@@ -18,12 +18,12 @@ use std::ffi::{OsStr, OsString};
 #[cfg(target_os = "linux")]
 use std::fs::File;
 #[cfg(target_os = "linux")]
-use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd};
 
 use ctcore::ct_display::Quotable;
 #[cfg(all(test, target_os = "linux"))]
 use ctcore::ct_error::CtSimpleError;
-use ctcore::ct_error::{CTResult, FromIo};
+use ctcore::ct_error::{CTError, CTResult, FromIo};
 
 #[cfg(target_os = "linux")]
 pub unsafe fn do_sync() -> isize {
@@ -55,8 +55,11 @@ fn open_sync_file(path: &OsStr) -> CTResult<File> {
             }
         },
     };
-    let file = unsafe { File::from_raw_fd(fd) };
+    Ok(unsafe { File::from_raw_fd(fd) })
+}
 
+#[cfg(target_os = "linux")]
+fn reset_nonblocking_mode(file: &File, path: &OsStr) -> CTResult<()> {
     let flags = fcntl(file.as_raw_fd(), FcntlArg::F_GETFL)
         .map(OFlag::from_bits_truncate)
         .map_err_context(|| format!("couldn't reset non-blocking mode {}", path.quote()))?;
@@ -65,7 +68,18 @@ fn open_sync_file(path: &OsStr) -> CTResult<File> {
     fcntl(file.as_raw_fd(), FcntlArg::F_SETFL(blocking_flags))
         .map_err_context(|| format!("couldn't reset non-blocking mode {}", path.quote()))?;
 
-    Ok(file)
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn close_sync_file(file: File, path: &OsStr) -> CTResult<()> {
+    let fd = file.into_raw_fd();
+    if unsafe { libc::close(fd) } == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+            .map_err_context(|| format!("failed to close {}", path.quote()))
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -76,12 +90,12 @@ fn sync_paths(files: &[OsString], operation: SyncOperation) -> CTResult<()> {
 #[cfg(target_os = "linux")]
 fn sync_all_paths<F>(files: &[OsString], mut sync_path: F) -> CTResult<()>
 where
-    F: FnMut(&OsStr) -> CTResult<()>,
+    F: FnMut(&OsStr) -> Vec<Box<dyn CTError>>,
 {
     let mut failed = false;
 
     for path in files {
-        if let Err(error) = sync_path(path) {
+        for error in sync_path(path) {
             ctcore::ct_show!(error);
             failed = true;
         }
@@ -95,20 +109,38 @@ where
 }
 
 #[cfg(target_os = "linux")]
-fn sync_path(path: &OsStr, operation: SyncOperation) -> CTResult<()> {
-    let file = open_sync_file(path)?;
-    let result = match operation {
-        SyncOperation::File => file.sync_all(),
-        SyncOperation::Data => file.sync_data(),
-        SyncOperation::FileSystem => {
-            if unsafe { libc::syncfs(file.as_raw_fd()) } == 0 {
-                Ok(())
-            } else {
-                Err(std::io::Error::last_os_error())
+fn sync_path(path: &OsStr, operation: SyncOperation) -> Vec<Box<dyn CTError>> {
+    let file = match open_sync_file(path) {
+        Ok(file) => file,
+        Err(error) => return vec![error],
+    };
+    let mut errors: Vec<Box<dyn CTError>> = Vec::new();
+
+    match reset_nonblocking_mode(&file, path) {
+        Ok(()) => {
+            let result = match operation {
+                SyncOperation::File => file.sync_all(),
+                SyncOperation::Data => file.sync_data(),
+                SyncOperation::FileSystem => {
+                    if unsafe { libc::syncfs(file.as_raw_fd()) } == 0 {
+                        Ok(())
+                    } else {
+                        Err(std::io::Error::last_os_error())
+                    }
+                }
+            };
+            if let Err(error) = result {
+                errors.push(error.map_err_context(|| format!("error syncing {}", path.quote())));
             }
         }
-    };
-    result.map_err_context(|| format!("error syncing {}", path.quote()))
+        Err(error) => errors.push(error),
+    }
+
+    if let Err(error) = close_sync_file(file, path) {
+        errors.push(error);
+    }
+
+    errors
 }
 
 #[cfg(target_os = "linux")]
@@ -128,6 +160,8 @@ pub fn sync_file_systems(files: &[OsString]) -> CTResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
+    use std::os::fd::AsRawFd;
     use std::sync::Mutex;
 
     #[cfg(target_os = "linux")]
@@ -155,6 +189,22 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
+    fn test_close_sync_file_reports_close_failure() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file_path = temp_dir.path().join("file");
+        let file = File::create(&file_path).unwrap();
+
+        assert_eq!(unsafe { libc::close(file.as_raw_fd()) }, 0);
+
+        let error = close_sync_file(file, file_path.as_os_str()).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!("failed to close {}: Bad file descriptor", file_path.quote())
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
     fn test_sync_missing_file() {
         let _exit_code_guard = EXIT_CODE_LOCK.lock().unwrap();
         ctcore::ct_error::set_ct_exit_code(0);
@@ -176,7 +226,7 @@ mod tests {
 
         let result = sync_all_paths(&files, |path| {
             calls.push(path.to_os_string());
-            Err(CtSimpleError::new(1, "sync failed"))
+            vec![CtSimpleError::new(1, "sync failed")]
         });
 
         assert!(result.is_ok());

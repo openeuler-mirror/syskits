@@ -530,6 +530,29 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "rm",
+            "description": "执行 rm -r -i //；stdin 为 n\\n；GNU 将 // 识别为根目录并拒绝递归删除，预期 RC=1 且输出 preserve-root failsafe 诊断。",
+            "args": [
+                "-r",
+                "-i",
+                "//"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "rm: it is dangerous to operate recursively on '//' (same as '/')\\nrm: use --no-preserve-root to override this failsafe\\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "n\n"
         }
     ]
 }

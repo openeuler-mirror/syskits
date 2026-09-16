@@ -1392,6 +1392,64 @@
         }
       },
       "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "LC_ALL=C；--preserve-root与-RL遇到树内指向/的链接时，必须在进入链接目标前拒绝递归",
+      "args": [
+        "-R",
+        "-L",
+        "-h",
+        "--preserve-root",
+        "--from=4294967294",
+        "0",
+        "chown-preserve-root-tree"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "mkdir chown-preserve-root-tree",
+        "ln -s / chown-preserve-root-tree/slink-to-root"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "chown: it is dangerous to operate recursively on 'chown-preserve-root-tree/slink-to-root' (same as '/')\nchown: use --no-preserve-root to override this failsafe\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf -- chown-preserve-root-tree"
+      ],
+      "requires_root": true,
+      "timeout": 3
+    },
+    {
+      "command": "chown",
+      "description": "LC_ALL=C；-RL跟随目录链接时仍按GNU后序输出，先报告链接目标子项和链接目录，再报告根目录",
+      "args": [
+        "-R",
+        "-L",
+        "-v",
+        "nobody",
+        "chown-follow-order/tree"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "mkdir -p chown-follow-order/tree chown-follow-order/target",
+        "touch chown-follow-order/target/child",
+        "ln -s ../target chown-follow-order/tree/link"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "changed ownership of 'chown-follow-order/tree/link/child' from root to nobody\nchanged ownership of 'chown-follow-order/tree/link' from root to nobody\nchanged ownership of 'chown-follow-order/tree' from root to nobody\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf -- chown-follow-order"
+      ],
+      "requires_root": true
     }
   ]
 }

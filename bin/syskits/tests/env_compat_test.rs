@@ -198,6 +198,21 @@ fn env_exec_replaces_the_env_process() {
 
 #[cfg(unix)]
 #[test]
+fn env_rejects_whitespace_in_signal_list_operand() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["env", "--block-signal=HUP, INT", "/usr/bin/true"])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env with whitespace in a signal list operand");
+
+    assert_eq!(output.status.code(), Some(125));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"env: invalid signal ' INT'\n");
+}
+
+#[cfg(unix)]
+#[test]
 fn env_list_signal_handling_omits_internal_handlers() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args(["env", "--list-signal-handling"])

@@ -880,7 +880,11 @@ fn is_operand(argument: &OsString) -> bool {
     argument == "-" || !argument.starts_with('-')
 }
 
-fn has_reference_option(command: &Command, args: &[OsString]) -> bool {
+fn has_option_before_operand(
+    command: &Command,
+    args: &[OsString],
+    matches_option: impl Fn(&OsString) -> bool,
+) -> bool {
     let posixly_correct = crate::ct_posix::posixly_correct();
     let mut skip_next_option_value = false;
 
@@ -892,19 +896,27 @@ fn has_reference_option(command: &Command, args: &[OsString]) -> bool {
             skip_next_option_value = false;
             continue;
         }
-        if is_reference_option(command, argument) {
+        if matches_option(argument) {
             return true;
         }
-        if posixly_correct {
-            if long_option_takes_next_value(command, argument) {
-                skip_next_option_value = true;
-            } else if is_operand(argument) {
-                break;
-            }
+        if long_option_takes_next_value(command, argument) {
+            skip_next_option_value = true;
+        } else if posixly_correct && is_operand(argument) {
+            break;
         }
     }
 
     false
+}
+
+fn has_reference_option(command: &Command, args: &[OsString]) -> bool {
+    has_option_before_operand(command, args, |argument| {
+        is_reference_option(command, argument)
+    })
+}
+
+fn has_help_option(command: &Command, args: &[OsString]) -> bool {
+    has_option_before_operand(command, args, |argument| argument == "--help")
 }
 
 /// Base implementation for `chgrp` and `chown`.
@@ -923,16 +935,7 @@ pub fn chown_base(
     groups_only: bool,
 ) -> CTResult<()> {
     let args: Vec<_> = args.collect();
-    let mut help = false;
-    // Stop processing on --.
-    for arg in args.iter().take_while(|s| *s != "--") {
-        if arg == "--help" {
-            // We stop processing once we see --help, as it doesn't matter if
-            // we've seen reference or not.
-            help = true;
-            break;
-        }
-    }
+    let help = has_help_option(&command, &args);
     let reference = has_reference_option(&command, &args);
 
     if help || !reference {

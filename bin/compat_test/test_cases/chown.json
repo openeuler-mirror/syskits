@@ -1193,6 +1193,41 @@
     },
     {
       "command": "chown",
+      "description": "POSIXLY_CORRECT=1；首个FILE后的--help必须作为文件操作数，先按--reference更新目标再报告不存在文件",
+      "args": [
+        "--reference=chown-posix-help-reference",
+        "chown-posix-help-target",
+        "--help"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "export POSIXLY_CORRECT=1",
+        "touch chown-posix-help-reference chown-posix-help-target",
+        "chown 65534:65534 chown-posix-help-reference",
+        "chown 0:0 chown-posix-help-target"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "chown: cannot access '--help': No such file or directory\n"
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%u:%g' chown-posix-help-target",
+            "expected_exit": 0,
+            "expected_stdout": "65534:65534\n",
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f -- chown-posix-help-reference chown-posix-help-target"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
       "description": "LC_ALL=C；递归-L解引用悬空符号链接时，GNU报告cannot dereference并使用单引号引用相对路径",
       "args": [
         "-R",

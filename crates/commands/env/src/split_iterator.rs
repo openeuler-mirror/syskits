@@ -415,11 +415,11 @@ mod tests {
         assert_eq!(split(&input3).unwrap(), expected3);
     }
 
-    // Test case 4: string with variable expansion
+    // GNU env -S expands only ${VARNAME}; the expansion forms a separate word here.
     #[test]
     fn test_split_variable_expansion() {
         unsafe { std::env::set_var("VAR", "value") };
-        let input4 = NativeIntString::from("hello $VAR");
+        let input4 = NativeIntString::from("hello ${VAR}");
         let expected4 = vec![
             NativeIntString::from("hello"),
             NativeIntString::from("value"),
@@ -435,13 +435,16 @@ mod tests {
         assert_eq!(split(&input5), expected5);
     }
 
-    // Test case 6: string with quoted variables
+    // Expansion inside double quotes stays in the same word after quotes are removed.
     #[test]
     fn test_split_quoted_variables() {
-        let input6 = NativeIntString::from(r#"hello "world$VAR""#);
-        let expected6 = vec![NativeIntString::from(r#"hello "worldvalue""#)];
         unsafe { std::env::set_var("VAR", "value") };
-        assert_ne!(split(&input6).unwrap(), expected6);
+        let input6 = NativeIntString::from(r#"hello "world${VAR}""#);
+        let expected6 = vec![
+            NativeIntString::from("hello"),
+            NativeIntString::from("worldvalue"),
+        ];
+        assert_eq!(split(&input6).unwrap(), expected6);
     }
 
     // Test case 7: string with single quoted variables (preventing expansion)

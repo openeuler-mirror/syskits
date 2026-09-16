@@ -123,40 +123,7 @@ impl<'a> VariableParser<'a, '_> {
         Ok((varname, default_option))
     }
 
-    /// 解析未用花括号包围的变量名。
-    fn parse_unbraced_variable_name(&mut self) -> Result<&'a NativeIntStr, EnvParseError> {
-        let position_start = self.parser.get_peek_position();
-
-        self.check_variable_name_start()?;
-
-        loop {
-            match self.get_current_char() {
-                None => break,
-                Some(c) if c.is_ascii_alphanumeric() || c == '_' => {
-                    self.skip_one()?;
-                }
-                Some(_) => break,
-            };
-        }
-
-        let pos_end = self.parser.get_peek_position();
-
-        if pos_end == position_start {
-            return Err(EnvParseError::ParsingOfVariableNameFailed {
-                pos: position_start,
-                msg: "Missing variable name".into(),
-            });
-        }
-
-        let var_name = self.parser.substring(&Range {
-            start: position_start,
-            end: pos_end,
-        });
-
-        Ok(var_name)
-    }
-
-    /// 解析变量，支持带花括号或不带花括号的变量名。
+    /// GNU env -S仅支持${VARNAME}形式的变量展开。
     pub fn parse_variable(
         &mut self,
     ) -> Result<(&'a NativeIntStr, Option<&'a NativeIntStr>), EnvParseError> {
@@ -173,7 +140,12 @@ impl<'a> VariableParser<'a, '_> {
                 self.skip_one()?;
                 self.parse_braced_variable_name()?
             }
-            Some(_) => (self.parse_unbraced_variable_name()?, None),
+            Some(_) => {
+                return Err(EnvParseError::ParsingOfVariableNameFailed {
+                    pos: self.parser.get_peek_position(),
+                    msg: "only ${VARNAME} expansion is supported".into(),
+                });
+            }
         };
 
         Ok((name, default))

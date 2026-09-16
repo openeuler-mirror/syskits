@@ -24,6 +24,7 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use std::io::{self, IsTerminal, Write};
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::io::RawFd;
 use sys_locale::get_locale;
 
 mod tty_flags {
@@ -57,19 +58,23 @@ pub fn tty_main(args: impl ctcore::Args) -> CTResult<()> {
         return value;
     }
 
-    let mut stdout = std::io::stdout();
-
     let tty_name = nix::unistd::ttyname(std::io::stdin());
 
     let tty_write_result = match tty_name {
-        Ok(name) => writeln!(stdout, "{}", name.display()),
+        Ok(name) => {
+            let mut output = name.as_os_str().as_bytes().to_vec();
+            output.push(b'\n');
+            tty_write_stdout(&output)
+        }
         Err(_) => {
             set_ct_exit_code(1);
-            writeln!(stdout, "{}", t!("tty.not_a_tty"))
+            let mut output = t!("tty.not_a_tty").as_bytes().to_vec();
+            output.push(b'\n');
+            tty_write_stdout(&output)
         }
     };
 
-    if let Err(error) = tty_write_result.and_then(|()| stdout.flush()) {
+    if let Err(error) = tty_write_result {
         exit_tty_write_error(&error);
     }
 
@@ -361,6 +366,36 @@ fn tty_write_error_message(error: &io::Error) -> String {
     format!("write error: {}", strip_errno(error))
 }
 
+fn tty_closed_stdout_error(stdout_was_closed: bool) -> Option<io::Error> {
+    stdout_was_closed.then(|| io::Error::from_raw_os_error(nix::libc::EBADF))
+}
+
+fn tty_write_stdout(output: &[u8]) -> io::Result<()> {
+    if let Some(error) = tty_closed_stdout_error(ctcore::ct_stdout_was_closed()) {
+        return Err(error);
+    }
+    tty_write_to_fd(nix::libc::STDOUT_FILENO, output)
+}
+
+fn tty_write_to_fd(fd: RawFd, mut output: &[u8]) -> io::Result<()> {
+    while !output.is_empty() {
+        // SAFETY: fd is supplied by the caller and output is a valid byte slice.
+        let written = unsafe { nix::libc::write(fd, output.as_ptr().cast(), output.len()) };
+        if written < 0 {
+            let error = io::Error::last_os_error();
+            if error.kind() == io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error);
+        }
+        if written == 0 {
+            return Err(io::Error::from(io::ErrorKind::WriteZero));
+        }
+        output = &output[written as usize..];
+    }
+    Ok(())
+}
+
 fn exit_tty_write_error(error: &io::Error) -> ! {
     let mut stderr = io::stderr().lock();
     let _ = writeln!(
@@ -458,7 +493,9 @@ impl Tool for Tty {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+    use std::fs::OpenOptions;
     use std::io;
+    use std::os::unix::io::AsRawFd;
     use std::sync::Mutex;
 
     static LOCALE_LOCK: Mutex<()> = Mutex::new(());
@@ -488,6 +525,26 @@ mod tests {
             tty_write_error_message(&error),
             "write error: No space left on device"
         );
+    }
+
+    #[test]
+    fn test_tty_write_to_fd_reports_read_only_stdout() {
+        let stdout = OpenOptions::new().read(true).open("/dev/null").unwrap();
+
+        let error = tty_write_to_fd(stdout.as_raw_fd(), b"not a tty\n").unwrap_err();
+
+        assert_eq!(error.raw_os_error(), Some(nix::libc::EBADF));
+    }
+
+    #[test]
+    fn test_tty_closed_stdout_error_preserves_gnu_ebadf() {
+        assert_eq!(
+            tty_closed_stdout_error(true)
+                .expect("closed stdout must report an error")
+                .raw_os_error(),
+            Some(nix::libc::EBADF)
+        );
+        assert!(tty_closed_stdout_error(false).is_none());
     }
 
     #[test]

@@ -164,6 +164,24 @@ fn env_suggests_split_string_for_whitespace_in_shebang_option() {
 }
 
 #[test]
+fn env_debug_reports_unset_step_before_execution() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["env", "--debug", "-u", "A", "/usr/bin/true"])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .env("A", "1")
+        .output()
+        .expect("run syskits env --debug -u A");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        output.stderr,
+        b"unset:    A\nexecuting: /usr/bin/true\n   arg[0]= '/usr/bin/true'\n"
+    );
+}
+
+#[test]
 fn env_expands_split_string_in_combined_short_options() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args(["env", "-iS", "A=1"])

@@ -199,7 +199,7 @@ fn env_args_init() -> Vec<Arg> {
             .short('i')
             .long("ignore-environment")
             .help(t!("env.clap.ignore-environment"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new("chdir")
             .short('C')
             .long("chdir")
@@ -207,12 +207,13 @@ fn env_args_init() -> Vec<Arg> {
             .value_name("DIR")
             .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::DirPath)
+            .action(ArgAction::Append)
             .help("change working directory to DIR"),
         Arg::new("null")
             .short('0')
             .long("null")
             .help("end each output line with a 0 byte rather than a newline")
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new("file")
             .short('f')
             .long("file")
@@ -231,7 +232,7 @@ fn env_args_init() -> Vec<Arg> {
         Arg::new("debug")
             .short('v')
             .long("debug")
-            .action(ArgAction::SetTrue)
+            .action(ArgAction::Count)
             .help(t!("env.clap.debug")),
         Arg::new("split-string")
             .short('S')
@@ -267,7 +268,7 @@ fn env_args_init() -> Vec<Arg> {
             .help("block delivery of SIG"),
         Arg::new("list-signal-handling")
             .long("list-signal-handling")
-            .action(ArgAction::SetTrue)
+            .action(ArgAction::Count)
             .help("list nondefault signal handling to stderr"),
         Arg::new("vars")
             .action(ArgAction::Append)
@@ -532,7 +533,7 @@ impl EnvAppData {
     fn run_env(&mut self, source_args: impl ctcore::Args) -> CTResult<()> {
         let (_sources_args, matches) = self.parse_arguments(source_args)?;
 
-        let is_debug_printing = self.do_debug_printing || matches.get_flag("debug");
+        let is_debug_printing = self.do_debug_printing || matches.get_count("debug") > 0;
 
         let mut options = env_make_options(&matches)?;
 
@@ -925,10 +926,11 @@ fn list_signal_handling(options: &EnvOptions<'_>) {
 }
 
 fn env_make_options(args_match: &clap::ArgMatches) -> CTResult<EnvOptions<'_>> {
-    let ignore_env = args_match.get_flag("ignore-environment");
-    let line_ending = CtLineEnding::from_zero_flag(args_match.get_flag("null"));
+    let ignore_env = args_match.get_count("ignore-environment") > 0;
+    let line_ending = CtLineEnding::from_zero_flag(args_match.get_count("null") > 0);
     let running_directory = args_match
-        .get_one::<OsString>("chdir")
+        .get_many::<OsString>("chdir")
+        .and_then(Iterator::last)
         .map(|s| s.as_os_str());
     let files = match args_match.get_many::<OsString>("file") {
         Some(v) => v.map(|s| s.as_os_str()).collect(),
@@ -944,7 +946,7 @@ fn env_make_options(args_match: &clap::ArgMatches) -> CTResult<EnvOptions<'_>> {
     #[cfg(unix)]
     let block_signals = get_signals(args_match, "block-signal")?;
     #[cfg(unix)]
-    let list_signal_handling = args_match.get_flag("list-signal-handling");
+    let list_signal_handling = args_match.get_count("list-signal-handling") > 0;
 
     let mut opts = EnvOptions {
         ignore_env,
@@ -1277,6 +1279,35 @@ mod tests {
 
         assert_eq!(semantic.classic_text, "=value\n");
         assert_eq!(semantic.stderr_text, "");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_repeated_standard_options_are_accepted() {
+        let matches = ct_app()
+            .try_get_matches_from([
+                ctcore::ct_util_name(),
+                "-i",
+                "-i",
+                "-0",
+                "-0",
+                "-v",
+                "-v",
+                "--list-signal-handling",
+                "--list-signal-handling",
+                "-C",
+                "/",
+                "-C",
+                "/tmp",
+            ])
+            .unwrap();
+
+        let options = env_make_options(&matches).unwrap();
+
+        assert!(options.ignore_env);
+        assert_eq!(options.line_ending, CtLineEnding::Nul);
+        assert_eq!(options.running_directory, Some(OsStr::new("/tmp")));
+        assert!(options.list_signal_handling);
     }
 
     #[cfg(unix)]

@@ -4,6 +4,8 @@ use std::os::unix::ffi::OsStringExt;
 use std::os::unix::process::ExitStatusExt;
 use std::process::Command;
 
+use tempfile::TempDir;
+
 #[test]
 fn env_verbose_without_changes_does_not_dump_input_args() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
@@ -76,6 +78,35 @@ fn env_debug_reports_gnu_execution_diagnostics() {
     assert_eq!(
         output.stderr,
         b"cleaning environ\nsetenv:   A=1\nexecuting: /usr/bin/printf\n   arg[0]= '/usr/bin/printf'\n   arg[1]= 'ok'\n"
+    );
+}
+
+#[test]
+fn env_debug_reports_chdir_before_execution() {
+    let temp_dir = TempDir::new().expect("create working directory");
+    let working_directory = temp_dir.path().to_str().expect("UTF-8 working directory");
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "env",
+            "--debug",
+            "-i",
+            "-C",
+            working_directory,
+            "A=1",
+            "/usr/bin/true",
+        ])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env --debug -C");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        String::from_utf8(output.stderr).expect("UTF-8 stderr"),
+        format!(
+            "cleaning environ\nsetenv:   A=1\nchdir:    '{working_directory}'\nexecuting: /usr/bin/true\n   arg[0]= '/usr/bin/true'\n"
+        )
     );
 }
 

@@ -570,9 +570,9 @@ impl EnvAppData {
         let args = &options.program[1..];
 
         if is_do_debug_printing {
-            eprintln!("executable: {}", prog.quote());
-            for (i, arg) in args.iter().enumerate() {
-                eprintln!("arg[{}]: {}", i, arg.quote());
+            eprintln!("executing: {}", prog.to_string_lossy());
+            for (i, arg) in options.program.iter().enumerate() {
+                eprintln!("   arg[{i}]= {}", arg.quote());
             }
         }
 

@@ -14,6 +14,8 @@ use nix::fcntl::{FcntlArg, OFlag, fcntl, open};
 #[cfg(target_os = "linux")]
 use nix::sys::stat::Mode;
 #[cfg(target_os = "linux")]
+use std::ffi::{OsStr, OsString};
+#[cfg(target_os = "linux")]
 use std::fs::File;
 #[cfg(target_os = "linux")]
 use std::os::fd::{AsRawFd, FromRawFd};
@@ -40,7 +42,7 @@ enum SyncOperation {
 }
 
 #[cfg(target_os = "linux")]
-fn open_sync_file(path: &str) -> CTResult<File> {
+fn open_sync_file(path: &OsStr) -> CTResult<File> {
     let read_flags = OFlag::O_RDONLY | OFlag::O_NONBLOCK;
     let write_flags = OFlag::O_WRONLY | OFlag::O_NONBLOCK;
     let fd = match open(path, read_flags, Mode::empty()) {
@@ -67,14 +69,14 @@ fn open_sync_file(path: &str) -> CTResult<File> {
 }
 
 #[cfg(target_os = "linux")]
-fn sync_paths(files: &[String], operation: SyncOperation) -> CTResult<()> {
+fn sync_paths(files: &[OsString], operation: SyncOperation) -> CTResult<()> {
     sync_all_paths(files, |path| sync_path(path, operation))
 }
 
 #[cfg(target_os = "linux")]
-fn sync_all_paths<F>(files: &[String], mut sync_path: F) -> CTResult<()>
+fn sync_all_paths<F>(files: &[OsString], mut sync_path: F) -> CTResult<()>
 where
-    F: FnMut(&str) -> CTResult<()>,
+    F: FnMut(&OsStr) -> CTResult<()>,
 {
     let mut failed = false;
 
@@ -93,7 +95,7 @@ where
 }
 
 #[cfg(target_os = "linux")]
-fn sync_path(path: &str, operation: SyncOperation) -> CTResult<()> {
+fn sync_path(path: &OsStr, operation: SyncOperation) -> CTResult<()> {
     let file = open_sync_file(path)?;
     let result = match operation {
         SyncOperation::File => file.sync_all(),
@@ -110,17 +112,17 @@ fn sync_path(path: &str, operation: SyncOperation) -> CTResult<()> {
 }
 
 #[cfg(target_os = "linux")]
-pub fn sync_files(files: &[String]) -> CTResult<()> {
+pub fn sync_files(files: &[OsString]) -> CTResult<()> {
     sync_paths(files, SyncOperation::File)
 }
 
 #[cfg(target_os = "linux")]
-pub fn sync_data(files: &[String]) -> CTResult<()> {
+pub fn sync_data(files: &[OsString]) -> CTResult<()> {
     sync_paths(files, SyncOperation::Data)
 }
 
 #[cfg(target_os = "linux")]
-pub fn sync_file_systems(files: &[String]) -> CTResult<()> {
+pub fn sync_file_systems(files: &[OsString]) -> CTResult<()> {
     sync_paths(files, SyncOperation::FileSystem)
 }
 #[cfg(test)]
@@ -144,7 +146,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("file");
         File::create(&file_path).unwrap();
-        let files = vec![file_path.to_string_lossy().into_owned()];
+        let files = vec![file_path.into_os_string()];
 
         assert!(sync_files(&files).is_ok());
         assert!(sync_data(&files).is_ok());
@@ -157,11 +159,7 @@ mod tests {
         let _exit_code_guard = EXIT_CODE_LOCK.lock().unwrap();
         ctcore::ct_error::set_ct_exit_code(0);
         let temp_dir = tempfile::tempdir().unwrap();
-        let missing = temp_dir
-            .path()
-            .join("missing")
-            .to_string_lossy()
-            .into_owned();
+        let missing = temp_dir.path().join("missing").into_os_string();
 
         assert!(sync_files(&[missing]).is_ok());
         assert_eq!(ctcore::ct_error::get_ct_exit_code(), 1);
@@ -173,16 +171,19 @@ mod tests {
     fn test_sync_all_paths_reports_each_error_without_aborting() {
         let _exit_code_guard = EXIT_CODE_LOCK.lock().unwrap();
         ctcore::ct_error::set_ct_exit_code(0);
-        let files = vec!["missing-one".to_string(), "missing-two".to_string()];
+        let files = vec![OsString::from("missing-one"), OsString::from("missing-two")];
         let mut calls = Vec::new();
 
         let result = sync_all_paths(&files, |path| {
-            calls.push(path.to_string());
-            Err(CtSimpleError::new(1, format!("{path} failed")))
+            calls.push(path.to_os_string());
+            Err(CtSimpleError::new(1, "sync failed"))
         });
 
         assert!(result.is_ok());
-        assert_eq!(calls, ["missing-one", "missing-two"]);
+        assert_eq!(
+            calls,
+            [OsString::from("missing-one"), OsString::from("missing-two")]
+        );
         assert_eq!(ctcore::ct_error::get_ct_exit_code(), 1);
         ctcore::ct_error::set_ct_exit_code(0);
     }

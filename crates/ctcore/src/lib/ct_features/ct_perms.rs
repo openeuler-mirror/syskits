@@ -27,8 +27,9 @@ use std::ffi::{CString, OsString};
 use std::fs::Metadata;
 use std::os::unix::fs::MetadataExt;
 
+use std::collections::HashSet;
 use std::os::unix::ffi::OsStrExt;
-use std::path::{MAIN_SEPARATOR_STR, Path};
+use std::path::{MAIN_SEPARATOR_STR, Path, PathBuf};
 
 /// The various level of verbosity
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -367,6 +368,14 @@ fn metadata_failure_action(path: &Path, dereference: bool) -> &'static str {
     }
 }
 
+fn traversal_failure_action(path: &Path, dereference: bool) -> &'static str {
+    if path.is_dir() {
+        "read directory"
+    } else {
+        metadata_failure_action(path, dereference)
+    }
+}
+
 fn traversal_walk(root: &Path, traverse_symlinks: &CtTraverseSymlinks) -> WalkDir {
     WalkDir::new(root)
         .follow_links(traverse_symlinks == &CtTraverseSymlinks::All)
@@ -429,6 +438,7 @@ impl CtChownExecutor {
 
         let mut ret = 0;
         let mut iterator = traversal_walk(root, &self.traverse_symlinks).into_iter();
+        let mut unreadable_directories = HashSet::<PathBuf>::new();
         // 我们不能使用 for 循环，因为在循环内部我们需要操作迭代器。
         while let Some(entry) = iterator.next() {
             let entry = match entry {
@@ -438,11 +448,19 @@ impl CtChownExecutor {
                         continue;
                     }
                     ret = 1;
+                    let path = e.path();
+                    let action = path.map(|path| {
+                        let action = traversal_failure_action(path, self.dereference);
+                        if action == "read directory" {
+                            unreadable_directories.insert(path.to_path_buf());
+                        }
+                        action
+                    });
                     if !self.verbosity.force_silent {
-                        if let Some(path) = e.path() {
+                        if let Some(path) = path {
                             ct_show_error!(
                                 "cannot {} {}: {}",
-                                metadata_failure_action(path, self.dereference),
+                                action.expect("path action is available"),
                                 path.quote(),
                                 if let Some(error) = e.io_error() {
                                     strip_errno(error)
@@ -459,6 +477,9 @@ impl CtChownExecutor {
                 Ok(entry) => entry,
             };
             let path = entry.path();
+            if unreadable_directories.contains(path) {
+                continue;
+            }
             let meta = match self.obtain_meta(path, self.dereference) {
                 Some(m) => m,
                 _ => {
@@ -1054,6 +1075,18 @@ mod tests {
 
         assert!(verbosity.force_silent);
         assert_eq!(verbosity.level, CtVerbosityLevel::Verbose);
+    }
+
+    #[test]
+    fn test_traversal_failure_uses_read_directory_for_directories() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let directory = temp_dir.path().join("directory");
+        let file = temp_dir.path().join("file");
+        fs::create_dir(&directory).unwrap();
+        fs::write(&file, b"").unwrap();
+
+        assert_eq!(traversal_failure_action(&directory, true), "read directory");
+        assert_eq!(traversal_failure_action(&file, true), "access");
     }
 
     #[test]

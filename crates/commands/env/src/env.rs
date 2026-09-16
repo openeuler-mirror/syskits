@@ -959,6 +959,10 @@ fn env_make_options(args_match: &clap::ArgMatches) -> CTResult<EnvOptions<'_>> {
 }
 
 fn env_apply_unset_env_vars(options: &EnvOptions<'_>) -> Result<(), Box<dyn CTError>> {
+    if options.ignore_env {
+        return Ok(());
+    }
+
     for opt_name in &options.unsets {
         let native_name = NativeStr::new(opt_name);
         if opt_name.is_empty()
@@ -1174,6 +1178,29 @@ mod tests {
     fn test_parse_signal_accepts_poll_alias() {
         assert_eq!(parse_signal("POLL").unwrap(), Signal::SIGIO);
         assert_eq!(parse_signal("SIGPOLL").unwrap(), Signal::SIGIO);
+    }
+
+    #[test]
+    fn test_ignore_environment_skips_unset_validation() {
+        let options = EnvOptions {
+            ignore_env: true,
+            line_ending: CtLineEnding::Newline,
+            running_directory: None,
+            files: vec![],
+            unsets: vec![OsStr::new("A=B")],
+            sets: vec![],
+            program: vec![],
+            #[cfg(unix)]
+            default_signals: None,
+            #[cfg(unix)]
+            ignore_signals: None,
+            #[cfg(unix)]
+            block_signals: None,
+            #[cfg(unix)]
+            list_signal_handling: false,
+        };
+
+        assert!(env_apply_unset_env_vars(&options).is_ok());
     }
 
     #[cfg(unix)]

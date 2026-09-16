@@ -844,22 +844,67 @@ pub struct CtGidUidOwnerFilter {
 }
 type GidUidFilterOwnerParser = fn(&ArgMatches) -> CTResult<CtGidUidOwnerFilter>;
 
-fn is_reference_option(command: &Command, argument: &OsString) -> bool {
+fn matching_long_option<'a>(command: &'a Command, argument: &OsString) -> Option<(&'a Arg, bool)> {
     let argument = argument.to_string_lossy();
-    let Some(option) = argument.strip_prefix("--") else {
-        return false;
-    };
-    let option = option.split_once('=').map_or(option, |(name, _)| name);
+    let option = argument.strip_prefix("--")?;
+    let (option, has_inline_value) = option
+        .split_once('=')
+        .map_or((option, false), |(name, _)| (name, true));
+    if option.is_empty() {
+        return None;
+    }
 
-    !option.is_empty()
-        && opt_flags::REFERENCE.starts_with(option)
-        && command
-            .get_arguments()
-            .filter_map(|arg| arg.get_long())
-            .filter(|long| long.starts_with(option))
-            .take(2)
-            .count()
-            == 1
+    let mut matches = command
+        .get_arguments()
+        .filter(|arg| arg.get_long().is_some_and(|long| long.starts_with(option)));
+    let matching = matches.next()?;
+    matches
+        .next()
+        .is_none()
+        .then_some((matching, has_inline_value))
+}
+
+fn is_reference_option(command: &Command, argument: &OsString) -> bool {
+    matching_long_option(command, argument)
+        .is_some_and(|(arg, _)| arg.get_long() == Some(opt_flags::REFERENCE))
+}
+
+fn long_option_takes_next_value(command: &Command, argument: &OsString) -> bool {
+    matching_long_option(command, argument).is_some_and(|(arg, has_inline_value)| {
+        !has_inline_value && arg.get_num_args().is_some_and(|range| range.takes_values())
+    })
+}
+
+fn is_operand(argument: &OsString) -> bool {
+    let argument = argument.to_string_lossy();
+    argument == "-" || !argument.starts_with('-')
+}
+
+fn has_reference_option(command: &Command, args: &[OsString]) -> bool {
+    let posixly_correct = crate::ct_posix::posixly_correct();
+    let mut skip_next_option_value = false;
+
+    for argument in args.iter().skip(1) {
+        if argument == "--" {
+            break;
+        }
+        if skip_next_option_value {
+            skip_next_option_value = false;
+            continue;
+        }
+        if is_reference_option(command, argument) {
+            return true;
+        }
+        if posixly_correct {
+            if long_option_takes_next_value(command, argument) {
+                skip_next_option_value = true;
+            } else if is_operand(argument) {
+                break;
+            }
+        }
+    }
+
+    false
 }
 
 /// Base implementation for `chgrp` and `chown`.
@@ -878,19 +923,17 @@ pub fn chown_base(
     groups_only: bool,
 ) -> CTResult<()> {
     let args: Vec<_> = args.collect();
-    let mut reference = false;
     let mut help = false;
-    // stop processing options on --
+    // Stop processing on --.
     for arg in args.iter().take_while(|s| *s != "--") {
-        if is_reference_option(&command, arg) {
-            reference = true;
-        } else if arg == "--help" {
-            // we stop processing once we see --help,
-            // as it doesn't matter if we've seen reference or not
+        if arg == "--help" {
+            // We stop processing once we see --help, as it doesn't matter if
+            // we've seen reference or not.
             help = true;
             break;
         }
     }
+    let reference = has_reference_option(&command, &args);
 
     if help || !reference {
         // add both positional arguments

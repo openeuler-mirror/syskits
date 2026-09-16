@@ -227,6 +227,7 @@ pub fn ct_app() -> Command {
                  group match those specified here. Either may be omitted, in \
                  which case a match is not required for the omitted attribute",
             )
+            .num_args(1)
             .value_name("CURRENT_OWNER:CURRENT_GROUP"),
         Arg::new(opt_flags::preserve_root::PRESERVE)
             .long(opt_flags::preserve_root::PRESERVE)
@@ -240,7 +241,8 @@ pub fn ct_app() -> Command {
             .long(opt_flags::REFERENCE)
             .value_name("RFILE")
             .value_hint(clap::ValueHint::FilePath)
-            .help("use RFILE's group rather than specifying GROUP values"),
+            .help("use RFILE's group rather than specifying GROUP values")
+            .num_args(1),
         Arg::new(opt_flags::RECURSIVE)
             .short('R')
             .long(opt_flags::RECURSIVE)

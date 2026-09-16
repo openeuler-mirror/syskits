@@ -1131,6 +1131,68 @@
     },
     {
       "command": "chown",
+      "description": "POSIXLY_CORRECT=1；首个FILE后的--reference参数必须作为文件操作数，不能改变OWNER解析模式",
+      "args": [
+        "0",
+        "chown-posix-reference-file",
+        "--reference=chown-posix-reference"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "export POSIXLY_CORRECT=1",
+        "touch chown-posix-reference-file chown-posix-reference",
+        "chown 0 chown-posix-reference-file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "chown: cannot access '--reference=chown-posix-reference': No such file or directory\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f -- chown-posix-reference-file chown-posix-reference"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "POSIXLY_CORRECT=1；--from的独立参数不能终止选项解析，后续--reference必须按参考UID和GID更新目标",
+      "args": [
+        "--from",
+        "0",
+        "--reference=chown-posix-from-reference",
+        "chown-posix-from-target"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "export POSIXLY_CORRECT=1",
+        "touch chown-posix-from-reference chown-posix-from-target",
+        "chown 65534:65534 chown-posix-from-reference",
+        "chown 0:0 chown-posix-from-target"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%u:%g' chown-posix-from-target",
+            "expected_exit": 0,
+            "expected_stdout": "65534:65534\n",
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f -- chown-posix-from-reference chown-posix-from-target"
+      ],
+      "requires_root": true
+    },
+    {
+      "command": "chown",
       "description": "LC_ALL=C；递归-L解引用悬空符号链接时，GNU报告cannot dereference并使用单引号引用相对路径",
       "args": [
         "-R",

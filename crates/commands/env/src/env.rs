@@ -66,6 +66,8 @@ use ctcore::ct_show_warning;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::process::{self};
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[cfg(unix)]
 type EnvSignal = libc::c_int;
@@ -93,6 +95,23 @@ const MISSING_SIGNAL_ARGUMENT: &str = "\0";
 #[cfg(target_os = "linux")]
 unsafe extern "C" {
     static mut environ: *mut *mut libc::c_char;
+}
+
+#[cfg(target_os = "linux")]
+static INHERITED_SIGPIPE_HANDLER: AtomicUsize = AtomicUsize::new(libc::SIG_ERR);
+
+#[cfg(target_os = "linux")]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static CAPTURE_INHERITED_SIGPIPE: unsafe extern "C" fn() = capture_inherited_sigpipe;
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" fn capture_inherited_sigpipe() {
+    let mut action = std::mem::MaybeUninit::<libc::sigaction>::uninit();
+    if unsafe { libc::sigaction(libc::SIGPIPE, std::ptr::null(), action.as_mut_ptr()) } == 0 {
+        let action = unsafe { action.assume_init() };
+        INHERITED_SIGPIPE_HANDLER.store(action.sa_sigaction, Ordering::Relaxed);
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -1104,6 +1123,41 @@ fn apply_signal_handlers_to_process(
 }
 
 #[cfg(unix)]
+fn signal_handling_line(signal: EnvSignal, is_blocked: bool, is_ignored: bool) -> Option<String> {
+    if !is_ignored && !is_blocked {
+        return None;
+    }
+
+    let name = signal_name(signal).expect("known signal has a display name");
+    let ignored = if is_ignored { "IGNORE" } else { "" };
+    let blocked = if is_blocked { "BLOCK" } else { "" };
+    let separator = if is_ignored && is_blocked { "," } else { "" };
+    Some(format!(
+        "{name:<10} ({signal:2}): {blocked}{separator}{ignored}"
+    ))
+}
+
+#[cfg(unix)]
+fn inherited_sigpipe_is_ignored() -> bool {
+    INHERITED_SIGPIPE_HANDLER.load(Ordering::Relaxed) == libc::SIG_IGN
+}
+
+#[cfg(not(target_os = "linux"))]
+fn inherited_sigpipe_is_ignored() -> bool {
+    false
+}
+
+#[cfg(unix)]
+fn is_ignored_signal_reportable(
+    signal: EnvSignal,
+    is_ignored: bool,
+    explicitly_ignored: bool,
+    inherited_sigpipe_ignored: bool,
+) -> bool {
+    is_ignored && (signal != libc::SIGPIPE || explicitly_ignored || inherited_sigpipe_ignored)
+}
+
+#[cfg(unix)]
 fn list_signal_handling(options: &EnvOptions<'_>) {
     let mut old_set: libc::sigset_t = unsafe { std::mem::zeroed() };
     let _ = unsafe { libc::sigprocmask(0, std::ptr::null(), &mut old_set) };
@@ -1117,28 +1171,18 @@ fn list_signal_handling(options: &EnvOptions<'_>) {
 
         let mut old_act: libc::sigaction = unsafe { std::mem::zeroed() };
         if unsafe { libc::sigaction(sig, std::ptr::null(), &mut old_act) } == 0 {
-            let mut is_ignored = old_act.sa_sigaction == libc::SIG_IGN;
-            if !is_ignored && !is_blocked {
-                continue;
-            }
-            if sig == libc::SIGPIPE
-                && is_ignored
-                && !options
+            let is_ignored = is_ignored_signal_reportable(
+                sig,
+                old_act.sa_sigaction == libc::SIG_IGN,
+                options
                     .ignore_signals
                     .as_ref()
-                    .is_some_and(|sigs| sigs.contains(&libc::SIGPIPE))
-            {
-                is_ignored = false;
-                if !is_blocked {
-                    continue;
-                }
+                    .is_some_and(|signals| signals.contains(&sig)),
+                inherited_sigpipe_is_ignored(),
+            );
+            if let Some(line) = signal_handling_line(sig, is_blocked, is_ignored) {
+                eprintln!("{line}");
             }
-
-            let name = signal_name(sig).expect("known signal has a display name");
-            let ignored = if is_ignored { "IGNORE" } else { "" };
-            let blocked = if is_blocked { "BLOCK" } else { "" };
-            let separator = if is_ignored && is_blocked { "," } else { "" };
-            eprintln!("{name:<10} ({sig:2}): {blocked}{separator}{ignored}");
         }
     }
 }
@@ -1576,6 +1620,38 @@ mod tests {
             signal_disposition_debug_message(libc::SIGIO, "IGNORE"),
             "Reset signal POLL (29) to IGNORE"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_signal_handling_line_reports_inherited_ignored_sigpipe() {
+        assert_eq!(
+            signal_handling_line(libc::SIGPIPE, false, true),
+            Some("PIPE       (13): IGNORE".to_owned())
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_inherited_ignored_sigpipe_is_reported_but_rust_runtime_state_is_not() {
+        assert!(!is_ignored_signal_reportable(
+            libc::SIGPIPE,
+            true,
+            false,
+            false
+        ));
+        assert!(is_ignored_signal_reportable(
+            libc::SIGPIPE,
+            true,
+            false,
+            true
+        ));
+        assert!(is_ignored_signal_reportable(
+            libc::SIGPIPE,
+            true,
+            true,
+            false
+        ));
     }
 
     #[cfg(unix)]

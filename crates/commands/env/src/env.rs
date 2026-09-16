@@ -74,6 +74,13 @@ type EnvSignal = libc::c_int;
 type SignalDispositions = (Option<Vec<EnvSignal>>, Option<Vec<EnvSignal>>);
 
 #[cfg(unix)]
+#[derive(Clone, Copy)]
+enum SignalDisposition {
+    Default,
+    Ignore,
+}
+
+#[cfg(unix)]
 #[derive(Debug, PartialEq)]
 struct SignalMasks {
     block: Vec<EnvSignal>,
@@ -934,18 +941,17 @@ fn get_signal_dispositions(args_match: &clap::ArgMatches) -> CTResult<SignalDisp
         };
 
         for signal in signals {
-            if signal == libc::SIGKILL || signal == libc::SIGSTOP {
-                if !ignore_immutable_signal_errors {
-                    return Err(CtSimpleError::new(
-                        125,
-                        format!(
-                            "failed to set signal action for signal {}: {}",
-                            signal,
-                            invalid_argument_message()
-                        ),
-                    ));
-                }
-                continue;
+            if (signal == libc::SIGKILL || signal == libc::SIGSTOP)
+                && !ignore_immutable_signal_errors
+            {
+                return Err(CtSimpleError::new(
+                    125,
+                    format!(
+                        "failed to set signal action for signal {}: {}",
+                        signal,
+                        invalid_argument_message()
+                    ),
+                ));
             }
             let (selected, overridden) = if set_default {
                 (&mut default_signals, &mut ignore_signals)
@@ -963,6 +969,21 @@ fn get_signal_dispositions(args_match: &clap::ArgMatches) -> CTResult<SignalDisp
         saw_default.then_some(default_signals),
         saw_ignore.then_some(ignore_signals),
     ))
+}
+
+#[cfg(unix)]
+fn apply_signal_disposition(signal: EnvSignal, disposition: SignalDisposition) -> bool {
+    unsafe {
+        let mut action: libc::sigaction = std::mem::zeroed();
+        if libc::sigaction(signal, std::ptr::null(), &mut action) != 0 {
+            return false;
+        }
+        action.sa_sigaction = match disposition {
+            SignalDisposition::Default => libc::SIG_DFL,
+            SignalDisposition::Ignore => libc::SIG_IGN,
+        };
+        libc::sigaction(signal, &action, std::ptr::null_mut()) == 0
+    }
 }
 
 // --- 处理和打印系统级信号状态 ---
@@ -987,33 +1008,19 @@ fn apply_signal_handlers_to_process(
     let mut disposition_changes = Vec::new();
     if let Some(sigs) = default_signals {
         for &sig in sigs {
-            if sig == libc::SIGKILL || sig == libc::SIGSTOP {
-                continue;
-            }
-            unsafe {
-                let mut action: libc::sigaction = std::mem::zeroed();
-                if libc::sigaction(sig, std::ptr::null(), &mut action) == 0 {
-                    action.sa_sigaction = libc::SIG_DFL;
-                    if libc::sigaction(sig, &action, std::ptr::null_mut()) == 0 {
-                        disposition_changes.push((sig, "DEFAULT"));
-                    }
-                }
+            if apply_signal_disposition(sig, SignalDisposition::Default) {
+                disposition_changes.push((sig, "DEFAULT"));
+            } else if sig == libc::SIGKILL || sig == libc::SIGSTOP {
+                disposition_changes.push((sig, "DEFAULT (failure ignored)"));
             }
         }
     }
     if let Some(sigs) = ignore_signals {
         for &sig in sigs {
-            if sig == libc::SIGKILL || sig == libc::SIGSTOP {
-                continue;
-            }
-            unsafe {
-                let mut action: libc::sigaction = std::mem::zeroed();
-                if libc::sigaction(sig, std::ptr::null(), &mut action) == 0 {
-                    action.sa_sigaction = libc::SIG_IGN;
-                    if libc::sigaction(sig, &action, std::ptr::null_mut()) == 0 {
-                        disposition_changes.push((sig, "IGNORE"));
-                    }
-                }
+            if apply_signal_disposition(sig, SignalDisposition::Ignore) {
+                disposition_changes.push((sig, "IGNORE"));
+            } else if sig == libc::SIGKILL || sig == libc::SIGSTOP {
+                disposition_changes.push((sig, "IGNORE (failure ignored)"));
             }
         }
     }
@@ -1539,6 +1546,16 @@ mod tests {
         let ignored = ignored.unwrap();
         assert!(ignored.contains(&libc::SIGRTMIN()));
         assert!(ignored.contains(&libc::SIGRTMAX()));
+        assert!(ignored.contains(&libc::SIGKILL));
+        assert!(ignored.contains(&libc::SIGSTOP));
+
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--default-signal", "true"])
+            .unwrap();
+        let (defaults, _) = get_signal_dispositions(&matches).unwrap();
+        let defaults = defaults.unwrap();
+        assert!(defaults.contains(&libc::SIGKILL));
+        assert!(defaults.contains(&libc::SIGSTOP));
     }
 
     #[cfg(unix)]

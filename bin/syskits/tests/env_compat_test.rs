@@ -163,6 +163,29 @@ fn env_list_signal_handling_uses_gnu_poll_signal_name() {
 
 #[cfg(unix)]
 #[test]
+fn env_debug_reports_ignored_immutable_signal_failures_for_all_signals() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["env", "--debug", "--ignore-signal", "/usr/bin/true"])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("run syskits env --debug --ignore-signal");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"");
+    let stderr = String::from_utf8(output.stderr).expect("UTF-8 stderr");
+    assert!(
+        stderr.contains("Reset signal KILL (9) to IGNORE (failure ignored)\n"),
+        "stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("Reset signal STOP (19) to IGNORE (failure ignored)\n"),
+        "stderr: {stderr}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn env_debug_reports_signal_handling_before_execution() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args([

@@ -844,6 +844,24 @@ pub struct CtGidUidOwnerFilter {
 }
 type GidUidFilterOwnerParser = fn(&ArgMatches) -> CTResult<CtGidUidOwnerFilter>;
 
+fn is_reference_option(command: &Command, argument: &OsString) -> bool {
+    let argument = argument.to_string_lossy();
+    let Some(option) = argument.strip_prefix("--") else {
+        return false;
+    };
+    let option = option.split_once('=').map_or(option, |(name, _)| name);
+
+    !option.is_empty()
+        && opt_flags::REFERENCE.starts_with(option)
+        && command
+            .get_arguments()
+            .filter_map(|arg| arg.get_long())
+            .filter(|long| long.starts_with(option))
+            .take(2)
+            .count()
+            == 1
+}
+
 /// Base implementation for `chgrp` and `chown`.
 ///
 /// An argument called `add_arg_if_not_reference` will be added to `command` if
@@ -864,7 +882,7 @@ pub fn chown_base(
     let mut help = false;
     // stop processing options on --
     for arg in args.iter().take_while(|s| *s != "--") {
-        if arg.to_string_lossy().starts_with("--reference=") || arg == "--reference" {
+        if is_reference_option(&command, arg) {
             reference = true;
         } else if arg == "--help" {
             // we stop processing once we see --help,

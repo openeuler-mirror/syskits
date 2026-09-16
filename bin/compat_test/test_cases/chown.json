@@ -1507,6 +1507,39 @@
         "rm -f -- chown-filtered-regular"
       ],
       "requires_root": true
+    },
+    {
+      "command": "chown",
+      "description": "LC_ALL=C；GNU接受--reference的唯一长选项缩写--ref，并使用参考文件的UID和GID",
+      "args": [
+        "--ref=chown-reference-abbreviation",
+        "chown-reference-abbreviation-target"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "touch chown-reference-abbreviation chown-reference-abbreviation-target",
+        "chown 65534:65534 chown-reference-abbreviation",
+        "chown 0:0 chown-reference-abbreviation-target"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "stat -c '%u:%g' chown-reference-abbreviation-target",
+            "expected_exit": 0,
+            "expected_stdout": "65534:65534\n",
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f -- chown-reference-abbreviation chown-reference-abbreviation-target"
+      ],
+      "requires_root": true
     }
   ]
 }

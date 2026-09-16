@@ -657,6 +657,38 @@ mod tests {
     }
 
     #[test]
+    fn test_chown_main_accepts_abbreviated_reference_option() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "ct_chown_abbreviated_reference_{}_{}",
+            std::process::id(),
+            unique
+        ));
+        fs::create_dir(&directory).unwrap();
+        let reference = directory.join("reference");
+        let target = directory.join("target");
+        File::create(&reference).unwrap();
+        File::create(&target).unwrap();
+
+        let result = chown_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from(format!("--ref={}", reference.display())),
+                target.into_os_string(),
+            ]
+            .into_iter(),
+        );
+
+        fs::remove_dir_all(&directory).unwrap();
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn test_posixly_correct_stops_option_parsing_after_owner() {
         use std::sync::Mutex;
         use std::time::{SystemTime, UNIX_EPOCH};

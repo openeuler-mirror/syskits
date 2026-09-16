@@ -383,6 +383,37 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "rm",
+            "description": "GNU 禁止缩写 --no-preserve-root：执行 rm --no-preserve-roo victim.bin；输入 fixture 为 file victim.bin、mode=644、内容=data；预期 RC=1，报出禁止缩写诊断且文件保留。",
+            "args": [
+                "--no-preserve-roo",
+                "victim.bin"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT",
+                "printf data > victim.bin",
+                "chmod 644 victim.bin"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "rm: you may not abbreviate the --no-preserve-root option\\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test -f victim.bin && printf retained",
+                        "expected_exit": 0,
+                        "expected_stdout": "retained"
+                    }
+                ]
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

@@ -374,6 +374,27 @@
       ],
       "tstdin": "",
       "byteMode": true
+    },
+    {
+      "command": "sync",
+      "description": "原始字节错误诊断用例：LC_ALL=C、LANG=C；参数完整十六进制=6d697373696e672dff，对应不存在的文件名 missing-\\xff；stdin 为 0 字节（完整十六进制为空）；预期 RC=1、stdout 为 0 字节，stderr 为 65 字节，完整十六进制=73796e633a206572726f72206f70656e696e6720276d697373696e672d2724275c333737273a204e6f20737563682066696c65206f72206469726563746f72790a，对应 GNU 的 'missing-'$'\\377' 路径引用。",
+      "args": [
+        "6d697373696e672dff"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "73796e633a206572726f72206f70656e696e6720276d697373696e672d2724275c333737273a204e6f20737563682066696c65206f72206469726563746f72790a"
+        }
+      },
+      "cleanup_commands": [],
+      "tstdin": "",
+      "byteMode": true
     }
   ]
 }

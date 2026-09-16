@@ -20,8 +20,13 @@ use std::fs::File;
 #[cfg(target_os = "linux")]
 use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd};
 
+#[cfg(test)]
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
+#[cfg(target_os = "linux")]
+use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStrExt;
 
 #[cfg(target_os = "linux")]
 pub unsafe fn do_sync() -> isize {
@@ -37,6 +42,49 @@ enum SyncOperation {
     File,
     Data,
     FileSystem,
+}
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn mbrtowc(
+        wide: *mut libc::wchar_t,
+        bytes: *const libc::c_char,
+        length: usize,
+        state: *mut libc::mbstate_t,
+    ) -> usize;
+    fn iswprint(wide: libc::c_uint) -> libc::c_int;
+}
+
+#[cfg(target_os = "linux")]
+fn sync_quote_path(path: &OsStr) -> String {
+    let bytes = path.as_bytes();
+    let mut quoted = escape_shell_bytes_with_classifier(bytes, |remaining| unsafe {
+        let mut state: libc::mbstate_t = std::mem::zeroed();
+        let mut wide = 0 as libc::wchar_t;
+        let length = mbrtowc(
+            &mut wide,
+            remaining.as_ptr().cast(),
+            remaining.len(),
+            &mut state,
+        );
+        if length == usize::MAX {
+            return (1, false);
+        }
+        if length == usize::MAX - 1 {
+            return (remaining.len(), false);
+        }
+
+        let length = if length == 0 { 1 } else { length };
+        let is_utf8 = std::str::from_utf8(&remaining[..length]).is_ok();
+        (length, is_utf8 && iswprint(wide as libc::c_uint) != 0)
+    });
+
+    if quoted.as_slice() == bytes {
+        quoted.insert(0, b'\'');
+        quoted.push(b'\'');
+    }
+
+    String::from_utf8(quoted).expect("shell-escaped file names are valid UTF-8")
 }
 
 #[cfg(target_os = "linux")]
@@ -69,7 +117,7 @@ fn open_sync_file(path: &OsStr) -> CTResult<File> {
             Err(_) => {
                 return Err(sync_nix_error(
                     read_error,
-                    format!("error opening {}", path.quote()),
+                    format!("error opening {}", sync_quote_path(path)),
                 ));
             }
         },
@@ -84,7 +132,7 @@ fn reset_nonblocking_mode(file: &File, path: &OsStr) -> CTResult<()> {
         .map_err(|error| {
             sync_nix_error(
                 error,
-                format!("couldn't reset non-blocking mode {}", path.quote()),
+                format!("couldn't reset non-blocking mode {}", sync_quote_path(path)),
             )
         })?;
     let mut blocking_flags = flags;
@@ -92,7 +140,7 @@ fn reset_nonblocking_mode(file: &File, path: &OsStr) -> CTResult<()> {
     fcntl(file.as_raw_fd(), FcntlArg::F_SETFL(blocking_flags)).map_err(|error| {
         sync_nix_error(
             error,
-            format!("couldn't reset non-blocking mode {}", path.quote()),
+            format!("couldn't reset non-blocking mode {}", sync_quote_path(path)),
         )
     })?;
 
@@ -107,7 +155,7 @@ fn close_sync_file(file: File, path: &OsStr) -> CTResult<()> {
     } else {
         Err(sync_io_error(
             std::io::Error::last_os_error(),
-            format!("failed to close {}", path.quote()),
+            format!("failed to close {}", sync_quote_path(path)),
         ))
     }
 }
@@ -162,7 +210,7 @@ fn sync_path(path: &OsStr, operation: SyncOperation) -> Vec<Box<dyn CTError>> {
             if let Err(error) = result {
                 errors.push(sync_io_error(
                     error,
-                    format!("error syncing {}", path.quote()),
+                    format!("error syncing {}", sync_quote_path(path)),
                 ));
             }
         }
@@ -242,6 +290,16 @@ mod tests {
         let error = std::io::Error::from_raw_os_error(libc::EINVAL);
 
         assert_eq!(sync_errno_text(&error), "Invalid argument");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_sync_quote_path_uses_gnu_shell_quote_for_non_utf8_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let path = OsString::from_vec(b"missing-\xff".to_vec());
+
+        assert_eq!(sync_quote_path(&path), "'missing-'$'\\377'");
     }
 
     #[cfg(target_os = "linux")]

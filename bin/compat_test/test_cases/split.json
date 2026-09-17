@@ -2548,6 +2548,57 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "split",
+      "description": "split --number rejects size suffixes in chunk counts",
+      "args": [
+        "--number=1K/1K"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "split",
+      "description": "split --number accepts a leading plus sign",
+      "args": [
+        "--number=+1/1",
+        "in"
+      ],
+      "setup_commands": [
+        "printf 'a\\nb\\n' > in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "a\nb\n",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
     }
   ]
 }

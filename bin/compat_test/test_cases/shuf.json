@@ -942,6 +942,33 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下通过直接父进程bash执行shuf -i 1-100000，并将stdout连接到无读端的管道；SIGPIPE保持默认处置，GNU在写入时被信号终止，预期RC=141、stdout和stderr均为0字节。",
+            "args": [
+                "-i",
+                "1-100000"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "default",
+                    "useBash": true
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "shuf",
             "description": "LC_ALL=C、LANG=C下执行shuf -i 1-1 -o /dev/null -o /dev/null；重复指定相同输出路径在GNU中有效，预期RC=0且stdout、stderr为空。",
             "args": [
                 "-i",

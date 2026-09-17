@@ -141,6 +141,8 @@ impl Tool for Shuf {
 }
 
 pub fn shuf_main(args: impl ctcore::Args) -> CTResult<()> {
+    configure_sigpipe();
+
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let (mode, settings) = shuf_parse_invocation(args)?;
@@ -173,6 +175,37 @@ pub fn shuf_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn configure_sigpipe() {
+    if !parent_ignores_sigpipe() {
+        let _ = ctcore::ct_signals::enable_pipe_errors();
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn configure_sigpipe() {}
+
+#[cfg(target_os = "linux")]
+fn parent_ignores_sigpipe() -> bool {
+    let parent = unsafe { ctcore::libc::getppid() };
+    let Ok(status) = std::fs::read_to_string(format!("/proc/{parent}/status")) else {
+        return false;
+    };
+    sigpipe_is_ignored_in_status(&status)
+}
+
+#[cfg(target_os = "linux")]
+fn sigpipe_is_ignored_in_status(status: &str) -> bool {
+    let Some(mask) = status
+        .lines()
+        .find_map(|line| line.strip_prefix("SigIgn:\t"))
+        .and_then(|mask| u64::from_str_radix(mask, 16).ok())
+    else {
+        return false;
+    };
+    mask & (1_u64 << (ctcore::libc::SIGPIPE - 1)) != 0
 }
 
 fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSettings)> {
@@ -1178,6 +1211,25 @@ mod tests {
             assert!(settings.is_repeat);
             assert_eq!(settings.output, Some(OsString::from("out.txt")));
             assert_eq!(settings.random_source, Some(OsString::from("rand.txt")));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    mod sigpipe_tests {
+        use super::*;
+
+        #[test]
+        fn sigpipe_status_mask_reports_only_an_ignored_sigpipe() {
+            assert!(sigpipe_is_ignored_in_status(
+                "Name:\tbash\nSigIgn:\t0000000000001000\n"
+            ));
+            assert!(!sigpipe_is_ignored_in_status(
+                "Name:\tbash\nSigIgn:\t0000000000000000\n"
+            ));
+            assert!(!sigpipe_is_ignored_in_status(
+                "Name:\tbash\nSigIgn:\tinvalid\n"
+            ));
+            assert!(!sigpipe_is_ignored_in_status("Name:\tbash\n"));
         }
     }
 

@@ -1987,6 +1987,39 @@
     },
     {
       "command": "split",
+      "description": "split -C 0 reports GNU invalid number of lines diagnostic: args hex=2d43,30,696e; stdin is empty; expected RC=1, stdout empty, stderr hex=73706c69743a20696e76616c6964206e756d626572206f66206c696e65733a202730270a",
+      "args": [
+        "2d43",
+        "30",
+        "696e"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "touch in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "73706c69743a20696e76616c6964206e756d626572206f66206c696e65733a202730270a"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ],
+      "tstdin": "",
+      "byteMode": true
+    },
+    {
+      "command": "split",
       "description": "split fail: -n 0",
       "args": [
         "-n",

@@ -226,28 +226,33 @@ fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSet
         .cloned()
         .collect::<Vec<_>>();
 
-    if input_ranges.len() > 1 {
-        return Err(CtSimpleError::new(1, "multiple -i options specified"));
-    }
-    if echo && !input_ranges.is_empty() {
+    // GNU validates the first -i value while parsing options.  A later -i
+    // reports the duplicate only after that first value was accepted.
+    let input_range = if let Some((first, remaining)) = input_ranges.split_first() {
+        let range = shuf_parse_range(first.as_os_str())
+            .map_err(|message| CtSimpleError::new(1, message))?;
+        if !remaining.is_empty() {
+            return Err(CtSimpleError::new(1, "multiple -i options specified"));
+        }
+        Some(range)
+    } else {
+        None
+    };
+
+    if echo && input_range.is_some() {
         return Err(CTsageError::new(1, "cannot combine -e and -i options"));
     }
 
     let mode = if echo {
         ShufMode::Echo(operands)
-    } else if let Some(range) = input_ranges.first() {
+    } else if let Some(range) = input_range {
         if let Some(extra_operand) = operands.first() {
             return Err(CTsageError::new(
                 1,
                 format!("extra operand {}", extra_operand.quote()),
             ));
         }
-        match shuf_parse_range(range.as_os_str()) {
-            Ok(m) => ShufMode::InputRange(m),
-            Err(msg) => {
-                return Err(CtSimpleError::new(1, msg));
-            }
-        }
+        ShufMode::InputRange(range)
     } else {
         let file = operands
             .first()
@@ -1457,6 +1462,34 @@ mod tests {
                 shuf_parse_invocation(parse_args(&["shuf", "-i", "0-1", "-i", "2-3"])).unwrap_err();
 
             assert_eq!(error.to_string(), "multiple -i options specified");
+        }
+
+        #[test]
+        fn test_invalid_first_input_range_precedes_later_duplicate_error() {
+            let error = shuf_parse_invocation(parse_args(&["shuf", "-i", "invalid", "-i", "1-2"]))
+                .expect_err("GNU validates the first input range before a later duplicate");
+
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "invalid input range: {}",
+                    ctcore::ct_display::locale_quote("invalid")
+                )
+            );
+        }
+
+        #[test]
+        fn test_invalid_input_range_precedes_echo_range_conflict() {
+            let error = shuf_parse_invocation(parse_args(&["shuf", "-e", "-i", "invalid"]))
+                .expect_err("GNU validates -i while parsing options");
+
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "invalid input range: {}",
+                    ctcore::ct_display::locale_quote("invalid")
+                )
+            );
         }
 
         #[test]

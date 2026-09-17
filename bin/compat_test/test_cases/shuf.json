@@ -972,6 +972,51 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -i invalid -i 1-2；GNU在处理第一个-i时立即校验范围，后续重复选项不能掩盖该错误，预期RC=1、stdout为空、stderr为shuf: invalid input range: 'invalid'加换行。",
+            "args": [
+                "-i",
+                "invalid",
+                "-i",
+                "1-2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: invalid input range: 'invalid'\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -e -i invalid；GNU在选项解析阶段先校验-i参数，随后才检查-e与-i组合，因此预期RC=1、stdout为空、stderr为shuf: invalid input range: 'invalid'加换行且不输出用法提示。",
+            "args": [
+                "-e",
+                "-i",
+                "invalid"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: invalid input range: 'invalid'\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "LC_ALL=C、LANG=C下执行shuf -n $' 1' -i 1-2 --random-source=/dev/zero；COUNT参数字节为2031，GNU xstrtoumax接受前导空白并限制输出一行，固定随机字节00选择范围起点，预期RC=0、stdout为310a、stderr为空。",
             "args": [
                 "-n",

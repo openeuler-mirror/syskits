@@ -571,6 +571,44 @@
         },
         {
             "command": "shuf",
+            "description": "原始字节用例：LC_ALL=C、LANG=C下执行shuf -e $'a\\n' -n 2 --random-source=/dev/zero -o echo-output；参数完整十六进制=2d65 610a 2d6e 32 2d2d72616e646f6d2d736f757263653d2f6465762f7a65726f 2d6f 6563686f2d6f7574707574，第二个echo参数为2字节a加换行。GNU会为每个-e参数追加换行并保留已有换行后的空项；随机顺序不约束，验证echo-output完整长度为3字节，RC=0、stdout和stderr均为0字节。",
+            "args": [
+                "2d65",
+                "610a",
+                "2d6e",
+                "32",
+                "2d2d72616e646f6d2d736f757263653d2f6465762f7a65726f",
+                "2d6f",
+                "6563686f2d6f7574707574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(wc -c < echo-output)\" -eq 3",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f echo-output"
+            ],
+            "byteMode": true
+        },
+        {
+            "command": "shuf",
             "description": "shuf: 显示帮助信息 (--help)",
             "args": [
                 "--help"

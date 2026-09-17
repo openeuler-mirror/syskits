@@ -88,6 +88,9 @@ pub enum FilenameSuffixError {
     /// Invalid suffix length parameter.
     NotParsable(String),
 
+    /// Invalid decimal or hexadecimal suffix start value.
+    InvalidStartValue { value: String, hexadecimal: bool },
+
     /// Suffix contains a directory separator, which is not allowed.
     ContainsSeparator(String),
 
@@ -99,6 +102,16 @@ impl fmt::Display for FilenameSuffixError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::NotParsable(s) => write!(f, "invalid suffix length: {}", s.quote()),
+            Self::InvalidStartValue { value, hexadecimal } => write!(
+                f,
+                "{}: invalid start value for {} suffix",
+                value.quote(),
+                if *hexadecimal {
+                    "hexadecimal"
+                } else {
+                    "numerical"
+                }
+            ),
             Self::TooSmall(i) => write!(f, "the suffix length needs to be at least {i}"),
             Self::ContainsSeparator(s) => write!(
                 f,
@@ -110,6 +123,29 @@ impl fmt::Display for FilenameSuffixError {
 }
 
 impl FilenameSuffix {
+    fn parse_start_value(value: &str, hexadecimal: bool) -> Result<usize, FilenameSuffixError> {
+        let valid = if hexadecimal {
+            value
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        } else {
+            value.bytes().all(|byte| byte.is_ascii_digit())
+        };
+        if !valid {
+            return Err(FilenameSuffixError::InvalidStartValue {
+                value: value.to_string(),
+                hexadecimal,
+            });
+        }
+
+        if value.is_empty() {
+            return Ok(0);
+        }
+
+        usize::from_str_radix(value, if hexadecimal { 16 } else { 10 })
+            .map_err(|_| FilenameSuffixError::NotParsable(value.to_string()))
+    }
+
     /// Parse the suffix type, start, length and additional suffix from the command-line arguments
     /// as well process suffix length auto-widening and auto-width scenarios
     ///
@@ -167,17 +203,14 @@ impl FilenameSuffix {
             (true, _, _, _) => {
                 stype = FilenameSuffixType::Decimal;
                 if let Some(opt) = args_match.get_one::<String>(OPT_NUMERIC_SUFFIXES) {
-                    start = opt
-                        .parse::<usize>()
-                        .map_err(|_| FilenameSuffixError::NotParsable(opt.to_string()))?;
+                    start = Self::parse_start_value(opt, false)?;
                     auto_widening = false;
                 }
             }
             (_, true, _, _) => {
                 stype = FilenameSuffixType::Hexadecimal;
                 if let Some(opt) = args_match.get_one::<String>(OPT_HEX_SUFFIXES) {
-                    start = usize::from_str_radix(opt, 16)
-                        .map_err(|_| FilenameSuffixError::NotParsable(opt.to_string()))?;
+                    start = Self::parse_start_value(opt, true)?;
                     auto_widening = false;
                 }
             }
@@ -729,6 +762,45 @@ mod tests {
         let strategy = Strategy::from(&matches, &None).expect("parse byte strategy");
 
         assert!(FilenameSuffix::from(&matches, &strategy).is_ok());
+    }
+
+    #[test]
+    fn test_suffix_start_accepts_empty_decimal_and_hexadecimal_values() {
+        for option in ["--numeric-suffixes=", "--hex-suffixes="] {
+            let matches = ct_app()
+                .try_get_matches_from(["split", option, "-b", "1"])
+                .expect("parse split arguments");
+            let strategy = Strategy::from(&matches, &None).expect("parse byte strategy");
+            let suffix = FilenameSuffix::from(&matches, &strategy)
+                .expect("empty suffix start must mean zero");
+
+            assert_eq!(suffix.start, 0);
+        }
+    }
+
+    #[test]
+    fn test_suffix_start_rejects_non_gnu_digit_alphabet() {
+        for (option, expected) in [
+            (
+                "--numeric-suffixes=+1",
+                "'+1': invalid start value for numerical suffix",
+            ),
+            (
+                "--hex-suffixes=A",
+                "'A': invalid start value for hexadecimal suffix",
+            ),
+        ] {
+            let matches = ct_app()
+                .try_get_matches_from(["split", option, "-b", "1"])
+                .expect("parse split arguments");
+            let strategy = Strategy::from(&matches, &None).expect("parse byte strategy");
+            let error = match FilenameSuffix::from(&matches, &strategy) {
+                Err(error) => error,
+                Ok(_) => panic!("non-GNU suffix start alphabet must be rejected"),
+            };
+
+            assert_eq!(error.to_string(), expected);
+        }
     }
 
     #[test]

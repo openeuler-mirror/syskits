@@ -45,6 +45,7 @@ use crate::{
 use clap::ArgMatches;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::path::is_separator;
 
@@ -349,18 +350,18 @@ impl FilenameSuffix {
 /// assert_eq!(it.next().unwrap(), "chunk_01.txt");
 /// assert_eq!(it.next().unwrap(), "chunk_02.txt");
 /// ```
-pub struct FilenameIterator<'a> {
-    prefix: &'a str,
-    additional_suffix: &'a str,
+pub struct FilenameIterator {
+    prefix: OsString,
+    additional_suffix: String,
     number: Number,
     first_iteration: bool,
 }
 
-impl<'a> FilenameIterator<'a> {
+impl FilenameIterator {
     pub fn new(
-        file_prefix: &'a str,
-        filename_suffix: &'a FilenameSuffix,
-    ) -> CTResult<FilenameIterator<'a>> {
+        file_prefix: impl AsRef<OsStr>,
+        filename_suffix: &FilenameSuffix,
+    ) -> CTResult<FilenameIterator> {
         let radix_size = filename_suffix.stype.radix();
         let file_suffix_number_size = if filename_suffix.auto_widening {
             Number::DynamicWidth(DynamicWidthNumber::new(radix_size, filename_suffix.start))
@@ -379,19 +380,17 @@ impl<'a> FilenameIterator<'a> {
                 })?,
             )
         };
-        let file_additional_suffix = filename_suffix.additional.as_str();
-
         Ok(FilenameIterator {
-            prefix: file_prefix,
-            additional_suffix: file_additional_suffix,
+            prefix: file_prefix.as_ref().to_os_string(),
+            additional_suffix: filename_suffix.additional.clone(),
             number: file_suffix_number_size,
             first_iteration: true,
         })
     }
 }
 
-impl Iterator for FilenameIterator<'_> {
-    type Item = String;
+impl Iterator for FilenameIterator {
+    type Item = OsString;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.first_iteration {
@@ -399,11 +398,10 @@ impl Iterator for FilenameIterator<'_> {
         } else {
             self.number.number_increment().ok()?;
         }
-        // 第一部分和第三部分直接取自结构体参数，不做任何改动。
-        Some(format!(
-            "{}{}{}",
-            self.prefix, self.number, self.additional_suffix
-        ))
+        let mut filename = self.prefix.to_os_string();
+        filename.push(self.number.to_string());
+        filename.push(self.additional_suffix.as_str());
+        Some(filename)
     }
 }
 

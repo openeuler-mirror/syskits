@@ -19,11 +19,17 @@ use crate::filenames::{FilenameIterator, FilenameSuffix, FilenameSuffixError};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use crate::strategy::{Strategy, StrategyError, StrategyNumberType};
-use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, crate_version, parser::ValueSource};
+use clap::{
+    Arg, ArgAction, ArgMatches, Command, ValueHint, builder::OsStringValueParser, crate_version,
+    parser::ValueSource,
+};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTIoError, CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::parse_size_u64;
+#[cfg(unix)]
+use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
+#[cfg(not(unix))]
 use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use ctcore::uio_error;
 use std::cell::RefCell;
@@ -36,6 +42,20 @@ use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Wr
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use sys_locale::get_locale;
+
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
+
+#[cfg(unix)]
+unsafe extern "C" {
+    fn mbrtowc(
+        wide: *mut ctcore::libc::wchar_t,
+        bytes: *const ctcore::libc::c_char,
+        length: usize,
+        state: *mut ctcore::libc::mbstate_t,
+    ) -> usize;
+    fn iswprint(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
+}
 
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
@@ -137,6 +157,7 @@ fn split_parse_invocation(args: impl ctcore::Args) -> CTResult<SpliceSettings> {
         let mut settings = settings;
         if settings.prefix == "x" {
             settings.prefix = split_test_prefix();
+            settings.prefix_os = None;
         }
         settings
     };
@@ -179,37 +200,82 @@ fn split_stdout_writer() -> SplitStdoutWriter {
     }
 }
 
-fn split_emit_opening_output(file_name: &str, filter_enabled: bool) -> io::Result<()> {
+fn split_quote_path(path: &OsStr, always_quote: bool) -> String {
+    #[cfg(unix)]
+    {
+        let bytes = path.as_bytes();
+        let mut quoted = escape_shell_bytes_with_classifier(bytes, |remaining| unsafe {
+            let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
+            let mut wide = 0 as ctcore::libc::wchar_t;
+            let length = mbrtowc(
+                &mut wide,
+                remaining.as_ptr().cast(),
+                remaining.len(),
+                &mut state,
+            );
+            if length == usize::MAX {
+                return (1, false);
+            }
+            if length == usize::MAX - 1 {
+                return (remaining.len(), false);
+            }
+
+            let length = if length == 0 { 1 } else { length };
+            let is_utf8 = std::str::from_utf8(&remaining[..length]).is_ok();
+            (
+                length,
+                is_utf8 && iswprint(wide as ctcore::libc::c_uint) != 0,
+            )
+        });
+
+        if always_quote && quoted.as_slice() == bytes {
+            quoted.insert(0, b'\'');
+            quoted.push(b'\'');
+        }
+
+        String::from_utf8(quoted).expect("shell-escaped file names are valid UTF-8")
+    }
+
+    #[cfg(not(unix))]
+    {
+        escape_name(
+            path,
+            &CtQuotingStyle::Shell {
+                escape: false,
+                always_quote,
+                show_control: false,
+            },
+        )
+    }
+}
+
+fn split_emit_opening_output(file_name: &OsStr, filter_enabled: bool) -> io::Result<()> {
     let mut writer = split_stdout_writer();
     if filter_enabled {
-        let style = CtQuotingStyle::Shell {
-            escape: false,
-            always_quote: false,
-            show_control: false,
-        };
         writeln!(
             writer,
             "{}{}",
             t!("split.executing_with_file"),
-            escape_name(OsStr::new(file_name), &style)
+            split_quote_path(file_name, false)
         )?;
     } else {
         writeln!(
             writer,
             "{} {}",
             t!("split.creating_file"),
-            file_name.quote()
+            split_quote_path(file_name, true)
         )?;
     }
     writer.flush()
 }
 
-fn split_observe_output_file(file_name: &str) {
+fn split_observe_output_file(file_name: &OsStr) {
     SPLIT_OBSERVED_FILES.with(|slot| {
         if let Some(files) = slot.borrow().as_ref() {
             let mut files = files.lock().expect("split file observation lock");
-            if !files.iter().any(|existing| existing == file_name) {
-                files.push(file_name.to_string());
+            let file_name = file_name.to_string_lossy();
+            if !files.iter().any(|existing| existing == file_name.as_ref()) {
+                files.push(file_name.into_owned());
             }
         }
     });
@@ -712,9 +778,11 @@ fn splice_args_init() -> Vec<Arg> {
             .hide(true),
         Arg::new(ARG_INPUT)
             .default_value("-")
+            .value_parser(OsStringValueParser::new())
             .value_hint(ValueHint::FilePath),
         Arg::new(ARG_PREFIX)
             .default_value("x")
+            .value_parser(OsStringValueParser::new())
     ];
     args
 }
@@ -725,8 +793,12 @@ fn splice_args_init() -> Vec<Arg> {
 /// instance by calling [`SpliceSettings::from`].
 struct SpliceSettings {
     prefix: String,
+    /// The original output prefix when it contains non-UTF-8 bytes.
+    prefix_os: Option<OsString>,
     suffix: FilenameSuffix,
     input: String,
+    /// The original input path when it contains non-UTF-8 bytes.
+    input_os: Option<OsString>,
     /// When supplied, a shell command to output to instead of xaa, xab …
     filter: Option<String>,
     strategy: Strategy,
@@ -854,10 +926,14 @@ impl SpliceSettings {
             None
         };
 
+        let prefix = args_match.get_one::<OsString>(ARG_PREFIX).unwrap();
+        let input = args_match.get_one::<OsString>(ARG_INPUT).unwrap();
         let result = Self {
-            prefix: args_match.get_one::<String>(ARG_PREFIX).unwrap().clone(),
+            prefix: prefix.to_string_lossy().into_owned(),
+            prefix_os: prefix.to_str().is_none().then(|| prefix.clone()),
             suffix,
-            input: args_match.get_one::<String>(ARG_INPUT).unwrap().clone(),
+            input: input.to_string_lossy().into_owned(),
+            input_os: input.to_str().is_none().then(|| input.clone()),
             filter: args_match.get_one::<String>(OPT_FILTER).cloned(),
             strategy,
             verbose: args_match.value_source(OPT_VERBOSE) == Some(ValueSource::CommandLine),
@@ -888,14 +964,28 @@ impl SpliceSettings {
         Ok(result)
     }
 
+    fn input_path(&self) -> &OsStr {
+        self.input_os
+            .as_deref()
+            .unwrap_or_else(|| OsStr::new(&self.input))
+    }
+
+    fn output_prefix(&self) -> &OsStr {
+        self.prefix_os
+            .as_deref()
+            .unwrap_or_else(|| OsStr::new(&self.prefix))
+    }
+
     fn splice_instantiate_current_writer(
         &self,
-        file_name: &str,
+        file_name: impl AsRef<OsStr>,
         new: bool,
     ) -> io::Result<BufWriter<Box<dyn Write>>> {
-        if platform::paths_refer_to_same_file(&self.input, file_name) {
+        let file_name = file_name.as_ref();
+        if platform::paths_refer_to_same_file(self.input_path(), file_name) {
             return Err(io::Error::other(format!(
-                "'{file_name}' would overwrite input; aborting"
+                "{} would overwrite input; aborting",
+                split_quote_path(file_name, true)
             )));
         }
 
@@ -996,7 +1086,7 @@ fn split_flush_if_unbuffered<T: Write>(
 // # 返回值
 // 返回一个`std::io::Result<u64>`，其中`u64`表示读取的数据量或输入源的大小（以字节为单位）。如果无法确定大小，将返回错误。
 fn splice_get_input_size<R>(
-    splice_input: &String,
+    splice_input: &OsStr,
     splice_reader: &mut R,
     bufffer: &mut Vec<u8>,
     splice_io_blksize: &Option<u64>,
@@ -1021,14 +1111,15 @@ where
     if number_bytes < read_splice_limit {
         // 如果读取的字节数小于限制，说明输入源可能是一个小文件或空输入流
         Ok(number_bytes)
-    } else if splice_input == "-" {
+    } else if splice_input == OsStr::new("-") {
         // 如果输入源是标准输入，且未读取到所有内容，说明输入流可能是一个无限的流
         return Err(io::Error::other(format!(
-            "{splice_input}: cannot determine input size"
+            "{}: cannot determine input size",
+            split_quote_path(splice_input, false)
         )));
     } else {
         // 如果文件大小超过了读取限制，尝试从文件元数据中获取文件大小
-        let input_metadata = metadata(splice_input)?;
+        let input_metadata = metadata(Path::new(splice_input))?;
         let input_metadata_size = input_metadata.len();
         if number_bytes <= input_metadata_size {
             Ok(input_metadata_size)
@@ -1041,7 +1132,8 @@ where
             } else {
                 // 如果无法确定文件大小，返回错误
                 return Err(io::Error::other(format!(
-                    "{splice_input}: cannot determine file size"
+                    "{}: cannot determine file size",
+                    split_quote_path(splice_input, false)
                 )));
             }
         }
@@ -1080,7 +1172,7 @@ struct SpliceByteChunkWriter<'a> {
     inner: Option<BufWriter<Box<dyn Write>>>,
 
     /// Iterator that yields filenames for each chunk.
-    filename_iterator: FilenameIterator<'a>,
+    filename_iterator: FilenameIterator,
 }
 
 impl<'a> SpliceByteChunkWriter<'a> {
@@ -1089,7 +1181,7 @@ impl<'a> SpliceByteChunkWriter<'a> {
         splice_settings: &'a SpliceSettings,
     ) -> CTResult<SpliceByteChunkWriter<'a>> {
         let file_iterator =
-            FilenameIterator::new(&splice_settings.prefix, &splice_settings.suffix)?;
+            FilenameIterator::new(splice_settings.output_prefix(), &splice_settings.suffix)?;
         Ok(SpliceByteChunkWriter {
             settings: splice_settings,
             chunk_size: splice_chunk_size,
@@ -1217,7 +1309,7 @@ struct SpliceLineChunkWriter<'a> {
     inner: Option<BufWriter<Box<dyn Write>>>,
 
     /// Iterator that yields filenames for each chunk.
-    filename_iterator: FilenameIterator<'a>,
+    filename_iterator: FilenameIterator,
 }
 
 impl<'a> SpliceLineChunkWriter<'a> {
@@ -1226,7 +1318,7 @@ impl<'a> SpliceLineChunkWriter<'a> {
         splice_settings: &'a SpliceSettings,
     ) -> CTResult<SpliceLineChunkWriter<'a>> {
         let file_iterator =
-            FilenameIterator::new(&splice_settings.prefix, &splice_settings.suffix)?;
+            FilenameIterator::new(splice_settings.output_prefix(), &splice_settings.suffix)?;
         Ok(SpliceLineChunkWriter {
             settings: splice_settings,
             chunk_size,
@@ -1320,8 +1412,9 @@ fn splice_line_bytes<R: BufRead>(
 ) -> CTResult<()> {
     let chunk_size = chunk_size as usize;
     let separator = splice_settings.separator;
-    let mut file_iterator = FilenameIterator::new(&splice_settings.prefix, &splice_settings.suffix)
-        .map_err(|e| CtSimpleError::new(1, format!("{e}")))?;
+    let mut file_iterator =
+        FilenameIterator::new(splice_settings.output_prefix(), &splice_settings.suffix)
+            .map_err(|e| CtSimpleError::new(1, format!("{e}")))?;
 
     let mut carry_over = Vec::new();
 
@@ -1384,7 +1477,7 @@ fn splice_line_bytes<R: BufRead>(
 
 /// Output file parameters
 struct SplitOutFile {
-    filename: String,
+    filename: OsString,
     maybe_writer: Option<BufWriter<Box<dyn Write>>>,
     is_new: bool,
 }
@@ -1443,8 +1536,8 @@ impl SplitManageOutFiles for OutFiles {
         writer_optional: bool,
     ) -> CTResult<Self> {
         // 创建文件名迭代器，用于生成每个分割文件的名称。
-        let mut file_iterator: FilenameIterator<'_> =
-            FilenameIterator::new(&split_settings.prefix, &split_settings.suffix)
+        let mut file_iterator: FilenameIterator =
+            FilenameIterator::new(split_settings.output_prefix(), &split_settings.suffix)
                 .map_err(|e| io::Error::other(format!("{e}")))?;
         let mut output_files: Self = Self::new();
         for _ in 0..number_files {
@@ -1458,7 +1551,7 @@ impl SplitManageOutFiles for OutFiles {
             } else {
                 // 尝试为文件实例化一个写入器。如果因系统限制而失败，并且当前不是为`--filter`子进程创建写入器，则记录为`None`。
                 let instantiated =
-                    split_settings.splice_instantiate_current_writer(file_name.as_str(), true);
+                    split_settings.splice_instantiate_current_writer(file_name.as_os_str(), true);
                 match instantiated {
                     Ok(writer) => Some(writer),
                     Err(e) if split_settings.filter.is_some() => {
@@ -1497,7 +1590,7 @@ impl SplitManageOutFiles for OutFiles {
         let mut count = 0;
         // 尝试多次关闭文件描述符以应对系统限制，特别是当有其他进程可能占用已释放的文件描述符时
         'loop1: loop {
-            let file_to_open = self[index].filename.as_str();
+            let file_to_open = self[index].filename.as_os_str();
             let file_to_open_is_new = self[index].is_new;
             let maybe_writer = splice_settings
                 .splice_instantiate_current_writer(file_to_open, file_to_open_is_new);
@@ -1608,7 +1701,7 @@ where
     // 尝试获取输入的总字节数
     let initial_buffer = &mut Vec::new();
     let mut num_bytes = splice_get_input_size(
-        &splice_settings.input,
+        splice_settings.input_path(),
         reader,
         initial_buffer,
         &splice_settings.io_blksize,
@@ -1672,7 +1765,8 @@ where
                         1,
                         format!(
                             "{}: cannot read from input : {}",
-                            splice_settings.input, error
+                            split_quote_path(splice_settings.input_path(), false),
+                            error
                         ),
                     ));
                 }
@@ -1751,7 +1845,7 @@ where
     // 初始化，计算每块的字节数
     let initial_buffer = &mut Vec::new();
     let number_bytes = splice_get_input_size(
-        &splice_settings.input,
+        splice_settings.input_path(),
         splice_reader,
         initial_buffer,
         &splice_settings.io_blksize,
@@ -1953,11 +2047,14 @@ where
  */
 fn split(splice_settings: &SpliceSettings) -> CTResult<()> {
     // 根据输入源创建一个读取器
-    let read_box = if splice_settings.input == "-" {
+    let read_box = if splice_settings.input_path() == OsStr::new("-") {
         Box::new(stdin()) as Box<dyn Read>
     } else {
-        let r = File::open(Path::new(&splice_settings.input)).map_err_context(|| {
-            format!("cannot open {} for reading", splice_settings.input.quote())
+        let r = File::open(Path::new(splice_settings.input_path())).map_err_context(|| {
+            format!(
+                "cannot open {} for reading",
+                split_quote_path(splice_settings.input_path(), true)
+            )
         })?;
         Box::new(r) as Box<dyn Read>
     };
@@ -2035,12 +2132,77 @@ fn split(splice_settings: &SpliceSettings) -> CTResult<()> {
 mod tests {
     use super::*;
     use std::collections::BTreeMap;
+    use std::path::PathBuf;
     use tempfile::tempdir;
+
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStrExt;
 
     fn unique_output_filename() -> &'static str {
         static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let seq = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Box::leak(format!("output.{}.{}.txt", std::process::id(), seq).into_boxed_str())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_split_preserves_non_utf8_input_and_output_prefix_bytes() {
+        let temp = tempdir().expect("create temporary directory");
+        let mut input_name = temp.path().as_os_str().to_os_string();
+        input_name.push(OsStr::from_bytes(b"/input-\xff"));
+        let input = PathBuf::from(input_name);
+        std::fs::write(&input, b"ab").expect("write raw-byte input file");
+
+        let mut prefix = temp.path().as_os_str().to_os_string();
+        prefix.push(OsStr::from_bytes(b"/out-\xff"));
+        let mut first_output = prefix.clone();
+        first_output.push("aa");
+        let mut second_output = prefix.clone();
+        second_output.push("ab");
+
+        let result = split_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-b"),
+                OsString::from("1"),
+                input.into_os_string(),
+                prefix,
+            ]
+            .into_iter(),
+        );
+
+        assert!(result.is_ok(), "raw-byte input and prefix must be accepted");
+        assert_eq!(
+            std::fs::read(first_output).expect("read first output"),
+            b"a"
+        );
+        assert_eq!(
+            std::fs::read(second_output).expect("read second output"),
+            b"b"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_split_reports_non_utf8_input_path_without_lossy_replacement() {
+        let temp = tempdir().expect("create temporary directory");
+        let mut missing = temp.path().as_os_str().to_os_string();
+        missing.push(OsStr::from_bytes(b"/missing-\xff"));
+
+        let error = split_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-b"),
+                OsString::from("1"),
+                missing,
+            ]
+            .into_iter(),
+        )
+        .expect_err("missing raw-byte input must fail");
+
+        let diagnostic = error.to_string();
+        assert!(diagnostic.contains("'$'\\377'"));
+        assert!(!diagnostic.contains('\u{fffd}'));
     }
 
     fn unique_output_prefix() -> String {

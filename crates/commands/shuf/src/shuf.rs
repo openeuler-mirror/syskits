@@ -713,7 +713,12 @@ fn shuf_parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> 
             .map_err(|_| format!("invalid input range: '{input_range}'"))?;
 
         // 确保范围有效（起始值不大于结束值）
-        if begin <= end {
+        if begin <= end
+            && end
+                .checked_sub(begin)
+                .and_then(|width| width.checked_add(1))
+                .is_some()
+        {
             Ok(begin..=end)
         } else {
             Err(format!("invalid input range: '{input_range}'"))
@@ -1160,6 +1165,14 @@ mod tests {
             assert!(shuf_parse_range("5-1").is_err());
             assert!(shuf_parse_range("a-b").is_err());
             assert!(shuf_parse_range("-5").is_err());
+        }
+
+        #[test]
+        fn test_parse_range_rejects_full_usize_interval() {
+            assert_eq!(
+                shuf_parse_range("0-18446744073709551615").unwrap_err(),
+                "invalid input range: '0-18446744073709551615'"
+            );
         }
 
         #[test]

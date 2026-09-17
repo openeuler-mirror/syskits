@@ -655,6 +655,28 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -i 0-18446744073709551615；参数是完整64位无符号闭区间，元素总数溢出。GNU立即返回RC=1、stdout为空、stderr为shuf: invalid input range: '0-18446744073709551615'加换行，不能进入无限输出。",
+            "args": [
+                "-i",
+                "0-18446744073709551615"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: invalid input range: '0-18446744073709551615'\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "timeout": 3
+        },
+        {
+            "command": "shuf",
             "description": "shuf: 显示帮助信息 (--help)",
             "args": [
                 "--help"

@@ -1076,19 +1076,26 @@ fn shuf_parse_range(input_range: &OsStr) -> Result<RangeInclusive<usize>, String
             shuf_quote_numeric_argument(input_range)
         )
     };
+    let overflow = || {
+        format!(
+            "{}: {}",
+            invalid(),
+            strip_errno(&Error::from_raw_os_error(ctcore::libc::EOVERFLOW))
+        )
+    };
     let bytes = input_range.as_encoded_bytes();
 
     // 尝试按 '-' 分割字符串
     if let Some(separator) = bytes.iter().position(|byte| *byte == b'-') {
-        let ShufUnsigned::Value(begin) =
-            shuf_parse_unsigned(&bytes[..separator]).map_err(|_| invalid())?
-        else {
-            return Err(invalid());
+        let begin = match shuf_parse_unsigned(&bytes[..separator]) {
+            Ok(ShufUnsigned::Value(value)) => value,
+            Ok(ShufUnsigned::Overflow) => return Err(overflow()),
+            Err(()) => return Err(invalid()),
         };
-        let ShufUnsigned::Value(end) =
-            shuf_parse_unsigned(&bytes[separator + 1..]).map_err(|_| invalid())?
-        else {
-            return Err(invalid());
+        let end = match shuf_parse_unsigned(&bytes[separator + 1..]) {
+            Ok(ShufUnsigned::Value(value)) => value,
+            Ok(ShufUnsigned::Overflow) => return Err(overflow()),
+            Err(()) => return Err(invalid()),
         };
 
         // 确保范围有效（起始值不大于结束值）
@@ -2109,6 +2116,22 @@ mod tests {
                     ctcore::ct_display::locale_quote("0-18446744073709551615")
                 )
             );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_parse_range_reports_erroverflow_for_each_bound() {
+            for input in ["18446744073709551616-1", "1-18446744073709551616"] {
+                assert_eq!(
+                    shuf_parse_range(OsStr::new(input)).unwrap_err(),
+                    format!(
+                        "invalid input range: {}: {}",
+                        shuf_quote_numeric_argument(OsStr::new(input)),
+                        strip_errno(&Error::from_raw_os_error(ctcore::libc::EOVERFLOW))
+                    ),
+                    "input: {input}"
+                );
+            }
         }
 
         #[test]

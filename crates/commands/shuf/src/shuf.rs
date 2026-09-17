@@ -252,7 +252,7 @@ fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSet
         if let Some(second_file) = operands.get(1) {
             return Err(CTsageError::new(
                 1,
-                format!("unexpected argument {} found", second_file.quote()),
+                format!("extra operand {}", second_file.quote()),
             ));
         };
         ShufMode::Default(file)
@@ -1251,6 +1251,15 @@ mod tests {
                 shuf_parse_invocation(parse_args(&["shuf", "-i", "0-1", "-i", "2-3"])).unwrap_err();
 
             assert_eq!(error.to_string(), "multiple -i options specified");
+        }
+
+        #[test]
+        fn test_default_mode_extra_operand_uses_gnu_diagnostic() {
+            let error = shuf_parse_invocation(parse_args(&["shuf", "file1", "file2"]))
+                .expect_err("a second file operand must fail");
+
+            assert_eq!(error.to_string(), "extra operand 'file2'");
+            assert!(error.usage());
         }
 
         #[test]

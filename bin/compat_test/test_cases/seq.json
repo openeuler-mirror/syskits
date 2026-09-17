@@ -1973,6 +1973,27 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq 0x1p-1000000；十六进制浮点末值在GNU long double范围下溢为零，默认首值1大于末值；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stdout与stderr均为0字节、内容=空",
+            "args": [
+                "0x1p-1000000"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

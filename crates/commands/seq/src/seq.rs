@@ -976,6 +976,7 @@ mod tests {
     use super::*;
     use ctcore::Tool;
     use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
 
     #[test]
     fn test_tool_implementation() {
@@ -1223,6 +1224,39 @@ mod tests {
             assert_eq!(error.to_string(), expected, "args: {args:?}");
             assert!(!error.usage(), "args: {args:?}");
         }
+    }
+
+    #[test]
+    fn test_invalid_non_utf8_format_preserves_gnu_diagnostic_bytes() {
+        let no_directive = seq_main(
+            vec![
+                OsString::from("seq"),
+                OsString::from("-f"),
+                OsString::from_vec(vec![0xff]),
+                OsString::from("1"),
+            ]
+            .into_iter(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            no_directive.diagnostic_bytes().as_ref(),
+            b"format '\\377' has no % directive"
+        );
+
+        let unknown_directive = seq_main(
+            vec![
+                OsString::from("seq"),
+                OsString::from("-f"),
+                OsString::from_vec(vec![b'%', 0xff]),
+                OsString::from("1"),
+            ]
+            .into_iter(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            unknown_directive.diagnostic_bytes().as_ref(),
+            b"format '%\\377' has unknown %\xff directive"
+        );
     }
 
     #[test]

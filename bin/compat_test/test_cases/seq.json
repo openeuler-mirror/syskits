@@ -1865,6 +1865,54 @@
         },
         {
             "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -s CT_NEG_, 1 3；CT_NEG_, 是用户传入的字面分隔符，不能被内部负数参数标记改写；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为20字节/1条换行分隔、内容=1CT_NEG_,2CT_NEG_,3\\n",
+            "args": [
+                "-s",
+                "CT_NEG_,",
+                "1",
+                "3"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1CT_NEG_,2CT_NEG_,3\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f CT_NEG_%g 1 1；CT_NEG_%g 是用户传入的字面格式前缀，不能被内部负数参数标记改写；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为9字节/1条换行分隔、内容=CT_NEG_1\\n",
+            "args": [
+                "-f",
+                "CT_NEG_%g",
+                "1",
+                "1"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "CT_NEG_1\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
             "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq --=bad；空长选项名称同时匹配多个GNU选项；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stdout为0字节/0条换行分隔、内容=空，stderr为151字节、内容=GNU歧义选项及候选列表诊断和Try 'seq --help'提示",
             "args": ["--=bad"],
             "setup_commands": [

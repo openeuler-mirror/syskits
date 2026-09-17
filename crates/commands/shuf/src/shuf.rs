@@ -214,6 +214,8 @@ fn sigpipe_is_ignored_in_status(status: &str) -> bool {
 
 fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSettings)> {
     let matches = ct_app().try_get_matches_from(args)?;
+    shuf_validate_numeric_options_in_order(&matches)?;
+
     let echo = matches.get_flag(shuf_options::SHUF_ECHO);
     let input_ranges = matches
         .get_many::<OsString>(shuf_options::SHUF_INPUT_RANGE)
@@ -269,6 +271,64 @@ fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSet
 
     let settings = ShufSettings::new(&matches)?;
     Ok((mode, settings))
+}
+
+enum ShufNumericOption {
+    HeadCount(OsString),
+    InputRange(OsString),
+}
+
+fn shuf_validate_numeric_options_in_order(matches: &clap::ArgMatches) -> CTResult<()> {
+    let mut options = Vec::new();
+
+    if let (Some(indices), Some(values)) = (
+        matches.indices_of(shuf_options::SHUF_HEAD_COUNT),
+        matches.get_many::<OsString>(shuf_options::SHUF_HEAD_COUNT),
+    ) {
+        options.extend(
+            indices
+                .zip(values)
+                .map(|(index, value)| (index, ShufNumericOption::HeadCount(value.clone()))),
+        );
+    }
+    if let (Some(indices), Some(values)) = (
+        matches.indices_of(shuf_options::SHUF_INPUT_RANGE),
+        matches.get_many::<OsString>(shuf_options::SHUF_INPUT_RANGE),
+    ) {
+        options.extend(
+            indices
+                .zip(values)
+                .map(|(index, value)| (index, ShufNumericOption::InputRange(value.clone()))),
+        );
+    }
+    options.sort_unstable_by_key(|(index, _)| *index);
+
+    let mut saw_input_range = false;
+    for (_, option) in options {
+        match option {
+            ShufNumericOption::HeadCount(value) => {
+                if shuf_parse_unsigned(value.as_encoded_bytes()).is_err() {
+                    return Err(CtSimpleError::new(
+                        1,
+                        format!(
+                            "invalid line count: {}",
+                            shuf_quote_numeric_argument(value.as_os_str())
+                        ),
+                    ));
+                }
+            }
+            ShufNumericOption::InputRange(value) => {
+                if saw_input_range {
+                    return Err(CtSimpleError::new(1, "multiple -i options specified"));
+                }
+                shuf_parse_range(value.as_os_str())
+                    .map_err(|message| CtSimpleError::new(1, message))?;
+                saw_input_range = true;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 pub fn ct_app() -> Command {
@@ -1487,6 +1547,21 @@ mod tests {
                 error.to_string(),
                 format!(
                     "invalid input range: {}",
+                    ctcore::ct_display::locale_quote("invalid")
+                )
+            );
+        }
+
+        #[test]
+        fn test_earlier_invalid_head_count_precedes_invalid_input_range() {
+            let error =
+                shuf_parse_invocation(parse_args(&["shuf", "-n", "invalid", "-i", "invalid"]))
+                    .expect_err("GNU diagnoses the first invalid numeric option");
+
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "invalid line count: {}",
                     ctcore::ct_display::locale_quote("invalid")
                 )
             );

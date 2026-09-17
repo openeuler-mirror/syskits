@@ -39,7 +39,6 @@ use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version}
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, strip_errno};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
@@ -256,7 +255,10 @@ fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSet
         if let Some(extra_operand) = operands.first() {
             return Err(CTsageError::new(
                 1,
-                format!("extra operand {}", extra_operand.quote()),
+                format!(
+                    "extra operand {}",
+                    shuf_quote_diagnostic_argument(extra_operand.as_os_str())
+                ),
             ));
         }
         ShufMode::InputRange(range)
@@ -268,7 +270,10 @@ fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSet
         if let Some(second_file) = operands.get(1) {
             return Err(CTsageError::new(
                 1,
-                format!("extra operand {}", second_file.quote()),
+                format!(
+                    "extra operand {}",
+                    shuf_quote_diagnostic_argument(second_file.as_os_str())
+                ),
             ));
         };
         ShufMode::Default(file)
@@ -508,7 +513,7 @@ fn shuf_validate_options_in_order(matches: &clap::ArgMatches) -> CTResult<()> {
                         1,
                         format!(
                             "invalid line count: {}",
-                            shuf_quote_numeric_argument(value.as_os_str())
+                            shuf_quote_diagnostic_argument(value.as_os_str())
                         ),
                     ));
                 }
@@ -1100,7 +1105,7 @@ fn shuf_parse_range(input_range: &OsStr) -> Result<RangeInclusive<usize>, String
     let invalid = || {
         format!(
             "invalid input range: {}",
-            shuf_quote_numeric_argument(input_range)
+            shuf_quote_diagnostic_argument(input_range)
         )
     };
     let overflow = || {
@@ -1209,7 +1214,7 @@ fn shuf_parse_head_count(headcounts: Vec<OsString>) -> Result<usize, String> {
             Err(()) => {
                 return Err(format!(
                     "invalid line count: {}",
-                    shuf_quote_numeric_argument(count.as_os_str())
+                    shuf_quote_diagnostic_argument(count.as_os_str())
                 ));
             }
         }
@@ -1218,7 +1223,11 @@ fn shuf_parse_head_count(headcounts: Vec<OsString>) -> Result<usize, String> {
     Ok(result)
 }
 
-fn shuf_quote_numeric_argument(input: &OsStr) -> String {
+/// Quote a user-supplied argument for GNU diagnostics.
+///
+/// The result keeps printable locale characters, renders control and invalid
+/// bytes with GNU escapes, and surrounds the argument with locale quote marks.
+fn shuf_quote_diagnostic_argument(input: &OsStr) -> String {
     let bytes = input.as_encoded_bytes();
     if let Ok(text) = std::str::from_utf8(bytes) {
         if shuf_bytes_are_locale_printable(bytes) {
@@ -1876,8 +1885,50 @@ mod tests {
             let error = shuf_parse_invocation(parse_args(&["shuf", "file1", "file2"]))
                 .expect_err("a second file operand must fail");
 
-            assert_eq!(error.to_string(), "extra operand 'file2'");
+            let (left_quote, right_quote) = shuf_diagnostic_quote_marks();
+            assert_eq!(
+                error.to_string(),
+                format!("extra operand {left_quote}file2{right_quote}")
+            );
             assert!(error.usage());
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_extra_operand_uses_gnu_diagnostic_quoting() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let raw_error = shuf_parse_invocation(
+                vec![
+                    OsString::from("shuf"),
+                    OsString::from("-i"),
+                    OsString::from("1-1"),
+                    OsString::from_vec(vec![0xff]),
+                ]
+                .into_iter(),
+            )
+            .expect_err("an input-range operand must be rejected");
+            let control_error = shuf_parse_invocation(
+                vec![
+                    OsString::from("shuf"),
+                    OsString::from("-i"),
+                    OsString::from("1-1"),
+                    OsString::from("a\tb"),
+                ]
+                .into_iter(),
+            )
+            .expect_err("an input-range operand must be rejected");
+
+            let (left_quote, right_quote) = shuf_diagnostic_quote_marks();
+            assert_eq!(
+                raw_error.to_string(),
+                format!("extra operand {left_quote}\\377{right_quote}")
+            );
+            assert_eq!(
+                control_error.to_string(),
+                format!("extra operand {left_quote}a\\tb{right_quote}")
+            );
+            assert!(raw_error.usage());
         }
 
         #[test]
@@ -2025,10 +2076,10 @@ mod tests {
 
         #[cfg(unix)]
         #[test]
-        fn test_quote_numeric_argument_uses_gnu_escape_sequences() {
+        fn test_quote_diagnostic_argument_uses_gnu_escape_sequences() {
             use std::os::unix::ffi::OsStringExt;
 
-            let quoted = shuf_quote_numeric_argument(
+            let quoted = shuf_quote_diagnostic_argument(
                 OsString::from_vec(vec![0xff, b'\'', b'\\', 0x07]).as_os_str(),
             );
 
@@ -2042,18 +2093,18 @@ mod tests {
         }
 
         #[test]
-        fn test_quote_numeric_argument_escapes_utf8_control_bytes() {
+        fn test_quote_diagnostic_argument_escapes_utf8_control_bytes() {
             let (left_quote, right_quote) = shuf_diagnostic_quote_marks();
 
             assert_eq!(
-                shuf_quote_numeric_argument(OsStr::new("1\t")),
+                shuf_quote_diagnostic_argument(OsStr::new("1\t")),
                 format!("{left_quote}1\\t{right_quote}")
             );
         }
 
         #[cfg(unix)]
         #[test]
-        fn test_quote_numeric_argument_escapes_non_ascii_bytes_in_c_locale() {
+        fn test_quote_diagnostic_argument_escapes_non_ascii_bytes_in_c_locale() {
             use std::ffi::CStr;
 
             let _lock = LOCALE_LOCK.lock().unwrap();
@@ -2070,7 +2121,7 @@ mod tests {
                 "set LC_CTYPE to C"
             );
 
-            let quoted = shuf_quote_numeric_argument(OsStr::new("1é"));
+            let quoted = shuf_quote_diagnostic_argument(OsStr::new("1é"));
 
             unsafe {
                 ctcore::libc::setlocale(ctcore::libc::LC_CTYPE, current.as_ptr());
@@ -2180,7 +2231,7 @@ mod tests {
                     shuf_parse_range(OsStr::new(input)).unwrap_err(),
                     format!(
                         "invalid input range: {}: {}",
-                        shuf_quote_numeric_argument(OsStr::new(input)),
+                        shuf_quote_diagnostic_argument(OsStr::new(input)),
                         strip_errno(&Error::from_raw_os_error(ctcore::libc::EOVERFLOW))
                     ),
                     "input: {input}"

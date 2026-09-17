@@ -1163,6 +1163,29 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -n $'1\\t' -i 1-2；COUNT参数字节为3109，GNU拒绝该无效数值并将TAB转义为反斜杠t，预期RC=1、stdout为空、stderr为shuf: invalid line count: '1\\t'加换行。",
+            "args": [
+                "-n",
+                "1\t",
+                "-i",
+                "1-2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: invalid line count: '1\\t'\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "LC_ALL=C、LANG=C下执行shuf -i $' 0- 1' --random-source=/dev/zero；范围参数字节为20302d2031，GNU分别按xstrtoumax解析上下界并接受前导空白，固定随机字节00得到升序排列，预期RC=0、stdout为300a310a、stderr为空。",
             "args": [
                 "-i",

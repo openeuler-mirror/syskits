@@ -106,6 +106,9 @@ pub struct StandardStreams {
     /// 将标准输入连接到测试沙箱中的指定路径；未设置时由stdin模式决定。
     #[serde(default, rename = "stdinFile", alias = "stdin_file")]
     pub stdin_file: Option<String>,
+    /// 将stdinFile打开后定位到的字节偏移；未设置时从文件开头读取。
+    #[serde(default, rename = "stdinOffset", alias = "stdin_offset")]
+    pub stdin_offset: Option<u64>,
     #[serde(default)]
     pub stdin: InputStream,
     #[serde(default)]
@@ -466,6 +469,8 @@ mod tests {
             },
             "environment": {
               "standardStreams": {
+                "stdinFile": "input.fixture",
+                "stdinOffset": 7,
                 "stdin": "closed",
                 "stdout": "closed_pipe",
                 "stderr": "tty",
@@ -487,7 +492,8 @@ mod tests {
         assert_eq!(streams.stderr, OutputStream::Tty);
         assert_eq!(streams.sigpipe, SignalDisposition::Ignore);
         assert_eq!(streams.stdin, InputStream::Closed);
-        assert_eq!(streams.stdin_file, None);
+        assert_eq!(streams.stdin_file.as_deref(), Some("input.fixture"));
+        assert_eq!(streams.stdin_offset, Some(7));
         assert!(streams.use_bash);
     }
 

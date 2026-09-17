@@ -502,6 +502,40 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下将常规stdin文件stdin-offset-input定位到字节9437184后执行shuf -n 1 --random-source=/dev/null；总文件长度超过8MiB但剩余输入仅为x加换行，GNU按当前偏移判断不使用蓄水池，且单行无需读取随机源，预期RC=0、stdout为780a、stderr为空。",
+            "args": [
+                "-n",
+                "1",
+                "--random-source=/dev/null"
+            ],
+            "tstdin": "",
+            "setup_commands": [
+                "truncate -s 9437184 stdin-offset-input",
+                "printf 'x\\n' >> stdin-offset-input"
+            ],
+            "cleanup_commands": [
+                "rm -f stdin-offset-input"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdinFile": "stdin-offset-input",
+                    "stdinOffset": 9437184
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "x\n",
+                    "stderr": ""
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "shuf: 单个数字范围 (-i 1-1)",
             "args": [
                 "-i",

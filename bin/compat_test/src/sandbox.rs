@@ -28,7 +28,7 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fs::{self, File, Permissions};
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, OwnedFd};
@@ -752,7 +752,11 @@ impl IsolatedSandbox {
                 } else {
                     self.current_dir.join(path)
                 };
-                Stdio::from(File::open(path)?)
+                let mut file = File::open(path)?;
+                if let Some(offset) = streams.stdin_offset {
+                    file.seek(SeekFrom::Start(offset))?;
+                }
+                Stdio::from(file)
             }
             None if close_stdin => Stdio::null(),
             None => Stdio::piped(),
@@ -1370,6 +1374,30 @@ mod tests {
 
         assert_eq!(result.exit_code, 0);
         assert_eq!(result.stdout, "regular input");
+        assert_eq!(result.stderr, "");
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_command_with_regular_file_stdin_offset() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        fs::write(sandbox.path().join("stdin.fixture"), b"skip:read this")?;
+        let streams = StandardStreams {
+            stdin_file: Some("stdin.fixture".to_string()),
+            stdin_offset: Some(5),
+            ..StandardStreams::default()
+        };
+        let result = sandbox.execute_command_with_streams(
+            "cat",
+            &[],
+            Some("ignored pipe input"),
+            true,
+            None,
+            &streams,
+        )?;
+
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.stdout, "read this");
         assert_eq!(result.stderr, "");
         Ok(())
     }

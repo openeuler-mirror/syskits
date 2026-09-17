@@ -1747,6 +1747,7 @@ where
     // 准备输出：如果在 Kth 块 of N 块模式，则写入标准输出；否则，为每个块创建一个写入器
     let mut splice_stdout_writer = split_stdout_writer();
     let mut output_files: OutFiles = OutFiles::new();
+    let mut filter_filenames = None;
 
     // 计算每个块的基础大小和余数，用于之后计算块大小
     let chunk_size_base = num_bytes / num_chunks;
@@ -1754,14 +1755,22 @@ where
 
     // 如果在 N 块模式，为每个块创建一个写入器
     if opt_kth_chunk.is_none() {
-        output_files = OutFiles::init(num_chunks, splice_settings, false)?;
+        if splice_settings.filter.is_some() {
+            filter_filenames = Some(FilenameIterator::new(
+                splice_settings.output_prefix(),
+                &splice_settings.suffix,
+            )?);
+        } else {
+            output_files = OutFiles::init(num_chunks, splice_settings, false)?;
+        }
     }
 
     // 遍历每个块，从读取器中读取数据并写入相应的输出
     for size in 1_u64..=num_chunks {
         let chunk_size = chunk_size_base + (chunk_size_reminder > size - 1) as u64;
         let buf = &mut Vec::new();
-        if num_bytes > 0 {
+        let has_remaining_input = num_bytes > 0;
+        if has_remaining_input {
             // 读取 `chunk_size` 字节到 `buf`，除了最后一个块。
             // 最后一个块会接收所有剩余字节，确保我们不会留下任何字节。
             let limit_size = {
@@ -1798,13 +1807,31 @@ where
                         break;
                     }
                 }
-                None => {
+                None if splice_settings.filter.is_none() => {
                     let idx = (size - 1) as usize;
                     let writer = output_files.get_writer(idx, splice_settings)?;
                     writer.write_all(buf)?;
                 }
+                None => {}
             }
-        } else {
+        }
+
+        if opt_kth_chunk.is_none() && splice_settings.filter.is_some() {
+            let filename = filter_filenames
+                .as_mut()
+                .and_then(Iterator::next)
+                .ok_or_else(|| CtSimpleError::new(1, "output file suffixes exhausted"))?;
+            if splice_settings.verbose {
+                split_emit_opening_output(&filename, true)?;
+            }
+
+            let mut writer = splice_settings.splice_instantiate_current_writer(&filename, true)?;
+            writer.write_all(buf)?;
+            drop(writer);
+            if platform::filter_failure_recorded() {
+                return Err(CtSimpleError::new(1, "filter command failed"));
+            }
+        } else if !has_remaining_input {
             break;
         }
     }
@@ -2273,7 +2300,7 @@ mod tests {
         let prefix = temp.path().join("out-");
         std::fs::write(&input, b"ab").expect("write input");
 
-        split_main(
+        let error = split_main(
             [
                 OsString::from(ctcore::ct_util_name()),
                 OsString::from("-b"),
@@ -2286,6 +2313,7 @@ mod tests {
         )
         .expect_err("a failing filter must stop split");
 
+        assert_eq!(error.code(), 42);
         assert_eq!(std::fs::read(temp.path().join("out-aa")).unwrap(), b"a");
         assert!(!temp.path().join("out-ab").exists());
     }
@@ -2319,6 +2347,31 @@ mod tests {
                 prefix.display()
             )
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_split_number_bytes_stops_after_failed_filter() {
+        let temp = tempdir().expect("create temporary directory");
+        let input = temp.path().join("input");
+        let prefix = temp.path().join("out-");
+        std::fs::write(&input, b"ab").expect("write input");
+
+        let error = split_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--number=2"),
+                OsString::from("--filter=cat > \"$FILE\"; exit 42"),
+                input.into_os_string(),
+                prefix.into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect_err("a failing filter must stop split");
+
+        assert_eq!(error.code(), 42);
+        assert_eq!(std::fs::read(temp.path().join("out-aa")).unwrap(), b"a");
+        assert!(!temp.path().join("out-ab").exists());
     }
 
     fn unique_output_prefix() -> String {

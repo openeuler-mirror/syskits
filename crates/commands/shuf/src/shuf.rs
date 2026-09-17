@@ -1040,7 +1040,9 @@ fn shuf_parse_head_count(headcounts: Vec<OsString>) -> Result<usize, String> {
 fn shuf_quote_numeric_argument(input: &OsStr) -> String {
     let bytes = input.as_encoded_bytes();
     if let Ok(text) = std::str::from_utf8(bytes) {
-        return ctcore::ct_display::locale_quote(text);
+        if !bytes.iter().any(u8::is_ascii_control) {
+            return ctcore::ct_display::locale_quote(text);
+        }
     }
 
     let (left_quote, right_quote) = shuf_diagnostic_quote_marks();
@@ -1764,6 +1766,16 @@ mod tests {
                     "'\\377\\'\\\\\\a'" | "\u{2018}\\377'\\\\\\a\u{2019}"
                 ),
                 "unexpected GNU-style numeric quote: {quoted:?}"
+            );
+        }
+
+        #[test]
+        fn test_quote_numeric_argument_escapes_utf8_control_bytes() {
+            let (left_quote, right_quote) = shuf_diagnostic_quote_marks();
+
+            assert_eq!(
+                shuf_quote_numeric_argument(OsStr::new("1\t")),
+                format!("{left_quote}1\\t{right_quote}")
             );
         }
 

@@ -818,6 +818,28 @@
         },
         {
             "command": "shuf",
+            "description": "原始字节用例：LC_ALL=C、LANG=C下执行shuf -e $'\\377'；参数完整十六进制=2d65 ff，echo输入为单字节ff。Linux GNU shuf接受非UTF-8参数并追加换行，预期RC=0、stderr为0字节、stdout为2字节/完整十六进制=ff0a。",
+            "args": [
+                "2d65",
+                "ff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ff0a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "byteMode": true
+        },
+        {
+            "command": "shuf",
             "description": "shuf: 显示帮助信息 (--help)",
             "args": [
                 "--help"

@@ -42,6 +42,7 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_posix::GnuGetoptCommandExt;
+use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
 
 use memchr::memchr_iter;
 use rand::RngCore;
@@ -52,9 +53,22 @@ use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Error, ErrorKind, Read, Write, stdout};
 use std::ops::RangeInclusive;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 
 mod rand_read_adapter;
+
+#[cfg(unix)]
+unsafe extern "C" {
+    fn mbrtowc(
+        wide: *mut ctcore::libc::wchar_t,
+        bytes: *const ctcore::libc::c_char,
+        length: usize,
+        state: *mut ctcore::libc::mbstate_t,
+    ) -> usize;
+    fn iswprint(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ShufMode {
@@ -135,8 +149,7 @@ pub fn shuf_main(args: impl ctcore::Args) -> CTResult<()> {
         // Do not attempt to read the random source or the input file.
         // However, we must touch the output file, if given:
         if let Some(s) = &settings.output {
-            File::create(s)
-                .map_err_context(|| format!("failed to open {} for writing", s.quote()))?;
+            File::create(s).map_err_context(|| shuf_quotef(s.as_os_str()))?;
         }
         return Ok(());
     }
@@ -293,10 +306,7 @@ fn shuf_read_input_file(filename: &OsStr) -> CTResult<Vec<u8>> {
     let reader: Box<dyn Read> = if filename.as_encoded_bytes() == b"-" {
         ctcore::ct_io::stdin_reader_box()
     } else {
-        Box::new(
-            File::open(filename)
-                .map_err_context(|| format!("failed to open {}", filename.quote()))?,
-        )
+        Box::new(File::open(filename).map_err_context(|| shuf_quotef(filename))?)
     };
 
     // 使用带缓冲的读取器提高性能
@@ -306,7 +316,7 @@ fn shuf_read_input_file(filename: &OsStr) -> CTResult<Vec<u8>> {
     // 读取所有数据
     buf_reader
         .read_to_end(&mut data)
-        .map_err_context(|| format!("failed reading {}", filename.quote()))?;
+        .map_err_context(|| String::from("read error"))?;
 
     Ok(data)
 }
@@ -566,13 +576,46 @@ fn shuf_exec<T: Shufable>(input: &mut T, settings: &ShufSettings) -> CTResult<()
 /// 创建输出写入器
 fn create_output_writer(settings: &ShufSettings) -> CTResult<Box<dyn Write>> {
     Ok(if let Some(path) = &settings.output {
-        Box::new(
-            File::create(path)
-                .map_err_context(|| format!("failed to open {} for writing", path.quote()))?,
-        )
+        Box::new(File::create(path).map_err_context(|| shuf_quotef(path.as_os_str()))?)
     } else {
         Box::new(stdout())
     })
+}
+
+fn shuf_quotef(path: &OsStr) -> String {
+    #[cfg(unix)]
+    {
+        let bytes = path.as_bytes();
+        let quoted = escape_shell_bytes_with_classifier(bytes, |remaining| unsafe {
+            let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
+            let mut wide = 0 as ctcore::libc::wchar_t;
+            let length = mbrtowc(
+                &mut wide,
+                remaining.as_ptr().cast(),
+                remaining.len(),
+                &mut state,
+            );
+            if length == usize::MAX {
+                return (1, false);
+            }
+            if length == usize::MAX - 1 {
+                return (remaining.len(), false);
+            }
+
+            let length = if length == 0 { 1 } else { length };
+            let is_utf8 = std::str::from_utf8(&remaining[..length]).is_ok();
+            (
+                length,
+                is_utf8 && iswprint(wide as ctcore::libc::c_uint) != 0,
+            )
+        });
+
+        String::from_utf8(quoted).expect("shell-escaped file names are valid UTF-8")
+    }
+    #[cfg(not(unix))]
+    {
+        path.to_string_lossy().into_owned()
+    }
 }
 
 /// 创建随机数生成器
@@ -970,9 +1013,8 @@ pub fn shuf_native_semantic(args: impl ctcore::Args) -> CTResult<ShufSemantic> {
     let mut buffered_output = Vec::new();
 
     if settings.head_count == 0 {
-        if let Some(path) = &output_file {
-            File::create(path)
-                .map_err_context(|| format!("failed to open {} for writing", path.quote()))?;
+        if let Some(path) = &settings.output {
+            File::create(path).map_err_context(|| shuf_quotef(path.as_os_str()))?;
         }
     } else {
         match &mode {
@@ -1439,6 +1481,30 @@ mod tests {
             let mut input: Vec<&[u8]> = vec![];
             assert!(shuf_exec(&mut input, &settings).is_err());
         }
+
+        #[test]
+        fn test_output_directory_uses_gnu_open_diagnostic() {
+            let temp = tempdir().unwrap();
+            let output = temp.path().join("output-directory");
+            std::fs::create_dir(&output).unwrap();
+            let settings = ShufSettings {
+                head_count: 1,
+                output: Some(output.clone().into_os_string()),
+                random_source: None,
+                is_repeat: false,
+                sep: b'\n',
+            };
+
+            let error = match create_output_writer(&settings) {
+                Ok(_) => panic!("opening a directory as shuf output must fail"),
+                Err(error) => error,
+            };
+
+            assert_eq!(
+                error.to_string(),
+                format!("{}: Is a directory", output.display())
+            );
+        }
     }
 
     mod semantic_tests {
@@ -1521,11 +1587,9 @@ mod tests {
             .expect_err("missing file should error");
 
             assert_eq!(err.code(), 1);
-            let message = err.to_string();
-            assert!(message.contains("failed to open"), "message: {message}");
-            assert!(
-                message.contains(&missing.display().to_string()),
-                "message: {message}"
+            assert_eq!(
+                err.to_string(),
+                format!("{}: No such file or directory", missing.display())
             );
         }
     }
@@ -1582,8 +1646,25 @@ mod tests {
 
         #[test]
         fn test_read_input_file_nonexistent() {
-            let result = shuf_read_input_file(OsStr::new("nonexistent.txt"));
-            assert!(result.is_err());
+            let temp = tempdir().unwrap();
+            let missing = temp.path().join("missing.txt");
+            let error = shuf_read_input_file(missing.as_os_str()).unwrap_err();
+
+            assert_eq!(
+                error.to_string(),
+                format!("{}: No such file or directory", missing.display())
+            );
+        }
+
+        #[test]
+        fn test_read_input_directory_uses_gnu_read_error() {
+            let temp = tempdir().unwrap();
+            let directory = temp.path().join("input-directory");
+            std::fs::create_dir(&directory).unwrap();
+
+            let error = shuf_read_input_file(directory.as_os_str()).unwrap_err();
+
+            assert_eq!(error.to_string(), "read error: Is a directory");
         }
     }
 }

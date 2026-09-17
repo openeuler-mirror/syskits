@@ -712,6 +712,81 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf shuf-missing-input；输入路径字节为736875662d6d697373696e672d696e707574。GNU在打开失败时输出路径、冒号和errno文本，预期RC=1、stdout为空、stderr为shuf: shuf-missing-input: No such file or directory加换行。",
+            "args": [
+                "shuf-missing-input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: shuf-missing-input: No such file or directory\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下先创建目录shuf-input-directory，再执行shuf shuf-input-directory；GNU在读取目录失败时不回显输入路径，预期RC=1、stdout为空、stderr为shuf: read error: Is a directory加换行。",
+            "args": [
+                "shuf-input-directory"
+            ],
+            "setup_commands": [
+                "mkdir shuf-input-directory"
+            ],
+            "cleanup_commands": [
+                "rm -rf shuf-input-directory"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: read error: Is a directory\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下先创建目录shuf-output-directory，再执行shuf -i 1-1 -o shuf-output-directory；输出路径字节为736875662d6f75747075742d6469726563746f7279。GNU输出文件打开失败时输出路径、冒号和errno文本，预期RC=1、stdout为空、stderr为shuf: shuf-output-directory: Is a directory加换行。",
+            "args": [
+                "-i",
+                "1-1",
+                "-o",
+                "shuf-output-directory"
+            ],
+            "setup_commands": [
+                "mkdir shuf-output-directory"
+            ],
+            "cleanup_commands": [
+                "rm -rf shuf-output-directory"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: shuf-output-directory: Is a directory\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "LC_ALL=C、LANG=C下执行shuf -i 0-18446744073709551615；参数是完整64位无符号闭区间，元素总数溢出。GNU立即返回RC=1、stdout为空、stderr为shuf: invalid input range: '0-18446744073709551615'加换行，不能进入无限输出。",
             "args": [
                 "-i",

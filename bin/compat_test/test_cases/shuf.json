@@ -1725,6 +1725,48 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -i 18446744073709551616-1；输入范围下界超过Linux uintmax_t时GNU在invalid input range后附加EOVERFLOW文本，预期RC=1、stdout为空、stderr精确匹配该诊断。",
+            "args": [
+                "-i",
+                "18446744073709551616-1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: invalid input range: '18446744073709551616-1': Value too large for defined data type\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -i 1-18446744073709551616；输入范围上界超过Linux uintmax_t时GNU在invalid input range后附加EOVERFLOW文本，预期RC=1、stdout为空、stderr精确匹配该诊断。",
+            "args": [
+                "-i",
+                "1-18446744073709551616"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: invalid input range: '1-18446744073709551616': Value too large for defined data type\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "shuf: 显示帮助信息 (--help)",
             "args": [
                 "--help"

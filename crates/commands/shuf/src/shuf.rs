@@ -213,6 +213,8 @@ fn sigpipe_is_ignored_in_status(status: &str) -> bool {
 }
 
 fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSettings)> {
+    let args = args.collect::<Vec<_>>();
+    shuf_validate_gnu_options(&args, ctcore::ct_posix::posixly_correct())?;
     let matches = ct_app().try_get_matches_from(args)?;
     shuf_validate_options_in_order(&matches)?;
 
@@ -271,6 +273,149 @@ fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSet
 
     let settings = ShufSettings::new(&matches)?;
     Ok((mode, settings))
+}
+
+const SHUF_LONG_OPTIONS: &[(&str, bool)] = &[
+    ("echo", false),
+    ("input-range", true),
+    ("head-count", true),
+    ("output", true),
+    ("random-source", true),
+    ("repeat", false),
+    ("zero-terminated", false),
+    ("help", false),
+    ("version", false),
+];
+
+enum ShufLongOptionMatch {
+    None,
+    Recognized(&'static str, bool),
+    Ambiguous(Vec<&'static str>),
+}
+
+fn shuf_match_long_option(name: &[u8]) -> ShufLongOptionMatch {
+    if let Some((option, takes_value)) = SHUF_LONG_OPTIONS
+        .iter()
+        .find(|(option, _)| option.as_bytes() == name)
+    {
+        return ShufLongOptionMatch::Recognized(option, *takes_value);
+    }
+
+    let matches = SHUF_LONG_OPTIONS
+        .iter()
+        .filter_map(|(option, takes_value)| {
+            option
+                .as_bytes()
+                .starts_with(name)
+                .then_some((*option, *takes_value))
+        })
+        .collect::<Vec<_>>();
+    match matches.as_slice() {
+        [] => ShufLongOptionMatch::None,
+        [(option, takes_value)] => ShufLongOptionMatch::Recognized(option, *takes_value),
+        _ => {
+            ShufLongOptionMatch::Ambiguous(matches.into_iter().map(|(option, _)| option).collect())
+        }
+    }
+}
+
+fn shuf_validate_gnu_options(args: &[OsString], posixly_correct: bool) -> CTResult<()> {
+    let mut index = 1;
+    while index < args.len() {
+        let argument = args[index].as_os_str();
+        let bytes = argument.as_encoded_bytes();
+        if bytes == b"--" {
+            break;
+        }
+        if bytes.len() <= 1 || bytes[0] != b'-' {
+            if posixly_correct {
+                break;
+            }
+            index += 1;
+            continue;
+        }
+
+        if bytes.starts_with(b"--") {
+            let equals = bytes[2..].iter().position(|byte| *byte == b'=');
+            let name = &bytes[2..equals.map_or(bytes.len(), |offset| offset + 2)];
+            match shuf_match_long_option(name) {
+                ShufLongOptionMatch::None => {
+                    return Err(CTsageError::new(
+                        1,
+                        format!("unrecognized option {}", shuf_quote_always(argument)),
+                    ));
+                }
+                ShufLongOptionMatch::Ambiguous(matches) => {
+                    let possibilities = matches
+                        .into_iter()
+                        .map(|option| format!("'--{option}'"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    return Err(CTsageError::new(
+                        1,
+                        format!(
+                            "option {} is ambiguous; possibilities: {possibilities}",
+                            shuf_quote_always(argument)
+                        ),
+                    ));
+                }
+                ShufLongOptionMatch::Recognized(option, takes_value) => {
+                    if equals.is_some() && !takes_value {
+                        return Err(CTsageError::new(
+                            1,
+                            format!("option '--{option}' doesn't allow an argument"),
+                        ));
+                    }
+                    if takes_value && equals.is_none() {
+                        if index + 1 == args.len() {
+                            return Err(CTsageError::new(
+                                1,
+                                format!("option '--{option}' requires an argument"),
+                            ));
+                        }
+                        index += 1;
+                    }
+                    if matches!(option, "help" | "version") {
+                        return Ok(());
+                    }
+                }
+            }
+            index += 1;
+            continue;
+        }
+
+        let mut short_index = 1;
+        while short_index < bytes.len() {
+            let option = bytes[short_index];
+            if matches!(option, b'h' | b'V') {
+                return Ok(());
+            }
+            if !matches!(option, b'e' | b'i' | b'n' | b'o' | b'r' | b'z') {
+                if option.is_ascii() {
+                    return Err(CTsageError::new(
+                        1,
+                        format!("invalid option -- '{}'", char::from(option)),
+                    ));
+                }
+                return Ok(());
+            }
+            if matches!(option, b'i' | b'n' | b'o') {
+                if short_index + 1 == bytes.len() {
+                    if index + 1 == args.len() {
+                        return Err(CTsageError::new(
+                            1,
+                            format!("option requires an argument -- '{}'", char::from(option)),
+                        ));
+                    }
+                    index += 1;
+                }
+                break;
+            }
+            short_index += 1;
+        }
+        index += 1;
+    }
+    Ok(())
 }
 
 enum ShufOptionValue {
@@ -1724,6 +1869,43 @@ mod tests {
             }
 
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_option_parse_errors_use_gnu_diagnostics() {
+            for (args, message) in [
+                (&["shuf", "-n"][..], "option requires an argument -- 'n'"),
+                (
+                    &["shuf", "--random-source"][..],
+                    "option '--random-source' requires an argument",
+                ),
+                (
+                    &["shuf", "--r"][..],
+                    "option '--r' is ambiguous; possibilities: '--random-source' '--repeat'",
+                ),
+                (
+                    &["shuf", "--repeat=bad"][..],
+                    "option '--repeat' doesn't allow an argument",
+                ),
+                (&["shuf", "-x"][..], "invalid option -- 'x'"),
+                (
+                    &["shuf", "--unknown"][..],
+                    "unrecognized option '--unknown'",
+                ),
+                (
+                    &["shuf", "--r=bad"][..],
+                    "option '--r=bad' is ambiguous; possibilities: '--random-source' '--repeat'",
+                ),
+                (
+                    &["shuf", "--unknown=bad"][..],
+                    "unrecognized option '--unknown=bad'",
+                ),
+            ] {
+                let error = shuf_parse_invocation(parse_args(args))
+                    .expect_err("invalid GNU option syntax must be rejected before clap");
+                assert_eq!(error.to_string(), message, "args: {args:?}");
+                assert!(error.usage(), "args: {args:?}");
+            }
         }
 
         #[cfg(unix)]

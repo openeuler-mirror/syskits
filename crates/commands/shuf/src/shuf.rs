@@ -150,8 +150,10 @@ pub fn shuf_main(args: impl ctcore::Args) -> CTResult<()> {
     let (mode, settings) = shuf_parse_invocation(args)?;
 
     if settings.head_count == 0 {
-        // Do not attempt to read the random source or the input file.
-        // However, we must touch the output file, if given:
+        // GNU skips input here, but repeat mode still initializes its random source.
+        if settings.is_repeat {
+            let _ = create_random_source(&settings)?;
+        }
         if let Some(s) = &settings.output {
             File::create(s).map_err_context(|| shuf_quotef(s.as_os_str()))?;
         }
@@ -1565,6 +1567,33 @@ mod tests {
                 format!(
                     "{}: end of file",
                     random_source.display().to_string().quote()
+                )
+            );
+        }
+
+        #[test]
+        fn test_repeat_zero_head_count_validates_random_source() {
+            let temp = tempdir().unwrap();
+            let missing_random_source = temp.path().join("missing-random-source");
+            let error = shuf_main(
+                vec![
+                    OsString::from("shuf"),
+                    OsString::from("-r"),
+                    OsString::from("-n"),
+                    OsString::from("0"),
+                    OsString::from("--random-source"),
+                    missing_random_source.clone().into_os_string(),
+                ]
+                .into_iter(),
+            )
+            .expect_err("repeat mode must open its random source even with -n 0");
+
+            assert_eq!(error.code(), 1);
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "{}: No such file or directory",
+                    missing_random_source.as_os_str().quote()
                 )
             );
         }

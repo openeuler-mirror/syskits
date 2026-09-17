@@ -1565,6 +1565,166 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -n；短选项n缺少COUNT时GNU输出option requires an argument -- 'n'和帮助提示，预期RC=1、stdout为空、stderr精确匹配该诊断。",
+            "args": [
+                "-n"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: option requires an argument -- 'n'\nTry 'shuf --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf --random-source；长选项random-source缺少FILE时GNU输出option '--random-source' requires an argument和帮助提示，预期RC=1、stdout为空、stderr精确匹配该诊断。",
+            "args": [
+                "--random-source"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: option '--random-source' requires an argument\nTry 'shuf --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf --r；--r同时是--random-source和--repeat的前缀，GNU输出歧义选项及候选列表，预期RC=1、stdout为空、stderr精确匹配该诊断。",
+            "args": [
+                "--r"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: option '--r' is ambiguous; possibilities: '--random-source' '--repeat'\nTry 'shuf --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf --repeat=bad；repeat不接受参数，GNU输出option '--repeat' doesn't allow an argument和帮助提示，预期RC=1、stdout为空、stderr精确匹配该诊断。",
+            "args": [
+                "--repeat=bad"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: option '--repeat' doesn't allow an argument\nTry 'shuf --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -x；x不是GNU shuf短选项，预期RC=1、stdout为空、stderr为invalid option -- 'x'及帮助提示。",
+            "args": [
+                "-x"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: invalid option -- 'x'\nTry 'shuf --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf --unknown；unknown不是GNU shuf长选项，预期RC=1、stdout为空、stderr为unrecognized option '--unknown'及帮助提示。",
+            "args": [
+                "--unknown"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: unrecognized option '--unknown'\nTry 'shuf --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf --r=bad；--r=bad同时匹配--random-source和--repeat，GNU将完整原始选项仅引用一次并列出候选项，预期RC=1、stdout为空、stderr精确匹配该歧义诊断。",
+            "args": [
+                "--r=bad"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: option '--r=bad' is ambiguous; possibilities: '--random-source' '--repeat'\nTry 'shuf --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf --unknown=bad；GNU将完整未知长选项仅引用一次，预期RC=1、stdout为空、stderr为unrecognized option '--unknown=bad'及帮助提示。",
+            "args": [
+                "--unknown=bad"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: unrecognized option '--unknown=bad'\nTry 'shuf --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "shuf: 显示帮助信息 (--help)",
             "args": [
                 "--help"

@@ -39,19 +39,27 @@
 /// [`OsRng`]: rand::rngs::OsRng
 /// [`try_fill_bytes`]: RngCore::try_fill_bytes
 use std::fmt;
-use std::io::Read;
+use std::io::{ErrorKind, Read};
 
 use rand_core::{Error, RngCore, impls};
 
 #[derive(Debug)]
 pub struct ReadRng<R> {
     reader: R,
+    last_error: Option<ReadFailure>,
 }
 
 impl<R: Read> ReadRng<R> {
     /// 从一个 `Read` 实现创建新的 `ReadRng`
     pub fn new(r: R) -> Self {
-        Self { reader: r }
+        Self {
+            reader: r,
+            last_error: None,
+        }
+    }
+
+    pub fn take_last_error(&mut self) -> Option<ReadFailure> {
+        self.last_error.take()
     }
 }
 
@@ -65,9 +73,9 @@ impl<R: Read> RngCore for ReadRng<R> {
     }
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
-        self.try_fill_bytes(dest).unwrap_or_else(|err| {
-            panic!("reading random bytes from Read implementation failed; error: {err}");
-        });
+        if self.try_fill_bytes(dest).is_err() {
+            dest.fill(0);
+        }
     }
 
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Error> {
@@ -75,9 +83,25 @@ impl<R: Read> RngCore for ReadRng<R> {
             return Ok(());
         }
         // Use `std::io::read_exact`, which retries on `ErrorKind::Interrupted`.
-        self.reader
-            .read_exact(dest)
-            .map_err(|e| Error::new(ReadError(e)))
+        self.reader.read_exact(dest).map_err(|error| {
+            self.last_error = Some(ReadFailure::from(&error));
+            Error::new(ReadError(error))
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReadFailure {
+    pub kind: ErrorKind,
+    pub raw_os_error: Option<i32>,
+}
+
+impl From<&std::io::Error> for ReadFailure {
+    fn from(error: &std::io::Error) -> Self {
+        Self {
+            kind: error.kind(),
+            raw_os_error: error.raw_os_error(),
+        }
     }
 }
 

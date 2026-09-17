@@ -23,7 +23,7 @@ use std::borrow::Cow;
 use std::error::Error as StdError;
 use std::ffi::{OsStr, OsString};
 use std::fmt::{Display, Formatter};
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use sys_locale::get_locale;
 mod error;
 use crate::error::SeqError;
@@ -61,7 +61,7 @@ struct SeqOptions {
 
 impl SeqOptions {
     fn new(matches: &clap::ArgMatches) -> Self {
-        let unescape = |s: &str| -> String {
+        let unmask_terminator = |s: &str| -> String {
             if let Some(stripped) = s.strip_prefix(SEQ_NEGATIVE_NUMBER_MARKER) {
                 format!("-{stripped}")
             } else {
@@ -72,24 +72,16 @@ impl SeqOptions {
         Self {
             separator: matches
                 .get_one::<OsString>(SEQ_SEPARATOR)
-                .map(|value| {
-                    value
-                        .to_str()
-                        .map(unescape)
-                        .map_or_else(|| value.clone(), OsString::from)
-                })
+                .map(|value| unmask_negative_number_arg(value.clone()))
                 .unwrap_or_else(|| "\n".into()),
             terminator: matches
                 .get_one::<String>(SEQ_TERMINATOR)
-                .map(|s| unescape(s.as_str()))
+                .map(|s| unmask_terminator(s.as_str()))
                 .unwrap_or_else(|| "\n".to_string()),
             is_equal_width: matches.get_flag(SEQ_EQUAL_WIDTH),
-            format: matches.get_one::<OsString>(SEQ_FORMAT).map(|value| {
-                value
-                    .to_str()
-                    .map(unescape)
-                    .map_or_else(|| value.clone(), OsString::from)
-            }),
+            format: matches
+                .get_one::<OsString>(SEQ_FORMAT)
+                .map(|value| unmask_negative_number_arg(value.clone())),
         }
     }
 }
@@ -283,16 +275,32 @@ fn prepare_seq_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
 fn mask_negative_number_args(args: Vec<OsString>) -> Vec<OsString> {
     args.into_iter()
         .map(|arg| {
-            let arg_str = arg.to_string_lossy();
-            if arg_str.starts_with('-') && arg_str.len() > 1 {
-                let second_char = arg_str.chars().nth(1).unwrap();
-                if second_char.is_ascii_digit() || second_char == '.' {
-                    return format!("{SEQ_NEGATIVE_NUMBER_MARKER}{}", &arg_str[1..]).into();
-                }
+            let bytes = arg.as_os_str().as_bytes();
+            if bytes.len() > 1
+                && bytes[0] == b'-'
+                && (bytes[1].is_ascii_digit() || bytes[1] == b'.')
+            {
+                let mut masked =
+                    Vec::with_capacity(SEQ_NEGATIVE_NUMBER_MARKER.len() + bytes.len() - 1);
+                masked.extend_from_slice(SEQ_NEGATIVE_NUMBER_MARKER.as_bytes());
+                masked.extend_from_slice(&bytes[1..]);
+                return OsString::from_vec(masked);
             }
             arg
         })
         .collect()
+}
+
+fn unmask_negative_number_arg(arg: OsString) -> OsString {
+    let bytes = arg.as_os_str().as_bytes();
+    let Some(unmasked) = bytes.strip_prefix(SEQ_NEGATIVE_NUMBER_MARKER.as_bytes()) else {
+        return arg;
+    };
+
+    let mut original = Vec::with_capacity(unmasked.len() + 1);
+    original.push(b'-');
+    original.extend_from_slice(unmasked);
+    OsString::from_vec(original)
 }
 
 pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
@@ -452,6 +460,7 @@ fn collect_number_args(matches: &clap::ArgMatches) -> CTResult<Vec<OsString>> {
         .get_many::<OsString>(SEQ_NUMBERS)
         .ok_or(SeqError::NoArguments)?
         .cloned()
+        .map(unmask_negative_number_arg)
         .collect::<Vec<_>>();
     if numbers.len() > 3 {
         return Err(SeqError::ExtraOperand(numbers[3].clone()).into());
@@ -466,11 +475,7 @@ fn parse_number_args(raw_numbers: &[OsString]) -> CTResult<Vec<String>> {
             let Some(value) = value.to_str() else {
                 return Err(SeqError::NonUtf8Argument(value.clone()));
             };
-            if let Some(stripped) = value.strip_prefix(SEQ_NEGATIVE_NUMBER_MARKER) {
-                Ok(format!("-{stripped}"))
-            } else {
-                Ok(value.to_string())
-            }
+            Ok(value.to_string())
         })
         .collect::<Result<Vec<_>, _>>()?)
 }
@@ -1091,6 +1096,20 @@ mod tests {
     }
 
     #[test]
+    fn test_negative_prefixed_non_utf8_option_value_is_not_reencoded() {
+        let args = mask_negative_number_args(vec![
+            OsString::from("seq"),
+            OsString::from("-s"),
+            OsString::from_vec(b"-1\xff".to_vec()),
+            OsString::from("1"),
+            OsString::from("2"),
+        ]);
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        assert_eq!(SeqOptions::new(&matches).separator.as_bytes(), b"-1\xff");
+    }
+
+    #[test]
     fn test_option_parse_errors_use_gnu_diagnostics() {
         for (args, message) in [
             (&["seq", "-s"][..], "option requires an argument -- 's'"),
@@ -1256,6 +1275,23 @@ mod tests {
         assert_eq!(
             unknown_directive.diagnostic_bytes().as_ref(),
             b"format '%\\377' has unknown %\xff directive"
+        );
+    }
+
+    #[test]
+    fn test_negative_prefixed_non_utf8_operand_preserves_gnu_diagnostic_bytes() {
+        let error = seq_main(
+            vec![
+                OsString::from("seq"),
+                OsString::from_vec(b"-1\xff".to_vec()),
+            ]
+            .into_iter(),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            b"invalid floating point argument: '-1\\377'"
         );
     }
 

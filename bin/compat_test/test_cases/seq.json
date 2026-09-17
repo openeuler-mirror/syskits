@@ -1738,6 +1738,53 @@
             "byteMode": true
         },
         {
+            "command": "seq",
+            "description": "原始字节用例：export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -s -1\\xff 1 2；参数完整十六进制=2d73 2d31ff 31 32，其中separator以负号和数字开头且尾部为非UTF-8字节ff；stdin为0字节、完整十六进制=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、完整十六进制=空，stdout为6字节/1条换行分隔、完整十六进制=312d31ff320a；验证用于clap的负数标记不会将separator中的ff改写为UTF-8替换字符",
+            "args": [
+                "2d73",
+                "2d31ff",
+                "31",
+                "32"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "312d31ff320a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
+        },
+        {
+            "command": "seq",
+            "description": "原始字节用例：export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -1\\xff；参数完整十六进制=2d31ff，其中操作数以负号和数字开头且尾部为非UTF-8字节ff；stdin为0字节、完整十六进制=空；输入fixture：无文件fixture；预期RC=1，stdout为0字节/0条换行分隔、完整十六进制=空，stderr为87字节、完整十六进制=7365713a20696e76616c696420666c6f6174696e6720706f696e7420617267756d656e743a20272d315c333737270a5472792027736571202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a；验证错误诊断将ff按GNU C locale转义为\\377而不生成U+FFFD",
+            "args": [
+                "2d31ff"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7365713a20696e76616c696420666c6f6174696e6720706f696e7420617267756d656e743a20272d315c333737270a5472792027736571202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
+        },
+        {
             "tstdin": "",
             "command": "seq",
             "description": "LC_ALL=C、LANG=C下执行seq 1 100000，并将stdout连接到已关闭读端的管道，SIGPIPE使用默认处置；stdin为空且无文件fixture；预期进程被SIGPIPE终止并折算RC=141，stdout和stderr均为0字节；迁移原Cargo用例seq_terminates_with_sigpipe_when_the_reader_closes",

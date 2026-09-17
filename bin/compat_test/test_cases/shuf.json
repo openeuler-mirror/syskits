@@ -832,6 +832,116 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -n $' 1' -i 1-2 --random-source=/dev/zero；COUNT参数字节为2031，GNU xstrtoumax接受前导空白并限制输出一行，固定随机字节00选择范围起点，预期RC=0、stdout为310a、stderr为空。",
+            "args": [
+                "-n",
+                " 1",
+                "-i",
+                "1-2",
+                "--random-source=/dev/zero"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -i $' 0- 1' --random-source=/dev/zero；范围参数字节为20302d2031，GNU分别按xstrtoumax解析上下界并接受前导空白，固定随机字节00得到升序排列，预期RC=0、stdout为300a310a、stderr为空。",
+            "args": [
+                "-i",
+                " 0- 1",
+                "--random-source=/dev/zero"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "0\n1\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -n 18446744073709551616 /dev/null；COUNT超过64位无符号上限，GNU将xstrtoumax的溢出视为未设置行数限制而不报错，预期RC=0、stdout和stderr均为空。",
+            "args": [
+                "-n",
+                "18446744073709551616",
+                "/dev/null"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -n -0；COUNT参数字节为2d30。GNU将连字符开头值作为-n的参数后按xstrtoumax拒绝，预期RC=1、stdout为空、stderr为shuf: invalid line count: '-0'加换行。",
+            "args": [
+                "-n",
+                "-0"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: invalid line count: '-0'\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -i -0-1；LO-HI参数字节为2d302d31。GNU将连字符开头值作为-i的参数后拒绝无效范围，预期RC=1、stdout为空、stderr为shuf: invalid input range: '-0-1'加换行。",
+            "args": [
+                "-i",
+                "-0-1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: invalid input range: '-0-1'\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "LC_ALL=C、LANG=C下执行shuf -i 1-1 -o /dev/null -o /dev/null；重复指定相同输出路径在GNU中有效，预期RC=0且stdout、stderr为空。",
             "args": [
                 "-i",

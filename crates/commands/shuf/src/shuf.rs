@@ -241,12 +241,14 @@ pub fn ct_app() -> Command {
             .short('i')
             .long(shuf_options::SHUF_INPUT_RANGE)
             .value_name("LO-HI")
+            .allow_hyphen_values(true)
             .help(t!("shuf.clap.shuf_input_range"))
             .action(clap::ArgAction::Append),
         Arg::new(shuf_options::SHUF_HEAD_COUNT)
             .short('n')
             .long(shuf_options::SHUF_HEAD_COUNT)
             .value_name("COUNT")
+            .allow_hyphen_values(true)
             .action(clap::ArgAction::Append)
             .help(t!("shuf.clap.shuf_head_count")),
         Arg::new(shuf_options::SHUF_OUTPUT)
@@ -679,17 +681,16 @@ fn process_nonrepeat_mode<T: Shufable>(
 /// * `Ok(RangeInclusive<usize>)` - 解析成功返回包含范围
 /// * `Err(String)` - 解析失败返回错误信息
 fn shuf_parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> {
+    let invalid = || format!("invalid input range: '{input_range}'");
+
     // 尝试按 '-' 分割字符串
     if let Some((from, to)) = input_range.split_once('-') {
-        // 解析起始值
-        let begin = from
-            .parse::<usize>()
-            .map_err(|_| format!("invalid input range: '{input_range}'"))?;
-
-        // 解析结束值
-        let end = to
-            .parse::<usize>()
-            .map_err(|_| format!("invalid input range: '{input_range}'"))?;
+        let ShufUnsigned::Value(begin) = shuf_parse_unsigned(from).map_err(|_| invalid())? else {
+            return Err(invalid());
+        };
+        let ShufUnsigned::Value(end) = shuf_parse_unsigned(to).map_err(|_| invalid())? else {
+            return Err(invalid());
+        };
 
         // 确保范围有效（起始值不大于结束值）
         if begin <= end
@@ -700,11 +701,59 @@ fn shuf_parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> 
         {
             Ok(begin..=end)
         } else {
-            Err(format!("invalid input range: '{input_range}'"))
+            Err(invalid())
         }
     } else {
         // 没有找到分隔符 '-'
-        Err(format!("invalid input range: '{input_range}'"))
+        Err(invalid())
+    }
+}
+
+enum ShufUnsigned {
+    Value(usize),
+    Overflow,
+}
+
+fn shuf_parse_unsigned(input: &str) -> Result<ShufUnsigned, ()> {
+    let bytes = input.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() && bytes[index].is_ascii_whitespace() {
+        index += 1;
+    }
+    if bytes.get(index) == Some(&b'+') {
+        index += 1;
+    }
+    if bytes.get(index) == Some(&b'-') {
+        return Err(());
+    }
+
+    let mut value = 0_usize;
+    let mut saw_digit = false;
+    let mut overflow = false;
+    while let Some(byte) = bytes.get(index) {
+        if !byte.is_ascii_digit() {
+            return Err(());
+        }
+        saw_digit = true;
+        if !overflow {
+            match value
+                .checked_mul(10)
+                .and_then(|value| value.checked_add(usize::from(byte - b'0')))
+            {
+                Some(next) => value = next,
+                None => overflow = true,
+            }
+        }
+        index += 1;
+    }
+
+    if !saw_digit {
+        return Err(());
+    }
+    if overflow {
+        Ok(ShufUnsigned::Overflow)
+    } else {
+        Ok(ShufUnsigned::Value(value))
     }
 }
 
@@ -722,13 +771,11 @@ fn shuf_parse_head_count(headcounts: Vec<String>) -> Result<usize, String> {
 
     // 遍历所有输入的数字
     for count in headcounts {
-        // 解析当前数字
-        let n = count
-            .parse::<usize>()
-            .map_err(|_| format!("invalid line count: '{count}'"))?;
-
-        // 更新为较小的值
-        result = result.min(n);
+        match shuf_parse_unsigned(&count) {
+            Ok(ShufUnsigned::Value(value)) => result = result.min(value),
+            Ok(ShufUnsigned::Overflow) => {}
+            Err(()) => return Err(format!("invalid line count: '{count}'")),
+        }
     }
 
     Ok(result)
@@ -1265,6 +1312,11 @@ mod tests {
         }
 
         #[test]
+        fn test_parse_range_accepts_gnu_leading_whitespace() {
+            assert_eq!(shuf_parse_range(" 0- 1").unwrap(), 0..=1);
+        }
+
+        #[test]
         fn test_parse_range_invalid() {
             assert!(shuf_parse_range("invalid").is_err());
             assert!(shuf_parse_range("5-1").is_err());
@@ -1287,6 +1339,25 @@ mod tests {
                 shuf_parse_head_count(vec!["10".to_string(), "5".to_string()]).unwrap(),
                 5
             );
+        }
+
+        #[test]
+        fn test_parse_head_count_uses_gnu_overflow_and_whitespace_rules() {
+            assert_eq!(shuf_parse_head_count(vec![" 1".to_string()]).unwrap(), 1);
+            assert_eq!(
+                shuf_parse_head_count(vec!["18446744073709551616".to_string()]).unwrap(),
+                usize::MAX
+            );
+        }
+
+        #[test]
+        fn test_hyphen_prefixed_numeric_values_reach_gnu_validation() {
+            let head_error = shuf_parse_invocation(parse_args(&["shuf", "-n", "-0"])).unwrap_err();
+            assert_eq!(head_error.to_string(), "invalid line count: '-0'");
+
+            let range_error =
+                shuf_parse_invocation(parse_args(&["shuf", "-i", "-0-1"])).unwrap_err();
+            assert_eq!(range_error.to_string(), "invalid input range: '-0-1'");
         }
 
         #[test]

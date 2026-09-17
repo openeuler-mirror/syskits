@@ -17,7 +17,7 @@
 //! # 主要组件
 //! - `ShufSettings`: 配置选项（输出数量、重复模式、分隔符等）
 //! - `Shufable`: 可打乱数据的特征
-//! - `NonrepeatingIterator`: 生成不重复随机数的迭代器
+//! - `shuf_partial_permutation_indices`: 使用稀疏交换生成不重复排列
 //!
 //! # 核心功能
 //! - 从文件或标准输入读取数据
@@ -40,11 +40,12 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo};
 
 use memchr::memchr_iter;
-use rand::prelude::SliceRandom;
-use rand::{Rng, RngCore};
+use rand::RngCore;
+use std::collections::HashMap;
+#[cfg(test)]
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -365,26 +366,14 @@ fn shuf_echo_input(args: &[OsString], sep: u8) -> Vec<u8> {
 }
 
 trait Shufable {
-    // 定义与此trait关联的数据类型，必须实现Writable特征
     type Item: ShufWritable;
 
-    // 检查集合是否为空
     fn is_empty(&self) -> bool;
 
-    // 从集合中随机选择一个元素
-    fn choose(&self, rng: &mut WrappedRng) -> Self::Item;
+    fn choose(&self, rng: &mut WrappedRng) -> CTResult<Self::Item>;
 
-    // 定义部分打乱后返回的迭代器类型
-    type PartialShuffleIterator<'b>: Iterator<Item = Self::Item>
-    where
-        Self: 'b;
-
-    // 部分打乱集合中的元素
-    fn partial_shuffle<'b>(
-        &'b mut self,
-        rng: &'b mut WrappedRng,
-        amount: usize,
-    ) -> Self::PartialShuffleIterator<'b>;
+    fn partial_shuffle(&mut self, rng: &mut WrappedRng, amount: usize)
+    -> CTResult<Vec<Self::Item>>;
 }
 
 /// 为字节切片向量实现 Shufable trait
@@ -398,33 +387,22 @@ impl<'a> Shufable for Vec<&'a [u8]> {
     }
 
     // 从向量中随机选择一个元素
-    fn choose(&self, rng: &mut WrappedRng) -> Self::Item {
+    fn choose(&self, rng: &mut WrappedRng) -> CTResult<Self::Item> {
         let items = &**self;
-        if items.len() == 1 {
-            items[0]
-        } else {
-            items.choose(rng).unwrap()
-        }
+        Ok(items[rng.choose_index(items.len())?])
     }
 
-    // 定义部分打乱后返回的迭代器类型
-    type PartialShuffleIterator<'b>
-        = std::iter::Copied<std::slice::Iter<'b, &'a [u8]>>
-    where
-        Self: 'b;
-
     // 部分打乱向量中的元素
-    fn partial_shuffle<'b>(
-        &'b mut self,
-        rng: &'b mut WrappedRng,
+    fn partial_shuffle(
+        &mut self,
+        rng: &mut WrappedRng,
         amount: usize,
-    ) -> Self::PartialShuffleIterator<'b> {
-        let items = &mut **self;
-        let amount = amount.min(items.len());
-        if amount == 0 || items.len() == 1 {
-            return items[..amount].iter().copied();
-        }
-        items.partial_shuffle(rng, amount).0.iter().copied()
+    ) -> CTResult<Vec<Self::Item>> {
+        let items = &**self;
+        Ok(shuf_partial_permutation_indices(rng, items.len(), amount)?
+            .into_iter()
+            .map(|index| items[index])
+            .collect())
     }
 }
 
@@ -439,130 +417,45 @@ impl Shufable for RangeInclusive<usize> {
     }
 
     // 从范围中随机选择一个数字
-    fn choose(&self, rng: &mut WrappedRng) -> usize {
-        if self.start() == self.end() {
-            *self.start()
-        } else {
-            rng.gen_range(self.clone())
-        }
+    fn choose(&self, rng: &mut WrappedRng) -> CTResult<usize> {
+        let item_count = self.end() - self.start() + 1;
+        Ok(*self.start() + rng.choose_index(item_count)?)
     }
-
-    // 定义部分打乱后返回的迭代器类型
-    type PartialShuffleIterator<'b>
-        = NonrepeatingIterator<'b>
-    where
-        Self: 'b;
 
     // 部分打乱范围中的数字
-    fn partial_shuffle<'b>(
-        &'b mut self,
-        rng: &'b mut WrappedRng,
+    fn partial_shuffle(
+        &mut self,
+        rng: &mut WrappedRng,
         amount: usize,
-    ) -> Self::PartialShuffleIterator<'b> {
-        NonrepeatingIterator::new(self.clone(), rng, amount)
+    ) -> CTResult<Vec<Self::Item>> {
+        let start = *self.start();
+        let item_count = self.end() - self.start() + 1;
+        Ok(shuf_partial_permutation_indices(rng, item_count, amount)?
+            .into_iter()
+            .map(|index| start + index)
+            .collect())
     }
 }
 
-enum NumberSet {
-    AlreadyListed(HashSet<usize>),
-    Remaining(Vec<usize>),
-}
+fn shuf_partial_permutation_indices(
+    rng: &mut WrappedRng,
+    item_count: usize,
+    amount: usize,
+) -> CTResult<Vec<usize>> {
+    let selected_count = amount.min(item_count);
+    let mut swaps = HashMap::with_capacity(selected_count.saturating_mul(2));
+    let mut permutation = Vec::with_capacity(selected_count);
 
-struct NonrepeatingIterator<'a> {
-    range: RangeInclusive<usize>,
-    rng: &'a mut WrappedRng,
-    remaining_count: usize,
-    buf: NumberSet,
-}
-
-/// 不重复数字迭代器的实现
-impl<'a> NonrepeatingIterator<'a> {
-    /// 创建新的迭代器实例
-    ///
-    /// # 参数
-    /// * `range` - 数字范围
-    /// * `rng` - 随机数生成器
-    /// * `amount` - 需要生成的数字数量
-    fn new(
-        range: RangeInclusive<usize>,
-        rng: &'a mut WrappedRng,
-        amount: usize,
-    ) -> NonrepeatingIterator<'a> {
-        // 计算实际需要生成的数量
-        let capped_amount = if range.start() > range.end() {
-            0 // 范围无效时返回0
-        } else if *range.start() == 0 && *range.end() == usize::MAX {
-            amount // 完整范围时直接使用请求数量
-        } else {
-            amount.min(range.end() - range.start() + 1) // 取较小值避免越界
-        };
-
-        // 创建迭代器实例
-        NonrepeatingIterator {
-            range,
-            rng,
-            remaining_count: capped_amount,
-            buf: NumberSet::AlreadyListed(HashSet::default()), // 初始使用HashSet记录已用数字
-        }
+    for index in 0..selected_count {
+        let selected_index = index + rng.choose_index(item_count - index)?;
+        let index_value = *swaps.get(&index).unwrap_or(&index);
+        let selected_value = *swaps.get(&selected_index).unwrap_or(&selected_index);
+        swaps.insert(index, selected_value);
+        swaps.insert(selected_index, index_value);
+        permutation.push(selected_value);
     }
 
-    /// 生成下一个不重复的随机数
-    ///
-    /// # 说明
-    /// 该函数有两种工作模式：
-    /// 1. HashSet模式：使用集合记录已生成的数字
-    /// 2. Vec模式：当生成的数字较多时，切换到预生成的剩余数字列表
-    ///
-    /// # 返回值
-    /// 返回范围内的一个未使用过的随机数
-    ///
-    /// # Panics
-    /// 当范围的起始值大于结束值时会触发断言失败
-    fn produce(&mut self) -> usize {
-        debug_assert!(self.range.start() <= self.range.end());
-
-        if self.range.start() == self.range.end() {
-            return *self.range.start();
-        }
-
-        match &mut self.buf {
-            NumberSet::AlreadyListed(used_numbers) => {
-                let chosen = loop {
-                    let guess = self.rng.gen_range(self.range.clone());
-                    if used_numbers.insert(guess) {
-                        break guess;
-                    }
-                };
-
-                let range_size = (self.range.end() - self.range.start()).saturating_add(1);
-                if number_set_should_list_remaining(used_numbers.len(), range_size) {
-                    let mut remaining = self
-                        .range
-                        .clone()
-                        .filter(|n| !used_numbers.contains(n))
-                        .collect::<Vec<_>>();
-
-                    remaining.partial_shuffle(&mut self.rng, self.remaining_count);
-                    remaining.truncate(self.remaining_count);
-                    self.buf = NumberSet::Remaining(remaining);
-                }
-                chosen
-            }
-            NumberSet::Remaining(remaining_numbers) => remaining_numbers.pop().unwrap(),
-        }
-    }
-}
-
-impl Iterator for NonrepeatingIterator<'_> {
-    type Item = usize;
-
-    fn next(&mut self) -> Option<usize> {
-        if self.range.is_empty() || self.remaining_count == 0 {
-            return None;
-        }
-        self.remaining_count -= 1;
-        Some(self.produce())
-    }
+    Ok(permutation)
 }
 
 /// 判断是否应该切换到列表模式
@@ -584,10 +477,6 @@ impl Iterator for NonrepeatingIterator<'_> {
 /// 3. 如果已生成数字占总范围的比例较大，则切换
 ///
 /// 这个策略可以在时间和空间效率之间取得平衡。
-fn number_set_should_list_remaining(already_listed_count: usize, range_size: usize) -> bool {
-    already_listed_count >= range_size / 4
-}
-
 trait ShufWritable {
     fn write_all_to(&self, output: &mut impl Write) -> Result<(), Error>;
 }
@@ -630,25 +519,42 @@ fn shuf_exec_to_writer<T: Shufable, W: Write>(
         return Ok(());
     }
 
-    // 创建随机数生成器
     let mut rng = create_random_source(settings)?;
+    shuf_exec_with_rng(input, settings, &mut rng, writer)
+}
 
-    // 根据是否重复选择不同的处理逻辑
+fn shuf_exec_with_rng<T: Shufable, W: Write>(
+    input: &mut T,
+    settings: &ShufSettings,
+    rng: &mut WrappedRng,
+    writer: &mut W,
+) -> CTResult<()> {
     if settings.is_repeat {
-        // 重复模式：直接随机选择
-        process_repeat_mode(input, &mut rng, writer, settings.head_count, settings.sep)?;
+        process_repeat_mode(input, rng, writer, settings.head_count, settings.sep)?;
     } else {
-        // 不重复模式：使用部分打乱
-        process_nonrepeat_mode(input, &mut rng, writer, settings.head_count, settings.sep)?;
+        process_nonrepeat_mode(input, rng, writer, settings.head_count, settings.sep)?;
     }
 
     Ok(())
 }
 
 fn shuf_exec<T: Shufable>(input: &mut T, settings: &ShufSettings) -> CTResult<()> {
+    if input.is_empty() {
+        let writer = create_output_writer(settings)?;
+        let mut buf_writer = BufWriter::new(writer);
+        if settings.is_repeat {
+            return Err(CtSimpleError::new(1, "no lines to repeat"));
+        }
+        buf_writer
+            .flush()
+            .map_err_context(|| String::from("write error"))?;
+        return Ok(());
+    }
+
+    let mut rng = create_random_source(settings)?;
     let writer = create_output_writer(settings)?;
     let mut buf_writer = BufWriter::new(writer);
-    shuf_exec_to_writer(input, settings, &mut buf_writer)?;
+    shuf_exec_with_rng(input, settings, &mut rng, &mut buf_writer)?;
     buf_writer
         .flush()
         .map_err_context(|| String::from("write error"))?;
@@ -672,7 +578,11 @@ fn create_random_source(settings: &ShufSettings) -> CTResult<WrappedRng> {
     if let Some(path) = &settings.random_source {
         WrappedRng::new_from_file(path)
     } else {
-        Ok(WrappedRng::RngDefault(rand::thread_rng()))
+        Ok(WrappedRng::RngDefault {
+            reader: rand::thread_rng(),
+            randnum: 0,
+            randmax: 0,
+        })
     }
 }
 
@@ -685,8 +595,7 @@ fn process_repeat_mode<T: Shufable>(
     sep: u8,
 ) -> CTResult<()> {
     for _ in 0..count {
-        let item = input.choose(rng);
-        rng.check_random_source()?;
+        let item = input.choose(rng)?;
         item.write_all_to(writer)
             .map_err_context(|| String::from("write error"))?;
         writer
@@ -704,8 +613,7 @@ fn process_nonrepeat_mode<T: Shufable>(
     count: usize,
     sep: u8,
 ) -> CTResult<()> {
-    let shuffled = input.partial_shuffle(rng, count).collect::<Vec<_>>();
-    rng.check_random_source()?;
+    let shuffled = input.partial_shuffle(rng, count)?;
 
     for item in shuffled {
         item.write_all_to(writer)
@@ -785,54 +693,14 @@ enum WrappedRng {
     RngFile {
         reader: rand_read_adapter::ReadRng<File>,
         path: OsString,
-        failure: Option<rand_read_adapter::ReadFailure>,
+        randnum: u64,
+        randmax: u64,
     },
-    RngDefault(rand::rngs::ThreadRng),
-}
-
-impl RngCore for WrappedRng {
-    fn next_u32(&mut self) -> u32 {
-        let mut bytes = [0_u8; std::mem::size_of::<u32>()];
-        self.fill_bytes(&mut bytes);
-        u32::from_le_bytes(bytes)
-    }
-
-    fn next_u64(&mut self) -> u64 {
-        let mut bytes = [0_u8; std::mem::size_of::<u64>()];
-        self.fill_bytes(&mut bytes);
-        u64::from_le_bytes(bytes)
-    }
-
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
-        match self {
-            Self::RngFile {
-                reader, failure, ..
-            } => {
-                if reader.try_fill_bytes(dest).is_err() {
-                    dest.fill(0);
-                    if failure.is_none() {
-                        *failure = reader.take_last_error();
-                    }
-                }
-            }
-            Self::RngDefault(r) => r.fill_bytes(dest),
-        }
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
-        match self {
-            Self::RngFile {
-                reader, failure, ..
-            } => {
-                let result = reader.try_fill_bytes(dest);
-                if result.is_err() && failure.is_none() {
-                    *failure = reader.take_last_error();
-                }
-                result
-            }
-            Self::RngDefault(r) => r.try_fill_bytes(dest),
-        }
-    }
+    RngDefault {
+        reader: rand::rngs::ThreadRng,
+        randnum: u64,
+        randmax: u64,
+    },
 }
 
 impl WrappedRng {
@@ -841,18 +709,15 @@ impl WrappedRng {
         Ok(WrappedRng::RngFile {
             reader: rand_read_adapter::ReadRng::new(file),
             path: path.to_os_string(),
-            failure: None,
+            randnum: 0,
+            randmax: 0,
         })
     }
 
-    fn check_random_source(&mut self) -> CTResult<()> {
-        let Self::RngFile { path, failure, .. } = self else {
-            return Ok(());
-        };
-        let Some(failure) = failure.take() else {
-            return Ok(());
-        };
-
+    fn random_source_error(
+        path: &OsStr,
+        failure: rand_read_adapter::ReadFailure,
+    ) -> Box<dyn CTError> {
         let message = if failure.kind == ErrorKind::UnexpectedEof {
             format!("{}: end of file", path.quote())
         } else if let Some(errno) = failure.raw_os_error {
@@ -860,7 +725,104 @@ impl WrappedRng {
         } else {
             format!("{}: {}", path.quote(), Error::from(failure.kind))
         };
-        Err(CtSimpleError::new(1, message))
+        CtSimpleError::new(1, message)
+    }
+
+    fn read_random_bytes(&mut self, dest: &mut [u8]) -> CTResult<()> {
+        match self {
+            Self::RngFile { reader, path, .. } => {
+                if reader.try_fill_bytes(dest).is_err() {
+                    let failure =
+                        reader
+                            .take_last_error()
+                            .unwrap_or(rand_read_adapter::ReadFailure {
+                                kind: ErrorKind::Other,
+                                raw_os_error: None,
+                            });
+                    return Err(Self::random_source_error(path.as_os_str(), failure));
+                }
+                Ok(())
+            }
+            Self::RngDefault { reader, .. } => {
+                reader.fill_bytes(dest);
+                Ok(())
+            }
+        }
+    }
+
+    fn random_state(&self) -> (u64, u64) {
+        match self {
+            Self::RngFile {
+                randnum, randmax, ..
+            }
+            | Self::RngDefault {
+                randnum, randmax, ..
+            } => (*randnum, *randmax),
+        }
+    }
+
+    fn set_random_state(&mut self, randnum: u64, randmax: u64) {
+        match self {
+            Self::RngFile {
+                randnum: state_randnum,
+                randmax: state_randmax,
+                ..
+            }
+            | Self::RngDefault {
+                randnum: state_randnum,
+                randmax: state_randmax,
+                ..
+            } => {
+                *state_randnum = randnum;
+                *state_randmax = randmax;
+            }
+        }
+    }
+
+    fn choose_index(&mut self, choices: usize) -> CTResult<usize> {
+        debug_assert!(choices > 0);
+        Ok(self.randint_genmax((choices - 1) as u64)? as usize)
+    }
+
+    fn randint_genmax(&mut self, genmax: u64) -> CTResult<u64> {
+        let (mut randnum, mut randmax) = self.random_state();
+        let choices = genmax + 1;
+
+        loop {
+            if randmax < genmax {
+                let mut byte_count = 0;
+                let mut new_randmax = randmax;
+                while new_randmax < genmax {
+                    new_randmax = (new_randmax << 8) | u64::from(u8::MAX);
+                    byte_count += 1;
+                }
+
+                let mut bytes = [0_u8; std::mem::size_of::<u64>()];
+                self.read_random_bytes(&mut bytes[..byte_count])?;
+                for byte in &bytes[..byte_count] {
+                    randnum = (randnum << 8) | u64::from(*byte);
+                    randmax = (randmax << 8) | u64::from(u8::MAX);
+                }
+            }
+
+            if randmax == genmax {
+                self.set_random_state(0, 0);
+                return Ok(randnum);
+            }
+
+            let excess_choices = randmax - genmax;
+            let unusable_choices = excess_choices % choices;
+            let last_usable_choice = randmax - unusable_choices;
+            let reduced_randnum = randnum % choices;
+
+            if randnum <= last_usable_choice {
+                self.set_random_state(randnum / choices, excess_choices / choices);
+                return Ok(reduced_randnum);
+            }
+
+            randnum = reduced_randnum;
+            randmax = unusable_choices - 1;
+        }
     }
 }
 
@@ -1065,88 +1027,6 @@ pub fn shuf_native_semantic(args: impl ctcore::Args) -> CTResult<ShufSemantic> {
         stderr_text: String::new(),
         exit_code: 0,
     })
-}
-
-#[cfg(test)]
-// Since the computed value is a bool, it is more readable to write the expected value out:
-#[allow(clippy::bool_assert_comparison)]
-mod test_number_set_decision {
-    use super::number_set_should_list_remaining;
-
-    #[test]
-    fn test_stay_positive_large_remaining_first() {
-        assert_eq!(false, number_set_should_list_remaining(0, usize::MAX));
-    }
-
-    #[test]
-    fn test_stay_positive_large_remaining_second() {
-        assert_eq!(false, number_set_should_list_remaining(1, usize::MAX));
-    }
-
-    #[test]
-    fn test_stay_positive_large_remaining_tenth() {
-        assert_eq!(false, number_set_should_list_remaining(9, usize::MAX));
-    }
-
-    #[test]
-    fn test_stay_positive_smallish_range_first() {
-        assert_eq!(false, number_set_should_list_remaining(0, 12345));
-    }
-
-    #[test]
-    fn test_stay_positive_smallish_range_second() {
-        assert_eq!(false, number_set_should_list_remaining(1, 12345));
-    }
-
-    #[test]
-    fn test_stay_positive_smallish_range_tenth() {
-        assert_eq!(false, number_set_should_list_remaining(9, 12345));
-    }
-
-    #[test]
-    fn test_stay_positive_small_range_not_too_early() {
-        assert_eq!(false, number_set_should_list_remaining(1, 10));
-    }
-
-    // Don't want to test close to the border, in case we decide to change the threshold.
-    // However, at 50% coverage, we absolutely should switch:
-    #[test]
-    fn test_switch_half() {
-        assert_eq!(true, number_set_should_list_remaining(1234, 2468));
-    }
-
-    // Ensure that the decision is monotonous:
-    #[test]
-    fn test_switch_late1() {
-        assert_eq!(true, number_set_should_list_remaining(12340, 12345));
-    }
-
-    #[test]
-    fn test_switch_late2() {
-        assert_eq!(true, number_set_should_list_remaining(12344, 12345));
-    }
-
-    // Ensure that we are overflow-free:
-    #[test]
-    fn test_no_crash_exceed_max_size1() {
-        assert_eq!(false, number_set_should_list_remaining(12345, usize::MAX));
-    }
-
-    #[test]
-    fn test_no_crash_exceed_max_size2() {
-        assert_eq!(
-            true,
-            number_set_should_list_remaining(usize::MAX - 1, usize::MAX)
-        );
-    }
-
-    #[test]
-    fn test_no_crash_exceed_max_size3() {
-        assert_eq!(
-            true,
-            number_set_should_list_remaining(usize::MAX, usize::MAX)
-        );
-    }
 }
 
 #[cfg(test)]
@@ -1469,6 +1349,26 @@ mod tests {
         }
 
         #[test]
+        fn test_random_source_uses_gnu_minimum_byte_count() {
+            let temp = tempdir().unwrap();
+            let random_source = temp.path().join("one-random-byte");
+            std::fs::write(&random_source, [0_u8]).unwrap();
+            let settings = ShufSettings {
+                head_count: 2,
+                output: None,
+                random_source: Some(random_source.into_os_string()),
+                is_repeat: false,
+                sep: b'\n',
+            };
+            let mut input = 1..=2;
+            let mut output = Vec::new();
+
+            shuf_exec_to_writer(&mut input, &settings, &mut output).unwrap();
+
+            assert_eq!(output, b"1\n2\n");
+        }
+
+        #[test]
         fn test_shuf_exec_basic() {
             let temp = tempdir().unwrap();
             let output_path = temp.path().join("output.txt");
@@ -1663,147 +1563,6 @@ mod tests {
         fn test_read_input_file_nonexistent() {
             let result = shuf_read_input_file(OsStr::new("nonexistent.txt"));
             assert!(result.is_err());
-        }
-    }
-
-    mod iterator_tests {
-        use super::*;
-
-        /// 创建测试用的迭代器实例
-        fn create_test_iterator(
-            range: RangeInclusive<usize>,
-            amount: usize,
-            rng: &mut WrappedRng,
-        ) -> NonrepeatingIterator<'_> {
-            NonrepeatingIterator::new(range, rng, amount)
-        }
-
-        #[test]
-        fn test_iterator_basic() {
-            let mut rng = WrappedRng::RngDefault(rand::thread_rng());
-            let iter = create_test_iterator(1..=5, 5, &mut rng);
-            let numbers: HashSet<_> = iter.collect();
-
-            println!("Collected numbers: {numbers:?}");
-            assert_eq!(numbers.len(), 5, "Should generate 5 unique numbers");
-            assert!(
-                numbers.iter().all(|&n| (1..=5).contains(&n)),
-                "All numbers should be in range 1..=5"
-            );
-        }
-
-        #[test]
-        fn test_iterator_partial() {
-            let mut rng = WrappedRng::RngDefault(rand::thread_rng());
-            let iter = create_test_iterator(1..=10, 5, &mut rng);
-            let numbers: HashSet<_> = iter.collect();
-
-            println!("Collected numbers: {numbers:?}");
-            assert_eq!(numbers.len(), 5, "Should generate exactly 5 numbers");
-            assert!(
-                numbers.iter().all(|&n| (1..=10).contains(&n)),
-                "All numbers should be in range 1..=10"
-            );
-        }
-
-        #[test]
-        fn test_iterator_exact_amount() {
-            let mut rng = WrappedRng::RngDefault(rand::thread_rng());
-            let iter = create_test_iterator(1..=3, 3, &mut rng);
-            let numbers: Vec<_> = iter.collect();
-
-            println!("Generated sequence: {numbers:?}");
-            assert_eq!(numbers.len(), 3, "Should generate exactly 3 numbers");
-            let unique: HashSet<_> = numbers.into_iter().collect();
-            assert_eq!(unique.len(), 3, "All numbers should be unique");
-        }
-
-        #[test]
-        fn test_iterator_empty_range() {
-            let mut rng = WrappedRng::RngDefault(rand::thread_rng());
-            let range = RangeInclusive::new(1, 0);
-            let iter = create_test_iterator(range, 5, &mut rng);
-            let numbers: Vec<_> = iter.collect();
-
-            println!("Empty range result: {numbers:?}");
-            assert!(
-                numbers.is_empty(),
-                "Should generate no numbers for invalid range"
-            );
-        }
-
-        #[test]
-        fn test_iterator_zero_amount() {
-            let mut rng = WrappedRng::RngDefault(rand::thread_rng());
-            let iter = create_test_iterator(1..=10, 0, &mut rng);
-            let numbers: Vec<_> = iter.collect();
-
-            println!("Zero amount result: {numbers:?}");
-            assert!(
-                numbers.is_empty(),
-                "Should generate no numbers when amount is 0"
-            );
-        }
-
-        #[test]
-        fn test_iterator_single_element() {
-            let mut rng = WrappedRng::RngDefault(rand::thread_rng());
-            let iter = create_test_iterator(42..=42, 1, &mut rng);
-            let numbers: Vec<_> = iter.collect();
-
-            println!("Single element result: {numbers:?}");
-            assert_eq!(numbers, vec![42], "Should generate exactly one number (42)");
-        }
-
-        #[test]
-        fn test_iterator_mode_switch() {
-            let mut rng = WrappedRng::RngDefault(rand::thread_rng());
-            let iter = create_test_iterator(1..=4, 4, &mut rng);
-            let numbers: Vec<_> = iter.collect();
-
-            println!("Mode switch result: {numbers:?}");
-            assert_eq!(numbers.len(), 4, "Should generate all 4 numbers");
-            let unique: HashSet<_> = numbers.into_iter().collect();
-            assert_eq!(unique.len(), 4, "All numbers should be unique");
-        }
-
-        #[test]
-        fn test_iterator_next() {
-            let mut rng = WrappedRng::RngDefault(rand::thread_rng());
-            let mut iter = create_test_iterator(1..=3, 3, &mut rng);
-
-            // 测试连续调用 next()
-            let first = iter.next();
-            println!("First next(): {first:?}");
-            assert!(first.is_some(), "First call should return Some");
-            assert!(
-                (1..=3).contains(&first.unwrap()),
-                "First number should be in range 1..=3"
-            );
-
-            let second = iter.next();
-            println!("Second next(): {second:?}");
-            assert!(second.is_some(), "Second call should return Some");
-            assert!(
-                (1..=3).contains(&second.unwrap()),
-                "Second number should be in range 1..=3"
-            );
-            assert_ne!(first, second, "Numbers should be unique");
-
-            let third = iter.next();
-            println!("Third next(): {third:?}");
-            assert!(third.is_some(), "Third call should return Some");
-            assert!(
-                (1..=3).contains(&third.unwrap()),
-                "Third number should be in range 1..=3"
-            );
-            assert_ne!(third, first, "Numbers should be unique");
-            assert_ne!(third, second, "Numbers should be unique");
-
-            // 测试迭代结束
-            let fourth = iter.next();
-            println!("Fourth next(): {fourth:?}");
-            assert!(fourth.is_none(), "Fourth call should return None");
         }
     }
 }

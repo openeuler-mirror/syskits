@@ -546,6 +546,34 @@
         },
         {
             "command": "shuf",
+            "description": "固定随机源用例：LC_ALL=C、LANG=C下先创建内容为单字节00的random-source，再执行shuf -i 1-2 --random-source=random-source。GNU randint仅需读取一个字节即可完成两个值的排列，预期RC=0、stdout字节为310a320a、stderr为空。",
+            "args": [
+                "-i",
+                "1-2",
+                "--random-source=random-source"
+            ],
+            "setup_commands": [
+                "printf '\\000' > random-source"
+            ],
+            "cleanup_commands": [
+                "rm -f random-source"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n2\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "LC_ALL=C、LANG=C下执行shuf -e first second -n 1 --random-source=/dev/null；多项输入即使仅输出一项也必须取样，GNU返回RC=1、stdout为空、stderr为shuf: '/dev/null': end of file加换行。",
             "args": [
                 "-e",

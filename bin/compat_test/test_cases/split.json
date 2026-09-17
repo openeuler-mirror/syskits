@@ -1920,21 +1920,22 @@
     },
     {
       "command": "split",
-      "description": "split --filter child command non-zero exit propagates",
+      "description": "split --filter propagates the child exit code and GNU FILE diagnostic",
       "args": [
         "-l",
         "1",
-        "--filter=false",
-        "in"
+        "--filter=exit 42",
+        "in",
+        "out-"
       ],
       "setup_commands": [
         "printf 'a\\nb\\n' > in"
       ],
       "expectation": {
         "execution": {
-          "exit_code": 1,
+          "exit_code": 42,
           "stdout": "",
-          "stderr": ""
+          "stderr": "split: with FILE=out-aa, exit 42 from command: exit 42\n"
         },
         "verifications": [],
         "ignore_fields": {
@@ -1945,7 +1946,38 @@
         }
       },
       "cleanup_commands": [
-        "rm -f in x*"
+        "rm -f in out-*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split --filter reports GNU signal name and exit status",
+      "args": [
+        "-b",
+        "1",
+        "--filter=kill -HUP $$",
+        "in",
+        "out-"
+      ],
+      "setup_commands": [
+        "printf 'a' > in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 129,
+          "stdout": "",
+          "stderr": "split: with FILE=out-aa, signal HUP from command: kill -HUP $$\n"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in out-*"
       ]
     },
     {

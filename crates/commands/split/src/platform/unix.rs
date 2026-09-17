@@ -9,16 +9,88 @@
  * See the Mulan PSL v2 for more details.
  */
 use crate::split_quote_path;
-use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_fs;
 use ctcore::ct_fs::CtFileInformation;
-use ctcore::ct_show;
+use ctcore::ct_signals::get_ct_signal_name_by_value;
+use std::cell::RefCell;
 use std::env;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::io::Write;
 use std::io::{BufWriter, Error, Result};
+use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
+
+thread_local! {
+    static FILTER_FAILURE: RefCell<Option<FilterFailure>> = const { RefCell::new(None) };
+}
+
+enum FilterFailure {
+    Exit {
+        file_name: OsString,
+        command: String,
+        code: i32,
+    },
+    Signal {
+        file_name: OsString,
+        command: String,
+        signal: i32,
+    },
+    Wait(String),
+}
+
+fn record_filter_failure(failure: FilterFailure) {
+    FILTER_FAILURE.with(|slot| {
+        if slot.borrow().is_none() {
+            *slot.borrow_mut() = Some(failure);
+        }
+    });
+}
+
+pub fn reset_filter_failure() {
+    FILTER_FAILURE.with(|slot| {
+        *slot.borrow_mut() = None;
+    });
+}
+
+pub fn filter_failure_recorded() -> bool {
+    FILTER_FAILURE.with(|slot| slot.borrow().is_some())
+}
+
+pub fn take_filter_failure() -> Option<(i32, String)> {
+    FILTER_FAILURE.with(|slot| {
+        slot.borrow_mut().take().map(|failure| match failure {
+            FilterFailure::Exit {
+                file_name,
+                command,
+                code,
+            } => (
+                code,
+                format!(
+                    "with FILE={}, exit {code} from command: {command}",
+                    split_quote_path(file_name.as_os_str(), false)
+                ),
+            ),
+            FilterFailure::Signal {
+                file_name,
+                command,
+                signal,
+            } => {
+                let signal_name = get_ct_signal_name_by_value(signal as usize)
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| signal.to_string());
+                (
+                    signal + 128,
+                    format!(
+                        "with FILE={}, signal {signal_name} from command: {command}",
+                        split_quote_path(file_name.as_os_str(), false)
+                    ),
+                )
+            }
+            FilterFailure::Wait(error) => (1, format!("waiting for child process: {error}")),
+        })
+    })
+}
 
 /// A writer that writes to a shell_process' stdin
 ///
@@ -27,6 +99,8 @@ use std::process::{Child, Command, Stdio};
 struct UnixFilterWriter {
     /// Running shell process
     shell_process: Child,
+    file_name: OsString,
+    command: String,
 }
 
 impl Write for UnixFilterWriter {
@@ -62,30 +136,39 @@ impl UnixFilterWriter {
                 .stdin(Stdio::piped())
                 .spawn()?;
 
-        Ok(Self { shell_process })
+        Ok(Self {
+            shell_process,
+            file_name: filepath.to_os_string(),
+            command: command.to_string(),
+        })
     }
 }
 
 impl Drop for UnixFilterWriter {
-    /// flush stdin, close it and wait on `shell_process` before dropping self
+    /// Close stdin and wait on the filter process before dropping the writer.
     fn drop(&mut self) {
-        {
-            // 通过丢弃来关闭标准输入
-            let _ = self.shell_process.stdin.as_mut();
-        }
-        let exit_status = self
-            .shell_process
-            .wait()
-            .expect("Couldn't wait for child process");
-        if let Some(return_code) = exit_status.code() {
-            if return_code != 0 {
-                ct_show!(CtSimpleError::new(
-                    1,
-                    format!("Shell process returned {return_code}")
-                ));
-            }
-        } else {
-            ct_show!(CtSimpleError::new(1, "Shell process terminated by signal"));
+        drop(self.shell_process.stdin.take());
+        match self.shell_process.wait() {
+            Ok(exit_status) => match exit_status.code() {
+                Some(code) if code != 0 => record_filter_failure(FilterFailure::Exit {
+                    file_name: self.file_name.clone(),
+                    command: self.command.clone(),
+                    code,
+                }),
+                Some(_) => {}
+                None => {
+                    if let Some(signal) = exit_status.signal()
+                        && signal != ctcore::libc::SIGPIPE
+                    {
+                        record_filter_failure(FilterFailure::Signal {
+                            file_name: self.file_name.clone(),
+                            command: self.command.clone(),
+                            signal,
+                        });
+                    }
+                }
+            },
+            Err(error) => record_filter_failure(FilterFailure::Wait(error.to_string())),
         }
     }
 }

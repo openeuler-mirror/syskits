@@ -806,8 +806,7 @@ impl RngCore for WrappedRng {
 
 impl WrappedRng {
     fn new_from_file(path: &str) -> CTResult<Self> {
-        let file = File::open(path)
-            .map_err_context(|| format!("failed to open random source {}", path.quote()))?;
+        let file = File::open(path).map_err_context(|| format!("{}", path.quote()))?;
         Ok(WrappedRng::RngFile {
             reader: rand_read_adapter::ReadRng::new(file),
             path: path.to_owned(),
@@ -1208,6 +1207,16 @@ mod tests {
             let error = shuf_exec_to_writer(&mut input, &settings, &mut FailingWriter).unwrap_err();
 
             assert_eq!(error.to_string(), "write error: No space left on device");
+        }
+
+        #[test]
+        fn test_random_source_open_error_uses_source_path() {
+            let error = match WrappedRng::new_from_file("") {
+                Ok(_) => panic!("opening an empty random-source path must fail"),
+                Err(error) => error,
+            };
+
+            assert_eq!(error.to_string(), "'': No such file or directory");
         }
 
         #[test]

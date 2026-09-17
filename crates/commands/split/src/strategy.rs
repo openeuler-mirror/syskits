@@ -134,6 +134,9 @@ impl StrategyNumberType {
             [k_str, n_str] if !k_str.starts_with('l') && !k_str.starts_with('r') => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| StrategyNumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                if num_chunks == 0 {
+                    return Err(StrategyNumberTypeError::NumberOfChunks(n_str.to_string()));
+                }
                 let chunk_number = parse_size_u64(k_str)
                     .map_err(|_| StrategyNumberTypeError::ChunkNumber(k_str.to_string()))?;
                 if is_invalid_chunk(chunk_number, num_chunks) {
@@ -144,11 +147,18 @@ impl StrategyNumberType {
             ["l", n_str] => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| StrategyNumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                Ok(Self::Lines(num_chunks))
+                if num_chunks > 0 {
+                    Ok(Self::Lines(num_chunks))
+                } else {
+                    Err(StrategyNumberTypeError::NumberOfChunks(n_str.to_string()))
+                }
             }
             ["l", k_str, n_str] => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| StrategyNumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                if num_chunks == 0 {
+                    return Err(StrategyNumberTypeError::NumberOfChunks(n_str.to_string()));
+                }
                 let chunk_number = parse_size_u64(k_str)
                     .map_err(|_| StrategyNumberTypeError::ChunkNumber(k_str.to_string()))?;
                 if is_invalid_chunk(chunk_number, num_chunks) {
@@ -159,11 +169,18 @@ impl StrategyNumberType {
             ["r", n_str] => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| StrategyNumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                Ok(Self::RoundRobin(num_chunks))
+                if num_chunks > 0 {
+                    Ok(Self::RoundRobin(num_chunks))
+                } else {
+                    Err(StrategyNumberTypeError::NumberOfChunks(n_str.to_string()))
+                }
             }
             ["r", k_str, n_str] => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| StrategyNumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                if num_chunks == 0 {
+                    return Err(StrategyNumberTypeError::NumberOfChunks(n_str.to_string()));
+                }
                 let chunk_number = parse_size_u64(k_str)
                     .map_err(|_| StrategyNumberTypeError::ChunkNumber(k_str.to_string()))?;
                 if is_invalid_chunk(chunk_number, num_chunks) {
@@ -444,6 +461,32 @@ mod tests {
             StrategyNumberType::from("r/abc/xyz").unwrap_err(),
             StrategyNumberTypeError::NumberOfChunks("xyz".to_string())
         );
+    }
+
+    #[test]
+    fn test_number_type_rejects_zero_line_chunks() {
+        assert_eq!(
+            StrategyNumberType::from("l/0").unwrap_err(),
+            StrategyNumberTypeError::NumberOfChunks("0".to_string())
+        );
+    }
+
+    #[test]
+    fn test_number_type_rejects_zero_round_robin_chunks() {
+        assert_eq!(
+            StrategyNumberType::from("r/0").unwrap_err(),
+            StrategyNumberTypeError::NumberOfChunks("0".to_string())
+        );
+    }
+
+    #[test]
+    fn test_number_type_rejects_zero_chunks_before_validating_kth_chunk() {
+        for value in ["1/0", "l/1/0", "r/1/0"] {
+            assert_eq!(
+                StrategyNumberType::from(value).unwrap_err(),
+                StrategyNumberTypeError::NumberOfChunks("0".to_string())
+            );
+        }
     }
 
     #[test]

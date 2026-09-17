@@ -2525,6 +2525,29 @@
       "cleanup_commands": [
         "rm -f in exp1 exp2 exp3 x*"
       ]
+    },
+    {
+      "command": "split",
+      "description": "split rejects zero chunks in round-robin number mode",
+      "args": [
+        "--number=r/0"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

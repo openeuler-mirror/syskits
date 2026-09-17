@@ -1767,6 +1767,69 @@
         },
         {
             "command": "shuf",
+            "description": "原始字节用例：LC_ALL=C、LANG=C下执行参数2d2dff，即shuf $'--\\377'；GNU对未知长选项在引号内保留原始ff字节，预期RC=1、stdout为空、stderr完整十六进制精确匹配。",
+            "args": [
+                "2d2dff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "736875663a20756e7265636f676e697a6564206f7074696f6e20272d2dff270a547279202773687566202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "byteMode": true
+        },
+        {
+            "command": "shuf",
+            "description": "原始字节用例：LC_ALL=C、LANG=C下执行参数2dff，即shuf $'-\\377'；GNU对未知短选项在引号内保留原始ff字节，预期RC=1、stdout为空、stderr完整十六进制精确匹配。",
+            "args": [
+                "2dff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "736875663a20696e76616c6964206f7074696f6e202d2d2027ff270a547279202773687566202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "byteMode": true
+        },
+        {
+            "command": "shuf",
+            "description": "原始字节用例：LC_ALL=C、LANG=C下执行参数2d2d723dff，即shuf $'--r=\\377'；GNU对歧义长选项在引号内保留原始ff字节并列出候选项，预期RC=1、stdout为空、stderr完整十六进制精确匹配。",
+            "args": [
+                "2d2d723dff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "736875663a206f7074696f6e20272d2d723dff2720697320616d626967756f75733b20706f73736962696c69746965733a20272d2d72616e646f6d2d736f757263652720272d2d726570656174270a547279202773687566202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "byteMode": true
+        },
+        {
+            "command": "shuf",
             "description": "shuf: 显示帮助信息 (--help)",
             "args": [
                 "--help"

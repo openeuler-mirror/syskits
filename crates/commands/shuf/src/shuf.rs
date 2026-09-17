@@ -46,10 +46,13 @@ use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
 
 use memchr::memchr_iter;
 use rand::RngCore;
+use std::borrow::Cow;
 use std::collections::HashMap;
 #[cfg(test)]
 use std::collections::HashSet;
+use std::error::Error as StdError;
 use std::ffi::{OsStr, OsString};
+use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Error, ErrorKind, Read, Write, stdout};
 use std::ops::RangeInclusive;
@@ -293,6 +296,35 @@ enum ShufLongOptionMatch {
     Ambiguous(Vec<&'static str>),
 }
 
+#[derive(Debug)]
+struct ShufUsageError {
+    message: Vec<u8>,
+}
+
+impl ShufUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl Display for ShufUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl StdError for ShufUsageError {}
+
+impl CTError for ShufUsageError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
 fn shuf_match_long_option(name: &[u8]) -> ShufLongOptionMatch {
     if let Some((option, takes_value)) = SHUF_LONG_OPTIONS
         .iter()
@@ -340,10 +372,10 @@ fn shuf_validate_gnu_options(args: &[OsString], posixly_correct: bool) -> CTResu
             let name = &bytes[2..equals.map_or(bytes.len(), |offset| offset + 2)];
             match shuf_match_long_option(name) {
                 ShufLongOptionMatch::None => {
-                    return Err(CTsageError::new(
-                        1,
-                        format!("unrecognized option {}", shuf_quote_always(argument)),
-                    ));
+                    let mut message = b"unrecognized option '".to_vec();
+                    message.extend_from_slice(bytes);
+                    message.push(b'\'');
+                    return Err(ShufUsageError::boxed(message));
                 }
                 ShufLongOptionMatch::Ambiguous(matches) => {
                     let possibilities = matches
@@ -351,13 +383,11 @@ fn shuf_validate_gnu_options(args: &[OsString], posixly_correct: bool) -> CTResu
                         .map(|option| format!("'--{option}'"))
                         .collect::<Vec<_>>()
                         .join(" ");
-                    return Err(CTsageError::new(
-                        1,
-                        format!(
-                            "option {} is ambiguous; possibilities: {possibilities}",
-                            shuf_quote_always(argument)
-                        ),
-                    ));
+                    let mut message = b"option '".to_vec();
+                    message.extend_from_slice(bytes);
+                    message.extend_from_slice(b"' is ambiguous; possibilities: ");
+                    message.extend_from_slice(possibilities.as_bytes());
+                    return Err(ShufUsageError::boxed(message));
                 }
                 ShufLongOptionMatch::Recognized(option, takes_value) => {
                     if equals.is_some() && !takes_value {
@@ -391,13 +421,10 @@ fn shuf_validate_gnu_options(args: &[OsString], posixly_correct: bool) -> CTResu
                 return Ok(());
             }
             if !matches!(option, b'e' | b'i' | b'n' | b'o' | b'r' | b'z') {
-                if option.is_ascii() {
-                    return Err(CTsageError::new(
-                        1,
-                        format!("invalid option -- '{}'", char::from(option)),
-                    ));
-                }
-                return Ok(());
+                let mut message = b"invalid option -- '".to_vec();
+                message.push(option);
+                message.push(b'\'');
+                return Err(ShufUsageError::boxed(message));
             }
             if matches!(option, b'i' | b'n' | b'o') {
                 if short_index + 1 == bytes.len() {
@@ -1967,6 +1994,33 @@ mod tests {
                 range_error.to_string().contains("\\377-1"),
                 "diagnostic must retain the original non-UTF-8 range byte as octal"
             );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_option_diagnostics_preserve_raw_non_utf8_bytes() {
+            use std::os::unix::ffi::OsStringExt;
+
+            for (argument, expected) in [
+                (
+                    vec![b'-', b'-', 0xff],
+                    b"unrecognized option '--\xff'".as_slice(),
+                ),
+                (vec![b'-', 0xff], b"invalid option -- '\xff'".as_slice()),
+                (
+                    vec![b'-', b'-', b'r', b'=', 0xff],
+                    b"option '--r=\xff' is ambiguous; possibilities: '--random-source' '--repeat'"
+                        .as_slice(),
+                ),
+            ] {
+                let error = shuf_parse_invocation(
+                    vec![OsString::from("shuf"), OsString::from_vec(argument)].into_iter(),
+                )
+                .expect_err("invalid raw option bytes must use GNU diagnostics");
+
+                assert_eq!(error.diagnostic_bytes().as_ref(), expected);
+                assert!(error.usage());
+            }
         }
 
         #[cfg(unix)]

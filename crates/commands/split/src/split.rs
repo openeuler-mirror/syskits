@@ -599,12 +599,14 @@ fn splice_args_init() -> Vec<Arg> {
         Arg::new(OPT_ADDITIONAL_SUFFIX)
             .long(OPT_ADDITIONAL_SUFFIX)
             .allow_hyphen_values(true)
+            .overrides_with(OPT_ADDITIONAL_SUFFIX)
             .value_name("SUFFIX")
             .default_value("")
             .help(t!("split.clap.opt_additional_suffix")),
         Arg::new(OPT_FILTER)
             .long(OPT_FILTER)
             .allow_hyphen_values(true)
+            .overrides_with(OPT_FILTER)
             .value_name("COMMAND")
             .value_hint(ValueHint::CommandName)
             .help(
@@ -614,12 +616,14 @@ fn splice_args_init() -> Vec<Arg> {
             .long(OPT_ELIDE_EMPTY_FILES)
             .short('e')
             .help(t!("split.clap.opt_elide_empty_files"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(OPT_ELIDE_EMPTY_FILES),
         Arg::new(OPT_UNBUFFERED)
             .long(OPT_UNBUFFERED)
             .short('u')
             .help(t!("split.clap.opt_unbuffered"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(OPT_UNBUFFERED),
         Arg::new(OPT_NUMERIC_SUFFIXES_SHORT)
             .short('d')
             .action(ArgAction::SetTrue)
@@ -668,12 +672,14 @@ fn splice_args_init() -> Vec<Arg> {
             .short('a')
             .long(OPT_SUFFIX_LENGTH)
             .allow_hyphen_values(true)
+            .overrides_with(OPT_SUFFIX_LENGTH)
             .value_name("N")
             .help(t!("split.clap.opt_suffix_length")),
         Arg::new(OPT_VERBOSE)
             .long(OPT_VERBOSE)
             .help(t!("split.clap.opt_verbose"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(OPT_VERBOSE),
         Arg::new(OPT_SEPARATOR)
             .short('t')
             .long(OPT_SEPARATOR)
@@ -4927,6 +4933,44 @@ mod tests {
                 matches.get_one::<String>(OPT_ADDITIONAL_SUFFIX),
                 Some(&"10".to_string())
             );
+        }
+
+        #[test]
+        fn test_ct_app_repeated_options_use_gnu_last_value_semantics() {
+            let matches = ct_app()
+                .try_get_matches_from([
+                    "split",
+                    "-a",
+                    "1",
+                    "--suffix-length=2",
+                    "--additional-suffix=.first",
+                    "--additional-suffix=.last",
+                    "--filter=cat > $FILE.first",
+                    "--filter=cat > $FILE.last",
+                    "--verbose",
+                    "--verbose",
+                    "-e",
+                    "--elide-empty-files",
+                    "-u",
+                    "--unbuffered",
+                ])
+                .unwrap();
+
+            assert_eq!(
+                matches.get_one::<String>(OPT_SUFFIX_LENGTH),
+                Some(&"2".to_string())
+            );
+            assert_eq!(
+                matches.get_one::<String>(OPT_ADDITIONAL_SUFFIX),
+                Some(&".last".to_string())
+            );
+            assert_eq!(
+                matches.get_one::<String>(OPT_FILTER),
+                Some(&"cat > $FILE.last".to_string())
+            );
+            assert!(matches.get_flag(OPT_VERBOSE));
+            assert!(matches.get_flag(OPT_ELIDE_EMPTY_FILES));
+            assert!(matches.get_flag(OPT_UNBUFFERED));
         }
 
         #[test]

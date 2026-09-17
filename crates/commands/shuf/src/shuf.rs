@@ -398,6 +398,7 @@ pub fn ct_app() -> Command {
             .short('o')
             .long(shuf_options::SHUF_OUTPUT)
             .value_name("FILE")
+            .allow_hyphen_values(true)
             .help(t!("shuf.clap.shuf_output"))
             .action(clap::ArgAction::Append)
             .value_parser(OsStringValueParser::new())
@@ -405,6 +406,7 @@ pub fn ct_app() -> Command {
         Arg::new(shuf_options::SHUF_RANDOM_SOURCE)
             .long(shuf_options::SHUF_RANDOM_SOURCE)
             .value_name("FILE")
+            .allow_hyphen_values(true)
             .help(t!("shuf.clap.shuf_random_source"))
             .action(clap::ArgAction::Append)
             .value_parser(OsStringValueParser::new())
@@ -1967,6 +1969,22 @@ mod tests {
                     "invalid input range: {}",
                     ctcore::ct_display::locale_quote("-0-1")
                 )
+            );
+        }
+
+        #[test]
+        fn test_file_options_accept_hyphen_prefixed_paths() {
+            let (_, output_settings) =
+                shuf_parse_invocation(parse_args(&["shuf", "-o", "-n", "-i", "1-1"]))
+                    .expect("GNU binds -n as the -o path");
+            assert_eq!(output_settings.output, Some(OsString::from("-n")));
+
+            let (_, random_source_settings) =
+                shuf_parse_invocation(parse_args(&["shuf", "-i", "1-1", "--random-source", "-r"]))
+                    .expect("GNU binds -r as the --random-source path");
+            assert_eq!(
+                random_source_settings.random_source,
+                Some(OsString::from("-r"))
             );
         }
 

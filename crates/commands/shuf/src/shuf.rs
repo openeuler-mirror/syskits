@@ -41,6 +41,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo};
+use ctcore::ct_posix::GnuGetoptCommandExt;
 
 use memchr::memchr_iter;
 use rand::RngCore;
@@ -273,6 +274,7 @@ pub fn ct_app() -> Command {
         .override_usage(t!("shuf.usage"))
         .infer_long_args(true)
         .args(args)
+        .gnu_getopt()
 }
 
 /// 从文件或标准输入读取数据
@@ -1032,6 +1034,7 @@ pub fn shuf_native_semantic(args: impl ctcore::Args) -> CTResult<ShufSemantic> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
     use tempfile::tempdir;
 
     #[test]
@@ -1092,6 +1095,8 @@ mod tests {
     mod parse_tests {
         use super::*;
 
+        static POSIXLY_CORRECT_LOCK: Mutex<()> = Mutex::new(());
+
         fn parse_args(args: &[&str]) -> std::vec::IntoIter<OsString> {
             args.iter()
                 .map(|arg| OsString::from(*arg))
@@ -1114,6 +1119,22 @@ mod tests {
 
             assert_eq!(error.to_string(), "cannot combine -e and -i options");
             assert!(error.usage());
+        }
+
+        #[test]
+        fn test_posixly_correct_stops_option_parsing_at_file_operand() {
+            let _guard = POSIXLY_CORRECT_LOCK.lock().unwrap();
+            let previous = std::env::var_os("POSIXLY_CORRECT");
+            unsafe { std::env::set_var("POSIXLY_CORRECT", "1") };
+
+            let result = shuf_parse_invocation(parse_args(&["shuf", "/dev/null", "-n", "0"]));
+
+            match previous {
+                Some(value) => unsafe { std::env::set_var("POSIXLY_CORRECT", value) },
+                None => unsafe { std::env::remove_var("POSIXLY_CORRECT") },
+            }
+
+            assert!(result.is_err());
         }
 
         #[cfg(unix)]

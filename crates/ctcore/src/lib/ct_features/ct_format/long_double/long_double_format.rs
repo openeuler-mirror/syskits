@@ -9,6 +9,7 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  */
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::error::Error;
 use std::ffi::CStr;
@@ -114,7 +115,29 @@ pub enum GnuFormatError {
 
 impl Error for GnuFormatError {}
 
-impl crate::ct_error::CTError for GnuFormatError {}
+impl crate::ct_error::CTError for GnuFormatError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        let mut diagnostic = Vec::new();
+        let (format, message) = match self {
+            Self::NoDirective(format) => (format, b" has no % directive".as_slice()),
+            Self::EndsInPercent(format) => (format, b" ends in %".as_slice()),
+            Self::TooManyDirectives(format) => (format, b" has too many % directives".as_slice()),
+            Self::UnknownDirective(format, directive) => {
+                diagnostic.extend_from_slice(b"format ");
+                diagnostic.extend_from_slice(&quote_format_bytes(format));
+                diagnostic.extend_from_slice(b" has unknown %");
+                diagnostic.push(*directive);
+                diagnostic.extend_from_slice(b" directive");
+                return Cow::Owned(diagnostic);
+            }
+        };
+
+        diagnostic.extend_from_slice(b"format ");
+        diagnostic.extend_from_slice(&quote_format_bytes(format));
+        diagnostic.extend_from_slice(message);
+        Cow::Owned(diagnostic)
+    }
+}
 
 impl Display for GnuFormatError {
     fn fmt(&self, output: &mut Formatter<'_>) -> std::fmt::Result {
@@ -146,6 +169,35 @@ impl Display for GnuFormatError {
             }
         }
     }
+}
+
+fn quote_format_bytes(bytes: &[u8]) -> Vec<u8> {
+    let mut quoted = Vec::with_capacity(bytes.len() + 2);
+    quoted.push(b'\'');
+    for byte in bytes {
+        match byte {
+            b'\x07' => quoted.extend_from_slice(b"\\a"),
+            b'\x08' => quoted.extend_from_slice(b"\\b"),
+            b'\t' => quoted.extend_from_slice(b"\\t"),
+            b'\n' => quoted.extend_from_slice(b"\\n"),
+            b'\x0b' => quoted.extend_from_slice(b"\\v"),
+            b'\x0c' => quoted.extend_from_slice(b"\\f"),
+            b'\r' => quoted.extend_from_slice(b"\\r"),
+            b'\\' | b'\'' => {
+                quoted.push(b'\\');
+                quoted.push(*byte);
+            }
+            0x20..=0x7e => quoted.push(*byte),
+            _ => {
+                quoted.push(b'\\');
+                quoted.push(b'0' + (byte >> 6));
+                quoted.push(b'0' + ((byte >> 3) & 7));
+                quoted.push(b'0' + (byte & 7));
+            }
+        }
+    }
+    quoted.push(b'\'');
+    quoted
 }
 
 impl GnuFloatFormat {
@@ -900,6 +952,7 @@ fn trim_scientific_fraction(value: String) -> String {
 mod tests {
     use super::super::number::PreciseNumber;
     use super::*;
+    use crate::ct_error::CTError;
 
     fn render(format: &str, value: &str) -> String {
         let value = value.parse::<PreciseNumber>().unwrap().number;
@@ -990,5 +1043,20 @@ mod tests {
                 expected
             );
         }
+    }
+
+    #[test]
+    fn diagnostic_bytes_preserve_non_utf8_format_arguments() {
+        let no_directive = GnuFloatFormat::try_parse(&[0xff]).unwrap_err();
+        assert_eq!(
+            no_directive.diagnostic_bytes().as_ref(),
+            b"format '\\377' has no % directive"
+        );
+
+        let unknown_directive = GnuFloatFormat::try_parse(&[b'%', 0xff]).unwrap_err();
+        assert_eq!(
+            unknown_directive.diagnostic_bytes().as_ref(),
+            b"format '%\\377' has unknown %\xff directive"
+        );
     }
 }

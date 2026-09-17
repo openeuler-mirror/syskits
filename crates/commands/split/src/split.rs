@@ -590,18 +590,21 @@ fn splice_args_init() -> Vec<Arg> {
             .short('b')
             .long(OPT_BYTES)
             .allow_hyphen_values(true)
+            .action(ArgAction::Append)
             .value_name("SIZE")
             .help(t!("split.clap.opt_bytes")),
         Arg::new(OPT_LINE_BYTES)
             .short('C')
             .long(OPT_LINE_BYTES)
             .allow_hyphen_values(true)
+            .action(ArgAction::Append)
             .value_name("SIZE")
             .help(t!("split.clap.opt_line_bytes")),
         Arg::new(OPT_LINES)
             .short('l')
             .long(OPT_LINES)
             .allow_hyphen_values(true)
+            .action(ArgAction::Append)
             .value_name("NUMBER")
             .default_value("1000")
             .help(t!("split.clap.opt_lines")),
@@ -609,6 +612,7 @@ fn splice_args_init() -> Vec<Arg> {
             .short('n')
             .long(OPT_NUMBER)
             .allow_hyphen_values(true)
+            .action(ArgAction::Append)
             .value_name("CHUNKS")
             .help(t!("split.clap.opt_number")),
         Arg::new(OPT_ADDITIONAL_SUFFIX)

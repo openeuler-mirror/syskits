@@ -1231,7 +1231,8 @@ fn shuf_quote_diagnostic_argument(input: &OsStr) -> String {
     let bytes = input.as_encoded_bytes();
     if let Ok(text) = std::str::from_utf8(bytes) {
         if shuf_bytes_are_locale_printable(bytes) {
-            return ctcore::ct_display::locale_quote(text);
+            let (left_quote, right_quote) = shuf_diagnostic_quote_marks();
+            return format!("{left_quote}{text}{right_quote}");
         }
     }
 
@@ -1348,12 +1349,28 @@ fn shuf_classify_locale_sequence(remaining: &[u8]) -> (usize, bool) {
 }
 
 fn shuf_diagnostic_quote_marks() -> (&'static str, &'static str) {
+    #[cfg(unix)]
+    let locale = unsafe {
+        let locale = ctcore::libc::setlocale(ctcore::libc::LC_CTYPE, std::ptr::null());
+        if locale.is_null() {
+            String::from("C")
+        } else {
+            std::ffi::CStr::from_ptr(locale)
+                .to_string_lossy()
+                .to_ascii_uppercase()
+        }
+    };
+    #[cfg(not(unix))]
     let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
         .into_iter()
         .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
         .unwrap_or_else(|| String::from("C"))
         .to_ascii_uppercase();
 
+    shuf_diagnostic_quote_marks_for_locale(&locale)
+}
+
+fn shuf_diagnostic_quote_marks_for_locale(locale: &str) -> (&'static str, &'static str) {
     if locale.contains("UTF-8") || locale.contains("UTF8") {
         ("‘", "’")
     } else if locale.contains("GB18030") {
@@ -1822,7 +1839,7 @@ mod tests {
                 error.to_string(),
                 format!(
                     "invalid input range: {}",
-                    ctcore::ct_display::locale_quote("invalid")
+                    shuf_quote_diagnostic_argument(OsStr::new("invalid"))
                 )
             );
         }
@@ -1836,7 +1853,7 @@ mod tests {
                 error.to_string(),
                 format!(
                     "invalid input range: {}",
-                    ctcore::ct_display::locale_quote("invalid")
+                    shuf_quote_diagnostic_argument(OsStr::new("invalid"))
                 )
             );
         }
@@ -1851,7 +1868,7 @@ mod tests {
                 error.to_string(),
                 format!(
                     "invalid line count: {}",
-                    ctcore::ct_display::locale_quote("invalid")
+                    shuf_quote_diagnostic_argument(OsStr::new("invalid"))
                 )
             );
         }
@@ -1885,10 +1902,12 @@ mod tests {
             let error = shuf_parse_invocation(parse_args(&["shuf", "file1", "file2"]))
                 .expect_err("a second file operand must fail");
 
-            let (left_quote, right_quote) = shuf_diagnostic_quote_marks();
-            assert_eq!(
-                error.to_string(),
-                format!("extra operand {left_quote}file2{right_quote}")
+            assert!(
+                matches!(
+                    error.to_string().as_str(),
+                    "extra operand 'file2'" | "extra operand ‘file2’"
+                ),
+                "unexpected GNU diagnostic: {error}"
             );
             assert!(error.usage());
         }
@@ -2133,6 +2152,11 @@ mod tests {
         }
 
         #[test]
+        fn test_diagnostic_quote_marks_use_ascii_for_c_locale() {
+            assert_eq!(shuf_diagnostic_quote_marks_for_locale("C"), ("'", "'"));
+        }
+
+        #[test]
         fn test_repeated_output_accepts_identical_path() {
             let (_, settings) = shuf_parse_invocation(parse_args(&[
                 "shuf",
@@ -2218,7 +2242,7 @@ mod tests {
                 shuf_parse_range(OsStr::new("0-18446744073709551615")).unwrap_err(),
                 format!(
                     "invalid input range: {}",
-                    ctcore::ct_display::locale_quote("0-18446744073709551615")
+                    shuf_quote_diagnostic_argument(OsStr::new("0-18446744073709551615"))
                 )
             );
         }
@@ -2267,7 +2291,7 @@ mod tests {
                 head_error.to_string(),
                 format!(
                     "invalid line count: {}",
-                    ctcore::ct_display::locale_quote("-0")
+                    shuf_quote_diagnostic_argument(OsStr::new("-0"))
                 )
             );
 
@@ -2277,7 +2301,7 @@ mod tests {
                 range_error.to_string(),
                 format!(
                     "invalid input range: {}",
-                    ctcore::ct_display::locale_quote("-0-1")
+                    shuf_quote_diagnostic_argument(OsStr::new("-0-1"))
                 )
             );
         }

@@ -1209,6 +1209,27 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=invalid.UTF-8、LANG=C下执行shuf -n invalid；GNU的setlocale失败后继续使用实际生效的C locale，因此无效COUNT诊断使用ASCII单引号，预期RC=1、stdout为空、stderr为shuf: invalid line count: 'invalid'加换行。",
+            "args": [
+                "-n",
+                "invalid"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: invalid line count: 'invalid'\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "invalid.UTF-8",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "LC_ALL=C、LANG=C下执行shuf -n '1é' -i 1-2；COUNT参数UTF-8字节为31 c3 a9，GNU拒绝该无效数值并按C locale将非ASCII字节转义为\\303\\251，预期RC=1、stdout为空、stderr为shuf: invalid line count: '1\\303\\251'加换行。",
             "args": [
                 "-n",

@@ -1605,6 +1605,53 @@
     },
     {
       "command": "split",
+      "description": "split --filter verbose reports GNU FILE diagnostic",
+      "args": [
+        "--lines",
+        "1",
+        "--filter=cat > \"$FILE\"",
+        "--verbose",
+        "in",
+        "out name"
+      ],
+      "setup_commands": [
+        "printf 'alpha\\nbeta\\n' > in",
+        "printf 'alpha\\n' > exp1",
+        "printf 'beta\\n' > exp2"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "executing with FILE='out nameaa'\nexecuting with FILE='out nameab'\n",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp1 'out nameaa'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 'out nameab'",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in exp1 exp2 'out name'*"
+      ]
+    },
+    {
+      "command": "split",
       "description": "split --filter invalid with -n K/N",
       "args": [
         "-n",

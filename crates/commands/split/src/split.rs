@@ -24,10 +24,11 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTIoError, CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::parse_size_u64;
+use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use ctcore::uio_error;
 use std::cell::RefCell;
 use std::env;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs::{File, metadata};
 use std::io;
@@ -178,14 +179,28 @@ fn split_stdout_writer() -> SplitStdoutWriter {
     }
 }
 
-fn split_emit_creating_file(file_name: &str) -> io::Result<()> {
+fn split_emit_opening_output(file_name: &str, filter_enabled: bool) -> io::Result<()> {
     let mut writer = split_stdout_writer();
-    writeln!(
-        writer,
-        "{} {}",
-        t!("split.creating_file"),
-        file_name.quote()
-    )?;
+    if filter_enabled {
+        let style = CtQuotingStyle::Shell {
+            escape: false,
+            always_quote: false,
+            show_control: false,
+        };
+        writeln!(
+            writer,
+            "{}{}",
+            t!("split.executing_with_file"),
+            escape_name(OsStr::new(file_name), &style)
+        )?;
+    } else {
+        writeln!(
+            writer,
+            "{} {}",
+            t!("split.creating_file"),
+            file_name.quote()
+        )?;
+    }
     writer.flush()
 }
 
@@ -1086,7 +1101,7 @@ impl<'a> SpliceByteChunkWriter<'a> {
             .next()
             .ok_or_else(|| std::io::Error::other("output file suffixes exhausted"))?;
         if self.settings.verbose {
-            split_emit_creating_file(&file_name)?;
+            split_emit_opening_output(&file_name, self.settings.filter.is_some())?;
         }
         self.settings
             .splice_instantiate_current_writer(&file_name, true)
@@ -1223,7 +1238,7 @@ impl<'a> SpliceLineChunkWriter<'a> {
             .next()
             .ok_or_else(|| std::io::Error::other("output file suffixes exhausted"))?;
         if self.settings.verbose {
-            split_emit_creating_file(&filename)?;
+            split_emit_opening_output(&filename, self.settings.filter.is_some())?;
         }
         self.settings
             .splice_instantiate_current_writer(&filename, true)
@@ -1330,7 +1345,8 @@ fn splice_line_bytes<R: BufRead>(
             .ok_or_else(|| CtSimpleError::new(1, "output file suffixes exhausted"))?;
 
         if splice_settings.verbose {
-            split_emit_creating_file(&filename).map_err(CTIoError::from)?;
+            split_emit_opening_output(&filename, splice_settings.filter.is_some())
+                .map_err(CTIoError::from)?;
         }
 
         let mut writer = splice_settings
@@ -2130,6 +2146,44 @@ mod tests {
         assert!(stdout.is_empty());
         assert!(files.is_empty());
         assert!(collect_outputs_by_prefix(&settings.prefix).is_empty());
+    }
+
+    #[test]
+    fn test_split_verbose_filter_reports_executing_file() {
+        let temp = tempdir().expect("tempdir");
+        let input = temp.path().join("input.txt");
+        std::fs::write(&input, "alpha\nbeta\n").expect("write split input");
+        let input_path = input.to_string_lossy().into_owned();
+
+        let command = ct_app();
+        let args = vec![
+            ctcore::ct_util_name(),
+            "--lines",
+            "1",
+            "--filter=cat > $FILE",
+            "--verbose",
+            input_path.as_str(),
+        ];
+        let matches = command
+            .try_get_matches_from(args)
+            .expect("parse split arguments");
+        let mut settings = SpliceSettings::from(&matches, &None).expect("split settings");
+        settings.prefix = temp.path().join("out").to_string_lossy().into_owned();
+
+        let (result, stdout, _) = split_run_with_buffered_observers(|| split(&settings));
+
+        assert!(result.is_ok());
+        assert_eq!(
+            stdout,
+            b"executing with FILE="
+                .iter()
+                .chain(settings.prefix.as_bytes())
+                .chain(b"aa\nexecuting with FILE=")
+                .chain(settings.prefix.as_bytes())
+                .chain(b"ab\n")
+                .copied()
+                .collect::<Vec<_>>(),
+        );
     }
 
     mod semantic_tests {

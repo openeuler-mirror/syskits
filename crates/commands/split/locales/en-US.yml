@@ -29,3 +29,4 @@ split:
     - r/N     like 'l' but use round robin distribution
     - r/K/N   likewise but only output Kth of N to stdout
   creating_file: creating file
+  executing_with_file: executing with FILE=

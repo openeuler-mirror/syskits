@@ -685,6 +685,9 @@ fn shuf_exec_with_rng<T: Shufable, W: Write>(
 
 fn shuf_exec<T: Shufable>(input: &mut T, settings: &ShufSettings) -> CTResult<()> {
     if input.is_empty() {
+        if settings.is_repeat {
+            let _ = create_random_source(settings)?;
+        }
         let writer = create_output_writer(settings)?;
         let mut buf_writer = BufWriter::new(writer);
         if settings.is_repeat {
@@ -1784,6 +1787,32 @@ mod tests {
             };
 
             assert_eq!(error.to_string(), "'': No such file or directory");
+        }
+
+        #[test]
+        fn test_empty_repeat_input_checks_random_source_before_no_lines_error() {
+            let temp = tempdir().unwrap();
+            let missing_random_source = temp.path().join("missing-random-source");
+            let settings = ShufSettings {
+                head_count: usize::MAX,
+                output: None,
+                random_source: Some(missing_random_source.clone().into_os_string()),
+                is_repeat: true,
+                sep: b'\n',
+            };
+            let mut input = Vec::<&[u8]>::new();
+
+            let error = shuf_exec(&mut input, &settings).expect_err(
+                "empty repeat input must initialize its configured random source first",
+            );
+
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "{}: No such file or directory",
+                    missing_random_source.display().to_string().quote()
+                )
+            );
         }
 
         #[test]

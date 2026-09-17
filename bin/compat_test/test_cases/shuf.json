@@ -445,6 +445,34 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下对空文件执行shuf -r --random-source=missing-random-source shuf-empty-input；GNU在报告no lines to repeat前初始化随机源，预期RC=1、stdout为空、stderr为missing-random-source打开失败。",
+            "args": [
+                "-r",
+                "--random-source=missing-random-source",
+                "shuf-empty-input"
+            ],
+            "setup_commands": [
+                ": > shuf-empty-input"
+            ],
+            "cleanup_commands": [
+                "rm -f shuf-empty-input"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: missing-random-source: No such file or directory\n"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "POSIXLY_CORRECT=1、LC_ALL=C、LANG=C下执行shuf /dev/null -n 0；GNU getopt在第一个文件操作数/dev/null处停止选项解析，后续字节2d6e 30被视为额外操作数，预期RC=1、stdout为0字节。",
             "args": [
                 "/dev/null",

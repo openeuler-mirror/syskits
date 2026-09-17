@@ -840,6 +840,15 @@ fn shuf_quotef(path: &OsStr) -> String {
     }
 }
 
+fn shuf_quote_always(path: &OsStr) -> String {
+    let quoted = shuf_quotef(path);
+    if quoted.as_bytes() == path.as_encoded_bytes() {
+        format!("'{quoted}'")
+    } else {
+        quoted
+    }
+}
+
 /// 创建随机数生成器
 fn create_random_source(settings: &ShufSettings) -> CTResult<WrappedRng> {
     if let Some(path) = &settings.random_source {
@@ -1154,11 +1163,15 @@ impl WrappedRng {
         failure: rand_read_adapter::ReadFailure,
     ) -> Box<dyn CTError> {
         let message = if failure.kind == ErrorKind::UnexpectedEof {
-            format!("{}: end of file", shuf_quotef(path))
+            format!("{}: end of file", shuf_quote_always(path))
         } else if let Some(errno) = failure.raw_os_error {
-            format!("{}: {}", shuf_quotef(path), Error::from_raw_os_error(errno))
+            format!(
+                "{}: {}",
+                shuf_quote_always(path),
+                Error::from_raw_os_error(errno)
+            )
         } else {
-            format!("{}: {}", shuf_quotef(path), Error::from(failure.kind))
+            format!("{}: {}", shuf_quote_always(path), Error::from(failure.kind))
         };
         CtSimpleError::new(1, message)
     }
@@ -1893,6 +1906,19 @@ mod tests {
         }
 
         #[test]
+        fn test_random_source_eof_always_quotes_safe_path() {
+            let error = WrappedRng::random_source_error(
+                OsStr::new("random-source"),
+                rand_read_adapter::ReadFailure {
+                    kind: ErrorKind::UnexpectedEof,
+                    raw_os_error: None,
+                },
+            );
+
+            assert_eq!(error.to_string(), "'random-source': end of file");
+        }
+
+        #[test]
         fn test_output_write_error_has_gnu_context() {
             let settings = ShufSettings {
                 head_count: 1,
@@ -1920,7 +1946,10 @@ mod tests {
 
             assert_eq!(
                 error.to_string(),
-                format!("{}: end of file", shuf_quotef(random_source.as_os_str()))
+                format!(
+                    "{}: end of file",
+                    shuf_quote_always(random_source.as_os_str())
+                )
             );
         }
 
@@ -2026,7 +2055,10 @@ mod tests {
 
             assert_eq!(
                 error.to_string(),
-                format!("{}: end of file", shuf_quotef(random_source.as_os_str()))
+                format!(
+                    "{}: end of file",
+                    shuf_quote_always(random_source.as_os_str())
+                )
             );
             assert!(output.is_empty());
         }
@@ -2070,7 +2102,10 @@ mod tests {
 
             assert_eq!(
                 error.to_string(),
-                format!("{}: end of file", shuf_quotef(random_source.as_os_str()))
+                format!(
+                    "{}: end of file",
+                    shuf_quote_always(random_source.as_os_str())
+                )
             );
             assert!(output.is_empty());
         }

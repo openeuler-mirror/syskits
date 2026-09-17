@@ -1508,6 +1508,63 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -o -n -i 1-1；GNU将紧跟-o的-n作为输出路径而非新的head-count选项，预期RC=0、stdout和stderr为空，并创建内容为310a的文件-n。",
+            "args": [
+                "-o",
+                "-n",
+                "-i",
+                "1-1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(cat -- -n)\" = 1",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f -- -n"
+            ]
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -i 1-1 --random-source -r；GNU将紧跟--random-source的-r作为随机源路径而非repeat选项，打开该不存在路径后预期RC=1、stdout为空、stderr为shuf: -r: No such file or directory加换行。",
+            "args": [
+                "-i",
+                "1-1",
+                "--random-source",
+                "-r"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: -r: No such file or directory\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "shuf: 显示帮助信息 (--help)",
             "args": [
                 "--help"

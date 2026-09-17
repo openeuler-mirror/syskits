@@ -2779,6 +2779,98 @@
     },
     {
       "command": "split",
+      "description": "split accepts leading ASCII whitespace in line count",
+      "args": [
+        "-l",
+        " 1",
+        "in",
+        "out"
+      ],
+      "setup_commands": [
+        "printf 'alpha\\nbeta\\n' > in",
+        "printf 'alpha\\n' > expected-aa",
+        "printf 'beta\\n' > expected-ab"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s expected-aa outaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s expected-ab outab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in expected-aa expected-ab out*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split accepts leading ASCII whitespace in suffix length",
+      "args": [
+        "-a",
+        " 1",
+        "-b",
+        "1",
+        "in",
+        "out"
+      ],
+      "setup_commands": [
+        "printf 'ab' > in",
+        "printf 'a' > expected-a",
+        "printf 'b' > expected-b"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s expected-a outa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s expected-b outb",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in expected-a expected-b out?"
+      ]
+    },
+    {
+      "command": "split",
       "description": "split accepts repeated verbose option",
       "args": [
         "--verbose",

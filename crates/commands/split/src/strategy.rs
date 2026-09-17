@@ -295,7 +295,8 @@ impl Strategy {
             error: fn(ParseSizeError) -> StrategyError,
         ) -> Result<Strategy, StrategyError> {
             let s = args_match.get_one::<String>(opt).unwrap();
-            let n = parse_size_u64_max(s).map_err(error)?;
+            let n = parse_size_u64_max(s.trim_start_matches(|c: char| c.is_ascii_whitespace()))
+                .map_err(error)?;
             if n > 0 {
                 Ok(strategy(n))
             } else {
@@ -368,9 +369,10 @@ impl Strategy {
             args_match.value_source(OPT_NUMBER) == Some(ValueSource::CommandLine),
         ) {
             (Some(v), false, false, false, false) => {
-                let v = parse_size_u64_max(v).map_err(|_| {
-                    StrategyError::Lines(ParseSizeError::ParseFailure(v.to_string()))
-                })?;
+                let v = parse_size_u64_max(v.trim_start_matches(|c: char| c.is_ascii_whitespace()))
+                    .map_err(|_| {
+                        StrategyError::Lines(ParseSizeError::ParseFailure(v.to_string()))
+                    })?;
                 if v > 0 {
                     Ok(Self::Lines(v))
                 } else {
@@ -421,6 +423,20 @@ mod tests {
         };
 
         assert_eq!(error.to_string(), "invalid number of lines: '0'");
+    }
+
+    #[test]
+    fn test_size_strategies_accept_leading_ascii_whitespace() {
+        for (option, operand) in [("-l", " 1"), ("-b", "\t1"), ("-C", "\n1")] {
+            let matches = ct_app()
+                .try_get_matches_from(["split", option, operand])
+                .expect("parse split arguments");
+
+            assert!(
+                Strategy::from(&matches, &None).is_ok(),
+                "{option} must accept a leading ASCII whitespace operand"
+            );
+        }
     }
 
     #[test]

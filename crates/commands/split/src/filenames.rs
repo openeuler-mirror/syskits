@@ -190,7 +190,8 @@ impl FilenameSuffix {
         let (mut length, is_length_cmd_opt) =
             if let Some(v) = args_match.get_one::<String>(OPT_SUFFIX_LENGTH) {
                 (
-                    v.parse::<usize>()
+                    v.trim_start_matches(|c: char| c.is_ascii_whitespace())
+                        .parse::<usize>()
                         .map_err(|_| FilenameSuffixError::NotParsable(v.to_string()))?,
                     true,
                 )
@@ -376,9 +377,11 @@ impl Iterator for FilenameIterator<'_> {
 #[cfg(test)]
 #[allow(clippy::module_inception)]
 mod tests {
+    use crate::ct_app;
     use crate::filenames::FilenameSuffix;
     use crate::filenames::FilenameSuffixType;
     use crate::filenames::{FilenameIterator, FilenameSuffixError};
+    use crate::strategy::Strategy;
 
     #[cfg(test)]
     mod tests {
@@ -716,6 +719,16 @@ mod tests {
     #[test]
     fn test_hexadecimal_radix() {
         assert_eq!(FilenameSuffixType::Hexadecimal.radix(), 16);
+    }
+
+    #[test]
+    fn test_suffix_length_accepts_leading_ascii_whitespace() {
+        let matches = ct_app()
+            .try_get_matches_from(["split", "-a", "\t1", "-b", "1"])
+            .expect("parse split arguments");
+        let strategy = Strategy::from(&matches, &None).expect("parse byte strategy");
+
+        assert!(FilenameSuffix::from(&matches, &strategy).is_ok());
     }
 
     #[test]

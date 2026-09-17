@@ -262,6 +262,98 @@
         },
         {
             "command": "tty",
+            "description": "LC_ALL=C、LANG=C下执行tty --help并将stdout连接到/dev/full；GNU在帮助文本写入失败时返回RC=3，stdout为0字节，stderr为tty: write error: No space left on device加换行。",
+            "args": [
+                "--help"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 3,
+                    "stdout": "",
+                    "stderr": "tty: write error: No space left on device\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "full"
+                }
+            }
+        },
+        {
+            "command": "tty",
+            "description": "LC_ALL=C、LANG=C下执行tty --version并将stdout连接到/dev/full；GNU在版本文本写入失败时返回RC=3，stdout为0字节，stderr为tty: write error: No space left on device加换行。",
+            "args": [
+                "--version"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 3,
+                    "stdout": "",
+                    "stderr": "tty: write error: No space left on device\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "full"
+                }
+            }
+        },
+        {
+            "command": "tty",
+            "description": "LC_ALL=C、LANG=C下启动前关闭stdout并执行tty --help；GNU帮助文本写入关闭描述符时返回RC=3，stdout为0字节，stderr为tty: write error: Bad file descriptor加换行。",
+            "args": [
+                "--help"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 3,
+                    "stdout": "",
+                    "stderr": "tty: write error: Bad file descriptor\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed"
+                }
+            }
+        },
+        {
+            "command": "tty",
+            "description": "LC_ALL=C、LANG=C下启动前关闭stdout并执行tty --version；GNU版本文本写入关闭描述符时返回RC=3，stdout为0字节，stderr为tty: write error: Bad file descriptor加换行。",
+            "args": [
+                "--version"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 3,
+                    "stdout": "",
+                    "stderr": "tty: write error: Bad file descriptor\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed"
+                }
+            }
+        },
+        {
+            "command": "tty",
             "description": "默认 SIGPIPE 且 stdout 无读端：输入为非终端；预期 GNU 默认信号终止，RC=141、stdout 与 stderr 均为空。",
             "args": [],
             "expectation": {

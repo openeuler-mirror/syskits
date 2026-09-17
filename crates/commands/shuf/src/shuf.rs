@@ -51,13 +51,15 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Error, ErrorKind, Read, Write, stdout};
+use std::io::{BufRead, BufReader, BufWriter, Error, ErrorKind, Read, Write, stdout};
 use std::ops::RangeInclusive;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 
 mod rand_read_adapter;
+
+const RESERVOIR_MIN_INPUT: u64 = 8192 * 1024;
 
 #[cfg(unix)]
 unsafe extern "C" {
@@ -167,10 +169,7 @@ pub fn shuf_main(args: impl ctcore::Args) -> CTResult<()> {
             shuf_exec(&mut range, &settings)?;
         }
         ShufMode::Default(filename) => {
-            let fdata = shuf_read_input_file(&filename)?;
-            let mut fdata = vec![&fdata[..]];
-            shuf_find_seps(&mut fdata, settings.sep);
-            shuf_exec(&mut fdata, &settings)?;
+            shuf_exec_default_input(&filename, &settings)?;
         }
     }
 
@@ -325,35 +324,127 @@ pub fn ct_app() -> Command {
         .gnu_getopt()
 }
 
-/// 从文件或标准输入读取数据
-///
-/// # 参数
-/// * `filename` - 文件名，"-" 表示从标准输入读取
-///
-/// # 返回值
-/// 返回读取的字节数据
-///
-/// # 错误
-/// - 文件打开失败
-/// - 读取过程中发生错误
+fn shuf_exec_default_input(filename: &OsStr, settings: &ShufSettings) -> CTResult<()> {
+    let (reader, input_size) = shuf_open_input(filename)?;
+    if shuf_should_use_reservoir(settings, input_size) {
+        return shuf_exec_reservoir(reader, settings);
+    }
+
+    let fdata = shuf_read_input(reader)?;
+    let mut fdata = vec![&fdata[..]];
+    shuf_find_seps(&mut fdata, settings.sep);
+    shuf_exec(&mut fdata, settings)
+}
+
+fn shuf_should_use_reservoir(settings: &ShufSettings, input_size: Option<u64>) -> bool {
+    !settings.is_repeat
+        && settings.head_count != usize::MAX
+        && input_size.is_none_or(|size| size > RESERVOIR_MIN_INPUT)
+}
+
+fn shuf_open_input(filename: &OsStr) -> CTResult<(Box<dyn Read>, Option<u64>)> {
+    if filename.as_encoded_bytes() == b"-" {
+        return Ok((ctcore::ct_io::stdin_reader_box(), shuf_stdin_input_size()));
+    }
+
+    let file = File::open(filename).map_err_context(|| shuf_quotef(filename))?;
+    let input_size = file
+        .metadata()
+        .ok()
+        .filter(|metadata| metadata.file_type().is_file())
+        .map(|metadata| metadata.len());
+    Ok((Box::new(file), input_size))
+}
+
+#[cfg(target_os = "linux")]
+fn shuf_stdin_input_size() -> Option<u64> {
+    std::fs::metadata("/proc/self/fd/0")
+        .ok()
+        .filter(|metadata| metadata.file_type().is_file())
+        .map(|metadata| metadata.len())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn shuf_stdin_input_size() -> Option<u64> {
+    None
+}
+
+/// 从文件或标准输入读取数据。
 fn shuf_read_input_file(filename: &OsStr) -> CTResult<Vec<u8>> {
-    // 创建读取器
-    let reader: Box<dyn Read> = if filename.as_encoded_bytes() == b"-" {
-        ctcore::ct_io::stdin_reader_box()
-    } else {
-        Box::new(File::open(filename).map_err_context(|| shuf_quotef(filename))?)
-    };
+    let (reader, _) = shuf_open_input(filename)?;
+    shuf_read_input(reader)
+}
 
-    // 使用带缓冲的读取器提高性能
+fn shuf_read_input(reader: impl Read) -> CTResult<Vec<u8>> {
     let mut buf_reader = BufReader::new(reader);
-    let mut data = Vec::with_capacity(1024); // 预分配合理的初始容量
-
-    // 读取所有数据
+    let mut data = Vec::with_capacity(1024);
     buf_reader
         .read_to_end(&mut data)
         .map_err_context(|| String::from("read error"))?;
-
     Ok(data)
+}
+
+fn shuf_exec_reservoir(reader: Box<dyn Read>, settings: &ShufSettings) -> CTResult<()> {
+    let mut rng = create_random_source(settings)?;
+    let reservoir = shuf_reservoir_sample(reader, settings.head_count, settings.sep, &mut rng)?;
+    let mut input = reservoir.iter().map(Vec::as_slice).collect::<Vec<_>>();
+    let writer = create_output_writer(settings)?;
+    let mut buf_writer = BufWriter::new(writer);
+    shuf_exec_with_rng(&mut input, settings, &mut rng, &mut buf_writer)?;
+    buf_writer
+        .flush()
+        .map_err_context(|| String::from("write error"))?;
+    Ok(())
+}
+
+fn shuf_reservoir_sample<R: Read>(
+    reader: R,
+    count: usize,
+    sep: u8,
+    rng: &mut WrappedRng,
+) -> CTResult<Vec<Vec<u8>>> {
+    let mut reader = BufReader::new(reader);
+    let mut reservoir = Vec::with_capacity(count.min(1024));
+    let mut record = Vec::new();
+    let mut total = 0_usize;
+
+    while total < count && shuf_read_record(&mut reader, sep, &mut record)? {
+        reservoir.push(std::mem::take(&mut record));
+        total += 1;
+    }
+
+    if total == count {
+        loop {
+            let choices = total
+                .checked_add(1)
+                .ok_or_else(|| CtSimpleError::new(1, "too many input lines"))?;
+            let selected = rng.choose_index(choices)?;
+            if !shuf_read_record(&mut reader, sep, &mut record)? {
+                break;
+            }
+            total += 1;
+            if selected < reservoir.len() {
+                std::mem::swap(&mut reservoir[selected], &mut record);
+            }
+        }
+    }
+
+    Ok(reservoir)
+}
+
+fn shuf_read_record(reader: &mut impl BufRead, sep: u8, record: &mut Vec<u8>) -> CTResult<bool> {
+    record.clear();
+    if reader
+        .read_until(sep, record)
+        .map_err_context(|| String::from("read error"))?
+        == 0
+    {
+        return Ok(false);
+    }
+    if record.last() == Some(&sep) {
+        record.pop();
+    }
+    Ok(true)
 }
 
 /// 在数据中查找分隔符并分割数据
@@ -1457,6 +1548,25 @@ mod tests {
             let error = shuf_exec_to_writer(&mut input, &settings, &mut FailingWriter).unwrap_err();
 
             assert_eq!(error.to_string(), "write error: No space left on device");
+        }
+
+        #[test]
+        fn test_reservoir_sample_consumes_random_value_after_filling_reservoir() {
+            let temp = tempdir().unwrap();
+            let random_source = temp.path().join("empty-random-source");
+            std::fs::write(&random_source, []).unwrap();
+            let mut rng = WrappedRng::new_from_file(random_source.as_os_str()).unwrap();
+
+            let error = shuf_reservoir_sample(&b"first\nsecond\n"[..], 2, b'\n', &mut rng)
+                .expect_err("GNU probes one further record after the reservoir fills");
+
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "{}: end of file",
+                    random_source.display().to_string().quote()
+                )
+            );
         }
 
         #[test]

@@ -436,7 +436,7 @@ pub fn ct_app() -> Command {
 }
 
 fn shuf_exec_default_input(filename: &OsStr, settings: &ShufSettings) -> CTResult<()> {
-    let (reader, input_size) = shuf_open_input(filename)?;
+    let (reader, input_size) = shuf_open_input(filename, true)?;
     if shuf_should_use_reservoir(settings, input_size) {
         return shuf_exec_reservoir(reader, settings);
     }
@@ -453,12 +453,25 @@ fn shuf_should_use_reservoir(settings: &ShufSettings, input_size: Option<u64>) -
         && input_size.is_none_or(|size| size > RESERVOIR_MIN_INPUT)
 }
 
-fn shuf_open_input(filename: &OsStr) -> CTResult<(Box<dyn Read>, Option<u64>)> {
+fn shuf_open_input(
+    filename: &OsStr,
+    replace_stdin: bool,
+) -> CTResult<(Box<dyn Read>, Option<u64>)> {
     if filename.as_encoded_bytes() == b"-" {
         return Ok((ctcore::ct_io::stdin_reader_box(), shuf_stdin_input_size()));
     }
 
     let file = File::open(filename).map_err_context(|| shuf_quotef(filename))?;
+    #[cfg(target_os = "linux")]
+    if replace_stdin {
+        use std::os::fd::AsRawFd;
+
+        if unsafe { ctcore::libc::dup2(file.as_raw_fd(), ctcore::libc::STDIN_FILENO) }
+            != ctcore::libc::STDIN_FILENO
+        {
+            return Err(Error::last_os_error().map_err_context(|| shuf_quotef(filename)));
+        }
+    }
     let input_size = file
         .metadata()
         .ok()
@@ -486,7 +499,7 @@ fn shuf_stdin_input_size() -> Option<u64> {
 
 /// 从文件或标准输入读取数据。
 fn shuf_read_input_file(filename: &OsStr) -> CTResult<Vec<u8>> {
-    let (reader, _) = shuf_open_input(filename)?;
+    let (reader, _) = shuf_open_input(filename, false)?;
     shuf_read_input(reader)
 }
 
@@ -2394,6 +2407,35 @@ mod tests {
             );
 
             assert_eq!(shuf_stdin_input_size(), Some(2));
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_regular_input_replaces_stdin_for_random_source_aliases() {
+            use std::io::Read;
+            use std::os::fd::AsRawFd;
+
+            let _lock = STDIN_OFFSET_LOCK.lock().unwrap();
+            let temp = tempdir().unwrap();
+            let input = temp.path().join("input");
+            std::fs::write(&input, b"random-input\n").unwrap();
+            let null = File::open("/dev/null").unwrap();
+
+            let saved_stdin = unsafe { ctcore::libc::dup(ctcore::libc::STDIN_FILENO) };
+            assert!(saved_stdin >= 0, "duplicate stdin for restoration");
+            let _restore = StdinRestore(saved_stdin);
+            assert_eq!(
+                unsafe { ctcore::libc::dup2(null.as_raw_fd(), ctcore::libc::STDIN_FILENO) },
+                ctcore::libc::STDIN_FILENO,
+                "replace stdin with /dev/null before opening the input file"
+            );
+
+            let (_reader, _) = shuf_open_input(input.as_os_str(), true).unwrap();
+            let mut random_source = File::open("/proc/self/fd/0").unwrap();
+            let mut first_byte = [0_u8; 1];
+            random_source.read_exact(&mut first_byte).unwrap();
+
+            assert_eq!(first_byte, [b'r']);
         }
 
         #[test]

@@ -623,7 +623,9 @@ fn shuf_exec<T: Shufable>(input: &mut T, settings: &ShufSettings) -> CTResult<()
     let writer = create_output_writer(settings)?;
     let mut buf_writer = BufWriter::new(writer);
     shuf_exec_to_writer(input, settings, &mut buf_writer)?;
-    buf_writer.flush()?;
+    buf_writer
+        .flush()
+        .map_err_context(|| String::from("write error"))?;
     Ok(())
 }
 
@@ -659,8 +661,11 @@ fn process_repeat_mode<T: Shufable>(
     for _ in 0..count {
         let item = input.choose(rng);
         rng.check_random_source()?;
-        item.write_all_to(writer)?;
-        writer.write_all(&[sep])?;
+        item.write_all_to(writer)
+            .map_err_context(|| String::from("write error"))?;
+        writer
+            .write_all(&[sep])
+            .map_err_context(|| String::from("write error"))?;
     }
     Ok(())
 }
@@ -677,8 +682,11 @@ fn process_nonrepeat_mode<T: Shufable>(
     rng.check_random_source()?;
 
     for item in shuffled {
-        item.write_all_to(writer)?;
-        writer.write_all(&[sep])?;
+        item.write_all_to(writer)
+            .map_err_context(|| String::from("write error"))?;
+        writer
+            .write_all(&[sep])
+            .map_err_context(|| String::from("write error"))?;
     }
     Ok(())
 }
@@ -1173,6 +1181,34 @@ mod tests {
 
     mod shuf_exec_tests {
         use super::*;
+
+        struct FailingWriter;
+
+        impl Write for FailingWriter {
+            fn write(&mut self, _: &[u8]) -> Result<usize, Error> {
+                Err(Error::from_raw_os_error(ctcore::libc::ENOSPC))
+            }
+
+            fn flush(&mut self) -> Result<(), Error> {
+                Ok(())
+            }
+        }
+
+        #[test]
+        fn test_output_write_error_has_gnu_context() {
+            let settings = ShufSettings {
+                head_count: 1,
+                output: None,
+                random_source: None,
+                is_repeat: false,
+                sep: b'\n',
+            };
+            let mut input = 1..=1;
+
+            let error = shuf_exec_to_writer(&mut input, &settings, &mut FailingWriter).unwrap_err();
+
+            assert_eq!(error.to_string(), "write error: No space left on device");
+        }
 
         #[test]
         fn test_empty_random_source_returns_gnu_eof_error() {

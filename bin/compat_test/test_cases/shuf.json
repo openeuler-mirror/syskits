@@ -609,6 +609,30 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -i 1-1并将stdout连接到/dev/full；随机范围固定为唯一值1，GNU在最终输出刷新失败时返回RC=1、stdout为空、stderr为shuf: write error: No space left on device加换行。",
+            "args": [
+                "-i",
+                "1-1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: write error: No space left on device\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "full"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "shuf: 显示帮助信息 (--help)",
             "args": [
                 "--help"

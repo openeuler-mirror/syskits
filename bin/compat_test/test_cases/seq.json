@@ -1994,6 +1994,52 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f bad invalid；GNU在解析数值操作数前验证FORMAT，bad不含%指令；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stdout为0字节、内容=空，stderr为36字节、内容=seq: format 'bad' has no % directive加换行",
+            "args": [
+                "-f",
+                "bad",
+                "invalid"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: format 'bad' has no % directive\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -wfoo 1 2；GNU短选项组合将其解释为-w和-f oo，oo在等宽冲突检查前被判定为无效FORMAT；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stdout为0字节、内容=空，stderr为35字节、内容=seq: format 'oo' has no % directive加换行",
+            "args": [
+                "-wfoo",
+                "1",
+                "2"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: format 'oo' has no % directive\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

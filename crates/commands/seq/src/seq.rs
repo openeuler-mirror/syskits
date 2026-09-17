@@ -306,8 +306,10 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
     let matches = ct_app().try_get_matches_from(modified_args)?;
     let options = SeqOptions::new(&matches);
 
-    let numbers = parse_number_args(&matches)?;
+    let raw_numbers = collect_number_args(&matches)?;
+    let user_format = parse_format_option(options.format.as_deref())?;
     validate_option_compatibility(&options)?;
+    let numbers = parse_number_args(&raw_numbers)?;
     let (first, increment, last) = get_sequence_range(&numbers)?;
 
     // Try fast path optimization first
@@ -331,7 +333,15 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let padding = calculate_padding(&first, &last);
     let largest_dec = calculate_largest_decimal(&first, &increment);
-    let format = select_output_format(&options, &first, &increment, &last, padding, largest_dec)?;
+    let format = select_output_format(
+        &options,
+        user_format,
+        &first,
+        &increment,
+        &last,
+        padding,
+        largest_dec,
+    )?;
 
     let config = PrintConfig {
         largest_dec,
@@ -361,13 +371,23 @@ pub fn seq_native_semantic(args: impl ctcore::Args) -> CTResult<SeqSemantic> {
 
     let matches = ct_app().try_get_matches_from(modified_args)?;
     let options = SeqOptions::new(&matches);
-    let numbers = parse_number_args(&matches)?;
+    let raw_numbers = collect_number_args(&matches)?;
+    let user_format = parse_format_option(options.format.as_deref())?;
     validate_option_compatibility(&options)?;
+    let numbers = parse_number_args(&raw_numbers)?;
     let (first, increment, last) = get_sequence_range(&numbers)?;
 
     let padding = calculate_padding(&first, &last);
     let largest_dec = calculate_largest_decimal(&first, &increment);
-    let format = select_output_format(&options, &first, &increment, &last, padding, largest_dec)?;
+    let format = select_output_format(
+        &options,
+        user_format,
+        &first,
+        &increment,
+        &last,
+        padding,
+        largest_dec,
+    )?;
 
     let mut classic_buffer = Vec::new();
     let mut rows = Vec::new();
@@ -427,17 +447,20 @@ fn parent_ignores_sigpipe() -> bool {
     mask & (1_u64 << (ctcore::libc::SIGPIPE - 1)) != 0
 }
 
-fn parse_number_args(matches: &clap::ArgMatches) -> CTResult<Vec<String>> {
-    let raw_numbers = matches
+fn collect_number_args(matches: &clap::ArgMatches) -> CTResult<Vec<OsString>> {
+    let numbers = matches
         .get_many::<OsString>(SEQ_NUMBERS)
         .ok_or(SeqError::NoArguments)?
         .cloned()
         .collect::<Vec<_>>();
-    if raw_numbers.len() > 3 {
-        return Err(SeqError::ExtraOperand(raw_numbers[3].clone()).into());
+    if numbers.len() > 3 {
+        return Err(SeqError::ExtraOperand(numbers[3].clone()).into());
     }
+    Ok(numbers)
+}
 
-    let numbers = raw_numbers
+fn parse_number_args(raw_numbers: &[OsString]) -> CTResult<Vec<String>> {
+    Ok(raw_numbers
         .iter()
         .map(|value| {
             let Some(value) = value.to_str() else {
@@ -449,8 +472,7 @@ fn parse_number_args(matches: &clap::ArgMatches) -> CTResult<Vec<String>> {
                 Ok(value.to_string())
             }
         })
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(numbers)
+        .collect::<Result<Vec<_>, _>>()?)
 }
 
 fn validate_option_compatibility(options: &SeqOptions) -> CTResult<()> {
@@ -516,13 +538,14 @@ fn parse_format_option(format_str: Option<&OsStr>) -> CTResult<Option<GnuFloatFo
 
 fn select_output_format(
     options: &SeqOptions,
+    user_format: Option<GnuFloatFormat>,
     first: &PreciseNumber,
     increment: &PreciseNumber,
     last: &PreciseNumber,
     padding: usize,
     precision: usize,
 ) -> CTResult<SeqOutputFormat> {
-    if let Some(format) = parse_format_option(options.format.as_deref())? {
+    if let Some(format) = user_format {
         return Ok(SeqOutputFormat::Float(format));
     }
     if uses_exact_integer_output(first, increment, last, options) {
@@ -1101,6 +1124,7 @@ mod tests {
             let last = "inf".parse::<PreciseNumber>().unwrap();
             let format = select_output_format(
                 &SeqOptions::default(),
+                None,
                 &first,
                 &increment,
                 &last,
@@ -1133,6 +1157,7 @@ mod tests {
             );
             let format = select_output_format(
                 &options,
+                None,
                 &first,
                 &increment,
                 &last,
@@ -1178,6 +1203,25 @@ mod tests {
                 error.to_string(),
                 "format string may not be specified when printing equal width strings"
             );
+        }
+    }
+
+    #[test]
+    fn test_invalid_format_is_reported_before_operand_and_width_errors() {
+        for (args, expected) in [
+            (
+                &["seq", "-f", "bad", "invalid"][..],
+                "format 'bad' has no % directive",
+            ),
+            (
+                &["seq", "-wfoo", "1", "2"][..],
+                "format 'oo' has no % directive",
+            ),
+        ] {
+            let error = seq_main(args.iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(error.to_string(), expected, "args: {args:?}");
+            assert!(!error.usage(), "args: {args:?}");
         }
     }
 

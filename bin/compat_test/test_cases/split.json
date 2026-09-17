@@ -2599,6 +2599,100 @@
       "cleanup_commands": [
         "rm -f in x*"
       ]
+    },
+    {
+      "command": "split",
+      "description": "split repeated options use the last value and accept duplicate flags",
+      "args": [
+        "-a",
+        "1",
+        "--suffix-length=2",
+        "--additional-suffix=.first",
+        "--additional-suffix=.last",
+        "--filter=false",
+        "--filter=cat > $FILE",
+        "-e",
+        "--elide-empty-files",
+        "-u",
+        "--unbuffered",
+        "-l",
+        "1",
+        "in",
+        "out"
+      ],
+      "setup_commands": [
+        "printf 'alpha\\nbeta\\n' > in",
+        "printf 'alpha\\n' > exp1",
+        "printf 'beta\\n' > exp2"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s exp1 outaa.last",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s exp2 outab.last",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "test ! -e outaa.first",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in exp1 exp2 out*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split accepts repeated verbose option",
+      "args": [
+        "--verbose",
+        "--verbose",
+        "-l",
+        "1",
+        "in",
+        "out"
+      ],
+      "setup_commands": [
+        "printf 'alpha\\nbeta\\n' > in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "creating file 'outaa'\ncreating file 'outab'\n",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in out*"
+      ]
     }
   ]
 }

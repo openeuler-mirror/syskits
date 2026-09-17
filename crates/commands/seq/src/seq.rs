@@ -559,6 +559,9 @@ fn uses_exact_integer_output(
 ) -> bool {
     if options.is_equal_width
         || options.separator.as_bytes().len() != 1
+        || !first.is_fixed_precision
+        || !increment.is_fixed_precision
+        || !(last.is_fixed_precision || matches!(last.number, ExtendedBigDecimal::Infinity))
         || first.num_fractional_digits != 0
         || increment.num_fractional_digits != 0
         || last.num_fractional_digits != 0
@@ -683,7 +686,10 @@ fn can_use_fast_path(
     }
 
     // Check if all are integers (precision == 0)
-    if first.num_fractional_digits != 0
+    if !first.is_fixed_precision
+        || !increment.is_fixed_precision
+        || !last.is_fixed_precision
+        || first.num_fractional_digits != 0
         || increment.num_fractional_digits != 0
         || last.num_fractional_digits != 0
     {
@@ -1105,6 +1111,38 @@ mod tests {
 
             let SeqOutputFormat::Float(format) = format else {
                 panic!("an infinite endpoint must use floating-point output");
+            };
+            assert_eq!(format.format_unlocalized_numeric(&first.number), expected);
+        }
+    }
+
+    #[test]
+    fn test_hex_float_uses_general_default_format() {
+        for (input, expected) in [("0x1.8p-1", "0.75"), ("0x1.8", "1.5")] {
+            let first = input.parse::<PreciseNumber>().unwrap();
+            let increment = PreciseNumber::one();
+            let last = input.parse::<PreciseNumber>().unwrap();
+            let matches = ct_app()
+                .try_get_matches_from(["seq", input, input])
+                .unwrap();
+            let options = SeqOptions::new(&matches);
+
+            assert!(
+                !uses_exact_integer_output(&first, &increment, &last, &options),
+                "input: {input}"
+            );
+            let format = select_output_format(
+                &options,
+                &first,
+                &increment,
+                &last,
+                calculate_padding(&first, &last),
+                calculate_largest_decimal(&first, &increment),
+            )
+            .unwrap();
+
+            let SeqOutputFormat::Float(format) = format else {
+                panic!("a hexadecimal float must use %g");
             };
             assert_eq!(format.format_unlocalized_numeric(&first.number), expected);
         }

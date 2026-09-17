@@ -976,6 +976,52 @@
         },
         {
             "command": "shuf",
+            "description": "原始字节用例：LC_ALL=C、LANG=C下执行参数完整十六进制=2d6e ff 2d69 312d31，即shuf -n $'\\377' -i 1-1；GNU将非UTF-8 COUNT字节按无效数值处理，预期RC=1、stdout为0字节、stderr完整十六进制=736875663a20696e76616c6964206c696e6520636f756e743a20275c333737270a。",
+            "args": [
+                "2d6e",
+                "ff",
+                "2d69",
+                "312d31"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "736875663a20696e76616c6964206c696e6520636f756e743a20275c333737270a"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "byteMode": true
+        },
+        {
+            "command": "shuf",
+            "description": "原始字节用例：LC_ALL=C、LANG=C下执行参数完整十六进制=2d69 ff2d31，即shuf -i $'\\377-1'；GNU将非UTF-8范围字节按无效范围处理，预期RC=1、stdout为0字节、stderr完整十六进制=736875663a20696e76616c696420696e7075742072616e67653a20275c3337372d31270a。",
+            "args": [
+                "2d69",
+                "ff2d31"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "736875663a20696e76616c696420696e7075742072616e67653a20275c3337372d31270a"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "byteMode": true
+        },
+        {
+            "command": "shuf",
             "description": "LC_ALL=C、LANG=C下执行shuf -i -0-1；LO-HI参数字节为2d302d31。GNU将连字符开头值作为-i的参数后拒绝无效范围，预期RC=1、stdout为空、stderr为shuf: invalid input range: '-0-1'加换行。",
             "args": [
                 "-i",

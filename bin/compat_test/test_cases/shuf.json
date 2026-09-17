@@ -677,6 +677,147 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -i 0-1 -i 2-3；GNU禁止重复输入范围，预期RC=1、stdout为空、stderr为shuf: multiple -i options specified加换行。",
+            "args": [
+                "-i",
+                "0-1",
+                "-i",
+                "2-3"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: multiple -i options specified\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -i 1-1 -o /dev/null -o /dev/null；重复指定相同输出路径在GNU中有效，预期RC=0且stdout、stderr为空。",
+            "args": [
+                "-i",
+                "1-1",
+                "-o",
+                "/dev/null",
+                "-o",
+                "/dev/null"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -i 1-1 -o /dev/null -o /dev/full；GNU拒绝不同的重复输出路径，预期RC=1、stdout为空、stderr为shuf: multiple output files specified加换行。",
+            "args": [
+                "-i",
+                "1-1",
+                "-o",
+                "/dev/null",
+                "-o",
+                "/dev/full"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: multiple output files specified\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -i 1-1 --random-source=/dev/zero --random-source=/dev/zero；重复指定相同随机源在GNU中有效，单一范围无需读取随机字节，预期RC=0、stdout为1加换行、stderr为空。",
+            "args": [
+                "-i",
+                "1-1",
+                "--random-source=/dev/zero",
+                "--random-source=/dev/zero"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -i 1-1 --random-source=/dev/zero --random-source=/dev/null；GNU拒绝不同的重复随机源，预期RC=1、stdout为空、stderr为shuf: multiple random sources specified加换行。",
+            "args": [
+                "-i",
+                "1-1",
+                "--random-source=/dev/zero",
+                "--random-source=/dev/null"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: multiple random sources specified\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -e -i 0-1；GNU禁止echo与输入范围组合，预期RC=1、stdout为空、stderr先输出shuf: cannot combine -e and -i options，再输出Try 'shuf --help' for more information.。",
+            "args": [
+                "-e",
+                "-i",
+                "0-1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: cannot combine -e and -i options\nTry 'shuf --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "shuf: 显示帮助信息 (--help)",
             "args": [
                 "--help"

@@ -395,6 +395,29 @@
         },
         {
             "command": "shuf",
+            "description": "原始字节用例：LC_ALL=C、LANG=C下执行shuf -i 1-1 $'\\377'；额外操作数为单字节ff，GNU quote()使用单引号和八进制转义，预期RC=1、stdout为空、stderr完整十六进制精确匹配。",
+            "args": [
+                "2d69",
+                "312d31",
+                "ff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "736875663a206578747261206f706572616e6420275c333737270a547279202773687566202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "byteMode": true
+        },
+        {
+            "command": "shuf",
             "description": "shuf: 输出行数为 0 (-n 0)",
             "args": [
                 "-n",

@@ -38,6 +38,7 @@ const SEQ_EQUAL_WIDTH: &str = "equal-width";
 const SEQ_FORMAT: &str = "format";
 
 const SEQ_NUMBERS: &str = "numbers";
+const SEQ_NEGATIVE_NUMBER_MARKER: &str = "\0CT_NEG_";
 
 const SEQ_GNU_LONG_OPTIONS: &[(&str, bool)] = &[
     ("equal-width", false),
@@ -61,7 +62,7 @@ struct SeqOptions {
 impl SeqOptions {
     fn new(matches: &clap::ArgMatches) -> Self {
         let unescape = |s: &str| -> String {
-            if let Some(stripped) = s.strip_prefix("CT_NEG_") {
+            if let Some(stripped) = s.strip_prefix(SEQ_NEGATIVE_NUMBER_MARKER) {
                 format!("-{stripped}")
             } else {
                 s.to_string()
@@ -286,7 +287,7 @@ fn mask_negative_number_args(args: Vec<OsString>) -> Vec<OsString> {
             if arg_str.starts_with('-') && arg_str.len() > 1 {
                 let second_char = arg_str.chars().nth(1).unwrap();
                 if second_char.is_ascii_digit() || second_char == '.' {
-                    return format!("CT_NEG_{}", &arg_str[1..]).into();
+                    return format!("{SEQ_NEGATIVE_NUMBER_MARKER}{}", &arg_str[1..]).into();
                 }
             }
             arg
@@ -442,7 +443,7 @@ fn parse_number_args(matches: &clap::ArgMatches) -> CTResult<Vec<String>> {
             let Some(value) = value.to_str() else {
                 return Err(SeqError::NonUtf8Argument(value.clone()));
             };
-            if let Some(stripped) = value.strip_prefix("CT_NEG_") {
+            if let Some(stripped) = value.strip_prefix(SEQ_NEGATIVE_NUMBER_MARKER) {
                 Ok(format!("-{stripped}"))
             } else {
                 Ok(value.to_string())
@@ -1030,6 +1031,33 @@ mod tests {
         let options = SeqOptions::new(&matches);
 
         assert_eq!(options.format.as_deref(), Some(OsStr::new("-w")));
+    }
+
+    #[test]
+    fn test_separator_preserves_literal_internal_sentinel_prefix() {
+        let args = mask_negative_number_args(
+            ["seq", "-s", "CT_NEG_,", "1", "3"]
+                .map(OsString::from)
+                .to_vec(),
+        );
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        assert_eq!(SeqOptions::new(&matches).separator, "CT_NEG_,");
+    }
+
+    #[test]
+    fn test_format_preserves_literal_internal_sentinel_prefix() {
+        let args = mask_negative_number_args(
+            ["seq", "-f", "CT_NEG_%g", "1", "1"]
+                .map(OsString::from)
+                .to_vec(),
+        );
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        assert_eq!(
+            SeqOptions::new(&matches).format.as_deref(),
+            Some(OsStr::new("CT_NEG_%g"))
+        );
     }
 
     #[test]

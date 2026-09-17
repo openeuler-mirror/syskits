@@ -1211,6 +1211,14 @@ impl<'a> SpliceByteChunkWriter<'a> {
         }
         Ok(self.inner.as_mut().unwrap())
     }
+
+    fn close_current_writer(&mut self) -> std::io::Result<()> {
+        drop(self.inner.take());
+        if platform::filter_failure_recorded() {
+            return Err(std::io::Error::other("filter command failed"));
+        }
+        Ok(())
+    }
 }
 
 impl Write for SpliceByteChunkWriter<'_> {
@@ -1232,6 +1240,7 @@ impl Write for SpliceByteChunkWriter<'_> {
             // 如果当前分块没有剩余空间，准备写入下一个分块
             if self.num_bytes_remaining_in_current_chunk == 0 {
                 // 更新分块信息并创建新的分块文件
+                self.close_current_writer()?;
                 self.num_chunks_written += 1;
                 self.num_bytes_remaining_in_current_chunk = self.chunk_size;
                 self.inner = Some(self.next_writer()?);
@@ -1348,6 +1357,14 @@ impl<'a> SpliceLineChunkWriter<'a> {
         }
         Ok(self.inner.as_mut().unwrap())
     }
+
+    fn close_current_writer(&mut self) -> std::io::Result<()> {
+        drop(self.inner.take());
+        if platform::filter_failure_recorded() {
+            return Err(std::io::Error::other("filter command failed"));
+        }
+        Ok(())
+    }
 }
 
 impl Write for SpliceLineChunkWriter<'_> {
@@ -1363,6 +1380,7 @@ impl Write for SpliceLineChunkWriter<'_> {
         for size in memchr::memchr_iter(separator, buf) {
             // 若已达到当前分块的行数限制，创建新的分块及对应的底层写入器
             if self.num_lines_remaining_in_current_chunk == 0 {
+                self.close_current_writer()?;
                 self.num_chunks_written += 1;
 
                 self.inner = Some(self.next_writer()?);
@@ -2046,6 +2064,11 @@ where
  * `CTResult<()>` - 表示操作成功或失败的结果。成功时返回`()`，失败时返回包含错误信息的`Err`。
  */
 fn split(splice_settings: &SpliceSettings) -> CTResult<()> {
+    // Filter writers report child-process failures when they are dropped.
+    // Clear the per-invocation state so repeated in-process calls do not
+    // inherit a prior filter failure.
+    platform::reset_filter_failure();
+
     // 根据输入源创建一个读取器
     let read_box = if splice_settings.input_path() == OsStr::new("-") {
         Box::new(stdin()) as Box<dyn Read>
@@ -2067,7 +2090,7 @@ fn split(splice_settings: &SpliceSettings) -> CTResult<()> {
     };
 
     // 根据分割策略执行相应的分割逻辑
-    match splice_settings.strategy {
+    let result = match splice_settings.strategy {
         Strategy::Number(StrategyNumberType::Bytes(num_chunks)) => {
             // 按字节分割成指定数量的块
             splice_n_chunks_by_byte(splice_settings, &mut reader, num_chunks, None)
@@ -2125,7 +2148,13 @@ fn split(splice_settings: &SpliceSettings) -> CTResult<()> {
             // 在行边界上按指定字节大小进行贪婪切割
             splice_line_bytes(splice_settings, &mut reader, chunk_size)
         }
+    };
+
+    if let Some((code, message)) = platform::take_filter_failure() {
+        return Err(CtSimpleError::new(code, message));
     }
+
+    result
 }
 
 #[cfg(test)]
@@ -2203,6 +2232,93 @@ mod tests {
         let diagnostic = error.to_string();
         assert!(diagnostic.contains("'$'\\377'"));
         assert!(!diagnostic.contains('\u{fffd}'));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_split_propagates_filter_exit_status_and_diagnostic() {
+        let temp = tempdir().expect("create temporary directory");
+        let input = temp.path().join("input");
+        let prefix = temp.path().join("out-");
+        std::fs::write(&input, b"a\nb\n").expect("write input");
+
+        let error = split_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-l"),
+                OsString::from("1"),
+                OsString::from("--filter=exit 42"),
+                input.into_os_string(),
+                prefix.clone().into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect_err("a failing filter must fail split");
+
+        assert_eq!(error.code(), 42);
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "with FILE={}aa, exit 42 from command: exit 42",
+                prefix.display()
+            )
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_split_stops_before_starting_next_failed_filter() {
+        let temp = tempdir().expect("create temporary directory");
+        let input = temp.path().join("input");
+        let prefix = temp.path().join("out-");
+        std::fs::write(&input, b"ab").expect("write input");
+
+        split_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-b"),
+                OsString::from("1"),
+                OsString::from("--filter=cat > \"$FILE\"; exit 42"),
+                input.into_os_string(),
+                prefix.into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect_err("a failing filter must stop split");
+
+        assert_eq!(std::fs::read(temp.path().join("out-aa")).unwrap(), b"a");
+        assert!(!temp.path().join("out-ab").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_split_reports_filter_signal_name() {
+        let temp = tempdir().expect("create temporary directory");
+        let input = temp.path().join("input");
+        let prefix = temp.path().join("out-");
+        std::fs::write(&input, b"a").expect("write input");
+
+        let error = split_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-b"),
+                OsString::from("1"),
+                OsString::from("--filter=kill -HUP $$"),
+                input.into_os_string(),
+                prefix.clone().into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect_err("a signaled filter must fail split");
+
+        assert_eq!(error.code(), 129);
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "with FILE={}aa, signal HUP from command: kill -HUP $$",
+                prefix.display()
+            )
+        );
     }
 
     fn unique_output_prefix() -> String {

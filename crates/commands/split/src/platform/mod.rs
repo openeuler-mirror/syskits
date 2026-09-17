@@ -12,11 +12,15 @@
 pub use self::unix::instantiate_current_writer;
 #[cfg(unix)]
 pub use self::unix::paths_refer_to_same_file;
+#[cfg(unix)]
+pub use self::unix::{filter_failure_recorded, reset_filter_failure, take_filter_failure};
 
 #[cfg(windows)]
 pub use self::windows::instantiate_current_writer;
 #[cfg(windows)]
 pub use self::windows::paths_refer_to_same_file;
+#[cfg(windows)]
+pub use self::windows::{filter_failure_recorded, reset_filter_failure, take_filter_failure};
 
 #[cfg(unix)]
 mod unix;

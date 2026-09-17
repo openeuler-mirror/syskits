@@ -1786,6 +1786,101 @@
             },
             "cleanup_commands": [],
             "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -s；-s缺少必需的separator参数；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stdout为0字节/0条换行分隔、内容=空，stderr为79字节、内容=GNU短选项缺参诊断和Try 'seq --help'提示",
+            "args": ["-s"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: option requires an argument -- 's'\nTry 'seq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq --separator；--separator缺少必需参数；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stdout为0字节/0条换行分隔、内容=空，stderr为86字节、内容=GNU长选项缺参诊断和Try 'seq --help'提示",
+            "args": ["--separator"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: option '--separator' requires an argument\nTry 'seq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -x；-x不是GNU seq的短选项；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stdout为0字节/0条换行分隔、内容=空，stderr为66字节、内容=GNU invalid option诊断和Try 'seq --help'提示",
+            "args": ["-x"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: invalid option -- 'x'\nTry 'seq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq --equal-width=bad；无参数的--equal-width被错误赋值；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stdout为0字节/0条换行分隔、内容=空，stderr为93字节、内容=GNU doesn't allow an argument诊断和Try 'seq --help'提示",
+            "args": ["--equal-width=bad"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: option '--equal-width' doesn't allow an argument\nTry 'seq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq --=bad；空长选项名称同时匹配多个GNU选项；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stdout为0字节/0条换行分隔、内容=空，stderr为151字节、内容=GNU歧义选项及候选列表诊断和Try 'seq --help'提示",
+            "args": ["--=bad"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: option '--=bad' is ambiguous; possibilities: '--equal-width' '--format' '--separator' '--help' '--version'\nTry 'seq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

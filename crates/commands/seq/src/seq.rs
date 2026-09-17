@@ -19,7 +19,10 @@ use num_traits::{ToPrimitive, Zero};
 
 use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, strip_errno};
+use std::borrow::Cow;
+use std::error::Error as StdError;
 use std::ffi::{OsStr, OsString};
+use std::fmt::{Display, Formatter};
 use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 mod error;
@@ -35,6 +38,14 @@ const SEQ_EQUAL_WIDTH: &str = "equal-width";
 const SEQ_FORMAT: &str = "format";
 
 const SEQ_NUMBERS: &str = "numbers";
+
+const SEQ_GNU_LONG_OPTIONS: &[(&str, bool)] = &[
+    ("equal-width", false),
+    ("format", true),
+    ("separator", true),
+    ("help", false),
+    ("version", false),
+];
 
 // Fast path optimization limit (same as GNU seq)
 const SEQ_FAST_STEP_LIMIT: u64 = 200;
@@ -115,29 +126,181 @@ pub struct SeqSemantic {
     pub classic_text: String,
 }
 
+#[derive(Debug)]
+struct SeqUsageError {
+    message: Vec<u8>,
+}
+
+impl SeqUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl Display for SeqUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl StdError for SeqUsageError {}
+
+impl CTError for SeqUsageError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
+enum SeqLongOptionMatch {
+    None,
+    Recognized(&'static str, bool),
+    Ambiguous(Vec<(&'static str, bool)>),
+}
+
+fn match_seq_long_option(name: &[u8]) -> SeqLongOptionMatch {
+    if let Some((option, takes_value)) = SEQ_GNU_LONG_OPTIONS
+        .iter()
+        .find(|(option, _)| option.as_bytes() == name)
+    {
+        return SeqLongOptionMatch::Recognized(option, *takes_value);
+    }
+
+    let matches = SEQ_GNU_LONG_OPTIONS
+        .iter()
+        .copied()
+        .filter(|(option, _)| option.as_bytes().starts_with(name))
+        .collect::<Vec<_>>();
+    match matches.as_slice() {
+        [] if SEQ_TERMINATOR.as_bytes().starts_with(name) => {
+            SeqLongOptionMatch::Recognized(SEQ_TERMINATOR, true)
+        }
+        [] => SeqLongOptionMatch::None,
+        [(option, takes_value)] => SeqLongOptionMatch::Recognized(option, *takes_value),
+        _ => SeqLongOptionMatch::Ambiguous(matches),
+    }
+}
+
+fn is_negative_number_argument(bytes: &[u8]) -> bool {
+    bytes.len() > 1 && bytes[0] == b'-' && (bytes[1].is_ascii_digit() || bytes[1] == b'.')
+}
+
+fn prepare_seq_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
+    let args = args.collect::<Vec<_>>();
+    let mut index = 1;
+
+    while index < args.len() {
+        let argument = args[index].as_os_str();
+        let bytes = argument.as_bytes();
+        if bytes == b"--" {
+            break;
+        }
+        if bytes.len() <= 1 || bytes[0] != b'-' || is_negative_number_argument(bytes) {
+            break;
+        }
+
+        if bytes.starts_with(b"--") {
+            let separator = bytes[2..].iter().position(|byte| *byte == b'=');
+            let name = &bytes[2..separator.map_or(bytes.len(), |offset| offset + 2)];
+            match match_seq_long_option(name) {
+                SeqLongOptionMatch::None => {
+                    let mut message = b"unrecognized option '".to_vec();
+                    message.extend_from_slice(bytes);
+                    message.push(b'\'');
+                    return Err(SeqUsageError::boxed(message));
+                }
+                SeqLongOptionMatch::Ambiguous(matches) => {
+                    let possibilities = matches
+                        .into_iter()
+                        .map(|(option, _)| format!("'--{option}'"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let mut message = b"option '".to_vec();
+                    message.extend_from_slice(bytes);
+                    message.extend_from_slice(b"' is ambiguous; possibilities: ");
+                    message.extend_from_slice(possibilities.as_bytes());
+                    return Err(SeqUsageError::boxed(message));
+                }
+                SeqLongOptionMatch::Recognized(option, takes_value) => {
+                    if separator.is_some() && !takes_value {
+                        return Err(SeqUsageError::boxed(
+                            format!("option '--{option}' doesn't allow an argument").into_bytes(),
+                        ));
+                    }
+                    if takes_value && separator.is_none() {
+                        if index + 1 == args.len() {
+                            return Err(SeqUsageError::boxed(
+                                format!("option '--{option}' requires an argument").into_bytes(),
+                            ));
+                        }
+                        index += 1;
+                    }
+                    if matches!(option, "help" | "version") {
+                        return Ok(args);
+                    }
+                }
+            }
+        } else {
+            let mut short_index = 1;
+            while short_index < bytes.len() {
+                let option = bytes[short_index];
+                match option {
+                    b'f' | b's' | b't' => {
+                        if short_index + 1 == bytes.len() {
+                            if index + 1 == args.len() {
+                                return Err(SeqUsageError::boxed(
+                                    format!(
+                                        "option requires an argument -- '{}'",
+                                        char::from(option)
+                                    )
+                                    .into_bytes(),
+                                ));
+                            }
+                            index += 1;
+                        }
+                        break;
+                    }
+                    b'w' | b'h' | b'V' => short_index += 1,
+                    _ => {
+                        let mut message = b"invalid option -- '".to_vec();
+                        message.push(option);
+                        message.push(b'\'');
+                        return Err(SeqUsageError::boxed(message));
+                    }
+                }
+            }
+        }
+        index += 1;
+    }
+
+    Ok(args)
+}
+
+fn mask_negative_number_args(args: Vec<OsString>) -> Vec<OsString> {
+    args.into_iter()
+        .map(|arg| {
+            let arg_str = arg.to_string_lossy();
+            if arg_str.starts_with('-') && arg_str.len() > 1 {
+                let second_char = arg_str.chars().nth(1).unwrap();
+                if second_char.is_ascii_digit() || second_char == '.' {
+                    return format!("CT_NEG_{}", &arg_str[1..]).into();
+                }
+            }
+            arg
+        })
+        .collect()
+}
+
 pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     set_process_locale();
     configure_sigpipe();
 
-    // 核心拦截器：在参数送入 clap 之前进行“易容伪装”。
-    // 将所有形如负数的参数（如 -1e-3, -.1）伪装成 CT_NEG_xxx，完美绕过 clap 的死板校验。
-    let mut modified_args: Vec<OsString> = Vec::new();
-    for arg in args {
-        let arg_str = arg.to_string_lossy();
-        if arg_str.starts_with('-') && arg_str.len() > 1 {
-            let second_char = arg_str.chars().nth(1).unwrap();
-            // 如果破折号后面紧跟的是数字或小数点，认定它是负数值
-            if second_char.is_ascii_digit() || second_char == '.' {
-                let mut safe_arg = "CT_NEG_".to_string();
-                safe_arg.push_str(&arg_str[1..]);
-                modified_args.push(safe_arg.into());
-                continue;
-            }
-        }
-        modified_args.push(arg);
-    }
+    let modified_args = mask_negative_number_args(prepare_seq_args(args)?);
 
     let matches = ct_app().try_get_matches_from(modified_args)?;
     let options = SeqOptions::new(&matches);
@@ -193,20 +356,7 @@ pub fn seq_native_semantic(args: impl ctcore::Args) -> CTResult<SeqSemantic> {
     rust_i18n::set_locale(&lang_code);
     set_process_locale();
 
-    let mut modified_args: Vec<OsString> = Vec::new();
-    for arg in args {
-        let arg_str = arg.to_string_lossy();
-        if arg_str.starts_with('-') && arg_str.len() > 1 {
-            let second_char = arg_str.chars().nth(1).unwrap();
-            if second_char.is_ascii_digit() || second_char == '.' {
-                let mut safe_arg = "CT_NEG_".to_string();
-                safe_arg.push_str(&arg_str[1..]);
-                modified_args.push(safe_arg.into());
-                continue;
-            }
-        }
-        modified_args.push(arg);
-    }
+    let modified_args = mask_negative_number_args(prepare_seq_args(args)?);
 
     let matches = ct_app().try_get_matches_from(modified_args)?;
     let options = SeqOptions::new(&matches);
@@ -876,6 +1026,33 @@ mod tests {
         let options = SeqOptions::new(&matches);
 
         assert_eq!(options.format.as_deref(), Some(OsStr::new("-w")));
+    }
+
+    #[test]
+    fn test_option_parse_errors_use_gnu_diagnostics() {
+        for (args, message) in [
+            (&["seq", "-s"][..], "option requires an argument -- 's'"),
+            (
+                &["seq", "--separator"][..],
+                "option '--separator' requires an argument",
+            ),
+            (&["seq", "-x"][..], "invalid option -- 'x'"),
+            (&["seq", "--unknown"][..], "unrecognized option '--unknown'"),
+            (
+                &["seq", "--equal-width=bad"][..],
+                "option '--equal-width' doesn't allow an argument",
+            ),
+            (&["seq", "-w=bad"][..], "invalid option -- '='"),
+            (
+                &["seq", "--=bad"][..],
+                "option '--=bad' is ambiguous; possibilities: '--equal-width' '--format' '--separator' '--help' '--version'",
+            ),
+        ] {
+            let error = seq_main(args.iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(error.to_string(), message, "args: {args:?}");
+            assert!(error.usage(), "args: {args:?}");
+        }
     }
 
     #[test]

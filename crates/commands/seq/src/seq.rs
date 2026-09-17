@@ -21,7 +21,7 @@ use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, strip_errno};
 use std::borrow::Cow;
 use std::error::Error as StdError;
-use std::ffi::{OsStr, OsString};
+use std::ffi::{CStr, OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use sys_locale::get_locale;
@@ -667,16 +667,76 @@ fn get_sequence_range(
 }
 
 fn parse_number_arg(value: &str) -> CTResult<PreciseNumber> {
-    let number: PreciseNumber = value
+    parse_number_arg_with_decimal_point(value, &current_numeric_decimal_point())
+}
+
+fn parse_number_arg_with_decimal_point(
+    value: &str,
+    decimal_point: &str,
+) -> CTResult<PreciseNumber> {
+    let normalized = if decimal_point == "." || !value.contains(decimal_point) {
+        Cow::Borrowed(value)
+    } else {
+        Cow::Owned(value.replace(decimal_point, "."))
+    };
+    let mut number: PreciseNumber = normalized
         .parse()
         .map_err(|error| SeqError::ParseError(value.to_string(), error))?;
     if value.as_bytes().contains(&b'_') {
         return Err(SeqError::ParseError(value.to_string(), ParseNumberError::Float).into());
     }
+    apply_gnu_locale_numeric_layout(&mut number, value, decimal_point);
     if overflows_long_double(&number.number) {
         return Err(SeqError::ParseError(value.to_string(), ParseNumberError::Float).into());
     }
     Ok(number)
+}
+
+fn current_numeric_decimal_point() -> String {
+    // SAFETY: localeconv returns pointers owned by the process locale. seq sets
+    // LC_ALL before parsing operands and only copies the NUL-terminated value.
+    unsafe {
+        let locale = ctcore::libc::localeconv();
+        if locale.is_null() || (*locale).decimal_point.is_null() {
+            return ".".to_string();
+        }
+        CStr::from_ptr((*locale).decimal_point)
+            .to_str()
+            .ok()
+            .filter(|point| !point.is_empty())
+            .unwrap_or(".")
+            .to_string()
+    }
+}
+
+fn apply_gnu_locale_numeric_layout(number: &mut PreciseNumber, value: &str, decimal_point: &str) {
+    if decimal_point == "." || !value.contains(decimal_point) || value.contains('.') {
+        return;
+    }
+
+    let value = value
+        .trim_start_matches([' ', '\t', '\n', '\r', '\u{b}', '\u{c}'])
+        .strip_prefix('+')
+        .unwrap_or(value);
+    if value.contains(['x', 'X']) {
+        return;
+    }
+
+    let Some(exponent_index) = value.find(['e', 'E']) else {
+        number.num_integral_digits = value.len();
+        number.num_fractional_digits = 0;
+        return;
+    };
+    let exponent = value[exponent_index + 1..]
+        .parse::<i64>()
+        .expect("parsed seq exponent must be a signed integer");
+    let magnitude = usize::try_from(exponent.unsigned_abs()).unwrap_or(usize::MAX);
+    number.num_fractional_digits = if exponent.is_negative() { magnitude } else { 0 };
+    number.num_integral_digits = if exponent.is_negative() {
+        exponent_index.saturating_add(1).saturating_add(magnitude)
+    } else {
+        exponent_index.saturating_add(magnitude)
+    };
 }
 
 fn calculate_padding(first: &PreciseNumber, last: &PreciseNumber) -> usize {
@@ -753,7 +813,12 @@ fn uses_exact_integer_output(
         || last.num_fractional_digits != 0
         || first.number < ExtendedBigDecimal::zero()
         || last.number < ExtendedBigDecimal::zero()
-        || !matches!(&first.number, ExtendedBigDecimal::BigDecimal(_))
+        || !matches!(&first.number, ExtendedBigDecimal::BigDecimal(value) if value.is_integer())
+        || !matches!(&increment.number, ExtendedBigDecimal::BigDecimal(value) if value.is_integer())
+        || !(matches!(
+            &last.number,
+            ExtendedBigDecimal::BigDecimal(value) if value.is_integer()
+        ) || matches!(&last.number, ExtendedBigDecimal::Infinity))
     {
         return false;
     }
@@ -1492,6 +1557,23 @@ mod tests {
                 "input: {value}"
             );
         }
+    }
+
+    #[test]
+    fn test_locale_decimal_operands_preserve_gnu_layout() {
+        let integer = parse_number_arg_with_decimal_point("1,0", ",").unwrap();
+        assert_eq!(integer.num_integral_digits, 3);
+        assert_eq!(integer.num_fractional_digits, 0);
+
+        let fractional = parse_number_arg_with_decimal_point("0,1", ",").unwrap();
+        assert_eq!(fractional.num_integral_digits, 3);
+        assert_eq!(fractional.num_fractional_digits, 0);
+        assert!(!uses_exact_integer_output(
+            &fractional,
+            &PreciseNumber::one(),
+            &fractional,
+            &SeqOptions::default()
+        ));
     }
 
     #[test]

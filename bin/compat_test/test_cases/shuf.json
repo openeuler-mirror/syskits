@@ -1040,6 +1040,54 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -o first -o second -n invalid；GNU在后续-n前检测到两个不同输出路径，预期RC=1、stdout为空、stderr为shuf: multiple output files specified加换行。",
+            "args": [
+                "-o",
+                "first",
+                "-o",
+                "second",
+                "-n",
+                "invalid"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: multiple output files specified\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf --random-source=first --random-source=second -n invalid；GNU在后续-n前检测到两个不同随机源路径，预期RC=1、stdout为空、stderr为shuf: multiple random sources specified加换行。",
+            "args": [
+                "--random-source=first",
+                "--random-source=second",
+                "-n",
+                "invalid"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: multiple random sources specified\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "LC_ALL=C、LANG=C下执行shuf -n $' 1' -i 1-2 --random-source=/dev/zero；COUNT参数字节为2031，GNU xstrtoumax接受前导空白并限制输出一行，固定随机字节00选择范围起点，预期RC=0、stdout为310a、stderr为空。",
             "args": [
                 "-n",

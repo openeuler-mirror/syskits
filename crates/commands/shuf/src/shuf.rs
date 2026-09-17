@@ -214,7 +214,7 @@ fn sigpipe_is_ignored_in_status(status: &str) -> bool {
 
 fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSettings)> {
     let matches = ct_app().try_get_matches_from(args)?;
-    shuf_validate_numeric_options_in_order(&matches)?;
+    shuf_validate_options_in_order(&matches)?;
 
     let echo = matches.get_flag(shuf_options::SHUF_ECHO);
     let input_ranges = matches
@@ -273,12 +273,14 @@ fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSet
     Ok((mode, settings))
 }
 
-enum ShufNumericOption {
+enum ShufOptionValue {
     HeadCount(OsString),
     InputRange(OsString),
+    Output(OsString),
+    RandomSource(OsString),
 }
 
-fn shuf_validate_numeric_options_in_order(matches: &clap::ArgMatches) -> CTResult<()> {
+fn shuf_validate_options_in_order(matches: &clap::ArgMatches) -> CTResult<()> {
     let mut options = Vec::new();
 
     if let (Some(indices), Some(values)) = (
@@ -288,7 +290,7 @@ fn shuf_validate_numeric_options_in_order(matches: &clap::ArgMatches) -> CTResul
         options.extend(
             indices
                 .zip(values)
-                .map(|(index, value)| (index, ShufNumericOption::HeadCount(value.clone()))),
+                .map(|(index, value)| (index, ShufOptionValue::HeadCount(value.clone()))),
         );
     }
     if let (Some(indices), Some(values)) = (
@@ -298,15 +300,37 @@ fn shuf_validate_numeric_options_in_order(matches: &clap::ArgMatches) -> CTResul
         options.extend(
             indices
                 .zip(values)
-                .map(|(index, value)| (index, ShufNumericOption::InputRange(value.clone()))),
+                .map(|(index, value)| (index, ShufOptionValue::InputRange(value.clone()))),
+        );
+    }
+    if let (Some(indices), Some(values)) = (
+        matches.indices_of(shuf_options::SHUF_OUTPUT),
+        matches.get_many::<OsString>(shuf_options::SHUF_OUTPUT),
+    ) {
+        options.extend(
+            indices
+                .zip(values)
+                .map(|(index, value)| (index, ShufOptionValue::Output(value.clone()))),
+        );
+    }
+    if let (Some(indices), Some(values)) = (
+        matches.indices_of(shuf_options::SHUF_RANDOM_SOURCE),
+        matches.get_many::<OsString>(shuf_options::SHUF_RANDOM_SOURCE),
+    ) {
+        options.extend(
+            indices
+                .zip(values)
+                .map(|(index, value)| (index, ShufOptionValue::RandomSource(value.clone()))),
         );
     }
     options.sort_unstable_by_key(|(index, _)| *index);
 
     let mut saw_input_range = false;
+    let mut output = None;
+    let mut random_source = None;
     for (_, option) in options {
         match option {
-            ShufNumericOption::HeadCount(value) => {
+            ShufOptionValue::HeadCount(value) => {
                 if shuf_parse_unsigned(value.as_encoded_bytes()).is_err() {
                     return Err(CtSimpleError::new(
                         1,
@@ -317,13 +341,28 @@ fn shuf_validate_numeric_options_in_order(matches: &clap::ArgMatches) -> CTResul
                     ));
                 }
             }
-            ShufNumericOption::InputRange(value) => {
+            ShufOptionValue::InputRange(value) => {
                 if saw_input_range {
                     return Err(CtSimpleError::new(1, "multiple -i options specified"));
                 }
                 shuf_parse_range(value.as_os_str())
                     .map_err(|message| CtSimpleError::new(1, message))?;
                 saw_input_range = true;
+            }
+            ShufOptionValue::Output(value) => {
+                if output.as_ref().is_some_and(|previous| previous != &value) {
+                    return Err(CtSimpleError::new(1, "multiple output files specified"));
+                }
+                output = Some(value);
+            }
+            ShufOptionValue::RandomSource(value) => {
+                if random_source
+                    .as_ref()
+                    .is_some_and(|previous| previous != &value)
+                {
+                    return Err(CtSimpleError::new(1, "multiple random sources specified"));
+                }
+                random_source = Some(value);
             }
         }
     }
@@ -1565,6 +1604,30 @@ mod tests {
                     ctcore::ct_display::locale_quote("invalid")
                 )
             );
+        }
+
+        #[test]
+        fn test_earlier_duplicate_output_precedes_invalid_head_count() {
+            let error = shuf_parse_invocation(parse_args(&[
+                "shuf", "-o", "first", "-o", "second", "-n", "invalid",
+            ]))
+            .expect_err("GNU diagnoses the earlier conflicting output options");
+
+            assert_eq!(error.to_string(), "multiple output files specified");
+        }
+
+        #[test]
+        fn test_earlier_duplicate_random_source_precedes_invalid_head_count() {
+            let error = shuf_parse_invocation(parse_args(&[
+                "shuf",
+                "--random-source=first",
+                "--random-source=second",
+                "-n",
+                "invalid",
+            ]))
+            .expect_err("GNU diagnoses the earlier conflicting random-source options");
+
+            assert_eq!(error.to_string(), "multiple random sources specified");
         }
 
         #[test]

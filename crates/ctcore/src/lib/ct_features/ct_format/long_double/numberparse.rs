@@ -399,7 +399,7 @@ fn parse_hexadecimal(s: &str) -> Result<PreciseNumber, ParseNumberError> {
     } else {
         ExtendedBigDecimal::BigDecimal(bd)
     };
-    if exp_str.is_some() {
+    if exp_str.is_some() || mantissa_str.contains('.') {
         Ok(PreciseNumber::new_non_fixed(number))
     } else {
         Ok(PreciseNumber::new(number, 0, 0))
@@ -500,6 +500,17 @@ mod tests {
             parse("0x10"),
             ExtendedBigDecimal::BigDecimal("16".parse::<BigDecimal>().unwrap())
         );
+    }
+
+    #[test]
+    fn test_hex_float_is_not_fixed_precision() {
+        assert!("0x10".parse::<PreciseNumber>().unwrap().is_fixed_precision);
+        for input in ["0x1.8", "0x1p0", "0x1.8p-1"] {
+            assert!(
+                !input.parse::<PreciseNumber>().unwrap().is_fixed_precision,
+                "input: {input}"
+            );
+        }
     }
 
     #[test]

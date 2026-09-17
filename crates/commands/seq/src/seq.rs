@@ -544,6 +544,10 @@ fn select_output_format(
 
 fn is_fixed_decimal(number: &PreciseNumber) -> bool {
     number.is_fixed_precision
+        || matches!(
+            number.number,
+            ExtendedBigDecimal::Infinity | ExtendedBigDecimal::MinusInfinity
+        )
 }
 
 fn uses_exact_integer_output(
@@ -1052,6 +1056,29 @@ mod tests {
 
             assert_eq!(error.to_string(), message, "args: {args:?}");
             assert!(error.usage(), "args: {args:?}");
+        }
+    }
+
+    #[test]
+    fn test_infinite_endpoint_preserves_finite_default_precision() {
+        for (first_text, increment_text, expected) in [("1", ".1", "1.0"), ("1.00", "1", "1.00")] {
+            let first = first_text.parse::<PreciseNumber>().unwrap();
+            let increment = increment_text.parse::<PreciseNumber>().unwrap();
+            let last = "inf".parse::<PreciseNumber>().unwrap();
+            let format = select_output_format(
+                &SeqOptions::default(),
+                &first,
+                &increment,
+                &last,
+                calculate_padding(&first, &last),
+                calculate_largest_decimal(&first, &increment),
+            )
+            .unwrap();
+
+            let SeqOutputFormat::Float(format) = format else {
+                panic!("an infinite endpoint must use floating-point output");
+            };
+            assert_eq!(format.format_unlocalized_numeric(&first.number), expected);
         }
     }
 

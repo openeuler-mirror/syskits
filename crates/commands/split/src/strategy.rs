@@ -14,9 +14,101 @@ use crate::{OPT_BYTES, OPT_LINE_BYTES, OPT_LINES, OPT_NUMBER};
 use clap::{ArgMatches, parser::ValueSource};
 use ctcore::{
     ct_display::Quotable,
-    ct_parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max},
+    ct_parse_size::{ParseSizeError, parse_size_u64_max},
 };
 use std::fmt;
+
+struct ParsedIntmax {
+    value: i64,
+    end: usize,
+    overflow: bool,
+}
+
+/// Parse the numeric prefix with the subset of `strtoimax` behavior used by
+/// GNU split's `parse_chunk`: leading ASCII whitespace and an optional sign
+/// are accepted, while overflow saturates to the matching `intmax_t` bound.
+fn parse_intmax_prefix(input: &str) -> Option<ParsedIntmax> {
+    let bytes = input.as_bytes();
+    let mut start = 0;
+    while start < bytes.len() && bytes[start].is_ascii_whitespace() {
+        start += 1;
+    }
+
+    let (negative, digits_start) = match bytes.get(start) {
+        Some(b'-') => (true, start + 1),
+        Some(b'+') => (false, start + 1),
+        _ => (false, start),
+    };
+    let mut end = digits_start;
+    while end < bytes.len() && bytes[end].is_ascii_digit() {
+        end += 1;
+    }
+    if end == digits_start {
+        return None;
+    }
+
+    let limit = if negative {
+        i64::MAX as u64 + 1
+    } else {
+        i64::MAX as u64
+    };
+    let mut magnitude = 0_u64;
+    let mut overflow = false;
+    for byte in &bytes[digits_start..end] {
+        let digit = u64::from(byte - b'0');
+        if magnitude > (limit - digit) / 10 {
+            magnitude = limit;
+            overflow = true;
+        } else if !overflow {
+            magnitude = magnitude * 10 + digit;
+        }
+    }
+
+    let value = if negative {
+        if magnitude == i64::MAX as u64 + 1 {
+            i64::MIN
+        } else {
+            -(magnitude as i64)
+        }
+    } else {
+        magnitude as i64
+    };
+    Some(ParsedIntmax {
+        value,
+        end,
+        overflow,
+    })
+}
+
+fn parse_chunk_count(input: &str) -> Option<u64> {
+    let parsed = parse_intmax_prefix(input)?;
+    (parsed.end == input.len() && parsed.value > 0).then_some(parsed.value as u64)
+}
+
+fn parse_number_chunks(input: &str) -> Result<(Option<u64>, u64), StrategyNumberTypeError> {
+    let input = input.trim_start_matches(|c: char| c.is_ascii_whitespace());
+    let parsed = parse_intmax_prefix(input)
+        .ok_or_else(|| StrategyNumberTypeError::NumberOfChunks(input.to_string()))?;
+
+    if !parsed.overflow && input.as_bytes().get(parsed.end) == Some(&b'/') {
+        let chunk_number = parsed.value;
+        let num_chunks_text = &input[parsed.end + 1..];
+        let num_chunks = parse_chunk_count(num_chunks_text)
+            .ok_or_else(|| StrategyNumberTypeError::NumberOfChunks(num_chunks_text.to_string()))?;
+        if chunk_number <= 0 || chunk_number as u64 > num_chunks {
+            return Err(StrategyNumberTypeError::ChunkNumber(
+                input[..parsed.end].to_string(),
+            ));
+        }
+        return Ok((Some(chunk_number as u64), num_chunks));
+    }
+
+    if parsed.end == input.len() && parsed.value > 0 {
+        Ok((None, parsed.value as u64))
+    } else {
+        Err(StrategyNumberTypeError::NumberOfChunks(input.to_string()))
+    }
+}
 
 /// Sub-strategy of the [`Strategy::Number`]
 /// Splitting a file into a specific number of chunks.
@@ -117,78 +209,24 @@ impl StrategyNumberType {
     /// or if `K` is greater than `N`
     /// then this function returns [`StrategyNumberTypeError`].
     fn from(s: &str) -> Result<Self, StrategyNumberTypeError> {
-        fn is_invalid_chunk(chunk_number: u64, num_chunks: u64) -> bool {
-            chunk_number > num_chunks || chunk_number == 0
-        }
-        let parts: Vec<&str> = s.split('/').collect();
-        match &parts[..] {
-            [n_str] => {
-                let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| StrategyNumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                if num_chunks > 0 {
-                    Ok(Self::Bytes(num_chunks))
-                } else {
-                    Err(StrategyNumberTypeError::NumberOfChunks(s.to_string()))
-                }
-            }
-            [k_str, n_str] if !k_str.starts_with('l') && !k_str.starts_with('r') => {
-                let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| StrategyNumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                if num_chunks == 0 {
-                    return Err(StrategyNumberTypeError::NumberOfChunks(n_str.to_string()));
-                }
-                let chunk_number = parse_size_u64(k_str)
-                    .map_err(|_| StrategyNumberTypeError::ChunkNumber(k_str.to_string()))?;
-                if is_invalid_chunk(chunk_number, num_chunks) {
-                    return Err(StrategyNumberTypeError::ChunkNumber(k_str.to_string()));
-                }
-                Ok(Self::KthBytes(chunk_number, num_chunks))
-            }
-            ["l", n_str] => {
-                let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| StrategyNumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                if num_chunks > 0 {
-                    Ok(Self::Lines(num_chunks))
-                } else {
-                    Err(StrategyNumberTypeError::NumberOfChunks(n_str.to_string()))
-                }
-            }
-            ["l", k_str, n_str] => {
-                let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| StrategyNumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                if num_chunks == 0 {
-                    return Err(StrategyNumberTypeError::NumberOfChunks(n_str.to_string()));
-                }
-                let chunk_number = parse_size_u64(k_str)
-                    .map_err(|_| StrategyNumberTypeError::ChunkNumber(k_str.to_string()))?;
-                if is_invalid_chunk(chunk_number, num_chunks) {
-                    return Err(StrategyNumberTypeError::ChunkNumber(k_str.to_string()));
-                }
-                Ok(Self::KthLines(chunk_number, num_chunks))
-            }
-            ["r", n_str] => {
-                let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| StrategyNumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                if num_chunks > 0 {
-                    Ok(Self::RoundRobin(num_chunks))
-                } else {
-                    Err(StrategyNumberTypeError::NumberOfChunks(n_str.to_string()))
-                }
-            }
-            ["r", k_str, n_str] => {
-                let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| StrategyNumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                if num_chunks == 0 {
-                    return Err(StrategyNumberTypeError::NumberOfChunks(n_str.to_string()));
-                }
-                let chunk_number = parse_size_u64(k_str)
-                    .map_err(|_| StrategyNumberTypeError::ChunkNumber(k_str.to_string()))?;
-                if is_invalid_chunk(chunk_number, num_chunks) {
-                    return Err(StrategyNumberTypeError::ChunkNumber(k_str.to_string()));
-                }
-                Ok(Self::KthRoundRobin(chunk_number, num_chunks))
-            }
-            _ => Err(StrategyNumberTypeError::NumberOfChunks(s.to_string())),
+        let s = s.trim_start_matches(|c: char| c.is_ascii_whitespace());
+        let (mode, chunks) = if let Some(chunks) = s.strip_prefix("l/") {
+            ('l', chunks)
+        } else if let Some(chunks) = s.strip_prefix("r/") {
+            ('r', chunks)
+        } else {
+            ('b', s)
+        };
+        let (chunk_number, num_chunks) = parse_number_chunks(chunks)?;
+
+        match (mode, chunk_number) {
+            ('b', None) => Ok(Self::Bytes(num_chunks)),
+            ('b', Some(chunk_number)) => Ok(Self::KthBytes(chunk_number, num_chunks)),
+            ('l', None) => Ok(Self::Lines(num_chunks)),
+            ('l', Some(chunk_number)) => Ok(Self::KthLines(chunk_number, num_chunks)),
+            ('r', None) => Ok(Self::RoundRobin(num_chunks)),
+            ('r', Some(chunk_number)) => Ok(Self::KthRoundRobin(chunk_number, num_chunks)),
+            _ => unreachable!("split number mode is one of b, l, or r"),
         }
     }
 }
@@ -379,7 +417,7 @@ mod tests {
     fn test_number_type_from_error_case_4() {
         assert_eq!(
             StrategyNumberType::from("l/abc/456").unwrap_err(),
-            StrategyNumberTypeError::ChunkNumber("abc".to_string())
+            StrategyNumberTypeError::NumberOfChunks("abc/456".to_string())
         );
     }
 
@@ -411,7 +449,7 @@ mod tests {
     fn test_number_type_from_error_case_8() {
         assert_eq!(
             StrategyNumberType::from("l/abc/xyz").unwrap_err(),
-            StrategyNumberTypeError::NumberOfChunks("xyz".to_string())
+            StrategyNumberTypeError::NumberOfChunks("abc/xyz".to_string())
         );
     }
 
@@ -435,7 +473,7 @@ mod tests {
     fn test_number_type_from_error_case_11() {
         assert_eq!(
             StrategyNumberType::from("r/abc/456").unwrap_err(),
-            StrategyNumberTypeError::ChunkNumber("abc".to_string())
+            StrategyNumberTypeError::NumberOfChunks("abc/456".to_string())
         );
     }
 
@@ -443,7 +481,7 @@ mod tests {
     fn test_number_type_from_error_case_12() {
         assert_eq!(
             StrategyNumberType::from("r/abc/xyz").unwrap_err(),
-            StrategyNumberTypeError::NumberOfChunks("xyz".to_string())
+            StrategyNumberTypeError::NumberOfChunks("abc/xyz".to_string())
         );
     }
 
@@ -451,7 +489,7 @@ mod tests {
     fn test_number_type_from_error_case_13() {
         assert_eq!(
             StrategyNumberType::from("r/abc/xyz").unwrap_err(),
-            StrategyNumberTypeError::NumberOfChunks("xyz".to_string())
+            StrategyNumberTypeError::NumberOfChunks("abc/xyz".to_string())
         );
     }
 
@@ -459,7 +497,43 @@ mod tests {
     fn test_number_type_from_error_case_14() {
         assert_eq!(
             StrategyNumberType::from("r/abc/xyz").unwrap_err(),
-            StrategyNumberTypeError::NumberOfChunks("xyz".to_string())
+            StrategyNumberTypeError::NumberOfChunks("abc/xyz".to_string())
+        );
+    }
+
+    #[test]
+    fn test_number_type_uses_gnu_decimal_chunk_syntax() {
+        assert_eq!(
+            StrategyNumberType::from("+1/1").unwrap(),
+            StrategyNumberType::KthBytes(1, 1)
+        );
+        assert_eq!(
+            StrategyNumberType::from(" 1/ 1").unwrap(),
+            StrategyNumberType::KthBytes(1, 1)
+        );
+        assert_eq!(
+            StrategyNumberType::from("l/1/+1").unwrap(),
+            StrategyNumberType::KthLines(1, 1)
+        );
+        assert_eq!(
+            StrategyNumberType::from("r/1/+1").unwrap(),
+            StrategyNumberType::KthRoundRobin(1, 1)
+        );
+    }
+
+    #[test]
+    fn test_number_type_rejects_size_suffixes_with_gnu_error_scope() {
+        assert_eq!(
+            StrategyNumberType::from("1K/1K").unwrap_err(),
+            StrategyNumberTypeError::NumberOfChunks("1K/1K".to_string())
+        );
+        assert_eq!(
+            StrategyNumberType::from("1/2K").unwrap_err(),
+            StrategyNumberTypeError::NumberOfChunks("2K".to_string())
+        );
+        assert_eq!(
+            StrategyNumberType::from("l/1K/1K").unwrap_err(),
+            StrategyNumberTypeError::NumberOfChunks("1K/1K".to_string())
         );
     }
 

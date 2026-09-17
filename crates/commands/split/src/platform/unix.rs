@@ -8,11 +8,13 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+use crate::split_quote_path;
 use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_fs;
 use ctcore::ct_fs::CtFileInformation;
 use ctcore::ct_show;
 use std::env;
+use std::ffi::OsStr;
 use std::io::Write;
 use std::io::{BufWriter, Error, Result};
 use std::path::Path;
@@ -44,35 +46,6 @@ impl Write for UnixFilterWriter {
     }
 }
 
-/// Have an environment variable set at a value during this lifetime
-struct UnixWithEnvVarSet {
-    /// Env var key
-    _previous_var_key: String,
-    /// Previous value set to this key
-    _previous_var_value: std::result::Result<String, env::VarError>,
-}
-impl UnixWithEnvVarSet {
-    /// Save previous value assigned to key, set key=value
-    fn new(key: &str, value: &str) -> Self {
-        let previous_env_value = env::var(key);
-        unsafe { env::set_var(key, value) };
-        Self {
-            _previous_var_key: String::from(key),
-            _previous_var_value: previous_env_value,
-        }
-    }
-}
-
-impl Drop for UnixWithEnvVarSet {
-    /// Restore previous value now that this is being dropped by context
-    fn drop(&mut self) {
-        if let Ok(ref prev_value) = self._previous_var_value {
-            unsafe { env::set_var(&self._previous_var_key, prev_value) };
-        } else {
-            unsafe { env::remove_var(&self._previous_var_key) };
-        }
-    }
-}
 impl UnixFilterWriter {
     /// Create a new filter running a command with $FILE pointing at the output name
     ///
@@ -80,13 +53,12 @@ impl UnixFilterWriter {
     ///
     /// * `command` - The shell command to execute
     /// * `filepath` - Path of the output file (forwarded to command as $FILE)
-    fn new(command: &str, filepath: &str) -> Result<Self> {
-        let _with_env_var_set = UnixWithEnvVarSet::new("FILE", filepath);
-
+    fn new(command: &str, filepath: &OsStr) -> Result<Self> {
         let shell_process =
             Command::new(env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_owned()))
                 .arg("-c")
                 .arg(command)
+                .env("FILE", filepath)
                 .stdin(Stdio::piped())
                 .spawn()?;
 
@@ -121,9 +93,10 @@ impl Drop for UnixFilterWriter {
 /// Instantiate either a file writer or a "write to shell process's stdin" writer
 pub fn instantiate_current_writer(
     opt_filter: &Option<String>,
-    file_name: &str,
+    file_name: impl AsRef<OsStr>,
     new: bool,
 ) -> Result<BufWriter<Box<dyn Write>>> {
+    let file_name = file_name.as_ref();
     match opt_filter {
         None => {
             let file = if new {
@@ -132,15 +105,23 @@ pub fn instantiate_current_writer(
                     .write(true)
                     .create(true)
                     .truncate(true)
-                    .open(std::path::Path::new(&file_name))
-                    .map_err(|_| Error::other(format!("unable to open '{file_name}'; aborting")))?
+                    .open(std::path::Path::new(file_name))
+                    .map_err(|_| {
+                        Error::other(format!(
+                            "unable to open '{}'; aborting",
+                            split_quote_path(file_name, false)
+                        ))
+                    })?
             } else {
                 // 重新打开之前创建的文件以便追加写入
                 std::fs::OpenOptions::new()
                     .append(true)
-                    .open(std::path::Path::new(&file_name))
+                    .open(std::path::Path::new(file_name))
                     .map_err(|_| {
-                        Error::other(format!("unable to re-open '{file_name}'; aborting"))
+                        Error::other(format!(
+                            "unable to re-open '{}'; aborting",
+                            split_quote_path(file_name, false)
+                        ))
                     })?
             };
             Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
@@ -152,12 +133,14 @@ pub fn instantiate_current_writer(
     }
 }
 
-pub fn paths_refer_to_same_file(path1: &str, path2: &str) -> bool {
+pub fn paths_refer_to_same_file(path1: impl AsRef<OsStr>, path2: impl AsRef<OsStr>) -> bool {
+    let path1 = path1.as_ref();
+    let path2 = path2.as_ref();
     // 我们必须考虑符号链接和相对路径。
-    let p1 = if path1 == "-" {
+    let p1 = if path1 == OsStr::new("-") {
         CtFileInformation::from_file(&std::io::stdin())
     } else {
-        CtFileInformation::from_path(Path::new(&path1), true)
+        CtFileInformation::from_path(Path::new(path1), true)
     };
     ct_fs::infos_refer_to_same_file(p1, CtFileInformation::from_path(Path::new(path2), true))
 }

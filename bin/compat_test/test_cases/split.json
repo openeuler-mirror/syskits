@@ -611,6 +611,42 @@
       "byteMode": true,
       "tstdin": "",
       "command": "split",
+      "description": "原始字节不存在输入路径诊断：LC_ALL=C；参数完整十六进制为2d62（-b）、31（1）、6d697373696e672dff（不存在路径missing-\\xff）和6f7574（输出前缀out）；预期RC=1、stdout为空，stderr完整十六进制为73706c69743a2063616e6e6f74206f70656e20276d697373696e672d2724275c3337372720666f722072656164696e673a204e6f20737563682066696c65206f72206469726563746f72790a，明确以'$'\\377'而不是UTF-8替换字符表达无效字节。",
+      "args": [
+        "2d62",
+        "31",
+        "6d697373696e672dff",
+        "6f7574"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C LANG=C"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "73706c69743a2063616e6e6f74206f70656e20276d697373696e672d2724275c3337372720666f722072656164696e673a204e6f20737563682066696c65206f72206469726563746f72790a"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "split",
       "description": "原始字节后缀起始值用例：LC_ALL=C；参数完整十六进制为2d2d6e756d657269632d73756666697865733d2b31（--numeric-suffixes=+1）、2d62（-b）、31（1）和696e（in）；输入文件in为空；GNU拒绝+号，预期RC=1、stdout为空、stderr完整十六进制为73706c69743a20272b31273a20696e76616c69642073746172742076616c756520666f72206e756d65726963616c207375666669780a547279202773706c6974202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a。",
       "args": [
         "2d2d6e756d657269632d73756666697865733d2b31",
@@ -2952,6 +2988,60 @@
       },
       "cleanup_commands": [
         "rm -f in expected-a expected-b out?"
+      ]
+    },
+    {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "split",
+      "description": "原始字节输入与输出前缀：LC_ALL=C；参数完整十六进制为2d62（-b）、31（1）、696e2dff（输入路径in-\\xff）和6f75742dff（输出前缀out-\\xff）；setup创建内容6162的输入文件，预期RC=0、stdout/stderr均为空，并生成名称6f75742dff6161和6f75742dff6162、内容分别为61和62的输出文件。",
+      "args": [
+        "2d62",
+        "31",
+        "696e2dff",
+        "6f75742dff"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C LANG=C",
+        "printf 'ab' > \"$(printf 'in-\\377')\"",
+        "printf a > expected-a",
+        "printf b > expected-b"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s expected-a \"$(printf 'out-\\377aa')\"",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s expected-b \"$(printf 'out-\\377ab')\"",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f \"$(printf 'in-\\377')\" \"$(printf 'out-\\377aa')\" \"$(printf 'out-\\377ab')\" expected-a expected-b"
       ]
     },
     {

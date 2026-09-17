@@ -1552,6 +1552,41 @@
     },
     {
       "command": "split",
+      "description": "split repeated -l reports GNU strategy conflict: args hex=2d6c,32,2d6c,33,696e; stdin is empty; expected RC=1, stdout empty, stderr hex=73706c69743a2063616e6e6f742073706c697420696e206d6f7265207468616e206f6e65207761790a547279202773706c6974202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a",
+      "args": [
+        "2d6c",
+        "32",
+        "2d6c",
+        "33",
+        "696e"
+      ],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "touch in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "73706c69743a2063616e6e6f742073706c697420696e206d6f7265207468616e206f6e65207761790a547279202773706c6974202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ],
+      "tstdin": "",
+      "byteMode": true
+    },
+    {
+      "command": "split",
       "description": "split --filter basic usage writes through $FILE",
       "args": [
         "-l",

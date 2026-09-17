@@ -305,6 +305,58 @@ impl Strategy {
                 ))))
             }
         }
+
+        let strategy_options = [OPT_LINES, OPT_BYTES, OPT_LINE_BYTES, OPT_NUMBER];
+        let strategy_occurrences = strategy_options
+            .iter()
+            .map(|option| {
+                if args_match.value_source(option) == Some(ValueSource::CommandLine) {
+                    args_match
+                        .get_many::<String>(option)
+                        .map(Iterator::count)
+                        .unwrap_or(0)
+                } else {
+                    0
+                }
+            })
+            .sum::<usize>();
+
+        if obs_lines.is_none() && strategy_occurrences > 1 {
+            let first_strategy = strategy_options
+                .iter()
+                .filter_map(|option| {
+                    (args_match.value_source(option) == Some(ValueSource::CommandLine))
+                        .then(|| {
+                            args_match
+                                .indices_of(option)
+                                .and_then(|mut indices| indices.next())
+                                .map(|index| (*option, index))
+                        })
+                        .flatten()
+                })
+                .min_by_key(|(_, index)| *index)
+                .expect("at least one split strategy argument");
+
+            if first_strategy.0 == OPT_LINES {
+                let _ = get_and_parse(args_match, OPT_LINES, Self::Lines, StrategyError::Lines)?;
+            } else if first_strategy.0 == OPT_BYTES {
+                let _ = get_and_parse(args_match, OPT_BYTES, Self::Bytes, StrategyError::Bytes)?;
+            } else if first_strategy.0 == OPT_LINE_BYTES {
+                let _ = get_and_parse(
+                    args_match,
+                    OPT_LINE_BYTES,
+                    Self::LineBytes,
+                    StrategyError::Lines,
+                )?;
+            } else if first_strategy.0 == OPT_NUMBER {
+                let value = args_match.get_one::<String>(OPT_NUMBER).unwrap();
+                let _ = StrategyNumberType::from(value).map_err(StrategyError::NumberType)?;
+            } else {
+                unreachable!("split strategy option is known");
+            }
+
+            return Err(StrategyError::MultipleWays);
+        }
         // 检查用户是否指定了超过一种策略。
         //
         // 注意：目前，由于“lines”值选项已弃用，此确切行为无法通过 overrides_with_all() 处理
@@ -369,6 +421,34 @@ mod tests {
         };
 
         assert_eq!(error.to_string(), "invalid number of lines: '0'");
+    }
+
+    #[test]
+    fn test_repeated_strategy_option_reports_multiple_ways() {
+        let matches = ct_app()
+            .try_get_matches_from(["split", "-l", "2", "-l", "3"])
+            .expect("parse repeated strategy arguments");
+
+        let error = match Strategy::from(&matches, &None) {
+            Err(error) => error,
+            Ok(_) => panic!("repeated split strategy must be rejected"),
+        };
+
+        assert!(matches!(error, super::StrategyError::MultipleWays));
+    }
+
+    #[test]
+    fn test_invalid_first_repeated_strategy_operand_is_reported_before_conflict() {
+        let matches = ct_app()
+            .try_get_matches_from(["split", "-l", "not-a-number", "-l", "2"])
+            .expect("parse repeated strategy arguments");
+
+        let error = match Strategy::from(&matches, &None) {
+            Err(error) => error,
+            Ok(_) => panic!("invalid first split strategy operand must be rejected"),
+        };
+
+        assert_eq!(error.to_string(), "invalid number of lines: 'not-a-number'");
     }
 
     #[test]

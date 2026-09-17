@@ -523,6 +523,54 @@
     },
     {
       "command": "split",
+      "description": "split accepts a numerical suffix start above usize and writes consecutive fixed-width names",
+      "args": [
+        "--numeric-suffixes=18446744073709551616",
+        "-a",
+        "30",
+        "-b",
+        "1",
+        "in",
+        "out-"
+      ],
+      "setup_commands": [
+        "printf ab > in",
+        "printf a > expected-a",
+        "printf b > expected-b"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s expected-a out-000000000018446744073709551616",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s expected-b out-000000000018446744073709551617",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in expected-a expected-b out-*"
+      ]
+    },
+    {
+      "command": "split",
       "description": "split numeric suffix start too large for suffix length",
       "args": [
         "-a",

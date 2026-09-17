@@ -79,6 +79,8 @@ pub struct FilenameSuffix {
     stype: FilenameSuffixType,
     length: usize,
     start: usize,
+    /// Digits for a suffix start that exceeds the host `usize` range.
+    start_digits: Option<Vec<u8>>,
     auto_widening: bool,
     additional: String,
 }
@@ -124,7 +126,10 @@ impl fmt::Display for FilenameSuffixError {
 }
 
 impl FilenameSuffix {
-    fn parse_start_value(value: &str, hexadecimal: bool) -> Result<usize, FilenameSuffixError> {
+    fn parse_start_value(
+        value: &str,
+        hexadecimal: bool,
+    ) -> Result<(usize, Option<Vec<u8>>), FilenameSuffixError> {
         let valid = if hexadecimal {
             value
                 .bytes()
@@ -139,12 +144,28 @@ impl FilenameSuffix {
             });
         }
 
-        if value.is_empty() {
-            return Ok(0);
+        let normalized = value.trim_start_matches('0');
+        if normalized.is_empty() {
+            return Ok((0, None));
         }
 
-        usize::from_str_radix(value, if hexadecimal { 16 } else { 10 })
-            .map_err(|_| FilenameSuffixError::NotParsable(value.to_string()))
+        let radix = if hexadecimal { 16 } else { 10 };
+        match usize::from_str_radix(normalized, radix) {
+            Ok(start) => Ok((start, None)),
+            Err(_) => Ok((
+                0,
+                Some(
+                    normalized
+                        .bytes()
+                        .map(|byte| match byte {
+                            b'0'..=b'9' => byte - b'0',
+                            b'a'..=b'f' => byte - b'a' + 10,
+                            _ => unreachable!("suffix start was validated before conversion"),
+                        })
+                        .collect(),
+                ),
+            )),
+        }
     }
 
     /// Parse the suffix type, start, length and additional suffix from the command-line arguments
@@ -191,6 +212,7 @@ impl FilenameSuffix {
 
         // 初始化默认值
         let mut start = 0;
+        let mut start_digits = None;
         let mut auto_widening = true;
         let default_length: usize = 2;
 
@@ -204,14 +226,14 @@ impl FilenameSuffix {
             (true, _, _, _) => {
                 stype = FilenameSuffixType::Decimal;
                 if let Some(opt) = args_match.get_one::<String>(OPT_NUMERIC_SUFFIXES) {
-                    start = Self::parse_start_value(opt, false)?;
+                    (start, start_digits) = Self::parse_start_value(opt, false)?;
                     auto_widening = false;
                 }
             }
             (_, true, _, _) => {
                 stype = FilenameSuffixType::Hexadecimal;
                 if let Some(opt) = args_match.get_one::<String>(OPT_HEX_SUFFIXES) {
-                    start = Self::parse_start_value(opt, true)?;
+                    (start, start_digits) = Self::parse_start_value(opt, true)?;
                     auto_widening = false;
                 }
             }
@@ -274,6 +296,7 @@ impl FilenameSuffix {
             stype,
             length,
             start,
+            start_digits,
             auto_widening,
             additional,
         };
@@ -366,19 +389,25 @@ impl FilenameIterator {
         let file_suffix_number_size = if filename_suffix.auto_widening {
             Number::DynamicWidth(DynamicWidthNumber::new(radix_size, filename_suffix.start))
         } else {
-            Number::FixedWidth(
+            let fixed_width_number = if let Some(start_digits) = &filename_suffix.start_digits {
+                NumberFixedWidthNumber::from_digits(
+                    radix_size,
+                    filename_suffix.length,
+                    start_digits,
+                )
+            } else {
                 NumberFixedWidthNumber::new(
                     radix_size,
                     filename_suffix.length,
                     filename_suffix.start,
                 )
-                .map_err(|_| {
-                    CtSimpleError::new(
-                        1,
-                        "numerical suffix start value is too large for the suffix length",
-                    )
-                })?,
-            )
+            };
+            Number::FixedWidth(fixed_width_number.map_err(|_| {
+                CtSimpleError::new(
+                    1,
+                    "numerical suffix start value is too large for the suffix length",
+                )
+            })?)
         };
         Ok(FilenameIterator {
             prefix: file_prefix.as_ref().to_os_string(),
@@ -413,6 +442,7 @@ mod tests {
     use crate::filenames::FilenameSuffixType;
     use crate::filenames::{FilenameIterator, FilenameSuffixError};
     use crate::strategy::Strategy;
+    use std::ffi::OsString;
 
     #[cfg(test)]
     mod tests {
@@ -424,6 +454,7 @@ mod tests {
                 stype: FilenameSuffixType::Alphabetic,
                 length: 2,
                 start: 0,
+                start_digits: None,
                 auto_widening: false,
                 additional: ".txt".to_string(),
             };
@@ -439,6 +470,7 @@ mod tests {
                 stype: FilenameSuffixType::Alphabetic,
                 length: 2,
                 start: 0,
+                start_digits: None,
                 auto_widening: false,
                 additional: ".txt".to_string(),
             };
@@ -452,6 +484,7 @@ mod tests {
                 stype: FilenameSuffixType::Alphabetic,
                 length: 2,
                 start: 0,
+                start_digits: None,
                 auto_widening: false,
                 additional: ".txt".to_string(),
             };
@@ -465,6 +498,7 @@ mod tests {
                 stype: FilenameSuffixType::Alphabetic,
                 length: 2,
                 start: 0,
+                start_digits: None,
                 auto_widening: true,
                 additional: ".txt".to_string(),
             };
@@ -477,6 +511,7 @@ mod tests {
                 stype: FilenameSuffixType::Decimal,
                 length: 2,
                 start: 0,
+                start_digits: None,
                 auto_widening: true,
                 additional: ".txt".to_string(),
             };
@@ -489,6 +524,7 @@ mod tests {
                 stype: FilenameSuffixType::Decimal,
                 length: 2,
                 start: 0,
+                start_digits: None,
                 auto_widening: false,
                 additional: ".txt".to_string(),
             };
@@ -501,6 +537,7 @@ mod tests {
                 stype: FilenameSuffixType::Decimal,
                 length: 2,
                 start: 10,
+                start_digits: None,
                 auto_widening: false,
                 additional: ".txt".to_string(),
             };
@@ -515,6 +552,7 @@ mod tests {
             stype: FilenameSuffixType::Decimal,
             length: 2,
             start: 0,
+            start_digits: None,
             auto_widening: false,
             additional: ".txt".to_string(),
         };
@@ -530,6 +568,7 @@ mod tests {
             stype: FilenameSuffixType::Decimal,
             length: 2,
             start: 0,
+            start_digits: None,
             auto_widening: false,
             additional: ".txt".to_string(),
         };
@@ -543,6 +582,7 @@ mod tests {
             stype: FilenameSuffixType::Decimal,
             length: 2,
             start: 0,
+            start_digits: None,
             auto_widening: false,
             additional: ".txt".to_string(),
         };
@@ -557,6 +597,7 @@ mod tests {
             stype: FilenameSuffixType::Alphabetic,
             length: 2,
             start: 0,
+            start_digits: None,
             auto_widening: true,
             additional: ".txt".to_string(),
         };
@@ -572,6 +613,7 @@ mod tests {
             stype: FilenameSuffixType::Alphabetic,
             length: 2,
             start: 0,
+            start_digits: None,
             auto_widening: true,
             additional: ".txt".to_string(),
         };
@@ -586,6 +628,7 @@ mod tests {
             stype: FilenameSuffixType::Alphabetic,
             length: 2,
             start: 0,
+            start_digits: None,
             auto_widening: true,
             additional: ".txt".to_string(),
         };
@@ -601,6 +644,7 @@ mod tests {
             stype: FilenameSuffixType::Decimal,
             length: 2,
             start: 0,
+            start_digits: None,
             auto_widening: true,
             additional: ".txt".to_string(),
         };
@@ -616,6 +660,7 @@ mod tests {
             stype: FilenameSuffixType::Decimal,
             length: 2,
             start: 0,
+            start_digits: None,
             auto_widening: true,
             additional: ".txt".to_string(),
         };
@@ -630,6 +675,7 @@ mod tests {
             stype: FilenameSuffixType::Decimal,
             length: 2,
             start: 0,
+            start_digits: None,
             auto_widening: true,
             additional: ".txt".to_string(),
         };
@@ -644,6 +690,7 @@ mod tests {
             stype: FilenameSuffixType::Decimal,
             length: 2,
             start: 5,
+            start_digits: None,
             auto_widening: true,
             additional: ".txt".to_string(),
         };
@@ -659,6 +706,7 @@ mod tests {
             stype: FilenameSuffixType::Hexadecimal,
             length: 2,
             start: 9,
+            start_digits: None,
             auto_widening: true,
             additional: ".txt".to_string(),
         };
@@ -674,6 +722,7 @@ mod tests {
             stype: FilenameSuffixType::Alphabetic,
             length: 2,
             start: 0,
+            start_digits: None,
             auto_widening: true,
             additional: ".txt".to_string(),
         };
@@ -689,6 +738,7 @@ mod tests {
             stype: FilenameSuffixType::Decimal,
             length: 3,
             start: 999,
+            start_digits: None,
             auto_widening: false,
             additional: ".txt".to_string(),
         };
@@ -703,6 +753,7 @@ mod tests {
             stype: FilenameSuffixType::Decimal,
             length: 3,
             start: 1000,
+            start_digits: None,
             auto_widening: false,
             additional: ".txt".to_string(),
         };
@@ -716,6 +767,7 @@ mod tests {
             stype: FilenameSuffixType::Hexadecimal,
             length: 3,
             start: 0xfff,
+            start_digits: None,
             auto_widening: false,
             additional: ".txt".to_string(),
         };
@@ -730,6 +782,7 @@ mod tests {
             stype: FilenameSuffixType::Hexadecimal,
             length: 3,
             start: 0x1000,
+            start_digits: None,
             auto_widening: false,
             additional: ".txt".to_string(),
         };
@@ -774,6 +827,35 @@ mod tests {
 
             assert_eq!(suffix.start, 0);
         }
+    }
+
+    #[test]
+    fn test_filename_iterator_accepts_suffix_start_beyond_usize() {
+        let start = "18446744073709551616";
+        let matches = ct_app()
+            .try_get_matches_from([
+                "split",
+                "--numeric-suffixes=18446744073709551616",
+                "-a",
+                "30",
+                "-b",
+                "1",
+            ])
+            .expect("parse split arguments");
+        let strategy = Strategy::from(&matches, &None).expect("parse byte strategy");
+        let suffix = FilenameSuffix::from(&matches, &strategy)
+            .expect("large numerical suffix start must be accepted");
+        let mut files = FilenameIterator::new("chunk-", &suffix)
+            .expect("large numerical suffix must fit the selected width");
+
+        assert_eq!(
+            files.next().expect("first output name"),
+            OsString::from(format!("chunk-{start:0>30}"))
+        );
+        assert_eq!(
+            files.next().expect("second output name"),
+            OsString::from("chunk-000000000018446744073709551617")
+        );
     }
 
     #[test]

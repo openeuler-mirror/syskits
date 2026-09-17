@@ -1032,7 +1032,7 @@ enum WrappedRng {
 
 impl WrappedRng {
     fn new_from_file(path: &OsStr) -> CTResult<Self> {
-        let file = File::open(path).map_err_context(|| format!("{}", path.quote()))?;
+        let file = File::open(path).map_err_context(|| shuf_quotef(path))?;
         Ok(WrappedRng::RngFile {
             reader: rand_read_adapter::ReadRng::new(file),
             path: path.to_os_string(),
@@ -1046,11 +1046,11 @@ impl WrappedRng {
         failure: rand_read_adapter::ReadFailure,
     ) -> Box<dyn CTError> {
         let message = if failure.kind == ErrorKind::UnexpectedEof {
-            format!("{}: end of file", path.quote())
+            format!("{}: end of file", shuf_quotef(path))
         } else if let Some(errno) = failure.raw_os_error {
-            format!("{}: {}", path.quote(), Error::from_raw_os_error(errno))
+            format!("{}: {}", shuf_quotef(path), Error::from_raw_os_error(errno))
         } else {
-            format!("{}: {}", path.quote(), Error::from(failure.kind))
+            format!("{}: {}", shuf_quotef(path), Error::from(failure.kind))
         };
         CtSimpleError::new(1, message)
     }
@@ -1745,10 +1745,7 @@ mod tests {
 
             assert_eq!(
                 error.to_string(),
-                format!(
-                    "{}: end of file",
-                    random_source.display().to_string().quote()
-                )
+                format!("{}: end of file", shuf_quotef(random_source.as_os_str()))
             );
         }
 
@@ -1774,7 +1771,7 @@ mod tests {
                 error.to_string(),
                 format!(
                     "{}: No such file or directory",
-                    missing_random_source.as_os_str().quote()
+                    shuf_quotef(missing_random_source.as_os_str())
                 )
             );
         }
@@ -1787,6 +1784,26 @@ mod tests {
             };
 
             assert_eq!(error.to_string(), "'': No such file or directory");
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_random_source_open_error_uses_gnu_quotef_for_raw_bytes() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let path = OsString::from_vec(vec![0xff]);
+            let error = match WrappedRng::new_from_file(path.as_os_str()) {
+                Ok(_) => panic!("the raw-byte random-source path must not exist"),
+                Err(error) => error,
+            };
+
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "{}: No such file or directory",
+                    shuf_quotef(path.as_os_str())
+                )
+            );
         }
 
         #[test]
@@ -1810,7 +1827,7 @@ mod tests {
                 error.to_string(),
                 format!(
                     "{}: No such file or directory",
-                    missing_random_source.display().to_string().quote()
+                    shuf_quotef(missing_random_source.as_os_str())
                 )
             );
         }
@@ -1834,10 +1851,7 @@ mod tests {
 
             assert_eq!(
                 error.to_string(),
-                format!(
-                    "{}: end of file",
-                    random_source.display().to_string().quote()
-                )
+                format!("{}: end of file", shuf_quotef(random_source.as_os_str()))
             );
             assert!(output.is_empty());
         }
@@ -1881,10 +1895,7 @@ mod tests {
 
             assert_eq!(
                 error.to_string(),
-                format!(
-                    "{}: end of file",
-                    random_source.display().to_string().quote()
-                )
+                format!("{}: end of file", shuf_quotef(random_source.as_os_str()))
             );
             assert!(output.is_empty());
         }

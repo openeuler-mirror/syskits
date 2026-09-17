@@ -795,6 +795,29 @@
         },
         {
             "command": "shuf",
+            "description": "原始字节用例：LC_ALL=C、LANG=C下执行参数完整十六进制=2d65 61 2d2d72616e646f6d2d736f757263653dff，即shuf -e a --random-source=$'\\377'；GNU随机源打开失败按quotef将路径字节ff显示为''$'\\377'，预期RC=1、stdout为0字节、stderr完整十六进制=736875663a20272724275c333737273a204e6f20737563682066696c65206f72206469726563746f72790a。",
+            "args": [
+                "2d65",
+                "61",
+                "2d2d72616e646f6d2d736f757263653dff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "736875663a20272724275c333737273a204e6f20737563682066696c65206f72206469726563746f72790a"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "byteMode": true
+        },
+        {
+            "command": "shuf",
             "description": "LC_ALL=C、LANG=C下执行shuf shuf-missing-input；输入路径字节为736875662d6d697373696e672d696e707574。GNU在打开失败时输出路径、冒号和errno文本，预期RC=1、stdout为空、stderr为shuf: shuf-missing-input: No such file or directory加换行。",
             "args": [
                 "shuf-missing-input"

@@ -365,10 +365,14 @@ fn shuf_open_input(filename: &OsStr) -> CTResult<(Box<dyn Read>, Option<u64>)> {
 
 #[cfg(target_os = "linux")]
 fn shuf_stdin_input_size() -> Option<u64> {
-    std::fs::metadata("/proc/self/fd/0")
+    let size = std::fs::metadata("/proc/self/fd/0")
         .ok()
         .filter(|metadata| metadata.file_type().is_file())
-        .map(|metadata| metadata.len())
+        .map(|metadata| metadata.len())?;
+    let offset =
+        unsafe { ctcore::libc::lseek(ctcore::libc::STDIN_FILENO, 0, ctcore::libc::SEEK_CUR) };
+    let offset = u64::try_from(offset).ok()?;
+    Some(size.saturating_sub(offset))
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -2121,6 +2125,49 @@ mod tests {
 
     mod read_input_file_tests {
         use super::*;
+
+        #[cfg(target_os = "linux")]
+        static STDIN_OFFSET_LOCK: Mutex<()> = Mutex::new(());
+
+        #[cfg(target_os = "linux")]
+        struct StdinRestore(ctcore::libc::c_int);
+
+        #[cfg(target_os = "linux")]
+        impl Drop for StdinRestore {
+            fn drop(&mut self) {
+                unsafe {
+                    ctcore::libc::dup2(self.0, ctcore::libc::STDIN_FILENO);
+                    ctcore::libc::close(self.0);
+                }
+            }
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_stdin_input_size_uses_remaining_regular_file_bytes() {
+            use std::io::{Seek, SeekFrom, Write};
+            use std::os::fd::AsRawFd;
+
+            let _lock = STDIN_OFFSET_LOCK.lock().unwrap();
+            let temp = tempdir().unwrap();
+            let input = temp.path().join("large-input");
+            let mut file = File::create(&input).unwrap();
+            file.set_len(RESERVOIR_MIN_INPUT + 2).unwrap();
+            file.seek(SeekFrom::End(-2)).unwrap();
+            file.write_all(b"x\n").unwrap();
+            file.seek(SeekFrom::End(-2)).unwrap();
+
+            let saved_stdin = unsafe { ctcore::libc::dup(ctcore::libc::STDIN_FILENO) };
+            assert!(saved_stdin >= 0, "duplicate stdin for restoration");
+            let _restore = StdinRestore(saved_stdin);
+            assert_eq!(
+                unsafe { ctcore::libc::dup2(file.as_raw_fd(), ctcore::libc::STDIN_FILENO) },
+                ctcore::libc::STDIN_FILENO,
+                "replace stdin with the seeked regular file"
+            );
+
+            assert_eq!(shuf_stdin_input_size(), Some(2));
+        }
 
         #[test]
         fn test_read_input_file_valid() {

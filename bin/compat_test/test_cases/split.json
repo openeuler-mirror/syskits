@@ -608,6 +608,91 @@
       ]
     },
     {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "split",
+      "description": "原始字节后缀起始值用例：LC_ALL=C；参数完整十六进制为2d2d6e756d657269632d73756666697865733d2b31（--numeric-suffixes=+1）、2d62（-b）、31（1）和696e（in）；输入文件in为空；GNU拒绝+号，预期RC=1、stdout为空、stderr完整十六进制为73706c69743a20272b31273a20696e76616c69642073746172742076616c756520666f72206e756d65726963616c207375666669780a547279202773706c6974202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a。",
+      "args": [
+        "2d2d6e756d657269632d73756666697865733d2b31",
+        "2d62",
+        "31",
+        "696e"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C LANG=C",
+        ": > in"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "73706c69743a20272b31273a20696e76616c69642073746172742076616c756520666f72206e756d65726963616c207375666669780a547279202773706c6974202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in x*"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "split empty numeric suffix start uses zero with fixed default width",
+      "args": [
+        "--numeric-suffixes=",
+        "-b",
+        "1",
+        "in",
+        "out"
+      ],
+      "setup_commands": [
+        "printf ab > in",
+        "printf a > expected-00",
+        "printf b > expected-01"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s expected-00 out00",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s expected-01 out01",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in expected-00 expected-01 out*"
+      ]
+    },
+    {
       "command": "split",
       "description": "split numeric suffix auto widening when no start specified",
       "args": [

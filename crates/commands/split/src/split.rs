@@ -783,6 +783,7 @@ impl SpliceSettingsError {
             self,
             Self::Strategy(StrategyError::MultipleWays)
                 | Self::Suffix(FilenameSuffixError::ContainsSeparator(_))
+                | Self::Suffix(FilenameSuffixError::InvalidStartValue { .. })
         )
     }
 }
@@ -10692,6 +10693,16 @@ mod tests {
             ));
 
             assert!(!error.splice_requires_usage());
+        }
+
+        #[test]
+        fn test_suffix_invalid_start_value_requires_usage() {
+            let error = SpliceSettingsError::Suffix(FilenameSuffixError::InvalidStartValue {
+                value: "+1".to_string(),
+                hexadecimal: false,
+            });
+
+            assert!(error.splice_requires_usage());
         }
 
         #[test]

@@ -368,7 +368,7 @@
         },
         {
             "command": "shuf",
-            "description": "shuf: 多个文件参数 (错误)",
+            "description": "LC_ALL=C、LANG=C下执行shuf file1 file2；普通文件模式的第二个操作数必须按GNU规则报extra operand，预期RC=1、stdout为空、stderr为shuf: extra operand 'file2'及使用提示。",
             "args": [
                 "file1",
                 "file2"
@@ -383,12 +383,12 @@
                 "execution": {
                     "exit_code": 1,
                     "stdout": "",
-                    "stderr": ""
+                    "stderr": "shuf: extra operand 'file2'\nTry 'shuf --help' for more information.\n"
                 },
                 "ignore_fields": {
                     "ignore_exit_code": false,
-                    "ignore_stdout": true,
-                    "ignore_stderr": true,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
                     "ignore_function": false
                 }
             }

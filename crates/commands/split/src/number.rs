@@ -211,6 +211,22 @@ impl NumberFixedWidthNumber {
         }
     }
 
+    /// Instantiate a number from already validated radix digits.
+    pub fn from_digits(
+        radix: u8,
+        width: usize,
+        suffix_start: &[u8],
+    ) -> Result<Self, NumberOverflow> {
+        if suffix_start.len() > width {
+            return Err(NumberOverflow);
+        }
+
+        let mut digits = vec![0_u8; width];
+        let offset = width - suffix_start.len();
+        digits[offset..].copy_from_slice(suffix_start);
+        Ok(Self { radix, digits })
+    }
+
     /// Increment this number.
     ///
     /// This method adds one to this number. If incrementing this

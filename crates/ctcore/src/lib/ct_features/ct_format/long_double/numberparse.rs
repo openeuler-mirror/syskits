@@ -136,10 +136,27 @@ fn parse_no_decimal_no_exponent(s: &str) -> Result<PreciseNumber, ParseNumberErr
             "-inf" | "-infinity" => Ok(PreciseNumber::new_non_fixed(
                 ExtendedBigDecimal::MinusInfinity,
             )),
-            "nan" | "-nan" | "+nan" => Err(ParseNumberError::Nan),
             _ => Err(ParseNumberError::Float),
         },
     }
+}
+
+/// Match the NaN spellings accepted by the Linux C `strtold` implementation.
+fn is_c_nan_literal(s: &str) -> bool {
+    let unsigned = s.strip_prefix(['+', '-']).unwrap_or(s);
+    let bytes = unsigned.as_bytes();
+    if bytes.len() < 3 || !bytes[..3].eq_ignore_ascii_case(b"nan") {
+        return false;
+    }
+
+    let payload = &bytes[3..];
+    payload.is_empty()
+        || (payload.len() >= 2
+            && payload[0] == b'('
+            && payload[payload.len() - 1] == b')'
+            && payload[1..payload.len() - 1]
+                .iter()
+                .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'_'))
 }
 
 /// Parse a number with an exponent but no decimal point.
@@ -437,6 +454,10 @@ impl FromStr for PreciseNumber {
             return Err(ParseNumberError::Float);
         }
 
+        if is_c_nan_literal(s) {
+            return Err(ParseNumberError::Nan);
+        }
+
         // 处理十六进制数字及浮点数 (如 0x1p-1)
         if s.to_ascii_lowercase().contains("0x") {
             // 解析十六进制逻辑现已全面强化
@@ -581,7 +602,20 @@ mod tests {
             ParseNumberError::Float
         );
         for invalid in [
-            "1e2e3", "1efoo", "1e+", "1e-", "1.e", "infinite", "++1", "+-1", ".", "+.", "-.",
+            "1e2e3",
+            "1efoo",
+            "1e+",
+            "1e-",
+            "1.e",
+            "infinite",
+            "++1",
+            "+-1",
+            ".",
+            "+.",
+            "-.",
+            "nan(foo!)",
+            "nan(foo",
+            "nan(foo))",
         ] {
             assert_eq!(
                 invalid.parse::<PreciseNumber>().unwrap_err(),
@@ -609,26 +643,27 @@ mod tests {
 
     #[test]
     fn test_parse_invalid_nan() {
-        assert_eq!(
-            "nan".parse::<PreciseNumber>().unwrap_err(),
-            ParseNumberError::Nan
-        );
-        assert_eq!(
-            "NAN".parse::<PreciseNumber>().unwrap_err(),
-            ParseNumberError::Nan
-        );
-        assert_eq!(
-            "NaN".parse::<PreciseNumber>().unwrap_err(),
-            ParseNumberError::Nan
-        );
-        assert_eq!(
-            "nAn".parse::<PreciseNumber>().unwrap_err(),
-            ParseNumberError::Nan
-        );
-        assert_eq!(
-            "-nan".parse::<PreciseNumber>().unwrap_err(),
-            ParseNumberError::Nan
-        );
+        for input in [
+            "nan",
+            "NAN",
+            "NaN",
+            "nAn",
+            "-nan",
+            "+nan",
+            "nan()",
+            "nan(foo)",
+            "nan(1e2)",
+            "nan(0x1)",
+            "NaN(ABC_123)",
+            "-nan(foo)",
+            "+nan(foo)",
+        ] {
+            assert_eq!(
+                input.parse::<PreciseNumber>().unwrap_err(),
+                ParseNumberError::Nan,
+                "input: {input}"
+            );
+        }
     }
 
     #[test]

@@ -340,6 +340,42 @@
         },
         {
             "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'；执行seq nan(foo)；nan(payload)是glibc strtold接受的NaN词法，stdin为空且无文件fixture；预期RC=1、stdout为空、stderr精确报告not-a-number而非floating point",
+            "args": ["nan(foo)"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: invalid 'not-a-number' argument: 'nan(foo)'\nTry 'seq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'；执行seq nan(1e2)；NaN负载中含e时仍必须在指数分派前按glibc strtold词法识别，stdin为空且无文件fixture；预期RC=1、stdout为空、stderr精确报告not-a-number",
+            "args": ["nan(1e2)"],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: invalid 'not-a-number' argument: 'nan(1e2)'\nTry 'seq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
             "description": "Error: NaN as increment",
             "args": ["1", "nan", "2"],
             "expectation": {

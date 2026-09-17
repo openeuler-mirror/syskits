@@ -162,16 +162,34 @@ pub fn shuf_main(args: impl ctcore::Args) -> CTResult<()> {
 
 fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSettings)> {
     let matches = ct_app().try_get_matches_from(args)?;
+    let echo = matches.get_flag(shuf_options::SHUF_ECHO);
+    let input_ranges = matches
+        .get_many::<String>(shuf_options::SHUF_INPUT_RANGE)
+        .unwrap_or_default()
+        .cloned()
+        .collect::<Vec<_>>();
+    let operands = matches
+        .get_many::<String>(shuf_options::SHUF_FILE_OR_ARGS)
+        .unwrap_or_default()
+        .cloned()
+        .collect::<Vec<_>>();
 
-    let mode = if matches.get_flag(shuf_options::SHUF_ECHO) {
-        ShufMode::Echo(
-            matches
-                .get_many::<String>(shuf_options::SHUF_FILE_OR_ARGS)
-                .unwrap_or_default()
-                .map(String::from)
-                .collect(),
-        )
-    } else if let Some(range) = matches.get_one::<String>(shuf_options::SHUF_INPUT_RANGE) {
+    if input_ranges.len() > 1 {
+        return Err(CtSimpleError::new(1, "multiple -i options specified"));
+    }
+    if echo && !input_ranges.is_empty() {
+        return Err(CTsageError::new(1, "cannot combine -e and -i options"));
+    }
+
+    let mode = if echo {
+        ShufMode::Echo(operands)
+    } else if let Some(range) = input_ranges.first() {
+        if let Some(extra_operand) = operands.first() {
+            return Err(CTsageError::new(
+                1,
+                format!("extra operand '{extra_operand}'"),
+            ));
+        }
         match shuf_parse_range(range) {
             Ok(m) => ShufMode::InputRange(m),
             Err(msg) => {
@@ -179,11 +197,8 @@ fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSet
             }
         }
     } else {
-        let mut operands = matches
-            .get_many::<String>(shuf_options::SHUF_FILE_OR_ARGS)
-            .unwrap_or_default();
-        let file = operands.next().cloned().unwrap_or("-".into());
-        if let Some(second_file) = operands.next() {
+        let file = operands.first().cloned().unwrap_or("-".into());
+        if let Some(second_file) = operands.get(1) {
             return Err(CTsageError::new(
                 1,
                 format!("unexpected argument '{second_file}' found"),
@@ -203,14 +218,13 @@ pub fn ct_app() -> Command {
             .long(shuf_options::SHUF_ECHO)
             .help(t!("shuf.clap.shuf_echo"))
             .action(clap::ArgAction::SetTrue)
-            .overrides_with(shuf_options::SHUF_ECHO)
-            .conflicts_with(shuf_options::SHUF_INPUT_RANGE),
+            .overrides_with(shuf_options::SHUF_ECHO),
         Arg::new(shuf_options::SHUF_INPUT_RANGE)
             .short('i')
             .long(shuf_options::SHUF_INPUT_RANGE)
             .value_name("LO-HI")
             .help(t!("shuf.clap.shuf_input_range"))
-            .conflicts_with(shuf_options::SHUF_FILE_OR_ARGS),
+            .action(clap::ArgAction::Append),
         Arg::new(shuf_options::SHUF_HEAD_COUNT)
             .short('n')
             .long(shuf_options::SHUF_HEAD_COUNT)
@@ -222,11 +236,13 @@ pub fn ct_app() -> Command {
             .long(shuf_options::SHUF_OUTPUT)
             .value_name("FILE")
             .help(t!("shuf.clap.shuf_output"))
+            .action(clap::ArgAction::Append)
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(shuf_options::SHUF_RANDOM_SOURCE)
             .long(shuf_options::SHUF_RANDOM_SOURCE)
             .value_name("FILE")
             .help(t!("shuf.clap.shuf_random_source"))
+            .action(clap::ArgAction::Append)
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(shuf_options::SHUF_REPEAT)
             .short('r')
@@ -859,14 +875,20 @@ impl ShufSettings {
             },
 
             // 解析输出文件参数
-            output: matches
-                .get_one::<String>(shuf_options::SHUF_OUTPUT)
-                .map(String::from),
+            output: shuf_repeated_path(
+                matches,
+                shuf_options::SHUF_OUTPUT,
+                "multiple output files specified",
+            )
+            .map_err(|message| CtSimpleError::new(1, message))?,
 
             // 解析随机源文件参数
-            random_source: matches
-                .get_one::<String>(shuf_options::SHUF_RANDOM_SOURCE)
-                .map(String::from),
+            random_source: shuf_repeated_path(
+                matches,
+                shuf_options::SHUF_RANDOM_SOURCE,
+                "multiple random sources specified",
+            )
+            .map_err(|message| CtSimpleError::new(1, message))?,
 
             // 解析重复选项
             is_repeat: matches.get_flag(shuf_options::SHUF_REPEAT),
@@ -879,6 +901,24 @@ impl ShufSettings {
             },
         })
     }
+}
+
+fn shuf_repeated_path(
+    matches: &clap::ArgMatches,
+    option: &str,
+    multiple_error: &str,
+) -> Result<Option<String>, String> {
+    let values = matches
+        .get_many::<String>(option)
+        .unwrap_or_default()
+        .collect::<Vec<_>>();
+    let Some(first) = values.first() else {
+        return Ok(None);
+    };
+    if values.iter().any(|value| value.as_str() != first.as_str()) {
+        return Err(multiple_error.to_string());
+    }
+    Ok(Some((*first).clone()))
 }
 
 fn shuf_input_kind(mode: &ShufMode) -> &'static str {
@@ -1151,6 +1191,90 @@ mod tests {
 
     mod parse_tests {
         use super::*;
+
+        fn parse_args(args: &[&str]) -> std::vec::IntoIter<OsString> {
+            args.iter()
+                .map(|arg| OsString::from(*arg))
+                .collect::<Vec<_>>()
+                .into_iter()
+        }
+
+        #[test]
+        fn test_repeated_input_range_uses_gnu_diagnostic() {
+            let error =
+                shuf_parse_invocation(parse_args(&["shuf", "-i", "0-1", "-i", "2-3"])).unwrap_err();
+
+            assert_eq!(error.to_string(), "multiple -i options specified");
+        }
+
+        #[test]
+        fn test_echo_and_input_range_conflict_requests_usage() {
+            let error =
+                shuf_parse_invocation(parse_args(&["shuf", "-e", "-i", "0-1"])).unwrap_err();
+
+            assert_eq!(error.to_string(), "cannot combine -e and -i options");
+            assert!(error.usage());
+        }
+
+        #[test]
+        fn test_repeated_output_accepts_identical_path() {
+            let (_, settings) = shuf_parse_invocation(parse_args(&[
+                "shuf",
+                "-i",
+                "0-1",
+                "-o",
+                "/dev/null",
+                "-o",
+                "/dev/null",
+            ]))
+            .unwrap();
+
+            assert_eq!(settings.output.as_deref(), Some("/dev/null"));
+        }
+
+        #[test]
+        fn test_repeated_output_rejects_different_paths() {
+            let error = shuf_parse_invocation(parse_args(&[
+                "shuf",
+                "-i",
+                "0-1",
+                "-o",
+                "/dev/null",
+                "-o",
+                "/dev/full",
+            ]))
+            .unwrap_err();
+
+            assert_eq!(error.to_string(), "multiple output files specified");
+        }
+
+        #[test]
+        fn test_repeated_random_source_accepts_identical_path() {
+            let (_, settings) = shuf_parse_invocation(parse_args(&[
+                "shuf",
+                "-i",
+                "0-1",
+                "--random-source=/dev/zero",
+                "--random-source=/dev/zero",
+            ]))
+            .unwrap();
+
+            assert_eq!(settings.random_source.as_deref(), Some("/dev/zero"));
+        }
+
+        #[test]
+        fn test_repeated_random_source_rejects_different_paths() {
+            let error = shuf_parse_invocation(parse_args(&[
+                "shuf",
+                "-i",
+                "0-1",
+                "--random-source=/dev/zero",
+                "--random-source=/dev/null",
+            ]))
+            .unwrap_err();
+
+            assert_eq!(error.to_string(), "multiple random sources specified");
+        }
 
         #[test]
         fn test_parse_range_valid() {

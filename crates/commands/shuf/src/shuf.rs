@@ -1040,7 +1040,7 @@ fn shuf_parse_head_count(headcounts: Vec<OsString>) -> Result<usize, String> {
 fn shuf_quote_numeric_argument(input: &OsStr) -> String {
     let bytes = input.as_encoded_bytes();
     if let Ok(text) = std::str::from_utf8(bytes) {
-        if !bytes.iter().any(u8::is_ascii_control) {
+        if shuf_bytes_are_locale_printable(bytes) {
             return ctcore::ct_display::locale_quote(text);
         }
     }
@@ -1096,6 +1096,31 @@ fn shuf_quote_numeric_argument(input: &OsStr) -> String {
     }
     escaped.push_str(right_quote);
     escaped
+}
+
+fn shuf_bytes_are_locale_printable(bytes: &[u8]) -> bool {
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if byte.is_ascii() {
+            if byte.is_ascii_control() {
+                return false;
+            }
+            index += 1;
+            continue;
+        }
+
+        #[cfg(unix)]
+        let (length, printable) = shuf_classify_locale_sequence(&bytes[index..]);
+        #[cfg(not(unix))]
+        let (length, printable) = (1, false);
+
+        if !printable {
+            return false;
+        }
+        index += length;
+    }
+    true
 }
 
 fn shuf_push_octal_byte(output: &mut String, byte: u8) {
@@ -1580,6 +1605,8 @@ mod tests {
         use super::*;
 
         static POSIXLY_CORRECT_LOCK: Mutex<()> = Mutex::new(());
+        #[cfg(unix)]
+        static LOCALE_LOCK: Mutex<()> = Mutex::new(());
 
         fn parse_args(args: &[&str]) -> std::vec::IntoIter<OsString> {
             args.iter()
@@ -1776,6 +1803,36 @@ mod tests {
             assert_eq!(
                 shuf_quote_numeric_argument(OsStr::new("1\t")),
                 format!("{left_quote}1\\t{right_quote}")
+            );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_quote_numeric_argument_escapes_non_ascii_bytes_in_c_locale() {
+            use std::ffi::CStr;
+
+            let _lock = LOCALE_LOCK.lock().unwrap();
+            let current = unsafe {
+                CStr::from_ptr(ctcore::libc::setlocale(
+                    ctcore::libc::LC_CTYPE,
+                    std::ptr::null(),
+                ))
+                .to_owned()
+            };
+            assert!(
+                !unsafe { ctcore::libc::setlocale(ctcore::libc::LC_CTYPE, c"C".as_ptr()) }
+                    .is_null(),
+                "set LC_CTYPE to C"
+            );
+
+            let quoted = shuf_quote_numeric_argument(OsStr::new("1é"));
+
+            unsafe {
+                ctcore::libc::setlocale(ctcore::libc::LC_CTYPE, current.as_ptr());
+            }
+            assert!(
+                quoted.contains("\\303\\251"),
+                "C locale must render the UTF-8 bytes as octal: {quoted:?}"
             );
         }
 

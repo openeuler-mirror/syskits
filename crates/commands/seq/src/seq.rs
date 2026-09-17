@@ -670,6 +670,9 @@ fn parse_number_arg(value: &str) -> CTResult<PreciseNumber> {
     let number: PreciseNumber = value
         .parse()
         .map_err(|error| SeqError::ParseError(value.to_string(), error))?;
+    if value.as_bytes().contains(&b'_') {
+        return Err(SeqError::ParseError(value.to_string(), ParseNumberError::Float).into());
+    }
     if overflows_long_double(&number.number) {
         return Err(SeqError::ParseError(value.to_string(), ParseNumberError::Float).into());
     }
@@ -1473,6 +1476,20 @@ mod tests {
             assert_eq!(
                 error.to_string(),
                 format!("invalid floating point argument: '{value}'")
+            );
+        }
+    }
+
+    #[test]
+    fn test_rejects_rust_style_numeric_underscores() {
+        for value in ["1_000", "1_0.5", "1_0e1", "0x1_0", "0x1._0"] {
+            let error = seq_main(["seq", value].map(OsString::from).into_iter()).unwrap_err();
+
+            assert_eq!(error.code(), 1, "input: {value}");
+            assert_eq!(
+                error.to_string(),
+                format!("invalid floating point argument: '{value}'"),
+                "input: {value}"
             );
         }
     }

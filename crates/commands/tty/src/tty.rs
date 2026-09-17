@@ -48,13 +48,18 @@ pub fn tty_main(args: impl ctcore::Args) -> CTResult<()> {
     }
     let matches = match ct_app().try_get_matches_from(prepare_tty_args(args)?) {
         Ok(m) => m,
-        Err(e) => {
-            e.print().ok();
-            match e.kind() {
-                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => return Ok(()),
-                _ => return Err(2.into()),
+        Err(e) => match e.kind() {
+            ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => {
+                if let Err(error) = tty_print_clap_display(&e) {
+                    exit_tty_write_error(&error);
+                }
+                return Ok(());
             }
-        }
+            _ => {
+                e.print().ok();
+                return Err(2.into());
+            }
+        },
     };
 
     if let Some(value) = tty_handle_silent(matches) {
@@ -373,6 +378,16 @@ fn tty_closed_stdout_error(stdout_was_closed: bool) -> Option<io::Error> {
     stdout_was_closed.then(|| io::Error::from_raw_os_error(nix::libc::EBADF))
 }
 
+fn tty_clap_display_error(error: io::Error, stdout_was_closed: bool) -> io::Error {
+    tty_closed_stdout_error(stdout_was_closed).unwrap_or(error)
+}
+
+fn tty_print_clap_display(error: &clap::Error) -> io::Result<()> {
+    error
+        .print()
+        .map_err(|error| tty_clap_display_error(error, ctcore::ct_stdout_was_closed()))
+}
+
 fn tty_write_stdout(output: &[u8]) -> io::Result<()> {
     if let Some(error) = tty_closed_stdout_error(ctcore::ct_stdout_was_closed()) {
         return Err(error);
@@ -548,6 +563,17 @@ mod tests {
             Some(nix::libc::EBADF)
         );
         assert!(tty_closed_stdout_error(false).is_none());
+    }
+
+    #[test]
+    fn test_tty_clap_display_error_preserves_or_remaps_stdout_error() {
+        let enospc = io::Error::from_raw_os_error(nix::libc::ENOSPC);
+        let preserved = tty_clap_display_error(enospc, false);
+        assert_eq!(preserved.raw_os_error(), Some(nix::libc::ENOSPC));
+
+        let remapped =
+            tty_clap_display_error(io::Error::from_raw_os_error(nix::libc::ENOSPC), true);
+        assert_eq!(remapped.raw_os_error(), Some(nix::libc::EBADF));
     }
 
     #[test]

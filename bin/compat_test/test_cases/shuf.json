@@ -633,6 +633,28 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -e A --random-source=；随机源路径为空字符串，GNU返回RC=1、stdout为空、stderr为shuf: '': No such file or directory加换行，不附加实现内部的随机源打开描述。",
+            "args": [
+                "-e",
+                "A",
+                "--random-source="
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: '': No such file or directory\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "shuf: 显示帮助信息 (--help)",
             "args": [
                 "--help"

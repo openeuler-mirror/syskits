@@ -107,6 +107,12 @@ enum SeqOutputFormat {
     ExactInteger,
 }
 
+struct RawIntegerSequence {
+    first: Vec<u8>,
+    last: Vec<u8>,
+    step: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SeqRow {
     pub index: usize,
@@ -317,6 +323,13 @@ pub fn seq_main(args: impl ctcore::Args) -> CTResult<()> {
     let raw_numbers = collect_number_args(&matches)?;
     let user_format = parse_format_option(options.format.as_deref())?;
     validate_option_compatibility(&options)?;
+    if let Some(sequence) = raw_integer_sequence(&raw_numbers, &options) {
+        return seq_raw_integer_fast(sequence, options.separator.as_bytes(), &options.terminator)
+            .map_err(|error| {
+                CtSimpleError::new(1, format!("write error: {}", strip_errno(&error)))
+            });
+    }
+
     let numbers = parse_number_args(&raw_numbers)?;
     let (first, increment, last) = get_sequence_range(&numbers)?;
 
@@ -382,6 +395,13 @@ pub fn seq_native_semantic(args: impl ctcore::Args) -> CTResult<SeqSemantic> {
     let raw_numbers = collect_number_args(&matches)?;
     let user_format = parse_format_option(options.format.as_deref())?;
     validate_option_compatibility(&options)?;
+    if let Some(sequence) = raw_integer_sequence(&raw_numbers, &options) {
+        return raw_integer_semantic(sequence, options.separator.as_bytes(), &options.terminator)
+            .map_err(|error| {
+                CtSimpleError::new(1, format!("write error: {}", strip_errno(&error)))
+            });
+    }
+
     let numbers = parse_number_args(&raw_numbers)?;
     let (first, increment, last) = get_sequence_range(&numbers)?;
 
@@ -485,6 +505,141 @@ fn validate_option_compatibility(options: &SeqOptions) -> CTResult<()> {
         return Err(SeqError::FormatWithEqualWidth.into());
     }
     Ok(())
+}
+
+fn raw_integer_sequence(
+    raw_numbers: &[OsString],
+    options: &SeqOptions,
+) -> Option<RawIntegerSequence> {
+    if options.format.is_some() || options.is_equal_width || options.separator.as_bytes().len() != 1
+    {
+        return None;
+    }
+
+    let (first, step, last) = match raw_numbers {
+        [last] => (b"1".as_slice(), 1, decimal_digits(last)?),
+        [first, last] => (decimal_digits(first)?, 1, decimal_digits(last)?),
+        [first, step, last] => (
+            decimal_digits(first)?,
+            parse_small_decimal(decimal_digits(step)?)?,
+            decimal_digits(last)?,
+        ),
+        _ => return None,
+    };
+
+    (step > 0 && step <= SEQ_FAST_STEP_LIMIT).then(|| RawIntegerSequence {
+        first: trim_decimal_leading_zeros(first).to_vec(),
+        last: trim_decimal_leading_zeros(last).to_vec(),
+        step,
+    })
+}
+
+fn decimal_digits(value: &OsString) -> Option<&[u8]> {
+    let bytes = value.as_os_str().as_bytes();
+    (!bytes.is_empty() && bytes.iter().all(u8::is_ascii_digit)).then_some(bytes)
+}
+
+fn parse_small_decimal(value: &[u8]) -> Option<u64> {
+    value.iter().try_fold(0_u64, |number, byte| {
+        number.checked_mul(10)?.checked_add(u64::from(byte - b'0'))
+    })
+}
+
+fn trim_decimal_leading_zeros(value: &[u8]) -> &[u8] {
+    match value.iter().position(|byte| *byte != b'0') {
+        Some(index) => &value[index..],
+        None => &value[value.len() - 1..],
+    }
+}
+
+fn compare_decimal_strings(left: &[u8], right: &[u8]) -> std::cmp::Ordering {
+    left.len().cmp(&right.len()).then_with(|| left.cmp(right))
+}
+
+fn increment_decimal(value: &mut Vec<u8>) {
+    for index in (0..value.len()).rev() {
+        if value[index] != b'9' {
+            value[index] += 1;
+            return;
+        }
+        value[index] = b'0';
+    }
+    value.insert(0, b'1');
+}
+
+fn walk_raw_integer_sequence(
+    sequence: RawIntegerSequence,
+    mut emit: impl FnMut(&[u8]) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    if compare_decimal_strings(&sequence.first, &sequence.last).is_gt() {
+        return Ok(());
+    }
+
+    let mut current = sequence.first;
+    loop {
+        emit(&current)?;
+        for _ in 0..sequence.step {
+            increment_decimal(&mut current);
+        }
+        if compare_decimal_strings(&current, &sequence.last).is_gt() {
+            return Ok(());
+        }
+    }
+}
+
+fn seq_raw_integer_fast(
+    sequence: RawIntegerSequence,
+    separator: &[u8],
+    terminator: &str,
+) -> std::io::Result<()> {
+    use std::io::BufWriter;
+
+    let stdout = stdout();
+    let mut writer = BufWriter::with_capacity(8192, stdout.lock());
+    let mut is_first = true;
+    walk_raw_integer_sequence(sequence, |value| {
+        if !is_first {
+            writer.write_all(separator)?;
+        }
+        writer.write_all(value)?;
+        is_first = false;
+        Ok(())
+    })?;
+    if !is_first {
+        writer.write_all(terminator.as_bytes())?;
+    }
+    writer.flush()
+}
+
+fn raw_integer_semantic(
+    sequence: RawIntegerSequence,
+    separator: &[u8],
+    terminator: &str,
+) -> std::io::Result<SeqSemantic> {
+    let mut classic_buffer = Vec::new();
+    let mut rows = Vec::new();
+    let mut is_first = true;
+
+    walk_raw_integer_sequence(sequence, |value| {
+        if !is_first {
+            classic_buffer.write_all(separator)?;
+        }
+        classic_buffer.write_all(value)?;
+        rows.push(SeqRow {
+            index: rows.len(),
+            value: String::from_utf8(value.to_vec()).expect("raw integer digits are ASCII"),
+        });
+        is_first = false;
+        Ok(())
+    })?;
+    if !is_first {
+        classic_buffer.write_all(terminator.as_bytes())?;
+    }
+
+    Ok(SeqSemantic {
+        classic_text: String::from_utf8_lossy(&classic_buffer).into_owned(),
+        rows,
+    })
 }
 
 fn get_sequence_range(
@@ -1437,6 +1592,38 @@ mod tests {
         assert_eq!(
             String::from_utf8(output.clone()).unwrap(),
             "01\n02\n03\n04\n05\n06\n07\n08\n09\n10\n"
+        );
+    }
+
+    #[test]
+    fn test_native_semantic_prints_integers_beyond_long_double_range() {
+        let first = "9".repeat(5000);
+        let last = format!("1{}", "0".repeat(5000));
+        let expected = format!("{first}\n{last}\n");
+
+        let semantic = seq_native_semantic(
+            [
+                OsString::from("seq"),
+                first.clone().into(),
+                last.clone().into(),
+            ]
+            .into_iter(),
+        )
+        .unwrap();
+
+        assert_eq!(semantic.classic_text, expected);
+        assert_eq!(
+            semantic.rows,
+            vec![
+                SeqRow {
+                    index: 0,
+                    value: first,
+                },
+                SeqRow {
+                    index: 1,
+                    value: last,
+                },
+            ]
         );
     }
 

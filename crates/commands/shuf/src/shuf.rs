@@ -141,7 +141,8 @@ pub fn shuf_main(args: impl ctcore::Args) -> CTResult<()> {
 
     match mode {
         ShufMode::Echo(args) => {
-            let mut evec = args.iter().map(String::as_bytes).collect::<Vec<_>>();
+            let echo_input = shuf_echo_input(&args, settings.sep);
+            let mut evec = vec![echo_input.as_slice()];
             shuf_find_seps(&mut evec, settings.sep);
             shuf_exec(&mut evec, &settings)?;
         }
@@ -326,6 +327,15 @@ fn shuf_find_seps(data: &mut Vec<&[u8]>, sep: u8) {
             }
         }
     }
+}
+
+fn shuf_echo_input(args: &[String], sep: u8) -> Vec<u8> {
+    let mut input = Vec::with_capacity(args.iter().map(|arg| arg.len() + 1).sum());
+    for arg in args {
+        input.extend_from_slice(arg.as_bytes());
+        input.push(sep);
+    }
+    input
 }
 
 trait Shufable {
@@ -931,7 +941,8 @@ pub fn shuf_native_semantic(args: impl ctcore::Args) -> CTResult<ShufSemantic> {
     } else {
         match &mode {
             ShufMode::Echo(args) => {
-                let mut evec = args.iter().map(String::as_bytes).collect::<Vec<_>>();
+                let echo_input = shuf_echo_input(args, settings.sep);
+                let mut evec = vec![echo_input.as_slice()];
                 shuf_find_seps(&mut evec, settings.sep);
                 if output_file.is_none() {
                     shuf_exec_to_writer(&mut evec, &settings, &mut buffered_output)?;
@@ -1380,6 +1391,15 @@ mod tests {
 
     mod find_seps_tests {
         use super::*;
+
+        #[test]
+        fn test_echo_input_appends_separator_after_each_argument() {
+            let input = shuf_echo_input(&["a\n".to_string()], b'\n');
+            let mut lines = vec![input.as_slice()];
+            shuf_find_seps(&mut lines, b'\n');
+
+            assert_eq!(lines, vec![b"a".as_slice(), b"".as_slice()]);
+        }
 
         #[test]
         fn test_find_seps_basic() {

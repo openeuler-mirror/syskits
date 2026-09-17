@@ -1738,6 +1738,54 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -s -w 1 2；-s的参数为连字符开头的-w而非equal-width选项；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=0，stderr为0字节、内容=空，stdout为5字节/1条换行分隔、内容=1-w2\\n",
+            "args": [
+                "-s",
+                "-w",
+                "1",
+                "2"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1-w2\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
+        },
+        {
+            "command": "seq",
+            "description": "export LC_ALL='C'，export LANG='C'，unset POSIXLY_CORRECT；执行seq -f -w 1 2；-f的参数为连字符开头的-w，随后格式校验拒绝没有%指令的格式；stdin为0字节、内容=空；输入fixture：无文件fixture；预期RC=1，stdout为0字节/0条换行分隔、内容=空，stderr为35字节、内容=seq: format '-w' has no % directive加换行",
+            "args": [
+                "-f",
+                "-w",
+                "1",
+                "2"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "seq: format '-w' has no % directive\n"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": ""
         }
     ]
 }

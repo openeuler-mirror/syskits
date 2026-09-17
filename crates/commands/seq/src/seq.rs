@@ -426,6 +426,7 @@ pub fn ct_app() -> Command {
         Arg::new(SEQ_SEPARATOR)
             .short('s')
             .long("separator")
+            .allow_hyphen_values(true)
             .value_parser(OsStringValueParser::new())
             .overrides_with(SEQ_SEPARATOR)
             .help(t!("seq.clap.seq_separator")),
@@ -442,6 +443,7 @@ pub fn ct_app() -> Command {
         Arg::new(SEQ_FORMAT)
             .short('f')
             .long(SEQ_FORMAT)
+            .allow_hyphen_values(true)
             .value_parser(OsStringValueParser::new())
             .overrides_with(SEQ_FORMAT)
             .help(t!("seq.clap.seq_format")),
@@ -853,6 +855,27 @@ mod tests {
 
             assert_eq!(options.format.as_deref(), Some(OsStr::new(expected)));
         }
+    }
+
+    #[test]
+    fn test_separator_accepts_a_hyphen_prefixed_value() {
+        let matches = ct_app()
+            .try_get_matches_from(["seq", "-s", "-w", "1", "2"])
+            .unwrap();
+        let options = SeqOptions::new(&matches);
+
+        assert_eq!(options.separator, "-w");
+        assert!(!options.is_equal_width);
+    }
+
+    #[test]
+    fn test_format_accepts_a_hyphen_prefixed_value() {
+        let matches = ct_app()
+            .try_get_matches_from(["seq", "-f", "-w", "1", "2"])
+            .unwrap();
+        let options = SeqOptions::new(&matches);
+
+        assert_eq!(options.format.as_deref(), Some(OsStr::new("-w")));
     }
 
     #[test]

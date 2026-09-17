@@ -143,6 +143,9 @@ impl Tool for Shuf {
 }
 
 pub fn shuf_main(args: impl ctcore::Args) -> CTResult<()> {
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
     configure_sigpipe();
 
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
@@ -213,7 +216,7 @@ fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSet
     let matches = ct_app().try_get_matches_from(args)?;
     let echo = matches.get_flag(shuf_options::SHUF_ECHO);
     let input_ranges = matches
-        .get_many::<String>(shuf_options::SHUF_INPUT_RANGE)
+        .get_many::<OsString>(shuf_options::SHUF_INPUT_RANGE)
         .unwrap_or_default()
         .cloned()
         .collect::<Vec<_>>();
@@ -239,7 +242,7 @@ fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSet
                 format!("extra operand {}", extra_operand.quote()),
             ));
         }
-        match shuf_parse_range(range) {
+        match shuf_parse_range(range.as_os_str()) {
             Ok(m) => ShufMode::InputRange(m),
             Err(msg) => {
                 return Err(CtSimpleError::new(1, msg));
@@ -277,14 +280,16 @@ pub fn ct_app() -> Command {
             .value_name("LO-HI")
             .allow_hyphen_values(true)
             .help(t!("shuf.clap.shuf_input_range"))
-            .action(clap::ArgAction::Append),
+            .action(clap::ArgAction::Append)
+            .value_parser(OsStringValueParser::new()),
         Arg::new(shuf_options::SHUF_HEAD_COUNT)
             .short('n')
             .long(shuf_options::SHUF_HEAD_COUNT)
             .value_name("COUNT")
             .allow_hyphen_values(true)
             .action(clap::ArgAction::Append)
-            .help(t!("shuf.clap.shuf_head_count")),
+            .help(t!("shuf.clap.shuf_head_count"))
+            .value_parser(OsStringValueParser::new()),
         Arg::new(shuf_options::SHUF_OUTPUT)
             .short('o')
             .long(shuf_options::SHUF_OUTPUT)
@@ -714,29 +719,7 @@ fn shuf_quotef(path: &OsStr) -> String {
     #[cfg(unix)]
     {
         let bytes = path.as_bytes();
-        let quoted = escape_shell_bytes_with_classifier(bytes, |remaining| unsafe {
-            let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
-            let mut wide = 0 as ctcore::libc::wchar_t;
-            let length = mbrtowc(
-                &mut wide,
-                remaining.as_ptr().cast(),
-                remaining.len(),
-                &mut state,
-            );
-            if length == usize::MAX {
-                return (1, false);
-            }
-            if length == usize::MAX - 1 {
-                return (remaining.len(), false);
-            }
-
-            let length = if length == 0 { 1 } else { length };
-            let is_utf8 = std::str::from_utf8(&remaining[..length]).is_ok();
-            (
-                length,
-                is_utf8 && iswprint(wide as ctcore::libc::c_uint) != 0,
-            )
-        });
+        let quoted = escape_shell_bytes_with_classifier(bytes, shuf_classify_locale_sequence);
 
         String::from_utf8(quoted).expect("shell-escaped file names are valid UTF-8")
     }
@@ -806,15 +789,25 @@ fn process_nonrepeat_mode<T: Shufable>(
 /// # 返回值
 /// * `Ok(RangeInclusive<usize>)` - 解析成功返回包含范围
 /// * `Err(String)` - 解析失败返回错误信息
-fn shuf_parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> {
-    let invalid = || format!("invalid input range: '{input_range}'");
+fn shuf_parse_range(input_range: &OsStr) -> Result<RangeInclusive<usize>, String> {
+    let invalid = || {
+        format!(
+            "invalid input range: {}",
+            shuf_quote_numeric_argument(input_range)
+        )
+    };
+    let bytes = input_range.as_encoded_bytes();
 
     // 尝试按 '-' 分割字符串
-    if let Some((from, to)) = input_range.split_once('-') {
-        let ShufUnsigned::Value(begin) = shuf_parse_unsigned(from).map_err(|_| invalid())? else {
+    if let Some(separator) = bytes.iter().position(|byte| *byte == b'-') {
+        let ShufUnsigned::Value(begin) =
+            shuf_parse_unsigned(&bytes[..separator]).map_err(|_| invalid())?
+        else {
             return Err(invalid());
         };
-        let ShufUnsigned::Value(end) = shuf_parse_unsigned(to).map_err(|_| invalid())? else {
+        let ShufUnsigned::Value(end) =
+            shuf_parse_unsigned(&bytes[separator + 1..]).map_err(|_| invalid())?
+        else {
             return Err(invalid());
         };
 
@@ -840,8 +833,7 @@ enum ShufUnsigned {
     Overflow,
 }
 
-fn shuf_parse_unsigned(input: &str) -> Result<ShufUnsigned, ()> {
-    let bytes = input.as_bytes();
+fn shuf_parse_unsigned(bytes: &[u8]) -> Result<ShufUnsigned, ()> {
     let mut index = 0;
     while index < bytes.len() && bytes[index].is_ascii_whitespace() {
         index += 1;
@@ -891,20 +883,134 @@ fn shuf_parse_unsigned(input: &str) -> Result<ShufUnsigned, ()> {
 /// # 返回值
 /// * `Ok(usize)` - 解析成功返回最小的有效数字
 /// * `Err(String)` - 解析失败返回错误信息
-fn shuf_parse_head_count(headcounts: Vec<String>) -> Result<usize, String> {
+fn shuf_parse_head_count(headcounts: Vec<OsString>) -> Result<usize, String> {
     // 初始化为最大值
     let mut result = usize::MAX;
 
     // 遍历所有输入的数字
     for count in headcounts {
-        match shuf_parse_unsigned(&count) {
+        match shuf_parse_unsigned(count.as_encoded_bytes()) {
             Ok(ShufUnsigned::Value(value)) => result = result.min(value),
             Ok(ShufUnsigned::Overflow) => {}
-            Err(()) => return Err(format!("invalid line count: '{count}'")),
+            Err(()) => {
+                return Err(format!(
+                    "invalid line count: {}",
+                    shuf_quote_numeric_argument(count.as_os_str())
+                ));
+            }
         }
     }
 
     Ok(result)
+}
+
+fn shuf_quote_numeric_argument(input: &OsStr) -> String {
+    let bytes = input.as_encoded_bytes();
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        return ctcore::ct_display::locale_quote(text);
+    }
+
+    let (left_quote, right_quote) = shuf_diagnostic_quote_marks();
+    let right_quote_bytes = right_quote.as_bytes();
+    let mut escaped = String::with_capacity(bytes.len() + left_quote.len() + right_quote.len());
+    escaped.push_str(left_quote);
+
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index..].starts_with(right_quote_bytes) {
+            escaped.push('\\');
+            escaped.push_str(right_quote);
+            index += right_quote_bytes.len();
+            continue;
+        }
+
+        let byte = bytes[index];
+        if byte.is_ascii() {
+            match byte {
+                b'\x07' => escaped.push_str("\\a"),
+                b'\x08' => escaped.push_str("\\b"),
+                b'\t' => escaped.push_str("\\t"),
+                b'\n' => escaped.push_str("\\n"),
+                b'\x0b' => escaped.push_str("\\v"),
+                b'\x0c' => escaped.push_str("\\f"),
+                b'\r' => escaped.push_str("\\r"),
+                b'\\' => escaped.push_str("\\\\"),
+                0x00..=0x1f | 0x7f => shuf_push_octal_byte(&mut escaped, byte),
+                _ => escaped.push(char::from(byte)),
+            }
+            index += 1;
+            continue;
+        }
+
+        #[cfg(unix)]
+        let (length, printable) = shuf_classify_locale_sequence(&bytes[index..]);
+        #[cfg(not(unix))]
+        let (length, printable) = (1, false);
+
+        if printable {
+            escaped.push_str(
+                std::str::from_utf8(&bytes[index..index + length])
+                    .expect("printable locale sequence must be valid UTF-8"),
+            );
+        } else {
+            for byte in &bytes[index..index + length] {
+                shuf_push_octal_byte(&mut escaped, *byte);
+            }
+        }
+        index += length;
+    }
+    escaped.push_str(right_quote);
+    escaped
+}
+
+fn shuf_push_octal_byte(output: &mut String, byte: u8) {
+    output.push('\\');
+    output.push(char::from(b'0' + (byte >> 6)));
+    output.push(char::from(b'0' + ((byte >> 3) & 0o7)));
+    output.push(char::from(b'0' + (byte & 0o7)));
+}
+
+#[cfg(unix)]
+fn shuf_classify_locale_sequence(remaining: &[u8]) -> (usize, bool) {
+    unsafe {
+        let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
+        let mut wide = 0 as ctcore::libc::wchar_t;
+        let length = mbrtowc(
+            &mut wide,
+            remaining.as_ptr().cast(),
+            remaining.len(),
+            &mut state,
+        );
+        if length == usize::MAX {
+            return (1, false);
+        }
+        if length == usize::MAX - 1 {
+            return (remaining.len(), false);
+        }
+
+        let length = if length == 0 { 1 } else { length };
+        let is_utf8 = std::str::from_utf8(&remaining[..length]).is_ok();
+        (
+            length,
+            is_utf8 && iswprint(wide as ctcore::libc::c_uint) != 0,
+        )
+    }
+}
+
+fn shuf_diagnostic_quote_marks() -> (&'static str, &'static str) {
+    let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
+        .into_iter()
+        .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
+        .unwrap_or_else(|| String::from("C"))
+        .to_ascii_uppercase();
+
+    if locale.contains("UTF-8") || locale.contains("UTF8") {
+        ("‘", "’")
+    } else if locale.contains("GB18030") {
+        ("\u{a1ae}", "\u{a1af}")
+    } else {
+        ("'", "'")
+    }
 }
 
 enum WrappedRng {
@@ -1057,7 +1163,7 @@ impl ShufSettings {
             // 解析 head_count 参数
             head_count: {
                 let headcounts = matches
-                    .get_many::<String>(shuf_options::SHUF_HEAD_COUNT)
+                    .get_many::<OsString>(shuf_options::SHUF_HEAD_COUNT)
                     .unwrap_or_default()
                     .cloned()
                     .collect();
@@ -1398,6 +1504,60 @@ mod tests {
             assert_eq!(shuf_echo_input(&args, settings.sep), vec![0xff, b'\n']);
         }
 
+        #[cfg(unix)]
+        #[test]
+        fn test_numeric_options_report_non_utf8_bytes_with_gnu_diagnostics() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let head_count_error = shuf_parse_invocation(
+                vec![
+                    OsString::from("shuf"),
+                    OsString::from("-n"),
+                    OsString::from_vec(vec![0xff]),
+                    OsString::from("-i"),
+                    OsString::from("1-1"),
+                ]
+                .into_iter(),
+            )
+            .expect_err("non-UTF-8 -n value must reach GNU numeric validation");
+            assert!(
+                head_count_error.to_string().contains("\\377"),
+                "diagnostic must retain the original non-UTF-8 byte as octal"
+            );
+
+            let range_error = shuf_parse_invocation(
+                vec![
+                    OsString::from("shuf"),
+                    OsString::from("-i"),
+                    OsString::from_vec(vec![0xff, b'-', b'1']),
+                ]
+                .into_iter(),
+            )
+            .expect_err("non-UTF-8 -i value must reach GNU range validation");
+            assert!(
+                range_error.to_string().contains("\\377-1"),
+                "diagnostic must retain the original non-UTF-8 range byte as octal"
+            );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_quote_numeric_argument_uses_gnu_escape_sequences() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let quoted = shuf_quote_numeric_argument(
+                OsString::from_vec(vec![0xff, b'\'', b'\\', 0x07]).as_os_str(),
+            );
+
+            assert!(
+                matches!(
+                    quoted.as_str(),
+                    "'\\377\\'\\\\\\a'" | "\u{2018}\\377'\\\\\\a\u{2019}"
+                ),
+                "unexpected GNU-style numeric quote: {quoted:?}"
+            );
+        }
+
         #[test]
         fn test_repeated_output_accepts_identical_path() {
             let (_, settings) = shuf_parse_invocation(parse_args(&[
@@ -1460,46 +1620,52 @@ mod tests {
 
         #[test]
         fn test_parse_range_valid() {
-            assert_eq!(shuf_parse_range("1-5").unwrap(), 1..=5);
-            assert_eq!(shuf_parse_range("0-0").unwrap(), 0..=0);
-            assert_eq!(shuf_parse_range("10-10").unwrap(), 10..=10);
+            assert_eq!(shuf_parse_range(OsStr::new("1-5")).unwrap(), 1..=5);
+            assert_eq!(shuf_parse_range(OsStr::new("0-0")).unwrap(), 0..=0);
+            assert_eq!(shuf_parse_range(OsStr::new("10-10")).unwrap(), 10..=10);
         }
 
         #[test]
         fn test_parse_range_accepts_gnu_leading_whitespace() {
-            assert_eq!(shuf_parse_range(" 0- 1").unwrap(), 0..=1);
+            assert_eq!(shuf_parse_range(OsStr::new(" 0- 1")).unwrap(), 0..=1);
         }
 
         #[test]
         fn test_parse_range_invalid() {
-            assert!(shuf_parse_range("invalid").is_err());
-            assert!(shuf_parse_range("5-1").is_err());
-            assert!(shuf_parse_range("a-b").is_err());
-            assert!(shuf_parse_range("-5").is_err());
+            assert!(shuf_parse_range(OsStr::new("invalid")).is_err());
+            assert!(shuf_parse_range(OsStr::new("5-1")).is_err());
+            assert!(shuf_parse_range(OsStr::new("a-b")).is_err());
+            assert!(shuf_parse_range(OsStr::new("-5")).is_err());
         }
 
         #[test]
         fn test_parse_range_rejects_full_usize_interval() {
             assert_eq!(
-                shuf_parse_range("0-18446744073709551615").unwrap_err(),
-                "invalid input range: '0-18446744073709551615'"
+                shuf_parse_range(OsStr::new("0-18446744073709551615")).unwrap_err(),
+                format!(
+                    "invalid input range: {}",
+                    ctcore::ct_display::locale_quote("0-18446744073709551615")
+                )
             );
         }
 
         #[test]
         fn test_parse_head_count_valid() {
-            assert_eq!(shuf_parse_head_count(vec!["5".to_string()]).unwrap(), 5);
+            assert_eq!(shuf_parse_head_count(vec![OsString::from("5")]).unwrap(), 5);
             assert_eq!(
-                shuf_parse_head_count(vec!["10".to_string(), "5".to_string()]).unwrap(),
+                shuf_parse_head_count(vec![OsString::from("10"), OsString::from("5")]).unwrap(),
                 5
             );
         }
 
         #[test]
         fn test_parse_head_count_uses_gnu_overflow_and_whitespace_rules() {
-            assert_eq!(shuf_parse_head_count(vec![" 1".to_string()]).unwrap(), 1);
             assert_eq!(
-                shuf_parse_head_count(vec!["18446744073709551616".to_string()]).unwrap(),
+                shuf_parse_head_count(vec![OsString::from(" 1")]).unwrap(),
+                1
+            );
+            assert_eq!(
+                shuf_parse_head_count(vec![OsString::from("18446744073709551616")]).unwrap(),
                 usize::MAX
             );
         }
@@ -1507,17 +1673,29 @@ mod tests {
         #[test]
         fn test_hyphen_prefixed_numeric_values_reach_gnu_validation() {
             let head_error = shuf_parse_invocation(parse_args(&["shuf", "-n", "-0"])).unwrap_err();
-            assert_eq!(head_error.to_string(), "invalid line count: '-0'");
+            assert_eq!(
+                head_error.to_string(),
+                format!(
+                    "invalid line count: {}",
+                    ctcore::ct_display::locale_quote("-0")
+                )
+            );
 
             let range_error =
                 shuf_parse_invocation(parse_args(&["shuf", "-i", "-0-1"])).unwrap_err();
-            assert_eq!(range_error.to_string(), "invalid input range: '-0-1'");
+            assert_eq!(
+                range_error.to_string(),
+                format!(
+                    "invalid input range: {}",
+                    ctcore::ct_display::locale_quote("-0-1")
+                )
+            );
         }
 
         #[test]
         fn test_parse_head_count_invalid() {
-            assert!(shuf_parse_head_count(vec!["invalid".to_string()]).is_err());
-            assert!(shuf_parse_head_count(vec!["-5".to_string()]).is_err());
+            assert!(shuf_parse_head_count(vec![OsString::from("invalid")]).is_err());
+            assert!(shuf_parse_head_count(vec![OsString::from("-5")]).is_err());
         }
     }
 

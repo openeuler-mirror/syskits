@@ -1017,6 +1017,29 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -n invalid -i invalid；GNU按出现顺序解析数值选项，先出现的-n非法值必须优先报invalid line count，预期RC=1、stdout为空、stderr为shuf: invalid line count: 'invalid'加换行。",
+            "args": [
+                "-n",
+                "invalid",
+                "-i",
+                "invalid"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: invalid line count: 'invalid'\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "LC_ALL=C、LANG=C下执行shuf -n $' 1' -i 1-2 --random-source=/dev/zero；COUNT参数字节为2031，GNU xstrtoumax接受前导空白并限制输出一行，固定随机字节00选择范围起点，预期RC=0、stdout为310a、stderr为空。",
             "args": [
                 "-n",

@@ -40,7 +40,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, strip_errno};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
 
@@ -1165,13 +1165,18 @@ impl WrappedRng {
         let message = if failure.kind == ErrorKind::UnexpectedEof {
             format!("{}: end of file", shuf_quote_always(path))
         } else if let Some(errno) = failure.raw_os_error {
+            let error = Error::from_raw_os_error(errno);
             format!(
-                "{}: {}",
+                "{}: read error: {}",
                 shuf_quote_always(path),
-                Error::from_raw_os_error(errno)
+                strip_errno(&error)
             )
         } else {
-            format!("{}: {}", shuf_quote_always(path), Error::from(failure.kind))
+            format!(
+                "{}: read error: {}",
+                shuf_quote_always(path),
+                Error::from(failure.kind)
+            )
         };
         CtSimpleError::new(1, message)
     }
@@ -1916,6 +1921,22 @@ mod tests {
             );
 
             assert_eq!(error.to_string(), "'random-source': end of file");
+        }
+
+        #[test]
+        fn test_random_source_read_error_uses_gnu_context_and_errno_text() {
+            let error = WrappedRng::random_source_error(
+                OsStr::new("random-source"),
+                rand_read_adapter::ReadFailure {
+                    kind: ErrorKind::IsADirectory,
+                    raw_os_error: Some(ctcore::libc::EISDIR),
+                },
+            );
+
+            assert_eq!(
+                error.to_string(),
+                "'random-source': read error: Is a directory"
+            );
         }
 
         #[test]

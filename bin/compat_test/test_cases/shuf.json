@@ -637,6 +637,28 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -i 1-2 --random-source=.；随机源可打开但读取目录失败时，GNU返回RC=1、stdout为空、stderr为shuf: '.': read error: Is a directory加换行。",
+            "args": [
+                "-i",
+                "1-2",
+                "--random-source=."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: '.': read error: Is a directory\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "LC_ALL=C、LANG=C下创建9437184字节的单行x输入，执行shuf -n 1 --random-source=/dev/null -o reservoir-output reservoir-input；输入大于GNU的8MiB蓄水池阈值且没有行终止字节，GNU填满1行蓄水池后仍先进行一次随机选择以探测下一行，空随机源因此返回EOF，预期RC=1、stdout为空、stderr为shuf: '/dev/null': end of file，且不创建reservoir-output。",
             "args": [
                 "-n",

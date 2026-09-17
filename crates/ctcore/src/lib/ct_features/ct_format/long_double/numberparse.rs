@@ -21,6 +21,11 @@ use num_traits::Zero;
 use super::extendedbigdecimal::ExtendedBigDecimal;
 use super::number::PreciseNumber;
 
+// Keep hexadecimal exponent handling bounded like the decimal exponent path.
+// Values outside this range are necessarily outside the supported long-double
+// range on Linux, so constructing an exact BigDecimal only wastes resources.
+const MAX_SUPPORTED_BINARY_EXPONENT: i64 = 100_000;
+
 /// An error returned when parsing a number fails.
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseNumberError {
@@ -364,7 +369,21 @@ fn parse_hexadecimal(s: &str) -> Result<PreciseNumber, ParseNumberError> {
     }
 
     // 调整指数：每有一个十六进制小数位，相当于乘了 16^-1，也就是 2^-4
-    p -= 4 * (frac_len as i64);
+    let fraction_exponent = i64::try_from(frac_len)
+        .unwrap_or(i64::MAX)
+        .saturating_mul(4);
+    p = p.saturating_sub(fraction_exponent);
+
+    if p > MAX_SUPPORTED_BINARY_EXPONENT {
+        return Err(ParseNumberError::Float);
+    }
+    if p < -MAX_SUPPORTED_BINARY_EXPONENT {
+        return Ok(PreciseNumber::new_non_fixed(if is_neg {
+            ExtendedBigDecimal::MinusZero
+        } else {
+            ExtendedBigDecimal::BigDecimal(BigDecimal::zero())
+        }));
+    }
 
     // 计算最终的 BigDecimal 值
     let bd = if p >= 0 {
@@ -511,6 +530,14 @@ mod tests {
                 "input: {input}"
             );
         }
+    }
+
+    #[test]
+    fn test_hex_float_below_supported_range_underflows_to_zero() {
+        let number = "0x1p-100001".parse::<PreciseNumber>().unwrap();
+
+        assert_eq!(number.number, ExtendedBigDecimal::zero());
+        assert!(!number.is_fixed_precision);
     }
 
     #[test]

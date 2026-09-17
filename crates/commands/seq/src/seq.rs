@@ -1149,6 +1149,14 @@ mod tests {
     }
 
     #[test]
+    fn test_tiny_hex_float_underflows_before_sequence_generation() {
+        let number = parse_number_arg("0x1p-100001").unwrap();
+
+        assert!(number.is_zero());
+        assert!(!number.is_fixed_precision);
+    }
+
+    #[test]
     fn test_repeated_equal_width_is_accepted() {
         let matches = ct_app()
             .try_get_matches_from(["seq", "-w", "--equal-width", "1", "3"])

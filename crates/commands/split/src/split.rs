@@ -1667,6 +1667,74 @@ impl SplitManageOutFiles for OutFiles {
     }
 }
 
+/// A sequential output writer for `-n l/N --filter`.
+///
+/// GNU split closes each filter before it starts the next logical chunk, so a
+/// non-zero child status prevents later filters from being created.
+struct SequentialFilterWriter<'a> {
+    settings: &'a SpliceSettings,
+    filenames: FilenameIterator,
+    writer: Option<BufWriter<Box<dyn Write>>>,
+    created: u64,
+}
+
+impl<'a> SequentialFilterWriter<'a> {
+    fn new(settings: &'a SpliceSettings) -> CTResult<Self> {
+        Ok(Self {
+            settings,
+            filenames: FilenameIterator::new(settings.output_prefix(), &settings.suffix)?,
+            writer: None,
+            created: 0,
+        })
+    }
+
+    fn close_current(&mut self) -> CTResult<()> {
+        drop(self.writer.take());
+        if platform::filter_failure_recorded() {
+            return Err(CtSimpleError::new(1, "filter command failed"));
+        }
+        Ok(())
+    }
+
+    fn open_next(&mut self) -> CTResult<()> {
+        self.close_current()?;
+        let filename = self
+            .filenames
+            .next()
+            .ok_or_else(|| CtSimpleError::new(1, "output file suffixes exhausted"))?;
+        if self.settings.verbose {
+            split_emit_opening_output(&filename, true)?;
+        }
+        self.writer = Some(
+            self.settings
+                .splice_instantiate_current_writer(&filename, true)?,
+        );
+        self.created += 1;
+        Ok(())
+    }
+
+    fn write_chunk(&mut self, chunk_number: u64, bytes: &[u8]) -> CTResult<()> {
+        while self.created < chunk_number {
+            self.open_next()?;
+        }
+        let writer = self
+            .writer
+            .as_mut()
+            .expect("filter writer must be open for the current chunk");
+        splice_custom_write_all(bytes, writer, self.settings)?;
+        Ok(())
+    }
+
+    fn finish(&mut self, number_chunks: u64) -> CTResult<()> {
+        if !self.settings.elide_empty_files {
+            while self.created < number_chunks {
+                self.open_next()?;
+            }
+        }
+        self.close_current()
+    }
+}
+
 /// Split a file or STDIN into a specific number of chunks by byte.
 ///
 /// When file size cannot be evenly divided into the number of chunks of the same size,
@@ -1905,6 +1973,7 @@ where
     // 准备输出：确定是写入标准输出还是多个文件
     let mut stdout_writer = split_stdout_writer();
     let mut output_files: OutFiles = OutFiles::new();
+    let mut filter_writer = None;
 
     // 计算基本块大小和余数，用于确定应写入的字节数
     let chunk_size_base = number_bytes / number_chunks;
@@ -1912,11 +1981,15 @@ where
 
     // 初始化文件输出，如果启用，则创建文件或管道
     if kth_chunk.is_none() {
-        output_files = OutFiles::init(
-            number_chunks,
-            splice_settings,
-            splice_settings.elide_empty_files,
-        )?;
+        if splice_settings.filter.is_some() {
+            filter_writer = Some(SequentialFilterWriter::new(splice_settings)?);
+        } else {
+            output_files = OutFiles::init(
+                number_chunks,
+                splice_settings,
+                splice_settings.elide_empty_files,
+            )?;
+        }
     }
 
     // 主循环：切分并写入数据
@@ -1941,9 +2014,13 @@ where
                 }
             }
             None => {
-                let idx = (chunk_number - 1) as usize;
-                let writer = output_files.get_writer(idx, splice_settings)?;
-                splice_custom_write_all(size, writer, splice_settings)?;
+                if let Some(writer) = filter_writer.as_mut() {
+                    writer.write_chunk(chunk_number, size)?;
+                } else {
+                    let idx = (chunk_number - 1) as usize;
+                    let writer = output_files.get_writer(idx, splice_settings)?;
+                    splice_custom_write_all(size, writer, splice_settings)?;
+                }
             }
         }
 
@@ -1969,6 +2046,10 @@ where
                 break;
             }
         }
+    }
+
+    if let Some(writer) = filter_writer.as_mut() {
+        writer.finish(number_chunks)?;
     }
     Ok(())
 }
@@ -2371,6 +2452,31 @@ mod tests {
 
         assert_eq!(error.code(), 42);
         assert_eq!(std::fs::read(temp.path().join("out-aa")).unwrap(), b"a");
+        assert!(!temp.path().join("out-ab").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_split_number_lines_stops_after_failed_filter() {
+        let temp = tempdir().expect("create temporary directory");
+        let input = temp.path().join("input");
+        let prefix = temp.path().join("out-");
+        std::fs::write(&input, b"a\nb\n").expect("write input");
+
+        let error = split_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--number=l/2"),
+                OsString::from("--filter=cat > \"$FILE\"; exit 42"),
+                input.into_os_string(),
+                prefix.into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect_err("a failing filter must stop split");
+
+        assert_eq!(error.code(), 42);
+        assert_eq!(std::fs::read(temp.path().join("out-aa")).unwrap(), b"a\n");
         assert!(!temp.path().join("out-ab").exists());
     }
 

@@ -423,6 +423,35 @@
         },
         {
             "command": "shuf",
+            "description": "POSIXLY_CORRECT=1、LC_ALL=C、LANG=C下执行shuf /dev/null -n 0；GNU getopt在第一个文件操作数/dev/null处停止选项解析，后续字节2d6e 30被视为额外操作数，预期RC=1、stdout为0字节。",
+            "args": [
+                "/dev/null",
+                "-n",
+                "0"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": true,
+                    "ignore_function": false
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "POSIXLY_CORRECT": "1",
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "shuf: 单个数字范围 (-i 1-1)",
             "args": [
                 "-i",

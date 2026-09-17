@@ -48,7 +48,7 @@ use rand::{Rng, RngCore};
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Error, Read, Write, stdout};
+use std::io::{BufReader, BufWriter, Error, ErrorKind, Read, Write, stdout};
 use std::ops::RangeInclusive;
 use sys_locale::get_locale;
 
@@ -363,9 +363,12 @@ impl<'a> Shufable for Vec<&'a [u8]> {
 
     // 从向量中随机选择一个元素
     fn choose(&self, rng: &mut WrappedRng) -> Self::Item {
-        // 注意：copied() 只复制引用，不复制整个字节切片
-        // 由于之前已检查非空，这里 unwrap 是安全的
-        (**self).choose(rng).unwrap()
+        let items = &**self;
+        if items.len() == 1 {
+            items[0]
+        } else {
+            items.choose(rng).unwrap()
+        }
     }
 
     // 定义部分打乱后返回的迭代器类型
@@ -380,8 +383,12 @@ impl<'a> Shufable for Vec<&'a [u8]> {
         rng: &'b mut WrappedRng,
         amount: usize,
     ) -> Self::PartialShuffleIterator<'b> {
-        // 注意：copied() 只复制引用，不复制整个字节切片
-        (**self).partial_shuffle(rng, amount).0.iter().copied()
+        let items = &mut **self;
+        let amount = amount.min(items.len());
+        if amount == 0 || items.len() == 1 {
+            return items[..amount].iter().copied();
+        }
+        items.partial_shuffle(rng, amount).0.iter().copied()
     }
 }
 
@@ -397,7 +404,11 @@ impl Shufable for RangeInclusive<usize> {
 
     // 从范围中随机选择一个数字
     fn choose(&self, rng: &mut WrappedRng) -> usize {
-        rng.gen_range(self.clone())
+        if self.start() == self.end() {
+            *self.start()
+        } else {
+            rng.gen_range(self.clone())
+        }
     }
 
     // 定义部分打乱后返回的迭代器类型
@@ -473,6 +484,10 @@ impl<'a> NonrepeatingIterator<'a> {
     /// 当范围的起始值大于结束值时会触发断言失败
     fn produce(&mut self) -> usize {
         debug_assert!(self.range.start() <= self.range.end());
+
+        if self.range.start() == self.range.end() {
+            return *self.range.start();
+        }
 
         match &mut self.buf {
             NumberSet::AlreadyListed(used_numbers) => {
@@ -633,6 +648,7 @@ fn process_repeat_mode<T: Shufable>(
 ) -> CTResult<()> {
     for _ in 0..count {
         let item = input.choose(rng);
+        rng.check_random_source()?;
         item.write_all_to(writer)?;
         writer.write_all(&[sep])?;
     }
@@ -647,7 +663,10 @@ fn process_nonrepeat_mode<T: Shufable>(
     count: usize,
     sep: u8,
 ) -> CTResult<()> {
-    for item in input.partial_shuffle(rng, count) {
+    let shuffled = input.partial_shuffle(rng, count).collect::<Vec<_>>();
+    rng.check_random_source()?;
+
+    for item in shuffled {
         item.write_all_to(writer)?;
         writer.write_all(&[sep])?;
     }
@@ -714,35 +733,54 @@ fn shuf_parse_head_count(headcounts: Vec<String>) -> Result<usize, String> {
 }
 
 enum WrappedRng {
-    RngFile(rand_read_adapter::ReadRng<File>),
+    RngFile {
+        reader: rand_read_adapter::ReadRng<File>,
+        path: String,
+        failure: Option<rand_read_adapter::ReadFailure>,
+    },
     RngDefault(rand::rngs::ThreadRng),
 }
 
 impl RngCore for WrappedRng {
     fn next_u32(&mut self) -> u32 {
-        match self {
-            Self::RngFile(r) => r.next_u32(),
-            Self::RngDefault(r) => r.next_u32(),
-        }
+        let mut bytes = [0_u8; std::mem::size_of::<u32>()];
+        self.fill_bytes(&mut bytes);
+        u32::from_le_bytes(bytes)
     }
 
     fn next_u64(&mut self) -> u64 {
-        match self {
-            Self::RngFile(r) => r.next_u64(),
-            Self::RngDefault(r) => r.next_u64(),
-        }
+        let mut bytes = [0_u8; std::mem::size_of::<u64>()];
+        self.fill_bytes(&mut bytes);
+        u64::from_le_bytes(bytes)
     }
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
         match self {
-            Self::RngFile(r) => r.fill_bytes(dest),
+            Self::RngFile {
+                reader, failure, ..
+            } => {
+                if reader.try_fill_bytes(dest).is_err() {
+                    dest.fill(0);
+                    if failure.is_none() {
+                        *failure = reader.take_last_error();
+                    }
+                }
+            }
             Self::RngDefault(r) => r.fill_bytes(dest),
         }
     }
 
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
         match self {
-            Self::RngFile(r) => r.try_fill_bytes(dest),
+            Self::RngFile {
+                reader, failure, ..
+            } => {
+                let result = reader.try_fill_bytes(dest);
+                if result.is_err() && failure.is_none() {
+                    *failure = reader.take_last_error();
+                }
+                result
+            }
             Self::RngDefault(r) => r.try_fill_bytes(dest),
         }
     }
@@ -752,7 +790,29 @@ impl WrappedRng {
     fn new_from_file(path: &str) -> CTResult<Self> {
         let file = File::open(path)
             .map_err_context(|| format!("failed to open random source {}", path.quote()))?;
-        Ok(WrappedRng::RngFile(rand_read_adapter::ReadRng::new(file)))
+        Ok(WrappedRng::RngFile {
+            reader: rand_read_adapter::ReadRng::new(file),
+            path: path.to_owned(),
+            failure: None,
+        })
+    }
+
+    fn check_random_source(&mut self) -> CTResult<()> {
+        let Self::RngFile { path, failure, .. } = self else {
+            return Ok(());
+        };
+        let Some(failure) = failure.take() else {
+            return Ok(());
+        };
+
+        let message = if failure.kind == ErrorKind::UnexpectedEof {
+            format!("{}: end of file", path.quote())
+        } else if let Some(errno) = failure.raw_os_error {
+            format!("{}: {}", path.quote(), Error::from_raw_os_error(errno))
+        } else {
+            format!("{}: {}", path.quote(), Error::from(failure.kind))
+        };
+        Err(CtSimpleError::new(1, message))
     }
 }
 
@@ -1102,6 +1162,80 @@ mod tests {
 
     mod shuf_exec_tests {
         use super::*;
+
+        #[test]
+        fn test_empty_random_source_returns_gnu_eof_error() {
+            let temp = tempdir().unwrap();
+            let random_source = temp.path().join("empty-random-source");
+            std::fs::write(&random_source, []).unwrap();
+            let settings = ShufSettings {
+                head_count: 2,
+                output: None,
+                random_source: Some(random_source.display().to_string()),
+                is_repeat: false,
+                sep: b'\n',
+            };
+            let mut input = 1..=2;
+            let mut output = Vec::new();
+
+            let error = shuf_exec_to_writer(&mut input, &settings, &mut output).unwrap_err();
+
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "{}: end of file",
+                    random_source.display().to_string().quote()
+                )
+            );
+            assert!(output.is_empty());
+        }
+
+        #[test]
+        fn test_single_input_does_not_consume_empty_random_source() {
+            let temp = tempdir().unwrap();
+            let random_source = temp.path().join("empty-random-source");
+            std::fs::write(&random_source, []).unwrap();
+            let settings = ShufSettings {
+                head_count: 1,
+                output: None,
+                random_source: Some(random_source.display().to_string()),
+                is_repeat: false,
+                sep: b'\n',
+            };
+            let mut input = 1..=1;
+            let mut output = Vec::new();
+
+            shuf_exec_to_writer(&mut input, &settings, &mut output).unwrap();
+
+            assert_eq!(output, b"1\n");
+        }
+
+        #[test]
+        fn test_multiple_input_lines_consume_empty_random_source_for_one_output() {
+            let temp = tempdir().unwrap();
+            let random_source = temp.path().join("empty-random-source");
+            std::fs::write(&random_source, []).unwrap();
+            let settings = ShufSettings {
+                head_count: 1,
+                output: None,
+                random_source: Some(random_source.display().to_string()),
+                is_repeat: false,
+                sep: b'\n',
+            };
+            let mut input = vec![b"first".as_slice(), b"second".as_slice()];
+            let mut output = Vec::new();
+
+            let error = shuf_exec_to_writer(&mut input, &settings, &mut output).unwrap_err();
+
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "{}: end of file",
+                    random_source.display().to_string().quote()
+                )
+            );
+            assert!(output.is_empty());
+        }
 
         #[test]
         fn test_shuf_exec_basic() {

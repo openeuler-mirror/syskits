@@ -502,6 +502,75 @@
         },
         {
             "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -i 1-2 --random-source=/dev/null；随机源在实际取样时立即EOF，GNU返回RC=1、stdout为空、stderr为shuf: '/dev/null': end of file加换行，不能panic。",
+            "args": [
+                "-i",
+                "1-2",
+                "--random-source=/dev/null"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: '/dev/null': end of file\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -i 1-1 --random-source=/dev/null；单一候选项无需消耗随机字节，GNU返回RC=0、stdout为1加换行、stderr为空。",
+            "args": [
+                "-i",
+                "1-1",
+                "--random-source=/dev/null"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
+            "description": "LC_ALL=C、LANG=C下执行shuf -e first second -n 1 --random-source=/dev/null；多项输入即使仅输出一项也必须取样，GNU返回RC=1、stdout为空、stderr为shuf: '/dev/null': end of file加换行。",
+            "args": [
+                "-e",
+                "first",
+                "second",
+                "-n",
+                "1",
+                "--random-source=/dev/null"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "shuf: '/dev/null': end of file\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "command": "shuf",
             "description": "shuf: 显示帮助信息 (--help)",
             "args": [
                 "--help"

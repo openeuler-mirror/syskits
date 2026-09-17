@@ -35,7 +35,7 @@
 // spell-checker:ignore (ToDO) cmdline evec nonrepeating seps shufable rvec fdata
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
@@ -46,7 +46,7 @@ use memchr::memchr_iter;
 use rand::prelude::SliceRandom;
 use rand::{Rng, RngCore};
 use std::collections::HashSet;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Error, ErrorKind, Read, Write, stdout};
 use std::ops::RangeInclusive;
@@ -56,16 +56,16 @@ mod rand_read_adapter;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ShufMode {
-    Default(String),
-    Echo(Vec<String>),
+    Default(OsString),
+    Echo(Vec<OsString>),
     InputRange(RangeInclusive<usize>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ShufSettings {
     head_count: usize,
-    output: Option<String>,
-    random_source: Option<String>,
+    output: Option<OsString>,
+    random_source: Option<OsString>,
     is_repeat: bool,
     sep: u8,
 }
@@ -133,7 +133,7 @@ pub fn shuf_main(args: impl ctcore::Args) -> CTResult<()> {
         // Do not attempt to read the random source or the input file.
         // However, we must touch the output file, if given:
         if let Some(s) = &settings.output {
-            File::create(&s[..])
+            File::create(s)
                 .map_err_context(|| format!("failed to open {} for writing", s.quote()))?;
         }
         return Ok(());
@@ -169,7 +169,7 @@ fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSet
         .cloned()
         .collect::<Vec<_>>();
     let operands = matches
-        .get_many::<String>(shuf_options::SHUF_FILE_OR_ARGS)
+        .get_many::<OsString>(shuf_options::SHUF_FILE_OR_ARGS)
         .unwrap_or_default()
         .cloned()
         .collect::<Vec<_>>();
@@ -187,7 +187,7 @@ fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSet
         if let Some(extra_operand) = operands.first() {
             return Err(CTsageError::new(
                 1,
-                format!("extra operand '{extra_operand}'"),
+                format!("extra operand {}", extra_operand.quote()),
             ));
         }
         match shuf_parse_range(range) {
@@ -197,11 +197,14 @@ fn shuf_parse_invocation(args: impl ctcore::Args) -> CTResult<(ShufMode, ShufSet
             }
         }
     } else {
-        let file = operands.first().cloned().unwrap_or("-".into());
+        let file = operands
+            .first()
+            .cloned()
+            .unwrap_or_else(|| OsString::from("-"));
         if let Some(second_file) = operands.get(1) {
             return Err(CTsageError::new(
                 1,
-                format!("unexpected argument '{second_file}' found"),
+                format!("unexpected argument {} found", second_file.quote()),
             ));
         };
         ShufMode::Default(file)
@@ -237,12 +240,14 @@ pub fn ct_app() -> Command {
             .value_name("FILE")
             .help(t!("shuf.clap.shuf_output"))
             .action(clap::ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(shuf_options::SHUF_RANDOM_SOURCE)
             .long(shuf_options::SHUF_RANDOM_SOURCE)
             .value_name("FILE")
             .help(t!("shuf.clap.shuf_random_source"))
             .action(clap::ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(shuf_options::SHUF_REPEAT)
             .short('r')
@@ -258,6 +263,7 @@ pub fn ct_app() -> Command {
             .overrides_with(shuf_options::SHUF_ZERO_TERMINATED),
         Arg::new(shuf_options::SHUF_FILE_OR_ARGS)
             .action(clap::ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
     ];
     Command::new(ctcore::ct_util_name())
@@ -279,9 +285,9 @@ pub fn ct_app() -> Command {
 /// # 错误
 /// - 文件打开失败
 /// - 读取过程中发生错误
-fn shuf_read_input_file(filename: &str) -> CTResult<Vec<u8>> {
+fn shuf_read_input_file(filename: &OsStr) -> CTResult<Vec<u8>> {
     // 创建读取器
-    let reader: Box<dyn Read> = if filename == "-" {
+    let reader: Box<dyn Read> = if filename.as_encoded_bytes() == b"-" {
         ctcore::ct_io::stdin_reader_box()
     } else {
         Box::new(
@@ -345,10 +351,14 @@ fn shuf_find_seps(data: &mut Vec<&[u8]>, sep: u8) {
     }
 }
 
-fn shuf_echo_input(args: &[String], sep: u8) -> Vec<u8> {
-    let mut input = Vec::with_capacity(args.iter().map(|arg| arg.len() + 1).sum());
+fn shuf_echo_input(args: &[OsString], sep: u8) -> Vec<u8> {
+    let mut input = Vec::with_capacity(
+        args.iter()
+            .map(|arg| arg.as_encoded_bytes().len() + 1)
+            .sum(),
+    );
     for arg in args {
-        input.extend_from_slice(arg.as_bytes());
+        input.extend_from_slice(arg.as_encoded_bytes());
         input.push(sep);
     }
     input
@@ -774,7 +784,7 @@ fn shuf_parse_head_count(headcounts: Vec<String>) -> Result<usize, String> {
 enum WrappedRng {
     RngFile {
         reader: rand_read_adapter::ReadRng<File>,
-        path: String,
+        path: OsString,
         failure: Option<rand_read_adapter::ReadFailure>,
     },
     RngDefault(rand::rngs::ThreadRng),
@@ -826,11 +836,11 @@ impl RngCore for WrappedRng {
 }
 
 impl WrappedRng {
-    fn new_from_file(path: &str) -> CTResult<Self> {
+    fn new_from_file(path: &OsStr) -> CTResult<Self> {
         let file = File::open(path).map_err_context(|| format!("{}", path.quote()))?;
         Ok(WrappedRng::RngFile {
             reader: rand_read_adapter::ReadRng::new(file),
-            path: path.to_owned(),
+            path: path.to_os_string(),
             failure: None,
         })
     }
@@ -907,15 +917,18 @@ fn shuf_repeated_path(
     matches: &clap::ArgMatches,
     option: &str,
     multiple_error: &str,
-) -> Result<Option<String>, String> {
+) -> Result<Option<OsString>, String> {
     let values = matches
-        .get_many::<String>(option)
+        .get_many::<OsString>(option)
         .unwrap_or_default()
         .collect::<Vec<_>>();
     let Some(first) = values.first() else {
         return Ok(None);
     };
-    if values.iter().any(|value| value.as_str() != first.as_str()) {
+    if values
+        .iter()
+        .any(|value| value.as_os_str() != first.as_os_str())
+    {
         return Err(multiple_error.to_string());
     }
     Ok(Some((*first).clone()))
@@ -982,7 +995,14 @@ pub fn shuf_native_semantic(args: impl ctcore::Args) -> CTResult<ShufSemantic> {
     rust_i18n::set_locale(&lang_code);
     let (mode, settings) = shuf_parse_invocation(args)?;
 
-    let output_file = settings.output.clone();
+    let output_file = settings
+        .output
+        .as_ref()
+        .map(|path| path.to_string_lossy().into_owned());
+    let random_source = settings
+        .random_source
+        .as_ref()
+        .map(|path| path.to_string_lossy().into_owned());
     let mut buffered_output = Vec::new();
 
     if settings.head_count == 0 {
@@ -1033,9 +1053,9 @@ pub fn shuf_native_semantic(args: impl ctcore::Args) -> CTResult<ShufSemantic> {
         zero_terminated: settings.sep == 0,
         separator_text: String::from_utf8_lossy(&[settings.sep]).into_owned(),
         output_file,
-        random_source: settings.random_source.clone(),
+        random_source,
         input_file: match &mode {
-            ShufMode::Default(filename) => Some(filename.clone()),
+            ShufMode::Default(filename) => Some(filename.to_string_lossy().into_owned()),
             _ => None,
         },
         range_start,
@@ -1184,8 +1204,8 @@ mod tests {
             assert_eq!(settings.head_count, 5);
             assert_eq!(settings.sep, 0x00_u8);
             assert!(settings.is_repeat);
-            assert_eq!(settings.output.as_deref(), Some("out.txt"));
-            assert_eq!(settings.random_source.as_deref(), Some("rand.txt"));
+            assert_eq!(settings.output, Some(OsString::from("out.txt")));
+            assert_eq!(settings.random_source, Some(OsString::from("rand.txt")));
         }
     }
 
@@ -1216,6 +1236,24 @@ mod tests {
             assert!(error.usage());
         }
 
+        #[cfg(unix)]
+        #[test]
+        fn test_echo_argument_accepts_non_utf8_bytes() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let raw = OsString::from_vec(vec![0xff]);
+            let (mode, settings) = shuf_parse_invocation(
+                vec![OsString::from("shuf"), OsString::from("-e"), raw].into_iter(),
+            )
+            .unwrap();
+            let ShufMode::Echo(args) = mode else {
+                panic!("expected echo mode");
+            };
+
+            assert_eq!(args[0].as_encoded_bytes(), [0xff]);
+            assert_eq!(shuf_echo_input(&args, settings.sep), vec![0xff, b'\n']);
+        }
+
         #[test]
         fn test_repeated_output_accepts_identical_path() {
             let (_, settings) = shuf_parse_invocation(parse_args(&[
@@ -1229,7 +1267,7 @@ mod tests {
             ]))
             .unwrap();
 
-            assert_eq!(settings.output.as_deref(), Some("/dev/null"));
+            assert_eq!(settings.output, Some(OsString::from("/dev/null")));
         }
 
         #[test]
@@ -1259,7 +1297,7 @@ mod tests {
             ]))
             .unwrap();
 
-            assert_eq!(settings.random_source.as_deref(), Some("/dev/zero"));
+            assert_eq!(settings.random_source, Some(OsString::from("/dev/zero")));
         }
 
         #[test]
@@ -1348,7 +1386,7 @@ mod tests {
 
         #[test]
         fn test_random_source_open_error_uses_source_path() {
-            let error = match WrappedRng::new_from_file("") {
+            let error = match WrappedRng::new_from_file(OsStr::new("")) {
                 Ok(_) => panic!("opening an empty random-source path must fail"),
                 Err(error) => error,
             };
@@ -1364,7 +1402,7 @@ mod tests {
             let settings = ShufSettings {
                 head_count: 2,
                 output: None,
-                random_source: Some(random_source.display().to_string()),
+                random_source: Some(random_source.clone().into_os_string()),
                 is_repeat: false,
                 sep: b'\n',
             };
@@ -1391,7 +1429,7 @@ mod tests {
             let settings = ShufSettings {
                 head_count: 1,
                 output: None,
-                random_source: Some(random_source.display().to_string()),
+                random_source: Some(random_source.clone().into_os_string()),
                 is_repeat: false,
                 sep: b'\n',
             };
@@ -1411,7 +1449,7 @@ mod tests {
             let settings = ShufSettings {
                 head_count: 1,
                 output: None,
-                random_source: Some(random_source.display().to_string()),
+                random_source: Some(random_source.clone().into_os_string()),
                 is_repeat: false,
                 sep: b'\n',
             };
@@ -1437,7 +1475,7 @@ mod tests {
 
             let settings = ShufSettings {
                 head_count: 3,
-                output: Some(output_path.to_str().unwrap().to_string()),
+                output: Some(output_path.into_os_string()),
                 random_source: None,
                 is_repeat: false,
                 sep: b'\n',
@@ -1576,7 +1614,7 @@ mod tests {
 
         #[test]
         fn test_echo_input_appends_separator_after_each_argument() {
-            let input = shuf_echo_input(&["a\n".to_string()], b'\n');
+            let input = shuf_echo_input(&[OsString::from("a\n")], b'\n');
             let mut lines = vec![input.as_slice()];
             shuf_find_seps(&mut lines, b'\n');
 
@@ -1616,14 +1654,14 @@ mod tests {
             let file_path = temp.path().join("test.txt");
             std::fs::write(&file_path, "test data").unwrap();
 
-            let result = shuf_read_input_file(file_path.to_str().unwrap());
+            let result = shuf_read_input_file(file_path.as_os_str());
             assert!(result.is_ok());
             assert_eq!(result.unwrap(), b"test data");
         }
 
         #[test]
         fn test_read_input_file_nonexistent() {
-            let result = shuf_read_input_file("nonexistent.txt");
+            let result = shuf_read_input_file(OsStr::new("nonexistent.txt"));
             assert!(result.is_err());
         }
     }

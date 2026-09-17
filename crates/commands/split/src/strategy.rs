@@ -299,7 +299,10 @@ impl Strategy {
             if n > 0 {
                 Ok(strategy(n))
             } else {
-                Err(error(ParseSizeError::ParseFailure(s.to_string())))
+                Err(error(ParseSizeError::ParseFailure(format!(
+                    "{}",
+                    s.quote()
+                ))))
             }
         }
         // 检查用户是否指定了超过一种策略。
@@ -335,7 +338,7 @@ impl Strategy {
                 args_match,
                 OPT_LINE_BYTES,
                 Self::LineBytes,
-                StrategyError::Bytes,
+                StrategyError::Lines,
             ),
             (None, false, false, false, true) => {
                 let s = args_match.get_one::<String>(OPT_NUMBER).unwrap();
@@ -349,8 +352,25 @@ impl Strategy {
 
 #[cfg(test)]
 mod tests {
+    use crate::ct_app;
+    use crate::strategy::Strategy;
     use crate::strategy::StrategyNumberType;
     use crate::strategy::StrategyNumberTypeError;
+
+    #[test]
+    fn test_line_bytes_zero_reports_invalid_number_of_lines() {
+        let matches = ct_app()
+            .try_get_matches_from(["split", "-C", "0"])
+            .expect("parse split arguments");
+
+        let error = match Strategy::from(&matches, &None) {
+            Err(error) => error,
+            Ok(_) => panic!("zero line bytes must be rejected"),
+        };
+
+        assert_eq!(error.to_string(), "invalid number of lines: '0'");
+    }
+
     #[test]
     fn test_number_type_from_case_1() {
         let number_type = StrategyNumberType::from("123").unwrap();

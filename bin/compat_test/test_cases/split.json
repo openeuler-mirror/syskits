@@ -1,6 +1,56 @@
 {
   "tests": [
     {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "split",
+      "description": "原始字节SHELL过滤器：LC_ALL=C、LANG=C；参数完整十六进制为2d62（-b）、31（1）、2d2d66696c7465723d636174203e20222446494c4522（--filter=cat > \"$FILE\"）、696e（输入in）和6f75742d（前缀out-）；SHELL环境变量完整字节为2e2f7368656c6c2dff（相对路径./shell-后接单字节0xff），该脚本先创建shell-used标记再执行/bin/sh；输入文件字节为78，预期RC=0、stdout/stderr均为空、shell-used存在且out-aa内容为78，证明过滤器按原始字节路径执行SHELL而非回退/bin/sh。",
+      "args": [
+        "2d62",
+        "31",
+        "2d2d66696c7465723d636174203e20222446494c4522",
+        "696e",
+        "6f75742d"
+      ],
+      "setup_commands": [
+        "printf x > in",
+        "name=$(printf 'shell-\\377'); printf '#!/bin/sh\\nprintf yes > shell-used\\nexec /bin/sh \"$@\"\\n' > \"$name\"; chmod +x \"$name\""
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        },
+        "envBytes": {
+          "SHELL": "2e2f7368656c6c2dff"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test -f shell-used && test \"$(cat out-aa)\" = x",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "name=$(printf 'shell-\\377'); rm -f in out-* shell-used \"$name\""
+      ]
+    },
+    {
       "command": "split",
       "description": "split lines: --lines=2 basic output files",
       "args": [

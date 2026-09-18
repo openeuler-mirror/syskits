@@ -130,13 +130,12 @@ impl UnixFilterWriter {
     /// * `command` - The shell command to execute
     /// * `filepath` - Path of the output file (forwarded to command as $FILE)
     fn new(command: &OsStr, filepath: &OsStr) -> Result<Self> {
-        let shell_process =
-            Command::new(env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_owned()))
-                .arg("-c")
-                .arg(command)
-                .env("FILE", filepath)
-                .stdin(Stdio::piped())
-                .spawn()?;
+        let shell_process = Command::new(filter_shell_program(env::var_os("SHELL")))
+            .arg("-c")
+            .arg(command)
+            .env("FILE", filepath)
+            .stdin(Stdio::piped())
+            .spawn()?;
 
         Ok(Self {
             shell_process,
@@ -144,6 +143,10 @@ impl UnixFilterWriter {
             command: command.to_os_string(),
         })
     }
+}
+
+fn filter_shell_program(shell: Option<OsString>) -> OsString {
+    shell.unwrap_or_else(|| OsString::from("/bin/sh"))
 }
 
 impl Drop for UnixFilterWriter {
@@ -232,6 +235,7 @@ pub fn paths_refer_to_same_file(path1: impl AsRef<OsStr>, path2: impl AsRef<OsSt
 
 #[cfg(test)]
 mod tests {
+    use super::filter_shell_program;
     use crate::SpliceSettings;
     use crate::ct_app;
     use crate::platform::instantiate_current_writer;
@@ -239,8 +243,18 @@ mod tests {
     use std::fs;
     use std::fs::File;
 
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
     use std::path::Path;
     use tempfile::Builder;
+
+    #[test]
+    fn filter_shell_program_preserves_non_utf8_environment_value() {
+        let shell = std::ffi::OsString::from_vec(b"./shell-\xff".to_vec());
+
+        let selected = filter_shell_program(Some(shell));
+
+        assert_eq!(selected.as_os_str().as_bytes(), b"./shell-\xff");
+    }
 
     fn split_test_base_dir() -> std::path::PathBuf {
         let base = std::env::temp_dir()

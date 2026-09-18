@@ -313,16 +313,10 @@ pub fn yes_exec(bytes_data: &[u8]) -> io::Result<()> {
 
     #[cfg(target_os = "linux")]
     {
-        if splice::splice_data(bytes_data, &std_output).is_ok() {
-            return Ok(());
-        } else if let Err(splice::SpliceError::Io(err)) =
-            splice::splice_data(bytes_data, &std_output)
-        {
-            return Err(err);
-        } else if let Err(splice::SpliceError::Unsupported) =
-            splice::splice_data(bytes_data, &std_output)
-        {
-            // 处理不支持的错误(do nothing)
+        match splice::splice_data(bytes_data, &std_output) {
+            Ok(()) => return Ok(()),
+            Err(splice::SpliceError::Io(error)) => return Err(error),
+            Err(splice::SpliceError::Unsupported) => {}
         }
     }
 

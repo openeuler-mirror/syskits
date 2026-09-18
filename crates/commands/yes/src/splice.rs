@@ -30,6 +30,9 @@ pub(crate) fn splice_data(bytes: &[u8], out: &impl AsRawFd) -> Result<()> {
 
     if st_mode & S_IFIFO != 0 {
         let flags = vmsplice_flags(out)?;
+        if flags.contains(SpliceFFlags::SPLICE_F_NONBLOCK) {
+            return Err(SpliceError::Unsupported);
+        }
         loop {
             let mut bytes = bytes;
             while !bytes.is_empty() {
@@ -153,6 +156,24 @@ mod tests {
             vmsplice_flags(&write_end).expect("Failed to read nonblocking pipe flags"),
             SpliceFFlags::SPLICE_F_NONBLOCK
         );
+    }
+
+    #[test]
+    fn nonblocking_output_pipe_uses_write_fallback() {
+        let (_read_end, write_end) = pipe().expect("Failed to create pipe");
+        let flags = OFlag::from_bits_truncate(
+            fcntl(write_end.as_raw_fd(), FcntlArg::F_GETFL).expect("Failed to read pipe flags"),
+        );
+        fcntl(
+            write_end.as_raw_fd(),
+            FcntlArg::F_SETFL(flags | OFlag::O_NONBLOCK),
+        )
+        .expect("Failed to set pipe nonblocking");
+
+        assert!(matches!(
+            splice_data(b"x\n", &write_end),
+            Err(SpliceError::Unsupported)
+        ));
     }
 
     #[test]

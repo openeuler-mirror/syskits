@@ -330,6 +330,31 @@
             },
             "timeout": 1,
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "yes",
+            "description": "LC_ALL=C下stdout为预填充后释放4096字节空间的非阻塞管道时，yes x写入2048行x\\n共4096字节后报告EAGAIN，新增字节通过GNU基线逐字节比较",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["78"],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "nonblocking_partial_pipe"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7965733a207374616e64617264206f75747075743a205265736f757263652074656d706f726172696c7920756e617661696c61626c650a"
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
         }
     ]
 }

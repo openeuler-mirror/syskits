@@ -99,10 +99,17 @@ impl Tool for Split {
 }
 
 pub fn split_main(args: impl ctcore::Args) -> CTResult<()> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    initialize_split_locale();
     let settings = split_parse_invocation(args)?;
     split(&settings)
+}
+
+fn initialize_split_locale() {
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -204,29 +211,7 @@ fn split_quote_path(path: &OsStr, always_quote: bool) -> String {
     #[cfg(unix)]
     {
         let bytes = path.as_bytes();
-        let mut quoted = escape_shell_bytes_with_classifier(bytes, |remaining| unsafe {
-            let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
-            let mut wide = 0 as ctcore::libc::wchar_t;
-            let length = mbrtowc(
-                &mut wide,
-                remaining.as_ptr().cast(),
-                remaining.len(),
-                &mut state,
-            );
-            if length == usize::MAX {
-                return (1, false);
-            }
-            if length == usize::MAX - 1 {
-                return (remaining.len(), false);
-            }
-
-            let length = if length == 0 { 1 } else { length };
-            let is_utf8 = std::str::from_utf8(&remaining[..length]).is_ok();
-            (
-                length,
-                is_utf8 && iswprint(wide as ctcore::libc::c_uint) != 0,
-            )
-        });
+        let mut quoted = escape_shell_bytes_with_classifier(bytes, split_classify_locale_sequence);
 
         if always_quote && quoted.as_slice() == bytes {
             quoted.insert(0, b'\'');
@@ -245,6 +230,33 @@ fn split_quote_path(path: &OsStr, always_quote: bool) -> String {
                 always_quote,
                 show_control: false,
             },
+        )
+    }
+}
+
+#[cfg(unix)]
+pub(crate) fn split_classify_locale_sequence(remaining: &[u8]) -> (usize, bool) {
+    unsafe {
+        let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
+        let mut wide = 0 as ctcore::libc::wchar_t;
+        let length = mbrtowc(
+            &mut wide,
+            remaining.as_ptr().cast(),
+            remaining.len(),
+            &mut state,
+        );
+        if length == usize::MAX {
+            return (1, false);
+        }
+        if length == usize::MAX - 1 {
+            return (remaining.len(), false);
+        }
+
+        let length = if length == 0 { 1 } else { length };
+        let is_utf8 = std::str::from_utf8(&remaining[..length]).is_ok();
+        (
+            length,
+            is_utf8 && iswprint(wide as ctcore::libc::c_uint) != 0,
         )
     }
 }
@@ -368,8 +380,7 @@ fn split_rows_from_outputs(stdout: &[u8], files: &[String]) -> Vec<SplitRow> {
 }
 
 pub fn split_native_semantic(args: impl ctcore::Args) -> CTResult<SplitSemantic> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    initialize_split_locale();
     let settings = split_parse_invocation(args)?;
     let (result, stdout, files) = split_run_with_buffered_observers(|| split(&settings));
     let classic_text = String::from_utf8_lossy(&stdout).into_owned();
@@ -11361,7 +11372,7 @@ mod tests {
         #[test]
         fn test_suffix_contains_separator_requires_usage() {
             let error = SpliceSettingsError::Suffix(FilenameSuffixError::ContainsSeparator(
-                "Suffix contains a directory separator, which is not allowed".to_string(),
+                OsString::from("Suffix contains a directory separator, which is not allowed"),
             ));
 
             assert!(error.splice_requires_usage());

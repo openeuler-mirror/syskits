@@ -49,7 +49,8 @@ pub fn locale_quote(text: &str) -> String {
     format!("{left_quote}{escaped}{right_quote}")
 }
 
-fn locale_quote_marks() -> (&'static str, &'static str) {
+/// Return the locale-sensitive opening and closing marks used by GNU diagnostics.
+pub fn locale_quote_marks() -> (&'static str, &'static str) {
     let locale = locale_name_for_ctype();
     let normalized = locale.to_ascii_uppercase();
 

@@ -43,7 +43,7 @@ use crate::{
     OPT_NUMERIC_SUFFIXES_SHORT, OPT_SUFFIX_LENGTH,
 };
 use clap::ArgMatches;
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::{Quotable, locale_quote_marks};
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use std::ffi::{OsStr, OsString};
 use std::fmt;
@@ -94,7 +94,7 @@ pub enum FilenameSuffixError {
     InvalidStartValue { value: String, hexadecimal: bool },
 
     /// Suffix contains a directory separator, which is not allowed.
-    ContainsSeparator(String),
+    ContainsSeparator(OsString),
 
     /// Suffix is not large enough to split into specified chunks
     TooSmall(usize),
@@ -118,10 +118,81 @@ impl fmt::Display for FilenameSuffixError {
             Self::ContainsSeparator(s) => write!(
                 f,
                 "invalid suffix {}, contains directory separator",
-                s.quote()
+                quote_suffix_for_diagnostic(s)
             ),
         }
     }
+}
+
+fn quote_suffix_for_diagnostic(suffix: &OsStr) -> String {
+    let bytes = suffix.as_encoded_bytes();
+    let (left_quote, right_quote) = locale_quote_marks();
+    let right_quote_bytes = right_quote.as_bytes();
+    let mut quoted = String::with_capacity(bytes.len() + left_quote.len() + right_quote.len());
+    quoted.push_str(left_quote);
+
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index..].starts_with(right_quote_bytes) {
+            quoted.push('\\');
+            quoted.push_str(right_quote);
+            index += right_quote_bytes.len();
+            continue;
+        }
+
+        let byte = bytes[index];
+        if byte.is_ascii() {
+            push_quoted_suffix_ascii(&mut quoted, byte, right_quote);
+            index += 1;
+            continue;
+        }
+
+        #[cfg(unix)]
+        let (length, printable) = crate::split_classify_locale_sequence(&bytes[index..]);
+        #[cfg(not(unix))]
+        let (length, printable) = (1, false);
+
+        if printable {
+            quoted.push_str(
+                std::str::from_utf8(&bytes[index..index + length])
+                    .expect("printable locale sequence must be valid UTF-8"),
+            );
+        } else {
+            for byte in &bytes[index..index + length] {
+                push_quoted_suffix_octal(&mut quoted, *byte);
+            }
+        }
+        index += length;
+    }
+
+    quoted.push_str(right_quote);
+    quoted
+}
+
+fn push_quoted_suffix_ascii(output: &mut String, byte: u8, right_quote: &str) {
+    match byte {
+        b'\x07' => output.push_str("\\a"),
+        b'\x08' => output.push_str("\\b"),
+        b'\t' => output.push_str("\\t"),
+        b'\n' => output.push_str("\\n"),
+        b'\x0b' => output.push_str("\\v"),
+        b'\x0c' => output.push_str("\\f"),
+        b'\r' => output.push_str("\\r"),
+        b'\\' => output.push_str("\\\\"),
+        b'\'' if right_quote == "'" => {
+            output.push('\\');
+            output.push('\'');
+        }
+        b' '..=b'~' => output.push(char::from(byte)),
+        _ => push_quoted_suffix_octal(output, byte),
+    }
+}
+
+fn push_quoted_suffix_octal(output: &mut String, byte: u8) {
+    output.push('\\');
+    output.push(char::from(b'0' + (byte >> 6)));
+    output.push(char::from(b'0' + ((byte >> 3) & 7)));
+    output.push(char::from(b'0' + (byte & 7)));
 }
 
 impl FilenameSuffix {
@@ -287,9 +358,7 @@ impl FilenameSuffix {
         // 获取额外的后缀信息，并检查其中是否包含分隔符
         let additional = Self::get_additional(args_match);
         if additional.as_encoded_bytes().contains(&b'/') {
-            return Err(FilenameSuffixError::ContainsSeparator(
-                additional.to_string_lossy().into_owned(),
-            ));
+            return Err(FilenameSuffixError::ContainsSeparator(additional));
         }
 
         // 创建并返回文件名后缀配置结果
@@ -444,6 +513,9 @@ mod tests {
     use crate::filenames::{FilenameIterator, FilenameSuffixError};
     use crate::strategy::Strategy;
     use std::ffi::OsString;
+
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStringExt;
 
     #[cfg(test)]
     mod tests {
@@ -901,29 +973,68 @@ mod tests {
 
     #[test]
     fn test_suffix_error_contains_separator_display() {
-        let error = FilenameSuffixError::ContainsSeparator("/".to_string());
+        let error = FilenameSuffixError::ContainsSeparator(OsString::from("/"));
+        let (left_quote, right_quote) = ctcore::ct_display::locale_quote_marks();
         assert_eq!(
-            "invalid suffix '/', contains directory separator",
+            format!("invalid suffix {left_quote}/{right_quote}, contains directory separator"),
             format!("{error}")
         );
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_suffix_error_contains_separator_preserves_non_utf8_bytes() {
+        let matches = ct_app()
+            .try_get_matches_from([
+                OsString::from("split"),
+                OsString::from("--additional-suffix"),
+                OsString::from_vec(b"bad-\xff/last".to_vec()),
+            ])
+            .expect("parse raw-byte suffix argument");
+
+        let error = match FilenameSuffix::from(&matches, &Strategy::Lines(1000)) {
+            Err(error) => error,
+            Ok(_) => panic!("a suffix containing a directory separator must fail"),
+        };
+        let (left_quote, right_quote) = ctcore::ct_display::locale_quote_marks();
+
+        assert_eq!(
+            format!(
+                "invalid suffix {left_quote}bad-\\377/last{right_quote}, contains directory separator"
+            ),
+            error.to_string()
+        );
+    }
+
+    #[test]
+    fn test_suffix_error_contains_separator_escapes_control_bytes() {
+        let error = FilenameSuffixError::ContainsSeparator(OsString::from("a\n/b"));
+        let (left_quote, right_quote) = ctcore::ct_display::locale_quote_marks();
+
+        assert_eq!(
+            format!("invalid suffix {left_quote}a\\n/b{right_quote}, contains directory separator"),
+            error.to_string()
+        );
+    }
+
     #[test]
     fn test_suffix_error_contains_separator_debug() {
-        let error = FilenameSuffixError::ContainsSeparator("/".to_string());
+        let error = FilenameSuffixError::ContainsSeparator(OsString::from("/"));
         assert_eq!("ContainsSeparator(\"/\")", format!("{error:?}"));
     }
     #[test]
     fn test_suffix_error_contains_separator_display_with_path() {
-        let error = FilenameSuffixError::ContainsSeparator("/".to_string());
+        let error = FilenameSuffixError::ContainsSeparator(OsString::from("/"));
+        let (left_quote, right_quote) = ctcore::ct_display::locale_quote_marks();
         assert_eq!(
-            "invalid suffix '/', contains directory separator",
+            format!("invalid suffix {left_quote}/{right_quote}, contains directory separator"),
             format!("{error}")
         );
     }
 
     #[test]
     fn test_suffix_error_contains_separator_debug_with_path() {
-        let error = FilenameSuffixError::ContainsSeparator("/".to_string());
+        let error = FilenameSuffixError::ContainsSeparator(OsString::from("/"));
         assert_eq!("ContainsSeparator(\"/\")", format!("{error:?}"));
     }
 }

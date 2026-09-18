@@ -2056,6 +2056,84 @@
       ]
     },
     {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "split",
+      "description": "原始字节错误诊断：LC_ALL=C、LANG=C；执行split --bytes=1 --additional-suffix后接完整字节6261642dff2f6c617374（bad-、0xff、/last） in out；输入in为单字节78。GNU quote将无效字节0xff按C风格保留为文本\\377，预期RC=1、stdout为0字节，stderr完整十六进制为split的invalid suffix、目录分隔符和try-help诊断。",
+      "args": [
+        "2d2d62797465733d31",
+        "2d2d6164646974696f6e616c2d737566666978",
+        "6261642dff2f6c617374",
+        "696e",
+        "6f7574"
+      ],
+      "setup_commands": [
+        "printf x > in"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "73706c69743a20696e76616c69642073756666697820276261642d5c3337372f6c617374272c20636f6e7461696e73206469726563746f727920736570617261746f720a547279202773706c6974202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in out*"
+      ]
+    },
+    {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "split",
+      "description": "原始字节错误诊断：LC_ALL=C、LANG=C；执行split --bytes=1 --additional-suffix后接完整字节6261642dc3a92f6c617374（bad-、UTF-8字节c3a9、/last） in out；输入in为单字节78。C locale 将每个非 ASCII 字节分别转义为文本\\303\\251，预期RC=1、stdout为0字节，stderr完整十六进制为split的invalid suffix、目录分隔符和try-help诊断。",
+      "args": [
+        "2d2d62797465733d31",
+        "2d2d6164646974696f6e616c2d737566666978",
+        "6261642dc3a92f6c617374",
+        "696e",
+        "6f7574"
+      ],
+      "setup_commands": [
+        "printf x > in"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "73706c69743a20696e76616c69642073756666697820276261642d5c3330335c3235312f6c617374272c20636f6e7461696e73206469726563746f727920736570617261746f720a547279202773706c6974202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in out*"
+      ]
+    },
+    {
       "command": "split",
       "description": "split --filter reports GNU signal name and exit status",
       "args": [

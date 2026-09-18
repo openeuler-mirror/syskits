@@ -2199,6 +2199,44 @@
     },
     {
       "command": "split",
+      "description": "split --number=r processes filters lazily after the first failure",
+      "args": [
+        "--number=r/2",
+        "--filter=cat > \"$FILE\"; exit 42",
+        "in",
+        "out-"
+      ],
+      "setup_commands": [
+        "printf 'a\\n' > in",
+        "printf 'a\\n' > expected-aa"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 42,
+          "stdout": "",
+          "stderr": "split: with FILE=out-aa, exit 42 from command: cat > \"$FILE\"; exit 42\n"
+        },
+        "verifications": [
+          {
+            "command": "cmp -s expected-aa out-aa && test ! -e out-ab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in expected-aa out-*"
+      ]
+    },
+    {
+      "command": "split",
       "description": "split should not overwrite input file",
       "args": [
         "-C",

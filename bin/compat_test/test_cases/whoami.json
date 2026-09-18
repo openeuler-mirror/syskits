@@ -209,6 +209,31 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "whoami",
+            "description": "LC_ALL=C下调用方保留默认SIGPIPE且stdout连接无读端管道；GNU whoami在首次写入时被SIGPIPE终止，预期RC=141且无stdout和stderr",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": [],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "default",
+                    "useBash": true
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

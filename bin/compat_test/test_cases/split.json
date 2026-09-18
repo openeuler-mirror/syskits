@@ -4039,6 +4039,18 @@
     },
     {
       "command": "split",
+      "description": "未终止末记录的行N块分片：LC_ALL=C、LANG=C；输入in仅含字节a，执行split -a 1 -n l/3 in out-。GNU lines_chunk_split 在EOF处停止零大小分片阈值推进，再补齐请求的三个输出；预期RC=0、out-a为a、out-b和out-c为空，且不得创建out-d。",
+      "args": ["-a", "1", "-n", "l/3", "in", "out-"],
+      "setup_commands": ["printf a > in", "printf a > expected-a", ": > expected-empty"],
+      "environment": {"env_vars": {"LC_ALL": "C", "LANG": "C"}},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""},
+        "verifications": [{"command": "cmp -s expected-a out-a && cmp -s expected-empty out-b && cmp -s expected-empty out-c && test ! -e out-d", "expected_exit": 0, "expected_stdout": null, "expected_stderr": null}]
+      },
+      "cleanup_commands": ["rm -f in expected-a expected-empty out-a out-b out-c out-d"]
+    },
+    {
+      "command": "split",
       "description": "零大小尾分片：LC_ALL=C、LANG=C；输入为两个换行，执行split -a 1 -n l/3 in out-。GNU lines_chunk_split在余数字节耗尽后继续推进零大小分片，创建out-a至out-z后因后缀耗尽返回RC=1；预期a和b各含一个换行、其余文件为空，stderr为output file suffixes exhausted。",
       "args": ["-a", "1", "-n", "l/3", "in", "out-"],
       "setup_commands": ["printf '\\n\\n' > in"],

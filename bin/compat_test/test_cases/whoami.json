@@ -234,6 +234,47 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "whoami",
+            "description": "LC_ALL=zh_CN.UTF-8下传入含双引号的操作数；GNU使用中文extra operand和try-help诊断，并以ASCII双引号转义操作数字节",
+            "setup_commands": [
+                "export LC_ALL='zh_CN.UTF-8'",
+                "export LANG='zh_CN.UTF-8'"
+            ],
+            "args": ["a\"b"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "whoami: 多余的操作对象 \"a\\\"b\"\n请尝试执行 \"whoami --help\" 来获取更多信息。\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "whoami",
+            "description": "LC_ALL=zh_CN.UTF-8下stdout连接/dev/full；GNU将write error翻译为中文且保留ENOSPC文本",
+            "setup_commands": [
+                "export LC_ALL='zh_CN.UTF-8'",
+                "export LANG='zh_CN.UTF-8'"
+            ],
+            "args": [],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "full"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "whoami: 写入错误: No space left on device\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -2,6 +2,34 @@
   "tests": [
     {
       "command": "split",
+      "description": "输出文件父目录不存在：LC_ALL=C、LANG=C；输入in为单字节x，执行split -b 1 in missing/out-，missing目录不存在。GNU create保留open的ENOENT并以生成的目标名missing/out-aa为上下文，预期RC=1、stdout为空、stderr为split: missing/out-aa: No such file or directory加换行。",
+      "args": ["-b", "1", "in", "missing/out-"],
+      "setup_commands": ["printf x > in"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "LANG": "C"},
+        "standardStreams": {"stderr": "capture"}
+      },
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": "split: missing/out-aa: No such file or directory\n"}
+      },
+      "cleanup_commands": ["rm -f in"]
+    },
+    {
+      "command": "split",
+      "description": "输出文件名是目录：LC_ALL=C、LANG=C；输入in为单字节x，预先创建目录out-aa，执行split -b 1 in out-。GNU create保留open的EISDIR并以生成的目标名out-aa为上下文，预期RC=1、stdout为空、stderr为split: out-aa: Is a directory加换行。",
+      "args": ["-b", "1", "in", "out-"],
+      "setup_commands": ["printf x > in", "mkdir out-aa"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "LANG": "C"},
+        "standardStreams": {"stderr": "capture"}
+      },
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": "split: out-aa: Is a directory\n"}
+      },
+      "cleanup_commands": ["rm -f in", "rmdir out-aa"]
+    },
+    {
+      "command": "split",
       "description": "按字节输出关闭失败：LC_ALL=C、LANG=C；输入in为a、换行、b、换行，out-aa预先链接到/dev/full；执行split -b 99 in out-，所有数据停留在用户态缓冲区直到关闭。GNU closeout检查关闭写失败，预期RC=1、stdout为空、stderr为split: out-aa: No space left on device加换行。",
       "args": ["-b", "99", "in", "out-"],
       "setup_commands": ["printf 'a\\nb\\n' > in", "ln -s /dev/full out-aa"],

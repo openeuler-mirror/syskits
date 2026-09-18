@@ -17,9 +17,10 @@ use std::error::Error;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::ct_println_verbatim;
-use ctcore::ct_error::{CTError, CTResult, FromIo};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, strip_errno};
 use std::ffi::{OsStr, OsString};
 use std::fmt::{Display, Formatter};
+use std::io;
 use sys_locale::get_locale;
 
 mod platform;
@@ -31,11 +32,35 @@ pub fn whoami_main(args: impl ctcore::Args) -> CTResult<String> {
 
     ct_app().try_get_matches_from(prepare_whoami_args(args)?)?;
     let username = whoami_exec()?;
-    ct_println_verbatim(username.clone())
-        .map_err_context(|| t!("whoami.errors.failed_print_username"))?;
+    write_whoami_username(&username)
+        .map_err(|error| CtSimpleError::new(1, whoami_write_error_message(&error)))?;
 
     let result = username.into_string().unwrap();
     Ok(result)
+}
+
+fn write_whoami_username(username: &OsStr) -> io::Result<()> {
+    if let Some(error) = whoami_closed_stdout_error(ctcore::ct_stdout_was_closed()) {
+        return Err(error);
+    }
+    ct_println_verbatim(username)
+}
+
+fn whoami_write_error_message(error: &io::Error) -> String {
+    format!("write error: {}", strip_errno(error))
+}
+
+fn whoami_closed_stdout_error(stdout_was_closed: bool) -> Option<io::Error> {
+    #[cfg(unix)]
+    {
+        stdout_was_closed.then(|| io::Error::from_raw_os_error(libc::EBADF))
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = stdout_was_closed;
+        None
+    }
 }
 
 const WHOAMI_LONG_OPTIONS: &[&str] = &["help", "version"];
@@ -638,5 +663,30 @@ mod tests {
             error.diagnostic_bytes().as_ref(),
             b"unrecognized option '--\xff'"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn whoami_write_errors_use_gnu_diagnostic_text() {
+        assert_eq!(
+            whoami_write_error_message(&io::Error::from_raw_os_error(libc::ENOSPC)),
+            "write error: No space left on device"
+        );
+        assert_eq!(
+            whoami_write_error_message(&io::Error::from_raw_os_error(libc::EPIPE)),
+            "write error: Broken pipe"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn whoami_closed_stdout_is_reported_as_ebadf() {
+        assert_eq!(
+            whoami_closed_stdout_error(true)
+                .expect("a closed stdout requires an error")
+                .raw_os_error(),
+            Some(libc::EBADF)
+        );
+        assert!(whoami_closed_stdout_error(false).is_none());
     }
 }

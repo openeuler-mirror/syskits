@@ -138,6 +138,77 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "whoami",
+            "description": "LC_ALL=C下stdout连接/dev/full；GNU close_stdout报告write error及ENOSPC文本，预期RC=1且stdout为空",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": [],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "full"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "whoami: write error: No space left on device\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "whoami",
+            "description": "LC_ALL=C下启动前关闭stdout；GNU whoami保留关闭描述符的EBADF语义，预期RC=1且stderr为write error: Bad file descriptor",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": [],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "whoami: write error: Bad file descriptor\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "whoami",
+            "description": "LC_ALL=C下调用方忽略SIGPIPE且stdout连接无读端管道；GNU将EPIPE转换为write error: Broken pipe，预期RC=1",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": [],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "ignore",
+                    "useBash": true
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "whoami: write error: Broken pipe\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

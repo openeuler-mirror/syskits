@@ -355,11 +355,15 @@ impl FilenameSuffix {
                 auto_widening = false;
 
                 if length < required_length {
-                    length = required_length;
+                    length = if length == 0 {
+                        default_length.max(required_length)
+                    } else {
+                        required_length
+                    };
                 }
             }
 
-            if length < required_length {
+            if length > 0 && length < required_length {
                 return Err(FilenameSuffixError::TooSmall(required_length));
             }
         }
@@ -900,6 +904,37 @@ mod tests {
         let strategy = Strategy::from(&matches, &None).expect("parse byte strategy");
 
         assert!(FilenameSuffix::from(&matches, &strategy).is_ok());
+    }
+
+    #[test]
+    fn test_zero_suffix_length_uses_default_before_number_width_validation() {
+        let matches = ct_app()
+            .try_get_matches_from(["split", "-a", "0", "--numeric-suffixes=9", "-n", "3"])
+            .expect("parse split arguments");
+        let strategy = Strategy::from(&matches, &None).expect("parse number strategy");
+        let suffix = FilenameSuffix::from(&matches, &strategy)
+            .expect("zero suffix length must use the default width");
+        let mut files = FilenameIterator::new("out-", &suffix).unwrap();
+
+        assert_eq!(suffix.length, 2);
+        assert_eq!(files.next().unwrap(), "out-09");
+        assert_eq!(files.next().unwrap(), "out-10");
+        assert_eq!(files.next().unwrap(), "out-11");
+    }
+
+    #[test]
+    fn test_zero_suffix_length_keeps_default_when_auto_width_needs_one_digit() {
+        let matches = ct_app()
+            .try_get_matches_from(["split", "-a", "0", "--numeric-suffixes=1", "-n", "2"])
+            .expect("parse split arguments");
+        let strategy = Strategy::from(&matches, &None).expect("parse number strategy");
+        let suffix = FilenameSuffix::from(&matches, &strategy)
+            .expect("zero suffix length must retain the default minimum width");
+        let mut files = FilenameIterator::new("out-", &suffix).unwrap();
+
+        assert_eq!(suffix.length, 2);
+        assert_eq!(files.next().unwrap(), "out-01");
+        assert_eq!(files.next().unwrap(), "out-02");
     }
 
     #[test]

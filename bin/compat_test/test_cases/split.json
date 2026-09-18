@@ -656,6 +656,57 @@
       ]
     },
     {
+      "command": "split",
+      "description": "split --lines moves an unterminated final record after a full chunk",
+      "args": [
+        "--lines=1",
+        "in",
+        "out-"
+      ],
+      "setup_commands": [
+        "printf 'a\\nb\\nc' > in",
+        "printf 'a\\n' > expected-aa",
+        "printf 'b\\n' > expected-ab",
+        "printf c > expected-ac"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s expected-aa out-aa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s expected-ab out-ab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s expected-ac out-ac && test ! -e out-ad",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in expected-aa expected-ab expected-ac out-*"
+      ]
+    },
+    {
       "byteMode": true,
       "tstdin": "",
       "command": "split",

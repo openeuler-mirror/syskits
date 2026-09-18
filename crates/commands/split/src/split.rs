@@ -2339,6 +2339,7 @@ fn split(splice_settings: &SpliceSettings) -> CTResult<()> {
     // Clear the per-invocation state so repeated in-process calls do not
     // inherit a prior filter failure.
     platform::reset_filter_failure();
+    platform::reset_output_failure();
 
     // 根据输入源创建一个读取器
     let read_box = if splice_settings.input_path() == OsStr::new("-") {
@@ -2422,6 +2423,9 @@ fn split(splice_settings: &SpliceSettings) -> CTResult<()> {
     };
 
     if let Some(error) = platform::take_filter_failure() {
+        return Err(error);
+    }
+    if let Some(error) = platform::take_output_failure() {
         return Err(error);
     }
 

@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 use crate::split_quote_path;
+use ctcore::ct_error::CTError;
 use ctcore::ct_fs;
 use std::ffi::{OsStr, OsString};
 use std::io::Write;
@@ -21,7 +22,13 @@ pub fn filter_failure_recorded() -> bool {
     false
 }
 
-pub fn take_filter_failure() -> Option<(i32, String)> {
+pub fn take_filter_failure() -> Option<Box<dyn CTError>> {
+    None
+}
+
+pub fn reset_output_failure() {}
+
+pub fn take_output_failure() -> Option<Box<dyn CTError>> {
     None
 }
 

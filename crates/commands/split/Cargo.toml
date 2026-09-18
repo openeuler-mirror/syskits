@@ -20,9 +20,9 @@ rust-i18n = { workspace = true }
 clap = { workspace = true }
 memchr = { workspace = true }
 ctcore = { workspace = true, features = ["fs"] }
+tempfile = { workspace = true }
 
 [dev-dependencies]
-tempfile = { workspace = true }
 
 [[bin]]
 name = "split"

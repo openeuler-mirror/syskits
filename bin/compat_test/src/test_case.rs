@@ -87,6 +87,8 @@ pub enum InputStream {
     Pipe,
     /// 在启动被测命令前关闭标准输入描述符。
     Closed,
+    /// 保持标准输入管道的写端打开但不写入数据，用于验证命令等待输入时的输出端处理。
+    OpenPipe,
 }
 
 /// 子进程执行时的 SIGPIPE 处置方式。
@@ -471,7 +473,7 @@ mod tests {
               "standardStreams": {
                 "stdinFile": "input.fixture",
                 "stdinOffset": 7,
-                "stdin": "closed",
+                "stdin": "open_pipe",
                 "stdout": "closed_pipe",
                 "stderr": "tty",
                 "sigpipe": "ignore",
@@ -491,7 +493,7 @@ mod tests {
         assert_eq!(streams.stdout, OutputStream::ClosedPipe);
         assert_eq!(streams.stderr, OutputStream::Tty);
         assert_eq!(streams.sigpipe, SignalDisposition::Ignore);
-        assert_eq!(streams.stdin, InputStream::Closed);
+        assert_eq!(streams.stdin, InputStream::OpenPipe);
         assert_eq!(streams.stdin_file.as_deref(), Some("input.fixture"));
         assert_eq!(streams.stdin_offset, Some(7));
         assert!(streams.use_bash);

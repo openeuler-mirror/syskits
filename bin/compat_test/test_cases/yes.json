@@ -150,6 +150,31 @@
             },
             "timeout": 1,
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "yes",
+            "description": "POSIXLY_CORRECT下首个字符串后的--version是输出内容而不是版本选项",
+            "args": ["alpha", "--version"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "POSIXLY_CORRECT": "1"
+                },
+                "standardStreams": {
+                    "stdout": "null"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 137,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
         }
     ]
 }

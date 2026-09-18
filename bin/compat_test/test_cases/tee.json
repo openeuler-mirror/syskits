@@ -386,6 +386,52 @@
           "cleanup_commands": []
       },
       {
+          "tstdin": "",
+          "command": "tee",
+          "description": "启动前stdin关闭且FILE引用/proc/self/fd/0时，tee应先报告FILE不存在，再保留stdin的GNU读取和关闭诊断",
+          "setup_commands": [
+              "export LC_ALL='C'",
+              "export LANG='C'"
+          ],
+          "args": ["/proc/self/fd/0"],
+          "expectation": {
+              "execution": {
+                  "exit_code": 1,
+                  "stdout": "",
+                  "stderr": "tee: /proc/self/fd/0: No such file or directory\ntee: read error: Bad file descriptor\ntee: standard input: Bad file descriptor\n"
+              }
+          },
+          "environment": {
+              "standardStreams": {
+                  "stdin": "closed"
+              }
+          },
+          "cleanup_commands": []
+      },
+      {
+          "tstdin": "x",
+          "command": "tee",
+          "description": "启动前stderr关闭且FILE引用/proc/self/fd/2时，FILE打开失败诊断不可见但退出状态仍应为失败",
+          "setup_commands": [
+              "export LC_ALL='C'",
+              "export LANG='C'"
+          ],
+          "args": ["/proc/self/fd/2"],
+          "expectation": {
+              "execution": {
+                  "exit_code": 1,
+                  "stdout": "x",
+                  "stderr": ""
+              }
+          },
+          "environment": {
+              "standardStreams": {
+                  "stderr": "closed"
+              }
+          },
+          "cleanup_commands": []
+      },
+      {
           "tstdin": "78",
           "command": "tee",
           "description": "原始字节用例：LC_ALL=C、LANG=C下执行tee tee-\\xff-output；参数完整十六进制=7465652dff6f7574707574；stdin为1字节、完整十六进制=78；输入fixture：无文件fixture；预期RC=0，stderr为0字节、完整十六进制=空，stdout为1字节、完整十六进制=78，确认Linux非UTF-8输出文件名可直接创建并写入。",

@@ -698,7 +698,7 @@ fn open(
 ) -> Result<Option<Box<dyn Write>>> {
     let name = name.as_ref();
     let path = PathBuf::from(name);
-    let result = if output_path_references_closed_stdout(&path) {
+    let result = if output_path_references_closed_standard_fd(&path) {
         Err(Error::from_raw_os_error(nix::libc::ENOENT))
     } else {
         let mut options = OpenOptions::new();
@@ -724,13 +724,17 @@ fn open(
 }
 
 #[cfg(target_os = "linux")]
-fn output_path_references_closed_stdout(path: &Path) -> bool {
-    ctcore::ct_stdout_was_closed()
-        && path_references_current_process_fd(path, nix::libc::STDOUT_FILENO)
+fn output_path_references_closed_standard_fd(path: &Path) -> bool {
+    (ctcore::ct_stdin_was_closed()
+        && path_references_current_process_fd(path, nix::libc::STDIN_FILENO))
+        || (ctcore::ct_stdout_was_closed()
+            && path_references_current_process_fd(path, nix::libc::STDOUT_FILENO))
+        || (ctcore::ct_stderr_was_closed()
+            && path_references_current_process_fd(path, nix::libc::STDERR_FILENO))
 }
 
 #[cfg(not(target_os = "linux"))]
-fn output_path_references_closed_stdout(_path: &Path) -> bool {
+fn output_path_references_closed_standard_fd(_path: &Path) -> bool {
     false
 }
 
@@ -1183,6 +1187,14 @@ mod tests {
         assert!(path_references_current_process_fd(
             Path::new("/dev/fd/1"),
             nix::libc::STDOUT_FILENO
+        ));
+        assert!(path_references_current_process_fd(
+            Path::new("/proc/self/fd/0"),
+            nix::libc::STDIN_FILENO
+        ));
+        assert!(path_references_current_process_fd(
+            Path::new("/proc/self/fd/2"),
+            nix::libc::STDERR_FILENO
         ));
         assert!(!path_references_current_process_fd(
             Path::new("/proc/self/fd/1"),

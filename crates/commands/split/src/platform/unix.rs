@@ -99,6 +99,14 @@ fn clone_io_error(error: &Error) -> Error {
     }
 }
 
+fn output_open_error(file_name: &OsStr, error: &Error) -> Error {
+    Error::other(format!(
+        "{}: {}",
+        split_quote_path(file_name, false),
+        strip_errno(error)
+    ))
+}
+
 pub fn reset_filter_failure() {
     FILTER_FAILURE.with(|slot| {
         *slot.borrow_mut() = None;
@@ -358,23 +366,13 @@ pub fn instantiate_current_writer(
                     .create(true)
                     .truncate(true)
                     .open(std::path::Path::new(file_name))
-                    .map_err(|_| {
-                        Error::other(format!(
-                            "unable to open '{}'; aborting",
-                            split_quote_path(file_name, false)
-                        ))
-                    })?
+                    .map_err(|error| output_open_error(file_name, &error))?
             } else {
                 // 重新打开之前创建的文件以便追加写入
                 std::fs::OpenOptions::new()
                     .append(true)
                     .open(std::path::Path::new(file_name))
-                    .map_err(|_| {
-                        Error::other(format!(
-                            "unable to re-open '{}'; aborting",
-                            split_quote_path(file_name, false)
-                        ))
-                    })?
+                    .map_err(|error| output_open_error(file_name, &error))?
             };
             Ok(BufWriter::new(Box::new(OutputFileWriter {
                 inner: file,
@@ -493,6 +491,39 @@ mod tests {
         assert_eq!(
             error.diagnostic_bytes().as_ref(),
             b"out-aa: No space left on device"
+        );
+    }
+
+    #[test]
+    fn output_open_error_keeps_filename_and_errno() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file_name = temp_dir.path().join("missing").join("out-aa");
+
+        let error = match instantiate_current_writer(&None, file_name.as_os_str(), true) {
+            Ok(_) => panic!("missing parent must fail"),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error.to_string(),
+            format!("{}: No such file or directory", file_name.display())
+        );
+    }
+
+    #[test]
+    fn output_open_directory_error_keeps_filename_and_errno() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file_name = temp_dir.path().join("out-aa");
+        fs::create_dir(&file_name).unwrap();
+
+        let error = match instantiate_current_writer(&None, file_name.as_os_str(), true) {
+            Ok(_) => panic!("directory output must fail"),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error.to_string(),
+            format!("{}: Is a directory", file_name.display())
         );
     }
 

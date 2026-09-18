@@ -16,7 +16,7 @@ use std::io::{self, Write};
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser, crate_version};
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, CtSimpleError, strip_errno};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, strip_errno};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 #[cfg(unix)]
 use ctcore::ct_signals::enable_pipe_errors;
@@ -54,7 +54,7 @@ pub fn yes_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
-    let matches = ct_app().try_get_matches_from(args)?;
+    let matches = ct_app().try_get_matches_from(yes_prepare_args(args)?)?;
 
     let mut buff = Vec::with_capacity(YES_BUF_SIZE);
     yes_args_into_buff(&mut buff, matches.get_many::<OsString>("STRING")).unwrap();
@@ -77,6 +77,75 @@ pub fn yes_main(args: impl ctcore::Args) -> CTResult<()> {
 
 fn yes_standard_output_error_message(error: &io::Error) -> String {
     format!("standard output: {}", strip_errno(error))
+}
+
+const YES_LONG_OPTIONS: &[&str] = &["help", "version"];
+const YES_SHORT_EXTENSIONS: &[u8] = b"hV";
+
+fn yes_prepare_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
+    yes_prepare_args_with_mode(args, ctcore::ct_posix::posixly_correct())
+}
+
+fn yes_prepare_args_with_mode(
+    args: impl ctcore::Args,
+    posixly_correct: bool,
+) -> CTResult<Vec<OsString>> {
+    let args = args.collect::<Vec<_>>();
+    for argument in args.iter().skip(1) {
+        let bytes = argument.as_encoded_bytes();
+        if bytes == b"--" {
+            break;
+        }
+        if bytes.len() <= 1 || bytes[0] != b'-' {
+            if posixly_correct {
+                break;
+            }
+            continue;
+        }
+
+        if bytes.starts_with(b"--") {
+            let long = &bytes[2..];
+            let name = &long[..long
+                .iter()
+                .position(|byte| *byte == b'=')
+                .unwrap_or(long.len())];
+            if yes_match_long_option(name).is_none() {
+                return Err(CTsageError::new(
+                    1,
+                    format!("unrecognized option '{}'", String::from_utf8_lossy(bytes)),
+                ));
+            }
+            return Ok(args);
+        }
+
+        let option = bytes[1];
+        if YES_SHORT_EXTENSIONS.contains(&option) {
+            return Ok(args);
+        }
+        return Err(CTsageError::new(
+            1,
+            format!("invalid option -- '{}'", char::from(option)),
+        ));
+    }
+    Ok(args)
+}
+
+fn yes_match_long_option(name: &[u8]) -> Option<&'static str> {
+    YES_LONG_OPTIONS
+        .iter()
+        .copied()
+        .find(|option| option.as_bytes() == name)
+        .or_else(|| {
+            let matches = YES_LONG_OPTIONS
+                .iter()
+                .copied()
+                .filter(|option| option.as_bytes().starts_with(name))
+                .collect::<Vec<_>>();
+            match matches.as_slice() {
+                [option] => Some(*option),
+                _ => None,
+            }
+        })
 }
 
 pub fn ct_app() -> Command {
@@ -294,6 +363,30 @@ mod tests {
                 std::ffi::OsStr::new("--version")
             ]
         );
+    }
+
+    #[test]
+    fn gnu_unknown_options_use_coreutils_diagnostics() {
+        for (argument, expected) in [
+            ("--unknown", "unrecognized option '--unknown'"),
+            ("-x", "invalid option -- 'x'"),
+        ] {
+            let error = yes_prepare_args_with_mode(
+                [OsString::from("yes"), OsString::from(argument)].into_iter(),
+                false,
+            )
+            .expect_err("unknown GNU option must fail before Clap parsing");
+
+            assert_eq!(error.to_string(), expected);
+            assert!(error.usage());
+        }
+    }
+
+    #[test]
+    fn long_option_matching_requires_exactly_one_candidate() {
+        assert_eq!(yes_match_long_option(b"hel"), Some("help"));
+        assert_eq!(yes_match_long_option(b"unknown"), None);
+        assert_eq!(yes_match_long_option(b""), None);
     }
 
     #[test]

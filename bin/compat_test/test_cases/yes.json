@@ -175,6 +175,44 @@
             },
             "timeout": 1,
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "yes",
+            "description": "LC_ALL=C下未知长选项使用GNU unrecognized option诊断",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["--unknown"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "yes: unrecognized option '--unknown'\nTry 'yes --help' for more information.\n"
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "yes",
+            "description": "LC_ALL=C下未知短选项使用GNU invalid option诊断",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["-x"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "yes: invalid option -- 'x'\nTry 'yes --help' for more information.\n"
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
         }
     ]
 }

@@ -4218,6 +4218,62 @@
       "cleanup_commands": [
         "rm -rf input out-aa out-ab"
       ]
+    },
+    {
+      "command": "split",
+      "description": "字节N块文件大小诊断：LC_ALL=C、LANG=C；输入input为目录，执行split --number=2 input out-。GNU在按文件大小分片前检测初始读取失败；预期RC=1、stdout为空、stderr为input cannot determine file size并保留Is a directory原因。",
+      "args": [
+        "--number=2",
+        "input",
+        "out-"
+      ],
+      "setup_commands": [
+        "mkdir input"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "split: input: cannot determine file size: Is a directory\n"
+        }
+      },
+      "cleanup_commands": [
+        "rmdir input"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "行边界N块文件大小诊断：LC_ALL=C、LANG=C；输入input为目录，执行split --number=l/2 input out-。GNU在按行边界分片前检测初始读取失败；预期RC=1、stdout为空、stderr为input cannot determine file size并保留Is a directory原因。",
+      "args": [
+        "--number=l/2",
+        "input",
+        "out-"
+      ],
+      "setup_commands": [
+        "mkdir input"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "split: input: cannot determine file size: Is a directory\n"
+        }
+      },
+      "cleanup_commands": [
+        "rmdir input"
+      ]
     }
   ]
 }

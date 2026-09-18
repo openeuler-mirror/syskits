@@ -2020,7 +2020,13 @@ where
         initial_buffer,
         &splice_settings.io_blksize,
         known_input_size,
-    )?;
+    )
+    .map_err_context(|| {
+        format!(
+            "{}: cannot determine file size",
+            split_quote_path(splice_settings.input_path(), false)
+        )
+    })?;
     let mut reader = initial_buffer.chain(reader);
 
     // 如果输入文件为空，并且我们无法在 Kth 块 of N 块模式中确定第 K 块，那么立即终止
@@ -2209,7 +2215,13 @@ where
         initial_buffer,
         &splice_settings.io_blksize,
         known_input_size,
-    )?;
+    )
+    .map_err_context(|| {
+        format!(
+            "{}: cannot determine file size",
+            split_quote_path(splice_settings.input_path(), false)
+        )
+    })?;
     let reader_buffer = initial_buffer.chain(splice_reader);
 
     // 处理输入为空的情况
@@ -2676,6 +2688,58 @@ mod tests {
         assert_eq!(
             error.to_string(),
             format!("{}: Is a directory", input.display())
+        );
+    }
+
+    #[test]
+    fn number_bytes_reports_input_file_size_error() {
+        let temp = tempdir().expect("create temporary directory");
+        let input = temp.path().join("input");
+        std::fs::create_dir(&input).expect("create input directory");
+
+        let error = split_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--number=2"),
+                input.clone().into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect_err("a directory has no usable input size");
+
+        assert_eq!(error.code(), 1);
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "{}: cannot determine file size: Is a directory",
+                input.display()
+            )
+        );
+    }
+
+    #[test]
+    fn number_lines_reports_input_file_size_error() {
+        let temp = tempdir().expect("create temporary directory");
+        let input = temp.path().join("input");
+        std::fs::create_dir(&input).expect("create input directory");
+
+        let error = split_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--number=l/2"),
+                input.clone().into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect_err("a directory has no usable input size");
+
+        assert_eq!(error.code(), 1);
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "{}: cannot determine file size: Is a directory",
+                input.display()
+            )
         );
     }
     use std::collections::BTreeMap;

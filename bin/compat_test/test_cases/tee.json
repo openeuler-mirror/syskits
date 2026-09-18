@@ -65,6 +65,28 @@
           "cleanup_commands": ["rm -f test_file.txt"]
       },
       {
+          "tstdin": "Append this text.\n",
+          "command": "tee",
+          "description": "重复-a按GNU getopt语义生效，仍只执行一次追加写入",
+          "setup_commands": [
+              "echo 'Initial content.' > repeated_append.txt"
+          ],
+          "args": ["-a", "-a", "repeated_append.txt"],
+          "expectation": {
+              "execution": {
+                  "exit_code": 0,
+                  "stdout": "Append this text.\n",
+                  "stderr": ""
+              },
+              "file_checks": {
+                  "repeated_append.txt": {
+                      "content": "Initial content.\nAppend this text.\n"
+                  }
+              }
+          },
+          "cleanup_commands": ["rm -f repeated_append.txt"]
+      },
+      {
           "tstdin": "Write to multiple files.\n",
           "command": "tee",
           "description": "将输入写入多个文件",

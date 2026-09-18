@@ -126,6 +126,30 @@
             },
             "timeout": 1,
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "yes",
+            "description": "LC_ALL=C下stdout为写满的非阻塞管道时，GNU yes以EAGAIN报告standard output并立即失败",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["x"],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "nonblocking_full_pipe"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "yes: standard output: Resource temporarily unavailable\\n"
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
         }
     ]
 }

@@ -19,7 +19,7 @@
 use std::io::IoSlice;
 use std::{io, os::unix::io::AsRawFd};
 
-use nix::fcntl::SpliceFFlags;
+use nix::fcntl::{FcntlArg, OFlag, SpliceFFlags, fcntl};
 use nix::{errno::Errno, libc::S_IFIFO, sys::stat::fstat};
 
 use ctcore::ct_pipes::{pipe, splice_exact};
@@ -29,15 +29,12 @@ pub(crate) fn splice_data(bytes: &[u8], out: &impl AsRawFd) -> Result<()> {
     let st_mode = fstat_result.st_mode as nix::libc::mode_t;
 
     if st_mode & S_IFIFO != 0 {
+        let flags = vmsplice_flags(out)?;
         loop {
             let mut bytes = bytes;
             while !bytes.is_empty() {
-                let len = nix::fcntl::vmsplice(
-                    out.as_raw_fd(),
-                    &[IoSlice::new(bytes)],
-                    SpliceFFlags::empty(),
-                )
-                .map_err(splice_maybe_unsupported)?;
+                let len = nix::fcntl::vmsplice(out.as_raw_fd(), &[IoSlice::new(bytes)], flags)
+                    .map_err(splice_maybe_unsupported)?;
                 bytes = &bytes[len..];
             }
         }
@@ -58,6 +55,15 @@ pub(crate) fn splice_data(bytes: &[u8], out: &impl AsRawFd) -> Result<()> {
                 bytes = &bytes[len..];
             }
         }
+    }
+}
+
+fn vmsplice_flags(out: &impl AsRawFd) -> Result<SpliceFFlags> {
+    let flags = OFlag::from_bits_truncate(fcntl(out.as_raw_fd(), FcntlArg::F_GETFL)?);
+    if flags.contains(OFlag::O_NONBLOCK) {
+        Ok(SpliceFFlags::SPLICE_F_NONBLOCK)
+    } else {
+        Ok(SpliceFFlags::empty())
     }
 }
 
@@ -122,6 +128,31 @@ mod tests {
         assert!(!result);
 
         fs::remove_file(regular_file_path).expect("Failed to remove regular file");
+    }
+
+    #[test]
+    fn vmsplice_flags_follow_output_nonblocking_mode() {
+        let (_read_end, write_end) = pipe().expect("Failed to create pipe");
+
+        assert_eq!(
+            vmsplice_flags(&write_end).expect("Failed to read blocking pipe flags"),
+            SpliceFFlags::empty()
+        );
+
+        let flags = nix::fcntl::OFlag::from_bits_truncate(
+            nix::fcntl::fcntl(write_end.as_raw_fd(), nix::fcntl::FcntlArg::F_GETFL)
+                .expect("Failed to read pipe flags"),
+        );
+        nix::fcntl::fcntl(
+            write_end.as_raw_fd(),
+            nix::fcntl::FcntlArg::F_SETFL(flags | nix::fcntl::OFlag::O_NONBLOCK),
+        )
+        .expect("Failed to set pipe nonblocking");
+
+        assert_eq!(
+            vmsplice_flags(&write_end).expect("Failed to read nonblocking pipe flags"),
+            SpliceFFlags::SPLICE_F_NONBLOCK
+        );
     }
 
     #[test]

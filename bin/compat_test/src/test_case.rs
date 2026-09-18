@@ -78,6 +78,8 @@ pub enum OutputStream {
     NonblockingFullPipe,
     /// 将输出连接到预填充后释放一个 PIPE_BUF 空间的非阻塞管道，并捕获子进程写入的字节。
     NonblockingPartialPipe,
+    /// 将输出连接到对端保持打开且写缓冲区已满的非阻塞 Unix 流套接字，并捕获子进程写入的字节。
+    NonblockingFullSocket,
     /// 将输出连接到伪终端并捕获终端输出。
     Tty,
 }

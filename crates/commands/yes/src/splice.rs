@@ -27,12 +27,15 @@ use ctcore::ct_pipes::{pipe, splice_exact};
 pub(crate) fn splice_data(bytes: &[u8], out: &impl AsRawFd) -> Result<()> {
     let fstat_result = fstat(out.as_raw_fd())?;
     let st_mode = fstat_result.st_mode as nix::libc::mode_t;
+    let flags = vmsplice_flags(out)?;
+
+    // GNU yes writes directly to every nonblocking descriptor.  Routing a
+    // socket through an intermediate pipe changes its partial-write behavior.
+    if flags.contains(SpliceFFlags::SPLICE_F_NONBLOCK) {
+        return Err(SpliceError::Unsupported);
+    }
 
     if st_mode & S_IFIFO != 0 {
-        let flags = vmsplice_flags(out)?;
-        if flags.contains(SpliceFFlags::SPLICE_F_NONBLOCK) {
-            return Err(SpliceError::Unsupported);
-        }
         loop {
             let mut bytes = bytes;
             while !bytes.is_empty() {
@@ -98,6 +101,7 @@ mod tests {
     use std::fs;
     use std::fs::File;
     use std::io::Write;
+    use std::os::unix::net::UnixStream;
 
     use nix::errno::Errno;
 
@@ -169,6 +173,24 @@ mod tests {
             FcntlArg::F_SETFL(flags | OFlag::O_NONBLOCK),
         )
         .expect("Failed to set pipe nonblocking");
+
+        assert!(matches!(
+            splice_data(b"x\n", &write_end),
+            Err(SpliceError::Unsupported)
+        ));
+    }
+
+    #[test]
+    fn nonblocking_output_socket_uses_write_fallback() {
+        let (write_end, _read_end) = UnixStream::pair().expect("Failed to create Unix socket");
+        let flags = OFlag::from_bits_truncate(
+            fcntl(write_end.as_raw_fd(), FcntlArg::F_GETFL).expect("Failed to read socket flags"),
+        );
+        fcntl(
+            write_end.as_raw_fd(),
+            FcntlArg::F_SETFL(flags | OFlag::O_NONBLOCK),
+        )
+        .expect("Failed to set socket nonblocking");
 
         assert!(matches!(
             splice_data(b"x\n", &write_end),

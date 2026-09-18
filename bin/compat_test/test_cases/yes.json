@@ -355,6 +355,31 @@
             },
             "timeout": 1,
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "yes",
+            "description": "LC_ALL=C下stdout为对端保持打开且写缓冲区已满的非阻塞Unix流套接字时，yes x不写入任何新增字节并报告EAGAIN，stdout和stderr均通过GNU基线逐字节比较",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["78"],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "nonblocking_full_socket"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7965733a207374616e64617264206f75747075743a205265736f757263652074656d706f726172696c7920756e617661696c61626c650a"
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
         }
     ]
 }

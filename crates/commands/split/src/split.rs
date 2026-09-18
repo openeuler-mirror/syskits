@@ -769,6 +769,7 @@ fn splice_args_init() -> Vec<Arg> {
             .short('t')
             .long(OPT_SEPARATOR)
             .allow_hyphen_values(true)
+            .value_parser(OsStringValueParser::new())
             .value_name("SEP")
             .action(ArgAction::Append)
             .help(t!("split.clap.opt_separator")),
@@ -895,25 +896,31 @@ impl SpliceSettings {
         let suffix =
             FilenameSuffix::from(args_match, &strategy).map_err(SpliceSettingsError::Suffix)?;
 
-        // 尝试从命令行参数中获取分隔符字符串
-        let args_separator = match args_match.get_many::<String>(OPT_SEPARATOR) {
+        // A GNU separator is exactly one argument byte, except for the
+        // textual \"\\0\" spelling of NUL.  Keep the argument as an OsString
+        // so Linux byte-valued separators are not rejected by clap.
+        let args_separator = match args_match.get_many::<OsString>(OPT_SEPARATOR) {
             Some(mut sep_values) => {
-                // 获取并解析第一个分隔符值
                 let first = sep_values.next().unwrap();
-                // 检查是否所有分隔符值都相同
                 if !sep_values.all(|s| s == first) {
-                    // 如果存在不同的分隔符值，则返回错误
                     return Err(SpliceSettingsError::MultipleSeparatorCharacters);
                 }
-                // 根据分隔符值处理分隔符
-                match first.as_str() {
-                    "\\0" => b'\0',
-                    s if s.len() == 1 => s.as_bytes()[0],
-                    // 如果分隔符不是单个字符，则返回错误
-                    s => return Err(SpliceSettingsError::MultiCharacterSeparator(s.to_string())),
+                let first_bytes = first.as_encoded_bytes();
+                match first_bytes {
+                    b"\\0" => b'\0',
+                    // GNU stores SEP in a signed char and later treats a
+                    // negative value as an unset separator.  On Linux this
+                    // makes a raw byte in 0x80..=0xff fall back to newline.
+                    [separator] if *separator < 0x80 => *separator,
+                    [_] => b'\n',
+                    bytes => {
+                        return Err(SpliceSettingsError::MultiCharacterSeparator(
+                            String::from_utf8_lossy(bytes).into_owned(),
+                        ));
+                    }
                 }
             }
-            None => b'\n', // 如果没有指定分隔符，则默认使用换行符
+            None => b'\n',
         };
         let io_blksize: Option<u64> = if let Some(s) = args_match.get_one::<String>(OPT_IO_BLKSIZE)
         {
@@ -2280,7 +2287,7 @@ mod tests {
     use tempfile::tempdir;
 
     #[cfg(unix)]
-    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
     fn unique_output_filename() -> &'static str {
         static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -2324,6 +2331,34 @@ mod tests {
             std::fs::read(second_output).expect("read second output"),
             b"b"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_split_accepts_high_bit_separator_like_gnu() {
+        let temp = tempdir().expect("create temporary directory");
+        let input = temp.path().join("input");
+        let prefix = temp.path().join("out-");
+        std::fs::write(&input, b"a\xffb\xff").expect("write input");
+
+        split_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--separator"),
+                OsString::from_vec(vec![0xff]),
+                OsString::from("--lines=1"),
+                input.into_os_string(),
+                prefix.into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect("a raw-byte separator must be accepted");
+
+        assert_eq!(
+            std::fs::read(temp.path().join("out-aa")).unwrap(),
+            b"a\xffb\xff"
+        );
+        assert!(!temp.path().join("out-ab").exists());
     }
 
     #[cfg(unix)]
@@ -6304,8 +6339,10 @@ mod tests {
             let matches = result.unwrap();
 
             assert_eq!(
-                matches.get_one::<String>(OPT_SEPARATOR),
-                Some(&"'\0'".to_string())
+                matches
+                    .get_one::<OsString>(OPT_SEPARATOR)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("'\0'"))
             );
         }
 
@@ -6330,8 +6367,10 @@ mod tests {
             let matches = result.unwrap();
 
             assert_eq!(
-                matches.get_one::<String>(OPT_SEPARATOR),
-                Some(&"'\0'".to_string())
+                matches
+                    .get_one::<OsString>(OPT_SEPARATOR)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("'\0'"))
             );
         }
 
@@ -6356,8 +6395,10 @@ mod tests {
             let matches = result.unwrap();
 
             assert_eq!(
-                matches.get_one::<String>(OPT_SEPARATOR),
-                Some(&"'\n'".to_string())
+                matches
+                    .get_one::<OsString>(OPT_SEPARATOR)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("'\n'"))
             );
         }
 
@@ -6382,8 +6423,10 @@ mod tests {
             let matches = result.unwrap();
 
             assert_eq!(
-                matches.get_one::<String>(OPT_SEPARATOR),
-                Some(&"'\r'".to_string())
+                matches
+                    .get_one::<OsString>(OPT_SEPARATOR)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("'\r'"))
             );
         }
 
@@ -6408,8 +6451,10 @@ mod tests {
             let matches = result.unwrap();
 
             assert_eq!(
-                matches.get_one::<String>(OPT_SEPARATOR),
-                Some(&"'\t'".to_string())
+                matches
+                    .get_one::<OsString>(OPT_SEPARATOR)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("'\t'"))
             );
         }
     }

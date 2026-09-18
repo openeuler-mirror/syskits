@@ -3236,6 +3236,54 @@
       ]
     },
     {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "split",
+      "description": "高位原始字节分隔符：LC_ALL=C；参数完整十六进制为2d2d736570617261746f72（--separator）、ff（单字节0xff）、2d2d6c696e65733d31（--lines=1）、696e（输入in）和6f75742d（前缀out-）；输入字节为61ff62ff。GNU split.c 在 Linux 将有符号 char 的高位分隔符视为未设置并回退换行，预期RC=0、stdout/stderr为空，只生成out-aa内容61ff62ff。",
+      "args": [
+        "2d2d736570617261746f72",
+        "ff",
+        "2d2d6c696e65733d31",
+        "696e",
+        "6f75742d"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C LANG=C",
+        "printf 'a\\377b\\377' > in",
+        "printf 'a\\377b\\377' > expected-aa"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s expected-aa out-aa && test ! -e out-ab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in expected-aa out-*"
+      ]
+    },
+    {
       "command": "split",
       "description": "split accepts repeated verbose option",
       "args": [

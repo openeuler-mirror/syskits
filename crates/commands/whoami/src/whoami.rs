@@ -18,8 +18,12 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::ct_println_verbatim;
 #[cfg(not(unix))]
+use ctcore::ct_error::CtSimpleError;
+#[cfg(not(unix))]
 use ctcore::ct_error::FromIo;
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, strip_errno};
+use ctcore::ct_error::{CTError, CTResult, strip_errno};
+#[cfg(target_os = "linux")]
+use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use std::io;
@@ -39,8 +43,7 @@ pub fn whoami_main(args: impl ctcore::Args) -> CTResult<String> {
 
     ct_app().try_get_matches_from(prepare_whoami_args(args)?)?;
     let username = whoami_exec()?;
-    write_whoami_username(&username)
-        .map_err(|error| CtSimpleError::new(1, whoami_write_error_message(&error)))?;
+    write_whoami_username(&username).map_err(whoami_write_error)?;
 
     let result = username.to_string_lossy().into_owned();
     Ok(result)
@@ -53,17 +56,23 @@ fn write_whoami_username(username: &OsStr) -> io::Result<()> {
     ct_println_verbatim(username)
 }
 
-fn whoami_write_error_message(error: &io::Error) -> String {
+fn whoami_write_error(error: io::Error) -> Box<dyn CTError> {
+    WhoamiRuntimeError::boxed(whoami_write_error_message(&error))
+}
+
+fn whoami_write_error_message(error: &io::Error) -> Vec<u8> {
     whoami_write_error_message_for_locale(error, whoami_uses_simplified_chinese())
 }
 
-fn whoami_write_error_message_for_locale(error: &io::Error, simplified_chinese: bool) -> String {
+fn whoami_write_error_message_for_locale(error: &io::Error, simplified_chinese: bool) -> Vec<u8> {
     let error = strip_errno(error);
-    if simplified_chinese {
-        format!("写入错误: {error}")
+    let mut message = if simplified_chinese {
+        whoami_encode_locale_text("写入错误: ")
     } else {
-        format!("write error: {error}")
-    }
+        b"write error: ".to_vec()
+    };
+    message.extend_from_slice(error.as_bytes());
+    message
 }
 
 fn whoami_closed_stdout_error(stdout_was_closed: bool) -> Option<io::Error> {
@@ -125,6 +134,31 @@ impl CTError for WhoamiUsageError {
 
     fn usage(&self) -> bool {
         true
+    }
+}
+
+#[derive(Debug)]
+struct WhoamiRuntimeError {
+    message: Vec<u8>,
+}
+
+impl WhoamiRuntimeError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl Display for WhoamiRuntimeError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl Error for WhoamiRuntimeError {}
+
+impl CTError for WhoamiRuntimeError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
     }
 }
 
@@ -244,7 +278,7 @@ fn match_whoami_long_option(name: &[u8]) -> WhoamiLongOptionMatch {
 
 fn whoami_extra_operand_message(operand: &OsStr, simplified_chinese: bool) -> Vec<u8> {
     let mut message = if simplified_chinese {
-        "多余的操作对象 ".as_bytes().to_vec()
+        whoami_encode_locale_text("多余的操作对象 ")
     } else {
         b"extra operand ".to_vec()
     };
@@ -254,7 +288,9 @@ fn whoami_extra_operand_message(operand: &OsStr, simplified_chinese: bool) -> Ve
 
 fn whoami_usage_hint(utility_name: &str, simplified_chinese: bool) -> Vec<u8> {
     if simplified_chinese {
-        format!("请尝试执行 \"{utility_name} --help\" 来获取更多信息。").into_bytes()
+        whoami_encode_locale_text(&format!(
+            "请尝试执行 \"{utility_name} --help\" 来获取更多信息。"
+        ))
     } else {
         format!("Try '{utility_name} --help' for more information.").into_bytes()
     }
@@ -275,6 +311,72 @@ fn whoami_effective_locale<const N: usize>(names: [&str; N]) -> Option<OsString>
         let value = std::env::var_os(name)?;
         (!value.is_empty()).then_some(value)
     })
+}
+
+fn whoami_encode_locale_text(text: &str) -> Vec<u8> {
+    #[cfg(target_os = "linux")]
+    if let Some(codeset) = whoami_output_codeset()
+        && let Some(encoded) = whoami_encode_locale_text_for_codeset(text, &codeset)
+    {
+        return encoded;
+    }
+
+    text.as_bytes().to_vec()
+}
+
+#[cfg(target_os = "linux")]
+fn whoami_output_codeset() -> Option<String> {
+    let locale = whoami_effective_locale(["LC_ALL", "LC_CTYPE", "LANG"])?;
+    let locale = locale.to_string_lossy();
+    let locale_uppercase = locale.to_ascii_uppercase();
+    if locale_uppercase.contains("UTF-8") || locale_uppercase.contains("UTF8") {
+        return None;
+    }
+
+    if matches!(locale_uppercase.as_str(), "C" | "POSIX") {
+        return Some("ASCII".to_owned());
+    }
+
+    locale
+        .split_once('.')
+        .map(|(_, codeset)| {
+            codeset
+                .split_once('@')
+                .map_or(codeset, |(codeset, _)| codeset)
+        })
+        .map(ToOwned::to_owned)
+}
+
+#[cfg(target_os = "linux")]
+fn whoami_encode_locale_text_for_codeset(text: &str, codeset: &str) -> Option<Vec<u8>> {
+    let target = CString::new(format!("{codeset}//TRANSLIT")).ok()?;
+    let source = CString::new("UTF-8").expect("UTF-8 has no NUL byte");
+    let converter = unsafe { libc::iconv_open(target.as_ptr(), source.as_ptr()) };
+    if converter == (-1_isize) as libc::iconv_t {
+        return None;
+    }
+
+    let mut input = text.as_ptr().cast_mut().cast::<libc::c_char>();
+    let mut input_left = text.len();
+    let mut output = vec![0_u8; text.len().saturating_mul(4).max(16)];
+    let mut output_ptr = output.as_mut_ptr().cast::<libc::c_char>();
+    let mut output_left = output.len();
+    let result = unsafe {
+        libc::iconv(
+            converter,
+            &mut input,
+            &mut input_left,
+            &mut output_ptr,
+            &mut output_left,
+        )
+    };
+    unsafe { libc::iconv_close(converter) };
+    if result == usize::MAX || input_left != 0 {
+        return None;
+    }
+
+    output.truncate(output.len() - output_left);
+    Some(output)
 }
 
 fn quote_whoami_operand(operand: &OsStr, simplified_chinese: bool) -> Vec<u8> {
@@ -392,10 +494,11 @@ pub fn whoami_exec() -> CTResult<OsString> {
 
 #[cfg(unix)]
 fn whoami_unknown_uid_error(uid: libc::uid_t, error: &io::Error) -> Box<dyn CTError> {
-    CtSimpleError::new(
-        1,
-        whoami_unknown_uid_message(uid, error, whoami_uses_simplified_chinese()),
-    )
+    WhoamiRuntimeError::boxed(whoami_unknown_uid_message(
+        uid,
+        error,
+        whoami_uses_simplified_chinese(),
+    ))
 }
 
 #[cfg(unix)]
@@ -403,15 +506,15 @@ fn whoami_unknown_uid_message(
     uid: libc::uid_t,
     error: &io::Error,
     simplified_chinese: bool,
-) -> String {
+) -> Vec<u8> {
     let mut message = if simplified_chinese {
-        format!("无法找到 ID 为 {uid} 的用户的名称")
+        whoami_encode_locale_text(&format!("无法找到 ID 为 {uid} 的用户的名称"))
     } else {
-        format!("cannot find name for user ID {uid}")
+        format!("cannot find name for user ID {uid}").into_bytes()
     };
     if !matches!(error.raw_os_error(), Some(0) | None) {
-        message.push_str(": ");
-        message.push_str(&strip_errno(error));
+        message.extend_from_slice(b": ");
+        message.extend_from_slice(strip_errno(error).as_bytes());
     }
     message
 }
@@ -760,11 +863,11 @@ mod tests {
     fn whoami_write_errors_use_gnu_diagnostic_text() {
         assert_eq!(
             whoami_write_error_message(&io::Error::from_raw_os_error(libc::ENOSPC)),
-            "write error: No space left on device"
+            b"write error: No space left on device"
         );
         assert_eq!(
             whoami_write_error_message(&io::Error::from_raw_os_error(libc::EPIPE)),
-            "write error: Broken pipe"
+            b"write error: Broken pipe"
         );
     }
 
@@ -820,13 +923,24 @@ mod tests {
                 &io::Error::from_raw_os_error(libc::ENOSPC),
                 true,
             ),
-            "写入错误: No space left on device"
+            "写入错误: No space left on device".as_bytes()
         );
         assert_eq!(
             whoami_unknown_uid_message(60_000, &io::Error::from(io::ErrorKind::NotFound), true),
-            "无法找到 ID 为 60000 的用户的名称"
+            "无法找到 ID 为 60000 的用户的名称".as_bytes()
         );
         assert!(whoami_simplified_chinese_locale(OsStr::new("zh_CN.UTF-8")));
         assert!(!whoami_simplified_chinese_locale(OsStr::new("zh_TW.UTF-8")));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn whoami_zh_cn_gbk_diagnostic_text_uses_locale_encoding() {
+        assert_eq!(
+            whoami_encode_locale_text_for_codeset("多余的操作对象", "GBK"),
+            Some(vec![
+                0xb6, 0xe0, 0xd3, 0xe0, 0xb5, 0xc4, 0xb2, 0xd9, 0xd7, 0xf7, 0xb6, 0xd4, 0xcf, 0xf3,
+            ])
+        );
     }
 }

@@ -275,6 +275,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "whoami",
+            "description": "原始字节诊断用例：LC_ALL=zh_CN.GBK下传入ASCII字节612262，即a双引号b；预期RC=1、stdout为空，stderr为GBK编码的GNU中文extra operand和try-help，其中操作数双引号转义为5c22",
+            "setup_commands": [
+                "export LC_ALL='zh_CN.GBK'",
+                "export LANG='zh_CN.GBK'"
+            ],
+            "args": ["612262"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77686f616d693a20b6e0d3e0b5c4b2d9d7f7b6d4cff32022615c2262220ac7ebb3a2cad4d6b4d0d0202277686f616d69202d2d68656c702220c0b4bbf1c8a1b8fcb6e0d0c5cfa2a1a30a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -1876,6 +1876,41 @@ impl<'a> SequentialFilterWriter<'a> {
     }
 }
 
+fn splice_exhaust_zero_sized_tail(
+    splice_settings: &SpliceSettings,
+    number_chunks: u64,
+    first_empty_chunk: u64,
+    filter_writer: Option<&mut SequentialFilterWriter<'_>>,
+) -> CTResult<()> {
+    if let Some(filter_writer) = filter_writer {
+        let mut chunk_number = first_empty_chunk;
+        loop {
+            filter_writer.write_chunk(chunk_number, &[])?;
+            chunk_number = chunk_number
+                .checked_add(1)
+                .ok_or_else(|| CtSimpleError::new(1, "output file suffixes exhausted"))?;
+        }
+    }
+
+    let mut filenames =
+        FilenameIterator::new(splice_settings.output_prefix(), &splice_settings.suffix)?;
+    for _ in 0..number_chunks {
+        filenames
+            .next()
+            .ok_or_else(|| CtSimpleError::new(1, "output file suffixes exhausted"))?;
+    }
+
+    loop {
+        let filename = filenames
+            .next()
+            .ok_or_else(|| CtSimpleError::new(1, "output file suffixes exhausted"))?;
+        if splice_settings.verbose {
+            split_emit_opening_output(&filename, false)?;
+        }
+        drop(splice_settings.splice_instantiate_current_writer(&filename, true)?);
+    }
+}
+
 /// Split a file or STDIN into a specific number of chunks by byte.
 ///
 /// When file size cannot be evenly divided into the number of chunks of the same size,
@@ -2182,8 +2217,29 @@ where
         number_bytes_written += number_line_bytes;
         let mut skipped = -1;
         while number_bytes_should_be_written <= number_bytes_written {
-            number_bytes_should_be_written +=
-                chunk_size_base + (chunk_size_reminder > chunk_number) as u64;
+            let next_chunk_size = chunk_size_base + (chunk_size_reminder > chunk_number) as u64;
+            if next_chunk_size == 0 {
+                if let Some(kth) = kth_chunk {
+                    if chunk_number == kth {
+                        return Ok(());
+                    }
+                    chunk_number += 1;
+                    continue;
+                }
+
+                if splice_settings.elide_empty_files {
+                    break;
+                }
+
+                return splice_exhaust_zero_sized_tail(
+                    splice_settings,
+                    number_chunks,
+                    chunk_number + 1,
+                    filter_writer.as_mut(),
+                );
+            }
+
+            number_bytes_should_be_written += next_chunk_size;
             chunk_number += 1;
             skipped += 1;
         }
@@ -2545,6 +2601,34 @@ mod tests {
         let mut copied = Vec::new();
         file.read_to_end(&mut copied).unwrap();
         assert_eq!(copied, input);
+    }
+
+    #[test]
+    fn lines_number_zero_sized_tail_exhausts_suffixes_without_panicking() {
+        let temp_dir = tempdir().unwrap();
+        let input = temp_dir.path().join("input");
+        std::fs::write(&input, b"\n\n").unwrap();
+        let prefix = temp_dir.path().join("out-");
+
+        let result = split_main(
+            vec![
+                ctcore::ct_util_name().into(),
+                "-a".into(),
+                "1".into(),
+                "-n".into(),
+                "l/3".into(),
+                input.into_os_string(),
+                prefix.into_os_string(),
+            ]
+            .into_iter(),
+        );
+
+        let error = result.expect_err("zero-sized tail must exhaust suffixes");
+        assert_eq!(error.code(), 1);
+        assert_eq!(error.to_string(), "output file suffixes exhausted");
+        assert_eq!(std::fs::read(temp_dir.path().join("out-a")).unwrap(), b"\n");
+        assert_eq!(std::fs::read(temp_dir.path().join("out-b")).unwrap(), b"\n");
+        assert_eq!(std::fs::read(temp_dir.path().join("out-z")).unwrap(), b"");
     }
 
     fn unique_output_filename() -> &'static str {

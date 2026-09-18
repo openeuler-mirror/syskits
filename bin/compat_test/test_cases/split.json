@@ -4028,6 +4028,18 @@
     },
     {
       "command": "split",
+      "description": "零大小尾分片：LC_ALL=C、LANG=C；输入为两个换行，执行split -a 1 -n l/3 in out-。GNU lines_chunk_split在余数字节耗尽后继续推进零大小分片，创建out-a至out-z后因后缀耗尽返回RC=1；预期a和b各含一个换行、其余文件为空，stderr为output file suffixes exhausted。",
+      "args": ["-a", "1", "-n", "l/3", "in", "out-"],
+      "setup_commands": ["printf '\\n\\n' > in"],
+      "environment": {"env_vars": {"LC_ALL": "C", "LANG": "C"}},
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": "split: output file suffixes exhausted\n"},
+        "verifications": [{"command": "test \"$(stat -c %s out-a)\" = 1 && test \"$(stat -c %s out-b)\" = 1 && test \"$(stat -c %s out-z)\" = 0 && test \"$(ls out-* | wc -l)\" = 26", "expected_exit": 0, "expected_stdout": null, "expected_stderr": null}]
+      },
+      "cleanup_commands": ["rm -f in out-*"]
+    },
+    {
+      "command": "split",
       "description": "POSIXLY_CORRECT=1、LC_ALL=C、LANG=C下执行split in -l 1；GNU getopt在首个输入文件操作数in处停止选项解析，后续-l和1作为输出前缀及额外操作数，预期RC=1、stdout为空且不创建任何分片文件。",
       "args": [
         "in",

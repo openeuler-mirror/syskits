@@ -10,13 +10,15 @@
  */
 
 extern crate rust_i18n;
+use std::borrow::Cow;
 use std::error::Error;
 use std::ffi::OsString;
+use std::fmt::{Display, Formatter};
 use std::io::{self, Write};
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser, crate_version};
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, strip_errno};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, strip_errno};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 #[cfg(unix)]
 use ctcore::ct_signals::enable_pipe_errors;
@@ -89,6 +91,35 @@ enum YesLongOptionMatch {
     None,
 }
 
+#[derive(Debug)]
+struct YesUsageError {
+    message: Vec<u8>,
+}
+
+impl YesUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl Display for YesUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl Error for YesUsageError {}
+
+impl CTError for YesUsageError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
 fn yes_prepare_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
     yes_prepare_args_with_mode(args, ctcore::ct_posix::posixly_correct())
 }
@@ -122,24 +153,21 @@ fn yes_prepare_args_with_mode(
                     ));
                 }
                 YesLongOptionMatch::Ambiguous(candidates) => {
-                    let possibilities = candidates
-                        .into_iter()
-                        .map(|candidate| format!("'--{candidate}'"))
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    return Err(CTsageError::new(
-                        1,
-                        format!(
-                            "option '{}' is ambiguous; possibilities: {possibilities}",
-                            String::from_utf8_lossy(bytes)
-                        ),
-                    ));
+                    let mut message = b"option '".to_vec();
+                    message.extend_from_slice(bytes);
+                    message.extend_from_slice(b"' is ambiguous; possibilities:");
+                    for candidate in candidates {
+                        message.extend_from_slice(b" '--");
+                        message.extend_from_slice(candidate.as_bytes());
+                        message.push(b'\'');
+                    }
+                    return Err(YesUsageError::boxed(message));
                 }
                 YesLongOptionMatch::None => {
-                    return Err(CTsageError::new(
-                        1,
-                        format!("unrecognized option '{}'", String::from_utf8_lossy(bytes)),
-                    ));
+                    let mut message = b"unrecognized option '".to_vec();
+                    message.extend_from_slice(bytes);
+                    message.push(b'\'');
+                    return Err(YesUsageError::boxed(message));
                 }
                 YesLongOptionMatch::Recognized(_) => {}
             }
@@ -150,10 +178,10 @@ fn yes_prepare_args_with_mode(
         if YES_SHORT_EXTENSIONS.contains(&option) {
             return Ok(args);
         }
-        return Err(CTsageError::new(
-            1,
-            format!("invalid option -- '{}'", char::from(option)),
-        ));
+        let mut message = b"invalid option -- '".to_vec();
+        message.push(option);
+        message.push(b'\'');
+        return Err(YesUsageError::boxed(message));
     }
     Ok(args)
 }
@@ -310,6 +338,7 @@ mod tests {
     use clap::error::ErrorKind;
     use rust_i18n::t;
     use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
 
     #[test]
     fn test_tool_implementation() {
@@ -459,6 +488,30 @@ mod tests {
             "option '--=' is ambiguous; possibilities: '--help' '--version'"
         );
         assert!(error.usage());
+    }
+
+    #[test]
+    fn non_utf8_option_diagnostics_preserve_input_bytes() {
+        for (argument, expected) in [
+            (
+                vec![b'-', b'-', 0xff],
+                b"unrecognized option '--\xff'".as_slice(),
+            ),
+            (vec![b'-', 0xff], b"invalid option -- '\xff'".as_slice()),
+            (
+                vec![b'-', b'-', b'=', 0xff],
+                b"option '--=\xff' is ambiguous; possibilities: '--help' '--version'".as_slice(),
+            ),
+        ] {
+            let error = yes_prepare_args_with_mode(
+                [OsString::from("yes"), OsString::from_vec(argument)].into_iter(),
+                false,
+            )
+            .expect_err("invalid raw option bytes must fail before Clap parsing");
+
+            assert_eq!(error.diagnostic_bytes().as_ref(), expected);
+            assert!(error.usage());
+        }
     }
 
     #[test]

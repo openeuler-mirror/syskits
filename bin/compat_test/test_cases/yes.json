@@ -270,6 +270,66 @@
             },
             "timeout": 1,
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "yes",
+            "description": "LC_ALL=C下非UTF-8未知长选项的诊断逐字节保留输入0xff",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["2d2dff"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7965733a20756e7265636f676e697a6564206f7074696f6e20272d2dff270a5472792027796573202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "yes",
+            "description": "LC_ALL=C下非UTF-8未知短选项的诊断逐字节保留输入0xff",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["2dff"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7965733a20696e76616c6964206f7074696f6e202d2d2027ff270a5472792027796573202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "yes",
+            "description": "LC_ALL=C下带非UTF-8值的空前缀长选项歧义诊断逐字节保留输入0xff",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["2d2d3dff"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7965733a206f7074696f6e20272d2d3dff2720697320616d626967756f75733b20706f73736962696c69746965733a20272d2d68656c702720272d2d76657273696f6e270a5472792027796573202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
         }
     ]
 }

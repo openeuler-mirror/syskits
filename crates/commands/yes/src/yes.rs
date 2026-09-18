@@ -82,6 +82,13 @@ fn yes_standard_output_error_message(error: &io::Error) -> String {
 const YES_LONG_OPTIONS: &[&str] = &["help", "version"];
 const YES_SHORT_EXTENSIONS: &[u8] = b"hV";
 
+#[derive(Debug, PartialEq, Eq)]
+enum YesLongOptionMatch {
+    Recognized(&'static str),
+    Ambiguous(Vec<&'static str>),
+    None,
+}
+
 fn yes_prepare_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
     yes_prepare_args_with_mode(args, ctcore::ct_posix::posixly_correct())
 }
@@ -107,17 +114,34 @@ fn yes_prepare_args_with_mode(
             let long = &bytes[2..];
             let separator = long.iter().position(|byte| *byte == b'=');
             let name = &long[..separator.unwrap_or(long.len())];
-            let Some(canonical) = yes_match_long_option(name) else {
-                return Err(CTsageError::new(
-                    1,
-                    format!("unrecognized option '{}'", String::from_utf8_lossy(bytes)),
-                ));
-            };
-            if separator.is_some() {
-                return Err(CTsageError::new(
-                    1,
-                    format!("option '--{canonical}' doesn't allow an argument"),
-                ));
+            match yes_match_long_option(name) {
+                YesLongOptionMatch::Recognized(canonical) if separator.is_some() => {
+                    return Err(CTsageError::new(
+                        1,
+                        format!("option '--{canonical}' doesn't allow an argument"),
+                    ));
+                }
+                YesLongOptionMatch::Ambiguous(candidates) => {
+                    let possibilities = candidates
+                        .into_iter()
+                        .map(|candidate| format!("'--{candidate}'"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    return Err(CTsageError::new(
+                        1,
+                        format!(
+                            "option '{}' is ambiguous; possibilities: {possibilities}",
+                            String::from_utf8_lossy(bytes)
+                        ),
+                    ));
+                }
+                YesLongOptionMatch::None => {
+                    return Err(CTsageError::new(
+                        1,
+                        format!("unrecognized option '{}'", String::from_utf8_lossy(bytes)),
+                    ));
+                }
+                YesLongOptionMatch::Recognized(_) => {}
             }
             return Ok(args);
         }
@@ -134,22 +158,25 @@ fn yes_prepare_args_with_mode(
     Ok(args)
 }
 
-fn yes_match_long_option(name: &[u8]) -> Option<&'static str> {
-    YES_LONG_OPTIONS
+fn yes_match_long_option(name: &[u8]) -> YesLongOptionMatch {
+    if let Some(option) = YES_LONG_OPTIONS
         .iter()
         .copied()
         .find(|option| option.as_bytes() == name)
-        .or_else(|| {
-            let matches = YES_LONG_OPTIONS
-                .iter()
-                .copied()
-                .filter(|option| option.as_bytes().starts_with(name))
-                .collect::<Vec<_>>();
-            match matches.as_slice() {
-                [option] => Some(*option),
-                _ => None,
-            }
-        })
+    {
+        return YesLongOptionMatch::Recognized(option);
+    }
+
+    let candidates = YES_LONG_OPTIONS
+        .iter()
+        .copied()
+        .filter(|option| option.as_bytes().starts_with(name))
+        .collect::<Vec<_>>();
+    match candidates.as_slice() {
+        [] => YesLongOptionMatch::None,
+        [candidate] => YesLongOptionMatch::Recognized(candidate),
+        _ => YesLongOptionMatch::Ambiguous(candidates),
+    }
 }
 
 pub fn ct_app() -> Command {
@@ -408,9 +435,30 @@ mod tests {
 
     #[test]
     fn long_option_matching_requires_exactly_one_candidate() {
-        assert_eq!(yes_match_long_option(b"hel"), Some("help"));
-        assert_eq!(yes_match_long_option(b"unknown"), None);
-        assert_eq!(yes_match_long_option(b""), None);
+        assert_eq!(
+            yes_match_long_option(b"hel"),
+            YesLongOptionMatch::Recognized("help")
+        );
+        assert_eq!(yes_match_long_option(b"unknown"), YesLongOptionMatch::None);
+        assert_eq!(
+            yes_match_long_option(b""),
+            YesLongOptionMatch::Ambiguous(vec!["help", "version"])
+        );
+    }
+
+    #[test]
+    fn ambiguous_long_option_lists_gnu_candidates() {
+        let error = yes_prepare_args_with_mode(
+            [OsString::from("yes"), OsString::from("--=")].into_iter(),
+            false,
+        )
+        .expect_err("an empty long-option prefix must be ambiguous");
+
+        assert_eq!(
+            error.to_string(),
+            "option '--=' is ambiguous; possibilities: '--help' '--version'"
+        );
+        assert!(error.usage());
     }
 
     #[test]

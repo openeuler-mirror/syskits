@@ -51,25 +51,50 @@ pub(crate) struct CommandStreamOptions<'a> {
     pub streams: &'a StandardStreams,
 }
 
-fn configured_output(mode: OutputStream) -> Result<(Stdio, Option<OwnedFd>)> {
+fn configured_output(mode: OutputStream) -> Result<(Stdio, Option<OwnedFd>, Option<OwnedFd>)> {
     match mode {
-        OutputStream::Capture => Ok((Stdio::piped(), None)),
-        OutputStream::Inherit => Ok((Stdio::inherit(), None)),
-        OutputStream::Null => Ok((Stdio::null(), None)),
+        OutputStream::Capture => Ok((Stdio::piped(), None, None)),
+        OutputStream::Inherit => Ok((Stdio::inherit(), None, None)),
+        OutputStream::Null => Ok((Stdio::null(), None, None)),
         OutputStream::Full => {
             let full = fs::OpenOptions::new().write(true).open("/dev/full")?;
-            Ok((Stdio::from(full), None))
+            Ok((Stdio::from(full), None, None))
         }
         OutputStream::ReadOnlyNull => {
             let null = fs::OpenOptions::new().read(true).open("/dev/null")?;
-            Ok((Stdio::from(null), None))
+            Ok((Stdio::from(null), None, None))
         }
-        OutputStream::Closed => Ok((Stdio::null(), None)),
+        OutputStream::Closed => Ok((Stdio::null(), None, None)),
         OutputStream::ClosedPipe => {
             let (read_end, write_end) = nix::unistd::pipe()
                 .map_err(|e| TestError::ExecutionError(format!("Failed to create pipe: {e}")))?;
             drop(read_end);
-            Ok((Stdio::from(write_end), None))
+            Ok((Stdio::from(write_end), None, None))
+        }
+        OutputStream::NonblockingFullPipe => {
+            let (read_end, write_end) = nix::unistd::pipe()
+                .map_err(|e| TestError::ExecutionError(format!("Failed to create pipe: {e}")))?;
+            let mut flags = OFlag::from_bits_truncate(
+                fcntl(write_end.as_raw_fd(), FcntlArg::F_GETFL).map_err(|e| {
+                    TestError::ExecutionError(format!("Failed to read pipe flags: {e}"))
+                })?,
+            );
+            flags.insert(OFlag::O_NONBLOCK);
+            fcntl(write_end.as_raw_fd(), FcntlArg::F_SETFL(flags))
+                .map_err(|e| TestError::ExecutionError(format!("Failed to set pipe flags: {e}")))?;
+            let fill = [0_u8; 8192];
+            loop {
+                match nix::unistd::write(&write_end, &fill) {
+                    Ok(_) => continue,
+                    Err(Errno::EAGAIN) => break,
+                    Err(e) => {
+                        return Err(TestError::ExecutionError(format!(
+                            "Failed to fill nonblocking pipe: {e}"
+                        )));
+                    }
+                }
+            }
+            Ok((Stdio::from(write_end), None, Some(read_end)))
         }
         OutputStream::Tty => {
             let pty = openpty(None, None)
@@ -82,7 +107,7 @@ fn configured_output(mode: OutputStream) -> Result<(Stdio, Option<OwnedFd>)> {
             flags.insert(OFlag::O_NONBLOCK);
             fcntl(master_fd, FcntlArg::F_SETFL(flags))
                 .map_err(|e| TestError::ExecutionError(format!("Failed to set pty flags: {e}")))?;
-            Ok((Stdio::from(pty.slave), Some(pty.master)))
+            Ok((Stdio::from(pty.slave), Some(pty.master), None))
         }
     }
 }
@@ -760,8 +785,8 @@ impl IsolatedSandbox {
             None if close_stdin => Stdio::null(),
             None => Stdio::piped(),
         };
-        let (stdout, stdout_tty) = configured_output(streams.stdout)?;
-        let (stderr, stderr_tty) = configured_output(streams.stderr)?;
+        let (stdout, stdout_tty, _stdout_pipe_keepalive) = configured_output(streams.stdout)?;
+        let (stderr, stderr_tty, _stderr_pipe_keepalive) = configured_output(streams.stderr)?;
         let mut command = if streams.use_bash {
             let mut command = Command::new("bash");
             command
@@ -1526,6 +1551,31 @@ mod tests {
         assert_eq!(result.exit_code, 1);
         assert!(result.stdout.is_empty());
         assert!(result.stderr.contains("write error: Broken pipe"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_command_with_nonblocking_full_stdout_reports_eagain() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        let streams = StandardStreams {
+            stdout: OutputStream::NonblockingFullPipe,
+            ..StandardStreams::default()
+        };
+        let result = sandbox.execute_command_with_streams(
+            "/usr/bin/yes",
+            &["x".to_string()],
+            None,
+            true,
+            Some(1),
+            &streams,
+        )?;
+
+        assert_eq!(result.exit_code, 1);
+        assert!(result.stdout.is_empty());
+        assert_eq!(
+            result.stderr,
+            "/usr/bin/yes: standard output: Resource temporarily unavailable\n"
+        );
         Ok(())
     }
 

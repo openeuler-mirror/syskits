@@ -284,6 +284,7 @@ impl FilenameSuffix {
         let mut start = 0;
         let mut start_digits = None;
         let mut auto_widening = true;
+        let mut has_explicit_suffix_start = false;
         let default_length: usize = 2;
 
         // 根据命令行参数确定后缀类型和起始值
@@ -297,6 +298,7 @@ impl FilenameSuffix {
                 stype = FilenameSuffixType::Decimal;
                 if let Some(opt) = args_match.get_one::<String>(OPT_NUMERIC_SUFFIXES) {
                     (start, start_digits) = Self::parse_start_value(opt, false)?;
+                    has_explicit_suffix_start = true;
                     auto_widening = false;
                 }
             }
@@ -304,6 +306,7 @@ impl FilenameSuffix {
                 stype = FilenameSuffixType::Hexadecimal;
                 if let Some(opt) = args_match.get_one::<String>(OPT_HEX_SUFFIXES) {
                     (start, start_digits) = Self::parse_start_value(opt, true)?;
+                    has_explicit_suffix_start = true;
                     auto_widening = false;
                 }
             }
@@ -333,9 +336,20 @@ impl FilenameSuffix {
         // 如有必要，自动预先计算新的后缀长度（自动宽度）
         if let Strategy::Number(number_type) = strategy {
             let chunks = number_type.num_chunks();
-            let required_length = ((start as u64 + chunks) as f64)
-                .log(stype.radix() as f64)
-                .ceil() as usize;
+            // GNU only incorporates an explicit numeric suffix start in the
+            // automatic width calculation when start < chunks. Otherwise,
+            // the iterator reports suffix exhaustion after any names that
+            // fit in the default width have been created.
+            let mut suffix_end = chunks.saturating_sub(1);
+            if has_explicit_suffix_start && start_digits.is_none() && (start as u64) < chunks {
+                suffix_end = suffix_end.saturating_add(start as u64);
+            }
+
+            let mut required_length = 1;
+            while suffix_end >= u64::from(stype.radix()) {
+                suffix_end /= u64::from(stype.radix());
+                required_length += 1;
+            }
 
             if (start as u64) < chunks && !(is_length_cmd_opt && length > 0) {
                 auto_widening = false;

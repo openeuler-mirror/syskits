@@ -27,6 +27,117 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "whoami",
+            "description": "LC_ALL=C下传入一个操作数；GNU whoami 不接受操作数，预期RC=1且使用extra operand诊断与帮助提示",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["operand"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "whoami: extra operand 'operand'\nTry 'whoami --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "whoami",
+            "description": "LC_ALL=C下--help=value不接受附带参数；预期RC=1且报option '--help' doesn't allow an argument",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["--help=value"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "whoami: option '--help' doesn't allow an argument\nTry 'whoami --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "whoami",
+            "description": "LC_ALL=C下空前缀长选项--=同时匹配help和version；预期RC=1并按GNU顺序列出两个歧义候选",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["--="],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "whoami: option '--=' is ambiguous; possibilities: '--help' '--version'\nTry 'whoami --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "whoami",
+            "description": "LC_ALL=C且未设置POSIXLY_CORRECT时，GNU标准选项扫描跨越首个操作数；operand后的未知选项优先报unrecognized option",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "unset POSIXLY_CORRECT"
+            ],
+            "args": ["operand", "--unknown"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "whoami: unrecognized option '--unknown'\nTry 'whoami --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "whoami",
+            "description": "LC_ALL=C且POSIXLY_CORRECT=1时，首个操作数停止GNU标准选项扫描；后续--help仍是操作数，预期报首个extra operand",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "export POSIXLY_CORRECT=1"
+            ],
+            "args": ["operand", "--help"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "whoami: extra operand 'operand'\nTry 'whoami --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "whoami",
+            "description": "原始字节诊断用例：LC_ALL=C下传入未知长选项2d2dff，即--后跟单字节0xff；预期RC=1、stdout为空，stderr完整十六进制逐字节保留0xff，不经过UTF-8替换",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["2d2dff"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77686f616d693a20756e7265636f676e697a6564206f7074696f6e20272d2dff270a547279202777686f616d69202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
-} 
+}

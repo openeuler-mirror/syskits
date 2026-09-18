@@ -17,6 +17,7 @@ use std::io::{self, Write};
 use clap::{Arg, ArgAction, Command, builder::ValueParser, crate_version};
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, strip_errno};
+use ctcore::ct_posix::GnuGetoptCommandExt;
 #[cfg(unix)]
 use ctcore::ct_signals::enable_pipe_errors;
 
@@ -79,6 +80,10 @@ fn yes_standard_output_error_message(error: &io::Error) -> String {
 }
 
 pub fn ct_app() -> Command {
+    ct_app_with_getopt_mode(ctcore::ct_posix::posixly_correct())
+}
+
+fn ct_app_with_getopt_mode(posixly_correct: bool) -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
     let application_info = t!("ct_yes.about");
@@ -109,6 +114,7 @@ pub fn ct_app() -> Command {
                 .action(ArgAction::Version),
         )
         .arg(arg)
+        .gnu_getopt_with_mode(posixly_correct)
 }
 
 // 将`i`中的单词复制到`buf`中，中间用空格隔开。
@@ -268,6 +274,25 @@ mod tests {
         assert_eq!(
             yes_standard_output_error_message(&io::Error::from_raw_os_error(nix::libc::ENOSPC)),
             "standard output: No space left on device"
+        );
+    }
+
+    #[test]
+    fn posix_getopt_treats_late_version_as_string() {
+        let matches = ct_app_with_getopt_mode(true)
+            .try_get_matches_from(["yes", "alpha", "--version"])
+            .expect("POSIX mode must stop option parsing at the first operand");
+
+        assert_eq!(
+            matches
+                .get_many::<OsString>("STRING")
+                .expect("STRING operands must be present")
+                .map(OsString::as_os_str)
+                .collect::<Vec<_>>(),
+            [
+                std::ffi::OsStr::new("alpha"),
+                std::ffi::OsStr::new("--version")
+            ]
         );
     }
 

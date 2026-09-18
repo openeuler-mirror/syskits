@@ -4182,6 +4182,42 @@
       "cleanup_commands": [
         "rm -f xaa"
       ]
+    },
+    {
+      "command": "split",
+      "description": "轮转分片读取错误优先级：LC_ALL=C、LANG=C；输入input和潜在首个输出out-aa均为目录，执行split --number=r/2 input out-。GNU lines_rr先读取输入，仅在读到记录后打开对应输出；预期RC=1、stdout为空、stderr报告input为目录，且不得创建out-ab。",
+      "args": [
+        "--number=r/2",
+        "input",
+        "out-"
+      ],
+      "setup_commands": [
+        "mkdir input out-aa"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "split: input: Is a directory\n"
+        },
+        "verifications": [
+          {
+            "command": "test -d out-aa && test ! -e out-ab",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -rf input out-aa out-ab"
+      ]
     }
   ]
 }

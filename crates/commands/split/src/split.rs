@@ -1765,12 +1765,10 @@ fn init_round_robin_output_files(
     split_settings: &SpliceSettings,
 ) -> CTResult<OutFiles> {
     let output_files = new_round_robin_output_files(number_files)?;
-    let (output_files, suffix_exhausted) = initialize_output_files(
-        output_files,
-        number_files,
-        split_settings,
-        split_settings.elide_empty_files || split_settings.filter.is_some(),
-    )?;
+    // GNU `lines_rr` creates output names before reading, then opens each file
+    // only when a record selects it or EOF requires an empty output file.
+    let (output_files, suffix_exhausted) =
+        initialize_output_files(output_files, number_files, split_settings, true)?;
     if suffix_exhausted {
         return Err(CtSimpleError::new(1, "output file suffixes exhausted"));
     }
@@ -2416,7 +2414,10 @@ where
     let mut size = 0;
     loop {
         let line = &mut Vec::new();
-        let number_bytes_read = splice_reader.by_ref().read_until(separator, line)?;
+        let number_bytes_read = splice_reader
+            .by_ref()
+            .read_until(separator, line)
+            .map_err_context(|| split_quote_path(splice_settings.input_path(), false))?;
 
         // 如果没有更多的数据可读，则退出循环。
         if number_bytes_read == 0 {
@@ -2455,7 +2456,7 @@ where
         }
     }
 
-    if kth_chunk.is_none() && splice_settings.filter.is_some() {
+    if kth_chunk.is_none() {
         for index in 0..output_files.len() {
             if output_files[index].maybe_writer.is_none() {
                 if splice_settings.elide_empty_files {
@@ -2465,7 +2466,7 @@ where
             }
 
             drop(output_files[index].maybe_writer.take());
-            if platform::filter_failure_recorded() {
+            if splice_settings.filter.is_some() && platform::filter_failure_recorded() {
                 return Err(CtSimpleError::new(1, "filter command failed"));
             }
         }
@@ -2649,6 +2650,33 @@ mod tests {
 
         assert_eq!(error.code(), 1);
         assert_eq!(error.to_string(), "memory exhausted");
+    }
+
+    #[test]
+    fn round_robin_reads_input_before_opening_output_files() {
+        let temp = tempdir().expect("create temporary directory");
+        let input = temp.path().join("input");
+        let prefix = temp.path().join("out-");
+        std::fs::create_dir(&input).expect("create unreadable input directory");
+        std::fs::create_dir(temp.path().join("out-aa"))
+            .expect("create conflicting output directory");
+
+        let error = split_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--number=r/2"),
+                input.clone().into_os_string(),
+                prefix.into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect_err("the unreadable input must be reported before the output conflict");
+
+        assert_eq!(error.code(), 1);
+        assert_eq!(
+            error.to_string(),
+            format!("{}: Is a directory", input.display())
+        );
     }
     use std::collections::BTreeMap;
     use std::path::PathBuf;

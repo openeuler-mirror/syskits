@@ -25,7 +25,7 @@
 //!     length: 2,
 //!     start: 0,
 //!     auto_widening: true,
-//!     additional: ".txt".to_string(),
+//!     additional: OsString::from(".txt"),
 //! };
 //! let it = FilenameIterator::new(prefix, suffix);
 //!
@@ -47,7 +47,6 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use std::ffi::{OsStr, OsString};
 use std::fmt;
-use std::path::is_separator;
 
 /// The format to use for suffixes in the filename for each output chunk.
 #[derive(Clone, Copy)]
@@ -82,7 +81,7 @@ pub struct FilenameSuffix {
     /// Digits for a suffix start that exceeds the host `usize` range.
     start_digits: Option<Vec<u8>>,
     auto_widening: bool,
-    additional: String,
+    additional: OsString,
 }
 
 /// An error when parsing suffix parameters from command-line arguments.
@@ -287,8 +286,10 @@ impl FilenameSuffix {
 
         // 获取额外的后缀信息，并检查其中是否包含分隔符
         let additional = Self::get_additional(args_match);
-        if additional.chars().any(is_separator) {
-            return Err(FilenameSuffixError::ContainsSeparator(additional));
+        if additional.as_encoded_bytes().contains(&b'/') {
+            return Err(FilenameSuffixError::ContainsSeparator(
+                additional.to_string_lossy().into_owned(),
+            ));
         }
 
         // 创建并返回文件名后缀配置结果
@@ -304,11 +305,11 @@ impl FilenameSuffix {
         Ok(result)
     }
 
-    fn get_additional(matches: &ArgMatches) -> String {
+    fn get_additional(matches: &ArgMatches) -> OsString {
         matches
-            .get_one::<String>(OPT_ADDITIONAL_SUFFIX)
+            .get_one::<OsString>(OPT_ADDITIONAL_SUFFIX)
             .unwrap()
-            .to_string()
+            .clone()
     }
 }
 
@@ -344,7 +345,7 @@ impl FilenameSuffix {
 ///     length: 2,
 ///     start: 0,
 ///     auto_widening: true,
-///     additional: ".txt".to_string(),
+///     additional: OsString::from(".txt"),
 /// };
 /// let it = FilenameIterator::new(prefix, suffix);
 ///
@@ -365,7 +366,7 @@ impl FilenameSuffix {
 ///     length: 2,
 ///     start: 0,
 ///     auto_widening: true,
-///     additional: ".txt".to_string(),
+///     additional: OsString::from(".txt"),
 /// };
 /// let it = FilenameIterator::new(prefix, suffix);
 ///
@@ -375,7 +376,7 @@ impl FilenameSuffix {
 /// ```
 pub struct FilenameIterator {
     prefix: OsString,
-    additional_suffix: String,
+    additional_suffix: OsString,
     number: Number,
     first_iteration: bool,
 }
@@ -429,7 +430,7 @@ impl Iterator for FilenameIterator {
         }
         let mut filename = self.prefix.to_os_string();
         filename.push(self.number.to_string());
-        filename.push(self.additional_suffix.as_str());
+        filename.push(&self.additional_suffix);
         Some(filename)
     }
 }
@@ -456,7 +457,7 @@ mod tests {
                 start: 0,
                 start_digits: None,
                 auto_widening: false,
-                additional: ".txt".to_string(),
+                additional: OsString::from(".txt"),
             };
             let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
             assert_eq!(it.next().unwrap(), "chunk_aa.txt");
@@ -472,7 +473,7 @@ mod tests {
                 start: 0,
                 start_digits: None,
                 auto_widening: false,
-                additional: ".txt".to_string(),
+                additional: OsString::from(".txt"),
             };
             let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
             assert_eq!(it.nth(26 * 26 - 1).unwrap(), "chunk_zz.txt");
@@ -486,7 +487,7 @@ mod tests {
                 start: 0,
                 start_digits: None,
                 auto_widening: false,
-                additional: ".txt".to_string(),
+                additional: OsString::from(".txt"),
             };
             let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
             it.nth(26 * 26 - 1).unwrap();
@@ -500,7 +501,7 @@ mod tests {
                 start: 0,
                 start_digits: None,
                 auto_widening: true,
-                additional: ".txt".to_string(),
+                additional: OsString::from(".txt"),
             };
             let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
             assert_eq!(it.next().unwrap(), "chunk_aa.txt");
@@ -513,7 +514,7 @@ mod tests {
                 start: 0,
                 start_digits: None,
                 auto_widening: true,
-                additional: ".txt".to_string(),
+                additional: OsString::from(".txt"),
             };
             let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
             assert_eq!(it.next().unwrap(), "chunk_00.txt");
@@ -526,7 +527,7 @@ mod tests {
                 start: 0,
                 start_digits: None,
                 auto_widening: false,
-                additional: ".txt".to_string(),
+                additional: OsString::from(".txt"),
             };
             let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
             assert_eq!(it.next().unwrap(), "chunk_00.txt");
@@ -539,7 +540,7 @@ mod tests {
                 start: 10,
                 start_digits: None,
                 auto_widening: false,
-                additional: ".txt".to_string(),
+                additional: OsString::from(".txt"),
             };
             let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
             assert_eq!(it.next().unwrap(), "chunk_10.txt");
@@ -554,7 +555,7 @@ mod tests {
             start: 0,
             start_digits: None,
             auto_widening: false,
-            additional: ".txt".to_string(),
+            additional: OsString::from(".txt"),
         };
         let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_00.txt");
@@ -570,7 +571,7 @@ mod tests {
             start: 0,
             start_digits: None,
             auto_widening: false,
-            additional: ".txt".to_string(),
+            additional: OsString::from(".txt"),
         };
         let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
         assert_eq!(it.nth(10 * 10 - 1).unwrap(), "chunk_99.txt");
@@ -584,7 +585,7 @@ mod tests {
             start: 0,
             start_digits: None,
             auto_widening: false,
-            additional: ".txt".to_string(),
+            additional: OsString::from(".txt"),
         };
         let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
         it.nth(10 * 10 - 1).unwrap();
@@ -599,7 +600,7 @@ mod tests {
             start: 0,
             start_digits: None,
             auto_widening: true,
-            additional: ".txt".to_string(),
+            additional: OsString::from(".txt"),
         };
         let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_aa.txt");
@@ -615,7 +616,7 @@ mod tests {
             start: 0,
             start_digits: None,
             auto_widening: true,
-            additional: ".txt".to_string(),
+            additional: OsString::from(".txt"),
         };
         let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
         assert_eq!(it.nth(26 * 25 - 1).unwrap(), "chunk_yz.txt");
@@ -630,7 +631,7 @@ mod tests {
             start: 0,
             start_digits: None,
             auto_widening: true,
-            additional: ".txt".to_string(),
+            additional: OsString::from(".txt"),
         };
         let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
         it.nth(26 * 25 - 1).unwrap();
@@ -646,7 +647,7 @@ mod tests {
             start: 0,
             start_digits: None,
             auto_widening: true,
-            additional: ".txt".to_string(),
+            additional: OsString::from(".txt"),
         };
         let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_00.txt");
@@ -662,7 +663,7 @@ mod tests {
             start: 0,
             start_digits: None,
             auto_widening: true,
-            additional: ".txt".to_string(),
+            additional: OsString::from(".txt"),
         };
         let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
         assert_eq!(it.nth(10 * 9 - 1).unwrap(), "chunk_89.txt");
@@ -677,7 +678,7 @@ mod tests {
             start: 0,
             start_digits: None,
             auto_widening: true,
-            additional: ".txt".to_string(),
+            additional: OsString::from(".txt"),
         };
         let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
         it.nth(10 * 9 - 1).unwrap();
@@ -692,7 +693,7 @@ mod tests {
             start: 5,
             start_digits: None,
             auto_widening: true,
-            additional: ".txt".to_string(),
+            additional: OsString::from(".txt"),
         };
         let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_05.txt");
@@ -708,7 +709,7 @@ mod tests {
             start: 9,
             start_digits: None,
             auto_widening: true,
-            additional: ".txt".to_string(),
+            additional: OsString::from(".txt"),
         };
         let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_09.txt");
@@ -724,7 +725,7 @@ mod tests {
             start: 0,
             start_digits: None,
             auto_widening: true,
-            additional: ".txt".to_string(),
+            additional: OsString::from(".txt"),
         };
         let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_aa.txt");
@@ -740,7 +741,7 @@ mod tests {
             start: 999,
             start_digits: None,
             auto_widening: false,
-            additional: ".txt".to_string(),
+            additional: OsString::from(".txt"),
         };
         let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_999.txt");
@@ -755,7 +756,7 @@ mod tests {
             start: 1000,
             start_digits: None,
             auto_widening: false,
-            additional: ".txt".to_string(),
+            additional: OsString::from(".txt"),
         };
         let it = FilenameIterator::new("chunk_", &suffix);
         assert!(it.is_err());
@@ -769,7 +770,7 @@ mod tests {
             start: 0xfff,
             start_digits: None,
             auto_widening: false,
-            additional: ".txt".to_string(),
+            additional: OsString::from(".txt"),
         };
         let mut it = FilenameIterator::new("chunk_", &suffix).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_fff.txt");
@@ -784,7 +785,7 @@ mod tests {
             start: 0x1000,
             start_digits: None,
             auto_widening: false,
-            additional: ".txt".to_string(),
+            additional: OsString::from(".txt"),
         };
         let it = FilenameIterator::new("chunk_", &suffix);
         assert!(it.is_err());

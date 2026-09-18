@@ -656,6 +656,61 @@
       ]
     },
     {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "split",
+      "description": "原始字节附加后缀：LC_ALL=C；参数完整十六进制为2d2d62797465733d31（--bytes=1）、2d2d6164646974696f6e616c2d737566666978（--additional-suffix）、ff（单字节后缀0xff）、696e（输入in）和6f75742d（前缀out-）；输入字节为6162，预期RC=0、stdout/stderr为空，并生成名称6f75742d6161ff和6f75742d6162ff、内容分别为61和62的输出文件。",
+      "args": [
+        "2d2d62797465733d31",
+        "2d2d6164646974696f6e616c2d737566666978",
+        "ff",
+        "696e",
+        "6f75742d"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C LANG=C",
+        "printf 'ab' > in",
+        "printf a > expected-a",
+        "printf b > expected-b"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "cmp -s expected-a \"$(printf 'out-aa\\377')\"",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          },
+          {
+            "command": "cmp -s expected-b \"$(printf 'out-ab\\377')\"",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in expected-a expected-b \"$(printf 'out-aa\\377')\" \"$(printf 'out-ab\\377')\""
+      ]
+    },
+    {
       "command": "split",
       "description": "split --lines moves an unterminated final record after a full chunk",
       "args": [

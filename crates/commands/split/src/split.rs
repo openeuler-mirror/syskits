@@ -2185,7 +2185,8 @@ where
     for line_result in reader_buffer.split(separator) {
         let mut line = line_result?;
         // 检查是否需要在行尾添加分隔符
-        if (number_bytes_written + line.len() as u64) < number_bytes {
+        let line_is_terminated = (number_bytes_written + line.len() as u64) < number_bytes;
+        if line_is_terminated {
             line.push(separator);
         }
         let size = line.as_slice();
@@ -2219,6 +2220,14 @@ where
         while number_bytes_should_be_written <= number_bytes_written {
             let next_chunk_size = chunk_size_base + (chunk_size_reminder > chunk_number) as u64;
             if next_chunk_size == 0 {
+                // GNU keeps advancing zero-sized chunks only after a
+                // separator-terminated line. An unterminated final line
+                // reaches EOF, so the normal finalization creates the
+                // remaining requested empty outputs.
+                if !line_is_terminated {
+                    break;
+                }
+
                 if let Some(kth) = kth_chunk {
                     if chunk_number == kth {
                         return Ok(());
@@ -2642,6 +2651,33 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn lines_number_unterminated_tail_creates_requested_empty_chunks() {
+        let temp_dir = tempdir().unwrap();
+        let input = temp_dir.path().join("input");
+        std::fs::write(&input, b"a").unwrap();
+        let prefix = temp_dir.path().join("out-");
+
+        split_main(
+            vec![
+                ctcore::ct_util_name().into(),
+                "-a".into(),
+                "1".into(),
+                "-n".into(),
+                "l/3".into(),
+                input.into_os_string(),
+                prefix.into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect("unterminated tail must only create the requested chunks");
+
+        assert_eq!(std::fs::read(temp_dir.path().join("out-a")).unwrap(), b"a");
+        assert_eq!(std::fs::read(temp_dir.path().join("out-b")).unwrap(), b"");
+        assert_eq!(std::fs::read(temp_dir.path().join("out-c")).unwrap(), b"");
+        assert!(!temp_dir.path().join("out-d").exists());
     }
 
     #[test]

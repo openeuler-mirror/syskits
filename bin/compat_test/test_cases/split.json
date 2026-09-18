@@ -3582,6 +3582,49 @@
       "cleanup_commands": [
         "rm -f in out*"
       ]
+    },
+    {
+      "command": "split",
+      "description": "POSIXLY_CORRECT=1、LC_ALL=C、LANG=C下执行split in -l 1；GNU getopt在首个输入文件操作数in处停止选项解析，后续-l和1作为输出前缀及额外操作数，预期RC=1、stdout为空且不创建任何分片文件。",
+      "args": [
+        "in",
+        "-l",
+        "1"
+      ],
+      "setup_commands": [
+        "printf 'alpha\\nbeta\\n' > in"
+      ],
+      "environment": {
+        "env_vars": {
+          "POSIXLY_CORRECT": "1",
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "test ! -e xaa && test ! -e xab && test ! -e ./-l",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": true,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in xaa xab -- -l"
+      ]
     }
   ]
 }

@@ -454,22 +454,58 @@ fn split_test_prefix() -> String {
 /// following GNU `split` behavior
 /// 分割并处理命令行参数。
 fn split_handle_obsolete(args: impl ctcore::Args) -> (Vec<OsString>, Option<String>) {
+    split_handle_obsolete_with_mode(args, ctcore::ct_posix::posixly_correct())
+}
+
+fn split_handle_obsolete_with_mode(
+    args: impl ctcore::Args,
+    posixly_correct: bool,
+) -> (Vec<OsString>, Option<String>) {
     // 初始化用于存储已弃用参数行的可选项，以及标记是否紧随了需要值的长或短选项。
     let mut obs_lines = None;
     let mut preceding_long_opt_req_value = false;
     let mut preceding_short_opt_req_value = false;
+    let mut parse_options = true;
+    let mut filtered_args = Vec::new();
 
-    // 过滤并映射输入参数，忽略已弃用的参数行并处理需要值的长/短选项。
-    let filtered_args = args
-        .filter_map(|os_slice| {
+    for (index, os_slice) in args.enumerate() {
+        let is_option_value = preceding_long_opt_req_value || preceding_short_opt_req_value;
+        let bytes = os_slice.as_encoded_bytes();
+
+        if index > 0 && parse_options && !is_option_value {
+            if bytes == b"--" {
+                parse_options = false;
+                filtered_args.push(os_slice);
+                continue;
+            }
+
+            if posixly_correct && (bytes.is_empty() || bytes == b"-" || bytes[0] != b'-') {
+                filtered_args.push(OsString::from("--"));
+                parse_options = false;
+                filtered_args.push(os_slice);
+                continue;
+            }
+        }
+
+        let filtered = if parse_options {
             split_filter_args(
                 os_slice,
                 &mut obs_lines,
                 &mut preceding_long_opt_req_value,
                 &mut preceding_short_opt_req_value,
             )
-        })
-        .collect();
+        } else {
+            Some(os_slice)
+        };
+
+        if is_option_value {
+            preceding_long_opt_req_value = false;
+            preceding_short_opt_req_value = false;
+        }
+        if let Some(argument) = filtered {
+            filtered_args.push(argument);
+        }
+    }
 
     (filtered_args, obs_lines)
 }
@@ -621,30 +657,59 @@ fn splice_handle_preceding_options(
     is_preceding_long_opt_req_value: &mut bool,
     is_preceding_short_opt_req_value: &mut bool,
 ) {
-    // 检查当前切片是否为需要值的前置长选项且未使用'='赋值
-    if splice_slice.starts_with("--") {
-        *is_preceding_long_opt_req_value = &splice_slice[2..] == OPT_BYTES
-            || &splice_slice[2..] == OPT_LINE_BYTES
-            || &splice_slice[2..] == OPT_LINES
-            || &splice_slice[2..] == OPT_ADDITIONAL_SUFFIX
-            || &splice_slice[2..] == OPT_FILTER
-            || &splice_slice[2..] == OPT_NUMBER
-            || &splice_slice[2..] == OPT_SUFFIX_LENGTH
-            || &splice_slice[2..] == OPT_SEPARATOR
-            || &splice_slice[2..] == OPT_IO_BLKSIZE;
+    let bytes = splice_slice.as_bytes();
+    *is_preceding_long_opt_req_value = split_long_option_takes_next_value(bytes);
+    *is_preceding_short_opt_req_value = split_short_option_takes_next_value(bytes);
+}
+
+fn split_long_option_takes_next_value(argument: &[u8]) -> bool {
+    let Some(name) = argument.strip_prefix(b"--") else {
+        return false;
+    };
+    if name.contains(&b'=') {
+        return false;
     }
-    // 检查当前切片是否为需要值的前置短选项（值通过空格分隔）
-    *is_preceding_short_opt_req_value = splice_slice == "-b"
-        || splice_slice == "-C"
-        || splice_slice == "-l"
-        || splice_slice == "-n"
-        || splice_slice == "-a"
-        || splice_slice == "-t";
-    // 如果当前切片不是以'-'开头，则认为它是一个值，并重置前置选项标志
-    if !splice_slice.starts_with('-') {
-        *is_preceding_short_opt_req_value = false;
-        *is_preceding_long_opt_req_value = false;
+
+    const LONG_OPTIONS: &[(&str, bool)] = &[
+        (OPT_BYTES, true),
+        (OPT_LINE_BYTES, true),
+        (OPT_LINES, true),
+        (OPT_ADDITIONAL_SUFFIX, true),
+        (OPT_FILTER, true),
+        (OPT_NUMBER, true),
+        (OPT_SUFFIX_LENGTH, true),
+        (OPT_SEPARATOR, true),
+        (OPT_IO_BLKSIZE, true),
+        (OPT_ELIDE_EMPTY_FILES, false),
+        (OPT_UNBUFFERED, false),
+        (OPT_NUMERIC_SUFFIXES, false),
+        (OPT_HEX_SUFFIXES, false),
+        (OPT_VERBOSE, false),
+        ("help", false),
+        ("version", false),
+    ];
+
+    let mut matches = LONG_OPTIONS
+        .iter()
+        .filter(|(option, _)| option.as_bytes().starts_with(name));
+    let first = matches.next();
+    if matches.next().is_some() {
+        return false;
     }
+    first.is_some_and(|(_, takes_value)| *takes_value)
+}
+
+fn split_short_option_takes_next_value(argument: &[u8]) -> bool {
+    if argument.len() < 2 || argument[0] != b'-' || argument[1] == b'-' {
+        return false;
+    }
+
+    for (index, option) in argument[1..].iter().enumerate() {
+        if matches!(*option, b'a' | b'b' | b'C' | b'l' | b'n' | b't') {
+            return index + 2 == argument.len();
+        }
+    }
+    false
 }
 
 pub fn ct_app() -> Command {
@@ -2332,6 +2397,42 @@ mod tests {
         static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let seq = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Box::leak(format!("output.{}.{}.txt", std::process::id(), seq).into_boxed_str())
+    }
+
+    #[test]
+    fn test_ct_app_posixly_correct_stops_at_first_operand() {
+        let (prepared, obsolete_lines) = split_handle_obsolete_with_mode(
+            ["split", "input", "-l", "1"]
+                .map(OsString::from)
+                .into_iter(),
+            true,
+        );
+        assert_eq!(
+            prepared,
+            ["split", "--", "input", "-l", "1"].map(OsString::from)
+        );
+        assert_eq!(obsolete_lines, None);
+
+        let error = ct_app()
+            .try_get_matches_from(prepared)
+            .expect_err("options after the first operand must remain operands");
+        assert_eq!(error.kind(), clap::error::ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_posix_preprocessing_skips_clustered_option_values() {
+        let (prepared, obsolete_lines) = split_handle_obsolete_with_mode(
+            ["split", "-db", "1", "input", "-l", "2"]
+                .map(OsString::from)
+                .into_iter(),
+            true,
+        );
+
+        assert_eq!(
+            prepared,
+            ["split", "-db", "1", "--", "input", "-l", "2"].map(OsString::from)
+        );
+        assert_eq!(obsolete_lines, None);
     }
 
     #[cfg(unix)]

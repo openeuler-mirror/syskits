@@ -17,7 +17,8 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::Write;
 use std::io::{BufWriter, Error, Result};
-use std::os::unix::process::ExitStatusExt;
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 
@@ -130,7 +131,10 @@ impl UnixFilterWriter {
     /// * `command` - The shell command to execute
     /// * `filepath` - Path of the output file (forwarded to command as $FILE)
     fn new(command: &OsStr, filepath: &OsStr) -> Result<Self> {
-        let shell_process = Command::new(filter_shell_program(env::var_os("SHELL")))
+        let shell_program = filter_shell_program(env::var_os("SHELL"));
+        let shell_argv0 = filter_shell_argv0(shell_program.as_os_str()).to_os_string();
+        let shell_process = Command::new(shell_program)
+            .arg0(shell_argv0)
             .arg("-c")
             .arg(command)
             .env("FILE", filepath)
@@ -147,6 +151,26 @@ impl UnixFilterWriter {
 
 fn filter_shell_program(shell: Option<OsString>) -> OsString {
     shell.unwrap_or_else(|| OsString::from("/bin/sh"))
+}
+
+fn filter_shell_argv0(shell: &OsStr) -> &OsStr {
+    let bytes = shell.as_bytes();
+    let mut base = bytes
+        .iter()
+        .position(|byte| *byte != b'/')
+        .unwrap_or(bytes.len());
+    let mut last_was_slash = false;
+
+    for (index, byte) in bytes.iter().enumerate().skip(base) {
+        if *byte == b'/' {
+            last_was_slash = true;
+        } else if last_was_slash {
+            base = index;
+            last_was_slash = false;
+        }
+    }
+
+    OsStr::from_bytes(&bytes[base..])
 }
 
 impl Drop for UnixFilterWriter {
@@ -235,7 +259,7 @@ pub fn paths_refer_to_same_file(path1: impl AsRef<OsStr>, path2: impl AsRef<OsSt
 
 #[cfg(test)]
 mod tests {
-    use super::filter_shell_program;
+    use super::{filter_shell_argv0, filter_shell_program};
     use crate::SpliceSettings;
     use crate::ct_app;
     use crate::platform::instantiate_current_writer;
@@ -254,6 +278,15 @@ mod tests {
         let selected = filter_shell_program(Some(shell));
 
         assert_eq!(selected.as_os_str().as_bytes(), b"./shell-\xff");
+    }
+
+    #[test]
+    fn filter_shell_argv0_uses_last_path_component() {
+        let shell = std::ffi::OsStr::from_bytes(b"/opt/shells/bash-\xff");
+
+        let argv0 = filter_shell_argv0(shell);
+
+        assert_eq!(argv0.as_bytes(), b"bash-\xff");
     }
 
     fn split_test_base_dir() -> std::path::PathBuf {

@@ -739,6 +739,8 @@ impl IsolatedSandbox {
 
         let streams = options.streams;
         let close_stdin = streams.stdin_file.is_none() && streams.stdin == InputStream::Closed;
+        let keep_stdin_open =
+            streams.stdin_file.is_none() && streams.stdin == InputStream::OpenPipe;
         let close_stdout = streams.stdout == OutputStream::Closed;
         let close_stderr = streams.stderr == OutputStream::Closed;
         let stdin = match streams.stdin_file.as_deref() {
@@ -816,6 +818,18 @@ impl IsolatedSandbox {
                 });
             }
         };
+        let stdin_keepalive = if keep_stdin_open {
+            child
+                .stdin
+                .as_ref()
+                .map(|stdin| -> Result<OwnedFd> {
+                    let fd = dup(stdin.as_raw_fd())?;
+                    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
+                })
+                .transpose()?
+        } else {
+            None
+        };
         let pty_readers_done = Arc::new(AtomicBool::new(false));
         let stdout_tty_reader = stdout_tty.map(|master| {
             let process_done = Arc::clone(&pty_readers_done);
@@ -827,23 +841,25 @@ impl IsolatedSandbox {
         });
 
         // 启动命令
-        if let Some(content) = stdin_content {
-            if let Some(stdin) = child.stdin.as_mut() {
-                if !content.is_empty() {
-                    if let Err(e) = stdin.write_all(content) {
-                        let _ = child.kill();
-                        pty_readers_done.store(true, Ordering::Release);
-                        self.debug_fmt(format_args!("Failed to write to stdin: {e}"));
-                        let stderr = encode_if_hex(&format!("Failed to write to stdin: {e}"));
-                        return Ok(CommandResult {
-                            stdout: String::new(),
-                            stderr,
-                            exit_code: 1,
-                        });
+        if !keep_stdin_open {
+            if let Some(content) = stdin_content {
+                if let Some(stdin) = child.stdin.as_mut() {
+                    if !content.is_empty() {
+                        if let Err(e) = stdin.write_all(content) {
+                            let _ = child.kill();
+                            pty_readers_done.store(true, Ordering::Release);
+                            self.debug_fmt(format_args!("Failed to write to stdin: {e}"));
+                            let stderr = encode_if_hex(&format!("Failed to write to stdin: {e}"));
+                            return Ok(CommandResult {
+                                stdout: String::new(),
+                                stderr,
+                                exit_code: 1,
+                            });
+                        }
                     }
+                    // Always close stdin so the child can observe EOF.
+                    drop(child.stdin.take());
                 }
-                // Always close stdin so the child can observe EOF.
-                drop(child.stdin.take());
             }
         }
 
@@ -910,6 +926,8 @@ impl IsolatedSandbox {
                 }
             };
         }
+
+        drop(stdin_keepalive);
 
         pty_readers_done.store(true, Ordering::Release);
         if let Some(reader) = stdout_tty_reader {
@@ -1349,6 +1367,29 @@ mod tests {
         assert_eq!(result.exit_code, 0);
         assert_eq!(result.stdout, "test input");
         assert_eq!(result.stderr, "");
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_command_with_open_stdin_pipe_keeps_child_waiting() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        let streams = StandardStreams {
+            stdin: InputStream::OpenPipe,
+            ..StandardStreams::default()
+        };
+
+        let result = sandbox.execute_command_with_streams(
+            "cat",
+            &[],
+            Some("ignored input"),
+            true,
+            Some(1),
+            &streams,
+        )?;
+
+        assert_eq!(result.exit_code, 137);
+        assert!(result.stdout.is_empty());
+        assert!(result.stderr.is_empty());
         Ok(())
     }
 

@@ -446,45 +446,34 @@ fn copy_without_poll(output: &mut MultiWriter) -> Result<()> {
 #[cfg(unix)]
 fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
     let stdin_handle = std::io::stdin();
-    let stdout_handle = std::io::stdout();
     let stdin_fd = stdin_handle.as_fd();
-    let stdout_fd = stdout_handle.as_fd();
 
     let mut buf = [0u8; 8192];
     let mut stdin_lock = stdin_handle.lock();
-    let mut stdout_active = true;
 
     loop {
-        // 动态组装需要监控的 fds，如果 stdout 挂了就不要再 poll 它了，防止死循环
-        let mut poll_fds = [
-            PollFd::new(stdin_fd, PollFlags::POLLIN),
-            PollFd::new(
-                stdout_fd,
+        let output_fd = output.first_output_pipe_fd();
+        let mut poll_fds = vec![PollFd::new(stdin_fd, PollFlags::POLLIN)];
+        if let Some(output_fd) = output_fd {
+            let output_fd = unsafe { std::os::fd::BorrowedFd::borrow_raw(output_fd) };
+            poll_fds.push(PollFd::new(
+                output_fd,
                 PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL,
-            ),
-        ];
+            ));
+        }
 
-        let fds_to_poll = if stdout_active {
-            &mut poll_fds[..2]
-        } else {
-            &mut poll_fds[..1]
-        };
-
-        match poll(fds_to_poll, PollTimeout::NONE) {
+        match poll(&mut poll_fds, PollTimeout::NONE) {
             Ok(_) => {
                 let stdin_revents = poll_fds[0].revents().unwrap_or(PollFlags::empty());
-                let stdout_revents = if stdout_active {
-                    poll_fds[1].revents().unwrap_or(PollFlags::empty())
-                } else {
-                    PollFlags::empty()
-                };
+                let output_revents = poll_fds
+                    .get(1)
+                    .and_then(|poll_fd| poll_fd.revents())
+                    .unwrap_or(PollFlags::empty());
 
-                if stdout_revents
+                if output_revents
                     .intersects(PollFlags::POLLERR | PollFlags::POLLHUP | PollFlags::POLLNVAL)
                 {
-                    // stdout失败与stdin可读同时发生时，GNU tee先处理输出错误。
-                    output.report_broken_pipe_for_stdout()?;
-                    stdout_active = false;
+                    output.report_broken_pipe_for_output(output_fd.expect("polled output fd"))?;
 
                     if output.is_empty() {
                         return Ok(());
@@ -503,8 +492,6 @@ fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
                                 }
                                 return Err(e);
                             }
-                            // 如果 write_all 内部移除了出错的 stdout，我们需要更新 active 状态
-                            stdout_active = output.has_stdout();
                         }
                         Err(e) => {
                             report_input_read_error(&e);
@@ -559,31 +546,25 @@ fn create_writers(options: &TeeOptions, ignored_errors: &mut usize) -> Result<Ve
             options.output_error.as_ref(),
             ignored_errors,
         ) {
-            Ok(Some(writer)) => writers.push(NamedWriter {
-                name: file.clone(),
-                inner: writer,
-            }),
+            Ok(Some(writer)) => writers.push(writer),
             Ok(None) => {}
             Err(e) => return Err(e),
         }
     }
 
     // 添加标准输出作为第一个写入器
-    writers.insert(
-        0,
-        NamedWriter {
-            name: OsString::from(STANDARD_OUTPUT_NAME),
-            inner: stdout_writer()?,
-        },
-    );
+    writers.insert(0, stdout_writer()?);
 
     Ok(writers)
 }
 
 #[cfg(unix)]
-fn stdout_writer() -> Result<Box<dyn Write>> {
+fn stdout_writer() -> Result<NamedWriter> {
     if ctcore::ct_stdout_was_closed() {
-        return Ok(Box::new(ClosedStdoutWriter));
+        return Ok(NamedWriter::new(
+            OsString::from(STANDARD_OUTPUT_NAME),
+            Box::new(ClosedStdoutWriter),
+        ));
     }
 
     let stdout_fd = unsafe { nix::libc::dup(nix::libc::STDOUT_FILENO) };
@@ -592,7 +573,10 @@ fn stdout_writer() -> Result<Box<dyn Write>> {
     }
     let stdout_file = unsafe { File::from_raw_fd(stdout_fd) };
     clear_nonblocking(stdout_file.as_raw_fd())?;
-    Ok(Box::new(stdout_file))
+    Ok(NamedWriter::from_file(
+        OsString::from(STANDARD_OUTPUT_NAME),
+        stdout_file,
+    ))
 }
 
 /// Models the original closed standard output after ctcore has installed its
@@ -626,8 +610,11 @@ fn clear_nonblocking(fd: RawFd) -> Result<()> {
 }
 
 #[cfg(not(unix))]
-fn stdout_writer() -> Result<Box<dyn Write>> {
-    Ok(Box::new(stdout()))
+fn stdout_writer() -> Result<NamedWriter> {
+    Ok(NamedWriter::new(
+        OsString::from(STANDARD_OUTPUT_NAME),
+        Box::new(stdout()),
+    ))
 }
 
 pub fn ct_app() -> Command {
@@ -695,7 +682,7 @@ fn open(
     append: bool,
     output_error: Option<&OutputErrorMode>,
     ignored_errors: &mut usize,
-) -> Result<Option<Box<dyn Write>>> {
+) -> Result<Option<NamedWriter>> {
     let name = name.as_ref();
     let path = PathBuf::from(name);
     let result = if output_path_references_closed_standard_fd(&path) {
@@ -710,7 +697,7 @@ fn open(
         mode.write(true).create(true).open(path.as_path())
     };
     match result {
-        Ok(file) => Ok(Some(Box::new(file))),
+        Ok(file) => Ok(Some(NamedWriter::from_file(name.to_os_string(), file))),
         Err(error) => {
             ct_show_error!("{}: {}", tee_quote_path(name), strip_errno(&error));
             *ignored_errors += 1;
@@ -818,14 +805,13 @@ impl MultiWriter {
         self.writers.is_empty()
     }
 
-    // 新增：检查标准输出是否还在写入列表中
-    fn has_stdout(&self) -> bool {
-        self.writers
-            .iter()
-            .any(|writer| writer.name.as_os_str() == OsStr::new(STANDARD_OUTPUT_NAME))
+    #[cfg(unix)]
+    fn first_output_pipe_fd(&self) -> Option<RawFd> {
+        self.writers.first().and_then(NamedWriter::pipe_fd)
     }
 
-    fn report_broken_pipe_for_stdout(&mut self) -> Result<()> {
+    #[cfg(unix)]
+    fn report_broken_pipe_for_output(&mut self, output_fd: RawFd) -> Result<()> {
         #[cfg(unix)]
         if self.output_error_mode.is_none() {
             let _ = nix::sys::signal::raise(nix::sys::signal::Signal::SIGPIPE);
@@ -835,7 +821,7 @@ impl MultiWriter {
         let mode = self.output_error_mode.clone();
         let mut aborted = None;
         self.writers.retain_mut(|writer| {
-            if writer.name.as_os_str() == OsStr::new(STANDARD_OUTPUT_NAME) {
+            if writer.output_fd == Some(output_fd) {
                 if let Err(e) = process_error(
                     mode.as_ref(),
                     Error::from_raw_os_error(nix::libc::EPIPE),
@@ -844,7 +830,7 @@ impl MultiWriter {
                 ) {
                     aborted = Some(e);
                 }
-                false // 发生断管后移除该 writer
+                false
             } else {
                 true
             }
@@ -989,6 +975,45 @@ impl Write for MultiWriter {
 struct NamedWriter {
     inner: Box<dyn Write>,
     pub name: OsString,
+    #[cfg(unix)]
+    output_fd: Option<RawFd>,
+}
+
+impl NamedWriter {
+    fn new(name: OsString, inner: Box<dyn Write>) -> Self {
+        Self {
+            inner,
+            name,
+            #[cfg(unix)]
+            output_fd: None,
+        }
+    }
+
+    fn from_file(name: OsString, file: File) -> Self {
+        #[cfg(unix)]
+        let output_fd = Some(file.as_raw_fd());
+
+        Self {
+            inner: Box::new(file),
+            name,
+            #[cfg(unix)]
+            output_fd,
+        }
+    }
+
+    #[cfg(unix)]
+    fn pipe_fd(&self) -> Option<RawFd> {
+        self.output_fd.filter(|fd| descriptor_is_pipe(*fd))
+    }
+}
+
+#[cfg(unix)]
+fn descriptor_is_pipe(fd: RawFd) -> bool {
+    let mut stat = std::mem::MaybeUninit::<nix::libc::stat>::uninit();
+    unsafe {
+        nix::libc::fstat(fd, stat.as_mut_ptr()) == 0
+            && (stat.assume_init().st_mode & nix::libc::S_IFMT) == nix::libc::S_IFIFO
+    }
 }
 
 impl Write for NamedWriter {
@@ -1214,6 +1239,29 @@ mod tests {
         ));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn first_output_pipe_fd_advances_after_a_removed_output() {
+        let regular_file = tempfile::tempfile().unwrap();
+        let (_read_end, write_end) = nix::unistd::pipe().unwrap();
+        let pipe_file = File::from(write_end);
+        let mut output = MultiWriter::new(
+            vec![
+                NamedWriter::from_file("regular".into(), regular_file),
+                NamedWriter::from_file("pipe".into(), pipe_file),
+            ],
+            Some(OutputErrorMode::WarnNoPipe),
+        );
+
+        assert_eq!(output.first_output_pipe_fd(), None);
+        output.writers.remove(0);
+
+        let pipe_fd = output.writers[0].output_fd.unwrap();
+        assert_eq!(output.first_output_pipe_fd(), Some(pipe_fd));
+        output.report_broken_pipe_for_output(pipe_fd).unwrap();
+        assert!(output.is_empty());
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn inherited_sigpipe_ignore_is_preserved_for_default_mode() {
@@ -1267,10 +1315,10 @@ mod tests {
         #[test]
         fn test_named_writer_write_success() {
             let data = b"Hello, world!";
-            let mut writer = NamedWriter {
-                inner: Box::new(Cursor::new(Vec::new())) as Box<dyn Write>,
-                name: "test".into(),
-            };
+            let mut writer = NamedWriter::new(
+                "test".into(),
+                Box::new(Cursor::new(Vec::new())) as Box<dyn Write>,
+            );
 
             let result = writer.write(data);
             assert!(result.is_ok());
@@ -1291,10 +1339,7 @@ mod tests {
                 }
             }
 
-            let mut writer = NamedWriter {
-                inner: Box::new(ErrorWriter) as Box<dyn Write>,
-                name: "test".into(),
-            };
+            let mut writer = NamedWriter::new("test".into(), Box::new(ErrorWriter));
 
             let data = b"Hello, world!";
             let result = writer.write(data);
@@ -1304,10 +1349,10 @@ mod tests {
 
         #[test]
         fn test_named_writer_flush_success() {
-            let mut writer = NamedWriter {
-                inner: Box::new(Cursor::new(Vec::new())) as Box<dyn Write>,
-                name: "test".into(),
-            };
+            let mut writer = NamedWriter::new(
+                "test".into(),
+                Box::new(Cursor::new(Vec::new())) as Box<dyn Write>,
+            );
 
             let result = writer.flush();
             assert!(result.is_ok());
@@ -1327,10 +1372,7 @@ mod tests {
                 }
             }
 
-            let mut writer = NamedWriter {
-                inner: Box::new(ErrorWriter) as Box<dyn Write>,
-                name: "test".into(),
-            };
+            let mut writer = NamedWriter::new("test".into(), Box::new(ErrorWriter));
 
             let result = writer.flush();
             assert!(result.is_err());
@@ -1549,10 +1591,7 @@ mod test_basic {
 
     #[test]
     fn test_process_error() {
-        let writer = NamedWriter {
-            name: "test".into(),
-            inner: Box::new(Cursor::new(Vec::new())),
-        };
+        let writer = NamedWriter::new("test".into(), Box::new(Cursor::new(Vec::new())));
         let mut ignored_errors = 0;
 
         // 测试 Warn 模式
@@ -1606,14 +1645,11 @@ mod test_basic {
 
         let recorded = Rc::new(RefCell::new(Vec::new()));
         let writers = vec![
-            NamedWriter {
-                name: STANDARD_OUTPUT_NAME.into(),
-                inner: Box::new(BrokenPipeWriter),
-            },
-            NamedWriter {
-                name: "out".into(),
-                inner: Box::new(RecordingWriter(Rc::clone(&recorded))),
-            },
+            NamedWriter::new(STANDARD_OUTPUT_NAME.into(), Box::new(BrokenPipeWriter)),
+            NamedWriter::new(
+                "out".into(),
+                Box::new(RecordingWriter(Rc::clone(&recorded))),
+            ),
         ];
         let mut output = MultiWriter::new(writers, Some(OutputErrorMode::Exit));
 

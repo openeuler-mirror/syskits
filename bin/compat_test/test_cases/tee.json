@@ -522,6 +522,27 @@
               }
           },
           "cleanup_commands": []
+      },
+      {
+          "tstdin": "",
+          "command": "tee",
+          "description": "-p模式下stdin保持无数据打开，stdout和/proc/self/fd/1均为断管时，GNU会依次移除两个断管输出并立即退出，不应等待输入。",
+          "args": ["-p", "/proc/self/fd/1"],
+          "timeout": 1,
+          "expectation": {
+              "execution": {
+                  "exit_code": 0,
+                  "stdout": "",
+                  "stderr": ""
+              }
+          },
+          "environment": {
+              "standardStreams": {
+                  "stdin": "open_pipe",
+                  "stdout": "closed_pipe"
+              }
+          },
+          "cleanup_commands": []
       }
   ]
 }

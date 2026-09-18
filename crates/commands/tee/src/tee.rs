@@ -29,7 +29,7 @@ use std::any::Any;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::io::{Error, ErrorKind as IoErrorKind, Read, Result, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, Stdio};
 #[cfg(target_os = "linux")]
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -698,13 +698,18 @@ fn open(
 ) -> Result<Option<Box<dyn Write>>> {
     let name = name.as_ref();
     let path = PathBuf::from(name);
-    let mut options = OpenOptions::new();
-    let mode = if append {
-        options.append(true)
+    let result = if output_path_references_closed_stdout(&path) {
+        Err(Error::from_raw_os_error(nix::libc::ENOENT))
     } else {
-        options.truncate(true)
+        let mut options = OpenOptions::new();
+        let mode = if append {
+            options.append(true)
+        } else {
+            options.truncate(true)
+        };
+        mode.write(true).create(true).open(path.as_path())
     };
-    match mode.write(true).create(true).open(path.as_path()) {
+    match result {
         Ok(file) => Ok(Some(Box::new(file))),
         Err(error) => {
             ct_show_error!("{}: {}", tee_quote_path(name), strip_errno(&error));
@@ -716,6 +721,29 @@ fn open(
             }
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+fn output_path_references_closed_stdout(path: &Path) -> bool {
+    ctcore::ct_stdout_was_closed()
+        && path_references_current_process_fd(path, nix::libc::STDOUT_FILENO)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn output_path_references_closed_stdout(_path: &Path) -> bool {
+    false
+}
+
+#[cfg(target_os = "linux")]
+fn path_references_current_process_fd(path: &Path, fd: RawFd) -> bool {
+    let fd_name = fd.to_string();
+    let current_fd_directory = PathBuf::from(format!("/proc/{}/fd", std::process::id()));
+
+    path.file_name() == Some(OsStr::new(&fd_name))
+        && path
+            .parent()
+            .and_then(|parent| parent.canonicalize().ok())
+            .is_some_and(|parent| parent == current_fd_directory)
 }
 
 fn tee_quote_path(path: &OsStr) -> String {
@@ -1143,6 +1171,27 @@ mod tests {
             standard_input_close_error_message(&error),
             "standard input: Bad file descriptor"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn current_process_fd_reference_detects_proc_and_dev_fd_aliases() {
+        assert!(path_references_current_process_fd(
+            Path::new("/proc/self/fd/1"),
+            nix::libc::STDOUT_FILENO
+        ));
+        assert!(path_references_current_process_fd(
+            Path::new("/dev/fd/1"),
+            nix::libc::STDOUT_FILENO
+        ));
+        assert!(!path_references_current_process_fd(
+            Path::new("/proc/self/fd/1"),
+            nix::libc::STDIN_FILENO
+        ));
+        assert!(!path_references_current_process_fd(
+            Path::new("/dev/full"),
+            nix::libc::STDOUT_FILENO
+        ));
     }
 
     #[cfg(target_os = "linux")]

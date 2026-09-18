@@ -16,7 +16,7 @@ use std::io::{self, Write};
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser, crate_version};
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, CtSimpleError};
+use ctcore::ct_error::{CTResult, CtSimpleError, strip_errno};
 #[cfg(unix)]
 use ctcore::ct_signals::enable_pipe_errors;
 
@@ -59,16 +59,23 @@ pub fn yes_main(args: impl ctcore::Args) -> CTResult<()> {
     yes_args_into_buff(&mut buff, matches.get_many::<OsString>("STRING")).unwrap();
     yes_prepare_buff(&mut buff);
 
-    if let Err(err) = yes_exec(&buff) {
-        if matches!(err.kind(), io::ErrorKind::BrokenPipe) {
-            Ok(())
-        } else {
-            let msg = format!("standard output: {err}");
-            Err(CtSimpleError::new(1, msg))
-        }
+    let result = if ctcore::ct_stdout_was_closed() {
+        Err(io::Error::from_raw_os_error(nix::libc::EBADF))
     } else {
-        Ok(())
+        yes_exec(&buff)
+    };
+    if let Err(error) = result {
+        return Err(CtSimpleError::new(
+            1,
+            yes_standard_output_error_message(&error),
+        ));
     }
+
+    Ok(())
+}
+
+fn yes_standard_output_error_message(error: &io::Error) -> String {
+    format!("standard output: {}", strip_errno(error))
 }
 
 pub fn ct_app() -> Command {
@@ -166,7 +173,9 @@ pub fn yes_exec(bytes_data: &[u8]) -> io::Result<()> {
     let io_ouput = io::stdout();
     let mut std_output: io::StdoutLock<'_> = io_ouput.lock();
     #[cfg(unix)]
-    enable_pipe_errors()?;
+    if ctcore::ct_sigpipe_was_default() {
+        enable_pipe_errors()?;
+    }
 
     #[cfg(target_os = "linux")]
     {
@@ -248,6 +257,18 @@ mod tests {
         let result = command.try_get_matches_from(help_args);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+    }
+
+    #[test]
+    fn standard_output_error_message_uses_gnu_errno_text() {
+        assert_eq!(
+            yes_standard_output_error_message(&io::Error::from_raw_os_error(nix::libc::EPIPE)),
+            "standard output: Broken pipe"
+        );
+        assert_eq!(
+            yes_standard_output_error_message(&io::Error::from_raw_os_error(nix::libc::ENOSPC)),
+            "standard output: No space left on device"
+        );
     }
 
     #[test]

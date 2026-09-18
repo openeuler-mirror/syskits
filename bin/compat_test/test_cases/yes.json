@@ -53,6 +53,79 @@
             },
             "timeout": 1,
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "yes",
+            "description": "LC_ALL=C下启动前stdout关闭时，GNU yes应以EBADF报告standard output并返回失败状态",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["x"],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "yes: standard output: Bad file descriptor\n"
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "yes",
+            "description": "LC_ALL=C下调用方忽略SIGPIPE且stdout为无读端管道时，GNU yes保留忽略处置并以EPIPE诊断退出",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["x"],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "ignore"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "yes: standard output: Broken pipe\n"
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "yes",
+            "description": "LC_ALL=C下stdout为/dev/full时，GNU yes使用errno文本诊断空间不足而不附加Rust错误码",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["x"],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "full"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "yes: standard output: No space left on device\n"
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
         }
     ]
-} 
+}

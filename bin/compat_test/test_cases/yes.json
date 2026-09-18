@@ -251,6 +251,25 @@
             },
             "timeout": 1,
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "yes",
+            "description": "LC_ALL=C下空前缀长选项--=按GNU规则列出help和version两个歧义候选",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["--="],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "yes: option '--=' is ambiguous; possibilities: '--help' '--version'\nTry 'yes --help' for more information.\n"
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
         }
     ]
 }

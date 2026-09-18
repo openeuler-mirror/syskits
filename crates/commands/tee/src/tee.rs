@@ -388,6 +388,14 @@ fn needs_pipe_check(mode: Option<&OutputErrorMode>) -> bool {
     )
 }
 
+fn input_read_error_message(error: &Error) -> String {
+    format!("read error: {}", strip_errno(error))
+}
+
+fn report_input_read_error(error: &Error) {
+    ct_show_error!("{}", input_read_error_message(error));
+}
+
 #[cfg(unix)]
 fn copy_without_poll(output: &mut MultiWriter) -> Result<()> {
     let stdin_handle = std::io::stdin();
@@ -407,7 +415,7 @@ fn copy_without_poll(output: &mut MultiWriter) -> Result<()> {
             }
             Err(error) if error.kind() == IoErrorKind::Interrupted => continue,
             Err(error) => {
-                ct_show_error!("stdin: {}", strip_errno(&error));
+                report_input_read_error(&error);
                 return Err(error);
             }
         }
@@ -479,8 +487,7 @@ fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
                             stdout_active = output.has_stdout();
                         }
                         Err(e) => {
-                            // 修复：加上 strip_errno
-                            ct_show_error!("stdin: {}", strip_errno(&e));
+                            report_input_read_error(&e);
                             return Err(e);
                         }
                     }
@@ -929,7 +936,7 @@ impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         match self.inner.read(buf) {
             Err(f) => {
-                ct_show_error!("stdin: {}", strip_errno(&f));
+                report_input_read_error(&f);
                 Err(f)
             }
             okay => okay,
@@ -1072,6 +1079,16 @@ mod tests {
         assert!(!needs_pipe_check(Some(&OutputErrorMode::Exit)));
         assert!(needs_pipe_check(Some(&OutputErrorMode::WarnNoPipe)));
         assert!(needs_pipe_check(Some(&OutputErrorMode::ExitNoPipe)));
+    }
+
+    #[test]
+    fn input_read_error_uses_gnu_read_error_label() {
+        let error = Error::from_raw_os_error(nix::libc::EISDIR);
+
+        assert_eq!(
+            input_read_error_message(&error),
+            "read error: Is a directory"
+        );
     }
 
     #[cfg(target_os = "linux")]

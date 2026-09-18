@@ -1681,21 +1681,8 @@ trait SplitManageOutFiles {
         index: usize,
         split_settings: &SpliceSettings,
     ) -> CTResult<&mut BufWriter<Box<dyn Write>>>;
-    /// Initialize a new set of output files
-    /// Each OutFile is generated with filename, while the writer for it could be
-    /// optional, to be instantiated later by the calling function as needed.
-    /// Optional writers could happen in the following situations:
-    /// * in [`splice_n_chunks_by_line`] and [`splice_n_chunks_by_line_round_robin`] if `elide_empty_files` parameter is set to `true`
-    /// * if the number of files is greater than system limit for open files
-    fn init(
-        num_files: u64,
-        split_settings: &SpliceSettings,
-        is_writer_optional: bool,
-    ) -> CTResult<Self>
-    where
-        Self: Sized;
-    /// Initialize as many output files as have valid names. Unlike [`Self::init`],
-    /// this retains successfully initialized earlier files when the suffix iterator
+    /// Initialize as many output files as have valid names. This retains
+    /// successfully initialized earlier files when the suffix iterator
     /// is exhausted so sequential strategies can report the error at the matching
     /// output boundary.
     fn init_with_deferred_suffix_exhaustion(
@@ -1721,71 +1708,82 @@ trait SplitManageOutFiles {
     ) -> CTResult<&mut BufWriter<Box<dyn Write>>>;
 }
 
-impl SplitManageOutFiles for OutFiles {
-    /**
-     * 初始化函数，用于创建和初始化一个输出文件集合。
-     *
-     * @param number_files 指定要创建的文件数量。
-     * @param split_settings 包含分割设置的引用，如前缀和后缀。
-     * @param writer_optional 指示是否每个文件都需要一个写入器。如果为`true`，则文件可以不关联写入器。
-     * @return 返回一个包含初始化好的输出文件集合的`CTResult`。如果操作成功，`CTResult`包含初始化的实例；如果失败，包含错误信息。
-     */
-    fn init(
-        number_files: u64,
-        split_settings: &SpliceSettings,
-        writer_optional: bool,
-    ) -> CTResult<Self> {
-        let (output_files, suffix_exhausted) = Self::init_with_deferred_suffix_exhaustion(
-            number_files,
-            split_settings,
-            writer_optional,
-        )?;
-        if suffix_exhausted {
-            return Err(CtSimpleError::new(1, "output file suffixes exhausted"));
-        }
-        Ok(output_files)
+fn initialize_output_files(
+    mut output_files: OutFiles,
+    number_files: u64,
+    split_settings: &SpliceSettings,
+    writer_optional: bool,
+) -> CTResult<(OutFiles, bool)> {
+    let mut file_iterator: FilenameIterator =
+        FilenameIterator::new(split_settings.output_prefix(), &split_settings.suffix)
+            .map_err(|e| io::Error::other(format!("{e}")))?;
+    for _ in 0..number_files {
+        let Some(file_name) = file_iterator.next() else {
+            return Ok((output_files, true));
+        };
+        let maybe_writer = if writer_optional {
+            None
+        } else {
+            let instantiated =
+                split_settings.splice_instantiate_current_writer(file_name.as_os_str(), true);
+            match instantiated {
+                Ok(writer) => Some(writer),
+                Err(e) if split_settings.filter.is_some() => {
+                    return Err(e.into());
+                }
+                Err(e) if platform::is_file_descriptor_limit(&e) => None,
+                Err(e) => return Err(e.into()),
+            }
+        };
+        output_files.push(SplitOutFile {
+            filename: file_name,
+            maybe_writer,
+            is_new: true,
+        });
     }
+    Ok((output_files, false))
+}
 
+/// Allocate the table GNU `split -n r/N` uses to keep its output metadata.
+///
+/// GNU allocates all `N` entries before processing input.  `try_reserve_exact`
+/// preserves its immediate `memory exhausted` diagnostic when that table cannot
+/// be represented or allocated, instead of growing the vector until a later
+/// allocation failure or process abort.
+fn new_round_robin_output_files(number_files: u64) -> CTResult<OutFiles> {
+    let capacity =
+        usize::try_from(number_files).map_err(|_| CtSimpleError::new(1, "memory exhausted"))?;
+    let mut output_files = OutFiles::new();
+    output_files
+        .try_reserve_exact(capacity)
+        .map_err(|_| CtSimpleError::new(1, "memory exhausted"))?;
+    Ok(output_files)
+}
+
+fn init_round_robin_output_files(
+    number_files: u64,
+    split_settings: &SpliceSettings,
+) -> CTResult<OutFiles> {
+    let output_files = new_round_robin_output_files(number_files)?;
+    let (output_files, suffix_exhausted) = initialize_output_files(
+        output_files,
+        number_files,
+        split_settings,
+        split_settings.elide_empty_files || split_settings.filter.is_some(),
+    )?;
+    if suffix_exhausted {
+        return Err(CtSimpleError::new(1, "output file suffixes exhausted"));
+    }
+    Ok(output_files)
+}
+
+impl SplitManageOutFiles for OutFiles {
     fn init_with_deferred_suffix_exhaustion(
         number_files: u64,
         split_settings: &SpliceSettings,
         writer_optional: bool,
     ) -> CTResult<(Self, bool)> {
-        // 创建文件名迭代器，用于生成每个分割文件的名称。
-        let mut file_iterator: FilenameIterator =
-            FilenameIterator::new(split_settings.output_prefix(), &split_settings.suffix)
-                .map_err(|e| io::Error::other(format!("{e}")))?;
-        let mut output_files: Self = Self::new();
-        for _ in 0..number_files {
-            // 获取下一个文件名。如果文件名序列耗尽，则视为错误。
-            let Some(file_name) = file_iterator.next() else {
-                return Ok((output_files, true));
-            };
-            // 根据`writer_optional`标志，决定是否为当前文件创建一个写入器。
-            let maybe_writer = if writer_optional {
-                None
-            } else {
-                // 尝试为文件实例化一个写入器。如果因系统限制而失败，并且当前不是为`--filter`子进程创建写入器，则记录为`None`。
-                let instantiated =
-                    split_settings.splice_instantiate_current_writer(file_name.as_os_str(), true);
-                match instantiated {
-                    Ok(writer) => Some(writer),
-                    Err(e) if split_settings.filter.is_some() => {
-                        return Err(e.into());
-                    }
-                    Err(e) if platform::is_file_descriptor_limit(&e) => None,
-                    Err(e) => return Err(e.into()),
-                }
-            };
-            // 将文件名和可能的写入器添加到输出文件集合中。
-            output_files.push(SplitOutFile {
-                filename: file_name,
-                maybe_writer,
-                is_new: true,
-            });
-        }
-        // 初始化完成，返回输出文件集合。
-        Ok((output_files, false))
+        initialize_output_files(Self::new(), number_files, split_settings, writer_optional)
     }
 
     /**
@@ -2408,11 +2406,7 @@ where
 
     // 在N块模式下初始化输出文件。
     if kth_chunk.is_none() {
-        output_files = OutFiles::init(
-            number_chunks,
-            splice_settings,
-            splice_settings.elide_empty_files || splice_settings.filter.is_some(),
-        )?;
+        output_files = init_round_robin_output_files(number_chunks, splice_settings)?;
     }
 
     let num_chunks: usize = number_chunks.try_into().unwrap();
@@ -2646,6 +2640,16 @@ fn split(splice_settings: &SpliceSettings) -> CTResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn round_robin_output_metadata_reports_memory_exhaustion_on_capacity_overflow() {
+        let error = new_round_robin_output_files(i64::MAX as u64)
+            .err()
+            .expect("an unrepresentable round-robin output table must fail");
+
+        assert_eq!(error.code(), 1);
+        assert_eq!(error.to_string(), "memory exhausted");
+    }
     use std::collections::BTreeMap;
     use std::path::PathBuf;
     use tempfile::tempdir;

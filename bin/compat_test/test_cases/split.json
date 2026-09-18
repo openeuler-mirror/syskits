@@ -4150,6 +4150,38 @@
       "cleanup_commands": [
         "rm -f in xaa xab -- -l"
       ]
+    },
+    {
+      "command": "split",
+      "description": "轮转N块元数据容量溢出：LC_ALL=C、LANG=C；执行split --number=r/18446744073709551616 /dev/null。GNU将超出intmax的N饱和为INTMAX_MAX，并在lines_rr为全部输出元数据分配数组时检测到容量溢出；预期RC=1、stdout为空、stderr为memory exhausted，且不创建输出文件。",
+      "args": [
+        "--number=r/18446744073709551616",
+        "/dev/null"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "split: memory exhausted\n"
+        },
+        "verifications": [
+          {
+            "command": "test ! -e xaa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ]
+      },
+      "cleanup_commands": [
+        "rm -f xaa"
+      ]
     }
   ]
 }

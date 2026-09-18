@@ -189,6 +189,37 @@
               }
           },
           "cleanup_commands": []
+      },
+      {
+          "tstdin": "x",
+          "command": "tee",
+          "description": "--output-error=exit后接-p时按GNU getopt使用最后的-p，即warn-nopipe忽略关闭stdout管道并继续写入普通文件",
+          "setup_commands": [
+              "export LC_ALL='C'",
+              "export LANG='C'"
+          ],
+          "args": ["--output-error=exit", "-p", "last_mode_out"],
+          "expectation": {
+              "execution": {
+                  "exit_code": 0,
+                  "stdout": "",
+                  "stderr": ""
+              },
+              "verifications": [
+                  {
+                      "command": "stat -c '%s' last_mode_out",
+                      "expected_exit": 0,
+                      "expected_stdout": "1\n",
+                      "expected_stderr": ""
+                  }
+              ]
+          },
+          "environment": {
+              "standardStreams": {
+                  "stdout": "closed_pipe"
+              }
+          },
+          "cleanup_commands": []
       }
   ]
 }

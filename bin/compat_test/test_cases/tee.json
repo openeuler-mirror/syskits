@@ -270,6 +270,25 @@
               }
           },
           "cleanup_commands": []
+      },
+      {
+          "tstdin": "78",
+          "command": "tee",
+          "description": "原始字节诊断用例：LC_ALL=C、LANG=C下执行tee bad-\\xff-parent/out；参数完整十六进制=6261642dff2d706172656e742f6f7574；stdin为1字节、完整十六进制=78；输入fixture：父目录不存在；预期RC=1，stdout为1字节、完整十六进制=78，stderr为GNU shell可重放八进制路径引用，完整十六进制=7465653a20276261642d2724275c33373727272d706172656e742f6f7574273a204e6f20737563682066696c65206f72206469726563746f72790a。",
+          "args": ["6261642dff2d706172656e742f6f7574"],
+          "setup_commands": [
+              "export LC_ALL='C'",
+              "export LANG='C'"
+          ],
+          "expectation": {
+              "execution": {
+                  "exit_code": 1,
+                  "stdout": "78",
+                  "stderr": "7465653a20276261642d2724275c33373727272d706172656e742f6f7574273a204e6f20737563682066696c65206f72206469726563746f72790a"
+              }
+          },
+          "cleanup_commands": [],
+          "byteMode": true
       }
   ]
 }

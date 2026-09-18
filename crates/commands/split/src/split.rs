@@ -2376,8 +2376,8 @@ fn split(splice_settings: &SpliceSettings) -> CTResult<()> {
         }
     };
 
-    if let Some((code, message)) = platform::take_filter_failure() {
-        return Err(CtSimpleError::new(code, message));
+    if let Some(error) = platform::take_filter_failure() {
+        return Err(error);
     }
 
     result

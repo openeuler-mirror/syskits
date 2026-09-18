@@ -9,12 +9,15 @@
  * See the Mulan PSL v2 for more details.
  */
 use crate::split_quote_path;
+use ctcore::ct_error::CTError;
 use ctcore::ct_fs;
 use ctcore::ct_fs::CtFileInformation;
 use ctcore::ct_signals::get_ct_signal_name_by_value;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::env;
 use std::ffi::{OsStr, OsString};
+use std::fmt::{Display, Formatter};
 use std::io::Write;
 use std::io::{BufWriter, Error, Result};
 use std::os::unix::ffi::OsStrExt;
@@ -40,6 +43,30 @@ enum FilterFailure {
     Wait(String),
 }
 
+#[derive(Debug)]
+struct FilterFailureError {
+    code: i32,
+    diagnostic: Vec<u8>,
+}
+
+impl Display for FilterFailureError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.diagnostic).fmt(formatter)
+    }
+}
+
+impl std::error::Error for FilterFailureError {}
+
+impl CTError for FilterFailureError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.diagnostic)
+    }
+
+    fn code(&self) -> i32 {
+        self.code
+    }
+}
+
 fn record_filter_failure(failure: FilterFailure) {
     FILTER_FAILURE.with(|slot| {
         if slot.borrow().is_none() {
@@ -58,41 +85,48 @@ pub fn filter_failure_recorded() -> bool {
     FILTER_FAILURE.with(|slot| slot.borrow().is_some())
 }
 
-pub fn take_filter_failure() -> Option<(i32, String)> {
-    FILTER_FAILURE.with(|slot| {
-        slot.borrow_mut().take().map(|failure| match failure {
-            FilterFailure::Exit {
-                file_name,
-                command,
-                code,
-            } => (
-                code,
-                format!(
-                    "with FILE={}, exit {code} from command: {command}",
-                    split_quote_path(file_name.as_os_str(), false),
-                    command = command.to_string_lossy(),
-                ),
-            ),
-            FilterFailure::Signal {
-                file_name,
-                command,
-                signal,
-            } => {
-                let signal_name = get_ct_signal_name_by_value(signal as usize)
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| signal.to_string());
-                (
-                    signal + 128,
-                    format!(
-                        "with FILE={}, signal {signal_name} from command: {command}",
-                        split_quote_path(file_name.as_os_str(), false),
-                        command = command.to_string_lossy(),
-                    ),
-                )
-            }
-            FilterFailure::Wait(error) => (1, format!("waiting for child process: {error}")),
-        })
-    })
+pub fn take_filter_failure() -> Option<Box<dyn CTError>> {
+    FILTER_FAILURE.with(|slot| slot.borrow_mut().take().map(filter_failure_error))
+}
+
+fn filter_failure_error(failure: FilterFailure) -> Box<dyn CTError> {
+    let (code, diagnostic) = match failure {
+        FilterFailure::Exit {
+            file_name,
+            command,
+            code,
+        } => {
+            let mut diagnostic = format!(
+                "with FILE={}, exit {code} from command: ",
+                split_quote_path(file_name.as_os_str(), false)
+            )
+            .into_bytes();
+            diagnostic.extend_from_slice(command.as_os_str().as_bytes());
+            (code, diagnostic)
+        }
+        FilterFailure::Signal {
+            file_name,
+            command,
+            signal,
+        } => {
+            let signal_name = get_ct_signal_name_by_value(signal as usize)
+                .map(str::to_owned)
+                .unwrap_or_else(|| signal.to_string());
+            let mut diagnostic = format!(
+                "with FILE={}, signal {signal_name} from command: ",
+                split_quote_path(file_name.as_os_str(), false)
+            )
+            .into_bytes();
+            diagnostic.extend_from_slice(command.as_os_str().as_bytes());
+            (signal + 128, diagnostic)
+        }
+        FilterFailure::Wait(error) => (
+            1,
+            format!("waiting for child process: {error}").into_bytes(),
+        ),
+    };
+
+    Box::new(FilterFailureError { code, diagnostic })
 }
 
 /// A writer that writes to a shell_process' stdin
@@ -259,7 +293,7 @@ pub fn paths_refer_to_same_file(path1: impl AsRef<OsStr>, path2: impl AsRef<OsSt
 
 #[cfg(test)]
 mod tests {
-    use super::{filter_shell_argv0, filter_shell_program};
+    use super::{FilterFailure, filter_failure_error, filter_shell_argv0, filter_shell_program};
     use crate::SpliceSettings;
     use crate::ct_app;
     use crate::platform::instantiate_current_writer;
@@ -267,6 +301,7 @@ mod tests {
     use std::fs;
     use std::fs::File;
 
+    use std::ffi::OsString;
     use std::os::unix::ffi::{OsStrExt, OsStringExt};
     use std::path::Path;
     use tempfile::Builder;
@@ -287,6 +322,21 @@ mod tests {
         let argv0 = filter_shell_argv0(shell);
 
         assert_eq!(argv0.as_bytes(), b"bash-\xff");
+    }
+
+    #[test]
+    fn filter_failure_error_preserves_non_utf8_command_bytes() {
+        let error = filter_failure_error(FilterFailure::Exit {
+            file_name: OsString::from("out-aa"),
+            command: OsString::from_vec(b"exit 42 #\xff".to_vec()),
+            code: 42,
+        });
+
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            b"with FILE=out-aa, exit 42 from command: exit 42 #\xff"
+        );
+        assert_eq!(error.code(), 42);
     }
 
     fn split_test_base_dir() -> std::path::PathBuf {

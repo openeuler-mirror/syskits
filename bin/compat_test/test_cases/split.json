@@ -1,6 +1,49 @@
 {
   "tests": [
     {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "split",
+      "description": "原始字节过滤器失败诊断：LC_ALL=C、LANG=C；参数完整十六进制为2d62（-b）、31（1）、2d2d66696c746572（--filter）、657869742034322023ff（exit 42、空格、#、单字节0xff）、696e（输入in）和6f75742d（前缀out-）；输入文件字节为78。过滤器以42退出，GNU诊断在from command冒号后原样保留命令末尾0xff，预期RC=42、stdout为空、stderr完整十六进制为73706c69743a20776974682046494c453d6f75742d61612c20657869742034322066726f6d20636f6d616e643a20657869742034322023ff0a。",
+      "args": [
+        "2d62",
+        "31",
+        "2d2d66696c746572",
+        "657869742034322023ff",
+        "696e",
+        "6f75742d"
+      ],
+      "setup_commands": [
+        "printf x > in"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 42,
+          "stdout": "",
+          "stderr": "73706c69743a20776974682046494c453d6f75742d61612c20657869742034322066726f6d20636f6d616e643a20657869742034322023ff0a"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in out-*"
+      ]
+    },
+    {
       "command": "split",
       "description": "过滤器shell的argv[0]：SHELL=/bin/bash、LC_ALL=C、LANG=C；执行split -b 1并使用过滤命令printf %s \"$0\" > \"$FILE\"，输入文件in内容为x，输出前缀为out-。GNU split使用SHELL路径最后一个组件bash作为过滤shell的argv[0]，预期RC=0、stdout/stderr为空且out-aa完整内容为bash，而不是完整路径/bin/bash。",
       "args": [

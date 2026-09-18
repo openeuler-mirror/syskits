@@ -1,6 +1,102 @@
 {
   "tests": [
     {
+      "command": "split",
+      "description": "字节K/N标准输出写失败诊断：LC_ALL=C、LANG=C；输入文件in内容为abc和换行，执行split -n 1/1 in并将stdout连接到/dev/full。GNU bytes_chunk_extract将标准输出按文件名-报告，预期RC=1、无可捕获stdout、stderr为split: -: No space left on device加换行。",
+      "args": [
+        "-n",
+        "1/1",
+        "in"
+      ],
+      "setup_commands": [
+        "printf 'abc\\n' > in"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        },
+        "standardStreams": {
+          "stdout": "full",
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "split: -: No space left on device\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "行边界l/K/N标准输出写失败诊断：LC_ALL=C、LANG=C；输入文件in内容为abc和换行，执行split -n l/1/1 in并将stdout连接到/dev/full。GNU lines_chunk_split通过write_error报告标准输出失败，预期RC=1、无可捕获stdout、stderr为split: write error: No space left on device加换行。",
+      "args": [
+        "-n",
+        "l/1/1",
+        "in"
+      ],
+      "setup_commands": [
+        "printf 'abc\\n' > in"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        },
+        "standardStreams": {
+          "stdout": "full",
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "split: write error: No space left on device\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in"
+      ]
+    },
+    {
+      "command": "split",
+      "description": "轮询r/K/N标准输出写失败诊断：LC_ALL=C、LANG=C；输入文件in内容为abc和换行，执行split -n r/1/1 in并将stdout连接到/dev/full。GNU lines_rr通过write_error报告标准输出失败，预期RC=1、无可捕获stdout、stderr为split: write error: No space left on device加换行。",
+      "args": [
+        "-n",
+        "r/1/1",
+        "in"
+      ],
+      "setup_commands": [
+        "printf 'abc\\n' > in"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        },
+        "standardStreams": {
+          "stdout": "full",
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "split: write error: No space left on device\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in"
+      ]
+    },
+    {
       "byteMode": true,
       "tstdin": "",
       "command": "split",

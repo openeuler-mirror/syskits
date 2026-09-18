@@ -207,6 +207,37 @@ fn split_stdout_writer() -> SplitStdoutWriter {
     }
 }
 
+#[derive(Clone, Copy)]
+enum SplitStdoutErrorContext {
+    OutputName,
+    WriteError,
+}
+
+impl SplitStdoutErrorContext {
+    fn message(self) -> &'static str {
+        match self {
+            Self::OutputName => "-",
+            Self::WriteError => "write error",
+        }
+    }
+}
+
+fn split_stdout_write_all(
+    writer: &mut impl Write,
+    bytes: &[u8],
+    context: SplitStdoutErrorContext,
+) -> CTResult<()> {
+    writer
+        .write_all(bytes)
+        .map_err_context(|| context.message().to_owned())
+}
+
+fn split_stdout_flush(writer: &mut impl Write) -> CTResult<()> {
+    writer
+        .flush()
+        .map_err_context(|| SplitStdoutErrorContext::WriteError.message().to_owned())
+}
+
 fn split_quote_path(path: &OsStr, always_quote: bool) -> String {
     #[cfg(unix)]
     {
@@ -1973,7 +2004,11 @@ where
             match opt_kth_chunk {
                 Some(chunk_number) => {
                     if size == chunk_number {
-                        splice_stdout_writer.write_all(buf)?;
+                        split_stdout_write_all(
+                            &mut splice_stdout_writer,
+                            buf,
+                            SplitStdoutErrorContext::OutputName,
+                        )?;
                         break;
                     }
                 }
@@ -2112,7 +2147,11 @@ where
         match kth_chunk {
             Some(kth) => {
                 if chunk_number == kth {
-                    stdout_writer.write_all(size)?;
+                    split_stdout_write_all(
+                        &mut stdout_writer,
+                        size,
+                        SplitStdoutErrorContext::WriteError,
+                    )?;
                 }
             }
             None => {
@@ -2240,8 +2279,14 @@ where
             Some(chunk_number) => {
                 // 在Kth块模式下，根据当前块的编号决定是否将数据写入标准输出。
                 if (size % num_chunks) == (chunk_number - 1) as usize {
-                    stdout_writer.write_all(bytes)?;
-                    split_flush_if_unbuffered(&mut stdout_writer, splice_settings)?;
+                    split_stdout_write_all(
+                        &mut stdout_writer,
+                        bytes,
+                        SplitStdoutErrorContext::WriteError,
+                    )?;
+                    if splice_settings.unbuffered {
+                        split_stdout_flush(&mut stdout_writer)?;
+                    }
                 }
             }
             None => {
@@ -2392,6 +2437,42 @@ mod tests {
 
     #[cfg(unix)]
     use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+    struct NoSpaceWriter;
+
+    impl Write for NoSpaceWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::from_raw_os_error(ctcore::libc::ENOSPC))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn kth_bytes_stdout_error_uses_dash_output_name() {
+        let error = split_stdout_write_all(
+            &mut NoSpaceWriter,
+            b"x",
+            SplitStdoutErrorContext::OutputName,
+        )
+        .unwrap_err();
+
+        assert_eq!(error.to_string(), "-: No space left on device");
+    }
+
+    #[test]
+    fn kth_line_stdout_error_uses_write_error_context() {
+        let error = split_stdout_write_all(
+            &mut NoSpaceWriter,
+            b"x",
+            SplitStdoutErrorContext::WriteError,
+        )
+        .unwrap_err();
+
+        assert_eq!(error.to_string(), "write error: No space left on device");
+    }
 
     fn unique_output_filename() -> &'static str {
         static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);

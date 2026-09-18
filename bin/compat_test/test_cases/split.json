@@ -4028,6 +4028,17 @@
     },
     {
       "command": "split",
+      "description": "伪文件大小依赖分片：LC_ALL=C、LANG=C；/proc/cpuinfo在Linux报告st_size为0但可读取。执行split -n 2 /proc/cpuinfo out-时，GNU在无法依赖文件长度时复制输入至临时文件后分片；预期RC=0、stdout和stderr为空，out-aa和out-ab均非空。",
+      "args": ["-n", "2", "/proc/cpuinfo", "out-"],
+      "environment": {"env_vars": {"LC_ALL": "C", "LANG": "C"}},
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""},
+        "verifications": [{"command": "test -s out-aa && test -s out-ab", "expected_exit": 0, "expected_stdout": null, "expected_stderr": null}]
+      },
+      "cleanup_commands": ["rm -f out-aa out-ab"]
+    },
+    {
+      "command": "split",
       "description": "零大小尾分片：LC_ALL=C、LANG=C；输入为两个换行，执行split -a 1 -n l/3 in out-。GNU lines_chunk_split在余数字节耗尽后继续推进零大小分片，创建out-a至out-z后因后缀耗尽返回RC=1；预期a和b各含一个换行、其余文件为空，stderr为output file suffixes exhausted。",
       "args": ["-a", "1", "-n", "l/3", "in", "out-"],
       "setup_commands": ["printf '\\n\\n' > in"],

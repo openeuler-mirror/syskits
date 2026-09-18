@@ -193,6 +193,29 @@
       {
           "tstdin": "x",
           "command": "tee",
+          "description": "-p模式下FILE打开失败且stdout为无读端管道时，tee只保留真实输出端并返回FILE打开失败状态",
+          "setup_commands": [
+              "export LC_ALL='C'",
+              "export LANG='C'"
+          ],
+          "args": ["-p", "missing-parent/out"],
+          "expectation": {
+              "execution": {
+                  "exit_code": 1,
+                  "stdout": "",
+                  "stderr": "tee: missing-parent/out: No such file or directory\n"
+              }
+          },
+          "environment": {
+              "standardStreams": {
+                  "stdout": "closed_pipe"
+              }
+          },
+          "cleanup_commands": []
+      },
+      {
+          "tstdin": "x",
+          "command": "tee",
           "description": "--output-error=exit后接-p时按GNU getopt使用最后的-p，即warn-nopipe忽略关闭stdout管道并继续写入普通文件",
           "setup_commands": [
               "export LC_ALL='C'",

@@ -27,8 +27,8 @@ use ctcore::ct_error::{CTResult, strip_errno};
 use ctcore::ct_show_error;
 use std::any::Any;
 use std::ffi::{OsStr, OsString};
-use std::fs::OpenOptions;
-use std::io::{Error, ErrorKind as IoErrorKind, Read, Result, Write, sink, stdout};
+use std::fs::{File, OpenOptions};
+use std::io::{Error, ErrorKind as IoErrorKind, Read, Result, Write, sink};
 use std::path::PathBuf;
 use std::process::{Command as ProcessCommand, Stdio};
 use std::thread;
@@ -39,8 +39,10 @@ use ctcore::ct_signals::{enable_pipe_errors, ignore_interrupts};
 
 #[cfg(unix)]
 use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
+#[cfg(not(unix))]
+use std::io::stdout;
 #[cfg(unix)]
-use std::os::fd::AsFd;
+use std::os::fd::{AsFd, FromRawFd};
 
 mod stat_flags {
     pub const TEE_APPEND: &str = "append";
@@ -310,7 +312,12 @@ fn run_tee(options: &TeeOptions) -> Result<()> {
 
     #[cfg(unix)]
     {
-        if let Err(e) = copy_with_poll(&mut output) {
+        let copy_result = if needs_pipe_check(options.output_error.as_ref()) {
+            copy_with_poll(&mut output)
+        } else {
+            copy_without_poll(&mut output)
+        };
+        if let Err(e) = copy_result {
             if e.kind() != IoErrorKind::Other {
                 return Err(e);
             }
@@ -339,7 +346,40 @@ fn run_tee(options: &TeeOptions) -> Result<()> {
     }
 }
 
-/// Copy data from stdin to output using poll to detect closed outputs (iopoll)
+fn needs_pipe_check(mode: Option<&OutputErrorMode>) -> bool {
+    matches!(
+        mode,
+        Some(OutputErrorMode::WarnNoPipe | OutputErrorMode::ExitNoPipe)
+    )
+}
+
+#[cfg(unix)]
+fn copy_without_poll(output: &mut MultiWriter) -> Result<()> {
+    let stdin_handle = std::io::stdin();
+    let mut stdin_lock = stdin_handle.lock();
+    let mut buf = [0u8; 8192];
+
+    loop {
+        match stdin_lock.read(&mut buf) {
+            Ok(0) => return Ok(()),
+            Ok(n) => {
+                if let Err(error) = output.write_all(&buf[..n]) {
+                    if error.kind() == IoErrorKind::Other {
+                        return Ok(());
+                    }
+                    return Err(error);
+                }
+            }
+            Err(error) if error.kind() == IoErrorKind::Interrupted => continue,
+            Err(error) => {
+                ct_show_error!("stdin: {}", strip_errno(&error));
+                return Err(error);
+            }
+        }
+    }
+}
+
+/// Copy data from stdin to output while checking for broken pipe outputs.
 #[cfg(unix)]
 fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
     use std::os::unix::io::AsRawFd;
@@ -466,11 +506,27 @@ fn create_writers(options: &TeeOptions, ignored_errors: &mut usize) -> Result<Ve
         0,
         NamedWriter {
             name: OsString::from(STANDARD_OUTPUT_NAME),
-            inner: Box::new(stdout()),
+            inner: stdout_writer()?,
         },
     );
 
     Ok(writers)
+}
+
+#[cfg(unix)]
+fn stdout_writer() -> Result<Box<dyn Write>> {
+    let stdout_fd = unsafe { nix::libc::dup(nix::libc::STDOUT_FILENO) };
+    if stdout_fd < 0 {
+        return Err(Error::last_os_error());
+    }
+
+    let stdout_file = unsafe { File::from_raw_fd(stdout_fd) };
+    Ok(Box::new(stdout_file))
+}
+
+#[cfg(not(unix))]
+fn stdout_writer() -> Result<Box<dyn Write>> {
+    Ok(Box::new(stdout()))
 }
 
 pub fn ct_app() -> Command {
@@ -896,6 +952,15 @@ mod tests {
             get_output_error_mode(&long_option_last),
             Some(OutputErrorMode::Exit)
         ));
+    }
+
+    #[test]
+    fn pipe_check_is_limited_to_no_pipe_modes() {
+        assert!(!needs_pipe_check(None));
+        assert!(!needs_pipe_check(Some(&OutputErrorMode::Warn)));
+        assert!(!needs_pipe_check(Some(&OutputErrorMode::Exit)));
+        assert!(needs_pipe_check(Some(&OutputErrorMode::WarnNoPipe)));
+        assert!(needs_pipe_check(Some(&OutputErrorMode::ExitNoPipe)));
     }
 
     #[cfg(unix)]

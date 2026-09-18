@@ -263,7 +263,16 @@ fn get_file_list(matches: &clap::ArgMatches) -> Vec<String> {
 }
 
 fn get_output_error_mode(matches: &clap::ArgMatches) -> Option<OutputErrorMode> {
-    if matches.get_flag(stat_flags::TEE_IGNORE_PIPE_ERRORS) {
+    let ignore_pipe_errors_index = matches
+        .get_flag(stat_flags::TEE_IGNORE_PIPE_ERRORS)
+        .then(|| matches.index_of(stat_flags::TEE_IGNORE_PIPE_ERRORS))
+        .flatten();
+    let output_error_index = matches
+        .contains_id(stat_flags::TEE_OUTPUT_ERROR)
+        .then(|| matches.index_of(stat_flags::TEE_OUTPUT_ERROR))
+        .flatten();
+
+    if ignore_pipe_errors_index > output_error_index {
         return Some(OutputErrorMode::WarnNoPipe);
     }
 
@@ -490,8 +499,7 @@ pub fn ct_app() -> Command {
                 PossibleValue::new("exit-nopipe")
                     .help("exit on write errors to any output that are not pipe errors (equivalent to exit on non-unix platforms)"),
             ])
-            .help("set write error behavior")
-            .conflicts_with(stat_flags::TEE_IGNORE_PIPE_ERRORS),
+            .help("set write error behavior"),
     ];
 
     Command::new(ctcore::ct_util_name())
@@ -855,6 +863,25 @@ mod tests {
         assert!(matches!(
             get_output_error_mode(&matches),
             Some(OutputErrorMode::WarnNoPipe)
+        ));
+    }
+
+    #[test]
+    fn output_error_uses_the_last_mode_option() {
+        let short_option_last = ct_app()
+            .try_get_matches_from(["tee", "--output-error=exit", "-p"])
+            .unwrap();
+        assert!(matches!(
+            get_output_error_mode(&short_option_last),
+            Some(OutputErrorMode::WarnNoPipe)
+        ));
+
+        let long_option_last = ct_app()
+            .try_get_matches_from(["tee", "-p", "--output-error=exit"])
+            .unwrap();
+        assert!(matches!(
+            get_output_error_mode(&long_option_last),
+            Some(OutputErrorMode::Exit)
         ));
     }
 

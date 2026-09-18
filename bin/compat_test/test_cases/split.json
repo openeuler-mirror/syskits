@@ -4013,6 +4013,21 @@
     },
     {
       "command": "split",
+      "description": "有限标准输入的字节N块分割：LC_ALL=C、LANG=C；将16384个零字节文件作为stdin，执行split -n 2 - out-。GNU在需要总大小时将不可seek的stdin完整缓存后回卷，预期RC=0、stdout和stderr为空，out-aa和out-ab各为8192字节。",
+      "args": ["-n", "2", "-", "out-"],
+      "setup_commands": ["head -c 16384 /dev/zero > input.bin"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "LANG": "C"},
+        "standardStreams": {"stdinFile": "input.bin"}
+      },
+      "expectation": {
+        "execution": {"exit_code": 0, "stdout": "", "stderr": ""},
+        "verifications": [{"command": "test \"$(stat -c %s out-aa)\" = 8192 && test \"$(stat -c %s out-ab)\" = 8192", "expected_exit": 0, "expected_stdout": null, "expected_stderr": null}]
+      },
+      "cleanup_commands": ["rm -f input.bin out-aa out-ab"]
+    },
+    {
+      "command": "split",
       "description": "POSIXLY_CORRECT=1、LC_ALL=C、LANG=C下执行split in -l 1；GNU getopt在首个输入文件操作数in处停止选项解析，后续-l和1作为输出前缀及额外操作数，预期RC=1、stdout为空且不创建任何分片文件。",
       "args": [
         "in",

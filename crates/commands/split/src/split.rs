@@ -1187,11 +1187,9 @@ fn split_flush_if_unbuffered<T: Write>(
 /// their actual content size, we will need to attempt to find the end of file
 /// with direct `seek()` on [`std::fs::File`].
 ///
-/// For STDIN stream - read into a buffer up to a limit
-/// If input stream does not EOF before that - return an error
-/// (i.e. "infinite" input as in `cat /dev/zero | split ...`, `yes | split ...` etc.).
-///
-/// Note: The `buf` might end up with either partial or entire input content.
+/// The caller may provide a known input size when stdin has been copied to a
+/// temporary file. In that case, the reader is already positioned at the
+/// beginning of the complete input and no initial buffer is needed.
 // 尝试确定输入数据的大小。
 //
 // 此函数用于从指定的输入源（文件或标准输入）中读取数据，并确定可以读取的数据量或输入源的总大小。
@@ -1209,10 +1207,15 @@ fn splice_get_input_size<R>(
     splice_reader: &mut R,
     bufffer: &mut Vec<u8>,
     splice_io_blksize: &Option<u64>,
+    known_input_size: Option<u64>,
 ) -> std::io::Result<u64>
 where
     R: BufRead,
 {
+    if let Some(size) = known_input_size {
+        return Ok(size);
+    }
+
     // 设置读取限制为指定的io_blksize，如果未指定，则尝试从文件系统获取一个默认值
     let read_splice_limit: u64 = if let Some(custom_blksize) = splice_io_blksize {
         *custom_blksize
@@ -1257,6 +1260,13 @@ where
             }
         }
     }
+}
+
+fn spool_input_to_temp<R: Read>(mut input: R) -> io::Result<(File, u64)> {
+    let mut file = tempfile::tempfile()?;
+    let size = io::copy(&mut input, &mut file)?;
+    file.seek(SeekFrom::Start(0))?;
+    Ok((file, size))
 }
 
 /// Write a certain number of bytes to one file, then move on to another one.
@@ -1911,6 +1921,7 @@ fn splice_n_chunks_by_byte<R>(
     reader: &mut R,
     num_chunks: u64,
     opt_kth_chunk: Option<u64>,
+    known_input_size: Option<u64>,
 ) -> CTResult<()>
 where
     R: BufRead,
@@ -1922,6 +1933,7 @@ where
         reader,
         initial_buffer,
         &splice_settings.io_blksize,
+        known_input_size,
     )?;
     let mut reader = initial_buffer.chain(reader);
 
@@ -2086,6 +2098,7 @@ fn splice_n_chunks_by_line<R>(
     splice_reader: &mut R,
     number_chunks: u64,
     kth_chunk: Option<u64>,
+    known_input_size: Option<u64>,
 ) -> CTResult<()>
 where
     R: BufRead,
@@ -2097,6 +2110,7 @@ where
         splice_reader,
         initial_buffer,
         &splice_settings.io_blksize,
+        known_input_size,
     )?;
     let reader_buffer = initial_buffer.chain(splice_reader);
 
@@ -2339,18 +2353,39 @@ fn split(splice_settings: &SpliceSettings) -> CTResult<()> {
     platform::reset_filter_failure();
     platform::reset_output_failure();
 
-    // 根据输入源创建一个读取器
-    let read_box = if splice_settings.input_path() == OsStr::new("-") {
-        Box::new(stdin()) as Box<dyn Read>
-    } else {
-        let r = File::open(Path::new(splice_settings.input_path())).map_err_context(|| {
-            format!(
-                "cannot open {} for reading",
-                split_quote_path(splice_settings.input_path(), true)
-            )
-        })?;
-        Box::new(r) as Box<dyn Read>
-    };
+    let needs_input_size = matches!(
+        &splice_settings.strategy,
+        Strategy::Number(
+            StrategyNumberType::Bytes(_)
+                | StrategyNumberType::KthBytes(_, _)
+                | StrategyNumberType::Lines(_)
+                | StrategyNumberType::KthLines(_, _)
+        )
+    );
+
+    // GNU split copies non-seekable input to a temporary file before it uses
+    // a size-dependent --number strategy. This accepts finite stdin larger
+    // than the I/O block while keeping round-robin and streaming modes lazy.
+    let (read_box, known_input_size): (Box<dyn Read>, Option<u64>) =
+        if splice_settings.input_path() == OsStr::new("-") && needs_input_size {
+            let (file, size) = spool_input_to_temp(stdin()).map_err_context(|| {
+                format!(
+                    "{}: cannot determine input size",
+                    split_quote_path(splice_settings.input_path(), false)
+                )
+            })?;
+            (Box::new(file), Some(size))
+        } else if splice_settings.input_path() == OsStr::new("-") {
+            (Box::new(stdin()), None)
+        } else {
+            let r = File::open(Path::new(splice_settings.input_path())).map_err_context(|| {
+                format!(
+                    "cannot open {} for reading",
+                    split_quote_path(splice_settings.input_path(), true)
+                )
+            })?;
+            (Box::new(r), None)
+        };
 
     // 根据是否指定了IO块大小，创建一个具有相应缓冲区的读取器
     let mut reader = if let Some(c) = splice_settings.io_blksize {
@@ -2363,19 +2398,43 @@ fn split(splice_settings: &SpliceSettings) -> CTResult<()> {
     let result = match splice_settings.strategy {
         Strategy::Number(StrategyNumberType::Bytes(num_chunks)) => {
             // 按字节分割成指定数量的块
-            splice_n_chunks_by_byte(splice_settings, &mut reader, num_chunks, None)
+            splice_n_chunks_by_byte(
+                splice_settings,
+                &mut reader,
+                num_chunks,
+                None,
+                known_input_size,
+            )
         }
         Strategy::Number(StrategyNumberType::KthBytes(chunk_number, num_chunks)) => {
             // 按字节分割，并保留指定的第K个块
-            splice_n_chunks_by_byte(splice_settings, &mut reader, num_chunks, Some(chunk_number))
+            splice_n_chunks_by_byte(
+                splice_settings,
+                &mut reader,
+                num_chunks,
+                Some(chunk_number),
+                known_input_size,
+            )
         }
         Strategy::Number(StrategyNumberType::Lines(num_chunks)) => {
             // 按行分割成指定数量的块
-            splice_n_chunks_by_line(splice_settings, &mut reader, num_chunks, None)
+            splice_n_chunks_by_line(
+                splice_settings,
+                &mut reader,
+                num_chunks,
+                None,
+                known_input_size,
+            )
         }
         Strategy::Number(StrategyNumberType::KthLines(chunk_number, num_chunks)) => {
             // 按行分割，并保留指定的第K个块
-            splice_n_chunks_by_line(splice_settings, &mut reader, num_chunks, Some(chunk_number))
+            splice_n_chunks_by_line(
+                splice_settings,
+                &mut reader,
+                num_chunks,
+                Some(chunk_number),
+                known_input_size,
+            )
         }
         Strategy::Number(StrategyNumberType::RoundRobin(num_chunks)) => {
             // 使用轮询方式按行分割成指定数量的块
@@ -2474,6 +2533,18 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(error.to_string(), "write error: No space left on device");
+    }
+
+    #[test]
+    fn spool_input_to_temp_copies_finite_input_and_rewinds() {
+        let input = vec![b'x'; 16_384];
+        let (mut file, size) = spool_input_to_temp(io::Cursor::new(input.clone())).unwrap();
+
+        assert_eq!(size, input.len() as u64);
+
+        let mut copied = Vec::new();
+        file.read_to_end(&mut copied).unwrap();
+        assert_eq!(copied, input);
     }
 
     fn unique_output_filename() -> &'static str {

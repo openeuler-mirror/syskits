@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 use crate::split_quote_path;
-use ctcore::ct_error::CTError;
+use ctcore::ct_error::{CTError, strip_errno};
 use ctcore::ct_fs;
 use ctcore::ct_fs::CtFileInformation;
 use ctcore::ct_signals::get_ct_signal_name_by_value;
@@ -167,13 +167,26 @@ impl UnixFilterWriter {
     fn new(command: &OsStr, filepath: &OsStr) -> Result<Self> {
         let shell_program = filter_shell_program(env::var_os("SHELL"));
         let shell_argv0 = filter_shell_argv0(shell_program.as_os_str()).to_os_string();
-        let shell_process = Command::new(shell_program)
+        let shell_process = match Command::new(&shell_program)
             .arg0(shell_argv0)
             .arg("-c")
             .arg(command)
             .env("FILE", filepath)
             .stdin(Stdio::piped())
-            .spawn()?;
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(error) if filter_exec_error(&error) => {
+                write_filter_exec_error(shell_program.as_os_str(), command, &error);
+                record_filter_failure(FilterFailure::Exit {
+                    file_name: filepath.to_os_string(),
+                    command: command.to_os_string(),
+                    code: 1,
+                });
+                return Err(Error::from_raw_os_error(ctcore::libc::EPIPE));
+            }
+            Err(error) => return Err(error),
+        };
 
         Ok(Self {
             shell_process,
@@ -181,6 +194,34 @@ impl UnixFilterWriter {
             command: command.to_os_string(),
         })
     }
+}
+
+fn filter_exec_error(error: &Error) -> bool {
+    matches!(
+        error.raw_os_error(),
+        Some(ctcore::libc::ENOENT)
+            | Some(ctcore::libc::EACCES)
+            | Some(ctcore::libc::ENOEXEC)
+            | Some(ctcore::libc::ETXTBSY)
+    )
+}
+
+fn filter_exec_error_message(shell_program: &OsStr, command: &OsStr, error: &Error) -> Vec<u8> {
+    let mut diagnostic = b"failed to run command: \"".to_vec();
+    diagnostic.extend_from_slice(shell_program.as_bytes());
+    diagnostic.extend_from_slice(b" -c ");
+    diagnostic.extend_from_slice(command.as_bytes());
+    diagnostic.extend_from_slice(b"\": ");
+    diagnostic.extend_from_slice(strip_errno(error).as_bytes());
+    diagnostic
+}
+
+fn write_filter_exec_error(shell_program: &OsStr, command: &OsStr, error: &Error) {
+    let mut stderr = std::io::stderr().lock();
+    let _ = stderr.write_all(ctcore::ct_util_name().as_bytes());
+    let _ = stderr.write_all(b": ");
+    let _ = stderr.write_all(&filter_exec_error_message(shell_program, command, error));
+    let _ = stderr.write_all(b"\n");
 }
 
 fn filter_shell_program(shell: Option<OsString>) -> OsString {
@@ -293,7 +334,10 @@ pub fn paths_refer_to_same_file(path1: impl AsRef<OsStr>, path2: impl AsRef<OsSt
 
 #[cfg(test)]
 mod tests {
-    use super::{FilterFailure, filter_failure_error, filter_shell_argv0, filter_shell_program};
+    use super::{
+        FilterFailure, filter_exec_error_message, filter_failure_error, filter_shell_argv0,
+        filter_shell_program,
+    };
     use crate::SpliceSettings;
     use crate::ct_app;
     use crate::platform::instantiate_current_writer;
@@ -337,6 +381,18 @@ mod tests {
             b"with FILE=out-aa, exit 42 from command: exit 42 #\xff"
         );
         assert_eq!(error.code(), 42);
+    }
+
+    #[test]
+    fn filter_exec_error_message_preserves_non_utf8_shell_and_command_bytes() {
+        let shell = OsString::from_vec(b"./shell-\xff".to_vec());
+        let command = OsString::from_vec(b"cat > \"$FILE\" #\xfe".to_vec());
+        let error = std::io::Error::from_raw_os_error(ctcore::libc::ENOENT);
+
+        assert_eq!(
+            filter_exec_error_message(shell.as_os_str(), command.as_os_str(), &error),
+            b"failed to run command: \"./shell-\xff -c cat > \"$FILE\" #\xfe\": No such file or directory"
+        );
     }
 
     fn split_test_base_dir() -> std::path::PathBuf {

@@ -500,6 +500,7 @@ pub fn ct_app() -> Command {
         .disable_version_flag(true)
         .after_help(t!("tee.after_help"))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new("help")
                 .long("help")
@@ -1060,6 +1061,13 @@ mod test_basic {
         let help_text = app.render_help().to_string();
         assert!(help_text.contains("tee"));
         assert!(help_text.contains("-i"));
+    }
+
+    #[test]
+    fn ct_app_accepts_repeated_switches() {
+        for args in [["tee", "-aa"], ["tee", "-ii"], ["tee", "-pp"]] {
+            assert!(ct_app().try_get_matches_from(args).is_ok());
+        }
     }
 
     #[test]

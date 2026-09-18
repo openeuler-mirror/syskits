@@ -26,7 +26,7 @@ use clap::{
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTIoError, CTResult, CTsageError, CtSimpleError, FromIo};
-use ctcore::ct_parse_size::parse_size_u64;
+use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 #[cfg(unix)]
 use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
 #[cfg(not(unix))]
@@ -73,6 +73,9 @@ static OPT_SEPARATOR: &str = "separator";
 static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
 static OPT_UNBUFFERED: &str = "unbuffered";
 static OPT_IO_BLKSIZE: &str = "-io-blksize";
+
+const IO_BLKSIZE_ZERO_REASON: &str = "Numerical result out of range";
+const IO_BLKSIZE_TOO_LARGE_REASON: &str = "Value too large for defined data type";
 
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
@@ -954,7 +957,10 @@ enum SpliceSettingsError {
     FilterWithKthChunkNumber,
 
     /// Invalid IO block size
-    InvalidIOBlockSize(String),
+    InvalidIOBlockSize {
+        value: String,
+        reason: Option<&'static str>,
+    },
 
     /// The `--filter` option is not supported on Windows.
     #[cfg(windows)]
@@ -987,7 +993,13 @@ impl fmt::Display for SpliceSettingsError {
             Self::FilterWithKthChunkNumber => {
                 write!(f, "--filter does not process a chunk extracted to stdout")
             }
-            Self::InvalidIOBlockSize(s) => write!(f, "invalid IO block size: {}", s.quote()),
+            Self::InvalidIOBlockSize { value, reason } => {
+                write!(f, "invalid IO block size: {}", value.quote())?;
+                if let Some(reason) = reason {
+                    write!(f, ": {reason}")?;
+                }
+                Ok(())
+            }
             #[cfg(windows)]
             Self::NotSupported => write!(
                 f,
@@ -1037,9 +1049,25 @@ impl SpliceSettings {
         let io_blksize: Option<u64> = if let Some(s) = args_match.get_one::<String>(OPT_IO_BLKSIZE)
         {
             match parse_size_u64(s) {
-                Ok(0) => return Err(SpliceSettingsError::InvalidIOBlockSize(s.to_string())),
+                Ok(0) => {
+                    return Err(SpliceSettingsError::InvalidIOBlockSize {
+                        value: s.to_string(),
+                        reason: Some(IO_BLKSIZE_ZERO_REASON),
+                    });
+                }
                 Ok(n) if n <= ctcore::ct_fs::sane_blksize::MAX => Some(n),
-                _ => return Err(SpliceSettingsError::InvalidIOBlockSize(s.to_string())),
+                Ok(_) | Err(ParseSizeError::SizeTooBig(_)) => {
+                    return Err(SpliceSettingsError::InvalidIOBlockSize {
+                        value: s.to_string(),
+                        reason: Some(IO_BLKSIZE_TOO_LARGE_REASON),
+                    });
+                }
+                Err(_) => {
+                    return Err(SpliceSettingsError::InvalidIOBlockSize {
+                        value: s.to_string(),
+                        reason: None,
+                    });
+                }
             }
         } else {
             None
@@ -11847,8 +11875,10 @@ mod tests {
     }
     mod tests_setting_error {
         use crate::FilenameSuffixError;
+        use crate::SpliceSettings;
         use crate::SpliceSettingsError;
         use crate::StrategyError;
+        use crate::ct_app;
         use crate::split_find_invalid_io_blksize_opt;
         use crate::split_should_extract_obs_lines;
 
@@ -11947,10 +11977,44 @@ mod tests {
 
         #[test]
         fn test_invalid_io_block_size_does_not_require_usage() {
-            let error =
-                SpliceSettingsError::InvalidIOBlockSize("Invalid IO block size".to_string());
+            let error = SpliceSettingsError::InvalidIOBlockSize {
+                value: "Invalid IO block size".to_string(),
+                reason: None,
+            };
 
             assert!(!error.splice_requires_usage());
+        }
+
+        #[test]
+        fn test_zero_io_block_size_reports_gnu_range_reason() {
+            let matches = ct_app()
+                .try_get_matches_from(["split", "---io=0", "-b", "1"])
+                .expect("parse split arguments");
+            let error = match SpliceSettings::from(&matches, &None) {
+                Ok(_) => panic!("zero IO block size must be rejected"),
+                Err(error) => error,
+            };
+
+            assert_eq!(
+                error.to_string(),
+                "invalid IO block size: '0': Numerical result out of range"
+            );
+        }
+
+        #[test]
+        fn test_overflow_io_block_size_reports_gnu_range_reason() {
+            let matches = ct_app()
+                .try_get_matches_from(["split", "---io=1Y", "-b", "1"])
+                .expect("parse split arguments");
+            let error = match SpliceSettings::from(&matches, &None) {
+                Ok(_) => panic!("overflowing IO block size must be rejected"),
+                Err(error) => error,
+            };
+
+            assert_eq!(
+                error.to_string(),
+                "invalid IO block size: '1Y': Value too large for defined data type"
+            );
         }
 
         #[cfg(windows)]

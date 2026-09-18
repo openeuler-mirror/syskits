@@ -3311,6 +3311,17 @@
     },
     {
       "command": "split",
+      "description": "隐藏I/O块大小零值诊断：LC_ALL=C、LANG=C；执行split ---io=0 -b 1 /dev/null。GNU将0视为超出允许范围，预期RC=1、stdout为空，stderr保留Numerical result out of range原因。",
+      "args": ["---io=0", "-b", "1", "/dev/null"],
+      "environment": {"env_vars": {"LC_ALL": "C", "LANG": "C"}},
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": "split: invalid IO block size: '0': Numerical result out of range\n"},
+        "verifications": []
+      },
+      "cleanup_commands": ["rm -f x*"]
+    },
+    {
+      "command": "split",
       "description": "split -u with round robin output",
       "args": [
         "-u",

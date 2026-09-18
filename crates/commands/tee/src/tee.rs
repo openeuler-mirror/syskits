@@ -42,7 +42,7 @@ use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 #[cfg(not(unix))]
 use std::io::stdout;
 #[cfg(unix)]
-use std::os::fd::{AsFd, FromRawFd};
+use std::os::fd::{AsFd, AsRawFd, FromRawFd, RawFd};
 
 mod stat_flags {
     pub const TEE_APPEND: &str = "append";
@@ -382,21 +382,10 @@ fn copy_without_poll(output: &mut MultiWriter) -> Result<()> {
 /// Copy data from stdin to output while checking for broken pipe outputs.
 #[cfg(unix)]
 fn copy_with_poll(output: &mut MultiWriter) -> Result<()> {
-    use std::os::unix::io::AsRawFd;
-
     let stdin_handle = std::io::stdin();
     let stdout_handle = std::io::stdout();
     let stdin_fd = stdin_handle.as_fd();
     let stdout_fd = stdout_handle.as_fd();
-
-    // 强行清除 stdout 的 O_NONBLOCK 标志，防止因测试环境污染导致崩溃
-    unsafe {
-        let fd = stdout_handle.as_raw_fd();
-        let flags = nix::libc::fcntl(fd, nix::libc::F_GETFL, 0);
-        if flags >= 0 && (flags & nix::libc::O_NONBLOCK) != 0 {
-            nix::libc::fcntl(fd, nix::libc::F_SETFL, flags & !nix::libc::O_NONBLOCK);
-        }
-    }
 
     let mut buf = [0u8; 8192];
     let mut stdin_lock = stdin_handle.lock();
@@ -519,9 +508,23 @@ fn stdout_writer() -> Result<Box<dyn Write>> {
     if stdout_fd < 0 {
         return Err(Error::last_os_error());
     }
-
     let stdout_file = unsafe { File::from_raw_fd(stdout_fd) };
+    clear_nonblocking(stdout_file.as_raw_fd())?;
     Ok(Box::new(stdout_file))
+}
+
+#[cfg(unix)]
+fn clear_nonblocking(fd: RawFd) -> Result<()> {
+    let flags = unsafe { nix::libc::fcntl(fd, nix::libc::F_GETFL, 0) };
+    if flags < 0 {
+        return Err(Error::last_os_error());
+    }
+    if flags & nix::libc::O_NONBLOCK != 0
+        && unsafe { nix::libc::fcntl(fd, nix::libc::F_SETFL, flags & !nix::libc::O_NONBLOCK) } < 0
+    {
+        return Err(Error::last_os_error());
+    }
+    Ok(())
 }
 
 #[cfg(not(unix))]
@@ -850,6 +853,8 @@ mod tests {
     use std::ffi::OsString;
 
     #[cfg(unix)]
+    use std::os::fd::AsRawFd;
+    #[cfg(unix)]
     use std::os::unix::ffi::OsStringExt;
 
     #[test]
@@ -961,6 +966,23 @@ mod tests {
         assert!(!needs_pipe_check(Some(&OutputErrorMode::Exit)));
         assert!(needs_pipe_check(Some(&OutputErrorMode::WarnNoPipe)));
         assert!(needs_pipe_check(Some(&OutputErrorMode::ExitNoPipe)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn clear_nonblocking_removes_the_inherited_flag() {
+        let (_read_end, write_end) = nix::unistd::pipe().unwrap();
+        let fd = write_end.as_raw_fd();
+        let flags = unsafe { nix::libc::fcntl(fd, nix::libc::F_GETFL, 0) };
+        assert!(flags >= 0);
+        assert!(
+            unsafe { nix::libc::fcntl(fd, nix::libc::F_SETFL, flags | nix::libc::O_NONBLOCK) } >= 0
+        );
+
+        clear_nonblocking(fd).unwrap();
+
+        let cleared_flags = unsafe { nix::libc::fcntl(fd, nix::libc::F_GETFL, 0) };
+        assert_eq!(cleared_flags & nix::libc::O_NONBLOCK, 0);
     }
 
     #[cfg(unix)]

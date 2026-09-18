@@ -10,7 +10,7 @@
  */
 use crate::split_quote_path;
 use ctcore::ct_fs;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::io::Write;
 use std::io::{BufWriter, Error, ErrorKind};
 use std::path::Path;
@@ -30,7 +30,7 @@ pub fn take_filter_failure() -> Option<(i32, String)> {
 /// Unlike the unix version of this function, this _always_ returns
 /// a file writer
 pub fn instantiate_current_writer(
-    _filter: &Option<String>,
+    _filter: &Option<OsString>,
     file_name: impl AsRef<OsStr>,
     is_new: bool,
 ) -> Result<BufWriter<Box<dyn Write>>> {

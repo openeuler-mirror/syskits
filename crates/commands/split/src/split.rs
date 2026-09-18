@@ -383,7 +383,10 @@ pub fn split_native_semantic(args: impl ctcore::Args) -> CTResult<SplitSemantic>
         strategy: split_strategy_name(&settings.strategy).into(),
         prefix: settings.prefix.clone(),
         input: settings.input.clone(),
-        filter: settings.filter.clone(),
+        filter: settings
+            .filter
+            .as_ref()
+            .map(|filter| filter.to_string_lossy().into_owned()),
         separator_text: String::from_utf8_lossy(&[settings.separator]).into_owned(),
         verbose: settings.verbose,
         elide_empty_files: settings.elide_empty_files,
@@ -693,6 +696,7 @@ fn splice_args_init() -> Vec<Arg> {
             .long(OPT_FILTER)
             .allow_hyphen_values(true)
             .overrides_with(OPT_FILTER)
+            .value_parser(OsStringValueParser::new())
             .value_name("COMMAND")
             .value_hint(ValueHint::CommandName)
             .help(
@@ -802,7 +806,7 @@ struct SpliceSettings {
     /// The original input path when it contains non-UTF-8 bytes.
     input_os: Option<OsString>,
     /// When supplied, a shell command to output to instead of xaa, xab …
-    filter: Option<String>,
+    filter: Option<OsString>,
     strategy: Strategy,
     verbose: bool,
     separator: u8,
@@ -942,7 +946,7 @@ impl SpliceSettings {
             suffix,
             input: input.to_string_lossy().into_owned(),
             input_os: input.to_str().is_none().then(|| input.clone()),
-            filter: args_match.get_one::<String>(OPT_FILTER).cloned(),
+            filter: args_match.get_one::<OsString>(OPT_FILTER).cloned(),
             strategy,
             verbose: args_match.value_source(OPT_VERBOSE) == Some(ValueSource::CommandLine),
             separator: args_separator,
@@ -2415,6 +2419,33 @@ mod tests {
 
         assert_eq!(std::fs::read(first_output).unwrap(), b"a");
         assert_eq!(std::fs::read(second_output).unwrap(), b"b");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_split_passes_non_utf8_filter_bytes_to_shell() {
+        let temp = tempdir().expect("create temporary directory");
+        let input = temp.path().join("in");
+        let prefix = temp.path().join("out-");
+        std::fs::write(&input, b"x").expect("write input");
+
+        split_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--bytes=1"),
+                OsString::from("--filter"),
+                OsString::from_vec(b"true #\xff".to_vec()),
+                input.into_os_string(),
+                prefix.clone().into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect("a non-UTF-8 filter command must be passed to the shell");
+
+        assert!(
+            !prefix.with_file_name("out-aa").exists(),
+            "the successful filter itself does not create an output file"
+        );
     }
 
     #[test]
@@ -5636,8 +5667,10 @@ mod tests {
                 Some(OsStr::new(".last"))
             );
             assert_eq!(
-                matches.get_one::<String>(OPT_FILTER),
-                Some(&"cat > $FILE.last".to_string())
+                matches
+                    .get_one::<OsString>(OPT_FILTER)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("cat > $FILE.last"))
             );
             assert!(matches.get_flag(OPT_VERBOSE));
             assert!(matches.get_flag(OPT_ELIDE_EMPTY_FILES));
@@ -5728,8 +5761,10 @@ mod tests {
             let matches = result.unwrap();
             assert!(matches.contains_id(OPT_FILTER));
             assert_eq!(
-                matches.get_one::<String>(OPT_FILTER),
-                Some(&"ls".to_string())
+                matches
+                    .get_one::<OsString>(OPT_FILTER)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("ls"))
             );
         }
 
@@ -5753,8 +5788,10 @@ mod tests {
             let matches = result.unwrap();
             assert!(matches.contains_id(OPT_FILTER));
             assert_eq!(
-                matches.get_one::<String>(OPT_FILTER),
-                Some(&"cat".to_string())
+                matches
+                    .get_one::<OsString>(OPT_FILTER)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("cat"))
             );
         }
 
@@ -5778,8 +5815,10 @@ mod tests {
             let matches = result.unwrap();
             assert!(matches.contains_id(OPT_FILTER));
             assert_eq!(
-                matches.get_one::<String>(OPT_FILTER),
-                Some(&"cd".to_string())
+                matches
+                    .get_one::<OsString>(OPT_FILTER)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("cd"))
             );
         }
 
@@ -5803,8 +5842,10 @@ mod tests {
             let matches = result.unwrap();
             assert!(matches.contains_id(OPT_FILTER));
             assert_eq!(
-                matches.get_one::<String>(OPT_FILTER),
-                Some(&"tail".to_string())
+                matches
+                    .get_one::<OsString>(OPT_FILTER)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("tail"))
             );
         }
 
@@ -5840,8 +5881,10 @@ mod tests {
             );
             assert!(matches.contains_id(OPT_FILTER));
             assert_eq!(
-                matches.get_one::<String>(OPT_FILTER),
-                Some(&"ls".to_string())
+                matches
+                    .get_one::<OsString>(OPT_FILTER)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("ls"))
             );
         }
 
@@ -5878,8 +5921,10 @@ mod tests {
             );
             assert!(matches.contains_id(OPT_FILTER));
             assert_eq!(
-                matches.get_one::<String>(OPT_FILTER),
-                Some(&"ls".to_string())
+                matches
+                    .get_one::<OsString>(OPT_FILTER)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("ls"))
             );
         }
 
@@ -5960,8 +6005,10 @@ mod tests {
 
             assert!(matches.contains_id(OPT_FILTER));
             assert_eq!(
-                matches.get_one::<String>(OPT_FILTER),
-                Some(&"ls".to_string())
+                matches
+                    .get_one::<OsString>(OPT_FILTER)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("ls"))
             );
         }
 
@@ -6009,8 +6056,10 @@ mod tests {
 
             assert!(matches.contains_id(OPT_FILTER));
             assert_eq!(
-                matches.get_one::<String>(OPT_FILTER),
-                Some(&"ls".to_string())
+                matches
+                    .get_one::<OsString>(OPT_FILTER)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("ls"))
             );
         }
 

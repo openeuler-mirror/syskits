@@ -2236,6 +2236,52 @@
       ]
     },
     {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "split",
+      "description": "原始字节过滤命令：LC_ALL=C、LANG=C；执行split --bytes=1 --filter后接完整字节747275652023ff（true、空格、#、0xff） in out-；输入in为单字节78。GNU将过滤命令原始字节传给/bin/sh，0xff位于注释内，预期RC=0、stdout/stderr均为0字节，且filter未创建out-aa。",
+      "args": [
+        "2d2d62797465733d31",
+        "2d2d66696c746572",
+        "747275652023ff",
+        "696e",
+        "6f75742d"
+      ],
+      "setup_commands": [
+        "printf x > in"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "test ! -e out-aa",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in out-*"
+      ]
+    },
+    {
       "command": "split",
       "description": "split should not overwrite input file",
       "args": [

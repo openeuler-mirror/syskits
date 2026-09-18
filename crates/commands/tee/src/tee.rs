@@ -31,6 +31,8 @@ use std::fs::{File, OpenOptions};
 use std::io::{Error, ErrorKind as IoErrorKind, Read, Result, Write, sink};
 use std::path::PathBuf;
 use std::process::{Command as ProcessCommand, Stdio};
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use sys_locale::get_locale;
 
@@ -55,6 +57,26 @@ mod stat_flags {
 }
 
 const STANDARD_OUTPUT_NAME: &str = "standard output";
+
+#[cfg(target_os = "linux")]
+static INHERITED_SIGPIPE_HANDLER: AtomicUsize = AtomicUsize::new(ctcore::libc::SIG_ERR);
+
+#[cfg(target_os = "linux")]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static CAPTURE_INHERITED_SIGPIPE: unsafe extern "C" fn() = capture_inherited_sigpipe;
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" fn capture_inherited_sigpipe() {
+    let mut action = std::mem::MaybeUninit::<ctcore::libc::sigaction>::uninit();
+    if unsafe {
+        ctcore::libc::sigaction(ctcore::libc::SIGPIPE, std::ptr::null(), action.as_mut_ptr())
+    } == 0
+    {
+        let action = unsafe { action.assume_init() };
+        INHERITED_SIGPIPE_HANDLER.store(action.sa_sigaction, Ordering::Relaxed);
+    }
+}
 
 #[cfg(unix)]
 unsafe extern "C" {
@@ -479,10 +501,25 @@ fn setup_signal_handlers(options: &TeeOptions) -> Result<()> {
     if options.is_ignore_interrupts {
         ignore_interrupts().map_err(|_| Error::from(IoErrorKind::Other))?;
     }
-    if options.output_error.is_none() {
+    if options.output_error.is_none() && !inherited_sigpipe_is_ignored() {
         enable_pipe_errors().map_err(|_| Error::from(IoErrorKind::Other))?;
     }
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn inherited_sigpipe_is_ignored() -> bool {
+    sigpipe_handler_is_ignored(INHERITED_SIGPIPE_HANDLER.load(Ordering::Relaxed))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn inherited_sigpipe_is_ignored() -> bool {
+    false
+}
+
+#[cfg(target_os = "linux")]
+fn sigpipe_handler_is_ignored(handler: usize) -> bool {
+    handler == ctcore::libc::SIG_IGN
 }
 
 fn create_writers(options: &TeeOptions, ignored_errors: &mut usize) -> Result<Vec<NamedWriter>> {
@@ -1035,6 +1072,13 @@ mod tests {
         assert!(!needs_pipe_check(Some(&OutputErrorMode::Exit)));
         assert!(needs_pipe_check(Some(&OutputErrorMode::WarnNoPipe)));
         assert!(needs_pipe_check(Some(&OutputErrorMode::ExitNoPipe)));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn inherited_sigpipe_ignore_is_preserved_for_default_mode() {
+        assert!(sigpipe_handler_is_ignored(ctcore::libc::SIG_IGN));
+        assert!(!sigpipe_handler_is_ignored(ctcore::libc::SIG_DFL));
     }
 
     #[cfg(unix)]

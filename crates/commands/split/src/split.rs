@@ -1708,7 +1708,8 @@ impl SplitManageOutFiles for OutFiles {
                     Err(e) if split_settings.filter.is_some() => {
                         return Err(e.into());
                     }
-                    Err(_) => None,
+                    Err(e) if platform::is_file_descriptor_limit(&e) => None,
+                    Err(e) => return Err(e.into()),
                 }
             };
             // 将文件名和可能的写入器添加到输出文件集合中。
@@ -1738,21 +1739,22 @@ impl SplitManageOutFiles for OutFiles {
         index: usize,
         splice_settings: &SpliceSettings,
     ) -> CTResult<&mut BufWriter<Box<dyn Write>>> {
-        let mut count = 0;
         // 尝试多次关闭文件描述符以应对系统限制，特别是当有其他进程可能占用已释放的文件描述符时
         'loop1: loop {
             let file_to_open = self[index].filename.as_os_str();
             let file_to_open_is_new = self[index].is_new;
             let maybe_writer = splice_settings
                 .splice_instantiate_current_writer(file_to_open, file_to_open_is_new);
-            if let Ok(writer) = maybe_writer {
-                self[index].maybe_writer = Some(writer);
-                return Ok(self[index].maybe_writer.as_mut().unwrap());
-            }
+            let error = match maybe_writer {
+                Ok(writer) => {
+                    self[index].maybe_writer = Some(writer);
+                    return Ok(self[index].maybe_writer.as_mut().unwrap());
+                }
+                Err(error) => error,
+            };
 
-            if splice_settings.filter.is_some() {
-                // 在过滤器模式下，直接返回错误
-                return Err(maybe_writer.err().unwrap().into());
+            if splice_settings.filter.is_some() || !platform::is_file_descriptor_limit(&error) {
+                return Err(error.into());
             }
 
             // 如果达到系统文件描述符限制，尝试关闭其他已打开的写入器
@@ -1761,7 +1763,6 @@ impl SplitManageOutFiles for OutFiles {
                     out_file.maybe_writer.as_mut().unwrap().flush()?;
                     out_file.maybe_writer = None;
                     out_file.is_new = false;
-                    count += 1;
 
                     // 再次尝试创建写入器
                     continue 'loop1;
@@ -1769,10 +1770,7 @@ impl SplitManageOutFiles for OutFiles {
             }
 
             // 如果无法创建写入器且无其他文件描述符可关闭，则放弃并返回错误
-            ctcore::ct_show_error!(
-                "at file descriptor limit, but no file descriptor left to close. Closed {count} writers before."
-            );
-            return Err(maybe_writer.err().unwrap().into());
+            return Err(error.into());
         }
     }
 

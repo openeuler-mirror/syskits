@@ -35,6 +35,20 @@ struct OutputFailure {
     error: Error,
 }
 
+#[derive(Debug)]
+struct OutputOpenError {
+    diagnostic: String,
+    errno: Option<i32>,
+}
+
+impl Display for OutputOpenError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        self.diagnostic.fmt(formatter)
+    }
+}
+
+impl std::error::Error for OutputOpenError {}
+
 enum FilterFailure {
     Exit {
         file_name: OsString,
@@ -100,11 +114,24 @@ fn clone_io_error(error: &Error) -> Error {
 }
 
 fn output_open_error(file_name: &OsStr, error: &Error) -> Error {
-    Error::other(format!(
-        "{}: {}",
-        split_quote_path(file_name, false),
-        strip_errno(error)
-    ))
+    Error::other(OutputOpenError {
+        diagnostic: format!(
+            "{}: {}",
+            split_quote_path(file_name, false),
+            strip_errno(error)
+        ),
+        errno: error.raw_os_error(),
+    })
+}
+
+pub fn is_file_descriptor_limit(error: &Error) -> bool {
+    let errno = error.raw_os_error().or_else(|| {
+        error
+            .get_ref()
+            .and_then(|inner| inner.downcast_ref::<OutputOpenError>())
+            .and_then(|inner| inner.errno)
+    });
+    matches!(errno, Some(ctcore::libc::EMFILE | ctcore::libc::ENFILE))
 }
 
 pub fn reset_filter_failure() {
@@ -402,7 +429,8 @@ pub fn paths_refer_to_same_file(path1: impl AsRef<OsStr>, path2: impl AsRef<OsSt
 mod tests {
     use super::{
         FilterFailure, OutputFileWriter, filter_exec_error_message, filter_failure_error,
-        filter_shell_argv0, filter_shell_program, reset_output_failure, take_output_failure,
+        filter_shell_argv0, filter_shell_program, is_file_descriptor_limit, output_open_error,
+        reset_output_failure, take_output_failure,
     };
     use crate::SpliceSettings;
     use crate::ct_app;
@@ -525,6 +553,17 @@ mod tests {
             error.to_string(),
             format!("{}: Is a directory", file_name.display())
         );
+    }
+
+    #[test]
+    fn output_open_error_preserves_file_descriptor_limit_errno() {
+        let error = output_open_error(
+            std::ffi::OsStr::new("out-aa"),
+            &io::Error::from_raw_os_error(ctcore::libc::EMFILE),
+        );
+
+        assert!(is_file_descriptor_limit(&error));
+        assert_eq!(error.to_string(), "out-aa: Too many open files");
     }
 
     fn split_test_base_dir() -> std::path::PathBuf {

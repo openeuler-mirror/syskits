@@ -32,6 +32,13 @@ pub fn take_output_failure() -> Option<Box<dyn CTError>> {
     None
 }
 
+pub fn is_file_descriptor_limit(error: &Error) -> bool {
+    matches!(
+        error.raw_os_error(),
+        Some(ctcore::libc::EMFILE | ctcore::libc::ENFILE)
+    )
+}
+
 /// Get a file writer
 ///
 /// Unlike the unix version of this function, this _always_ returns

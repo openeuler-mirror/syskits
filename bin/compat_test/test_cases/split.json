@@ -2,6 +2,42 @@
   "tests": [
     {
       "command": "split",
+      "description": "字节N块初始化输出失败：LC_ALL=C、LANG=C；输入in为a、换行、b、换行，预先创建目录out-aa，执行split -n 2 in out-。GNU bytes_chunk_split在首个create返回EISDIR时立即停止，预期RC=1、stderr仅为out-aa的Is a directory诊断，且不得继续创建out-ab。",
+      "args": ["-n", "2", "in", "out-"],
+      "setup_commands": ["printf 'a\nb\n' > in", "mkdir out-aa"],
+      "environment": {"env_vars": {"LC_ALL": "C", "LANG": "C"}},
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": "split: out-aa: Is a directory\n"},
+        "verifications": [{"command": "test ! -e out-ab", "expected_exit": 0, "expected_stdout": null, "expected_stderr": null}]
+      },
+      "cleanup_commands": ["rmdir out-aa", "rm -f in out-ab"]
+    },
+    {
+      "command": "split",
+      "description": "行边界N块初始化输出失败：LC_ALL=C、LANG=C；输入in为a、换行、b、换行，预先创建目录out-aa，执行split -n l/2 in out-。GNU lines_chunk_split在首个create返回EISDIR时立即停止，预期RC=1、stderr仅为out-aa的Is a directory诊断，且不得继续创建out-ab。",
+      "args": ["-n", "l/2", "in", "out-"],
+      "setup_commands": ["printf 'a\nb\n' > in", "mkdir out-aa"],
+      "environment": {"env_vars": {"LC_ALL": "C", "LANG": "C"}},
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": "split: out-aa: Is a directory\n"},
+        "verifications": [{"command": "test ! -e out-ab", "expected_exit": 0, "expected_stdout": null, "expected_stderr": null}]
+      },
+      "cleanup_commands": ["rmdir out-aa", "rm -f in out-ab"]
+    },
+    {
+      "command": "split",
+      "description": "轮询N块初始化输出失败：LC_ALL=C、LANG=C；输入in为a、换行、b、换行，预先创建目录out-aa，执行split -n r/2 in out-。GNU ofile_open仅在EMFILE或ENFILE时轮换描述符，EISDIR应立即停止；预期RC=1、stderr仅为out-aa的Is a directory诊断，且不得继续创建out-ab。",
+      "args": ["-n", "r/2", "in", "out-"],
+      "setup_commands": ["printf 'a\nb\n' > in", "mkdir out-aa"],
+      "environment": {"env_vars": {"LC_ALL": "C", "LANG": "C"}},
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": "split: out-aa: Is a directory\n"},
+        "verifications": [{"command": "test ! -e out-ab", "expected_exit": 0, "expected_stdout": null, "expected_stderr": null}]
+      },
+      "cleanup_commands": ["rmdir out-aa", "rm -f in out-ab"]
+    },
+    {
+      "command": "split",
       "description": "输出文件父目录不存在：LC_ALL=C、LANG=C；输入in为单字节x，执行split -b 1 in missing/out-，missing目录不存在。GNU create保留open的ENOENT并以生成的目标名missing/out-aa为上下文，预期RC=1、stdout为空、stderr为split: missing/out-aa: No such file or directory加换行。",
       "args": ["-b", "1", "in", "missing/out-"],
       "setup_commands": ["printf x > in"],

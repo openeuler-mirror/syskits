@@ -335,12 +335,17 @@ fn push_whoami_octal_escape(output: &mut Vec<u8>, byte: u8) {
 #[cfg(unix)]
 pub fn whoami_exec() -> CTResult<OsString> {
     let uid = unsafe { libc::geteuid() };
-    platform::get_username().map_err(|_| whoami_unknown_uid_error(uid))
+    platform::get_username().map_err(|error| whoami_unknown_uid_error(uid, &error))
 }
 
 #[cfg(unix)]
-fn whoami_unknown_uid_error(uid: libc::uid_t) -> Box<dyn CTError> {
-    CtSimpleError::new(1, format!("cannot find name for user ID {uid}"))
+fn whoami_unknown_uid_error(uid: libc::uid_t, error: &io::Error) -> Box<dyn CTError> {
+    let mut message = format!("cannot find name for user ID {uid}");
+    if !matches!(error.raw_os_error(), Some(0) | None) {
+        message.push_str(": ");
+        message.push_str(&strip_errno(error));
+    }
+    CtSimpleError::new(1, message)
 }
 
 #[cfg(not(unix))]
@@ -710,11 +715,22 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn whoami_unknown_uid_uses_gnu_diagnostic() {
-        let error = whoami_unknown_uid_error(60_000);
+        let error = whoami_unknown_uid_error(60_000, &io::Error::from(io::ErrorKind::NotFound));
 
         assert_eq!(
             error.diagnostic_bytes().as_ref(),
             b"cannot find name for user ID 60000"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn whoami_nss_error_appends_gnu_errno_text() {
+        let error = whoami_unknown_uid_error(0, &io::Error::from_raw_os_error(libc::ENOENT));
+
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            b"cannot find name for user ID 0: No such file or directory"
         );
     }
 }

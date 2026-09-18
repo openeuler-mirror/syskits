@@ -2056,6 +2056,43 @@
     },
     {
       "command": "split",
+      "description": "split --line-bytes processes filter chunks sequentially after failure",
+      "args": [
+        "--line-bytes=1",
+        "--filter=cat > \"$FILE\"; exit 42",
+        "in",
+        "out-"
+      ],
+      "setup_commands": [
+        "printf 'ab' > in"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 42,
+          "stdout": "",
+          "stderr": "split: with FILE=out-aa, exit 42 from command: cat > \"$FILE\"; exit 42\n"
+        },
+        "verifications": [
+          {
+            "command": "test -f out-aa && test ! -e out-ab && test \"$(cat out-aa)\" = a",
+            "expected_exit": 0,
+            "expected_stdout": null,
+            "expected_stderr": null
+          }
+        ],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in out-*"
+      ]
+    },
+    {
+      "command": "split",
       "description": "split should not overwrite input file",
       "args": [
         "-C",

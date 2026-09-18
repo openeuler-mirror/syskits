@@ -1469,24 +1469,31 @@ fn splice_line_bytes<R: BufRead>(
             .splice_instantiate_current_writer(&filename, true)
             .map_err(|e| CtSimpleError::new(1, format!("{e}")))?;
 
-        // 如果缓冲区没满，说明必定是最后一块（EOF）
-        // 既然剩余数据总大小已经小于 chunk_size，无需再找换行符，全部写入！
-        if carry_over.len() < chunk_size {
+        let is_last_chunk = carry_over.len() < chunk_size;
+        if is_last_chunk {
+            // 如果缓冲区没满，说明必定是最后一块（EOF）。
             splice_custom_write_all(&carry_over, &mut writer, splice_settings)
                 .map_err(|e| CtSimpleError::new(1, format!("{e}")))?;
-            break; // 顺利结束
+        } else {
+            // 3. 缓冲区满了。寻找最后一个换行符进行安全切割
+            if let Some(idx) = carry_over.iter().rposition(|&b| b == separator) {
+                splice_custom_write_all(&carry_over[..=idx], &mut writer, splice_settings)
+                    .map_err(|e| CtSimpleError::new(1, format!("{e}")))?;
+                carry_over.drain(..=idx); // 丢弃已写入的部分
+            } else {
+                // 没有换行符，说明这单独一行极其长，已经超出了 chunk_size。强行截断。
+                splice_custom_write_all(&carry_over, &mut writer, splice_settings)
+                    .map_err(|e| CtSimpleError::new(1, format!("{e}")))?;
+                carry_over.clear();
+            }
         }
 
-        // 3. 缓冲区满了。寻找最后一个换行符进行安全切割
-        if let Some(idx) = carry_over.iter().rposition(|&b| b == separator) {
-            splice_custom_write_all(&carry_over[..=idx], &mut writer, splice_settings)
-                .map_err(|e| CtSimpleError::new(1, format!("{e}")))?;
-            carry_over.drain(..=idx); // 丢弃已写入的部分
-        } else {
-            // 没有换行符，说明这单独一行极其长，已经超出了 chunk_size。强行截断。
-            splice_custom_write_all(&carry_over, &mut writer, splice_settings)
-                .map_err(|e| CtSimpleError::new(1, format!("{e}")))?;
-            carry_over.clear();
+        drop(writer);
+        if platform::filter_failure_recorded() {
+            return Err(CtSimpleError::new(1, "filter command failed"));
+        }
+        if is_last_chunk {
+            break;
         }
     }
 
@@ -2477,6 +2484,31 @@ mod tests {
 
         assert_eq!(error.code(), 42);
         assert_eq!(std::fs::read(temp.path().join("out-aa")).unwrap(), b"a\n");
+        assert!(!temp.path().join("out-ab").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_split_line_bytes_stops_after_failed_filter() {
+        let temp = tempdir().expect("create temporary directory");
+        let input = temp.path().join("input");
+        let prefix = temp.path().join("out-");
+        std::fs::write(&input, b"ab").expect("write input");
+
+        let error = split_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--line-bytes=1"),
+                OsString::from("--filter=cat > \"$FILE\"; exit 42"),
+                input.into_os_string(),
+                prefix.into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect_err("a failing filter must stop split");
+
+        assert_eq!(error.code(), 42);
+        assert_eq!(std::fs::read(temp.path().join("out-aa")).unwrap(), b"a");
         assert!(!temp.path().join("out-ab").exists());
     }
 

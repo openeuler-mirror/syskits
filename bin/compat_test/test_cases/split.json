@@ -2,6 +2,90 @@
   "tests": [
     {
       "command": "split",
+      "description": "按字节输出关闭失败：LC_ALL=C、LANG=C；输入in为a、换行、b、换行，out-aa预先链接到/dev/full；执行split -b 99 in out-，所有数据停留在用户态缓冲区直到关闭。GNU closeout检查关闭写失败，预期RC=1、stdout为空、stderr为split: out-aa: No space left on device加换行。",
+      "args": ["-b", "99", "in", "out-"],
+      "setup_commands": ["printf 'a\\nb\\n' > in", "ln -s /dev/full out-aa"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "LANG": "C"},
+        "standardStreams": {"stderr": "capture"}
+      },
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": "split: out-aa: No space left on device\n"}
+      },
+      "cleanup_commands": ["rm -f in out-aa"]
+    },
+    {
+      "command": "split",
+      "description": "按行输出关闭失败：LC_ALL=C、LANG=C；输入in为a、换行、b、换行，out-aa预先链接到/dev/full；执行split -l 99 in out-，小输入仅在关闭时触发ENOSPC。GNU closeout检查关闭写失败，预期RC=1、stdout为空、stderr为split: out-aa: No space left on device加换行。",
+      "args": ["-l", "99", "in", "out-"],
+      "setup_commands": ["printf 'a\\nb\\n' > in", "ln -s /dev/full out-aa"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "LANG": "C"},
+        "standardStreams": {"stderr": "capture"}
+      },
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": "split: out-aa: No space left on device\n"}
+      },
+      "cleanup_commands": ["rm -f in out-aa"]
+    },
+    {
+      "command": "split",
+      "description": "按行字节输出关闭失败：LC_ALL=C、LANG=C；输入in为a、换行、b、换行，out-aa预先链接到/dev/full；执行split -C 99 in out-，小输入仅在关闭时触发ENOSPC。GNU closeout检查关闭写失败，预期RC=1、stdout为空、stderr为split: out-aa: No space left on device加换行。",
+      "args": ["-C", "99", "in", "out-"],
+      "setup_commands": ["printf 'a\\nb\\n' > in", "ln -s /dev/full out-aa"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "LANG": "C"},
+        "standardStreams": {"stderr": "capture"}
+      },
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": "split: out-aa: No space left on device\n"}
+      },
+      "cleanup_commands": ["rm -f in out-aa"]
+    },
+    {
+      "command": "split",
+      "description": "字节N块输出关闭失败：LC_ALL=C、LANG=C；输入in为a、换行、b、换行，out-aa预先链接到/dev/full；执行split -n 1 in out-，分片写入缓冲区后关闭。GNU closeout检查关闭写失败，预期RC=1、stdout为空、stderr为split: out-aa: No space left on device加换行。",
+      "args": ["-n", "1", "in", "out-"],
+      "setup_commands": ["printf 'a\\nb\\n' > in", "ln -s /dev/full out-aa"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "LANG": "C"},
+        "standardStreams": {"stderr": "capture"}
+      },
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": "split: out-aa: No space left on device\n"}
+      },
+      "cleanup_commands": ["rm -f in out-aa"]
+    },
+    {
+      "command": "split",
+      "description": "行边界N块输出关闭失败：LC_ALL=C、LANG=C；输入in为a、换行、b、换行，out-aa预先链接到/dev/full；执行split -n l/1 in out-，分片写入缓冲区后关闭。GNU closeout检查关闭写失败，预期RC=1、stdout为空、stderr为split: out-aa: No space left on device加换行。",
+      "args": ["-n", "l/1", "in", "out-"],
+      "setup_commands": ["printf 'a\\nb\\n' > in", "ln -s /dev/full out-aa"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "LANG": "C"},
+        "standardStreams": {"stderr": "capture"}
+      },
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": "split: out-aa: No space left on device\n"}
+      },
+      "cleanup_commands": ["rm -f in out-aa"]
+    },
+    {
+      "command": "split",
+      "description": "轮询N块输出关闭失败：LC_ALL=C、LANG=C；输入in为a、换行、b、换行，out-aa预先链接到/dev/full；执行split -n r/1 in out-，轮询分片写入缓冲区后关闭。GNU closeout检查关闭写失败，预期RC=1、stdout为空、stderr为split: out-aa: No space left on device加换行。",
+      "args": ["-n", "r/1", "in", "out-"],
+      "setup_commands": ["printf 'a\\nb\\n' > in", "ln -s /dev/full out-aa"],
+      "environment": {
+        "env_vars": {"LC_ALL": "C", "LANG": "C"},
+        "standardStreams": {"stderr": "capture"}
+      },
+      "expectation": {
+        "execution": {"exit_code": 1, "stdout": "", "stderr": "split: out-aa: No space left on device\n"}
+      },
+      "cleanup_commands": ["rm -f in out-aa"]
+    },
+    {
+      "command": "split",
       "description": "字节K/N标准输出写失败诊断：LC_ALL=C、LANG=C；输入文件in内容为abc和换行，执行split -n 1/1 in并将stdout连接到/dev/full。GNU bytes_chunk_extract将标准输出按文件名-报告，预期RC=1、无可捕获stdout、stderr为split: -: No space left on device加换行。",
       "args": [
         "-n",

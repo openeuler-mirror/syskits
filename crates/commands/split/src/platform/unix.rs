@@ -27,6 +27,12 @@ use std::process::{Child, Command, Stdio};
 
 thread_local! {
     static FILTER_FAILURE: RefCell<Option<FilterFailure>> = const { RefCell::new(None) };
+    static OUTPUT_FAILURE: RefCell<Option<OutputFailure>> = const { RefCell::new(None) };
+}
+
+struct OutputFailure {
+    file_name: OsString,
+    error: Error,
 }
 
 enum FilterFailure {
@@ -75,8 +81,32 @@ fn record_filter_failure(failure: FilterFailure) {
     });
 }
 
+fn record_output_failure(file_name: &OsStr, error: &Error) {
+    OUTPUT_FAILURE.with(|slot| {
+        if slot.borrow().is_none() {
+            *slot.borrow_mut() = Some(OutputFailure {
+                file_name: file_name.to_os_string(),
+                error: clone_io_error(error),
+            });
+        }
+    });
+}
+
+fn clone_io_error(error: &Error) -> Error {
+    match error.raw_os_error() {
+        Some(errno) => Error::from_raw_os_error(errno),
+        None => Error::new(error.kind(), error.to_string()),
+    }
+}
+
 pub fn reset_filter_failure() {
     FILTER_FAILURE.with(|slot| {
+        *slot.borrow_mut() = None;
+    });
+}
+
+pub fn reset_output_failure() {
+    OUTPUT_FAILURE.with(|slot| {
         *slot.borrow_mut() = None;
     });
 }
@@ -87,6 +117,22 @@ pub fn filter_failure_recorded() -> bool {
 
 pub fn take_filter_failure() -> Option<Box<dyn CTError>> {
     FILTER_FAILURE.with(|slot| slot.borrow_mut().take().map(filter_failure_error))
+}
+
+pub fn take_output_failure() -> Option<Box<dyn CTError>> {
+    OUTPUT_FAILURE.with(|slot| {
+        slot.borrow_mut().take().map(|failure| {
+            Box::new(FilterFailureError {
+                code: 1,
+                diagnostic: format!(
+                    "{}: {}",
+                    split_quote_path(failure.file_name.as_os_str(), false),
+                    strip_errno(&failure.error)
+                )
+                .into_bytes(),
+            }) as Box<dyn CTError>
+        })
+    })
 }
 
 fn filter_failure_error(failure: FilterFailure) -> Box<dyn CTError> {
@@ -277,6 +323,25 @@ impl Drop for UnixFilterWriter {
     }
 }
 
+struct OutputFileWriter<W: Write> {
+    inner: W,
+    file_name: OsString,
+}
+
+impl<W: Write> Write for OutputFileWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        self.inner.write(buf).inspect_err(|error| {
+            record_output_failure(self.file_name.as_os_str(), error);
+        })
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush().inspect_err(|error| {
+            record_output_failure(self.file_name.as_os_str(), error);
+        })
+    }
+}
+
 /// Instantiate either a file writer or a "write to shell process's stdin" writer
 pub fn instantiate_current_writer(
     opt_filter: &Option<OsString>,
@@ -311,7 +376,10 @@ pub fn instantiate_current_writer(
                         ))
                     })?
             };
-            Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
+            Ok(BufWriter::new(Box::new(OutputFileWriter {
+                inner: file,
+                file_name: file_name.to_os_string(),
+            }) as Box<dyn Write>))
         }
         Some(filter_command) => Ok(BufWriter::new(Box::new(
             // spawn a shell command and write to it
@@ -335,8 +403,8 @@ pub fn paths_refer_to_same_file(path1: impl AsRef<OsStr>, path2: impl AsRef<OsSt
 #[cfg(test)]
 mod tests {
     use super::{
-        FilterFailure, filter_exec_error_message, filter_failure_error, filter_shell_argv0,
-        filter_shell_program,
+        FilterFailure, OutputFileWriter, filter_exec_error_message, filter_failure_error,
+        filter_shell_argv0, filter_shell_program, reset_output_failure, take_output_failure,
     };
     use crate::SpliceSettings;
     use crate::ct_app;
@@ -344,6 +412,7 @@ mod tests {
     use crate::platform::paths_refer_to_same_file;
     use std::fs;
     use std::fs::File;
+    use std::io::{self, BufWriter, Write};
 
     use std::ffi::OsString;
     use std::os::unix::ffi::{OsStrExt, OsStringExt};
@@ -392,6 +461,38 @@ mod tests {
         assert_eq!(
             filter_exec_error_message(shell.as_os_str(), command.as_os_str(), &error),
             b"failed to run command: \"./shell-\xff -c cat > \"$FILE\" #\xfe\": No such file or directory"
+        );
+    }
+
+    struct NoSpaceWriter;
+
+    impl Write for NoSpaceWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::from_raw_os_error(ctcore::libc::ENOSPC))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn buffered_output_drop_records_flush_failure() {
+        reset_output_failure();
+        {
+            let output = OutputFileWriter {
+                inner: NoSpaceWriter,
+                file_name: OsString::from("out-aa"),
+            };
+            let mut writer = BufWriter::new(Box::new(output) as Box<dyn Write>);
+            writer.write_all(b"a\nb\n").unwrap();
+        }
+
+        let error = take_output_failure().expect("buffered write failure");
+        assert_eq!(error.code(), 1);
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            b"out-aa: No space left on device"
         );
     }
 

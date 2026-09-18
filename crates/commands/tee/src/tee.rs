@@ -28,7 +28,7 @@ use ctcore::ct_show_error;
 use std::any::Any;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
-use std::io::{Error, ErrorKind as IoErrorKind, Read, Result, Write, sink};
+use std::io::{Error, ErrorKind as IoErrorKind, Read, Result, Write};
 use std::path::PathBuf;
 use std::process::{Command as ProcessCommand, Stdio};
 #[cfg(target_os = "linux")]
@@ -559,10 +559,11 @@ fn create_writers(options: &TeeOptions, ignored_errors: &mut usize) -> Result<Ve
             options.output_error.as_ref(),
             ignored_errors,
         ) {
-            Ok(writer) => writers.push(NamedWriter {
+            Ok(Some(writer)) => writers.push(NamedWriter {
                 name: file.clone(),
                 inner: writer,
             }),
+            Ok(None) => {}
             Err(e) => return Err(e),
         }
     }
@@ -694,30 +695,27 @@ fn open(
     append: bool,
     output_error: Option<&OutputErrorMode>,
     ignored_errors: &mut usize,
-) -> Result<Box<dyn Write>> {
+) -> Result<Option<Box<dyn Write>>> {
     let name = name.as_ref();
     let path = PathBuf::from(name);
-    let inner: Box<dyn Write> = {
-        let mut options = OpenOptions::new();
-        let mode = if append {
-            options.append(true)
-        } else {
-            options.truncate(true)
-        };
-        match mode.write(true).create(true).open(path.as_path()) {
-            Ok(file) => Box::new(file),
-            Err(f) => {
-                ct_show_error!("{}: {}", tee_quote_path(name), strip_errno(&f));
-                *ignored_errors += 1;
+    let mut options = OpenOptions::new();
+    let mode = if append {
+        options.append(true)
+    } else {
+        options.truncate(true)
+    };
+    match mode.write(true).create(true).open(path.as_path()) {
+        Ok(file) => Ok(Some(Box::new(file))),
+        Err(error) => {
+            ct_show_error!("{}: {}", tee_quote_path(name), strip_errno(&error));
+            *ignored_errors += 1;
 
-                match output_error {
-                    Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => return Err(f),
-                    _ => Box::new(sink()),
-                }
+            match output_error {
+                Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => Err(error),
+                _ => Ok(None),
             }
         }
-    };
-    Ok(inner)
+    }
 }
 
 fn tee_quote_path(path: &OsStr) -> String {
@@ -1460,6 +1458,24 @@ mod test_basic {
         );
         assert!(result.is_err());
         assert_eq!(exit_ignored_errors, 1);
+    }
+
+    #[test]
+    fn failed_nonfatal_output_file_is_not_kept_as_a_writer() {
+        let directory = tempfile::tempdir().unwrap();
+        let missing_file = directory.path().join("missing-parent/out");
+        let options = TeeOptions {
+            files: vec![missing_file.into_os_string()],
+            output_error: Some(OutputErrorMode::WarnNoPipe),
+            ..TeeOptions::default()
+        };
+        let mut ignored_errors = 0;
+
+        let writers = create_writers(&options, &mut ignored_errors).unwrap();
+
+        assert_eq!(writers.len(), 1);
+        assert_eq!(writers[0].name, OsString::from(STANDARD_OUTPUT_NAME));
+        assert_eq!(ignored_errors, 1);
     }
 
     #[test]

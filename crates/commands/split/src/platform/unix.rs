@@ -28,12 +28,12 @@ thread_local! {
 enum FilterFailure {
     Exit {
         file_name: OsString,
-        command: String,
+        command: OsString,
         code: i32,
     },
     Signal {
         file_name: OsString,
-        command: String,
+        command: OsString,
         signal: i32,
     },
     Wait(String),
@@ -68,7 +68,8 @@ pub fn take_filter_failure() -> Option<(i32, String)> {
                 code,
                 format!(
                     "with FILE={}, exit {code} from command: {command}",
-                    split_quote_path(file_name.as_os_str(), false)
+                    split_quote_path(file_name.as_os_str(), false),
+                    command = command.to_string_lossy(),
                 ),
             ),
             FilterFailure::Signal {
@@ -83,7 +84,8 @@ pub fn take_filter_failure() -> Option<(i32, String)> {
                     signal + 128,
                     format!(
                         "with FILE={}, signal {signal_name} from command: {command}",
-                        split_quote_path(file_name.as_os_str(), false)
+                        split_quote_path(file_name.as_os_str(), false),
+                        command = command.to_string_lossy(),
                     ),
                 )
             }
@@ -100,7 +102,7 @@ struct UnixFilterWriter {
     /// Running shell process
     shell_process: Child,
     file_name: OsString,
-    command: String,
+    command: OsString,
 }
 
 impl Write for UnixFilterWriter {
@@ -127,7 +129,7 @@ impl UnixFilterWriter {
     ///
     /// * `command` - The shell command to execute
     /// * `filepath` - Path of the output file (forwarded to command as $FILE)
-    fn new(command: &str, filepath: &OsStr) -> Result<Self> {
+    fn new(command: &OsStr, filepath: &OsStr) -> Result<Self> {
         let shell_process =
             Command::new(env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_owned()))
                 .arg("-c")
@@ -139,7 +141,7 @@ impl UnixFilterWriter {
         Ok(Self {
             shell_process,
             file_name: filepath.to_os_string(),
-            command: command.to_string(),
+            command: command.to_os_string(),
         })
     }
 }
@@ -175,7 +177,7 @@ impl Drop for UnixFilterWriter {
 
 /// Instantiate either a file writer or a "write to shell process's stdin" writer
 pub fn instantiate_current_writer(
-    opt_filter: &Option<String>,
+    opt_filter: &Option<OsString>,
     file_name: impl AsRef<OsStr>,
     new: bool,
 ) -> Result<BufWriter<Box<dyn Write>>> {

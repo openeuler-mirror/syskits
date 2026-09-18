@@ -1408,6 +1408,13 @@ impl Write for SpliceLineChunkWriter<'_> {
 
         // 写入剩余未处理部分（可能包含最后一行）
         if prev_size < buf.len() {
+            if self.num_lines_remaining_in_current_chunk == 0 {
+                self.close_current_writer()?;
+                self.num_chunks_written += 1;
+                self.inner = Some(self.next_writer()?);
+                self.num_lines_remaining_in_current_chunk = self.chunk_size;
+            }
+
             let settings = self.settings;
             let writer = self.current_writer()?;
             let num_bytes_written_size =
@@ -2359,6 +2366,29 @@ mod tests {
             b"a\xffb\xff"
         );
         assert!(!temp.path().join("out-ab").exists());
+    }
+
+    #[test]
+    fn test_split_lines_moves_unterminated_tail_to_next_chunk() {
+        let temp = tempdir().expect("create temporary directory");
+        let input = temp.path().join("input");
+        let prefix = temp.path().join("out-");
+        std::fs::write(&input, b"a\nb\nc").expect("write input");
+
+        split_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--lines=1"),
+                input.into_os_string(),
+                prefix.into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect("split must preserve the final unterminated record");
+
+        assert_eq!(std::fs::read(temp.path().join("out-aa")).unwrap(), b"a\n");
+        assert_eq!(std::fs::read(temp.path().join("out-ab")).unwrap(), b"b\n");
+        assert_eq!(std::fs::read(temp.path().join("out-ac")).unwrap(), b"c");
     }
 
     #[cfg(unix)]

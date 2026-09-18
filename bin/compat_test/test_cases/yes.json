@@ -213,6 +213,44 @@
             },
             "timeout": 1,
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "yes",
+            "description": "LC_ALL=C下--help附带参数使用GNU不接收参数诊断",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["--help=x"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "yes: option '--help' doesn't allow an argument\nTry 'yes --help' for more information.\n"
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "yes",
+            "description": "LC_ALL=C下--version附带参数使用GNU不接收参数诊断",
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "args": ["--version=x"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "yes: option '--version' doesn't allow an argument\nTry 'yes --help' for more information.\n"
+                }
+            },
+            "timeout": 1,
+            "cleanup_commands": []
         }
     ]
 }

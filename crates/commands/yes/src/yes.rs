@@ -105,14 +105,18 @@ fn yes_prepare_args_with_mode(
 
         if bytes.starts_with(b"--") {
             let long = &bytes[2..];
-            let name = &long[..long
-                .iter()
-                .position(|byte| *byte == b'=')
-                .unwrap_or(long.len())];
-            if yes_match_long_option(name).is_none() {
+            let separator = long.iter().position(|byte| *byte == b'=');
+            let name = &long[..separator.unwrap_or(long.len())];
+            let Some(canonical) = yes_match_long_option(name) else {
                 return Err(CTsageError::new(
                     1,
                     format!("unrecognized option '{}'", String::from_utf8_lossy(bytes)),
+                ));
+            };
+            if separator.is_some() {
+                return Err(CTsageError::new(
+                    1,
+                    format!("option '--{canonical}' doesn't allow an argument"),
                 ));
             }
             return Ok(args);
@@ -376,6 +380,26 @@ mod tests {
                 false,
             )
             .expect_err("unknown GNU option must fail before Clap parsing");
+
+            assert_eq!(error.to_string(), expected);
+            assert!(error.usage());
+        }
+    }
+
+    #[test]
+    fn gnu_standard_options_reject_attached_arguments() {
+        for (argument, expected) in [
+            ("--help=x", "option '--help' doesn't allow an argument"),
+            (
+                "--version=x",
+                "option '--version' doesn't allow an argument",
+            ),
+        ] {
+            let error = yes_prepare_args_with_mode(
+                [OsString::from("yes"), OsString::from(argument)].into_iter(),
+                false,
+            )
+            .expect_err("GNU standard options must reject attached arguments");
 
             assert_eq!(error.to_string(), expected);
             assert!(error.usage());

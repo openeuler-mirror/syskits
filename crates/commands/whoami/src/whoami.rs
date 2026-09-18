@@ -17,7 +17,9 @@ use std::error::Error;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::ct_println_verbatim;
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, strip_errno};
+#[cfg(not(unix))]
+use ctcore::ct_error::FromIo;
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, strip_errno};
 use std::ffi::{OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use std::io;
@@ -330,10 +332,20 @@ fn push_whoami_octal_escape(output: &mut Vec<u8>, byte: u8) {
 }
 
 /// 获取当前用户名
+#[cfg(unix)]
 pub fn whoami_exec() -> CTResult<OsString> {
-    let username_result = platform::get_username();
+    let uid = unsafe { libc::geteuid() };
+    platform::get_username().map_err(|_| whoami_unknown_uid_error(uid))
+}
 
-    username_result.map_err_context(|| t!("whoami.errors.failed_get_username"))
+#[cfg(unix)]
+fn whoami_unknown_uid_error(uid: libc::uid_t) -> Box<dyn CTError> {
+    CtSimpleError::new(1, format!("cannot find name for user ID {uid}"))
+}
+
+#[cfg(not(unix))]
+pub fn whoami_exec() -> CTResult<OsString> {
+    platform::get_username().map_err_context(|| t!("whoami.errors.failed_get_username"))
 }
 
 pub fn ct_app() -> Command {
@@ -693,5 +705,16 @@ mod tests {
             Some(libc::EBADF)
         );
         assert!(whoami_closed_stdout_error(false).is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn whoami_unknown_uid_uses_gnu_diagnostic() {
+        let error = whoami_unknown_uid_error(60_000);
+
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            b"cannot find name for user ID 60000"
+        );
     }
 }

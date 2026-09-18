@@ -32,6 +32,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, OwnedFd};
+use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
@@ -177,6 +178,44 @@ fn configured_output(mode: OutputStream) -> Result<ConfiguredOutput> {
                 Some(PipeOutputCapture {
                     reader: read_end,
                     prefixed_bytes: prefixed_bytes - released_bytes,
+                }),
+            ))
+        }
+        OutputStream::NonblockingFullSocket => {
+            let (reader, write_end) = UnixStream::pair().map_err(|e| {
+                TestError::ExecutionError(format!("Failed to create Unix socket pair: {e}"))
+            })?;
+            let mut flags = OFlag::from_bits_truncate(
+                fcntl(write_end.as_raw_fd(), FcntlArg::F_GETFL).map_err(|e| {
+                    TestError::ExecutionError(format!("Failed to read socket flags: {e}"))
+                })?,
+            );
+            flags.insert(OFlag::O_NONBLOCK);
+            fcntl(write_end.as_raw_fd(), FcntlArg::F_SETFL(flags)).map_err(|e| {
+                TestError::ExecutionError(format!("Failed to set socket flags: {e}"))
+            })?;
+
+            let fill = [0_u8; 8192];
+            let mut prefixed_bytes = 0;
+            loop {
+                match nix::unistd::write(&write_end, &fill) {
+                    Ok(written) => prefixed_bytes += written,
+                    Err(Errno::EAGAIN) => break,
+                    Err(e) => {
+                        return Err(TestError::ExecutionError(format!(
+                            "Failed to fill nonblocking socket: {e}"
+                        )));
+                    }
+                }
+            }
+
+            Ok((
+                Stdio::from(OwnedFd::from(write_end)),
+                None,
+                None,
+                Some(PipeOutputCapture {
+                    reader: OwnedFd::from(reader),
+                    prefixed_bytes,
                 }),
             ))
         }

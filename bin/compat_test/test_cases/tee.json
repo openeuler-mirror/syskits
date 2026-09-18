@@ -499,6 +499,29 @@
           },
           "cleanup_commands": [],
           "byteMode": true
+      },
+      {
+          "tstdin": "x",
+          "command": "tee",
+          "description": "启动前stdout关闭且FILE引用/proc/thread-self/fd/1时，Linux线程procfs别名也必须保留原始关闭描述符语义，先报告FILE不存在再报告标准输出Bad file descriptor。",
+          "setup_commands": [
+              "export LC_ALL='C'",
+              "export LANG='C'"
+          ],
+          "args": ["/proc/thread-self/fd/1"],
+          "expectation": {
+              "execution": {
+                  "exit_code": 1,
+                  "stdout": "",
+                  "stderr": "tee: /proc/thread-self/fd/1: No such file or directory\\ntee: 'standard output': Bad file descriptor\\n"
+              }
+          },
+          "environment": {
+              "standardStreams": {
+                  "stdout": "closed"
+              }
+          },
+          "cleanup_commands": []
       }
   ]
 }

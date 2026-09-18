@@ -742,12 +742,16 @@ fn output_path_references_closed_standard_fd(_path: &Path) -> bool {
 fn path_references_current_process_fd(path: &Path, fd: RawFd) -> bool {
     let fd_name = fd.to_string();
     let current_fd_directory = PathBuf::from(format!("/proc/{}/fd", std::process::id()));
+    let current_thread_fd_directory = Path::new("/proc/thread-self/fd").canonicalize().ok();
 
     path.file_name() == Some(OsStr::new(&fd_name))
         && path
             .parent()
             .and_then(|parent| parent.canonicalize().ok())
-            .is_some_and(|parent| parent == current_fd_directory)
+            .is_some_and(|parent| {
+                parent == current_fd_directory
+                    || current_thread_fd_directory.as_ref() == Some(&parent)
+            })
 }
 
 fn tee_quote_path(path: &OsStr) -> String {
@@ -1182,6 +1186,10 @@ mod tests {
     fn current_process_fd_reference_detects_proc_and_dev_fd_aliases() {
         assert!(path_references_current_process_fd(
             Path::new("/proc/self/fd/1"),
+            nix::libc::STDOUT_FILENO
+        ));
+        assert!(path_references_current_process_fd(
+            Path::new("/proc/thread-self/fd/1"),
             nix::libc::STDOUT_FILENO
         ));
         assert!(path_references_current_process_fd(

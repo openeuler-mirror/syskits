@@ -4,6 +4,51 @@
       "byteMode": true,
       "tstdin": "",
       "command": "split",
+      "description": "过滤器shell启动失败诊断：LC_ALL=C、LANG=C；参数完整十六进制为2d62（-b）、31（1）、2d2d66696c7465723d636174203e20222446494c4522（--filter=cat > \"$FILE\"）、696e（输入in）和6f75742d（前缀out-）；SHELL完整字节为2e2f6d697373696e672d7368656c6c（./missing-shell）且该路径不存在，输入文件字节为78。GNU子进程先输出failed to run command及ENOENT，再由父进程输出FILE和过滤命令退出1诊断，预期RC=1、stdout为空、stderr完整十六进制为73706c69743a206661696c656420746f2072756e20636f6d6d616e643a20222e2f6d697373696e672d7368656c6c202d6320636174203e20222446494c4522223a204e6f20737563682066696c65206f72206469726563746f72790a73706c69743a20776974682046494c453d6f75742d61612c206578697420312066726f6d20636f6d6d616e643a20636174203e20222446494c45220a。",
+      "args": [
+        "2d62",
+        "31",
+        "2d2d66696c7465723d636174203e20222446494c4522",
+        "696e",
+        "6f75742d"
+      ],
+      "setup_commands": [
+        "printf x > in"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        },
+        "envBytes": {
+          "SHELL": "2e2f6d697373696e672d7368656c6c"
+        },
+        "standardStreams": {
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "73706c69743a206661696c656420746f2072756e20636f6d6d616e643a20222e2f6d697373696e672d7368656c6c202d6320636174203e20222446494c4522223a204e6f20737563682066696c65206f72206469726563746f72790a73706c69743a20776974682046494c453d6f75742d61612c206578697420312066726f6d20636f6d6d616e643a20636174203e20222446494c45220a"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f in out-*"
+      ]
+    },
+    {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "split",
       "description": "原始字节过滤器失败诊断：LC_ALL=C、LANG=C；参数完整十六进制为2d62（-b）、31（1）、2d2d66696c746572（--filter）、657869742034322023ff（exit 42、空格、#、单字节0xff）、696e（输入in）和6f75742d（前缀out-）；输入文件字节为78。过滤器以42退出，GNU诊断在from command冒号后原样保留命令末尾0xff，预期RC=42、stdout为空、stderr完整十六进制为73706c69743a20776974682046494c453d6f75742d61612c20657869742034322066726f6d20636f6d616e643a20657869742034322023ff0a。",
       "args": [
         "2d62",

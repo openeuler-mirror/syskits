@@ -76,6 +76,8 @@ pub enum OutputStream {
     ClosedPipe,
     /// 将输出连接到读端保持打开且已写满的非阻塞管道，用于验证 EAGAIN 写失败处理。
     NonblockingFullPipe,
+    /// 将输出连接到预填充后释放一个 PIPE_BUF 空间的非阻塞管道，并捕获子进程写入的字节。
+    NonblockingPartialPipe,
     /// 将输出连接到伪终端并捕获终端输出。
     Tty,
 }

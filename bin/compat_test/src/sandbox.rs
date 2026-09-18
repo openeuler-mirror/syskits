@@ -51,25 +51,51 @@ pub(crate) struct CommandStreamOptions<'a> {
     pub streams: &'a StandardStreams,
 }
 
-fn configured_output(mode: OutputStream) -> Result<(Stdio, Option<OwnedFd>, Option<OwnedFd>)> {
+struct PipeOutputCapture {
+    reader: OwnedFd,
+    prefixed_bytes: usize,
+}
+
+type ConfiguredOutput = (
+    Stdio,
+    Option<OwnedFd>,
+    Option<OwnedFd>,
+    Option<PipeOutputCapture>,
+);
+
+impl PipeOutputCapture {
+    fn read_output(self) -> Result<Vec<u8>> {
+        let mut reader = File::from(self.reader);
+        let mut output = Vec::new();
+        reader.read_to_end(&mut output)?;
+        if output.len() < self.prefixed_bytes {
+            return Err(TestError::ExecutionError(
+                "Nonblocking pipe output was shorter than its prefilled prefix".to_string(),
+            ));
+        }
+        Ok(output.split_off(self.prefixed_bytes))
+    }
+}
+
+fn configured_output(mode: OutputStream) -> Result<ConfiguredOutput> {
     match mode {
-        OutputStream::Capture => Ok((Stdio::piped(), None, None)),
-        OutputStream::Inherit => Ok((Stdio::inherit(), None, None)),
-        OutputStream::Null => Ok((Stdio::null(), None, None)),
+        OutputStream::Capture => Ok((Stdio::piped(), None, None, None)),
+        OutputStream::Inherit => Ok((Stdio::inherit(), None, None, None)),
+        OutputStream::Null => Ok((Stdio::null(), None, None, None)),
         OutputStream::Full => {
             let full = fs::OpenOptions::new().write(true).open("/dev/full")?;
-            Ok((Stdio::from(full), None, None))
+            Ok((Stdio::from(full), None, None, None))
         }
         OutputStream::ReadOnlyNull => {
             let null = fs::OpenOptions::new().read(true).open("/dev/null")?;
-            Ok((Stdio::from(null), None, None))
+            Ok((Stdio::from(null), None, None, None))
         }
-        OutputStream::Closed => Ok((Stdio::null(), None, None)),
+        OutputStream::Closed => Ok((Stdio::null(), None, None, None)),
         OutputStream::ClosedPipe => {
             let (read_end, write_end) = nix::unistd::pipe()
                 .map_err(|e| TestError::ExecutionError(format!("Failed to create pipe: {e}")))?;
             drop(read_end);
-            Ok((Stdio::from(write_end), None, None))
+            Ok((Stdio::from(write_end), None, None, None))
         }
         OutputStream::NonblockingFullPipe => {
             let (read_end, write_end) = nix::unistd::pipe()
@@ -94,7 +120,65 @@ fn configured_output(mode: OutputStream) -> Result<(Stdio, Option<OwnedFd>, Opti
                     }
                 }
             }
-            Ok((Stdio::from(write_end), None, Some(read_end)))
+            Ok((Stdio::from(write_end), None, Some(read_end), None))
+        }
+        OutputStream::NonblockingPartialPipe => {
+            let (read_end, write_end) = nix::unistd::pipe()
+                .map_err(|e| TestError::ExecutionError(format!("Failed to create pipe: {e}")))?;
+            let mut flags = OFlag::from_bits_truncate(
+                fcntl(write_end.as_raw_fd(), FcntlArg::F_GETFL).map_err(|e| {
+                    TestError::ExecutionError(format!("Failed to read pipe flags: {e}"))
+                })?,
+            );
+            flags.insert(OFlag::O_NONBLOCK);
+            fcntl(write_end.as_raw_fd(), FcntlArg::F_SETFL(flags))
+                .map_err(|e| TestError::ExecutionError(format!("Failed to set pipe flags: {e}")))?;
+
+            let fill = [0_u8; 8192];
+            let mut prefixed_bytes = 0;
+            loop {
+                match nix::unistd::write(&write_end, &fill) {
+                    Ok(written) => prefixed_bytes += written,
+                    Err(Errno::EAGAIN) => break,
+                    Err(e) => {
+                        return Err(TestError::ExecutionError(format!(
+                            "Failed to fill nonblocking partial pipe: {e}"
+                        )));
+                    }
+                }
+            }
+
+            const AVAILABLE_BYTES: usize = 4096;
+            let mut released_bytes = 0;
+            while released_bytes < AVAILABLE_BYTES {
+                let mut buffer = [0_u8; AVAILABLE_BYTES];
+                let read = nix::unistd::read(
+                    read_end.as_raw_fd(),
+                    &mut buffer[..AVAILABLE_BYTES - released_bytes],
+                )
+                .map_err(|e| {
+                    TestError::ExecutionError(format!(
+                        "Failed to release space in nonblocking partial pipe: {e}"
+                    ))
+                })?;
+                if read == 0 {
+                    return Err(TestError::ExecutionError(
+                        "Nonblocking partial pipe ended before releasing PIPE_BUF bytes"
+                            .to_string(),
+                    ));
+                }
+                released_bytes += read;
+            }
+
+            Ok((
+                Stdio::from(write_end),
+                None,
+                None,
+                Some(PipeOutputCapture {
+                    reader: read_end,
+                    prefixed_bytes: prefixed_bytes - released_bytes,
+                }),
+            ))
         }
         OutputStream::Tty => {
             let pty = openpty(None, None)
@@ -107,7 +191,7 @@ fn configured_output(mode: OutputStream) -> Result<(Stdio, Option<OwnedFd>, Opti
             flags.insert(OFlag::O_NONBLOCK);
             fcntl(master_fd, FcntlArg::F_SETFL(flags))
                 .map_err(|e| TestError::ExecutionError(format!("Failed to set pty flags: {e}")))?;
-            Ok((Stdio::from(pty.slave), Some(pty.master), None))
+            Ok((Stdio::from(pty.slave), Some(pty.master), None, None))
         }
     }
 }
@@ -785,8 +869,10 @@ impl IsolatedSandbox {
             None if close_stdin => Stdio::null(),
             None => Stdio::piped(),
         };
-        let (stdout, stdout_tty, _stdout_pipe_keepalive) = configured_output(streams.stdout)?;
-        let (stderr, stderr_tty, _stderr_pipe_keepalive) = configured_output(streams.stderr)?;
+        let (stdout, stdout_tty, _stdout_pipe_keepalive, stdout_pipe_capture) =
+            configured_output(streams.stdout)?;
+        let (stderr, stderr_tty, _stderr_pipe_keepalive, stderr_pipe_capture) =
+            configured_output(streams.stderr)?;
         let mut command = if streams.use_bash {
             let mut command = Command::new("bash");
             command
@@ -843,6 +929,7 @@ impl IsolatedSandbox {
                 });
             }
         };
+        drop(command);
         let stdin_keepalive = if keep_stdin_open {
             child
                 .stdin
@@ -964,6 +1051,12 @@ impl IsolatedSandbox {
             output.stderr = reader.join().map_err(|_| {
                 TestError::ExecutionError("stderr PTY reader thread panicked".to_string())
             })??;
+        }
+        if let Some(capture) = stdout_pipe_capture {
+            output.stdout = capture.read_output()?;
+        }
+        if let Some(capture) = stderr_pipe_capture {
+            output.stderr = capture.read_output()?;
         }
 
         let result = if options.output_hex {

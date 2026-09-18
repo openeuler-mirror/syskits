@@ -1666,6 +1666,17 @@ trait SplitManageOutFiles {
     ) -> CTResult<Self>
     where
         Self: Sized;
+    /// Initialize as many output files as have valid names. Unlike [`Self::init`],
+    /// this retains successfully initialized earlier files when the suffix iterator
+    /// is exhausted so sequential strategies can report the error at the matching
+    /// output boundary.
+    fn init_with_deferred_suffix_exhaustion(
+        num_files: u64,
+        split_settings: &SpliceSettings,
+        is_writer_optional: bool,
+    ) -> CTResult<(Self, bool)>
+    where
+        Self: Sized;
     /// Get the writer for the output file by index.
     /// If system limit of open files has been reached
     /// it will try to close one of previously instantiated writers
@@ -1696,6 +1707,22 @@ impl SplitManageOutFiles for OutFiles {
         split_settings: &SpliceSettings,
         writer_optional: bool,
     ) -> CTResult<Self> {
+        let (output_files, suffix_exhausted) = Self::init_with_deferred_suffix_exhaustion(
+            number_files,
+            split_settings,
+            writer_optional,
+        )?;
+        if suffix_exhausted {
+            return Err(CtSimpleError::new(1, "output file suffixes exhausted"));
+        }
+        Ok(output_files)
+    }
+
+    fn init_with_deferred_suffix_exhaustion(
+        number_files: u64,
+        split_settings: &SpliceSettings,
+        writer_optional: bool,
+    ) -> CTResult<(Self, bool)> {
         // 创建文件名迭代器，用于生成每个分割文件的名称。
         let mut file_iterator: FilenameIterator =
             FilenameIterator::new(split_settings.output_prefix(), &split_settings.suffix)
@@ -1703,9 +1730,9 @@ impl SplitManageOutFiles for OutFiles {
         let mut output_files: Self = Self::new();
         for _ in 0..number_files {
             // 获取下一个文件名。如果文件名序列耗尽，则视为错误。
-            let file_name = file_iterator
-                .next()
-                .ok_or_else(|| CtSimpleError::new(1, "output file suffixes exhausted"))?;
+            let Some(file_name) = file_iterator.next() else {
+                return Ok((output_files, true));
+            };
             // 根据`writer_optional`标志，决定是否为当前文件创建一个写入器。
             let maybe_writer = if writer_optional {
                 None
@@ -1730,7 +1757,7 @@ impl SplitManageOutFiles for OutFiles {
             });
         }
         // 初始化完成，返回输出文件集合。
-        Ok(output_files)
+        Ok((output_files, false))
     }
 
     /**
@@ -1994,6 +2021,7 @@ where
     let mut splice_stdout_writer = split_stdout_writer();
     let mut output_files: OutFiles = OutFiles::new();
     let mut filter_filenames = None;
+    let mut deferred_suffix_exhaustion = false;
 
     // 计算每个块的基础大小和余数，用于之后计算块大小
     let chunk_size_base = num_bytes / num_chunks;
@@ -2007,7 +2035,10 @@ where
                 &splice_settings.suffix,
             )?);
         } else {
-            output_files = OutFiles::init(num_chunks, splice_settings, false)?;
+            let (files, suffix_exhausted) =
+                OutFiles::init_with_deferred_suffix_exhaustion(num_chunks, splice_settings, false)?;
+            output_files = files;
+            deferred_suffix_exhaustion = suffix_exhausted;
         }
     }
 
@@ -2059,6 +2090,10 @@ where
                 }
                 None if splice_settings.filter.is_none() => {
                     let idx = (size - 1) as usize;
+                    if idx >= output_files.len() {
+                        drop(output_files);
+                        return Err(CtSimpleError::new(1, "output file suffixes exhausted"));
+                    }
                     let writer = output_files.get_writer(idx, splice_settings)?;
                     writer.write_all(buf)?;
                 }
@@ -2084,6 +2119,10 @@ where
         } else if !has_remaining_input {
             break;
         }
+    }
+    if deferred_suffix_exhaustion {
+        drop(output_files);
+        return Err(CtSimpleError::new(1, "output file suffixes exhausted"));
     }
     Ok(())
 }
@@ -2158,6 +2197,7 @@ where
     let mut stdout_writer = split_stdout_writer();
     let mut output_files: OutFiles = OutFiles::new();
     let mut filter_writer = None;
+    let mut deferred_suffix_exhaustion = false;
 
     // 计算基本块大小和余数，用于确定应写入的字节数
     let chunk_size_base = number_bytes / number_chunks;
@@ -2168,11 +2208,13 @@ where
         if splice_settings.filter.is_some() {
             filter_writer = Some(SequentialFilterWriter::new(splice_settings)?);
         } else {
-            output_files = OutFiles::init(
+            let (files, suffix_exhausted) = OutFiles::init_with_deferred_suffix_exhaustion(
                 number_chunks,
                 splice_settings,
                 splice_settings.elide_empty_files,
             )?;
+            output_files = files;
+            deferred_suffix_exhaustion = suffix_exhausted;
         }
     }
 
@@ -2207,6 +2249,10 @@ where
                     writer.write_chunk(chunk_number, size)?;
                 } else {
                     let idx = (chunk_number - 1) as usize;
+                    if idx >= output_files.len() {
+                        drop(output_files);
+                        return Err(CtSimpleError::new(1, "output file suffixes exhausted"));
+                    }
                     let writer = output_files.get_writer(idx, splice_settings)?;
                     splice_custom_write_all(size, writer, splice_settings)?;
                 }
@@ -2268,6 +2314,10 @@ where
 
     if let Some(writer) = filter_writer.as_mut() {
         writer.finish(number_chunks)?;
+    }
+    if deferred_suffix_exhaustion && !splice_settings.elide_empty_files {
+        drop(output_files);
+        return Err(CtSimpleError::new(1, "output file suffixes exhausted"));
     }
     Ok(())
 }
@@ -2678,6 +2728,58 @@ mod tests {
         assert_eq!(std::fs::read(temp_dir.path().join("out-b")).unwrap(), b"");
         assert_eq!(std::fs::read(temp_dir.path().join("out-c")).unwrap(), b"");
         assert!(!temp_dir.path().join("out-d").exists());
+    }
+
+    #[test]
+    fn number_strategy_defers_numeric_suffix_start_exhaustion() {
+        let temp_dir = tempdir().unwrap();
+        let input = temp_dir.path().join("input");
+        std::fs::write(&input, b"a").unwrap();
+        let prefix = temp_dir.path().join("out-");
+
+        let error = split_main(
+            vec![
+                ctcore::ct_util_name().into(),
+                "--numeric-suffixes=99".into(),
+                "-n".into(),
+                "2".into(),
+                input.into_os_string(),
+                prefix.into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect_err("suffix exhaustion must occur after the first output file");
+
+        assert_eq!(error.code(), 1);
+        assert_eq!(error.to_string(), "output file suffixes exhausted");
+        assert_eq!(std::fs::read(temp_dir.path().join("out-99")).unwrap(), b"a");
+        assert!(!temp_dir.path().join("out-100").exists());
+    }
+
+    #[test]
+    fn lines_number_defers_numeric_suffix_start_exhaustion() {
+        let temp_dir = tempdir().unwrap();
+        let input = temp_dir.path().join("input");
+        std::fs::write(&input, b"a").unwrap();
+        let prefix = temp_dir.path().join("out-");
+
+        let error = split_main(
+            vec![
+                ctcore::ct_util_name().into(),
+                "--numeric-suffixes=99".into(),
+                "-n".into(),
+                "l/2".into(),
+                input.into_os_string(),
+                prefix.into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect_err("suffix exhaustion must occur after the first line chunk");
+
+        assert_eq!(error.code(), 1);
+        assert_eq!(error.to_string(), "output file suffixes exhausted");
+        assert_eq!(std::fs::read(temp_dir.path().join("out-99")).unwrap(), b"a");
+        assert!(!temp_dir.path().join("out-100").exists());
     }
 
     #[test]

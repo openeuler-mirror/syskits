@@ -22,8 +22,8 @@ use clap::{
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, strip_errno};
+use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
 use ctcore::ct_show_error;
 use std::any::Any;
 use std::ffi::{OsStr, OsString};
@@ -43,6 +43,8 @@ use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
 use std::io::stdout;
 #[cfg(unix)]
 use std::os::fd::{AsFd, AsRawFd, FromRawFd, RawFd};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 
 mod stat_flags {
     pub const TEE_APPEND: &str = "append";
@@ -53,6 +55,17 @@ mod stat_flags {
 }
 
 const STANDARD_OUTPUT_NAME: &str = "standard output";
+
+#[cfg(unix)]
+unsafe extern "C" {
+    fn mbrtowc(
+        wide: *mut ctcore::libc::wchar_t,
+        bytes: *const ctcore::libc::c_char,
+        length: usize,
+        state: *mut ctcore::libc::mbstate_t,
+    ) -> usize;
+    fn iswprint(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
+}
 
 #[allow(dead_code)]
 #[derive(Default)]
@@ -610,7 +623,7 @@ fn open(
         match mode.write(true).create(true).open(path.as_path()) {
             Ok(file) => Box::new(file),
             Err(f) => {
-                ct_show_error!("{}: {}", name.maybe_quote(), strip_errno(&f));
+                ct_show_error!("{}: {}", tee_quote_path(name), strip_errno(&f));
                 *ignored_errors += 1;
 
                 match output_error {
@@ -621,6 +634,46 @@ fn open(
         }
     };
     Ok(inner)
+}
+
+fn tee_quote_path(path: &OsStr) -> String {
+    #[cfg(unix)]
+    {
+        let quoted =
+            escape_shell_bytes_with_classifier(path.as_bytes(), tee_classify_locale_sequence);
+        String::from_utf8(quoted).expect("shell-escaped file names are valid UTF-8")
+    }
+    #[cfg(not(unix))]
+    {
+        path.to_string_lossy().into_owned()
+    }
+}
+
+#[cfg(unix)]
+fn tee_classify_locale_sequence(remaining: &[u8]) -> (usize, bool) {
+    unsafe {
+        let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
+        let mut wide = 0 as ctcore::libc::wchar_t;
+        let length = mbrtowc(
+            &mut wide,
+            remaining.as_ptr().cast(),
+            remaining.len(),
+            &mut state,
+        );
+        if length == usize::MAX {
+            return (1, false);
+        }
+        if length == usize::MAX - 1 {
+            return (remaining.len(), false);
+        }
+
+        let length = if length == 0 { 1 } else { length };
+        let is_utf8 = std::str::from_utf8(&remaining[..length]).is_ok();
+        (
+            length,
+            is_utf8 && iswprint(wide as ctcore::libc::c_uint) != 0,
+        )
+    }
 }
 
 struct MultiWriter {
@@ -695,26 +748,42 @@ fn process_error(
 ) -> Result<()> {
     match mode {
         Some(OutputErrorMode::Warn) => {
-            ct_show_error!("{}: {}", writer.name.maybe_quote(), strip_errno(&f));
+            ct_show_error!(
+                "{}: {}",
+                tee_quote_path(writer.name.as_os_str()),
+                strip_errno(&f)
+            );
             *ignored_errors += 1;
             Ok(())
         }
         Some(OutputErrorMode::WarnNoPipe) | None => {
             if f.kind() != IoErrorKind::BrokenPipe {
-                ct_show_error!("{}: {}", writer.name.maybe_quote(), strip_errno(&f));
+                ct_show_error!(
+                    "{}: {}",
+                    tee_quote_path(writer.name.as_os_str()),
+                    strip_errno(&f)
+                );
                 *ignored_errors += 1;
             }
             Ok(())
         }
         Some(OutputErrorMode::Exit) => {
-            ct_show_error!("{}: {}", writer.name.maybe_quote(), strip_errno(&f));
+            ct_show_error!(
+                "{}: {}",
+                tee_quote_path(writer.name.as_os_str()),
+                strip_errno(&f)
+            );
             Err(f)
         }
         Some(OutputErrorMode::ExitNoPipe) => {
             if f.kind() == IoErrorKind::BrokenPipe {
                 Ok(())
             } else {
-                ct_show_error!("{}: {}", writer.name.maybe_quote(), strip_errno(&f));
+                ct_show_error!(
+                    "{}: {}",
+                    tee_quote_path(writer.name.as_os_str()),
+                    strip_errno(&f)
+                );
                 Err(f)
             }
         }
@@ -993,6 +1062,17 @@ mod tests {
         let matches = ct_app().try_get_matches_from(args).unwrap();
 
         assert_eq!(get_file_list(&matches), vec![invalid_name]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn quote_non_utf8_output_path_with_gnu_shell_syntax() {
+        let path = OsString::from_vec(b"bad-\xff-parent/out".to_vec());
+
+        assert_eq!(
+            tee_quote_path(path.as_os_str()),
+            "'bad-'$'\\377''-parent/out'"
+        );
     }
 
     #[cfg(test)]

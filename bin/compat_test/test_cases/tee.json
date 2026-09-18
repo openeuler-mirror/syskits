@@ -309,6 +309,37 @@
           "cleanup_commands": []
       },
       {
+          "tstdin": "",
+          "command": "tee",
+          "description": "启动前stdin关闭时，tee在创建普通FILE后应依次报告read error和standard input的Bad file descriptor",
+          "setup_commands": [
+              "export LC_ALL='C'",
+              "export LANG='C'"
+          ],
+          "args": ["closed_stdin_file"],
+          "expectation": {
+              "execution": {
+                  "exit_code": 1,
+                  "stdout": "",
+                  "stderr": "tee: read error: Bad file descriptor\ntee: standard input: Bad file descriptor\n"
+              },
+              "verifications": [
+                  {
+                      "command": "stat -c '%s' closed_stdin_file",
+                      "expected_exit": 0,
+                      "expected_stdout": "0\n",
+                      "expected_stderr": ""
+                  }
+              ]
+          },
+          "environment": {
+              "standardStreams": {
+                  "stdin": "closed"
+              }
+          },
+          "cleanup_commands": []
+      },
+      {
           "tstdin": "78",
           "command": "tee",
           "description": "原始字节用例：LC_ALL=C、LANG=C下执行tee tee-\\xff-output；参数完整十六进制=7465652dff6f7574707574；stdin为1字节、完整十六进制=78；输入fixture：无文件fixture；预期RC=0，stderr为0字节、完整十六进制=空，stdout为1字节、完整十六进制=78，确认Linux非UTF-8输出文件名可直接创建并写入。",

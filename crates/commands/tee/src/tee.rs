@@ -347,6 +347,13 @@ fn run_tee(options: &TeeOptions) -> Result<()> {
 
     #[cfg(unix)]
     {
+        if ctcore::ct_stdin_was_closed() {
+            let error = closed_stdin_error();
+            report_input_read_error(&error);
+            report_standard_input_close_error(&error);
+            return Err(error);
+        }
+
         let copy_result = if needs_pipe_check(options.output_error.as_ref()) {
             copy_with_poll(&mut output)
         } else {
@@ -394,6 +401,19 @@ fn input_read_error_message(error: &Error) -> String {
 
 fn report_input_read_error(error: &Error) {
     ct_show_error!("{}", input_read_error_message(error));
+}
+
+#[cfg(unix)]
+fn closed_stdin_error() -> Error {
+    Error::from_raw_os_error(nix::libc::EBADF)
+}
+
+fn standard_input_close_error_message(error: &Error) -> String {
+    format!("standard input: {}", strip_errno(error))
+}
+
+fn report_standard_input_close_error(error: &Error) {
+    ct_show_error!("{}", standard_input_close_error_message(error));
 }
 
 #[cfg(unix)]
@@ -1108,6 +1128,22 @@ mod tests {
         assert_eq!(
             input_read_error_message(&error),
             "read error: Is a directory"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn closed_stdin_error_uses_ebadf_for_both_gnu_diagnostics() {
+        let error = closed_stdin_error();
+
+        assert_eq!(error.raw_os_error(), Some(nix::libc::EBADF));
+        assert_eq!(
+            input_read_error_message(&error),
+            "read error: Bad file descriptor"
+        );
+        assert_eq!(
+            standard_input_close_error_message(&error),
+            "standard input: Bad file descriptor"
         );
     }
 

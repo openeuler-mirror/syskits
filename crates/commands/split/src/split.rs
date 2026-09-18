@@ -2419,9 +2419,10 @@ fn split(splice_settings: &SpliceSettings) -> CTResult<()> {
         )
     );
 
-    // GNU split copies non-seekable input to a temporary file before it uses
-    // a size-dependent --number strategy. This accepts finite stdin larger
-    // than the I/O block while keeping round-robin and streaming modes lazy.
+    // GNU split copies input with an unreliable reported size to a temporary
+    // file before it uses a size-dependent --number strategy. This accepts
+    // finite stdin and procfs-style files while keeping round-robin and
+    // streaming modes lazy.
     let (read_box, known_input_size): (Box<dyn Read>, Option<u64>) =
         if splice_settings.input_path() == OsStr::new("-") && needs_input_size {
             let (file, size) = spool_input_to_temp(stdin()).map_err_context(|| {
@@ -2440,7 +2441,17 @@ fn split(splice_settings: &SpliceSettings) -> CTResult<()> {
                     split_quote_path(splice_settings.input_path(), true)
                 )
             })?;
-            (Box::new(r), None)
+            if needs_input_size && r.metadata()?.len() == 0 {
+                let (file, size) = spool_input_to_temp(r).map_err_context(|| {
+                    format!(
+                        "{}: cannot determine input size",
+                        split_quote_path(splice_settings.input_path(), false)
+                    )
+                })?;
+                (Box::new(file), Some(size))
+            } else {
+                (Box::new(r), None)
+            }
         };
 
     // 根据是否指定了IO块大小，创建一个具有相应缓冲区的读取器
@@ -2601,6 +2612,36 @@ mod tests {
         let mut copied = Vec::new();
         file.read_to_end(&mut copied).unwrap();
         assert_eq!(copied, input);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn number_strategy_spools_proc_file_with_unknown_size() {
+        let temp_dir = tempdir().unwrap();
+        let prefix = temp_dir.path().join("out-");
+
+        split_main(
+            vec![
+                ctcore::ct_util_name().into(),
+                "-n".into(),
+                "2".into(),
+                "/proc/cpuinfo".into(),
+                prefix.into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect("size-dependent split must accept readable proc files");
+
+        assert!(
+            !std::fs::read(temp_dir.path().join("out-aa"))
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            !std::fs::read(temp_dir.path().join("out-ab"))
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

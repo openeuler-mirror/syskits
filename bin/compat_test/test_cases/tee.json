@@ -222,6 +222,38 @@
           "cleanup_commands": []
       },
       {
+          "tstdin": "x",
+          "command": "tee",
+          "description": "调用方忽略SIGPIPE且stdout无读端时，默认tee保留继承的忽略处置，不诊断并继续将输入写入普通文件",
+          "setup_commands": [
+              "export LC_ALL='C'",
+              "export LANG='C'"
+          ],
+          "args": ["inherited_sigpipe_out"],
+          "expectation": {
+              "execution": {
+                  "exit_code": 0,
+                  "stdout": "",
+                  "stderr": ""
+              },
+              "verifications": [
+                  {
+                      "command": "stat -c '%s' inherited_sigpipe_out",
+                      "expected_exit": 0,
+                      "expected_stdout": "1\n",
+                      "expected_stderr": ""
+                  }
+              ]
+          },
+          "environment": {
+              "standardStreams": {
+                  "stdout": "closed_pipe",
+                  "sigpipe": "ignore"
+              }
+          },
+          "cleanup_commands": []
+      },
+      {
           "tstdin": "78",
           "command": "tee",
           "description": "原始字节用例：LC_ALL=C、LANG=C下执行tee tee-\\xff-output；参数完整十六进制=7465652dff6f7574707574；stdin为1字节、完整十六进制=78；输入fixture：无文件fixture；预期RC=0，stderr为0字节、完整十六进制=空，stdout为1字节、完整十六进制=78，确认Linux非UTF-8输出文件名可直接创建并写入。",

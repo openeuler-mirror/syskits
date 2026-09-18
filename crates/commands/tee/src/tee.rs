@@ -267,17 +267,19 @@ fn get_output_error_mode(matches: &clap::ArgMatches) -> Option<OutputErrorMode> 
         return Some(OutputErrorMode::WarnNoPipe);
     }
 
-    matches
-        .get_one::<String>(stat_flags::TEE_OUTPUT_ERROR)
-        .map(|v| {
-            match v.as_str() {
-                "warn" => OutputErrorMode::Warn,
-                "warn-nopipe" => OutputErrorMode::WarnNoPipe,
-                "exit" => OutputErrorMode::Exit,
-                "exit-nopipe" => OutputErrorMode::ExitNoPipe,
-                _ => OutputErrorMode::WarnNoPipe, // 默认行为
-            }
-        })
+    match matches.get_one::<String>(stat_flags::TEE_OUTPUT_ERROR) {
+        Some(value) => Some(match value.as_str() {
+            "warn" => OutputErrorMode::Warn,
+            "warn-nopipe" => OutputErrorMode::WarnNoPipe,
+            "exit" => OutputErrorMode::Exit,
+            "exit-nopipe" => OutputErrorMode::ExitNoPipe,
+            _ => OutputErrorMode::WarnNoPipe, // 默认行为
+        }),
+        None if matches.contains_id(stat_flags::TEE_OUTPUT_ERROR) => {
+            Some(OutputErrorMode::WarnNoPipe)
+        }
+        None => None,
+    }
 }
 
 fn run_tee(options: &TeeOptions) -> Result<()> {
@@ -842,6 +844,18 @@ mod tests {
             output_error_mode_name(Some(&OutputErrorMode::ExitNoPipe)),
             "exit_nopipe"
         );
+    }
+
+    #[test]
+    fn output_error_without_mode_selects_warn_nopipe() {
+        let matches = ct_app()
+            .try_get_matches_from(["tee", "--output-error"])
+            .unwrap();
+
+        assert!(matches!(
+            get_output_error_mode(&matches),
+            Some(OutputErrorMode::WarnNoPipe)
+        ));
     }
 
     #[cfg(test)]

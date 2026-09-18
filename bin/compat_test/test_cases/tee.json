@@ -158,6 +158,37 @@
               }
           },
           "cleanup_commands": []
+      },
+      {
+          "tstdin": "x",
+          "command": "tee",
+          "description": "--output-error未指定MODE时采用GNU warn-nopipe：stdout已关闭的管道不诊断、不失败，输入仍写入普通输出文件",
+          "setup_commands": [
+              "export LC_ALL='C'",
+              "export LANG='C'"
+          ],
+          "args": ["--output-error", "output_error_default_out"],
+          "expectation": {
+              "execution": {
+                  "exit_code": 0,
+                  "stdout": "",
+                  "stderr": ""
+              },
+              "verifications": [
+                  {
+                      "command": "stat -c '%s' output_error_default_out",
+                      "expected_exit": 0,
+                      "expected_stdout": "1\n",
+                      "expected_stderr": ""
+                  }
+              ]
+          },
+          "environment": {
+              "standardStreams": {
+                  "stdout": "closed_pipe"
+              }
+          },
+          "cleanup_commands": []
       }
   ]
 }

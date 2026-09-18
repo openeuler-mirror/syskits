@@ -14,7 +14,9 @@
 
 extern crate rust_i18n;
 use clap::{
-    Arg, ArgAction, Command, builder::PossibleValue, crate_version,
+    Arg, ArgAction, Command,
+    builder::{OsStringValueParser, PossibleValue},
+    crate_version,
     error::ErrorKind as ClapErrorKind,
 };
 use rust_i18n::t;
@@ -24,7 +26,7 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, strip_errno};
 use ctcore::ct_show_error;
 use std::any::Any;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::OpenOptions;
 use std::io::{Error, ErrorKind as IoErrorKind, Read, Result, Write, sink, stdout};
 use std::path::PathBuf;
@@ -55,7 +57,7 @@ const STANDARD_OUTPUT_NAME: &str = "standard output";
 struct TeeOptions {
     is_append: bool,
     is_ignore_interrupts: bool,
-    files: Vec<String>,
+    files: Vec<OsString>,
     output_error: Option<OutputErrorMode>,
 }
 
@@ -247,7 +249,11 @@ pub fn tee_native_semantic(args: impl ctcore::Args) -> CTResult<TeeSemantic> {
         append: options.is_append,
         ignore_interrupts: options.is_ignore_interrupts,
         output_error_mode: output_error_mode_name(options.output_error.as_ref()).into(),
-        target_files: options.files,
+        target_files: options
+            .files
+            .iter()
+            .map(|file| file.to_string_lossy().into_owned())
+            .collect(),
         rows: tee_rows_from_output(&direct.stdout),
         classic_text,
         stderr_text: String::from_utf8_lossy(&direct.stderr).into_owned(),
@@ -255,10 +261,10 @@ pub fn tee_native_semantic(args: impl ctcore::Args) -> CTResult<TeeSemantic> {
     })
 }
 
-fn get_file_list(matches: &clap::ArgMatches) -> Vec<String> {
+fn get_file_list(matches: &clap::ArgMatches) -> Vec<OsString> {
     matches
-        .get_many::<String>(stat_flags::TEE_FILE)
-        .map(|v| v.map(ToString::to_string).collect())
+        .get_many::<OsString>(stat_flags::TEE_FILE)
+        .map(|values| values.cloned().collect())
         .unwrap_or_default()
 }
 
@@ -442,7 +448,7 @@ fn create_writers(options: &TeeOptions, ignored_errors: &mut usize) -> Result<Ve
 
     for file in &options.files {
         match open(
-            file.clone(),
+            file,
             options.is_append,
             options.output_error.as_ref(),
             ignored_errors,
@@ -459,7 +465,7 @@ fn create_writers(options: &TeeOptions, ignored_errors: &mut usize) -> Result<Ve
     writers.insert(
         0,
         NamedWriter {
-            name: STANDARD_OUTPUT_NAME.to_owned(),
+            name: OsString::from(STANDARD_OUTPUT_NAME),
             inner: Box::new(stdout()),
         },
     );
@@ -481,6 +487,7 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(stat_flags::TEE_FILE)
             .action(ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(stat_flags::TEE_IGNORE_PIPE_ERRORS)
             .short('p')
@@ -527,12 +534,13 @@ pub fn ct_app() -> Command {
 }
 
 fn open(
-    name: String,
+    name: impl AsRef<OsStr>,
     append: bool,
     output_error: Option<&OutputErrorMode>,
     ignored_errors: &mut usize,
 ) -> Result<Box<dyn Write>> {
-    let path = PathBuf::from(name.clone());
+    let name = name.as_ref();
+    let path = PathBuf::from(name);
     let inner: Box<dyn Write> = {
         let mut options = OpenOptions::new();
         let mode = if append {
@@ -582,7 +590,9 @@ impl MultiWriter {
 
     // 新增：检查标准输出是否还在写入列表中
     fn has_stdout(&self) -> bool {
-        self.writers.iter().any(|w| w.name == STANDARD_OUTPUT_NAME)
+        self.writers
+            .iter()
+            .any(|writer| writer.name.as_os_str() == OsStr::new(STANDARD_OUTPUT_NAME))
     }
 
     fn report_broken_pipe_for_stdout(&mut self) -> Result<()> {
@@ -595,7 +605,7 @@ impl MultiWriter {
         let mode = self.output_error_mode.clone();
         let mut aborted = None;
         self.writers.retain_mut(|writer| {
-            if writer.name == STANDARD_OUTPUT_NAME {
+            if writer.name.as_os_str() == OsStr::new(STANDARD_OUTPUT_NAME) {
                 if let Err(e) = process_error(
                     mode.as_ref(),
                     Error::from_raw_os_error(nix::libc::EPIPE),
@@ -732,7 +742,7 @@ impl Write for MultiWriter {
 
 struct NamedWriter {
     inner: Box<dyn Write>,
-    pub name: String,
+    pub name: OsString,
 }
 
 impl Write for NamedWriter {
@@ -783,6 +793,9 @@ mod tests {
     use super::*;
     use std::ffi::OsString;
 
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStringExt;
+
     #[test]
     fn test_tool_implementation() {
         let tool = Tee;
@@ -818,7 +831,7 @@ mod tests {
 
         assert!(options.is_append);
         assert!(!options.is_ignore_interrupts);
-        assert_eq!(options.files, vec!["file.txt"]);
+        assert_eq!(options.files, vec![OsString::from("file.txt")]);
         assert!(options.output_error.is_none());
     }
 
@@ -885,6 +898,16 @@ mod tests {
         ));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn ct_app_accepts_non_utf8_file_operands() {
+        let invalid_name = OsString::from_vec(b"tee-\xff-output".to_vec());
+        let args = vec![OsString::from("tee"), invalid_name.clone()];
+        let matches = ct_app().try_get_matches_from(args).unwrap();
+
+        assert_eq!(get_file_list(&matches), vec![invalid_name]);
+    }
+
     #[cfg(test)]
     mod named_writer_tests {
         use super::*;
@@ -895,7 +918,7 @@ mod tests {
             let data = b"Hello, world!";
             let mut writer = NamedWriter {
                 inner: Box::new(Cursor::new(Vec::new())) as Box<dyn Write>,
-                name: "test".to_string(),
+                name: "test".into(),
             };
 
             let result = writer.write(data);
@@ -919,7 +942,7 @@ mod tests {
 
             let mut writer = NamedWriter {
                 inner: Box::new(ErrorWriter) as Box<dyn Write>,
-                name: "test".to_string(),
+                name: "test".into(),
             };
 
             let data = b"Hello, world!";
@@ -932,7 +955,7 @@ mod tests {
         fn test_named_writer_flush_success() {
             let mut writer = NamedWriter {
                 inner: Box::new(Cursor::new(Vec::new())) as Box<dyn Write>,
-                name: "test".to_string(),
+                name: "test".into(),
             };
 
             let result = writer.flush();
@@ -955,7 +978,7 @@ mod tests {
 
             let mut writer = NamedWriter {
                 inner: Box::new(ErrorWriter) as Box<dyn Write>,
-                name: "test".to_string(),
+                name: "test".into(),
             };
 
             let result = writer.flush();
@@ -1136,7 +1159,7 @@ mod test_basic {
         assert_eq!(ignored_errors, 0);
 
         let result = open(
-            "/nonexistent/file".to_string(),
+            "/nonexistent/file",
             false,
             Some(&OutputErrorMode::Warn),
             &mut ignored_errors,
@@ -1146,7 +1169,7 @@ mod test_basic {
 
         let mut exit_ignored_errors = 0;
         let result = open(
-            "/nonexistent/file".to_string(),
+            "/nonexistent/file",
             false,
             Some(&OutputErrorMode::Exit),
             &mut exit_ignored_errors,
@@ -1158,7 +1181,7 @@ mod test_basic {
     #[test]
     fn test_process_error() {
         let writer = NamedWriter {
-            name: "test".to_string(),
+            name: "test".into(),
             inner: Box::new(Cursor::new(Vec::new())),
         };
         let mut ignored_errors = 0;

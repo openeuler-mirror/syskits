@@ -220,6 +220,25 @@
               }
           },
           "cleanup_commands": []
+      },
+      {
+          "tstdin": "78",
+          "command": "tee",
+          "description": "原始字节用例：LC_ALL=C、LANG=C下执行tee tee-\\xff-output；参数完整十六进制=7465652dff6f7574707574；stdin为1字节、完整十六进制=78；输入fixture：无文件fixture；预期RC=0，stderr为0字节、完整十六进制=空，stdout为1字节、完整十六进制=78，确认Linux非UTF-8输出文件名可直接创建并写入。",
+          "args": ["7465652dff6f7574707574"],
+          "setup_commands": [
+              "export LC_ALL='C'",
+              "export LANG='C'"
+          ],
+          "expectation": {
+              "execution": {
+                  "exit_code": 0,
+                  "stdout": "78",
+                  "stderr": ""
+              }
+          },
+          "cleanup_commands": [],
+          "byteMode": true
       }
   ]
 }

@@ -561,6 +561,10 @@ fn create_writers(options: &TeeOptions, ignored_errors: &mut usize) -> Result<Ve
 
 #[cfg(unix)]
 fn stdout_writer() -> Result<Box<dyn Write>> {
+    if ctcore::ct_stdout_was_closed() {
+        return Ok(Box::new(ClosedStdoutWriter));
+    }
+
     let stdout_fd = unsafe { nix::libc::dup(nix::libc::STDOUT_FILENO) };
     if stdout_fd < 0 {
         return Err(Error::last_os_error());
@@ -568,6 +572,22 @@ fn stdout_writer() -> Result<Box<dyn Write>> {
     let stdout_file = unsafe { File::from_raw_fd(stdout_fd) };
     clear_nonblocking(stdout_file.as_raw_fd())?;
     Ok(Box::new(stdout_file))
+}
+
+/// Models the original closed standard output after ctcore has installed its
+/// process-safety replacement descriptor.
+#[cfg(unix)]
+struct ClosedStdoutWriter;
+
+#[cfg(unix)]
+impl Write for ClosedStdoutWriter {
+    fn write(&mut self, _buf: &[u8]) -> Result<usize> {
+        Err(Error::from_raw_os_error(nix::libc::EBADF))
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[cfg(unix)]
@@ -1480,5 +1500,16 @@ mod test_basic {
 
         assert_eq!(error.kind(), IoErrorKind::BrokenPipe);
         assert!(recorded.borrow().is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn closed_stdout_writer_reports_ebadf_without_failing_flush() {
+        let mut writer = ClosedStdoutWriter;
+
+        let error = writer.write(b"x").unwrap_err();
+
+        assert_eq!(error.raw_os_error(), Some(nix::libc::EBADF));
+        assert!(writer.flush().is_ok());
     }
 }

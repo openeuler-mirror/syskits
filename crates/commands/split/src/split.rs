@@ -685,6 +685,7 @@ fn splice_args_init() -> Vec<Arg> {
             .long(OPT_ADDITIONAL_SUFFIX)
             .allow_hyphen_values(true)
             .overrides_with(OPT_ADDITIONAL_SUFFIX)
+            .value_parser(OsStringValueParser::new())
             .value_name("SUFFIX")
             .default_value("")
             .help(t!("split.clap.opt_additional_suffix")),
@@ -2366,6 +2367,38 @@ mod tests {
             b"a\xffb\xff"
         );
         assert!(!temp.path().join("out-ab").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_split_preserves_non_utf8_additional_suffix_bytes() {
+        let temp = tempdir().expect("create temporary directory");
+        let input = temp.path().join("input");
+        let prefix = temp.path().join("out-");
+        std::fs::write(&input, b"ab").expect("write input");
+
+        split_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--bytes=1"),
+                OsString::from("--additional-suffix"),
+                OsString::from_vec(vec![0xff]),
+                input.into_os_string(),
+                prefix.clone().into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect("a raw-byte additional suffix must be accepted");
+
+        let mut first_output = prefix.clone().into_os_string();
+        first_output.push("aa");
+        first_output.push(OsStr::from_bytes(b"\xff"));
+        let mut second_output = prefix.into_os_string();
+        second_output.push("ab");
+        second_output.push(OsStr::from_bytes(b"\xff"));
+
+        assert_eq!(std::fs::read(first_output).unwrap(), b"a");
+        assert_eq!(std::fs::read(second_output).unwrap(), b"b");
     }
 
     #[test]
@@ -5523,8 +5556,10 @@ mod tests {
             let matches = result.unwrap();
             assert!(matches.contains_id(OPT_ADDITIONAL_SUFFIX));
             assert_eq!(
-                matches.get_one::<String>(OPT_ADDITIONAL_SUFFIX),
-                Some(&"10".to_string())
+                matches
+                    .get_one::<OsString>(OPT_ADDITIONAL_SUFFIX)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("10"))
             );
         }
 
@@ -5554,8 +5589,10 @@ mod tests {
                 Some(&"2".to_string())
             );
             assert_eq!(
-                matches.get_one::<String>(OPT_ADDITIONAL_SUFFIX),
-                Some(&".last".to_string())
+                matches
+                    .get_one::<OsString>(OPT_ADDITIONAL_SUFFIX)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new(".last"))
             );
             assert_eq!(
                 matches.get_one::<String>(OPT_FILTER),
@@ -5591,8 +5628,10 @@ mod tests {
             let matches = result.unwrap();
             assert!(matches.contains_id(OPT_ADDITIONAL_SUFFIX));
             assert_eq!(
-                matches.get_one::<String>(OPT_ADDITIONAL_SUFFIX),
-                Some(&"100".to_string())
+                matches
+                    .get_one::<OsString>(OPT_ADDITIONAL_SUFFIX)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("100"))
             );
         }
 
@@ -5621,8 +5660,10 @@ mod tests {
             let matches = result.unwrap();
             assert!(matches.contains_id(OPT_ADDITIONAL_SUFFIX));
             assert_eq!(
-                matches.get_one::<String>(OPT_ADDITIONAL_SUFFIX),
-                Some(&"1000".to_string())
+                matches
+                    .get_one::<OsString>(OPT_ADDITIONAL_SUFFIX)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new("1000"))
             );
         }
 
@@ -5835,8 +5876,10 @@ mod tests {
 
             assert!(matches.contains_id(OPT_ADDITIONAL_SUFFIX));
             assert_eq!(
-                matches.get_one::<String>(OPT_ADDITIONAL_SUFFIX),
-                Some(&".txt".to_string())
+                matches
+                    .get_one::<OsString>(OPT_ADDITIONAL_SUFFIX)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new(".txt"))
             );
         }
 
@@ -5868,8 +5911,10 @@ mod tests {
 
             assert!(matches.contains_id(OPT_ADDITIONAL_SUFFIX));
             assert_eq!(
-                matches.get_one::<String>(OPT_ADDITIONAL_SUFFIX),
-                Some(&".txt".to_string())
+                matches
+                    .get_one::<OsString>(OPT_ADDITIONAL_SUFFIX)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new(".txt"))
             );
 
             assert!(matches.contains_id(OPT_FILTER));
@@ -5915,8 +5960,10 @@ mod tests {
 
             assert!(matches.contains_id(OPT_ADDITIONAL_SUFFIX));
             assert_eq!(
-                matches.get_one::<String>(OPT_ADDITIONAL_SUFFIX),
-                Some(&".txt".to_string())
+                matches
+                    .get_one::<OsString>(OPT_ADDITIONAL_SUFFIX)
+                    .map(OsString::as_os_str),
+                Some(OsStr::new(".txt"))
             );
 
             assert!(matches.contains_id(OPT_FILTER));

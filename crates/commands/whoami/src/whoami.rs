@@ -42,7 +42,7 @@ pub fn whoami_main(args: impl ctcore::Args) -> CTResult<String> {
     write_whoami_username(&username)
         .map_err(|error| CtSimpleError::new(1, whoami_write_error_message(&error)))?;
 
-    let result = username.into_string().unwrap();
+    let result = username.to_string_lossy().into_owned();
     Ok(result)
 }
 

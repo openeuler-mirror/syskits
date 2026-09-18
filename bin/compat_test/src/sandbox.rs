@@ -708,10 +708,7 @@ impl IsolatedSandbox {
             timeout,
             CommandStreamOptions {
                 output_hex,
-                streams: &StandardStreams {
-                    stderr: OutputStream::Inherit,
-                    ..StandardStreams::default()
-                },
+                streams: &StandardStreams::default(),
             },
         )
     }
@@ -2104,6 +2101,27 @@ mod tests {
         // 验证退出码已更新
         assert_eq!(sandbox.exit_code, 42);
 
+        Ok(())
+    }
+
+    #[test]
+    fn byte_mode_captures_stderr_as_hex() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        let result = sandbox.execute_command_bytes(
+            "/bin/sh",
+            &[
+                OsString::from("-c"),
+                OsString::from("printf diagnostic >&2"),
+            ],
+            None,
+            false,
+            None,
+            true,
+        )?;
+
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.stdout, "");
+        assert_eq!(result.stderr, "646961676e6f73746963");
         Ok(())
     }
 }

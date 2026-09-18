@@ -2137,7 +2137,7 @@ where
         output_files = OutFiles::init(
             number_chunks,
             splice_settings,
-            splice_settings.elide_empty_files,
+            splice_settings.elide_empty_files || splice_settings.filter.is_some(),
         )?;
     }
 
@@ -2178,6 +2178,22 @@ where
         if closed_writers_size == num_chunks {
             // 如果所有写入器都已关闭，则停止读取数据。
             break;
+        }
+    }
+
+    if kth_chunk.is_none() && splice_settings.filter.is_some() {
+        for index in 0..output_files.len() {
+            if output_files[index].maybe_writer.is_none() {
+                if splice_settings.elide_empty_files {
+                    continue;
+                }
+                output_files.instantiate_writer(index, splice_settings)?;
+            }
+
+            drop(output_files[index].maybe_writer.take());
+            if platform::filter_failure_recorded() {
+                return Err(CtSimpleError::new(1, "filter command failed"));
+            }
         }
     }
     Ok(())
@@ -2579,6 +2595,31 @@ mod tests {
             .into_iter(),
         )
         .expect_err("a failing filter must stop split");
+
+        assert_eq!(error.code(), 42);
+        assert_eq!(std::fs::read(temp.path().join("out-aa")).unwrap(), b"a\n");
+        assert!(!temp.path().join("out-ab").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_split_round_robin_stops_before_starting_empty_failed_filter() {
+        let temp = tempdir().expect("create temporary directory");
+        let input = temp.path().join("input");
+        let prefix = temp.path().join("out-");
+        std::fs::write(&input, b"a\n").expect("write input");
+
+        let error = split_main(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--number=r/2"),
+                OsString::from("--filter=cat > \"$FILE\"; exit 42"),
+                input.into_os_string(),
+                prefix.into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect_err("the first failed filter must stop split");
 
         assert_eq!(error.code(), 42);
         assert_eq!(std::fs::read(temp.path().join("out-aa")).unwrap(), b"a\n");

@@ -154,6 +154,31 @@ impl CTError for UniqUsageError {
     }
 }
 
+#[derive(Debug)]
+struct UniqRawError {
+    message: Vec<u8>,
+}
+
+impl UniqRawError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl Display for UniqRawError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl StdError for UniqRawError {}
+
+impl CTError for UniqRawError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+}
+
 macro_rules! uniq_write_line_terminator {
     ($writer:expr, $line_terminator:expr) => {
         $writer
@@ -1229,6 +1254,52 @@ fn uniq_delimiter_method_parts(
     }
 }
 
+fn uniq_numeric_long_option_parts(argument: &[u8]) -> Option<(&'static str, Option<&[u8]>)> {
+    let long_option = argument.strip_prefix(b"--")?;
+    let equals = long_option.iter().position(|byte| *byte == b'=');
+    let name = &long_option[..equals.unwrap_or(long_option.len())];
+    let option = match uniq_match_long_option(name) {
+        UniqLongOptionMatch::Recognized(option, UniqLongOptionArgument::Required) => option,
+        _ => return None,
+    };
+    let flag = match option {
+        "skip-fields" => uniq_flags::SKIP_FIELDS,
+        "skip-chars" => uniq_flags::SKIP_CHARS,
+        "check-chars" => uniq_flags::CHECK_CHARS,
+        _ => unreachable!("only numeric uniq options require values"),
+    };
+    let value = equals.map(|index| &long_option[index + 1..]);
+
+    Some((flag, value))
+}
+
+fn uniq_numeric_short_option_parts(argument: &[u8]) -> Option<(&'static str, Option<&[u8]>)> {
+    let short_options = argument.strip_prefix(b"-")?;
+    if argument.starts_with(b"--") {
+        return None;
+    }
+
+    for (index, option) in short_options.iter().copied().enumerate() {
+        let flag = match option {
+            b'f' => uniq_flags::SKIP_FIELDS,
+            b's' => uniq_flags::SKIP_CHARS,
+            b'w' => uniq_flags::CHECK_CHARS,
+            _ => continue,
+        };
+        let value = (index + 1 < short_options.len()).then_some(&short_options[index + 1..]);
+        return Some((flag, value));
+    }
+
+    None
+}
+
+fn uniq_raw_numeric_error(option: &str, value: &[u8]) -> Box<dyn CTError> {
+    let mut message = value.to_vec();
+    message.extend_from_slice(b": ");
+    message.extend_from_slice(uniq_invalid_number_message(option).as_bytes());
+    UniqRawError::boxed(message)
+}
+
 fn uniq_short_option_requires_next_value(argument: &[u8]) -> bool {
     if argument.starts_with(b"--") {
         return uniq_required_long_option(argument).is_some();
@@ -1540,12 +1611,12 @@ fn uniq_extra_operand_error(args: &[OsString], posixly_correct: bool) -> Option<
     None
 }
 
-fn uniq_non_utf8_delimiter_method_error(
+fn uniq_non_utf8_option_value_error(
     args: &[OsString],
     posixly_correct: bool,
 ) -> Option<Box<dyn CTError>> {
     let mut parse_options = true;
-    let mut previous_option_requires_value = false;
+    let mut previous_numeric_option = None;
 
     for (index, argument) in args.iter().enumerate() {
         if index == 0 || !parse_options {
@@ -1553,8 +1624,10 @@ fn uniq_non_utf8_delimiter_method_error(
         }
 
         let bytes = argument.as_encoded_bytes();
-        if previous_option_requires_value {
-            previous_option_requires_value = false;
+        if let Some(option) = previous_numeric_option.take() {
+            if std::str::from_utf8(bytes).is_err() {
+                return Some(uniq_raw_numeric_error(option, bytes));
+            }
             continue;
         }
         if bytes == b"--" {
@@ -1573,7 +1646,17 @@ fn uniq_non_utf8_delimiter_method_error(
                 ));
             }
         }
-        previous_option_requires_value = uniq_short_option_requires_next_value(bytes);
+        let numeric_parts = uniq_numeric_long_option_parts(bytes)
+            .or_else(|| uniq_numeric_short_option_parts(bytes));
+        if let Some((option, value)) = numeric_parts {
+            if let Some(value) = value {
+                if std::str::from_utf8(value).is_err() {
+                    return Some(uniq_raw_numeric_error(option, value));
+                }
+            } else {
+                previous_numeric_option = Some(option);
+            }
+        }
     }
 
     None
@@ -1617,7 +1700,7 @@ pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
     if let Some(error) = uniq_required_option_error(&args, posixly_correct()) {
         return Err(error);
     }
-    if let Some(error) = uniq_non_utf8_delimiter_method_error(&args, posixly_correct()) {
+    if let Some(error) = uniq_non_utf8_option_value_error(&args, posixly_correct()) {
         return Err(error);
     }
     let (args, skip_fields_old, skip_chars_old) = uniq_handle_obsolete(args.into_iter());
@@ -1689,7 +1772,7 @@ pub fn uniq_native_semantic(args: impl ctcore::Args) -> CTResult<UniqSemantic> {
     if let Some(error) = uniq_required_option_error(&args, posixly_correct()) {
         return Err(error);
     }
-    if let Some(error) = uniq_non_utf8_delimiter_method_error(&args, posixly_correct()) {
+    if let Some(error) = uniq_non_utf8_option_value_error(&args, posixly_correct()) {
         return Err(error);
     }
     let (args, skip_fields_old, skip_chars_old) = uniq_handle_obsolete(args.into_iter());
@@ -2270,7 +2353,7 @@ mod tests {
             OsString::from("uniq"),
             OsString::from_vec(b"--group=bad\xffvalue".to_vec()),
         ];
-        let error = uniq_non_utf8_delimiter_method_error(&args, false)
+        let error = uniq_non_utf8_option_value_error(&args, false)
             .expect("non-UTF-8 delimiter method must be rejected before Clap");
 
         assert!(error.to_string().contains("invalid argument"));
@@ -2287,7 +2370,7 @@ mod tests {
             OsString::from("uniq"),
             OsString::from_vec(b"--all-r=\xff".to_vec()),
         ];
-        let error = uniq_non_utf8_delimiter_method_error(&args, false)
+        let error = uniq_non_utf8_option_value_error(&args, false)
             .expect("the GNU long-option prefix must retain the argmatch diagnostic");
 
         let diagnostic = error.diagnostic_bytes();
@@ -2300,6 +2383,24 @@ mod tests {
             diagnostic
                 .windows(b"--all-repeated".len())
                 .any(|part| part == b"--all-repeated")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_non_utf8_numeric_option_uses_raw_gnu_diagnostic() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let args = [
+            OsString::from("uniq"),
+            OsString::from_vec(b"--skip-f=\xff".to_vec()),
+        ];
+        let error = uniq_non_utf8_option_value_error(&args, false)
+            .expect("non-UTF-8 numeric values must be diagnosed before Clap");
+
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            b"\xff: invalid number of fields to skip"
         );
     }
 

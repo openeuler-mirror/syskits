@@ -25,7 +25,9 @@ use clap::{crate_version, error::ContextKind, error::Error, error::ErrorKind};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
-use ctcore::ct_posix::{GnuGetoptCommandExt, OBSOLETE, ct_posix_version, posixly_correct};
+use ctcore::ct_posix::{
+    GnuGetoptCommandExt, MODERN, TRADITIONAL, ct_posix_version, posixly_correct,
+};
 use sys_locale::get_locale;
 
 unsafe extern "C" {
@@ -665,7 +667,7 @@ fn uniq_handle_obsolete_with_mode(
             let is_obsolete_skip_chars = bytes.len() > 1
                 && bytes[0] == b'+'
                 && bytes[1].is_ascii_digit()
-                && ct_posix_version().is_some_and(|version| version <= OBSOLETE);
+                && uniq_supports_obsolete_skip_chars(ct_posix_version());
             if posixly_correct && !is_obsolete_skip_chars && (bytes.is_empty() || bytes[0] != b'-')
             {
                 filtered_args.push(OsString::from("--"));
@@ -785,10 +787,17 @@ fn uniq_should_extract_obs_skip_chars(
     is_preceding_short_opt_req_value: &bool,
 ) -> bool {
     str_slice.starts_with('+')
-        && ct_posix_version().is_some_and(|v| v <= OBSOLETE)
+        && uniq_supports_obsolete_skip_chars(ct_posix_version())
         && !is_preceding_long_opt_req_value
         && !is_preceding_short_opt_req_value
         && str_slice.chars().nth(1).is_some_and(|c| c.is_ascii_digit())
+}
+
+/// GNU `strict_posix2` only rejects obsolete `+N` syntax in the strict
+/// POSIX.2 interval [200112, 200809). The system default in this build is
+/// strict, so an absent or invalid environment value also rejects the syntax.
+fn uniq_supports_obsolete_skip_chars(posix_version: Option<usize>) -> bool {
+    posix_version.is_some_and(|version| !(TRADITIONAL..MODERN).contains(&version))
 }
 
 /// [`uniq_filter_args`] 的辅助函数
@@ -2328,6 +2337,15 @@ mod tests {
     #[cfg(test)]
     mod should_extract_obs_skip_chars_tests {
         use super::*;
+
+        #[test]
+        fn test_obsolete_skip_chars_posix_version_boundaries() {
+            assert!(uniq_supports_obsolete_skip_chars(Some(199209)));
+            assert!(!uniq_supports_obsolete_skip_chars(Some(200112)));
+            assert!(!uniq_supports_obsolete_skip_chars(Some(200808)));
+            assert!(uniq_supports_obsolete_skip_chars(Some(200809)));
+            assert!(!uniq_supports_obsolete_skip_chars(None));
+        }
 
         #[test]
         fn test_plus_with_numbers() {

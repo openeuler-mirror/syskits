@@ -55,6 +55,8 @@ pub mod uniq_flags {
 }
 
 const UNIQ_ARG_FILES: &str = "files";
+const UNIQ_ALL_REPEATED_METHODS: &[&str] = &["none", "prepend", "separate"];
+const UNIQ_GROUP_METHODS: &[&str] = &["prepend", "append", "separate", "both"];
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 enum UniqDelimiters {
@@ -1093,28 +1095,17 @@ fn uniq_quote_argmatch_bytes_with_marks(
     quoted
 }
 
-fn uniq_delimiter_value_error(clap_err: &Error) -> Option<String> {
-    let (option, valid_arguments) = match clap_err
-        .get(ContextKind::InvalidArg)
-        .map(ToString::to_string)
-        .as_deref()
-    {
-        Some("--group[=<group-method>]") => (
-            "--group",
-            ["prepend", "append", "separate", "both"].as_slice(),
-        ),
-        Some("--all-repeated[=<delimit-method>]") => {
-            ("--all-repeated", ["none", "prepend", "separate"].as_slice())
-        }
-        _ => return None,
-    };
-    let value = clap_err.get(ContextKind::InvalidValue)?.to_string();
+fn uniq_delimiter_method_error_message(
+    option: &str,
+    valid_arguments: &[&str],
+    value: &[u8],
+) -> String {
     let kind = if value.is_empty() {
         "ambiguous"
     } else {
         "invalid"
     };
-    let value = uniq_quote_argmatch_bytes(value.as_bytes());
+    let value = uniq_quote_argmatch_bytes(value);
     let option = uniq_quote_argmatch_bytes(option.as_bytes());
     let valid_arguments = valid_arguments
         .iter()
@@ -1122,9 +1113,97 @@ fn uniq_delimiter_value_error(clap_err: &Error) -> Option<String> {
         .collect::<Vec<_>>()
         .join("\n");
 
-    Some(format!(
+    format!(
         "{kind} argument {value} for {option}\nValid arguments are:\n{valid_arguments}\nTry 'uniq --help' for more information."
+    )
+}
+
+fn uniq_delimiter_value_error(clap_err: &Error) -> Option<String> {
+    let (option, valid_arguments) = match clap_err
+        .get(ContextKind::InvalidArg)
+        .map(ToString::to_string)
+        .as_deref()
+    {
+        Some("--group[=<group-method>]") => ("--group", UNIQ_GROUP_METHODS),
+        Some("--all-repeated[=<delimit-method>]") => ("--all-repeated", UNIQ_ALL_REPEATED_METHODS),
+        _ => return None,
+    };
+    let value = clap_err.get(ContextKind::InvalidValue)?.to_string();
+    Some(uniq_delimiter_method_error_message(
+        option,
+        valid_arguments,
+        value.as_bytes(),
     ))
+}
+
+fn uniq_full_delimiter_method_parts(
+    argument: &[u8],
+) -> Option<(&'static str, &'static [&'static str], &[u8])> {
+    if let Some(value) = argument.strip_prefix(b"--all-repeated=") {
+        Some(("--all-repeated", UNIQ_ALL_REPEATED_METHODS, value))
+    } else if let Some(value) = argument.strip_prefix(b"--group=") {
+        Some(("--group", UNIQ_GROUP_METHODS, value))
+    } else {
+        None
+    }
+}
+
+fn uniq_short_option_requires_next_value(argument: &[u8]) -> bool {
+    if argument.starts_with(b"--") {
+        return matches!(
+            argument,
+            b"--skip-fields" | b"--skip-chars" | b"--check-chars"
+        );
+    }
+
+    let Some(short_options) = argument.strip_prefix(b"-") else {
+        return false;
+    };
+    for (index, option) in short_options.iter().enumerate() {
+        if matches!(option, b'f' | b's' | b'w') {
+            return index + 1 == short_options.len();
+        }
+    }
+    false
+}
+
+fn uniq_non_utf8_delimiter_method_error(
+    args: &[OsString],
+    posixly_correct: bool,
+) -> Option<Box<dyn CTError>> {
+    let mut parse_options = true;
+    let mut previous_option_requires_value = false;
+
+    for (index, argument) in args.iter().enumerate() {
+        if index == 0 || !parse_options {
+            continue;
+        }
+
+        let bytes = argument.as_encoded_bytes();
+        if previous_option_requires_value {
+            previous_option_requires_value = false;
+            continue;
+        }
+        if bytes == b"--" {
+            parse_options = false;
+            continue;
+        }
+        if posixly_correct && (bytes.is_empty() || bytes[0] != b'-') {
+            parse_options = false;
+            continue;
+        }
+        if let Some((option, methods, value)) = uniq_full_delimiter_method_parts(bytes) {
+            if std::str::from_utf8(value).is_err() {
+                return Some(CtSimpleError::new(
+                    1,
+                    uniq_delimiter_method_error_message(option, methods, value),
+                ));
+            }
+        }
+        previous_option_requires_value = uniq_short_option_requires_next_value(bytes);
+    }
+
+    None
 }
 
 /// 将 Clap 错误映射到 USimpleError 并覆盖 GNU 特定错误
@@ -1158,6 +1237,9 @@ pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
             1,
             "invalid option -- '='\nTry 'uniq --help' for more information.",
         ));
+    }
+    if let Some(error) = uniq_non_utf8_delimiter_method_error(&args, posixly_correct()) {
+        return Err(error);
     }
     let (args, skip_fields_old, skip_chars_old) = uniq_handle_obsolete(args.into_iter());
 
@@ -1215,7 +1297,11 @@ pub fn uniq_native_semantic(args: impl ctcore::Args) -> CTResult<UniqSemantic> {
     uniq_initialize_c_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let (args, skip_fields_old, skip_chars_old) = uniq_handle_obsolete(args);
+    let args = args.collect::<Vec<_>>();
+    if let Some(error) = uniq_non_utf8_delimiter_method_error(&args, posixly_correct()) {
+        return Err(error);
+    }
+    let (args, skip_fields_old, skip_chars_old) = uniq_handle_obsolete(args.into_iter());
     let matches = ct_app()
         .try_get_matches_from(args)
         .map_err(|err| uniq_map_clap_errors(&err))?;
@@ -1585,6 +1671,23 @@ mod tests {
             ),
             "\u{2018}bad\\\u{2019}value\u{2019}"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_non_utf8_delimiter_method_uses_gnu_argmatch_diagnostic() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let args = [
+            OsString::from("uniq"),
+            OsString::from_vec(b"--group=bad\xffvalue".to_vec()),
+        ];
+        let error = uniq_non_utf8_delimiter_method_error(&args, false)
+            .expect("non-UTF-8 delimiter method must be rejected before Clap");
+
+        assert!(error.to_string().contains("invalid argument"));
+        assert!(error.to_string().contains("\\377"));
+        assert!(error.to_string().contains("Valid arguments are:"));
     }
 
     mod native_semantic_tests {

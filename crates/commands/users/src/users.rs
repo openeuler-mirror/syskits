@@ -105,6 +105,7 @@ impl Tool for Users {
     }
 
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
+        configure_users_sigpipe();
         let result = users_native_semantic(args.iter().cloned());
         match result {
             Ok(semantic) => {
@@ -125,6 +126,26 @@ impl Tool for Users {
             }
             Err(e) => Err(e),
         }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn configure_users_sigpipe() {
+    users_restore_default_sigpipe_if_needed(ctcore::ct_sigpipe_was_default(), || {
+        let _ = ctcore::ct_signals::enable_pipe_errors();
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
+fn configure_users_sigpipe() {}
+
+#[cfg(target_os = "linux")]
+fn users_restore_default_sigpipe_if_needed(
+    inherited_sigpipe_was_default: bool,
+    restore_default: impl FnOnce(),
+) {
+    if inherited_sigpipe_was_default {
+        restore_default();
     }
 }
 
@@ -579,6 +600,17 @@ mod tests {
                 users_write_error_message(&error),
                 "write error: No space left on device"
             );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn users_restore_default_sigpipe_only_for_default_callers() {
+            let restored = std::cell::Cell::new(false);
+            users_restore_default_sigpipe_if_needed(false, || restored.set(true));
+            assert!(!restored.get());
+
+            users_restore_default_sigpipe_if_needed(true, || restored.set(true));
+            assert!(restored.get());
         }
 
         #[test]

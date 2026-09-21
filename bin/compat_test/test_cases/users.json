@@ -255,6 +255,74 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "users",
+            "description": "LC_ALL=C、LANG=C下执行users pipe.utmp，stdout连接无读端管道且调用方保留默认SIGPIPE；输入fixture为400字节Linux utmp，USER_PROCESS用户名为pipe。GNU首次写入时由SIGPIPE终止，预期RC=141、stdout和stderr均为空。",
+            "setup_commands": [
+                "dd if=/dev/zero of=pipe.utmp bs=400 count=1 status=none",
+                "/usr/bin/printf '\\007\\000' | dd of=pipe.utmp bs=1 seek=0 conv=notrunc status=none",
+                "/usr/bin/printf 'pts/1\\000' | dd of=pipe.utmp bs=1 seek=8 conv=notrunc status=none",
+                "/usr/bin/printf 'p001' | dd of=pipe.utmp bs=1 seek=40 conv=notrunc status=none",
+                "/usr/bin/printf 'pipe\\000' | dd of=pipe.utmp bs=1 seek=44 conv=notrunc status=none"
+            ],
+            "args": [
+                "pipe.utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "default"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "users",
+            "description": "LC_ALL=C、LANG=C下执行users ignored-pipe.utmp，stdout连接无读端管道且调用方显式忽略SIGPIPE；输入fixture为400字节Linux utmp，USER_PROCESS用户名为ignored。GNU将EPIPE报告为write error，预期RC=1、stdout为空、stderr为users: write error: Broken pipe。",
+            "setup_commands": [
+                "dd if=/dev/zero of=ignored-pipe.utmp bs=400 count=1 status=none",
+                "/usr/bin/printf '\\007\\000' | dd of=ignored-pipe.utmp bs=1 seek=0 conv=notrunc status=none",
+                "/usr/bin/printf 'pts/1\\000' | dd of=ignored-pipe.utmp bs=1 seek=8 conv=notrunc status=none",
+                "/usr/bin/printf 'p001' | dd of=ignored-pipe.utmp bs=1 seek=40 conv=notrunc status=none",
+                "/usr/bin/printf 'ignored\\000' | dd of=ignored-pipe.utmp bs=1 seek=44 conv=notrunc status=none"
+            ],
+            "args": [
+                "ignored-pipe.utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "users: write error: Broken pipe\\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "ignore"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

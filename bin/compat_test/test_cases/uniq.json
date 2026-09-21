@@ -1049,6 +1049,26 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "610a620000",
+            "byteMode": true,
+            "command": "uniq",
+            "description": "LC_ALL=C时-z -f 1必须将NUL记录内的换行视为字段分隔符：输入记录610a62和空记录00，比较键分别为0a62和空，预期完整输出610a620000；不能把换行算入首字段而错误合并两条记录",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "unset POSIXLY_CORRECT"
+            ],
+            "args": ["2d7a", "2d66", "31"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "610a620000",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "61e38080580a62e38080590a",
             "byteMode": true,
             "command": "uniq",

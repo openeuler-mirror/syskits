@@ -127,6 +127,28 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "unlink",
+            "description": "原始字节用例：LC_ALL=C、LANG=C下执行unlink，参数完整十六进制=ff（单个不存在文件名）；stdin为0字节、完整十六进制=空。GNU quoteaf 对不可表示文件名使用单引号包裹的八进制Shell转义，预期RC=1、stdout为空、stderr完整十六进制包含cannot unlink ''$'\\377'而不是Rust的$'\\xFF'。",
+            "args": ["ff"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "756e6c696e6b3a2063616e6e6f7420756e6c696e6b20272724275c333737273a204e6f20737563682066696c65206f72206469726563746f72790a"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

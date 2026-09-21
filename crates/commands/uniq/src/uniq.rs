@@ -999,7 +999,39 @@ fn uniq_handle_extract_obs_skip_chars(
     }
 }
 
-/// 将 Clap 错误映射到 USimpleError 并覆盖 3 个特定错误
+fn uniq_delimiter_value_error(clap_err: &Error) -> Option<String> {
+    let (option, valid_arguments) = match clap_err
+        .get(ContextKind::InvalidArg)
+        .map(ToString::to_string)
+        .as_deref()
+    {
+        Some("--group[=<group-method>]") => (
+            "--group",
+            ["prepend", "append", "separate", "both"].as_slice(),
+        ),
+        Some("--all-repeated[=<delimit-method>]") => {
+            ("--all-repeated", ["none", "prepend", "separate"].as_slice())
+        }
+        _ => return None,
+    };
+    let value = clap_err.get(ContextKind::InvalidValue)?.to_string();
+    let kind = if value.is_empty() {
+        "ambiguous"
+    } else {
+        "invalid"
+    };
+    let valid_arguments = valid_arguments
+        .iter()
+        .map(|argument| format!("  - '{argument}'"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Some(format!(
+        "{kind} argument '{value}' for '{option}'\nValid arguments are:\n{valid_arguments}\nTry 'uniq --help' for more information."
+    ))
+}
+
+/// 将 Clap 错误映射到 USimpleError 并覆盖 GNU 特定错误
 /// 以满足 GNU `uniq` 的要求
 /// 不幸的是，这些覆盖是必要的，因为几个 GNU `uniq` 测试
 /// 对 `uniq` 错误消息的措辞进行了硬编码并且需要完全一致
@@ -1008,30 +1040,11 @@ fn uniq_map_clap_errors(clap_err: &Error) -> Box<dyn CTError> {
     let footer = "Try 'uniq --help' for more information.";
     let override_arg_conflict =
         "--group is mutually exclusive with -c/-d/-D/-u\n".to_string() + footer;
-    let override_group_bad_opt = "invalid argument 'badoption' for '--group'\nValid arguments are:\n  - 'prepend'\n  - 'append'\n  - 'separate'\n  - 'both'\n".to_string() + footer;
-    let override_all_repeated_bad_opt = "invalid argument 'badoption' for '--all-repeated'\nValid arguments are:\n  - 'none'\n  - 'prepend'\n  - 'separate'\n".to_string() + footer;
 
     let err_message = match clap_err.kind() {
         ErrorKind::ArgumentConflict => override_arg_conflict,
-        ErrorKind::InvalidValue
-            if clap_err
-                .get(ContextKind::InvalidValue)
-                .is_some_and(|value| value.to_string() == "badoption")
-                && clap_err
-                    .get(ContextKind::InvalidArg)
-                    .is_some_and(|value| value.to_string().starts_with("--group")) =>
-        {
-            override_group_bad_opt
-        }
-        ErrorKind::InvalidValue
-            if clap_err
-                .get(ContextKind::InvalidValue)
-                .is_some_and(|value| value.to_string() == "badoption")
-                && clap_err
-                    .get(ContextKind::InvalidArg)
-                    .is_some_and(|value| value.to_string().starts_with("--all-repeated")) =>
-        {
-            override_all_repeated_bad_opt
+        ErrorKind::InvalidValue => {
+            uniq_delimiter_value_error(clap_err).unwrap_or_else(|| clap_err.to_string())
         }
         _ => clap_err.to_string(),
     };
@@ -3054,6 +3067,48 @@ mod tests {
             let error = uniq_map_clap_errors(&clap_err).to_string();
             let expected = "error: dummy error for testing: all-repeated badoption";
             assert_eq!(error, expected);
+        }
+
+        #[test]
+        fn test_uniq_map_clap_errors_invalid_delimiter_methods() {
+            let cases = [
+                (
+                    "--group=invalid",
+                    "invalid argument 'invalid' for '--group'\nValid arguments are:\n  - 'prepend'\n  - 'append'\n  - 'separate'\n  - 'both'\nTry 'uniq --help' for more information.",
+                ),
+                (
+                    "--all-repeated=invalid",
+                    "invalid argument 'invalid' for '--all-repeated'\nValid arguments are:\n  - 'none'\n  - 'prepend'\n  - 'separate'\nTry 'uniq --help' for more information.",
+                ),
+            ];
+
+            for (arg, expected) in cases {
+                let clap_err = ct_app()
+                    .try_get_matches_from([ctcore::ct_util_name(), arg])
+                    .expect_err("invalid delimiter method must fail to parse");
+                assert_eq!(uniq_map_clap_errors(&clap_err).to_string(), expected);
+            }
+        }
+
+        #[test]
+        fn test_uniq_map_clap_errors_empty_delimiter_methods() {
+            let cases = [
+                (
+                    "--group=",
+                    "ambiguous argument '' for '--group'\nValid arguments are:\n  - 'prepend'\n  - 'append'\n  - 'separate'\n  - 'both'\nTry 'uniq --help' for more information.",
+                ),
+                (
+                    "--all-repeated=",
+                    "ambiguous argument '' for '--all-repeated'\nValid arguments are:\n  - 'none'\n  - 'prepend'\n  - 'separate'\nTry 'uniq --help' for more information.",
+                ),
+            ];
+
+            for (arg, expected) in cases {
+                let clap_err = ct_app()
+                    .try_get_matches_from([ctcore::ct_util_name(), arg])
+                    .expect_err("an empty delimiter method must fail to parse");
+                assert_eq!(uniq_map_clap_errors(&clap_err).to_string(), expected);
+            }
         }
 
         #[test]

@@ -696,12 +696,19 @@ fn uniq_handle_obsolete_with_mode(
         }
     }
 
-    // 提取的 skip_fields_old 和 skip_chars_old 的 String 值（如果有）
-    // 保证仅由 ascii 数字字符组成，因此可以安全地解析为 usize 并将 Result 折叠为 Option
-    let skip_fields_old: Option<usize> = skip_fields_old.and_then(|v| v.parse::<usize>().ok());
-    let skip_chars_old: Option<usize> = skip_chars_old.and_then(|v| v.parse::<usize>().ok());
+    // 旧式跳过值只包含ASCII数字；与GNU size_opt一致，溢出时饱和为usize::MAX。
+    let skip_fields_old = uniq_parse_obsolete_option(skip_fields_old);
+    let skip_chars_old = uniq_parse_obsolete_option(skip_chars_old);
 
     (filtered_args, skip_fields_old, skip_chars_old)
+}
+
+fn uniq_parse_obsolete_option(value: Option<String>) -> Option<usize> {
+    value.and_then(|value| match value.parse::<usize>() {
+        Ok(value) => Some(value),
+        Err(error) if error.kind() == &IntErrorKind::PosOverflow => Some(usize::MAX),
+        Err(_) => None,
+    })
 }
 
 fn uniq_filter_args(
@@ -1892,7 +1899,7 @@ mod tests {
                 uniq_handle_obsolete(args.into_iter());
 
             assert_eq!(processed_args.len(), 0);
-            assert_eq!(skip_fields_old, None); // Assuming it clamps to usize::MAX
+            assert_eq!(skip_fields_old, Some(usize::MAX));
             assert!(skip_chars_old.is_none());
         }
 

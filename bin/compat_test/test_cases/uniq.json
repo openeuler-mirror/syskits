@@ -88,6 +88,26 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "a\nb\n",
+            "command": "uniq",
+            "description": "旧式字段跳过值超过usize时按GNU规则饱和为最大值：两个比较键均为空，预期仅保留首行",
+            "args": ["-999999999999999999999999999999"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "a\na\nb\nc\nc\nd\n",
             "command": "uniq",
             "description": "计数重复行",

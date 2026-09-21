@@ -63,6 +63,70 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "unlink",
+            "description": "LC_ALL=C、LANG=C下执行unlink --help=value；GNU标准帮助选项不允许等号参数，预期RC=1、stdout为空，stderr为option '--help' doesn't allow an argument及单行Try提示。",
+            "args": ["--help=value"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "unlink: option '--help' doesn't allow an argument\nTry 'unlink --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "unlink",
+            "description": "LC_ALL=C、LANG=C且未设置POSIXLY_CORRECT时执行unlink first second；unlink只接受一个FILE，预期RC=1、stdout为空，stderr将第二个参数诊断为extra operand 'second'并给出Try提示。",
+            "args": ["first", "second"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "unlink: extra operand 'second'\nTry 'unlink --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "unlink",
+            "description": "LC_ALL=C、LANG=C并设置POSIXLY_CORRECT=1时执行unlink first --version；GNU getopt在首个FILE后停止选项扫描，--version是第二个操作数，预期RC=1、stdout为空，stderr为extra operand '--version'及Try提示。",
+            "args": ["first", "--version"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "unlink: extra operand '--version'\nTry 'unlink --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "POSIXLY_CORRECT": "1"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
-} 
+}

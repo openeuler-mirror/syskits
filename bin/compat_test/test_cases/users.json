@@ -158,6 +158,37 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "users",
+            "description": "LC_ALL=C、LANG=C下执行users stale.utmp；输入fixture为400字节Linux utmp，USER_PROCESS用户名为stale、PID=2147483647且该PID不存在。显式FILE时GNU不检查PID，预期RC=0、stdout为stale加换行、stderr为空；覆盖默认来源PID筛选不能错误应用到显式文件。",
+            "setup_commands": [
+                "dd if=/dev/zero of=stale.utmp bs=400 count=1 status=none",
+                "/usr/bin/printf '\\007\\000' | dd of=stale.utmp bs=1 seek=0 conv=notrunc status=none",
+                "/usr/bin/printf '\\377\\377\\377\\177' | dd of=stale.utmp bs=1 seek=4 conv=notrunc status=none",
+                "/usr/bin/printf 'pts/1\\000' | dd of=stale.utmp bs=1 seek=8 conv=notrunc status=none",
+                "/usr/bin/printf 'p001' | dd of=stale.utmp bs=1 seek=40 conv=notrunc status=none",
+                "/usr/bin/printf 'stale\\000' | dd of=stale.utmp bs=1 seek=44 conv=notrunc status=none"
+            ],
+            "args": [
+                "stale.utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "stale\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

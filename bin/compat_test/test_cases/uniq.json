@@ -118,6 +118,26 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "line\n",
+            "command": "uniq",
+            "description": "OUTPUT为/dev/full时必须在最终刷新阶段报告写入失败，不能因BufWriter析构忽略错误而返回成功",
+            "args": ["-", "/dev/full"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uniq: write error: No space left on device\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "",
             "command": "uniq",
             "description": "INPUT是目录时GNU在读取阶段报告带引号的error reading诊断，不仅输出底层EISDIR文本",

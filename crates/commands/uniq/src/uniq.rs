@@ -274,7 +274,8 @@ impl UniqFlags {
         {
             uniq_write_line_terminator!(writer, line_terminator)?;
         }
-        Ok(())
+
+        writer.flush().map_err(uniq_write_error)
     }
 
     fn skip_fields(&self, line: &[u8]) -> Vec<u8> {
@@ -2308,7 +2309,22 @@ mod tests {
     #[cfg(test)]
     mod uniq_tests {
         use super::*;
-        use std::io::Cursor;
+        use std::io::{Cursor, Error, ErrorKind};
+
+        #[derive(Default)]
+        struct FlushFailsWriter(Vec<u8>);
+
+        impl Write for FlushFailsWriter {
+            fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+                self.0.extend_from_slice(buffer);
+                Ok(buffer.len())
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Err(Error::from(ErrorKind::StorageFull))
+            }
+        }
+
         fn default_uniq() -> UniqFlags {
             UniqFlags {
                 is_repeats_only: false,
@@ -2323,6 +2339,15 @@ mod tests {
                 is_zero_terminated: false,
             }
         }
+
+        #[test]
+        fn test_print_uniq_reports_final_flush_failure() {
+            let result =
+                default_uniq().print_uniq(Cursor::new(b"line\n"), FlushFailsWriter::default());
+
+            assert!(result.is_err(), "the final flush error must be reported");
+        }
+
         #[test]
         fn test_print_uniq_show_counts() {
             let input_data = b"apple\nbanana\napple\nbanana\nbanana\n";

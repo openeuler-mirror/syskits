@@ -30,6 +30,7 @@ use sys_locale::get_locale;
 
 unsafe extern "C" {
     fn __ctype_get_mb_cur_max() -> usize;
+    fn iswblank(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
     fn mbrtowc(
         wide: *mut ctcore::libc::wchar_t,
         bytes: *const ctcore::libc::c_char,
@@ -220,24 +221,12 @@ impl UniqFlags {
     fn skip_fields(&self, line: &[u8]) -> Vec<u8> {
         match self.skip_fields {
             Some(skip_fields) => {
-                let mut line_iter = line.iter();
-                let mut line_after_skipped_field: Vec<u8>;
-                for _ in 0..skip_fields {
-                    if line_iter.all(|u| u.is_ascii_whitespace()) {
-                        return Vec::new();
-                    }
-                    line_after_skipped_field = line_iter
-                        .by_ref()
-                        .skip_while(|u| !u.is_ascii_whitespace())
-                        .copied()
-                        .collect::<Vec<u8>>();
-
-                    if line_after_skipped_field.is_empty() {
-                        return Vec::new();
-                    }
-                    line_iter = line_after_skipped_field.iter();
-                }
-                line_iter.copied().collect::<Vec<u8>>()
+                let offset = if uniq_is_multibyte_locale() {
+                    uniq_skip_fields_multibyte(line, skip_fields)
+                } else {
+                    uniq_skip_fields_single_byte(line, skip_fields)
+                };
+                line[offset..].to_vec()
             }
             _ => line.to_vec(),
         }
@@ -443,26 +432,78 @@ fn uniq_skip_n_chars_with_locale(slice: &[u8], n: usize, is_multibyte_locale: bo
     let mut state: ctcore::libc::mbstate_t = unsafe { std::mem::zeroed() };
 
     while offset < slice.len() && skipped < n {
-        let mut wide = 0 as ctcore::libc::wchar_t;
-        let length = unsafe {
-            mbrtowc(
-                &mut wide,
-                slice[offset..].as_ptr().cast(),
-                slice.len() - offset,
-                &mut state,
-            )
-        };
-        let length = match length {
-            length if length == usize::MAX || length == usize::MAX - 1 => {
-                state = unsafe { std::mem::zeroed() };
-                1
-            }
-            0 => 1,
-            length => length,
-        };
+        let (length, _) = uniq_next_locale_char(slice, offset, &mut state);
 
         offset += length.min(slice.len() - offset);
         skipped += 1;
+    }
+
+    offset
+}
+
+fn uniq_next_locale_char(
+    slice: &[u8],
+    offset: usize,
+    state: &mut ctcore::libc::mbstate_t,
+) -> (usize, Option<ctcore::libc::wchar_t>) {
+    let mut wide = 0 as ctcore::libc::wchar_t;
+    let length = unsafe {
+        mbrtowc(
+            &mut wide,
+            slice[offset..].as_ptr().cast(),
+            slice.len() - offset,
+            state,
+        )
+    };
+
+    match length {
+        length if length == usize::MAX || length == usize::MAX - 1 => {
+            *state = unsafe { std::mem::zeroed() };
+            (1, None)
+        }
+        0 => (1, Some(wide)),
+        length => (length, Some(wide)),
+    }
+}
+
+fn uniq_skip_fields_single_byte(line: &[u8], skip_fields: usize) -> usize {
+    let mut offset = 0;
+    for _ in 0..skip_fields {
+        while offset < line.len()
+            && unsafe { ctcore::libc::isblank(ctcore::libc::c_int::from(line[offset])) != 0 }
+        {
+            offset += 1;
+        }
+        while offset < line.len()
+            && unsafe { ctcore::libc::isblank(ctcore::libc::c_int::from(line[offset])) == 0 }
+        {
+            offset += 1;
+        }
+    }
+    offset
+}
+
+fn uniq_skip_fields_multibyte(line: &[u8], skip_fields: usize) -> usize {
+    let mut offset = 0;
+    let mut state: ctcore::libc::mbstate_t = unsafe { std::mem::zeroed() };
+
+    for _ in 0..skip_fields {
+        while offset < line.len() {
+            let (length, wide) = uniq_next_locale_char(line, offset, &mut state);
+            if wide.is_none_or(|wide| unsafe { iswblank(wide as ctcore::libc::c_uint) == 0 }) {
+                offset += length.min(line.len() - offset);
+                break;
+            }
+            offset += length.min(line.len() - offset);
+        }
+
+        while offset < line.len() {
+            let (length, wide) = uniq_next_locale_char(line, offset, &mut state);
+            if wide.is_some_and(|wide| unsafe { iswblank(wide as ctcore::libc::c_uint) != 0 }) {
+                break;
+            }
+            offset += length.min(line.len() - offset);
+        }
     }
 
     offset
@@ -1268,6 +1309,14 @@ mod tests {
 
             let result = uniq.skip_fields(b"field1 field2 field3 field4");
             assert_eq!(std::str::from_utf8(&result).unwrap(), " field3 field4");
+        }
+
+        #[test]
+        fn test_skip_fields_does_not_treat_form_feed_as_blank() {
+            let mut uniq = default_uniq();
+            uniq.skip_fields = Some(1);
+
+            assert!(uniq.skip_fields(b"a\x0cX").is_empty());
         }
 
         #[test]

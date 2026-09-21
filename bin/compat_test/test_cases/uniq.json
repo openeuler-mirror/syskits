@@ -240,6 +240,46 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "610c580a620c590a",
+            "byteMode": true,
+            "command": "uniq",
+            "description": "LC_ALL=C时-f 1只将空格和Tab视为字段空白：610c58与620c59各自仅有一个字段，跳过后比较键均为空，预期仅保留首行610c58",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "unset POSIXLY_CORRECT"
+            ],
+            "args": ["2d66", "31"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "610c580a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "61e38080580a62e38080590a",
+            "byteMode": true,
+            "command": "uniq",
+            "description": "LC_ALL=C.UTF-8时-f 1遵循iswblank：U+3000是字段空白，61e3808058与62e3808059跳过首字段后分别比较U+3000X和U+3000Y，预期两行均保留",
+            "setup_commands": [
+                "export LC_ALL=C.UTF-8",
+                "export LANG=C.UTF-8",
+                "unset POSIXLY_CORRECT"
+            ],
+            "args": ["2d66", "31"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "61e38080580a62e38080590a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "a\na\nb\nc\nc\nd\n",
             "command": "uniq",
             "description": "使用 --group=prepend 选项",

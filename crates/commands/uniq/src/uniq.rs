@@ -24,7 +24,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use clap::{crate_version, error::ContextKind, error::Error, error::ErrorKind};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, strip_errno};
 use ctcore::ct_posix::{
     GnuGetoptCommandExt, MODERN, TRADITIONAL, ct_posix_version, posixly_correct,
 };
@@ -124,8 +124,12 @@ macro_rules! uniq_write_line_terminator {
     ($writer:expr, $line_terminator:expr) => {
         $writer
             .write_all(&[$line_terminator])
-            .map_err_context(|| "Could not write line terminator".to_string())
+            .map_err(uniq_write_error)
     };
+}
+
+fn uniq_write_error(error: std::io::Error) -> Box<dyn CTError> {
+    CtSimpleError::new(1, format!("write error: {}", strip_errno(&error)))
 }
 
 #[derive(Default)]
@@ -308,7 +312,7 @@ impl UniqFlags {
         } else {
             w.write_all(line)
         }
-        .map_err_context(|| "Failed to write line".to_string())?;
+        .map_err(uniq_write_error)?;
 
         uniq_write_line_terminator!(w, line_terminator)
     }
@@ -957,6 +961,7 @@ fn uniq_map_clap_errors(clap_err: &Error) -> Box<dyn CTError> {
 }
 
 pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
+    uniq_configure_sigpipe();
     uniq_initialize_c_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -988,6 +993,26 @@ pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
         uniq_open_input_file(invocation.in_file_name.as_deref())?,
         uniq_open_output_file(invocation.out_file_name.as_deref())?,
     )
+}
+
+#[cfg(target_os = "linux")]
+fn uniq_configure_sigpipe() {
+    uniq_restore_default_sigpipe_if_needed(ctcore::ct_sigpipe_was_default(), || {
+        let _ = ctcore::ct_signals::enable_pipe_errors();
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
+fn uniq_configure_sigpipe() {}
+
+#[cfg(target_os = "linux")]
+fn uniq_restore_default_sigpipe_if_needed(
+    inherited_sigpipe_was_default: bool,
+    restore_default: impl FnOnce(),
+) {
+    if inherited_sigpipe_was_default {
+        restore_default();
+    }
 }
 
 pub fn uniq_native_semantic(args: impl ctcore::Args) -> CTResult<UniqSemantic> {
@@ -1223,6 +1248,18 @@ mod tests {
         let args = vec![OsString::from("uniq"), OsString::from("--help")];
         let result = tool.execute(&args);
         assert!(result.is_ok());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_sigpipe_default_is_only_restored_for_default_inheritance() {
+        let mut restored = false;
+        uniq_restore_default_sigpipe_if_needed(true, || restored = true);
+        assert!(restored);
+
+        restored = false;
+        uniq_restore_default_sigpipe_if_needed(false, || restored = true);
+        assert!(!restored);
     }
 
     mod native_semantic_tests {

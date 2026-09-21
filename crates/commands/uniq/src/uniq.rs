@@ -195,13 +195,8 @@ fn uniq_write_error(error: std::io::Error) -> Box<dyn CTError> {
 }
 
 fn uniq_read_error(input: Option<&OsStr>, error: std::io::Error) -> Box<dyn CTError> {
-    match input {
-        Some(path) if path != "-" => uniq_path_error(path, error, true, Some("error reading ")),
-        _ => CtSimpleError::new(
-            1,
-            format!("error reading standard input: {}", strip_errno(&error)),
-        ),
-    }
+    let path = input.unwrap_or_else(|| OsStr::new("-"));
+    uniq_path_error(path, error, true, Some("error reading "))
 }
 
 fn uniq_open_path_error(path: &OsStr, error: std::io::Error) -> Box<dyn CTError> {
@@ -2187,6 +2182,15 @@ mod tests {
             error.to_string(),
             "error reading 'input-dir': Is a directory"
         );
+    }
+
+    #[test]
+    fn test_read_error_names_standard_input_as_dash_like_gnu() {
+        let error = uniq_read_error(
+            None,
+            std::io::Error::from_raw_os_error(ctcore::libc::EISDIR),
+        );
+        assert_eq!(error.to_string(), "error reading '-': Is a directory");
     }
 
     #[test]

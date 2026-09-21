@@ -139,6 +139,26 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "c40ae40a",
+            "byteMode": true,
+            "command": "uniq",
+            "description": "LC_ALL=en_US.iso88591时-i使用locale单字节大小写分类：c4与e4分别是Ä和ä，预期比较相等并仅保留首行c4",
+            "setup_commands": [
+                "export LC_ALL=en_US.iso88591",
+                "export LANG=en_US.iso88591",
+                "unset POSIXLY_CORRECT"
+            ],
+            "args": ["2d69"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "c40a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "",
             "command": "uniq",
             "description": "从文件读取",

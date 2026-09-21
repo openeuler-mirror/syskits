@@ -125,6 +125,90 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "abX\ncdX\n",
+            "command": "uniq",
+            "description": "重复-s与--skip-chars时采用最后值：-s 1 --skip-chars=2后比较键均为X，预期仅保留首行",
+            "args": ["-s", "1", "--skip-chars=2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "abX\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a b X\nc d X\n",
+            "command": "uniq",
+            "description": "重复-f与--skip-fields时采用最后值：-f 1 --skip-fields=2后比较键均为X，预期仅保留首行",
+            "args": ["-f", "1", "--skip-fields=2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a b X\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "abX\nacY\n",
+            "command": "uniq",
+            "description": "重复-w与--check-chars时采用最后值：-w 1 --check-chars=2后比较ab与ac，预期两行均保留",
+            "args": ["-w", "1", "--check-chars=2"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "abX\nacY\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a\na\nb\nb\n",
+            "command": "uniq",
+            "description": "重复--all-repeated时采用最后分隔方式：prepend后接separate，预期仅在重复组之间输出空行",
+            "args": ["--all-repeated=prepend", "--all-repeated=separate"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\na\n\nb\nb\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a\na\nb\nb\n",
+            "command": "uniq",
+            "description": "重复--group时采用最后分隔方式：prepend后接append，预期每组后输出空行且末组也追加空行",
+            "args": ["--group=prepend", "--group=append"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\na\n\nb\nb\n\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a\na\nb\nb\n",
+            "command": "uniq",
+            "description": "重复-c是幂等选项：-c -c应正常输出每个相邻组的计数",
+            "args": ["-c", "-c"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "      2 a\n      2 b\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "A\na\nB\nb\n",
             "command": "uniq",
             "description": "忽略大小写",

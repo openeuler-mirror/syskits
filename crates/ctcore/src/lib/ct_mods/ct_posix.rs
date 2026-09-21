@@ -35,11 +35,23 @@ impl GnuGetoptCommandExt for Command {
     }
 }
 
-pub fn ct_posix_version() -> Option<usize> {
-    let ct_posix = "_POSIX2_VERSION";
-    match env::var(ct_posix) {
-        Ok(var) => var.parse::<usize>().ok(),
-        Err(_) => None, // Variable not found returns None
+pub fn ct_posix_version() -> Option<i32> {
+    env::var("_POSIX2_VERSION")
+        .ok()
+        .and_then(|value| ct_parse_posix_version(&value))
+}
+
+/// Parse `_POSIX2_VERSION` with GNU `posix2_version` semantics.
+///
+/// GNU uses `strtol`, so values may have leading ASCII whitespace or a sign.
+/// Values outside the `int` range saturate before callers compare them.
+fn ct_parse_posix_version(value: &str) -> Option<i32> {
+    let value = value.trim_start_matches(|character: char| character.is_ascii_whitespace());
+    match value.parse::<i64>() {
+        Ok(version) => Some(version.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32),
+        Err(error) if error.kind() == &std::num::IntErrorKind::PosOverflow => Some(i32::MAX),
+        Err(error) if error.kind() == &std::num::IntErrorKind::NegOverflow => Some(i32::MIN),
+        Err(_) => None,
     }
 }
 
@@ -111,10 +123,25 @@ mod tests {
         assert_eq!(None, ct_posix_version());
         // set specific version
         unsafe { env::set_var("_POSIX2_VERSION", OBSOLETE.to_string()) };
-        assert_eq!(Some(OBSOLETE), ct_posix_version());
+        assert_eq!(Some(OBSOLETE as i32), ct_posix_version());
         unsafe { env::set_var("_POSIX2_VERSION", TRADITIONAL.to_string()) };
-        assert_eq!(Some(TRADITIONAL), ct_posix_version());
+        assert_eq!(Some(TRADITIONAL as i32), ct_posix_version());
         unsafe { env::set_var("_POSIX2_VERSION", MODERN.to_string()) };
-        assert_eq!(Some(MODERN), ct_posix_version());
+        assert_eq!(Some(MODERN as i32), ct_posix_version());
+    }
+
+    #[test]
+    fn test_ct_parse_posix_version_matches_gnu_strtol_forms() {
+        assert_eq!(ct_parse_posix_version("-1"), Some(-1));
+        assert_eq!(ct_parse_posix_version(" \t+200112"), Some(200112));
+        assert_eq!(
+            ct_parse_posix_version("999999999999999999999"),
+            Some(i32::MAX)
+        );
+        assert_eq!(
+            ct_parse_posix_version("-999999999999999999999"),
+            Some(i32::MIN)
+        );
+        assert_eq!(ct_parse_posix_version("200112x"), None);
     }
 }

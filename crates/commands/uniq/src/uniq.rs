@@ -1092,8 +1092,8 @@ fn uniq_should_extract_obs_skip_chars(
 /// GNU `strict_posix2` only rejects obsolete `+N` syntax in the strict
 /// POSIX.2 interval [200112, 200809). The system default in this build is
 /// strict, so an absent or invalid environment value also rejects the syntax.
-fn uniq_supports_obsolete_skip_chars(posix_version: Option<usize>) -> bool {
-    posix_version.is_some_and(|version| !(TRADITIONAL..MODERN).contains(&version))
+fn uniq_supports_obsolete_skip_chars(posix_version: Option<i32>) -> bool {
+    posix_version.is_some_and(|version| !((TRADITIONAL as i32)..(MODERN as i32)).contains(&version))
 }
 
 /// [`uniq_filter_args`] 的辅助函数
@@ -3817,6 +3817,7 @@ mod tests {
 
         #[test]
         fn test_obsolete_skip_chars_posix_version_boundaries() {
+            assert!(uniq_supports_obsolete_skip_chars(Some(-1)));
             assert!(uniq_supports_obsolete_skip_chars(Some(199209)));
             assert!(!uniq_supports_obsolete_skip_chars(Some(200112)));
             assert!(!uniq_supports_obsolete_skip_chars(Some(200808)));

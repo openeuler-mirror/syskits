@@ -756,6 +756,27 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "baa\naaa\n",
+            "command": "uniq",
+            "description": "_POSIX2_VERSION=-1按GNU strtol接受负值且不处于严格POSIX区间，+1仍是旧式跳过字符选项，两个比较键均为aa，预期仅保留首行baa",
+            "args": ["+1"],
+            "environment": {
+                "env_vars": {
+                    "_POSIX2_VERSION": "-1",
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "baa\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "a\na\nb\nc\nc\nd\n",
             "command": "uniq",
             "description": "计数重复行",

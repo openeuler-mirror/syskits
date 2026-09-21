@@ -225,6 +225,46 @@
         {
             "tstdin": "",
             "command": "uniq",
+            "description": "--group和--all-repeated的任意无效METHOD必须按GNU列出有效值，不泄漏Clap诊断",
+            "args": ["--group=invalid"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uniq: invalid argument 'invalid' for '--group'\nValid arguments are:\n  - 'prepend'\n  - 'append'\n  - 'separate'\n  - 'both'\nTry 'uniq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uniq",
+            "description": "--all-repeated=空METHOD必须按GNU报告ambiguous argument并列出有效值",
+            "args": ["--all-repeated="],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uniq: ambiguous argument '' for '--all-repeated'\nValid arguments are:\n  - 'none'\n  - 'prepend'\n  - 'separate'\nTry 'uniq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uniq",
             "description": "--all-repeated后面的--必须结束选项解析，-1成为INPUT文件名并按GNU报告不存在，而非继续处理为旧式选项",
             "args": ["--all-repeated", "--", "-1"],
             "environment": {

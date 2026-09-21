@@ -132,6 +132,14 @@ fn uniq_write_error(error: std::io::Error) -> Box<dyn CTError> {
     CtSimpleError::new(1, format!("write error: {}", strip_errno(&error)))
 }
 
+fn uniq_read_error(input: Option<&OsStr>, error: std::io::Error) -> Box<dyn CTError> {
+    let input = match input {
+        Some(path) if path != "-" => path.quote().to_string(),
+        _ => "standard input".to_string(),
+    };
+    CtSimpleError::new(1, format!("error reading {input}: {}", strip_errno(&error)))
+}
+
 #[derive(Default)]
 pub struct Uniq;
 impl Tool for Uniq {
@@ -149,13 +157,24 @@ impl Tool for Uniq {
 }
 
 impl UniqFlags {
-    pub fn print_uniq(&self, reader: impl BufRead, mut writer: impl Write) -> CTResult<()> {
+    pub fn print_uniq(&self, reader: impl BufRead, writer: impl Write) -> CTResult<()> {
+        self.print_uniq_with_read_error(reader, writer, |error| {
+            CtSimpleError::new(1, strip_errno(&error))
+        })
+    }
+
+    fn print_uniq_with_read_error(
+        &self,
+        reader: impl BufRead,
+        mut writer: impl Write,
+        read_error: impl Fn(std::io::Error) -> Box<dyn CTError>,
+    ) -> CTResult<()> {
         let mut is_first_line_printed = false;
         let mut group_cnt = 1;
         let line_terminator = self.get_line_terminator();
         let mut lines = reader.split(line_terminator);
         let mut line = if let Some(l) = lines.next() {
-            l?
+            l.map_err(&read_error)?
         } else {
             return Ok(());
         };
@@ -177,7 +196,7 @@ impl UniqFlags {
 
         // 比较当前的 `line` 和输入中的连续行（`next_line`）
         for next_line in lines {
-            let next_line = next_line?;
+            let next_line = next_line.map_err(&read_error)?;
             if self.cmp_keys(&line, &next_line) {
                 // 两行不同（新组开始）
                 if !print_immediately
@@ -989,9 +1008,11 @@ pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let invocation = uniq_invocation_from_matches(&matches, skip_fields_old, skip_chars_old)?;
 
-    invocation.config.print_uniq(
-        uniq_open_input_file(invocation.in_file_name.as_deref())?,
+    let input = invocation.in_file_name.as_deref();
+    invocation.config.print_uniq_with_read_error(
+        uniq_open_input_file(input)?,
         uniq_open_output_file(invocation.out_file_name.as_deref())?,
+        |error| uniq_read_error(input, error),
     )
 }
 
@@ -1260,6 +1281,18 @@ mod tests {
         restored = false;
         uniq_restore_default_sigpipe_if_needed(false, || restored = true);
         assert!(!restored);
+    }
+
+    #[test]
+    fn test_read_error_names_the_input_like_gnu() {
+        let error = uniq_read_error(
+            Some(OsStr::new("input-dir")),
+            std::io::Error::from_raw_os_error(ctcore::libc::EISDIR),
+        );
+        assert_eq!(
+            error.to_string(),
+            "error reading 'input-dir': Is a directory"
+        );
     }
 
     mod native_semantic_tests {

@@ -546,8 +546,8 @@ fn uniq_invocation_from_matches(
             || matches.contains_id(uniq_flags::GROUP),
         delimiters: uniq_get_delimiter(matches),
         is_show_counts: matches.get_flag(uniq_flags::COUNT),
-        skip_fields: skip_fields_modern.or(skip_fields_old),
-        slice_start: skip_chars_modern.or(skip_chars_old),
+        skip_fields: skip_fields_old.or(skip_fields_modern),
+        slice_start: skip_chars_old.or(skip_chars_modern),
         slice_stop: uniq_opt_parsed(uniq_flags::CHECK_CHARS, matches)?,
         is_ignore_case: matches.get_flag(uniq_flags::IGNORE_CASE),
         is_zero_terminated: matches.get_flag(uniq_flags::ZERO_TERMINATED),
@@ -733,10 +733,10 @@ fn uniq_filter_args(
             // 检查并重置到目前为止提取的废弃值，如果接下来遇到相应的新/已记录选项
             // 注意：对于跳过字段 - 在组合短选项中出现的相应新/已记录选项的情况
             // 例如 `-u20s4` 或 `-D1w3`，等. 也在 `handle_extract_obs_skip_fields()` 函数中覆盖
-            if slice.starts_with("-f") {
+            if slice.starts_with("-f") || slice.starts_with("--skip-f") {
                 *skip_fields_old = None;
             }
-            if slice.starts_with("-s") {
+            if slice.starts_with("-s") || slice.starts_with("--skip-c") {
                 *skip_chars_old = None;
             }
         }
@@ -851,10 +851,8 @@ fn uniq_handle_extract_obs_skip_fields(
         if is_obs_overwritten_by_new {
             *skip_fields_old = None;
         } else {
-            let mut extracted: String = obs_extracted_vec.iter().collect();
-            if let Some(val) = skip_fields_old {
-                extracted.push_str(val);
-            }
+            let mut extracted = skip_fields_old.take().unwrap_or_default();
+            extracted.extend(obs_extracted_vec);
             *skip_fields_old = Some(extracted);
         }
         if filtered_slice.get(1).is_some() {
@@ -1789,8 +1787,37 @@ mod tests {
                 uniq_handle_obsolete(args.into_iter());
 
             assert_eq!(processed_args.len(), 0); // Assuming it removes all obsolete args
-            assert_eq!(skip_fields_old, Some(321)); // Assuming it aggregates numbers
+            assert_eq!(skip_fields_old, Some(123));
             assert!(skip_chars_old.is_none());
+        }
+
+        #[test]
+        fn test_obsolete_skip_fields_after_modern_option_wins() {
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-f1"),
+                OsString::from("-2"),
+            ];
+            let (args, skip_fields_old, skip_chars_old) = uniq_handle_obsolete(args.into_iter());
+            let matches = ct_app_with_getopt_mode(false)
+                .try_get_matches_from(args)
+                .expect("modern option must parse");
+            let invocation =
+                uniq_invocation_from_matches(&matches, skip_fields_old, skip_chars_old)
+                    .expect("invocation must parse");
+
+            assert_eq!(invocation.config.skip_fields, Some(2));
+        }
+
+        #[test]
+        fn test_obsolete_skip_chars_after_modern_option_wins() {
+            let matches = ct_app_with_getopt_mode(false)
+                .try_get_matches_from([ctcore::ct_util_name(), "-s1"])
+                .expect("modern option must parse");
+            let invocation = uniq_invocation_from_matches(&matches, None, Some(2))
+                .expect("invocation must parse");
+
+            assert_eq!(invocation.config.slice_start, Some(2));
         }
 
         #[test]
@@ -1894,7 +1921,7 @@ mod tests {
                 processed_args,
                 vec![OsString::from("--valid"), OsString::from("file.txt")]
             );
-            assert_eq!(skip_fields_old, Some(21)); // Assuming "-1" and "-2" are aggregated
+            assert_eq!(skip_fields_old, Some(12));
         }
 
         #[test]
@@ -1928,7 +1955,7 @@ mod tests {
                     OsString::from("path/to/file")
                 ]
             );
-            assert_eq!(skip_fields_old, Some(21)); // Assuming "-1" and "-2" are combined
+            assert_eq!(skip_fields_old, Some(12));
         }
 
         #[test]

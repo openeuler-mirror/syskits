@@ -183,6 +183,26 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "a\na\n",
+            "command": "uniq",
+            "description": "-D是无参数短选项，只有--all-repeated允许=METHOD；-D=prepend必须按GNU报告非法=选项",
+            "args": ["-D=prepend"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uniq: invalid option -- '='\nTry 'uniq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "a X Z\nb Y Z\n",
             "command": "uniq",
             "description": "旧式字段跳过参数出现在-f后时采用最后值：-f 1 -2按跳过两个字段比较，两个比较键均为Z，预期仅保留首行",

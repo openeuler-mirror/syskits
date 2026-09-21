@@ -471,6 +471,26 @@
             "tstdin": "",
             "byteMode": true,
             "command": "whoami",
+            "description": "原始字节诊断用例：LC_ALL=en_US 且 LANGUAGE=zh_cn 使用非规范小写地区名时，GNU gettext 不匹配大小写敏感的 zh_CN 消息目录并回退英文；传入 alpha 后预期 ISO-8859-1 locale 的英文诊断和 ASCII 单引号",
+            "setup_commands": [
+                "export LC_ALL='en_US'",
+                "export LANGUAGE='zh_cn'",
+                "unset OUTPUT_CHARSET"
+            ],
+            "args": ["616c706861"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77686f616d693a206578747261206f706572616e642027616c706861270a547279202777686f616d69202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "whoami",
             "description": "原始字节诊断用例：LC_ALL 取复合类别字符串时，GNU setlocale(LC_ALL, \"\") 拒绝该值并保留 C locale；传入 alpha 后预期英文诊断和 ASCII 单引号，而非按子类别误判为 UTF-8 并输出弯引号",
             "setup_commands": [
                 "export LC_ALL='LC_CTYPE=zh_CN.utf8;LC_NUMERIC=C;LC_TIME=C;LC_COLLATE=C;LC_MONETARY=C;LC_MESSAGES=zh_CN.utf8;LC_PAPER=C;LC_NAME=C;LC_ADDRESS=C;LC_TELEPHONE=C;LC_MEASUREMENT=C;LC_IDENTIFICATION=C'",

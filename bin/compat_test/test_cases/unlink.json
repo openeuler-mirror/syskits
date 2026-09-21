@@ -191,6 +191,50 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "unlink",
+            "description": "LANG=zh_CN.utf8、OUTPUT_CHARSET=UTF-16LE下执行unlink first second；GNU gettext 将翻译格式串转换为UTF-16LE后在第一个NUL处按C字符串截断，因此extra operand的操作数和帮助提示中的参数均不输出。输入参数为ASCII完整十六进制=6669727374、7365636f6e64，stderr为GNU实际原始字节。",
+            "args": ["6669727374", "7365636f6e64"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "756e6c696e6b3a201a59594f8476cd645c4ff95b618c200af78b1d5cd58b67624c8820"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LANG": "zh_CN.utf8",
+                    "OUTPUT_CHARSET": "UTF-16LE"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "unlink",
+            "description": "LANG=zh_CN.utf8、OUTPUT_CHARSET=UTF-16下执行unlink first second；GNU gettext 在Linux上按主机字节序输出UTF-16内容但不注入BOM，并在第一个NUL处截断。输入参数为ASCII完整十六进制=6669727374、7365636f6e64，stderr为GNU实际原始字节。",
+            "args": ["6669727374", "7365636f6e64"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "756e6c696e6b3a201a59594f8476cd645c4ff95b618c200af78b1d5cd58b67624c8820"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LANG": "zh_CN.utf8",
+                    "OUTPUT_CHARSET": "UTF-16"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

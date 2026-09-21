@@ -170,6 +170,11 @@ pub trait CTError: Error + Send {
         None
     }
 
+    /// Whether the framework should append a line feed after a custom usage hint.
+    fn usage_hint_appends_newline(&self) -> bool {
+        true
+    }
+
     /// 自定义错误的错误码。
     ///
     ///
@@ -299,7 +304,9 @@ pub fn write_error_usage_hint(error: &dyn CTError) -> io::Result<Option<()>> {
 
     let mut stderr = io::stderr().lock();
     stderr.write_all(hint.as_ref())?;
-    stderr.write_all(b"\n")?;
+    if error.usage_hint_appends_newline() {
+        stderr.write_all(b"\n")?;
+    }
     Ok(Some(()))
 }
 

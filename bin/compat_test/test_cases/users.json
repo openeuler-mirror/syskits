@@ -323,6 +323,102 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "users",
+            "description": "LC_ALL=zh_CN.UTF-8、LANG=zh_CN.UTF-8下执行users --help=x；GNU保留option首行英文，但将标准usage hint翻译为简体中文。预期RC=1、stdout为空、stderr使用请尝试执行中文提示。",
+            "args": [
+                "--help=x"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "users: option '--help' doesn't allow an argument\n请尝试执行 \"users --help\" 来获取更多信息。\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "zh_CN.UTF-8",
+                    "LANG": "zh_CN.UTF-8"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "users",
+            "description": "LC_ALL=zh_CN.UTF-8、LANG=zh_CN.UTF-8下执行users first second；GNU将extra operand翻译为多余的操作对象并使用双引号，同时使用简体中文usage hint。预期RC=1、stdout为空。",
+            "args": [
+                "first",
+                "second"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "users: 多余的操作对象 \"second\"\n请尝试执行 \"users --help\" 来获取更多信息。\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "zh_CN.UTF-8",
+                    "LANG": "zh_CN.UTF-8"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "users",
+            "description": "LC_ALL=C.UTF-8、LANG=C.UTF-8下执行users first second；GNU的locale-aware quote将第二个操作数包围为UTF-8弯单引号‘second’，而usage hint仍为英文。预期RC=1、stdout为空。",
+            "args": [
+                "first",
+                "second"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "users: extra operand ‘second’\nTry 'users --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "users",
+            "description": "原始字节用例：LC_ALL=zh_CN.gb18030、LANG=zh_CN.gb18030下执行users first second；参数完整十六进制依次为6669727374（first）和7365636f6e64（second），stdin为0字节。GNU将多余操作数和usage hint编码为GB18030；预期RC=1、stdout为空，stderr完整十六进制为GB18030诊断字节。",
+            "args": [
+                "6669727374",
+                "7365636f6e64"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "75736572733a20b6e0d3e0b5c4b2d9d7f7b6d4cff320227365636f6e64220ac7ebb3a2cad4d6b4d0d020227573657273202d2d68656c702220c0b4bbf1c8a1b8fcb6e0d0c5cfa2a1a30a"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "zh_CN.gb18030",
+                    "LANG": "zh_CN.gb18030"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

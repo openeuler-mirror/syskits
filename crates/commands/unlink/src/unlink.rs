@@ -37,6 +37,11 @@ use sys_locale::get_locale;
 static OPT_PATH: &str = "FILE";
 const UNLINK_LONG_OPTIONS: &[&str] = &["help", "version"];
 
+struct UnlinkLocalizedText {
+    bytes: Vec<u8>,
+    truncated_at_nul: bool,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum UnlinkLongOptionMatch {
     Recognized(&'static str),
@@ -48,14 +53,17 @@ enum UnlinkLongOptionMatch {
 struct UnlinkUsageError {
     message: Vec<u8>,
     usage_hint: Vec<u8>,
+    usage_hint_appends_newline: bool,
 }
 
 impl UnlinkUsageError {
     fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
         let simplified_chinese = unlink_uses_simplified_chinese();
+        let usage_hint = unlink_usage_hint(simplified_chinese);
         Box::new(Self {
             message,
-            usage_hint: unlink_usage_hint(simplified_chinese),
+            usage_hint: usage_hint.bytes,
+            usage_hint_appends_newline: !usage_hint.truncated_at_nul,
         })
     }
 }
@@ -75,6 +83,10 @@ impl CTError for UnlinkUsageError {
 
     fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
         Some(Cow::Borrowed(&self.usage_hint))
+    }
+
+    fn usage_hint_appends_newline(&self) -> bool {
+        self.usage_hint_appends_newline
     }
 
     fn usage(&self) -> bool {
@@ -168,14 +180,17 @@ fn unlink_runtime_error_message_for_locale(
     error: &std::io::Error,
     simplified_chinese: bool,
 ) -> Vec<u8> {
-    let mut message = if simplified_chinese {
-        unlink_encode_locale_text("对 ")
+    let (mut message, format_truncated_at_nul) = if simplified_chinese {
+        let localized = unlink_encode_locale_text("对 ");
+        (localized.bytes, localized.truncated_at_nul)
     } else {
-        b"cannot unlink ".to_vec()
+        (b"cannot unlink ".to_vec(), false)
     };
-    message.extend_from_slice(&unlink_quote_path(path));
-    if simplified_chinese {
-        message.extend_from_slice(&unlink_encode_locale_text(" 调用 unlink 失败"));
+    if !format_truncated_at_nul {
+        message.extend_from_slice(&unlink_quote_path(path));
+        if simplified_chinese {
+            message.extend_from_slice(&unlink_encode_locale_text(" 调用 unlink 失败").bytes);
+        }
     }
     message.extend_from_slice(b": ");
     message.extend_from_slice(strip_errno(error).as_bytes());
@@ -215,7 +230,7 @@ fn unlink_quote_path(path: &OsStr) -> Vec<u8> {
 
 fn unlink_missing_operand_message() -> Vec<u8> {
     if unlink_uses_simplified_chinese() {
-        unlink_encode_locale_text("缺少操作对象")
+        unlink_encode_locale_text("缺少操作对象").bytes
     } else {
         b"missing operand".to_vec()
     }
@@ -226,23 +241,29 @@ fn unlink_extra_operand_message(operand: &OsStr) -> Vec<u8> {
 }
 
 fn unlink_extra_operand_message_for_locale(operand: &OsStr, simplified_chinese: bool) -> Vec<u8> {
-    let mut message = if simplified_chinese {
-        unlink_encode_locale_text("多余的操作对象 ")
+    let (mut message, format_truncated_at_nul) = if simplified_chinese {
+        let localized = unlink_encode_locale_text("多余的操作对象 ");
+        (localized.bytes, localized.truncated_at_nul)
     } else {
-        b"extra operand ".to_vec()
+        (b"extra operand ".to_vec(), false)
     };
-    message.extend(unlink_quote_operand(operand, simplified_chinese));
+    if !format_truncated_at_nul {
+        message.extend(unlink_quote_operand(operand, simplified_chinese));
+    }
     message
 }
 
-fn unlink_usage_hint(simplified_chinese: bool) -> Vec<u8> {
+fn unlink_usage_hint(simplified_chinese: bool) -> UnlinkLocalizedText {
     let utility_name = ctcore::ct_help_utility_name();
     if simplified_chinese {
         unlink_encode_locale_text(&format!(
             "请尝试执行 \"{utility_name} --help\" 来获取更多信息。"
         ))
     } else {
-        format!("Try '{utility_name} --help' for more information.").into_bytes()
+        UnlinkLocalizedText {
+            bytes: format!("Try '{utility_name} --help' for more information.").into_bytes(),
+            truncated_at_nul: false,
+        }
     }
 }
 
@@ -311,15 +332,38 @@ fn unlink_effective_locale<const N: usize>(names: [&str; N]) -> Option<OsString>
     })
 }
 
-fn unlink_encode_locale_text(text: &str) -> Vec<u8> {
+fn unlink_encode_locale_text(text: &str) -> UnlinkLocalizedText {
     #[cfg(target_os = "linux")]
     if let Some(codeset) = unlink_output_codeset()
         && let Some(encoded) = unlink_encode_locale_text_for_codeset(text, &codeset)
     {
-        return encoded;
+        return unlink_localized_text_from_encoded(encoded);
     }
 
-    text.as_bytes().to_vec()
+    UnlinkLocalizedText {
+        bytes: text.as_bytes().to_vec(),
+        truncated_at_nul: false,
+    }
+}
+
+fn unlink_localized_text_from_encoded(mut encoded: Vec<u8>) -> UnlinkLocalizedText {
+    // GNU gettext does not retain the iconv BOM in diagnostic strings.
+    let bom_length = match encoded.as_slice() {
+        [0xff, 0xfe, 0x00, 0x00, ..] | [0x00, 0x00, 0xfe, 0xff, ..] => 4,
+        [0xff, 0xfe, ..] | [0xfe, 0xff, ..] => 2,
+        _ => 0,
+    };
+    encoded.drain(..bom_length);
+    if let Some(nul_index) = encoded.iter().position(|byte| *byte == b'\0') {
+        return UnlinkLocalizedText {
+            bytes: encoded[..nul_index].to_vec(),
+            truncated_at_nul: true,
+        };
+    }
+    UnlinkLocalizedText {
+        bytes: encoded,
+        truncated_at_nul: false,
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -906,6 +950,25 @@ mod tests {
                 unlink_extra_operand_message_for_locale(OsStr::new("second"), true),
                 "多余的操作对象 \"second\"".as_bytes()
             );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn unlink_matches_gnu_utf16_localized_format_before_operand() {
+            let expected = vec![
+                0x1a, 0x59, 0x59, 0x4f, 0x84, 0x76, 0xcd, 0x64, 0x5c, 0x4f, 0xf9, 0x5b, 0x61, 0x8c,
+                0x20,
+            ];
+
+            for codeset in ["UTF-16LE", "UTF-16"] {
+                let encoded = unlink_encode_locale_text_for_codeset("多余的操作对象 ", codeset)
+                    .expect("UTF-16 iconv conversion must be available");
+                assert_eq!(
+                    unlink_localized_text_from_encoded(encoded).bytes,
+                    expected,
+                    "codeset {codeset}"
+                );
+            }
         }
 
         #[test]

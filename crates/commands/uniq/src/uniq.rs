@@ -1391,6 +1391,39 @@ fn uniq_numeric_short_option_parts(argument: &[u8]) -> Option<(&'static str, Opt
     None
 }
 
+fn uniq_numeric_value_error(option: &str, value: &[u8]) -> Option<Box<dyn CTError>> {
+    let value = match std::str::from_utf8(value) {
+        Ok(value) => value,
+        Err(_) => return Some(uniq_raw_numeric_error(option, value)),
+    };
+
+    uniq_parse_size_option(value).is_err().then(|| {
+        CtSimpleError::new(
+            1,
+            format!("{value}: {}", uniq_invalid_number_message(option)),
+        )
+    })
+}
+
+fn uniq_delimiter_method_error(
+    option: &'static str,
+    valid_arguments: &'static [&'static str],
+    value: &[u8],
+) -> Option<Box<dyn CTError>> {
+    let mut matching_methods = valid_arguments
+        .iter()
+        .filter(|method| method.as_bytes().starts_with(value));
+
+    if matching_methods.next().is_some() && matching_methods.next().is_none() {
+        return None;
+    }
+
+    Some(CtSimpleError::new(
+        1,
+        uniq_delimiter_method_error_message(option, valid_arguments, value),
+    ))
+}
+
 fn uniq_raw_numeric_error(option: &str, value: &[u8]) -> Box<dyn CTError> {
     let mut message = value.to_vec();
     message.extend_from_slice(b": ");
@@ -1621,11 +1654,6 @@ fn uniq_invalid_option_error(args: &[OsString], posixly_correct: bool) -> Option
                     }
                     return Some(UniqUsageError::boxed(message));
                 }
-                UniqLongOptionMatch::Recognized(_, UniqLongOptionArgument::Required)
-                    if equals.is_none() =>
-                {
-                    index += 1;
-                }
                 UniqLongOptionMatch::Recognized(option, UniqLongOptionArgument::None)
                     if equals.is_some() =>
                 {
@@ -1634,7 +1662,43 @@ fn uniq_invalid_option_error(args: &[OsString], posixly_correct: bool) -> Option
                         format!("option '--{option}' doesn't allow an argument"),
                     ));
                 }
-                UniqLongOptionMatch::Recognized(_, _) => {}
+                UniqLongOptionMatch::Recognized(option, UniqLongOptionArgument::Required) => {
+                    let flag = match option {
+                        "skip-fields" => uniq_flags::SKIP_FIELDS,
+                        "skip-chars" => uniq_flags::SKIP_CHARS,
+                        "check-chars" => uniq_flags::CHECK_CHARS,
+                        _ => unreachable!("only numeric uniq options require values"),
+                    };
+                    let value = equals.map(|offset| &bytes[offset + 3..]).or_else(|| {
+                        args.get(index + 1)
+                            .map(|argument| argument.as_encoded_bytes())
+                    });
+
+                    if let Some(error) =
+                        value.and_then(|value| uniq_numeric_value_error(flag, value))
+                    {
+                        return Some(error);
+                    }
+                    if equals.is_none() && index + 1 < args.len() {
+                        index += 1;
+                    }
+                }
+                UniqLongOptionMatch::Recognized(option, UniqLongOptionArgument::Optional) => {
+                    if let Some(offset) = equals {
+                        let value = &bytes[offset + 3..];
+                        let (option, valid_arguments) = match option {
+                            "all-repeated" => ("--all-repeated", UNIQ_ALL_REPEATED_METHODS),
+                            "group" => ("--group", UNIQ_GROUP_METHODS),
+                            _ => unreachable!("only delimiter options have optional values"),
+                        };
+                        if let Some(error) =
+                            uniq_delimiter_method_error(option, valid_arguments, value)
+                        {
+                            return Some(error);
+                        }
+                    }
+                }
+                UniqLongOptionMatch::Recognized(_, UniqLongOptionArgument::None) => {}
             }
             index += 1;
             continue;
@@ -1650,7 +1714,24 @@ fn uniq_invalid_option_error(args: &[OsString], posixly_correct: bool) -> Option
                     short_index += 1;
                 }
                 b'f' | b's' | b'w' => {
-                    if short_index + 1 == bytes.len() {
+                    let flag = match bytes[short_index] {
+                        b'f' => uniq_flags::SKIP_FIELDS,
+                        b's' => uniq_flags::SKIP_CHARS,
+                        b'w' => uniq_flags::CHECK_CHARS,
+                        _ => unreachable!("only numeric uniq options require values"),
+                    };
+                    let value = (short_index + 1 < bytes.len())
+                        .then_some(&bytes[short_index + 1..])
+                        .or_else(|| {
+                            args.get(index + 1)
+                                .map(|argument| argument.as_encoded_bytes())
+                        });
+                    if let Some(error) =
+                        value.and_then(|value| uniq_numeric_value_error(flag, value))
+                    {
+                        return Some(error);
+                    }
+                    if short_index + 1 == bytes.len() && index + 1 < args.len() {
                         index += 1;
                     }
                     break;
@@ -2166,6 +2247,36 @@ mod tests {
         .expect_err("the earlier unknown option must be rejected");
 
         assert_eq!(error.to_string(), "unrecognized option '--d'");
+    }
+
+    #[test]
+    fn test_uniq_main_reports_earlier_invalid_option_value() {
+        let method_error = uniq_main(
+            [
+                OsString::from("uniq"),
+                OsString::from("--all-repeated=bad"),
+                OsString::from("--count=1"),
+            ]
+            .into_iter(),
+        )
+        .expect_err("the earlier invalid delimiter method must be rejected");
+        let method_message = method_error.to_string();
+        assert!(method_message.starts_with("invalid argument"));
+        assert!(method_message.contains("--all-repeated"));
+
+        let numeric_error = uniq_main(
+            [
+                OsString::from("uniq"),
+                OsString::from("--skip-fields=-1"),
+                OsString::from("--count=1"),
+            ]
+            .into_iter(),
+        )
+        .expect_err("the earlier invalid numeric value must be rejected");
+        assert_eq!(
+            numeric_error.to_string(),
+            "-1: invalid number of fields to skip"
+        );
     }
 
     #[test]

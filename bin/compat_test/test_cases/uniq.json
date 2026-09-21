@@ -433,6 +433,44 @@
             "cleanup_commands": []
         },
         {
+            "command": "uniq",
+            "description": "前置--all-repeated无效METHOD必须在后续--count=1的无参数选项错误之前按GNU报告",
+            "args": ["--all-repeated=bad", "--count=1"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uniq: invalid argument 'bad' for '--all-repeated'\nValid arguments are:\n  - 'none'\n  - 'prepend'\n  - 'separate'\nTry 'uniq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "uniq",
+            "description": "前置--skip-fields无效数值必须在后续--count=1的无参数选项错误之前按GNU报告",
+            "args": ["--skip-fields=-1", "--count=1"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uniq: -1: invalid number of fields to skip\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "a X\nb X\n",
             "command": "uniq",
             "description": "--all-repeated没有分离取值时，后接旧式-1仍按跳过字段处理；比较键均为X，预期输出两条重复行",

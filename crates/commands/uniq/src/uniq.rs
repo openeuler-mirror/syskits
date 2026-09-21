@@ -23,7 +23,7 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use clap::{crate_version, error::ContextKind, error::Error, error::ErrorKind};
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::{Quotable, locale_quote_marks};
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, strip_errno};
 use ctcore::ct_posix::{
     GnuGetoptCommandExt, MODERN, TRADITIONAL, ct_posix_version, posixly_correct,
@@ -1034,6 +1034,65 @@ fn uniq_handle_extract_obs_skip_chars(
     }
 }
 
+fn uniq_quote_argmatch_bytes(value: &[u8]) -> String {
+    let (left_quote, right_quote) = locale_quote_marks();
+    uniq_quote_argmatch_bytes_with_marks(value, left_quote, right_quote)
+}
+
+fn uniq_quote_argmatch_bytes_with_marks(
+    value: &[u8],
+    left_quote: &str,
+    right_quote: &str,
+) -> String {
+    let mut quoted = String::from(left_quote);
+
+    if (left_quote, right_quote) == ("\u{2018}", "\u{2019}") {
+        if let Ok(value) = std::str::from_utf8(value) {
+            let right_quote_char = right_quote
+                .chars()
+                .next()
+                .expect("UTF-8 right quote must contain one character");
+            for character in value.chars() {
+                match character {
+                    '\u{7}' => quoted.push_str("\\a"),
+                    '\u{8}' => quoted.push_str("\\b"),
+                    '\t' => quoted.push_str("\\t"),
+                    '\n' => quoted.push_str("\\n"),
+                    '\u{b}' => quoted.push_str("\\v"),
+                    '\u{c}' => quoted.push_str("\\f"),
+                    '\r' => quoted.push_str("\\r"),
+                    '\\' => quoted.push_str("\\\\"),
+                    _ if character == right_quote_char => {
+                        quoted.push('\\');
+                        quoted.push(character);
+                    }
+                    _ => quoted.push(character),
+                }
+            }
+            quoted.push_str(right_quote);
+            return quoted;
+        }
+    }
+
+    for byte in value {
+        match byte {
+            b'\x07' => quoted.push_str("\\a"),
+            b'\x08' => quoted.push_str("\\b"),
+            b'\t' => quoted.push_str("\\t"),
+            b'\n' => quoted.push_str("\\n"),
+            b'\x0b' => quoted.push_str("\\v"),
+            b'\x0c' => quoted.push_str("\\f"),
+            b'\r' => quoted.push_str("\\r"),
+            b'\\' => quoted.push_str("\\\\"),
+            b'\'' if right_quote == "'" => quoted.push_str("\\'"),
+            byte if byte.is_ascii_graphic() || *byte == b' ' => quoted.push(*byte as char),
+            byte => quoted.push_str(&format!("\\{byte:03o}")),
+        }
+    }
+    quoted.push_str(right_quote);
+    quoted
+}
+
 fn uniq_delimiter_value_error(clap_err: &Error) -> Option<String> {
     let (option, valid_arguments) = match clap_err
         .get(ContextKind::InvalidArg)
@@ -1055,14 +1114,16 @@ fn uniq_delimiter_value_error(clap_err: &Error) -> Option<String> {
     } else {
         "invalid"
     };
+    let value = uniq_quote_argmatch_bytes(value.as_bytes());
+    let option = uniq_quote_argmatch_bytes(option.as_bytes());
     let valid_arguments = valid_arguments
         .iter()
-        .map(|argument| format!("  - '{argument}'"))
+        .map(|argument| format!("  - {}", uniq_quote_argmatch_bytes(argument.as_bytes())))
         .collect::<Vec<_>>()
         .join("\n");
 
     Some(format!(
-        "{kind} argument '{value}' for '{option}'\nValid arguments are:\n{valid_arguments}\nTry 'uniq --help' for more information."
+        "{kind} argument {value} for {option}\nValid arguments are:\n{valid_arguments}\nTry 'uniq --help' for more information."
     ))
 }
 
@@ -1499,6 +1560,30 @@ mod tests {
                 OsString::from("--skip-fields"),
                 OsString::from("--group=app"),
             ]
+        );
+    }
+
+    #[test]
+    fn test_argmatch_quote_escapes_c_locale_and_utf8_quote_marks() {
+        assert_eq!(
+            uniq_quote_argmatch_bytes_with_marks(b"bad'value", "'", "'"),
+            "'bad\\'value'"
+        );
+        assert_eq!(
+            uniq_quote_argmatch_bytes_with_marks(b"bad\nvalue", "'", "'"),
+            "'bad\\nvalue'"
+        );
+        assert_eq!(
+            uniq_quote_argmatch_bytes_with_marks(b"bad\xffvalue", "\u{2018}", "\u{2019}"),
+            "\u{2018}bad\\377value\u{2019}"
+        );
+        assert_eq!(
+            uniq_quote_argmatch_bytes_with_marks(
+                "bad\u{2019}value".as_bytes(),
+                "\u{2018}",
+                "\u{2019}"
+            ),
+            "\u{2018}bad\\\u{2019}value\u{2019}"
         );
     }
 
@@ -3098,6 +3183,24 @@ mod tests {
         use clap::error::ErrorKind as ClapErrorKind;
         // Assuming you use ContextKind elsewhere
 
+        fn delimiter_error_expectation(
+            kind: &str,
+            value: &str,
+            option: &str,
+            valid_arguments: &[&str],
+        ) -> String {
+            let valid_arguments = valid_arguments
+                .iter()
+                .map(|argument| format!("  - {}", uniq_quote_argmatch_bytes(argument.as_bytes())))
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!(
+                "{kind} argument {} for {}\nValid arguments are:\n{valid_arguments}\nTry 'uniq --help' for more information.",
+                uniq_quote_argmatch_bytes(value.as_bytes()),
+                uniq_quote_argmatch_bytes(option.as_bytes()),
+            )
+        }
+
         fn generate_clap_error(
             error_kind: ClapErrorKind,
             arg_name: Option<&str>,
@@ -3147,11 +3250,21 @@ mod tests {
             let cases = [
                 (
                     "--group=invalid",
-                    "invalid argument 'invalid' for '--group'\nValid arguments are:\n  - 'prepend'\n  - 'append'\n  - 'separate'\n  - 'both'\nTry 'uniq --help' for more information.",
+                    delimiter_error_expectation(
+                        "invalid",
+                        "invalid",
+                        "--group",
+                        &["prepend", "append", "separate", "both"],
+                    ),
                 ),
                 (
                     "--all-repeated=invalid",
-                    "invalid argument 'invalid' for '--all-repeated'\nValid arguments are:\n  - 'none'\n  - 'prepend'\n  - 'separate'\nTry 'uniq --help' for more information.",
+                    delimiter_error_expectation(
+                        "invalid",
+                        "invalid",
+                        "--all-repeated",
+                        &["none", "prepend", "separate"],
+                    ),
                 ),
             ];
 
@@ -3168,11 +3281,21 @@ mod tests {
             let cases = [
                 (
                     "--group=",
-                    "ambiguous argument '' for '--group'\nValid arguments are:\n  - 'prepend'\n  - 'append'\n  - 'separate'\n  - 'both'\nTry 'uniq --help' for more information.",
+                    delimiter_error_expectation(
+                        "ambiguous",
+                        "",
+                        "--group",
+                        &["prepend", "append", "separate", "both"],
+                    ),
                 ),
                 (
                     "--all-repeated=",
-                    "ambiguous argument '' for '--all-repeated'\nValid arguments are:\n  - 'none'\n  - 'prepend'\n  - 'separate'\nTry 'uniq --help' for more information.",
+                    delimiter_error_expectation(
+                        "ambiguous",
+                        "",
+                        "--all-repeated",
+                        &["none", "prepend", "separate"],
+                    ),
                 ),
             ];
 

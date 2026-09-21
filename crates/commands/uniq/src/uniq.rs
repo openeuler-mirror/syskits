@@ -786,7 +786,9 @@ fn uniq_handle_obsolete_with_mode(
                 && bytes[0] == b'+'
                 && bytes[1].is_ascii_digit()
                 && uniq_supports_obsolete_skip_chars(ct_posix_version());
-            if posixly_correct && !is_obsolete_skip_chars && (bytes.is_empty() || bytes[0] != b'-')
+            if posixly_correct
+                && (bytes == b"-"
+                    || (!is_obsolete_skip_chars && (bytes.is_empty() || bytes[0] != b'-')))
             {
                 filtered_args.push(OsString::from("--"));
                 parse_options = false;
@@ -2013,6 +2015,31 @@ mod tests {
             ],
             false,
         ));
+    }
+
+    #[test]
+    fn test_posixly_correct_treats_dash_as_the_first_operand() {
+        let (filtered, skip_fields, skip_chars) = uniq_handle_obsolete_with_mode(
+            [
+                OsString::from("uniq"),
+                OsString::from("-"),
+                OsString::from("+1"),
+            ]
+            .into_iter(),
+            true,
+        );
+
+        assert_eq!(
+            filtered,
+            [
+                OsString::from("uniq"),
+                OsString::from("--"),
+                OsString::from("-"),
+                OsString::from("+1"),
+            ]
+        );
+        assert_eq!(skip_fields, None);
+        assert_eq!(skip_chars, None);
     }
 
     #[test]

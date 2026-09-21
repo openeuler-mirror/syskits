@@ -183,6 +183,27 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "a X\nb X\n",
+            "command": "uniq",
+            "description": "--skip-f是GNU唯一长选项前缀，后接+1必须作为其字段数值而非旧式+N选项；比较键均为X，预期仅保留首行",
+            "args": ["--skip-f", "+1"],
+            "environment": {
+                "env_vars": {
+                    "_POSIX2_VERSION": "200809",
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a X\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "a X\na X\nb X\nb Y\n",
             "command": "uniq",
             "description": "组合短选项-cf1中f后的1是-f的紧随数值参数而非旧式字段跳过值，GNU按-count和-f 1执行并保留两个分组首行及计数",

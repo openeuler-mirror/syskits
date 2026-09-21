@@ -425,6 +425,26 @@
         {
             "tstdin": "a\na\nb\nb\n",
             "command": "uniq",
+            "description": "--all-r=pre同时使用GNU长选项和METHOD唯一前缀时，必须解析为--all-repeated=prepend并在重复组前输出空行",
+            "args": ["--all-r=pre"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\na\na\n\nb\nb\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a\na\nb\nb\n",
+            "command": "uniq",
             "description": "--group的唯一METHOD前缀app必须按GNU解析为append并在每个分组后输出空行",
             "args": ["--group=app"],
             "environment": {

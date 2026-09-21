@@ -18,14 +18,17 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, Command, crate_version};
 
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, FromIo};
+use ctcore::ct_error::{CTError, CTResult, strip_errno};
+#[cfg(target_os = "linux")]
+use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
 
 use std::borrow::Cow;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use std::fs::remove_file;
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -80,14 +83,115 @@ impl CTError for UnlinkUsageError {
     }
 }
 
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+struct UnlinkRuntimeError {
+    message: Vec<u8>,
+}
+
+#[cfg(target_os = "linux")]
+impl UnlinkRuntimeError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Display for UnlinkRuntimeError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Error for UnlinkRuntimeError {}
+
+#[cfg(target_os = "linux")]
+impl CTError for UnlinkRuntimeError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+}
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn mbrtowc(
+        wide: *mut ctcore::libc::wchar_t,
+        bytes: *const ctcore::libc::c_char,
+        length: usize,
+        state: *mut ctcore::libc::mbstate_t,
+    ) -> usize;
+    fn iswprint(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
+}
+
 pub fn unlink_main(args: impl ctcore::Args) -> CTResult<()> {
+    #[cfg(target_os = "linux")]
+    initialize_unlink_locale();
+
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(prepare_unlink_args(args)?)?;
 
     let path: &Path = matches.get_one::<OsString>(OPT_PATH).unwrap().as_ref();
 
-    remove_file(path).map_err_context(|| format!("cannot unlink {}", path.quote()))
+    unlink_path(path)
+}
+
+#[cfg(target_os = "linux")]
+fn initialize_unlink_locale() {
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn unlink_path(path: &Path) -> CTResult<()> {
+    remove_file(path).map_err(|error| unlink_io_error(path, error))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn unlink_path(path: &Path) -> CTResult<()> {
+    remove_file(path).map_err(Into::into)
+}
+
+#[cfg(target_os = "linux")]
+fn unlink_io_error(path: &Path, error: std::io::Error) -> Box<dyn CTError> {
+    let mut message = b"cannot unlink ".to_vec();
+    message.extend_from_slice(&unlink_quote_path(path.as_os_str()));
+    message.extend_from_slice(b": ");
+    message.extend_from_slice(strip_errno(&error).as_bytes());
+    UnlinkRuntimeError::boxed(message)
+}
+
+#[cfg(target_os = "linux")]
+fn unlink_quote_path(path: &OsStr) -> Vec<u8> {
+    let bytes = path.as_bytes();
+    let mut quoted = escape_shell_bytes_with_classifier(bytes, |remaining| unsafe {
+        let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
+        let mut wide = 0 as ctcore::libc::wchar_t;
+        let length = mbrtowc(
+            &mut wide,
+            remaining.as_ptr().cast(),
+            remaining.len(),
+            &mut state,
+        );
+        if length == usize::MAX {
+            return (1, false);
+        }
+        if length == usize::MAX - 1 {
+            return (remaining.len(), false);
+        }
+
+        let length = if length == 0 { 1 } else { length };
+        (length, iswprint(wide as ctcore::libc::c_uint) != 0)
+    });
+
+    if quoted.as_slice() == bytes {
+        quoted.insert(0, b'\'');
+        quoted.push(b'\'');
+    }
+
+    quoted
 }
 
 fn prepare_unlink_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
@@ -294,6 +398,7 @@ mod tests {
     #[cfg(test)]
     mod ct_main_tests {
         use std::fs::File;
+        use std::os::unix::ffi::OsStringExt;
         use std::path::PathBuf;
 
         use super::*;
@@ -425,6 +530,20 @@ mod tests {
 
             assert_eq!(error.to_string(), "extra operand '--version'");
             assert!(error.usage());
+        }
+
+        #[test]
+        fn unlink_uses_gnu_shell_escape_for_non_utf8_file_error() {
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from_vec(vec![0xff]),
+            ];
+            let error = unlink_main(args.into_iter()).unwrap_err();
+
+            assert_eq!(
+                error.diagnostic_bytes().as_ref(),
+                b"cannot unlink ''$'\\377': No such file or directory"
+            );
         }
     }
 

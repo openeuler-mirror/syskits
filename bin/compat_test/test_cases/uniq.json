@@ -223,6 +223,26 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "",
+            "command": "uniq",
+            "description": "必需值短选项-f缺少参数时，GNU仅输出option requires an argument诊断和帮助提示，不输出Clap用法块",
+            "args": ["-f"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uniq: option requires an argument -- 'f'\nTry 'uniq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "a\na\n",
             "command": "uniq",
             "description": "-D是无参数短选项，只有--all-repeated允许=METHOD；-D=prepend必须按GNU报告非法=选项",

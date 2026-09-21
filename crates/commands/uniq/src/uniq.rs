@@ -1494,6 +1494,49 @@ fn uniq_invalid_option_error(args: &[OsString], posixly_correct: bool) -> Option
     None
 }
 
+fn uniq_extra_operand_error(args: &[OsString], posixly_correct: bool) -> Option<Box<dyn CTError>> {
+    let mut parse_options = true;
+    let mut previous_option_requires_value = false;
+    let mut operands = 0;
+
+    for (index, argument) in args.iter().enumerate() {
+        if index == 0 {
+            continue;
+        }
+
+        let bytes = argument.as_encoded_bytes();
+        if parse_options && previous_option_requires_value {
+            previous_option_requires_value = false;
+            continue;
+        }
+        if parse_options && bytes == b"--" {
+            parse_options = false;
+            continue;
+        }
+        if parse_options && posixly_correct && (bytes.is_empty() || bytes[0] != b'-') {
+            parse_options = false;
+        }
+        if parse_options && bytes.len() > 1 && bytes[0] == b'-' {
+            if bytes.starts_with(b"--") {
+                previous_option_requires_value = uniq_required_long_option(bytes).is_some();
+            } else {
+                previous_option_requires_value = uniq_short_option_requires_next_value(bytes);
+            }
+            continue;
+        }
+
+        operands += 1;
+        if operands > 2 {
+            return Some(CTsageError::new(
+                1,
+                format!("extra operand {}", argument.quote()),
+            ));
+        }
+    }
+
+    None
+}
+
 fn uniq_non_utf8_delimiter_method_error(
     args: &[OsString],
     posixly_correct: bool,
@@ -1578,6 +1621,9 @@ pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
     if let Some(error) = uniq_short_option_equals_error(&args, posixly_correct()) {
         return Err(error);
     }
+    if let Some(error) = uniq_extra_operand_error(&args, posixly_correct()) {
+        return Err(error);
+    }
 
     let matches = match ct_app().try_get_matches_from(args) {
         Ok(matches) => matches,
@@ -1645,6 +1691,9 @@ pub fn uniq_native_semantic(args: impl ctcore::Args) -> CTResult<UniqSemantic> {
     }
     let (args, skip_fields_old, skip_chars_old) = uniq_handle_obsolete(args.into_iter());
     if let Some(error) = uniq_short_option_equals_error(&args, posixly_correct()) {
+        return Err(error);
+    }
+    if let Some(error) = uniq_extra_operand_error(&args, posixly_correct()) {
         return Err(error);
     }
     let matches = ct_app()
@@ -2083,6 +2132,20 @@ mod tests {
 
             assert_eq!(error.to_string(), expected);
         }
+    }
+
+    #[test]
+    fn test_third_file_operand_uses_gnu_diagnostic() {
+        let args = [
+            OsString::from("uniq"),
+            OsString::from("input"),
+            OsString::from("output"),
+            OsString::from("extra"),
+        ];
+        let error = uniq_extra_operand_error(&args, false)
+            .expect("GNU permits only INPUT and OUTPUT operands");
+
+        assert_eq!(error.to_string(), "extra operand 'extra'");
     }
 
     #[cfg(unix)]

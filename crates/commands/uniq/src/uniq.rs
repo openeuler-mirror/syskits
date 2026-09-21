@@ -829,21 +829,23 @@ fn uniq_handle_obsolete_with_mode(
 
 fn uniq_expand_delimiter_method_prefix(argument: OsString) -> OsString {
     let bytes = argument.as_encoded_bytes();
-    let (option, methods, value) = if let Some(value) = bytes.strip_prefix(b"--all-repeated=") {
-        (
-            "--all-repeated",
-            ["none", "prepend", "separate"].as_slice(),
-            value,
-        )
-    } else if let Some(value) = bytes.strip_prefix(b"--group=") {
-        (
-            "--group",
-            ["prepend", "append", "separate", "both"].as_slice(),
-            value,
-        )
-    } else {
+    let Some(long_option) = bytes.strip_prefix(b"--") else {
         return argument;
     };
+    let Some(equals) = long_option.iter().position(|byte| *byte == b'=') else {
+        return argument;
+    };
+    let (option, methods) = match uniq_match_long_option(&long_option[..equals]) {
+        UniqLongOptionMatch::Recognized("all-repeated", _) => {
+            ("--all-repeated", ["none", "prepend", "separate"].as_slice())
+        }
+        UniqLongOptionMatch::Recognized("group", _) => (
+            "--group",
+            ["prepend", "append", "separate", "both"].as_slice(),
+        ),
+        _ => return argument,
+    };
+    let value = &long_option[equals + 1..];
 
     let mut matching_methods = methods
         .iter()
@@ -2019,6 +2021,22 @@ mod tests {
             );
             assert_eq!(filtered, [OsString::from("uniq"), OsString::from(expected)]);
         }
+    }
+
+    #[test]
+    fn test_delimiter_method_prefix_expands_after_long_option_prefix() {
+        let (filtered, _, _) = uniq_handle_obsolete_with_mode(
+            [OsString::from("uniq"), OsString::from("--all-r=pre")].into_iter(),
+            false,
+        );
+
+        assert_eq!(
+            filtered,
+            [
+                OsString::from("uniq"),
+                OsString::from("--all-repeated=prepend"),
+            ]
+        );
     }
 
     #[test]

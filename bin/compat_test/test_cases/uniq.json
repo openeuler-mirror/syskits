@@ -48,6 +48,26 @@
             ]
         },
         {
+            "tstdin": "",
+            "command": "uniq",
+            "description": "不存在的INPUT仅报告GNU格式的原始路径和系统错误，不添加Could not open前缀",
+            "args": ["syskits-uniq-missing-input"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uniq: syskits-uniq-missing-input: No such file or directory\\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "a\na\nb\nc\nc\nd\n",
             "command": "uniq",
             "description": "计数重复行",

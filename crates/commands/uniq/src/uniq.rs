@@ -1119,8 +1119,7 @@ fn uniq_get_delimiter(arg_matches: &ArgMatches) -> UniqDelimiters {
 fn uniq_open_input_file(in_file_name: Option<&OsStr>) -> CTResult<Box<dyn BufRead>> {
     Ok(match in_file_name {
         Some(path) if path != "-" => {
-            let infile = File::open(path)
-                .map_err_context(|| format!("Could not open {}", path.maybe_quote()))?;
+            let infile = File::open(path).map_err_context(|| format!("{}", path.maybe_quote()))?;
             Box::new(BufReader::new(infile))
         }
         _ => Box::new(BufReader::new(ctcore::ct_io::stdin_reader_box())),
@@ -1155,8 +1154,7 @@ fn uniq_open_output_file(out_file_name: Option<&OsStr>) -> CTResult<Box<dyn Writ
     // 获取原始的输出流（文件或 stdout）
     let out: Box<dyn Write> = match out_file_name {
         Some(path) if path != "-" => {
-            let out = File::create(path)
-                .map_err_context(|| format!("Could not open {}", path.maybe_quote()))?;
+            let out = File::create(path).map_err_context(|| format!("{}", path.maybe_quote()))?;
             Box::new(out)
         }
         _ => Box::new(stdout().lock()),
@@ -2994,7 +2992,14 @@ mod tests {
             let invalid_path = OsStr::new("/invalid/path/to/input.txt");
             let file_name: Option<&OsStr> = Some(invalid_path);
             let result = uniq_open_input_file(file_name);
-            assert!(result.is_err());
+            let error = match result {
+                Ok(_) => panic!("missing input must fail"),
+                Err(error) => error,
+            };
+            assert_eq!(
+                error.to_string(),
+                "/invalid/path/to/input.txt: No such file or directory"
+            );
         }
     }
 
@@ -3042,7 +3047,14 @@ mod tests {
             let invalid_path = OsStr::new("/invalid/path/to/output.txt");
             let file_name: Option<&OsStr> = Some(invalid_path);
             let result = uniq_open_output_file(file_name);
-            assert!(result.is_err());
+            let error = match result {
+                Ok(_) => panic!("missing output directory must fail"),
+                Err(error) => error,
+            };
+            assert_eq!(
+                error.to_string(),
+                "/invalid/path/to/output.txt: No such file or directory"
+            );
         }
 
         #[test]

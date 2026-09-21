@@ -302,7 +302,18 @@ fn whoami_uses_simplified_chinese() -> bool {
         return false;
     }
 
-    whoami_message_locale().is_some_and(|locale| whoami_simplified_chinese_locale(&locale))
+    let simplified_chinese =
+        whoami_message_locale().is_some_and(|locale| whoami_simplified_chinese_locale(&locale));
+    if !simplified_chinese {
+        return false;
+    }
+
+    #[cfg(target_os = "linux")]
+    if let Some(codeset) = whoami_output_codeset() {
+        return whoami_encode_locale_text_for_codeset("多余的操作对象", &codeset).is_some();
+    }
+
+    true
 }
 
 fn whoami_message_locale() -> Option<OsString> {
@@ -1254,6 +1265,26 @@ mod tests {
             || quote_whoami_operand(OsStr::from_bytes(b"\xa1\xaf"), false),
         );
         assert_eq!(embedded_right_quote, b"\xa1\x07e\\\xa1\xaf\xa1\xaf");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn whoami_invalid_output_charset_falls_back_to_gnu_c_diagnostics() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let message = with_locale_variables(
+            &[
+                ("LC_ALL", Some("zh_CN.UTF-8")),
+                ("LANGUAGE", Some("zh_CN")),
+                ("OUTPUT_CHARSET", Some("INVALID")),
+            ],
+            || {
+                let simplified_chinese = whoami_uses_simplified_chinese();
+                whoami_extra_operand_message(OsStr::from_bytes(b"alpha"), simplified_chinese)
+            },
+        );
+
+        assert_eq!(message, "extra operand ‘alpha’".as_bytes());
     }
 
     #[cfg(target_os = "linux")]

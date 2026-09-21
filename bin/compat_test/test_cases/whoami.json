@@ -446,6 +446,26 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "whoami",
+            "description": "原始字节诊断用例：LC_ALL=zh_CN.UTF-8、LANGUAGE=zh_CN且OUTPUT_CHARSET=INVALID时，GNU gettext无法转换翻译文本并回退英文msgid；传入alpha后预期RC=1、stdout为空，stderr使用英文和UTF-8弯引号",
+            "setup_commands": [
+                "export LC_ALL='zh_CN.UTF-8'",
+                "export LANGUAGE='zh_CN'",
+                "export OUTPUT_CHARSET='INVALID'"
+            ],
+            "args": ["616c706861"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77686f616d693a206578747261206f706572616e6420e28098616c706861e280990a547279202777686f616d69202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

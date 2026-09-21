@@ -362,6 +362,16 @@ fn whoami_output_codeset() -> Option<String> {
         return Some("ASCII".to_owned());
     }
 
+    if let Some(codeset) = std::env::var_os("OUTPUT_CHARSET").filter(|codeset| !codeset.is_empty())
+    {
+        return Some(codeset.to_string_lossy().into_owned());
+    }
+
+    whoami_ctype_codeset()
+}
+
+#[cfg(target_os = "linux")]
+fn whoami_ctype_codeset() -> Option<String> {
     let locale = whoami_effective_locale(["LC_ALL", "LC_CTYPE", "LANG"])?;
     let locale_text = locale.to_string_lossy();
     let locale_uppercase = locale_text.to_ascii_uppercase();
@@ -493,7 +503,7 @@ fn whoami_encode_locale_text_for_codeset(text: &str, codeset: &str) -> Option<Ve
 fn quote_whoami_operand(operand: &OsStr, simplified_chinese: bool) -> Vec<u8> {
     if simplified_chinese {
         #[cfg(target_os = "linux")]
-        if let Some(codeset) = whoami_output_codeset() {
+        if let Some(codeset) = whoami_ctype_codeset() {
             return quote_whoami_locale_encoded_operand(operand, &codeset, b'\"');
         }
         quote_whoami_utf8_operand_with_quotes(operand, b"\"", b"\"", Some(b'\"'))
@@ -501,7 +511,7 @@ fn quote_whoami_operand(operand: &OsStr, simplified_chinese: bool) -> Vec<u8> {
         quote_whoami_utf8_operand(operand)
     } else {
         #[cfg(target_os = "linux")]
-        if let Some(codeset) = whoami_output_codeset() {
+        if let Some(codeset) = whoami_ctype_codeset() {
             return quote_whoami_locale_encoded_operand(operand, &codeset, b'\'');
         }
         quote_whoami_c_operand(operand)
@@ -1275,5 +1285,26 @@ mod tests {
             whoami_uses_simplified_chinese,
         );
         assert!(simplified_chinese);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn whoami_output_charset_encodes_text_without_reinterpreting_operands() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let (codeset, quoted_operand) = with_locale_variables(
+            &[
+                ("LC_ALL", Some("zh_CN.UTF-8")),
+                ("OUTPUT_CHARSET", Some("GBK")),
+            ],
+            || {
+                (
+                    whoami_output_codeset(),
+                    quote_whoami_operand(OsStr::from_bytes(b"\xe4\xb8\xad"), true),
+                )
+            },
+        );
+        assert_eq!(codeset.as_deref(), Some("GBK"));
+        assert_eq!(quoted_operand, b"\"\xe4\xb8\xad\"");
     }
 }

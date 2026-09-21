@@ -15,6 +15,39 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "",
+            "command": "uniq",
+            "description": "POSIXLY_CORRECT=1时在INPUT后停止扫描选项：input -c中的-c是OUTPUT文件名，stdout为空且输出文件只包含去重后的a",
+            "setup_commands": [
+                "printf 'a\\na\\n' > input"
+            ],
+            "args": ["input", "-c"],
+            "environment": {
+                "env_vars": {
+                    "POSIXLY_CORRECT": "1",
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat -- -c",
+                        "expected_exit": 0,
+                        "expected_stdout": "a\\n"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f -- input -c"
+            ]
+        },
+        {
             "tstdin": "a\na\nb\nc\nc\nd\n",
             "command": "uniq",
             "description": "计数重复行",

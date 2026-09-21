@@ -678,6 +678,54 @@ fn uniq_handle_obsolete(args: impl ctcore::Args) -> (Vec<OsString>, Option<usize
     uniq_handle_obsolete_with_mode(args, posixly_correct())
 }
 
+fn uniq_has_short_all_repeated_assignment(args: &[OsString], posixly_correct: bool) -> bool {
+    let mut parse_options = true;
+    let mut previous_option_requires_value = false;
+
+    for (index, argument) in args.iter().enumerate() {
+        if index == 0 || !parse_options {
+            continue;
+        }
+
+        let bytes = argument.as_encoded_bytes();
+        if previous_option_requires_value {
+            previous_option_requires_value = false;
+            continue;
+        }
+        if bytes == b"--" {
+            parse_options = false;
+            continue;
+        }
+        if posixly_correct && (bytes.is_empty() || bytes[0] != b'-') {
+            parse_options = false;
+            continue;
+        }
+        if bytes.starts_with(b"--") {
+            previous_option_requires_value =
+                matches!(bytes, b"--skip-fields" | b"--skip-chars" | b"--check-chars");
+            continue;
+        }
+        if !bytes.starts_with(b"-") || bytes.len() == 1 {
+            continue;
+        }
+
+        let mut short_index = 1;
+        while short_index < bytes.len() {
+            match bytes[short_index] {
+                b'f' | b's' | b'w' => {
+                    previous_option_requires_value = short_index + 1 == bytes.len();
+                    break;
+                }
+                b'D' if bytes.get(short_index + 1) == Some(&b'=') => return true,
+                b'c' | b'd' | b'D' | b'i' | b'u' | b'z' => short_index += 1,
+                _ => break,
+            }
+        }
+    }
+
+    false
+}
+
 fn uniq_handle_obsolete_with_mode(
     args: impl ctcore::Args,
     posixly_correct: bool,
@@ -997,7 +1045,14 @@ pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
     uniq_initialize_c_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let (args, skip_fields_old, skip_chars_old) = uniq_handle_obsolete(args);
+    let args = args.collect::<Vec<_>>();
+    if uniq_has_short_all_repeated_assignment(&args, posixly_correct()) {
+        return Err(CtSimpleError::new(
+            1,
+            "invalid option -- '='\nTry 'uniq --help' for more information.",
+        ));
+    }
+    let (args, skip_fields_old, skip_chars_old) = uniq_handle_obsolete(args.into_iter());
 
     let matches = match ct_app().try_get_matches_from(args) {
         Ok(matches) => matches,
@@ -1319,6 +1374,30 @@ mod tests {
             uniq_parse_size_option("999999999999999999999999999999"),
             Ok(usize::MAX)
         );
+    }
+
+    #[test]
+    fn test_short_all_repeated_assignment_detection_respects_option_values() {
+        assert!(uniq_has_short_all_repeated_assignment(
+            &[OsString::from("uniq"), OsString::from("-D=prepend")],
+            false,
+        ));
+        assert!(!uniq_has_short_all_repeated_assignment(
+            &[
+                OsString::from("uniq"),
+                OsString::from("-f"),
+                OsString::from("-D=prepend"),
+            ],
+            false,
+        ));
+        assert!(!uniq_has_short_all_repeated_assignment(
+            &[
+                OsString::from("uniq"),
+                OsString::from("--"),
+                OsString::from("-D=prepend"),
+            ],
+            false,
+        ));
     }
 
     mod native_semantic_tests {
@@ -3460,7 +3539,7 @@ mod tests {
                 .unwrap();
             let file_name = file_path.to_str().unwrap();
 
-            let args = [ctcore::ct_util_name(), "-D=prepend", file_name];
+            let args = [ctcore::ct_util_name(), "-D", file_name];
             let result = uniq_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }

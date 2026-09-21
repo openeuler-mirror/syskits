@@ -428,55 +428,9 @@ fn whoami_locale_codeset(locale: &OsStr) -> Option<String> {
 }
 
 #[cfg(target_os = "linux")]
-const WHOAMI_LOCALE_CATEGORIES: &[(&str, libc::c_int)] = &[
-    ("LC_CTYPE", libc::LC_CTYPE_MASK),
-    ("LC_NUMERIC", libc::LC_NUMERIC_MASK),
-    ("LC_TIME", libc::LC_TIME_MASK),
-    ("LC_COLLATE", libc::LC_COLLATE_MASK),
-    ("LC_MONETARY", libc::LC_MONETARY_MASK),
-    ("LC_MESSAGES", libc::LC_MESSAGES_MASK),
-];
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-const WHOAMI_GNU_LOCALE_CATEGORIES: &[(&str, libc::c_int)] = &[
-    ("LC_PAPER", libc::LC_PAPER_MASK),
-    ("LC_NAME", libc::LC_NAME_MASK),
-    ("LC_ADDRESS", libc::LC_ADDRESS_MASK),
-    ("LC_TELEPHONE", libc::LC_TELEPHONE_MASK),
-    ("LC_MEASUREMENT", libc::LC_MEASUREMENT_MASK),
-    ("LC_IDENTIFICATION", libc::LC_IDENTIFICATION_MASK),
-];
-
-#[cfg(all(target_os = "linux", not(target_env = "gnu")))]
-const WHOAMI_GNU_LOCALE_CATEGORIES: &[(&str, libc::c_int)] = &[];
-
-#[cfg(target_os = "linux")]
 fn whoami_locale_environment_is_valid() -> bool {
-    let lc_all = std::env::var_os("LC_ALL").filter(|value| !value.is_empty());
-    let lang = std::env::var_os("LANG")
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| OsString::from("C"));
-
-    WHOAMI_LOCALE_CATEGORIES
-        .iter()
-        .chain(WHOAMI_GNU_LOCALE_CATEGORIES)
-        .all(|(category, mask)| {
-            let locale = lc_all
-                .clone()
-                .or_else(|| std::env::var_os(category).filter(|value| !value.is_empty()))
-                .unwrap_or_else(|| lang.clone());
-            whoami_locale_is_available(&locale, *mask)
-        })
-}
-
-#[cfg(target_os = "linux")]
-fn whoami_locale_is_available(locale: &OsStr, category_mask: libc::c_int) -> bool {
-    let locale = match CString::new(locale.as_encoded_bytes()) {
-        Ok(locale) => locale,
-        Err(_) => return false,
-    };
     let locale_handle =
-        unsafe { libc::newlocale(category_mask, locale.as_ptr(), std::ptr::null_mut()) };
+        unsafe { libc::newlocale(libc::LC_ALL_MASK, c"".as_ptr(), std::ptr::null_mut()) };
     if locale_handle.is_null() {
         return false;
     }
@@ -1064,6 +1018,7 @@ mod tests {
 
     #[test]
     fn whoami_preparse_reports_gnu_standard_option_errors() {
+        let _guard = LOCALE_LOCK.lock().unwrap();
         let cases = [
             (
                 "--help=x",
@@ -1117,6 +1072,7 @@ mod tests {
     fn whoami_preparse_preserves_raw_unknown_option_bytes() {
         use std::os::unix::ffi::OsStringExt;
 
+        let _guard = LOCALE_LOCK.lock().unwrap();
         let error = prepare_whoami_args_with_mode(
             [
                 OsString::from("whoami"),
@@ -1136,6 +1092,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn whoami_write_errors_use_gnu_diagnostic_text() {
+        let _guard = LOCALE_LOCK.lock().unwrap();
         assert_eq!(
             whoami_write_error_message(&io::Error::from_raw_os_error(libc::ENOSPC)),
             b"write error: No space left on device"
@@ -1161,6 +1118,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn whoami_unknown_uid_uses_gnu_diagnostic() {
+        let _guard = LOCALE_LOCK.lock().unwrap();
         let error = whoami_unknown_uid_error(60_000, &io::Error::from(io::ErrorKind::NotFound));
 
         assert_eq!(
@@ -1172,6 +1130,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn whoami_nss_error_appends_gnu_errno_text() {
+        let _guard = LOCALE_LOCK.lock().unwrap();
         let error = whoami_unknown_uid_error(0, &io::Error::from_raw_os_error(libc::ENOENT));
 
         assert_eq!(
@@ -1355,6 +1314,41 @@ mod tests {
         assert!(!simplified_chinese);
         #[cfg(target_env = "gnu")]
         assert_eq!(codeset.as_deref(), Some("ASCII"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn whoami_invalid_composite_lc_all_uses_c_diagnostics() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let (locale_is_valid, simplified_chinese, codeset, message) = with_locale_variables(
+            &[
+                (
+                    "LC_ALL",
+                    Some(
+                        "LC_CTYPE=zh_CN.utf8;LC_NUMERIC=C;LC_TIME=C;LC_COLLATE=C;LC_MONETARY=C;LC_MESSAGES=zh_CN.utf8;LC_PAPER=C;LC_NAME=C;LC_ADDRESS=C;LC_TELEPHONE=C;LC_MEASUREMENT=C;LC_IDENTIFICATION=C",
+                    ),
+                ),
+                ("LANG", Some("C")),
+                ("LANGUAGE", None),
+                ("OUTPUT_CHARSET", None),
+            ],
+            || {
+                let locale_is_valid = whoami_locale_environment_is_valid();
+                let simplified_chinese = whoami_uses_simplified_chinese();
+                (
+                    locale_is_valid,
+                    simplified_chinese,
+                    whoami_output_codeset(),
+                    whoami_extra_operand_message(OsStr::from_bytes(b"alpha"), simplified_chinese),
+                )
+            },
+        );
+
+        assert!(!locale_is_valid);
+        assert!(!simplified_chinese);
+        assert_eq!(codeset.as_deref(), Some("ASCII"));
+        assert_eq!(message, b"extra operand 'alpha'");
     }
 
     #[cfg(target_os = "linux")]

@@ -276,9 +276,18 @@ fn trim_user_name(name: &[u8]) -> &[u8] {
     &name[..length]
 }
 
-fn users_sessions_from_file(path: &Path) -> Vec<UsersSession> {
+fn should_keep_user_pid(check_pids: bool, pid: i32) -> bool {
+    if !check_pids || pid <= 0 {
+        return true;
+    }
+
+    let status = unsafe { ctcore::libc::kill(pid, 0) };
+    status == 0 || std::io::Error::last_os_error().raw_os_error() != Some(ctcore::libc::ESRCH)
+}
+
+fn users_sessions_from_file(path: &Path, check_pids: bool) -> Vec<UsersSession> {
     let mut sessions = CtUtmpx::iter_all_records_from(path)
-        .filter(CtUtmpx::is_user_process)
+        .filter(|ut| ut.is_user_process() && should_keep_user_pid(check_pids, ut.pid()))
         .map(|ut| {
             let user_bytes = trim_user_name(ut.user_bytes()).to_vec();
             UsersSession {
@@ -318,8 +327,8 @@ pub fn users_native_semantic(args: impl ctcore::Args) -> CTResult<UsersSemantic>
         .after_help(users_get_long_usage())
         .try_get_matches_from(prepare_users_args(args)?)?;
 
-    let filename = parse_users_files(matches);
-    let sessions = users_sessions_from_file(&filename);
+    let (filename, check_pids) = parse_users_files(matches);
+    let sessions = users_sessions_from_file(&filename, check_pids);
     let classic_bytes = users_classic_text(&sessions);
     let classic_text = String::from_utf8_lossy(&classic_bytes).into_owned();
     Ok(UsersSemantic {
@@ -329,19 +338,17 @@ pub fn users_native_semantic(args: impl ctcore::Args) -> CTResult<UsersSemantic>
     })
 }
 
-fn parse_users_files(matches: ArgMatches) -> PathBuf {
+fn parse_users_files(matches: ArgMatches) -> (PathBuf, bool) {
     let files: Vec<&Path> = matches
         .get_many::<OsString>(USERS_ARG_FILES)
         .map(|v| v.map(AsRef::as_ref).collect())
         .unwrap_or_default();
 
-    let file_name = if files.is_empty() {
-        ct_utmpx::DEFAULT_FILE.as_ref()
+    if files.is_empty() {
+        (PathBuf::from(ct_utmpx::DEFAULT_FILE), true)
     } else {
-        files[0]
-    };
-
-    file_name.to_path_buf()
+        (files[0].to_path_buf(), false)
+    }
 }
 
 pub fn ct_app() -> Command {
@@ -521,6 +528,31 @@ mod tests {
                 error.diagnostic_bytes().as_ref(),
                 b"unrecognized option '--\xff'"
             );
+        }
+
+        #[test]
+        fn users_default_source_discards_missing_positive_user_pids() {
+            assert!(!should_keep_user_pid(true, i32::MAX));
+            assert!(should_keep_user_pid(false, i32::MAX));
+            assert!(should_keep_user_pid(true, 0));
+            assert!(should_keep_user_pid(true, std::process::id() as i32));
+        }
+
+        #[test]
+        fn users_only_check_pids_for_the_default_source() {
+            let default_matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name()])
+                .unwrap();
+            let (default_file, default_checks_pids) = parse_users_files(default_matches);
+            assert_eq!(default_file, PathBuf::from(ct_utmpx::DEFAULT_FILE));
+            assert!(default_checks_pids);
+
+            let explicit_matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "fixture.utmp"])
+                .unwrap();
+            let (explicit_file, explicit_checks_pids) = parse_users_files(explicit_matches);
+            assert_eq!(explicit_file, PathBuf::from("fixture.utmp"));
+            assert!(!explicit_checks_pids);
         }
 
         #[test]

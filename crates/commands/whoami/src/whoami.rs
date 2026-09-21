@@ -297,6 +297,11 @@ fn whoami_usage_hint(utility_name: &str, simplified_chinese: bool) -> Vec<u8> {
 }
 
 fn whoami_uses_simplified_chinese() -> bool {
+    #[cfg(target_os = "linux")]
+    if !whoami_locale_environment_is_valid() {
+        return false;
+    }
+
     whoami_effective_locale(["LC_ALL", "LC_MESSAGES", "LANG"])
         .is_some_and(|locale| whoami_simplified_chinese_locale(&locale))
 }
@@ -326,6 +331,10 @@ fn whoami_encode_locale_text(text: &str) -> Vec<u8> {
 
 #[cfg(target_os = "linux")]
 fn whoami_output_codeset() -> Option<String> {
+    if !whoami_locale_environment_is_valid() {
+        return Some("ASCII".to_owned());
+    }
+
     let locale = whoami_effective_locale(["LC_ALL", "LC_CTYPE", "LANG"])?;
     let locale_text = locale.to_string_lossy();
     let locale_uppercase = locale_text.to_ascii_uppercase();
@@ -363,6 +372,63 @@ fn whoami_locale_codeset(locale: &OsStr) -> Option<String> {
     };
     unsafe { libc::freelocale(locale_handle) };
     codeset.and_then(|codeset| String::from_utf8(codeset).ok())
+}
+
+#[cfg(target_os = "linux")]
+const WHOAMI_LOCALE_CATEGORIES: &[(&str, libc::c_int)] = &[
+    ("LC_CTYPE", libc::LC_CTYPE_MASK),
+    ("LC_NUMERIC", libc::LC_NUMERIC_MASK),
+    ("LC_TIME", libc::LC_TIME_MASK),
+    ("LC_COLLATE", libc::LC_COLLATE_MASK),
+    ("LC_MONETARY", libc::LC_MONETARY_MASK),
+    ("LC_MESSAGES", libc::LC_MESSAGES_MASK),
+];
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+const WHOAMI_GNU_LOCALE_CATEGORIES: &[(&str, libc::c_int)] = &[
+    ("LC_PAPER", libc::LC_PAPER_MASK),
+    ("LC_NAME", libc::LC_NAME_MASK),
+    ("LC_ADDRESS", libc::LC_ADDRESS_MASK),
+    ("LC_TELEPHONE", libc::LC_TELEPHONE_MASK),
+    ("LC_MEASUREMENT", libc::LC_MEASUREMENT_MASK),
+    ("LC_IDENTIFICATION", libc::LC_IDENTIFICATION_MASK),
+];
+
+#[cfg(all(target_os = "linux", not(target_env = "gnu")))]
+const WHOAMI_GNU_LOCALE_CATEGORIES: &[(&str, libc::c_int)] = &[];
+
+#[cfg(target_os = "linux")]
+fn whoami_locale_environment_is_valid() -> bool {
+    let lc_all = std::env::var_os("LC_ALL").filter(|value| !value.is_empty());
+    let lang = std::env::var_os("LANG")
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| OsString::from("C"));
+
+    WHOAMI_LOCALE_CATEGORIES
+        .iter()
+        .chain(WHOAMI_GNU_LOCALE_CATEGORIES)
+        .all(|(category, mask)| {
+            let locale = lc_all
+                .clone()
+                .or_else(|| std::env::var_os(category).filter(|value| !value.is_empty()))
+                .unwrap_or_else(|| lang.clone());
+            whoami_locale_is_available(&locale, *mask)
+        })
+}
+
+#[cfg(target_os = "linux")]
+fn whoami_locale_is_available(locale: &OsStr, category_mask: libc::c_int) -> bool {
+    let locale = match CString::new(locale.as_encoded_bytes()) {
+        Ok(locale) => locale,
+        Err(_) => return false,
+    };
+    let locale_handle =
+        unsafe { libc::newlocale(category_mask, locale.as_ptr(), std::ptr::null_mut()) };
+    if locale_handle.is_null() {
+        return false;
+    }
+    unsafe { libc::freelocale(locale_handle) };
+    true
 }
 
 #[cfg(target_os = "linux")]
@@ -416,6 +482,11 @@ fn quote_whoami_operand(operand: &OsStr, simplified_chinese: bool) -> Vec<u8> {
 }
 
 fn whoami_locale_is_utf8() -> bool {
+    #[cfg(target_os = "linux")]
+    if !whoami_locale_environment_is_valid() {
+        return false;
+    }
+
     whoami_effective_locale(["LC_ALL", "LC_CTYPE", "LANG"]).is_some_and(|value| {
         let value = value.to_string_lossy().to_ascii_uppercase();
         value.contains("UTF-8") || value.contains("UTF8")
@@ -685,6 +756,28 @@ mod tests {
         match previous {
             Some(value) => unsafe { std::env::set_var("LC_ALL", value) },
             None => unsafe { std::env::remove_var("LC_ALL") },
+        }
+        result
+    }
+
+    fn with_locale_variables<T>(variables: &[(&str, Option<&str>)], test: impl FnOnce() -> T) -> T {
+        let _guard = LOCALE_LOCK.lock().unwrap();
+        let previous = variables
+            .iter()
+            .map(|(name, _)| (*name, std::env::var_os(name)))
+            .collect::<Vec<_>>();
+        for (name, value) in variables {
+            match value {
+                Some(value) => unsafe { std::env::set_var(name, value) },
+                None => unsafe { std::env::remove_var(name) },
+            }
+        }
+        let result = test();
+        for (name, value) in previous {
+            match value {
+                Some(value) => unsafe { std::env::set_var(name, value) },
+                None => unsafe { std::env::remove_var(name) },
+            }
         }
         result
     }
@@ -1006,6 +1099,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn whoami_zh_cn_diagnostics_match_gnu() {
+        let _guard = LOCALE_LOCK.lock().unwrap();
         let operand = OsString::from("a\"b");
 
         assert_eq!(
@@ -1073,5 +1167,70 @@ mod tests {
                 b"'\xe9'"
             );
         });
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn whoami_invalid_locale_environment_uses_c_diagnostics() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let (simplified_chinese, codeset, message) = with_lc_all("zh_CN.invalid", || {
+            let simplified_chinese = whoami_uses_simplified_chinese();
+            (
+                simplified_chinese,
+                whoami_output_codeset(),
+                whoami_extra_operand_message(OsStr::from_bytes(b"\xff"), simplified_chinese),
+            )
+        });
+        assert!(!simplified_chinese);
+        assert_eq!(codeset.as_deref(), Some("ASCII"));
+        assert_eq!(message, b"extra operand '\\377'");
+
+        let _guard = LOCALE_LOCK.lock().unwrap();
+        let previous = ["LC_ALL", "LC_CTYPE", "LC_MESSAGES", "LC_NUMERIC", "LANG"]
+            .map(|name| (name, std::env::var_os(name)));
+        unsafe {
+            std::env::remove_var("LC_ALL");
+            std::env::set_var("LC_CTYPE", "zh_CN");
+            std::env::set_var("LC_MESSAGES", "zh_CN");
+            std::env::set_var("LC_NUMERIC", "invalid");
+            std::env::set_var("LANG", "C");
+        }
+        let simplified_chinese = whoami_uses_simplified_chinese();
+        let codeset = whoami_output_codeset();
+        for (name, value) in previous {
+            match value {
+                Some(value) => unsafe { std::env::set_var(name, value) },
+                None => unsafe { std::env::remove_var(name) },
+            }
+        }
+        assert!(!simplified_chinese);
+        assert_eq!(codeset.as_deref(), Some("ASCII"));
+        drop(_guard);
+
+        #[cfg(target_env = "gnu")]
+        let (simplified_chinese, codeset) = with_locale_variables(
+            &[
+                ("LC_ALL", None),
+                ("LC_CTYPE", Some("zh_CN")),
+                ("LC_MESSAGES", Some("zh_CN")),
+                ("LC_NUMERIC", None),
+                ("LC_TIME", None),
+                ("LC_COLLATE", None),
+                ("LC_MONETARY", None),
+                ("LC_PAPER", Some("invalid")),
+                ("LC_NAME", None),
+                ("LC_ADDRESS", None),
+                ("LC_TELEPHONE", None),
+                ("LC_MEASUREMENT", None),
+                ("LC_IDENTIFICATION", None),
+                ("LANG", Some("C")),
+            ],
+            || (whoami_uses_simplified_chinese(), whoami_output_codeset()),
+        );
+        #[cfg(target_env = "gnu")]
+        assert!(!simplified_chinese);
+        #[cfg(target_env = "gnu")]
+        assert_eq!(codeset.as_deref(), Some("ASCII"));
     }
 }

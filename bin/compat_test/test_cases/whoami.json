@@ -351,6 +351,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "whoami",
+            "description": "原始字节诊断用例：LC_ALL=zh_CN.invalid不可用时，GNU setlocale失败并保留C locale；传入ff后预期RC=1、stdout为空，stderr为英文C诊断且无效字节按377八进制转义",
+            "setup_commands": [
+                "export LC_ALL='zh_CN.invalid'",
+                "export LANG='C'"
+            ],
+            "args": ["ff"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77686f616d693a206578747261206f706572616e6420275c333737270a547279202777686f616d69202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

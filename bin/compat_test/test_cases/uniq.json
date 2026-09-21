@@ -536,6 +536,27 @@
             "byteMode": true
         },
         {
+            "command": "uniq",
+            "description": "原始字节用例：LC_ALL=C、LANG=C；参数完整十六进制=2d2d736b69702d663dff，即--skip-f后接等号和0xff数值；预期RC=1、stdout为0字节、完整十六进制=空，stderr完整十六进制=756e69713a20ff3a20696e76616c6964206e756d626572206f66206669656c647320746f20736b69700a，GNU原样输出0xff而不作UTF-8替换。",
+            "args": ["2d2d736b69702d663dff"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "756e69713a20ff3a20696e76616c6964206e756d626572206f66206669656c647320746f20736b69700a"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
+        },
+        {
             "tstdin": "a\na\nb\nb\n",
             "command": "uniq",
             "description": "--group的唯一METHOD前缀app必须按GNU解析为append并在每个分组后输出空行",

@@ -24,6 +24,8 @@ use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
 
 use std::borrow::Cow;
 use std::error::Error;
+#[cfg(target_os = "linux")]
+use std::ffi::{CStr, CString};
 use std::ffi::{OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use std::fs::remove_file;
@@ -50,13 +52,10 @@ struct UnlinkUsageError {
 
 impl UnlinkUsageError {
     fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        let simplified_chinese = unlink_uses_simplified_chinese();
         Box::new(Self {
             message,
-            usage_hint: format!(
-                "Try '{} --help' for more information.",
-                ctcore::ct_help_utility_name()
-            )
-            .into_bytes(),
+            usage_hint: unlink_usage_hint(simplified_chinese),
         })
     }
 }
@@ -194,6 +193,342 @@ fn unlink_quote_path(path: &OsStr) -> Vec<u8> {
     quoted
 }
 
+fn unlink_missing_operand_message() -> Vec<u8> {
+    if unlink_uses_simplified_chinese() {
+        unlink_encode_locale_text("缺少操作对象")
+    } else {
+        b"missing operand".to_vec()
+    }
+}
+
+fn unlink_extra_operand_message(operand: &OsStr) -> Vec<u8> {
+    unlink_extra_operand_message_for_locale(operand, unlink_uses_simplified_chinese())
+}
+
+fn unlink_extra_operand_message_for_locale(operand: &OsStr, simplified_chinese: bool) -> Vec<u8> {
+    let mut message = if simplified_chinese {
+        unlink_encode_locale_text("多余的操作对象 ")
+    } else {
+        b"extra operand ".to_vec()
+    };
+    message.extend(unlink_quote_operand(operand, simplified_chinese));
+    message
+}
+
+fn unlink_usage_hint(simplified_chinese: bool) -> Vec<u8> {
+    let utility_name = ctcore::ct_help_utility_name();
+    if simplified_chinese {
+        unlink_encode_locale_text(&format!(
+            "请尝试执行 \"{utility_name} --help\" 来获取更多信息。"
+        ))
+    } else {
+        format!("Try '{utility_name} --help' for more information.").into_bytes()
+    }
+}
+
+fn unlink_uses_simplified_chinese() -> bool {
+    #[cfg(target_os = "linux")]
+    if !unlink_locale_environment_is_valid() {
+        return false;
+    }
+
+    let simplified_chinese = unlink_message_locale()
+        .is_some_and(|locale| unlink_simplified_chinese_locale(locale.as_os_str()));
+    if !simplified_chinese {
+        return false;
+    }
+
+    #[cfg(target_os = "linux")]
+    if let Some(codeset) = unlink_output_codeset() {
+        return unlink_encode_locale_text_for_codeset("多余的操作对象", &codeset).is_some();
+    }
+
+    true
+}
+
+fn unlink_message_locale() -> Option<OsString> {
+    let locale = unlink_effective_locale(["LC_ALL", "LC_MESSAGES", "LANG"])?;
+    if unlink_c_message_locale(locale.as_os_str()) {
+        return Some(locale);
+    }
+
+    let Some(language) = std::env::var_os("LANGUAGE").filter(|language| !language.is_empty())
+    else {
+        return Some(locale);
+    };
+    for candidate in language
+        .to_string_lossy()
+        .split(':')
+        .filter(|candidate| !candidate.is_empty())
+    {
+        if unlink_c_message_locale(OsStr::new(candidate)) {
+            return Some(OsString::from("C"));
+        }
+        if unlink_simplified_chinese_locale(OsStr::new(candidate)) {
+            return Some(OsString::from(candidate));
+        }
+    }
+
+    Some(OsString::from("C"))
+}
+
+fn unlink_c_message_locale(locale: &OsStr) -> bool {
+    matches!(
+        locale.to_string_lossy().to_ascii_uppercase().as_str(),
+        "C" | "POSIX"
+    )
+}
+
+fn unlink_simplified_chinese_locale(locale: &OsStr) -> bool {
+    let locale = locale.to_string_lossy();
+    locale == "zh_CN" || locale.starts_with("zh_CN.") || locale.starts_with("zh_CN@")
+}
+
+fn unlink_effective_locale<const N: usize>(names: [&str; N]) -> Option<OsString> {
+    names.into_iter().find_map(|name| {
+        let value = std::env::var_os(name)?;
+        (!value.is_empty()).then_some(value)
+    })
+}
+
+fn unlink_encode_locale_text(text: &str) -> Vec<u8> {
+    #[cfg(target_os = "linux")]
+    if let Some(codeset) = unlink_output_codeset()
+        && let Some(encoded) = unlink_encode_locale_text_for_codeset(text, &codeset)
+    {
+        return encoded;
+    }
+
+    text.as_bytes().to_vec()
+}
+
+#[cfg(target_os = "linux")]
+fn unlink_output_codeset() -> Option<String> {
+    if !unlink_locale_environment_is_valid() {
+        return Some("ASCII".to_owned());
+    }
+
+    if let Some(codeset) = std::env::var_os("OUTPUT_CHARSET").filter(|codeset| !codeset.is_empty())
+    {
+        return Some(codeset.to_string_lossy().into_owned());
+    }
+
+    unlink_ctype_codeset()
+}
+
+#[cfg(target_os = "linux")]
+fn unlink_ctype_codeset() -> Option<String> {
+    let locale = unlink_effective_locale(["LC_ALL", "LC_CTYPE", "LANG"])?;
+    let locale_text = locale.to_string_lossy();
+    let locale_uppercase = locale_text.to_ascii_uppercase();
+    if locale_uppercase.contains("UTF-8") || locale_uppercase.contains("UTF8") {
+        return None;
+    }
+
+    if matches!(locale_uppercase.as_str(), "C" | "POSIX") {
+        return Some("ASCII".to_owned());
+    }
+
+    locale_text
+        .split_once('.')
+        .map(|(_, codeset)| {
+            codeset
+                .split_once('@')
+                .map_or(codeset, |(codeset, _)| codeset)
+        })
+        .map(ToOwned::to_owned)
+        .or_else(|| unlink_locale_codeset(locale.as_os_str()))
+}
+
+#[cfg(target_os = "linux")]
+fn unlink_locale_codeset(locale: &OsStr) -> Option<String> {
+    let locale = CString::new(locale.as_encoded_bytes()).ok()?;
+    let locale_handle = unsafe {
+        ctcore::libc::newlocale(
+            ctcore::libc::LC_CTYPE_MASK,
+            locale.as_ptr(),
+            std::ptr::null_mut(),
+        )
+    };
+    if locale_handle.is_null() {
+        return None;
+    }
+
+    let codeset = unsafe {
+        let codeset = ctcore::libc::nl_langinfo_l(ctcore::libc::CODESET, locale_handle);
+        (!codeset.is_null()).then(|| CStr::from_ptr(codeset).to_bytes().to_vec())
+    };
+    unsafe { ctcore::libc::freelocale(locale_handle) };
+    codeset.and_then(|codeset| String::from_utf8(codeset).ok())
+}
+
+#[cfg(target_os = "linux")]
+fn unlink_locale_environment_is_valid() -> bool {
+    let locale_handle = unsafe {
+        ctcore::libc::newlocale(
+            ctcore::libc::LC_ALL_MASK,
+            c"".as_ptr(),
+            std::ptr::null_mut(),
+        )
+    };
+    if locale_handle.is_null() {
+        return false;
+    }
+    unsafe { ctcore::libc::freelocale(locale_handle) };
+    true
+}
+
+#[cfg(target_os = "linux")]
+fn unlink_encode_locale_text_for_codeset(text: &str, codeset: &str) -> Option<Vec<u8>> {
+    let target = CString::new(format!("{codeset}//TRANSLIT")).ok()?;
+    let source = CString::new("UTF-8").expect("UTF-8 has no NUL byte");
+    let converter = unsafe { ctcore::libc::iconv_open(target.as_ptr(), source.as_ptr()) };
+    if converter == (-1_isize) as ctcore::libc::iconv_t {
+        return None;
+    }
+
+    let mut input = text.as_ptr().cast_mut().cast::<ctcore::libc::c_char>();
+    let mut input_left = text.len();
+    let mut output = vec![0_u8; text.len().saturating_mul(4).max(16)];
+    let mut output_ptr = output.as_mut_ptr().cast::<ctcore::libc::c_char>();
+    let mut output_left = output.len();
+    let result = unsafe {
+        ctcore::libc::iconv(
+            converter,
+            &mut input,
+            &mut input_left,
+            &mut output_ptr,
+            &mut output_left,
+        )
+    };
+    unsafe { ctcore::libc::iconv_close(converter) };
+    if result == usize::MAX || input_left != 0 {
+        return None;
+    }
+
+    output.truncate(output.len() - output_left);
+    Some(output)
+}
+
+#[cfg(target_os = "linux")]
+fn unlink_quote_operand(operand: &OsStr, simplified_chinese: bool) -> Vec<u8> {
+    let (left_quote, right_quote, quote_to_escape) = if simplified_chinese {
+        (b"\"".as_slice(), b"\"".as_slice(), Some(b'\"'))
+    } else if unlink_ctype_is_utf8() {
+        ("‘".as_bytes(), "’".as_bytes(), None)
+    } else {
+        (b"'".as_slice(), b"'".as_slice(), Some(b'\''))
+    };
+    unlink_quote_operand_bytes(operand.as_bytes(), left_quote, right_quote, quote_to_escape)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn unlink_quote_operand(operand: &OsStr, _simplified_chinese: bool) -> Vec<u8> {
+    unlink_quote_c_operand(operand)
+}
+
+#[cfg(target_os = "linux")]
+fn unlink_ctype_is_utf8() -> bool {
+    let locale = unsafe { ctcore::libc::setlocale(ctcore::libc::LC_CTYPE, std::ptr::null()) };
+    if locale.is_null() {
+        return false;
+    }
+    let locale = unsafe { CStr::from_ptr(locale) }.to_string_lossy();
+    let locale = locale.to_ascii_uppercase();
+    locale.contains("UTF-8") || locale.contains("UTF8")
+}
+
+#[cfg(target_os = "linux")]
+fn unlink_quote_operand_bytes(
+    input: &[u8],
+    left_quote: &[u8],
+    right_quote: &[u8],
+    quote_to_escape: Option<u8>,
+) -> Vec<u8> {
+    let mut quoted = Vec::with_capacity(input.len() + left_quote.len() + right_quote.len());
+    quoted.extend_from_slice(left_quote);
+
+    let mut index = 0;
+    while index < input.len() {
+        if input[index..].starts_with(right_quote) {
+            quoted.push(b'\\');
+            quoted.extend_from_slice(right_quote);
+            index += right_quote.len();
+            continue;
+        }
+
+        if input[index].is_ascii() {
+            unlink_push_quoted_ascii(&mut quoted, input[index], quote_to_escape);
+            index += 1;
+            continue;
+        }
+
+        let (length, printable) = unlink_classify_locale_sequence(&input[index..]);
+        if printable {
+            quoted.extend_from_slice(&input[index..index + length]);
+        } else {
+            for byte in &input[index..index + length] {
+                unlink_push_octal_escape(&mut quoted, *byte);
+            }
+        }
+        index += length;
+    }
+
+    quoted.extend_from_slice(right_quote);
+    quoted
+}
+
+#[cfg(target_os = "linux")]
+fn unlink_classify_locale_sequence(remaining: &[u8]) -> (usize, bool) {
+    unsafe {
+        let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
+        let mut wide = 0 as ctcore::libc::wchar_t;
+        let length = mbrtowc(
+            &mut wide,
+            remaining.as_ptr().cast(),
+            remaining.len(),
+            &mut state,
+        );
+        if length == usize::MAX {
+            return (1, false);
+        }
+        if length == usize::MAX - 1 {
+            return (remaining.len(), false);
+        }
+
+        let length = if length == 0 { 1 } else { length };
+        (length, iswprint(wide as ctcore::libc::c_uint) != 0)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn unlink_push_quoted_ascii(output: &mut Vec<u8>, byte: u8, quote_to_escape: Option<u8>) {
+    match byte {
+        b'\x07' => output.extend_from_slice(b"\\a"),
+        b'\x08' => output.extend_from_slice(b"\\b"),
+        b'\t' => output.extend_from_slice(b"\\t"),
+        b'\n' => output.extend_from_slice(b"\\n"),
+        b'\x0b' => output.extend_from_slice(b"\\v"),
+        b'\x0c' => output.extend_from_slice(b"\\f"),
+        b'\r' => output.extend_from_slice(b"\\r"),
+        b'\\' => output.extend_from_slice(b"\\\\"),
+        byte if quote_to_escape == Some(byte) => {
+            output.push(b'\\');
+            output.push(byte);
+        }
+        b' '..=b'~' => output.push(byte),
+        _ => unlink_push_octal_escape(output, byte),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn unlink_push_octal_escape(output: &mut Vec<u8>, byte: u8) {
+    output.push(b'\\');
+    output.push(b'0' + (byte >> 6));
+    output.push(b'0' + ((byte >> 3) & 7));
+    output.push(b'0' + (byte & 7));
+}
+
 fn prepare_unlink_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
     prepare_unlink_args_with_mode(args, ctcore::ct_posix::posixly_correct())
 }
@@ -244,13 +579,9 @@ fn prepare_unlink_args_with_mode(
     }
 
     match operands.as_slice() {
-        [] => Err(UnlinkUsageError::boxed(b"missing operand".to_vec())),
+        [] => Err(UnlinkUsageError::boxed(unlink_missing_operand_message())),
         [_] => Ok(args),
-        [_, extra, ..] => {
-            let mut message = b"extra operand ".to_vec();
-            message.extend_from_slice(&unlink_quote_c_operand(extra));
-            Err(UnlinkUsageError::boxed(message))
-        }
+        [_, extra, ..] => Err(UnlinkUsageError::boxed(unlink_extra_operand_message(extra))),
     }
 }
 
@@ -308,6 +639,7 @@ fn match_unlink_long_option(name: &[u8]) -> UnlinkLongOptionMatch {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn unlink_quote_c_operand(operand: &OsStr) -> Vec<u8> {
     let mut quoted = Vec::with_capacity(operand.as_encoded_bytes().len() + 2);
     quoted.push(b'\'');
@@ -498,7 +830,8 @@ mod tests {
             let args = [ctcore::ct_util_name(), "first", "second"];
             let error = unlink_main(args.iter().map(OsString::from)).unwrap_err();
 
-            assert_eq!(error.to_string(), "extra operand 'second'");
+            assert!(error.to_string().starts_with("extra operand "));
+            assert!(error.to_string().contains("second"));
             assert!(error.usage());
         }
 
@@ -528,7 +861,8 @@ mod tests {
                 None => unsafe { std::env::remove_var("POSIXLY_CORRECT") },
             }
 
-            assert_eq!(error.to_string(), "extra operand '--version'");
+            assert!(error.to_string().starts_with("extra operand "));
+            assert!(error.to_string().contains("--version"));
             assert!(error.usage());
         }
 
@@ -543,6 +877,14 @@ mod tests {
             assert_eq!(
                 error.diagnostic_bytes().as_ref(),
                 b"cannot unlink ''$'\\377': No such file or directory"
+            );
+        }
+
+        #[test]
+        fn unlink_formats_extra_operand_for_simplified_chinese_locale() {
+            assert_eq!(
+                unlink_extra_operand_message_for_locale(OsStr::new("second"), true),
+                "多余的操作对象 \"second\"".as_bytes()
             );
         }
     }

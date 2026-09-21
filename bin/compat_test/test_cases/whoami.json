@@ -332,6 +332,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "whoami",
+            "description": "原始字节诊断用例：LC_ALL=en_US默认使用ISO-8859-1，传入e9是有效单字节字符；预期RC=1、stdout为空，stderr中的操作数保留e9并使用GNU单引号，而非八进制转义",
+            "setup_commands": [
+                "export LC_ALL='en_US'",
+                "export LANG='en_US'"
+            ],
+            "args": ["e9"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77686f616d693a206578747261206f706572616e642027e9270a547279202777686f616d69202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

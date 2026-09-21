@@ -302,8 +302,35 @@ fn whoami_uses_simplified_chinese() -> bool {
         return false;
     }
 
-    whoami_effective_locale(["LC_ALL", "LC_MESSAGES", "LANG"])
-        .is_some_and(|locale| whoami_simplified_chinese_locale(&locale))
+    whoami_message_locale().is_some_and(|locale| whoami_simplified_chinese_locale(&locale))
+}
+
+fn whoami_message_locale() -> Option<OsString> {
+    let locale = whoami_effective_locale(["LC_ALL", "LC_MESSAGES", "LANG"])?;
+    if whoami_c_message_locale(&locale) {
+        return Some(locale);
+    }
+
+    let Some(language) = std::env::var_os("LANGUAGE").filter(|language| !language.is_empty())
+    else {
+        return Some(locale);
+    };
+    let language = language.to_string_lossy();
+    let Some(language) = language.split(':').find(|language| !language.is_empty()) else {
+        return Some(locale);
+    };
+    if whoami_simplified_chinese_locale(OsStr::new(language)) {
+        Some(OsString::from(language))
+    } else {
+        Some(OsString::from("C"))
+    }
+}
+
+fn whoami_c_message_locale(locale: &OsStr) -> bool {
+    matches!(
+        locale.to_string_lossy().to_ascii_uppercase().as_str(),
+        "C" | "POSIX"
+    )
 }
 
 fn whoami_simplified_chinese_locale(locale: &OsStr) -> bool {
@@ -1232,5 +1259,21 @@ mod tests {
         assert!(!simplified_chinese);
         #[cfg(target_env = "gnu")]
         assert_eq!(codeset.as_deref(), Some("ASCII"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn whoami_language_overrides_message_locale() {
+        let simplified_chinese = with_locale_variables(
+            &[("LC_ALL", Some("zh_CN.UTF-8")), ("LANGUAGE", Some("C"))],
+            whoami_uses_simplified_chinese,
+        );
+        assert!(!simplified_chinese);
+
+        let simplified_chinese = with_locale_variables(
+            &[("LC_ALL", Some("en_US")), ("LANGUAGE", Some("zh_CN"))],
+            whoami_uses_simplified_chinese,
+        );
+        assert!(simplified_chinese);
     }
 }

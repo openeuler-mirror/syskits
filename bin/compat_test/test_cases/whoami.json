@@ -370,6 +370,44 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "whoami",
+            "description": "原始字节诊断用例：LC_ALL=zh_CN.UTF-8但LANGUAGE=C时，GNU gettext强制英文；传入test后预期RC=1、stdout为空，stderr使用英文诊断和UTF-8弯引号",
+            "setup_commands": [
+                "export LC_ALL='zh_CN.UTF-8'",
+                "export LANGUAGE='C'"
+            ],
+            "args": ["74657374"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77686f616d693a206578747261206f706572616e6420e2809874657374e280990a547279202777686f616d69202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "whoami",
+            "description": "原始字节诊断用例：LC_ALL=en_US且LANGUAGE=zh_CN时，GNU gettext选择简体中文翻译但LC_CTYPE仍为ISO-8859-1；传入test后预期RC=1、stdout为空，无法表示的中文按问号字节输出且操作数采用双引号",
+            "setup_commands": [
+                "export LC_ALL='en_US'",
+                "export LANGUAGE='zh_CN'"
+            ],
+            "args": ["74657374"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77686f616d693a203f3f3f3f3f3f3f202274657374220a3f3f3f3f3f202277686f616d69202d2d68656c7022203f3f3f3f3f3f3f3f0a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

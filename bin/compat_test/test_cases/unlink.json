@@ -149,6 +149,27 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "unlink",
+            "description": "LC_ALL=zh_CN.utf8、LANG=zh_CN.utf8下执行unlink first second；GNU将extra operand和Try提示翻译为简体中文，并使用双引号包裹第二个操作数，预期RC=1、stdout为空、stderr为对应UTF-8诊断。",
+            "args": ["first", "second"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "unlink: 多余的操作对象 \"second\"\n请尝试执行 \"unlink --help\" 来获取更多信息。\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "zh_CN.utf8",
+                    "LANG": "zh_CN.utf8"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

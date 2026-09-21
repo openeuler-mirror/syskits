@@ -1030,6 +1030,7 @@ pub fn ct_app() -> Command {
         .disable_help_flag(true)
         .disable_version_flag(true)
         .infer_long_args(true)
+        .args_override_self(true)
         .after_help(t!("uniq.after_help"))
         .arg(
             Arg::new("help")
@@ -3484,6 +3485,54 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--all-repeated", "prepend"];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_repeated_options_use_last_occurrence() {
+            let matches = ct_app()
+                .try_get_matches_from([
+                    ctcore::ct_util_name(),
+                    "-s",
+                    "1",
+                    "--skip-chars=2",
+                    "-f",
+                    "1",
+                    "--skip-fields=2",
+                    "-w",
+                    "1",
+                    "--check-chars=2",
+                    "-c",
+                    "-c",
+                    "--all-repeated=prepend",
+                    "--all-repeated=separate",
+                ])
+                .expect("repeated GNU options must parse");
+
+            assert_eq!(
+                matches.get_one::<String>(uniq_flags::SKIP_CHARS),
+                Some(&"2".to_string())
+            );
+            assert_eq!(
+                matches.get_one::<String>(uniq_flags::SKIP_FIELDS),
+                Some(&"2".to_string())
+            );
+            assert_eq!(
+                matches.get_one::<String>(uniq_flags::CHECK_CHARS),
+                Some(&"2".to_string())
+            );
+            assert!(matches.get_flag(uniq_flags::COUNT));
+            assert_eq!(
+                matches.get_one::<String>(uniq_flags::ALL_REPEATED),
+                Some(&"separate".to_string())
+            );
+
+            let group = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "--group=prepend", "--group=append"])
+                .expect("repeated --group must parse");
+            assert_eq!(
+                group.get_one::<String>(uniq_flags::GROUP),
+                Some(&"append".to_string())
+            );
         }
 
         #[test]

@@ -1390,7 +1390,7 @@ const UNIQ_GNU_LONG_OPTIONS: &[(&str, UniqLongOptionArgument)] = &[
 
 enum UniqLongOptionMatch {
     None,
-    Recognized(UniqLongOptionArgument),
+    Recognized(&'static str, UniqLongOptionArgument),
     Ambiguous(Vec<&'static str>),
 }
 
@@ -1407,7 +1407,7 @@ fn uniq_match_long_option(name: &[u8]) -> UniqLongOptionMatch {
 
     match matches.as_slice() {
         [] => UniqLongOptionMatch::None,
-        [(_, argument)] => UniqLongOptionMatch::Recognized(*argument),
+        [(option, argument)] => UniqLongOptionMatch::Recognized(option, *argument),
         _ => {
             UniqLongOptionMatch::Ambiguous(matches.into_iter().map(|(option, _)| option).collect())
         }
@@ -1449,12 +1449,20 @@ fn uniq_invalid_option_error(args: &[OsString], posixly_correct: bool) -> Option
                     }
                     return Some(UniqUsageError::boxed(message));
                 }
-                UniqLongOptionMatch::Recognized(UniqLongOptionArgument::Required)
+                UniqLongOptionMatch::Recognized(_, UniqLongOptionArgument::Required)
                     if equals.is_none() =>
                 {
                     index += 1;
                 }
-                UniqLongOptionMatch::Recognized(_) => {}
+                UniqLongOptionMatch::Recognized(option, UniqLongOptionArgument::None)
+                    if equals.is_some() =>
+                {
+                    return Some(CTsageError::new(
+                        1,
+                        format!("option '--{option}' doesn't allow an argument"),
+                    ));
+                }
+                UniqLongOptionMatch::Recognized(_, _) => {}
             }
             index += 1;
             continue;
@@ -2053,6 +2061,25 @@ mod tests {
             let args = [OsString::from("uniq"), OsString::from(argument)];
             let error = uniq_invalid_option_error(&args, false)
                 .expect("GNU rejects unknown and ambiguous options before Clap");
+
+            assert_eq!(error.to_string(), expected);
+        }
+    }
+
+    #[test]
+    fn test_flag_long_option_value_uses_gnu_diagnostic() {
+        let cases = [
+            ("--count=1", "option '--count' doesn't allow an argument"),
+            (
+                "--ignore-case=1",
+                "option '--ignore-case' doesn't allow an argument",
+            ),
+        ];
+
+        for (argument, expected) in cases {
+            let args = [OsString::from("uniq"), OsString::from(argument)];
+            let error = uniq_invalid_option_error(&args, false)
+                .expect("GNU rejects a value for a flag long option");
 
             assert_eq!(error.to_string(), expected);
         }

@@ -377,13 +377,10 @@ impl UniqFlags {
 
         let w = &mut writer;
 
-        // 如果不需要统计数量，也不需要过滤唯一/重复行，
-        // 我们就可以在遇到新组的第一行时立刻打印，而不需要等待下一行。
-        // 这完美解决了 stdbuf 时序测试中 uniq 扣留第一行不输出的 bug。
-        let print_immediately = !self.is_show_counts
-            && !self.is_repeats_only
-            && !self.is_uniques_only
-            && !self.is_all_repeated;
+        // 无需筛选行时，默认模式和 --group 都能在读取下一行前写出当前行。
+        // --group 仍会比较后续行，但比较结果只影响分组分隔符。
+        let print_immediately =
+            !self.is_show_counts && !self.is_repeats_only && !self.is_uniques_only;
 
         if print_immediately {
             self.print_line(w, &line, 1, is_first_line_printed)?;
@@ -414,7 +411,13 @@ impl UniqFlags {
             } else {
                 // 两行相同（组内重复）
                 if self.is_all_repeated {
-                    self.print_line(w, &line, group_cnt, is_first_line_printed)?;
+                    if print_immediately {
+                        // --group 已写出该组的首行；同组的后续行不应插入分组分隔符。
+                        w.write_all(&next_line).map_err(uniq_write_error)?;
+                        uniq_write_line_terminator!(w, line_terminator)?;
+                    } else {
+                        self.print_line(w, &line, group_cnt, is_first_line_printed)?;
+                    }
                     is_first_line_printed = true;
                     line = next_line;
                 }
@@ -2634,7 +2637,7 @@ mod tests {
     #[cfg(test)]
     mod uniq_tests {
         use super::*;
-        use std::io::{Cursor, Error, ErrorKind};
+        use std::io::{BufReader, Cursor, Error, ErrorKind, Read};
 
         #[derive(Default)]
         struct FlushFailsWriter(Vec<u8>);
@@ -2647,6 +2650,23 @@ mod tests {
 
             fn flush(&mut self) -> std::io::Result<()> {
                 Err(Error::from(ErrorKind::StorageFull))
+            }
+        }
+
+        #[derive(Default)]
+        struct FirstLineThenError {
+            first_read: bool,
+        }
+
+        impl Read for FirstLineThenError {
+            fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                if self.first_read {
+                    return Err(Error::from(ErrorKind::BrokenPipe));
+                }
+
+                buffer[..2].copy_from_slice(b"a\n");
+                self.first_read = true;
+                Ok(2)
             }
         }
 
@@ -2671,6 +2691,33 @@ mod tests {
                 default_uniq().print_uniq(Cursor::new(b"line\n"), FlushFailsWriter::default());
 
             assert!(result.is_err(), "the final flush error must be reported");
+        }
+
+        #[test]
+        fn test_group_writes_first_line_before_next_read() {
+            let mut uniq = default_uniq();
+            uniq.is_all_repeated = true;
+            uniq.delimiters = UniqDelimiters::Separate;
+            let mut output = Cursor::new(Vec::new());
+
+            let result =
+                uniq.print_uniq(BufReader::new(FirstLineThenError::default()), &mut output);
+
+            assert!(result.is_err(), "the second read must fail");
+            assert_eq!(output.into_inner(), b"a\n");
+        }
+
+        #[test]
+        fn test_group_keeps_repeated_records_without_inner_delimiter() {
+            let mut uniq = default_uniq();
+            uniq.is_all_repeated = true;
+            uniq.delimiters = UniqDelimiters::Separate;
+            let mut output = Cursor::new(Vec::new());
+
+            uniq.print_uniq(Cursor::new(b"a\na\nb\n"), &mut output)
+                .expect("group output");
+
+            assert_eq!(output.into_inner(), b"a\na\n\nb\n");
         }
 
         #[test]

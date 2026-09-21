@@ -337,6 +337,10 @@ fn whoami_output_codeset() -> Option<String> {
         return Some("ASCII".to_owned());
     }
 
+    if locale_uppercase == "ZH_CN" || locale_uppercase.starts_with("ZH_CN@") {
+        return Some("GB2312".to_owned());
+    }
+
     locale
         .split_once('.')
         .map(|(_, codeset)| {
@@ -381,6 +385,10 @@ fn whoami_encode_locale_text_for_codeset(text: &str, codeset: &str) -> Option<Ve
 
 fn quote_whoami_operand(operand: &OsStr, simplified_chinese: bool) -> Vec<u8> {
     if simplified_chinese {
+        #[cfg(target_os = "linux")]
+        if let Some(codeset) = whoami_output_codeset() {
+            return quote_whoami_locale_encoded_operand(operand, &codeset);
+        }
         quote_whoami_utf8_operand_with_quotes(operand, b"\"", b"\"", Some(b'\"'))
     } else if whoami_locale_is_utf8() {
         quote_whoami_utf8_operand(operand)
@@ -457,6 +465,74 @@ fn quote_whoami_utf8_operand_with_quotes(
 
     quoted.extend_from_slice(right_quote);
     quoted
+}
+
+#[cfg(target_os = "linux")]
+fn quote_whoami_locale_encoded_operand(operand: &OsStr, codeset: &str) -> Vec<u8> {
+    let input = operand.as_encoded_bytes();
+    let mut quoted = Vec::with_capacity(input.len() + 2);
+    quoted.push(b'\"');
+
+    let mut index = 0;
+    while index < input.len() {
+        if input[index].is_ascii() {
+            push_whoami_quoted_ascii(&mut quoted, input[index], Some(b'\"'));
+            index += 1;
+            continue;
+        }
+
+        let valid_character_len = whoami_valid_locale_character_len(&input[index..], codeset);
+        if valid_character_len == 0 {
+            push_whoami_octal_escape(&mut quoted, input[index]);
+            index += 1;
+        } else {
+            quoted.extend_from_slice(&input[index..index + valid_character_len]);
+            index += valid_character_len;
+        }
+    }
+
+    quoted.push(b'\"');
+    quoted
+}
+
+#[cfg(target_os = "linux")]
+fn whoami_valid_locale_character_len(input: &[u8], codeset: &str) -> usize {
+    for length in 1..=input.len().min(4) {
+        if whoami_locale_bytes_are_valid(&input[..length], codeset) {
+            return length;
+        }
+    }
+    0
+}
+
+#[cfg(target_os = "linux")]
+fn whoami_locale_bytes_are_valid(input: &[u8], codeset: &str) -> bool {
+    let source = match CString::new(codeset) {
+        Ok(source) => source,
+        Err(_) => return false,
+    };
+    let target = CString::new("UTF-8").expect("UTF-8 has no NUL byte");
+    let converter = unsafe { libc::iconv_open(target.as_ptr(), source.as_ptr()) };
+    if converter == (-1_isize) as libc::iconv_t {
+        return false;
+    }
+
+    let mut input_ptr = input.as_ptr().cast_mut().cast::<libc::c_char>();
+    let mut input_left = input.len();
+    let mut output = vec![0_u8; input.len().saturating_mul(4).max(16)];
+    let mut output_ptr = output.as_mut_ptr().cast::<libc::c_char>();
+    let mut output_left = output.len();
+    let result = unsafe {
+        libc::iconv(
+            converter,
+            &mut input_ptr,
+            &mut input_left,
+            &mut output_ptr,
+            &mut output_left,
+        )
+    };
+    unsafe { libc::iconv_close(converter) };
+    result != usize::MAX && input_left == 0
 }
 
 fn push_whoami_quoted_ascii(output: &mut Vec<u8>, byte: u8, quote_to_escape: Option<u8>) {
@@ -941,6 +1017,25 @@ mod tests {
             Some(vec![
                 0xb6, 0xe0, 0xd3, 0xe0, 0xb5, 0xc4, 0xb2, 0xd9, 0xd7, 0xf7, 0xb6, 0xd4, 0xcf, 0xf3,
             ])
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn whoami_zh_cn_gbk_quote_preserves_valid_multibyte_operand_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let operand = OsString::from_vec(vec![0xd6, 0xd0, 0xb9, 0xfa, 0xff]);
+
+        assert_eq!(
+            quote_whoami_locale_encoded_operand(&operand, "GBK"),
+            b"\"\xd6\xd0\xb9\xfa\\377\""
+        );
+
+        let ascii_trailing_byte = OsString::from_vec(vec![0x81, b'@']);
+        assert_eq!(
+            quote_whoami_locale_encoded_operand(&ascii_trailing_byte, "GBK"),
+            b"\"\x81@\""
         );
     }
 }

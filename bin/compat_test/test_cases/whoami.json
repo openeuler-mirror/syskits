@@ -427,6 +427,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "whoami",
+            "description": "原始字节诊断用例：LC_ALL=zh_CN.gb18030且LANGUAGE=C时，GNU quotearg 在未翻译引号的GB18030回退分支输出a10765和a1af；传入alpha后预期RC=1、stdout为空，stderr逐字节保留该引号序列",
+            "setup_commands": [
+                "export LC_ALL='zh_CN.gb18030'",
+                "export LANGUAGE='C'"
+            ],
+            "args": ["616c706861"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77686f616d693a206578747261206f706572616e6420a10765616c706861a1af0a547279202777686f616d69202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

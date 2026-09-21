@@ -504,7 +504,7 @@ fn quote_whoami_operand(operand: &OsStr, simplified_chinese: bool) -> Vec<u8> {
     if simplified_chinese {
         #[cfg(target_os = "linux")]
         if let Some(codeset) = whoami_ctype_codeset() {
-            return quote_whoami_locale_encoded_operand(operand, &codeset, b'\"');
+            return quote_whoami_locale_encoded_operand(operand, &codeset, b"\"", b"\"");
         }
         quote_whoami_utf8_operand_with_quotes(operand, b"\"", b"\"", Some(b'\"'))
     } else if whoami_locale_is_utf8() {
@@ -512,10 +512,29 @@ fn quote_whoami_operand(operand: &OsStr, simplified_chinese: bool) -> Vec<u8> {
     } else {
         #[cfg(target_os = "linux")]
         if let Some(codeset) = whoami_ctype_codeset() {
-            return quote_whoami_locale_encoded_operand(operand, &codeset, b'\'');
+            if whoami_gb18030_codeset(&codeset) {
+                return quote_whoami_locale_encoded_operand(
+                    operand,
+                    &codeset,
+                    GNU_GB18030_FALLBACK_LEFT_QUOTE,
+                    GNU_GB18030_FALLBACK_RIGHT_QUOTE,
+                );
+            }
+            return quote_whoami_locale_encoded_operand(operand, &codeset, b"'", b"'");
         }
         quote_whoami_c_operand(operand)
     }
+}
+
+#[cfg(target_os = "linux")]
+// GNU's "\xa1\ae" source literal expands \a as BEL and leaves the trailing e.
+const GNU_GB18030_FALLBACK_LEFT_QUOTE: &[u8] = b"\xa1\x07e";
+#[cfg(target_os = "linux")]
+const GNU_GB18030_FALLBACK_RIGHT_QUOTE: &[u8] = b"\xa1\xaf";
+
+#[cfg(target_os = "linux")]
+fn whoami_gb18030_codeset(codeset: &str) -> bool {
+    codeset.eq_ignore_ascii_case("GB18030")
 }
 
 fn whoami_locale_is_utf8() -> bool {
@@ -597,16 +616,28 @@ fn quote_whoami_utf8_operand_with_quotes(
 fn quote_whoami_locale_encoded_operand(
     operand: &OsStr,
     codeset: &str,
-    quote_to_escape: u8,
+    left_quote: &[u8],
+    right_quote: &[u8],
 ) -> Vec<u8> {
     let input = operand.as_encoded_bytes();
-    let mut quoted = Vec::with_capacity(input.len() + 2);
-    quoted.push(quote_to_escape);
+    let mut quoted = Vec::with_capacity(input.len() + left_quote.len() + right_quote.len());
+    quoted.extend_from_slice(left_quote);
 
     let mut index = 0;
     while index < input.len() {
+        if input[index..].starts_with(right_quote) {
+            quoted.push(b'\\');
+            quoted.extend_from_slice(right_quote);
+            index += right_quote.len();
+            continue;
+        }
+
         if input[index].is_ascii() {
-            push_whoami_quoted_ascii(&mut quoted, input[index], Some(quote_to_escape));
+            push_whoami_quoted_ascii(
+                &mut quoted,
+                input[index],
+                (right_quote.len() == 1).then_some(right_quote[0]),
+            );
             index += 1;
             continue;
         }
@@ -621,7 +652,7 @@ fn quote_whoami_locale_encoded_operand(
         }
     }
 
-    quoted.push(quote_to_escape);
+    quoted.extend_from_slice(right_quote);
     quoted
 }
 
@@ -1181,13 +1212,13 @@ mod tests {
         let operand = OsString::from_vec(vec![0xd6, 0xd0, 0xb9, 0xfa, 0xff]);
 
         assert_eq!(
-            quote_whoami_locale_encoded_operand(&operand, "GBK", b'\"'),
+            quote_whoami_locale_encoded_operand(&operand, "GBK", b"\"", b"\""),
             b"\"\xd6\xd0\xb9\xfa\\377\""
         );
 
         let ascii_trailing_byte = OsString::from_vec(vec![0x81, b'@']);
         assert_eq!(
-            quote_whoami_locale_encoded_operand(&ascii_trailing_byte, "GBK", b'\"'),
+            quote_whoami_locale_encoded_operand(&ascii_trailing_byte, "GBK", b"\"", b"\""),
             b"\"\x81@\""
         );
     }
@@ -1204,6 +1235,25 @@ mod tests {
                 b"'\xe9'"
             );
         });
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn whoami_gb18030_c_messages_use_gnu_quote_fallback_bytes() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let quoted = with_locale_variables(
+            &[("LC_ALL", Some("zh_CN.gb18030")), ("LANGUAGE", Some("C"))],
+            || quote_whoami_operand(OsStr::from_bytes(b"alpha"), false),
+        );
+
+        assert_eq!(quoted, b"\xa1\x07ealpha\xa1\xaf");
+
+        let embedded_right_quote = with_locale_variables(
+            &[("LC_ALL", Some("zh_CN.gb18030")), ("LANGUAGE", Some("C"))],
+            || quote_whoami_operand(OsStr::from_bytes(b"\xa1\xaf"), false),
+        );
+        assert_eq!(embedded_right_quote, b"\xa1\x07e\\\xa1\xaf\xa1\xaf");
     }
 
     #[cfg(target_os = "linux")]

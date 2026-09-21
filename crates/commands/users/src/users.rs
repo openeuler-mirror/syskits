@@ -18,6 +18,7 @@ use std::ffi::OsString;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::builder::ValueParser;
 use clap::{Arg, ArgMatches, Command, crate_version};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
@@ -32,12 +33,14 @@ pub struct UsersSession {
     pub user: String,
     pub tty_device: String,
     pub host: String,
+    user_bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UsersSemantic {
     pub sessions: Vec<UsersSession>,
     pub classic_text: String,
+    pub classic_bytes: Vec<u8>,
 }
 
 fn users_get_long_usage() -> String {
@@ -60,11 +63,13 @@ impl Tool for Users {
     }
 
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
-        let result = users_main(args.iter().cloned());
+        let result = users_native_semantic(args.iter().cloned());
         match result {
-            Ok(s) => {
-                if !s.is_empty() {
-                    println!("{s}");
+            Ok(semantic) => {
+                if !semantic.sessions.is_empty() {
+                    let mut stdout = std::io::stdout().lock();
+                    stdout.write_all(&semantic.classic_bytes)?;
+                    stdout.write_all(b"\n")?;
                 }
                 Ok(())
             }
@@ -73,24 +78,36 @@ impl Tool for Users {
     }
 }
 
-pub fn users_main(args: impl ctcore::Args) -> CTResult<String> {
+pub fn users_main(args: impl ctcore::Args) -> CTResult<Vec<u8>> {
     let semantic = users_native_semantic(args)?;
-    Ok(semantic.classic_text)
+    Ok(semantic.classic_bytes)
+}
+
+fn trim_user_name(name: &[u8]) -> &[u8] {
+    let length = name
+        .iter()
+        .rposition(|byte| *byte != b' ')
+        .map_or(0, |index| index + 1);
+    &name[..length]
 }
 
 fn users_sessions_from_file(path: &Path) -> Vec<UsersSession> {
     let mut sessions = CtUtmpx::iter_all_records_from(path)
         .filter(CtUtmpx::is_user_process)
-        .map(|ut| UsersSession {
-            user: ut.user(),
-            tty_device: ut.tty_device(),
-            host: ut.host(),
+        .map(|ut| {
+            let user_bytes = trim_user_name(ut.user_bytes()).to_vec();
+            UsersSession {
+                user: String::from_utf8_lossy(&user_bytes).into_owned(),
+                tty_device: ut.tty_device(),
+                host: ut.host(),
+                user_bytes,
+            }
         })
         .collect::<Vec<_>>();
 
     sessions.sort_by(|left, right| {
-        left.user
-            .cmp(&right.user)
+        left.user_bytes
+            .cmp(&right.user_bytes)
             .then_with(|| left.tty_device.cmp(&right.tty_device))
             .then_with(|| left.host.cmp(&right.host))
     });
@@ -98,12 +115,15 @@ fn users_sessions_from_file(path: &Path) -> Vec<UsersSession> {
     sessions
 }
 
-fn users_classic_text(sessions: &[UsersSession]) -> String {
-    sessions
-        .iter()
-        .map(|session| session.user.as_str())
-        .collect::<Vec<_>>()
-        .join(" ")
+fn users_classic_text(sessions: &[UsersSession]) -> Vec<u8> {
+    let mut output = Vec::new();
+    for (index, session) in sessions.iter().enumerate() {
+        if index != 0 {
+            output.push(b' ');
+        }
+        output.extend_from_slice(trim_user_name(&session.user_bytes));
+    }
+    output
 }
 
 pub fn users_native_semantic(args: impl ctcore::Args) -> CTResult<UsersSemantic> {
@@ -115,10 +135,12 @@ pub fn users_native_semantic(args: impl ctcore::Args) -> CTResult<UsersSemantic>
 
     let filename = parse_users_files(matches);
     let sessions = users_sessions_from_file(&filename);
-    let classic_text = users_classic_text(&sessions);
+    let classic_bytes = users_classic_text(&sessions);
+    let classic_text = String::from_utf8_lossy(&classic_bytes).into_owned();
     Ok(UsersSemantic {
         sessions,
         classic_text,
+        classic_bytes,
     })
 }
 
@@ -231,7 +253,48 @@ mod tests {
             let args = [ctcore::ct_util_name(), file_name.as_str()];
             let result = users_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
-            assert_eq!(result.unwrap(), "user1 user2 user3");
+            assert_eq!(result.unwrap(), b"user1 user2 user3");
+        }
+
+        #[test]
+        fn users_classic_text_trims_trailing_spaces_from_login_names() {
+            let sessions = vec![UsersSession {
+                user: "zeta   ".into(),
+                tty_device: "pts/1".into(),
+                host: "localhost".into(),
+                user_bytes: b"zeta   ".to_vec(),
+            }];
+
+            assert_eq!(users_classic_text(&sessions), b"zeta");
+        }
+
+        #[test]
+        fn users_main_preserves_non_utf8_login_name_bytes() {
+            let dir = TempDir::with_prefix("test_users_raw_").unwrap();
+            let file_path = dir.path().join("users.utmp");
+            let mut file = File::create(&file_path).unwrap();
+            let mut record = unsafe { std::mem::zeroed::<libc::utmpx>() };
+            record.ut_type = ctcore::ct_utmpx::USER_PROCESS;
+            record.ut_pid = 1;
+            copy_str_to_c_char_array(&mut record.ut_line, "pts/1");
+            copy_str_to_c_char_array(&mut record.ut_id, "0001");
+            for (dst, byte) in record.ut_user.iter_mut().zip([b'a', 0xff]) {
+                *dst = byte as libc::c_char;
+            }
+
+            let record_bytes = unsafe {
+                std::slice::from_raw_parts(
+                    &record as *const libc::utmpx as *const u8,
+                    std::mem::size_of::<libc::utmpx>(),
+                )
+            };
+            file.write_all(record_bytes).unwrap();
+
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from(file_path),
+            ];
+            assert_eq!(users_main(args.into_iter()).unwrap(), b"a\xff");
         }
 
         #[test]
@@ -251,15 +314,17 @@ mod tests {
                         user: "user1".into(),
                         tty_device: "pts/1".into(),
                         host: "remote-a".into(),
+                        user_bytes: b"user1".to_vec(),
                     },
                     UsersSession {
                         user: "user2".into(),
                         tty_device: "pts/2".into(),
                         host: "remote-b".into(),
+                        user_bytes: b"user2".to_vec(),
                     },
                 ]
             );
-            assert_eq!(result.classic_text, "user1 user2");
+            assert_eq!(result.classic_bytes, b"user1 user2");
         }
 
         #[test]

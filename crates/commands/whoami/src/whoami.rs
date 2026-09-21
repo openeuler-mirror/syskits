@@ -350,8 +350,8 @@ fn whoami_c_message_locale(locale: &OsStr) -> bool {
 }
 
 fn whoami_simplified_chinese_locale(locale: &OsStr) -> bool {
-    let locale = locale.to_string_lossy().to_ascii_lowercase();
-    locale == "zh_cn" || locale.starts_with("zh_cn.") || locale.starts_with("zh_cn@")
+    let locale = locale.to_string_lossy();
+    locale == "zh_CN" || locale.starts_with("zh_CN.") || locale.starts_with("zh_CN@")
 }
 
 fn whoami_effective_locale<const N: usize>(names: [&str; N]) -> Option<OsString> {
@@ -1365,6 +1365,38 @@ mod tests {
             whoami_uses_simplified_chinese,
         );
         assert!(simplified_chinese);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn whoami_language_requires_case_sensitive_zh_cn_catalog() {
+        use std::os::unix::ffi::OsStrExt;
+
+        for language in ["zh_cn", "ZH_CN"] {
+            let (simplified_chinese, message) = with_locale_variables(
+                &[
+                    ("LC_ALL", Some("en_US")),
+                    ("LANGUAGE", Some(language)),
+                    ("OUTPUT_CHARSET", None),
+                ],
+                || {
+                    let simplified_chinese = whoami_uses_simplified_chinese();
+                    (
+                        simplified_chinese,
+                        whoami_extra_operand_message(
+                            OsStr::from_bytes(b"alpha"),
+                            simplified_chinese,
+                        ),
+                    )
+                },
+            );
+
+            assert!(
+                !simplified_chinese,
+                "LANGUAGE={language} must fall back to English"
+            );
+            assert_eq!(message, b"extra operand 'alpha'");
+        }
     }
 
     #[cfg(target_os = "linux")]

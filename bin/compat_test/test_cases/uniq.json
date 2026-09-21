@@ -303,6 +303,26 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "",
+            "command": "uniq",
+            "description": "uniq至多接受INPUT和OUTPUT两个操作数，第三个操作数必须在打开文件前按GNU报告extra operand",
+            "args": ["input", "output", "extra"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uniq: extra operand 'extra'\nTry 'uniq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "a\na\n",
             "command": "uniq",
             "description": "-D是无参数短选项，只有--all-repeated允许=METHOD；-D=prepend必须按GNU报告非法=选项",

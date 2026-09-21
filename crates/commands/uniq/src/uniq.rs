@@ -268,7 +268,7 @@ impl UniqFlags {
         if !self.is_ignore_case {
             closure(&mut final_slice.iter().copied())
         } else {
-            closure(&mut final_slice.iter().map(|u| u.to_ascii_lowercase()))
+            closure(&mut final_slice.iter().map(|u| uniq_fold_case_byte(*u)))
         }
     }
 
@@ -412,6 +412,10 @@ fn uniq_initialize_c_locale() {
 
 fn uniq_is_multibyte_locale() -> bool {
     unsafe { __ctype_get_mb_cur_max() > 1 }
+}
+
+fn uniq_fold_case_byte(byte: u8) -> u8 {
+    unsafe { ctcore::libc::tolower(ctcore::libc::c_int::from(byte)) as u8 }
 }
 
 /// Return the byte offset after skipping N locale characters.
@@ -1351,6 +1355,29 @@ mod tests {
             let line1 = b"Case";
             let line2 = b"case";
             assert!(!uniq.cmp_keys(line1, line2)); // Expect true as case is ignored
+        }
+
+        #[test]
+        fn test_cmp_keys_case_insensitivity_uses_single_byte_locale() {
+            let locale = unsafe {
+                ctcore::libc::newlocale(
+                    ctcore::libc::LC_CTYPE_MASK,
+                    c"en_US.iso88591".as_ptr(),
+                    std::ptr::null_mut(),
+                )
+            };
+            assert!(!locale.is_null());
+
+            let previous = unsafe { ctcore::libc::uselocale(locale) };
+            let mut uniq = default_uniq();
+            uniq.is_ignore_case = true;
+            let matches = !uniq.cmp_keys(b"\xc4", b"\xe4");
+            unsafe {
+                ctcore::libc::uselocale(previous);
+                ctcore::libc::freelocale(locale);
+            }
+
+            assert!(matches);
         }
 
         #[test]

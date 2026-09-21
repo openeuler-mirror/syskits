@@ -566,6 +566,9 @@ fn uniq_is_field_separator_wide(wide: ctcore::libc::wchar_t) -> bool {
 fn uniq_skip_fields_single_byte(line: &[u8], skip_fields: usize) -> usize {
     let mut offset = 0;
     for _ in 0..skip_fields {
+        if offset == line.len() {
+            break;
+        }
         while offset < line.len() && uniq_is_field_separator_byte(line[offset]) {
             offset += 1;
         }
@@ -581,6 +584,9 @@ fn uniq_skip_fields_multibyte(line: &[u8], skip_fields: usize) -> usize {
     let mut state: ctcore::libc::mbstate_t = unsafe { std::mem::zeroed() };
 
     for _ in 0..skip_fields {
+        if offset == line.len() {
+            break;
+        }
         while offset < line.len() {
             let (length, wide) = uniq_next_locale_char(line, offset, &mut state);
             if wide.is_none_or(|wide| !uniq_is_field_separator_wide(wide)) {
@@ -2594,6 +2600,18 @@ mod tests {
         fn test_skip_fields_treats_newline_as_a_separator() {
             assert_eq!(uniq_skip_fields_single_byte(b"a\nb", 1), 1);
             assert_eq!(uniq_skip_fields_multibyte(b"a\nb", 1), 1);
+        }
+
+        #[test]
+        fn test_skip_fields_stops_at_end_of_line() {
+            assert_eq!(
+                uniq_skip_fields_single_byte(b"field", usize::MAX),
+                b"field".len()
+            );
+            assert_eq!(
+                uniq_skip_fields_multibyte(b"field", usize::MAX),
+                b"field".len()
+            );
         }
 
         #[test]

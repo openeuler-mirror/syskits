@@ -1029,6 +1029,26 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "field\nother\n",
+            "command": "uniq",
+            "description": "LC_ALL=C时-f 10000000000必须在输入行到达末尾后停止字段扫描：两行均没有足够字段，比较键均为空，预期快速保留首行field；不能继续按巨大N值空转",
+            "args": ["-f", "10000000000"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "field\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "610c580a620c590a",
             "byteMode": true,
             "command": "uniq",

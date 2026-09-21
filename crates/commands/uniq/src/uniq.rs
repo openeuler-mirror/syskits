@@ -629,21 +629,34 @@ fn uniq_semantic_from_invocation(invocation: &UniqInvocation) -> CTResult<UniqSe
 
 fn uniq_opt_parsed(opt_name: &str, arg_matches: &ArgMatches) -> CTResult<Option<usize>> {
     match arg_matches.get_one::<String>(opt_name) {
-        Some(arg_str) => match arg_str.parse::<usize>() {
+        Some(arg_str) => match uniq_parse_size_option(arg_str) {
             Ok(value) => Ok(Some(value)),
-            Err(e) => match e.kind() {
-                IntErrorKind::PosOverflow => Ok(Some(usize::MAX)),
-                _ => {
-                    let err_message = format!(
-                        "Invalid argument for {}: {}",
-                        opt_name,
-                        arg_str.maybe_quote()
-                    );
-                    Err(CtSimpleError::new(1, err_message))
-                }
-            },
+            Err(_) => Err(CtSimpleError::new(
+                1,
+                format!("{arg_str}: {}", uniq_invalid_number_message(opt_name)),
+            )),
         },
         None => Ok(None),
+    }
+}
+
+fn uniq_parse_size_option(value: &str) -> Result<usize, std::num::ParseIntError> {
+    match value
+        .trim_start_matches(|character: char| character.is_ascii_whitespace())
+        .parse::<usize>()
+    {
+        Ok(value) => Ok(value),
+        Err(error) if error.kind() == &IntErrorKind::PosOverflow => Ok(usize::MAX),
+        Err(error) => Err(error),
+    }
+}
+
+fn uniq_invalid_number_message(opt_name: &str) -> &'static str {
+    match opt_name {
+        uniq_flags::SKIP_FIELDS => "invalid number of fields to skip",
+        uniq_flags::SKIP_CHARS => "invalid number of bytes to skip",
+        uniq_flags::CHECK_CHARS => "invalid number of bytes to compare",
+        _ => unreachable!("only uniq numeric options call this helper"),
     }
 }
 
@@ -1085,7 +1098,8 @@ fn ct_app_with_getopt_mode(posixly_correct: bool) -> Command {
             .short('w')
             .long(uniq_flags::CHECK_CHARS)
             .help(t!("uniq.clap.check_chars"))
-            .value_name("N"),
+            .value_name("N")
+            .allow_hyphen_values(true),
         Arg::new(uniq_flags::COUNT)
             .short('c')
             .long(uniq_flags::COUNT)
@@ -1105,12 +1119,14 @@ fn ct_app_with_getopt_mode(posixly_correct: bool) -> Command {
             .short('s')
             .long(uniq_flags::SKIP_CHARS)
             .help(t!("uniq.clap.skip_chars"))
-            .value_name("N"),
+            .value_name("N")
+            .allow_hyphen_values(true),
         Arg::new(uniq_flags::SKIP_FIELDS)
             .short('f')
             .long(uniq_flags::SKIP_FIELDS)
             .help(t!("uniq.clap.skip_fields"))
-            .value_name("N"),
+            .value_name("N")
+            .allow_hyphen_values(true),
         Arg::new(uniq_flags::UNIQUE)
             .short('u')
             .long(uniq_flags::UNIQUE)
@@ -1292,6 +1308,16 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "error reading 'input-dir': Is a directory"
+        );
+    }
+
+    #[test]
+    fn test_parse_size_option_accepts_gnu_leading_whitespace_and_saturates() {
+        assert_eq!(uniq_parse_size_option(" 1"), Ok(1));
+        assert_eq!(uniq_parse_size_option("+2"), Ok(2));
+        assert_eq!(
+            uniq_parse_size_option("999999999999999999999999999999"),
+            Ok(usize::MAX)
         );
     }
 

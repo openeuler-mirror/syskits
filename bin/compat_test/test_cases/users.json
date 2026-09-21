@@ -27,6 +27,41 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "users",
+            "description": "原始字节用例：LC_ALL=C、LANG=C下读取800字节Linux utmp fixture；第一条USER_PROCESS用户名为zeta后跟3个ASCII空格，第二条用户名为a后跟ff。参数完整十六进制=75736572732e75746d70（users.utmp）；stdin为0字节、完整十六进制=空；预期按GNU原始字节排序、删除每个用户名末尾ASCII空格，RC=0、stdout为8字节完整十六进制=61ff207a6574610a（a\\xff zeta\\n）、stderr为空。",
+            "setup_commands": [
+                "dd if=/dev/zero of=users.utmp bs=400 count=2 status=none",
+                "/usr/bin/printf '\\007\\000' | dd of=users.utmp bs=1 seek=0 conv=notrunc status=none",
+                "/usr/bin/printf 'pts/1\\000' | dd of=users.utmp bs=1 seek=8 conv=notrunc status=none",
+                "/usr/bin/printf 'p001' | dd of=users.utmp bs=1 seek=40 conv=notrunc status=none",
+                "/usr/bin/printf 'zeta   \\000' | dd of=users.utmp bs=1 seek=44 conv=notrunc status=none",
+                "/usr/bin/printf '\\007\\000' | dd of=users.utmp bs=1 seek=400 conv=notrunc status=none",
+                "/usr/bin/printf 'pts/2\\000' | dd of=users.utmp bs=1 seek=408 conv=notrunc status=none",
+                "/usr/bin/printf 'p002' | dd of=users.utmp bs=1 seek=440 conv=notrunc status=none",
+                "/usr/bin/printf 'a\\377\\000' | dd of=users.utmp bs=1 seek=444 conv=notrunc status=none"
+            ],
+            "args": [
+                "75736572732e75746d70"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "61ff207a6574610a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
-} 
+}

@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
 use ctcore::Tool;
-use ctcore::ct_error::{CTError, CTResult};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, strip_errno};
 use ctcore::ct_posix::{GnuGetoptCommandExt, posixly_correct};
 use ctcore::ct_utmpx::{self, CtUtmpx};
 
@@ -109,15 +109,31 @@ impl Tool for Users {
         match result {
             Ok(semantic) => {
                 if !semantic.sessions.is_empty() {
+                    if ctcore::ct_stdout_was_closed() {
+                        let error = std::io::Error::from_raw_os_error(ctcore::libc::EBADF);
+                        return Err(users_write_error(&error));
+                    }
                     let mut stdout = std::io::stdout().lock();
-                    stdout.write_all(&semantic.classic_bytes)?;
-                    stdout.write_all(b"\n")?;
+                    stdout
+                        .write_all(&semantic.classic_bytes)
+                        .map_err(|error| users_write_error(&error))?;
+                    stdout
+                        .write_all(b"\n")
+                        .map_err(|error| users_write_error(&error))?;
                 }
                 Ok(())
             }
             Err(e) => Err(e),
         }
     }
+}
+
+fn users_write_error_message(error: &std::io::Error) -> String {
+    format!("write error: {}", strip_errno(error))
+}
+
+fn users_write_error(error: &std::io::Error) -> Box<dyn CTError> {
+    CtSimpleError::new(1, users_write_error_message(error))
 }
 
 pub fn users_main(args: impl ctcore::Args) -> CTResult<Vec<u8>> {
@@ -553,6 +569,16 @@ mod tests {
             let (explicit_file, explicit_checks_pids) = parse_users_files(explicit_matches);
             assert_eq!(explicit_file, PathBuf::from("fixture.utmp"));
             assert!(!explicit_checks_pids);
+        }
+
+        #[test]
+        fn users_write_errors_include_the_gnu_context() {
+            let error = std::io::Error::from_raw_os_error(ctcore::libc::ENOSPC);
+
+            assert_eq!(
+                users_write_error_message(&error),
+                "write error: No space left on device"
+            );
         }
 
         #[test]

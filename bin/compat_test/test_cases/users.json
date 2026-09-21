@@ -189,6 +189,72 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "users",
+            "description": "LC_ALL=C、LANG=C下执行users writer.utmp，stdout连接/dev/full；输入fixture为400字节Linux utmp，USER_PROCESS用户名为writer。预期首次写入失败后RC=1、stdout为空，stderr为users: write error: No space left on device。",
+            "setup_commands": [
+                "dd if=/dev/zero of=writer.utmp bs=400 count=1 status=none",
+                "/usr/bin/printf '\\007\\000' | dd of=writer.utmp bs=1 seek=0 conv=notrunc status=none",
+                "/usr/bin/printf 'pts/1\\000' | dd of=writer.utmp bs=1 seek=8 conv=notrunc status=none",
+                "/usr/bin/printf 'p001' | dd of=writer.utmp bs=1 seek=40 conv=notrunc status=none",
+                "/usr/bin/printf 'writer\\000' | dd of=writer.utmp bs=1 seek=44 conv=notrunc status=none"
+            ],
+            "args": [
+                "writer.utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "users: write error: No space left on device\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "full"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "users",
+            "description": "LC_ALL=C、LANG=C下执行users closed.utmp，stdout在启动前关闭；输入fixture为400字节Linux utmp，USER_PROCESS用户名为closed。预期RC=1、stdout为空，stderr为users: write error: Bad file descriptor，验证关闭stdout不会被内部标准描述符重建掩盖。",
+            "setup_commands": [
+                "dd if=/dev/zero of=closed.utmp bs=400 count=1 status=none",
+                "/usr/bin/printf '\\007\\000' | dd of=closed.utmp bs=1 seek=0 conv=notrunc status=none",
+                "/usr/bin/printf 'pts/1\\000' | dd of=closed.utmp bs=1 seek=8 conv=notrunc status=none",
+                "/usr/bin/printf 'p001' | dd of=closed.utmp bs=1 seek=40 conv=notrunc status=none",
+                "/usr/bin/printf 'closed\\000' | dd of=closed.utmp bs=1 seek=44 conv=notrunc status=none"
+            ],
+            "args": [
+                "closed.utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "users: write error: Bad file descriptor\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

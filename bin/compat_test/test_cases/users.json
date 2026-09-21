@@ -62,6 +62,102 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "users",
+            "description": "LC_ALL=C、LANG=C且未设置POSIXLY_CORRECT时执行users --help=x；GNU标准帮助选项不接受等号参数，预期RC=1、stdout为空，stderr为option '--help' doesn't allow an argument及单行Try 'users --help'提示。",
+            "args": [
+                "--help=x"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "users: option '--help' doesn't allow an argument\nTry 'users --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "users",
+            "description": "LC_ALL=C、LANG=C且未设置POSIXLY_CORRECT时执行users first second；users至多接受一个FILE，预期RC=1、stdout为空，stderr将第二个参数诊断为extra operand 'second'并给出Try提示。",
+            "args": [
+                "first",
+                "second"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "users: extra operand 'second'\nTry 'users --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "users",
+            "description": "LC_ALL=C、LANG=C并设置POSIXLY_CORRECT=1时执行users first --version；GNU在首个FILE后停止解析选项，--version是第二个操作数，预期RC=1、stdout为空，stderr为extra operand '--version'及Try提示。",
+            "args": [
+                "first",
+                "--version"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "users: extra operand '--version'\nTry 'users --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "POSIXLY_CORRECT": "1"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "users",
+            "description": "原始字节用例：LC_ALL=C、LANG=C且未设置POSIXLY_CORRECT时执行users --\\xff；参数完整十六进制=2d2dff，stdin为0字节、完整十六进制=空；预期RC=1、stdout为空，stderr完整十六进制保留GNU诊断中的原始ff选项字节，而不是转义为\\377或替换为UTF-8字符。",
+            "args": [
+                "2d2dff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "75736572733a20756e7265636f676e697a6564206f7074696f6e20272d2dff270a54727920277573657273202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -14,7 +14,11 @@
 
 extern crate rust_i18n;
 use rust_i18n::t;
+use std::borrow::Cow;
+use std::error::Error;
 use std::ffi::OsString;
+use std::fmt::{Display, Formatter};
+use std::os::unix::ffi::OsStrExt;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::builder::ValueParser;
 use clap::{Arg, ArgMatches, Command, crate_version};
@@ -23,10 +27,48 @@ use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
 use ctcore::Tool;
-use ctcore::ct_error::CTResult;
+use ctcore::ct_error::{CTError, CTResult};
+use ctcore::ct_posix::{GnuGetoptCommandExt, posixly_correct};
 use ctcore::ct_utmpx::{self, CtUtmpx};
 
 static USERS_ARG_FILES: &str = "files";
+const USERS_LONG_OPTIONS: &[&str] = &["help", "version"];
+
+#[derive(Debug, PartialEq, Eq)]
+enum UsersLongOptionMatch {
+    Recognized(&'static str),
+    Ambiguous(Vec<&'static str>),
+    None,
+}
+
+#[derive(Debug)]
+struct UsersUsageError {
+    message: Vec<u8>,
+}
+
+impl UsersUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl Display for UsersUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl Error for UsersUsageError {}
+
+impl CTError for UsersUsageError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UsersSession {
@@ -83,6 +125,149 @@ pub fn users_main(args: impl ctcore::Args) -> CTResult<Vec<u8>> {
     Ok(semantic.classic_bytes)
 }
 
+fn prepare_users_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
+    prepare_users_args_with_mode(args, posixly_correct())
+}
+
+fn prepare_users_args_with_mode(
+    args: impl ctcore::Args,
+    posix_mode: bool,
+) -> CTResult<Vec<OsString>> {
+    let args = args.collect::<Vec<_>>();
+    let mut parse_options = true;
+    let mut operands = Vec::new();
+
+    for argument in args.iter().skip(1) {
+        let bytes = argument.as_encoded_bytes();
+        if parse_options && bytes == b"--" {
+            parse_options = false;
+            continue;
+        }
+
+        if parse_options && bytes.len() > 1 && bytes[0] == b'-' {
+            if bytes.starts_with(b"--") {
+                if validate_users_long_option(bytes)? {
+                    let mut terminal_args = Vec::with_capacity(2);
+                    if let Some(program) = args.first() {
+                        terminal_args.push(program.clone());
+                    }
+                    terminal_args.push(argument.clone());
+                    return Ok(terminal_args);
+                }
+                continue;
+            }
+
+            // -h and -V are syskits extensions, not GNU users options.
+            if bytes == b"-h" || bytes == b"-V" {
+                return Ok(args);
+            }
+
+            let mut message = b"invalid option -- '".to_vec();
+            message.push(bytes[1]);
+            message.push(b'\'');
+            return Err(UsersUsageError::boxed(message));
+        }
+
+        operands.push(argument);
+        if posix_mode {
+            parse_options = false;
+        }
+    }
+
+    if operands.len() > 1 {
+        let mut message = b"extra operand ".to_vec();
+        message.extend(users_quote_c_operand(operands[1].as_os_str()));
+        return Err(UsersUsageError::boxed(message));
+    }
+
+    Ok(args)
+}
+
+fn validate_users_long_option(argument: &[u8]) -> CTResult<bool> {
+    let long = &argument[2..];
+    let separator = long.iter().position(|byte| *byte == b'=');
+    let name = &long[..separator.unwrap_or(long.len())];
+
+    match match_users_long_option(name) {
+        UsersLongOptionMatch::None => {
+            let mut message = b"unrecognized option '".to_vec();
+            message.extend_from_slice(argument);
+            message.push(b'\'');
+            Err(UsersUsageError::boxed(message))
+        }
+        UsersLongOptionMatch::Ambiguous(candidates) => {
+            let mut message = b"option '".to_vec();
+            message.extend_from_slice(argument);
+            message.extend_from_slice(b"' is ambiguous; possibilities:");
+            for candidate in candidates {
+                message.extend_from_slice(b" '--");
+                message.extend_from_slice(candidate.as_bytes());
+                message.push(b'\'');
+            }
+            Err(UsersUsageError::boxed(message))
+        }
+        UsersLongOptionMatch::Recognized(canonical) if separator.is_some() => {
+            Err(UsersUsageError::boxed(
+                format!("option '--{canonical}' doesn't allow an argument").into_bytes(),
+            ))
+        }
+        UsersLongOptionMatch::Recognized("help" | "version") => Ok(true),
+        UsersLongOptionMatch::Recognized(_) => unreachable!("users only has standard options"),
+    }
+}
+
+fn match_users_long_option(name: &[u8]) -> UsersLongOptionMatch {
+    if let Some(option) = USERS_LONG_OPTIONS
+        .iter()
+        .copied()
+        .find(|option| option.as_bytes() == name)
+    {
+        return UsersLongOptionMatch::Recognized(option);
+    }
+
+    let candidates = USERS_LONG_OPTIONS
+        .iter()
+        .copied()
+        .filter(|option| option.as_bytes().starts_with(name))
+        .collect::<Vec<_>>();
+    match candidates.as_slice() {
+        [] => UsersLongOptionMatch::None,
+        [candidate] => UsersLongOptionMatch::Recognized(candidate),
+        _ => UsersLongOptionMatch::Ambiguous(candidates),
+    }
+}
+
+fn users_quote_c_operand(operand: &std::ffi::OsStr) -> Vec<u8> {
+    users_quote_c_bytes(operand.as_bytes())
+}
+
+fn users_quote_c_bytes(bytes: &[u8]) -> Vec<u8> {
+    let mut quoted = Vec::with_capacity(bytes.len() + 2);
+    quoted.push(b'\'');
+    for byte in bytes {
+        match *byte {
+            b'\x07' => quoted.extend_from_slice(b"\\a"),
+            b'\x08' => quoted.extend_from_slice(b"\\b"),
+            b'\t' => quoted.extend_from_slice(b"\\t"),
+            b'\n' => quoted.extend_from_slice(b"\\n"),
+            b'\x0b' => quoted.extend_from_slice(b"\\v"),
+            b'\x0c' => quoted.extend_from_slice(b"\\f"),
+            b'\r' => quoted.extend_from_slice(b"\\r"),
+            b'\\' => quoted.extend_from_slice(b"\\\\"),
+            b'\'' => quoted.extend_from_slice(b"\\'"),
+            b' '..=b'~' => quoted.push(*byte),
+            _ => {
+                quoted.push(b'\\');
+                quoted.push(b'0' + (byte >> 6));
+                quoted.push(b'0' + ((byte >> 3) & 7));
+                quoted.push(b'0' + (byte & 7));
+            }
+        }
+    }
+    quoted.push(b'\'');
+    quoted
+}
+
 fn trim_user_name(name: &[u8]) -> &[u8] {
     let length = name
         .iter()
@@ -131,7 +316,7 @@ pub fn users_native_semantic(args: impl ctcore::Args) -> CTResult<UsersSemantic>
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app()
         .after_help(users_get_long_usage())
-        .try_get_matches_from(args)?;
+        .try_get_matches_from(prepare_users_args(args)?)?;
 
     let filename = parse_users_files(matches);
     let sessions = users_sessions_from_file(&filename);
@@ -175,6 +360,7 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .arg(arg)
+        .gnu_getopt()
 }
 
 #[cfg(test)]
@@ -205,6 +391,7 @@ mod tests {
         use std::fs;
         use std::fs::File;
         use std::io::Write;
+        use std::os::unix::ffi::OsStringExt;
         use tempfile::TempDir;
 
         fn copy_str_to_c_char_array<const N: usize>(dst: &mut [libc::c_char; N], src: &str) {
@@ -295,6 +482,45 @@ mod tests {
                 OsString::from(file_path),
             ];
             assert_eq!(users_main(args.into_iter()).unwrap(), b"a\xff");
+        }
+
+        #[test]
+        fn users_reports_unknown_option_with_gnu_diagnostic() {
+            let args = [ctcore::ct_util_name(), "--invalid-option"];
+            let error = users_main(args.iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(error.to_string(), "unrecognized option '--invalid-option'");
+        }
+
+        #[test]
+        fn users_reports_second_file_as_extra_operand() {
+            let args = [ctcore::ct_util_name(), "first", "second"];
+            let error = users_main(args.iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(error.to_string(), "extra operand 'second'");
+        }
+
+        #[test]
+        fn users_posix_mode_stops_option_parsing_after_first_file() {
+            let args = [ctcore::ct_util_name(), "first", "--version"];
+            let error =
+                prepare_users_args_with_mode(args.iter().map(OsString::from), true).unwrap_err();
+
+            assert_eq!(error.to_string(), "extra operand '--version'");
+        }
+
+        #[test]
+        fn users_preserves_non_utf8_unknown_option_bytes() {
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from_vec(vec![b'-', b'-', 0xff]),
+            ];
+            let error = users_main(args.into_iter()).unwrap_err();
+
+            assert_eq!(
+                error.diagnostic_bytes().as_ref(),
+                b"unrecognized option '--\xff'"
+            );
         }
 
         #[test]

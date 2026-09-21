@@ -419,6 +419,37 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "users",
+            "description": "LC_ALL=C、LANG=C且POSIXLY_CORRECT=1下执行users posix.utmp；输入fixture为400字节Linux utmp，USER_PROCESS用户名为posix。GNU停止选项扫描但必须正常接受单个FILE，预期RC=0、stdout为posix加换行、stderr为空，且不得触发clap断言。",
+            "setup_commands": [
+                "dd if=/dev/zero of=posix.utmp bs=400 count=1 status=none",
+                "/usr/bin/printf '\\007\\000' | dd of=posix.utmp bs=1 seek=0 conv=notrunc status=none",
+                "/usr/bin/printf 'pts/1\\000' | dd of=posix.utmp bs=1 seek=8 conv=notrunc status=none",
+                "/usr/bin/printf 'p001' | dd of=posix.utmp bs=1 seek=40 conv=notrunc status=none",
+                "/usr/bin/printf 'posix\\000' | dd of=posix.utmp bs=1 seek=44 conv=notrunc status=none"
+            ],
+            "args": [
+                "posix.utmp"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "posix\n",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "POSIXLY_CORRECT": "1"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

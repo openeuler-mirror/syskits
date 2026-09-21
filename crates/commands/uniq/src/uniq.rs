@@ -24,7 +24,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use clap::{crate_version, error::ContextKind, error::Error, error::ErrorKind};
 use ctcore::Tool;
 use ctcore::ct_display::{Quotable, locale_quote_marks};
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, strip_errno};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, strip_errno};
 use ctcore::ct_posix::{
     GnuGetoptCommandExt, MODERN, TRADITIONAL, ct_posix_version, posixly_correct,
 };
@@ -1258,6 +1258,82 @@ fn uniq_short_option_equals_error(
     None
 }
 
+fn uniq_required_long_option(argument: &[u8]) -> Option<&'static str> {
+    let name = argument.strip_prefix(b"--")?;
+    if name.contains(&b'=') {
+        return None;
+    }
+
+    let mut options = ["skip-fields", "skip-chars", "check-chars"]
+        .into_iter()
+        .filter(|option| option.as_bytes().starts_with(name));
+    let option = options.next()?;
+    options.next().is_none().then_some(option)
+}
+
+fn uniq_required_short_option(argument: &[u8]) -> Option<u8> {
+    let short_options = argument.strip_prefix(b"-")?;
+
+    for (index, option) in short_options.iter().copied().enumerate() {
+        match option {
+            b'0'..=b'9' | b'c' | b'd' | b'D' | b'i' | b'u' | b'z' => continue,
+            b'f' | b's' | b'w' => return (index + 1 == short_options.len()).then_some(option),
+            _ => return None,
+        }
+    }
+
+    None
+}
+
+fn uniq_required_option_error(
+    args: &[OsString],
+    posixly_correct: bool,
+) -> Option<Box<dyn CTError>> {
+    let mut parse_options = true;
+    let mut previous_option_requires_value = false;
+
+    for (index, argument) in args.iter().enumerate() {
+        if index == 0 || !parse_options {
+            continue;
+        }
+
+        let bytes = argument.as_encoded_bytes();
+        if previous_option_requires_value {
+            previous_option_requires_value = false;
+            continue;
+        }
+        if bytes == b"--" {
+            parse_options = false;
+            continue;
+        }
+        if posixly_correct && (bytes.is_empty() || bytes[0] != b'-') {
+            parse_options = false;
+            continue;
+        }
+        if let Some(option) = uniq_required_long_option(bytes) {
+            if index + 1 == args.len() {
+                return Some(CTsageError::new(
+                    1,
+                    format!("option '--{option}' requires an argument"),
+                ));
+            }
+            previous_option_requires_value = true;
+            continue;
+        }
+        if let Some(option) = uniq_required_short_option(bytes) {
+            if index + 1 == args.len() {
+                return Some(CTsageError::new(
+                    1,
+                    format!("option requires an argument -- '{}'", char::from(option)),
+                ));
+            }
+            previous_option_requires_value = true;
+        }
+    }
+
+    None
+}
+
 fn uniq_non_utf8_delimiter_method_error(
     args: &[OsString],
     posixly_correct: bool,
@@ -1329,6 +1405,9 @@ pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
             "invalid option -- '='\nTry 'uniq --help' for more information.",
         ));
     }
+    if let Some(error) = uniq_required_option_error(&args, posixly_correct()) {
+        return Err(error);
+    }
     if let Some(error) = uniq_non_utf8_delimiter_method_error(&args, posixly_correct()) {
         return Err(error);
     }
@@ -1392,6 +1471,9 @@ pub fn uniq_native_semantic(args: impl ctcore::Args) -> CTResult<UniqSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
+    if let Some(error) = uniq_required_option_error(&args, posixly_correct()) {
+        return Err(error);
+    }
     if let Some(error) = uniq_non_utf8_delimiter_method_error(&args, posixly_correct()) {
         return Err(error);
     }
@@ -1774,6 +1856,25 @@ mod tests {
             let args = [OsString::from("uniq"), OsString::from(argument)];
             let error = uniq_short_option_equals_error(&args, false)
                 .expect("GNU rejects '=' in a value-taking short option");
+
+            assert_eq!(error.to_string(), expected);
+        }
+    }
+
+    #[test]
+    fn test_required_option_without_value_uses_gnu_diagnostic() {
+        let cases = [
+            ("-f", "option requires an argument -- 'f'"),
+            (
+                "--skip-fields",
+                "option '--skip-fields' requires an argument",
+            ),
+        ];
+
+        for (argument, expected) in cases {
+            let args = [OsString::from("uniq"), OsString::from(argument)];
+            let error = uniq_required_option_error(&args, false)
+                .expect("GNU rejects a required option without a value");
 
             assert_eq!(error.to_string(), expected);
         }

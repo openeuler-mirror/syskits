@@ -255,7 +255,6 @@
             "cleanup_commands": []
         },
         {
-            "tstdin": "a\n",
             "command": "uniq",
             "description": "-s后的负数仍是该选项的参数，GNU按skip-chars专用错误文本拒绝而非将其当作未知选项",
             "args": ["-s", "-1"],

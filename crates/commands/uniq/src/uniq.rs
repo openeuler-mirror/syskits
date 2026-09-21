@@ -13,7 +13,10 @@
 
 extern crate rust_i18n;
 use rust_i18n::t;
+use std::borrow::Cow;
+use std::error::Error as StdError;
 use std::ffi::{OsStr, OsString};
+use std::fmt::{Display, Formatter};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
@@ -120,6 +123,35 @@ struct UniqInvocation {
     config: UniqFlags,
     in_file_name: Option<OsString>,
     out_file_name: Option<OsString>,
+}
+
+#[derive(Debug)]
+struct UniqUsageError {
+    message: Vec<u8>,
+}
+
+impl UniqUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl Display for UniqUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl StdError for UniqUsageError {}
+
+impl CTError for UniqUsageError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
 }
 
 macro_rules! uniq_write_line_terminator {
@@ -1334,6 +1366,126 @@ fn uniq_required_option_error(
     None
 }
 
+#[derive(Clone, Copy)]
+enum UniqLongOptionArgument {
+    None,
+    Optional,
+    Required,
+}
+
+const UNIQ_GNU_LONG_OPTIONS: &[(&str, UniqLongOptionArgument)] = &[
+    ("count", UniqLongOptionArgument::None),
+    ("repeated", UniqLongOptionArgument::None),
+    ("all-repeated", UniqLongOptionArgument::Optional),
+    ("group", UniqLongOptionArgument::Optional),
+    ("ignore-case", UniqLongOptionArgument::None),
+    ("unique", UniqLongOptionArgument::None),
+    ("skip-fields", UniqLongOptionArgument::Required),
+    ("skip-chars", UniqLongOptionArgument::Required),
+    ("check-chars", UniqLongOptionArgument::Required),
+    ("zero-terminated", UniqLongOptionArgument::None),
+    ("help", UniqLongOptionArgument::None),
+    ("version", UniqLongOptionArgument::None),
+];
+
+enum UniqLongOptionMatch {
+    None,
+    Recognized(UniqLongOptionArgument),
+    Ambiguous(Vec<&'static str>),
+}
+
+fn uniq_match_long_option(name: &[u8]) -> UniqLongOptionMatch {
+    let matches = UNIQ_GNU_LONG_OPTIONS
+        .iter()
+        .filter_map(|(option, argument)| {
+            option
+                .as_bytes()
+                .starts_with(name)
+                .then_some((*option, *argument))
+        })
+        .collect::<Vec<_>>();
+
+    match matches.as_slice() {
+        [] => UniqLongOptionMatch::None,
+        [(_, argument)] => UniqLongOptionMatch::Recognized(*argument),
+        _ => {
+            UniqLongOptionMatch::Ambiguous(matches.into_iter().map(|(option, _)| option).collect())
+        }
+    }
+}
+
+fn uniq_invalid_option_error(args: &[OsString], posixly_correct: bool) -> Option<Box<dyn CTError>> {
+    let mut index = 1;
+
+    while index < args.len() {
+        let bytes = args[index].as_encoded_bytes();
+        if bytes == b"--" {
+            break;
+        }
+        if bytes.len() <= 1 || bytes[0] != b'-' {
+            if posixly_correct {
+                break;
+            }
+            index += 1;
+            continue;
+        }
+
+        if bytes.starts_with(b"--") {
+            let equals = bytes[2..].iter().position(|byte| *byte == b'=');
+            let name = &bytes[2..equals.map_or(bytes.len(), |offset| offset + 2)];
+            match uniq_match_long_option(name) {
+                UniqLongOptionMatch::None => {
+                    let mut message = b"unrecognized option '".to_vec();
+                    message.extend_from_slice(bytes);
+                    message.push(b'\'');
+                    return Some(UniqUsageError::boxed(message));
+                }
+                UniqLongOptionMatch::Ambiguous(options) => {
+                    let mut message = b"option '".to_vec();
+                    message.extend_from_slice(bytes);
+                    message.extend_from_slice(b"' is ambiguous; possibilities:");
+                    for option in options {
+                        message.extend_from_slice(format!(" '--{option}'").as_bytes());
+                    }
+                    return Some(UniqUsageError::boxed(message));
+                }
+                UniqLongOptionMatch::Recognized(UniqLongOptionArgument::Required)
+                    if equals.is_none() =>
+                {
+                    index += 1;
+                }
+                UniqLongOptionMatch::Recognized(_) => {}
+            }
+            index += 1;
+            continue;
+        }
+
+        let mut short_index = 1;
+        while short_index < bytes.len() {
+            match bytes[short_index] {
+                b'c' | b'd' | b'D' | b'i' | b'u' | b'z' | b'0'..=b'9' => {
+                    short_index += 1;
+                }
+                b'f' | b's' | b'w' => {
+                    if short_index + 1 == bytes.len() {
+                        index += 1;
+                    }
+                    break;
+                }
+                option => {
+                    let mut message = b"invalid option -- '".to_vec();
+                    message.push(option);
+                    message.push(b'\'');
+                    return Some(UniqUsageError::boxed(message));
+                }
+            }
+        }
+        index += 1;
+    }
+
+    None
+}
+
 fn uniq_non_utf8_delimiter_method_error(
     args: &[OsString],
     posixly_correct: bool,
@@ -1405,6 +1557,9 @@ pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
             "invalid option -- '='\nTry 'uniq --help' for more information.",
         ));
     }
+    if let Some(error) = uniq_invalid_option_error(&args, posixly_correct()) {
+        return Err(error);
+    }
     if let Some(error) = uniq_required_option_error(&args, posixly_correct()) {
         return Err(error);
     }
@@ -1471,6 +1626,9 @@ pub fn uniq_native_semantic(args: impl ctcore::Args) -> CTResult<UniqSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
+    if let Some(error) = uniq_invalid_option_error(&args, posixly_correct()) {
+        return Err(error);
+    }
     if let Some(error) = uniq_required_option_error(&args, posixly_correct()) {
         return Err(error);
     }
@@ -1878,6 +2036,44 @@ mod tests {
 
             assert_eq!(error.to_string(), expected);
         }
+    }
+
+    #[test]
+    fn test_unknown_and_ambiguous_options_use_gnu_diagnostics() {
+        let cases = [
+            ("-cx", "invalid option -- 'x'"),
+            ("--unknown", "unrecognized option '--unknown'"),
+            (
+                "--s",
+                "option '--s' is ambiguous; possibilities: '--skip-fields' '--skip-chars'",
+            ),
+        ];
+
+        for (argument, expected) in cases {
+            let args = [OsString::from("uniq"), OsString::from(argument)];
+            let error = uniq_invalid_option_error(&args, false)
+                .expect("GNU rejects unknown and ambiguous options before Clap");
+
+            assert_eq!(error.to_string(), expected);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_invalid_short_option_preserves_raw_non_utf8_byte() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let args = [
+            OsString::from("uniq"),
+            OsString::from_vec(b"-\xff".to_vec()),
+        ];
+        let error = uniq_invalid_option_error(&args, false)
+            .expect("GNU rejects the raw invalid short option");
+
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            b"invalid option -- '\xff'"
+        );
     }
 
     #[test]

@@ -243,6 +243,46 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "",
+            "command": "uniq",
+            "description": "组合短选项-cx中的x不是合法选项，GNU定位到无效短选项字符并输出标准帮助提示，不输出Clap建议和Usage块",
+            "args": ["-cx"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uniq: invalid option -- 'x'\nTry 'uniq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "uniq",
+            "description": "--s同时匹配--skip-fields和--skip-chars时，GNU输出歧义候选列表和标准帮助提示",
+            "args": ["--s"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uniq: option '--s' is ambiguous; possibilities: '--skip-fields' '--skip-chars'\nTry 'uniq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "a\na\n",
             "command": "uniq",
             "description": "-D是无参数短选项，只有--all-repeated允许=METHOD；-D=prepend必须按GNU报告非法=选项",

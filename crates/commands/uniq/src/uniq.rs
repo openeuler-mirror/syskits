@@ -883,53 +883,6 @@ fn uniq_handle_obsolete(args: impl ctcore::Args) -> (Vec<OsString>, Option<usize
     uniq_handle_obsolete_with_mode(args, posixly_correct())
 }
 
-fn uniq_has_short_all_repeated_assignment(args: &[OsString], posixly_correct: bool) -> bool {
-    let mut parse_options = true;
-    let mut previous_option_requires_value = false;
-
-    for (index, argument) in args.iter().enumerate() {
-        if index == 0 || !parse_options {
-            continue;
-        }
-
-        let bytes = argument.as_encoded_bytes();
-        if previous_option_requires_value {
-            previous_option_requires_value = false;
-            continue;
-        }
-        if bytes == b"--" {
-            parse_options = false;
-            continue;
-        }
-        if posixly_correct && (bytes.is_empty() || bytes[0] != b'-') {
-            parse_options = false;
-            continue;
-        }
-        if bytes.starts_with(b"--") {
-            previous_option_requires_value = uniq_required_long_option(bytes).is_some();
-            continue;
-        }
-        if !bytes.starts_with(b"-") || bytes.len() == 1 {
-            continue;
-        }
-
-        let mut short_index = 1;
-        while short_index < bytes.len() {
-            match bytes[short_index] {
-                b'f' | b's' | b'w' => {
-                    previous_option_requires_value = short_index + 1 == bytes.len();
-                    break;
-                }
-                b'D' if bytes.get(short_index + 1) == Some(&b'=') => return true,
-                b'c' | b'd' | b'D' | b'i' | b'u' | b'z' => short_index += 1,
-                _ => break,
-            }
-        }
-    }
-
-    false
-}
-
 fn uniq_handle_obsolete_with_mode(
     args: impl ctcore::Args,
     posixly_correct: bool,
@@ -1690,6 +1643,9 @@ fn uniq_invalid_option_error(args: &[OsString], posixly_correct: bool) -> Option
         let mut short_index = 1;
         while short_index < bytes.len() {
             match bytes[short_index] {
+                b'D' if bytes.get(short_index + 1) == Some(&b'=') => {
+                    return Some(UniqUsageError::boxed(b"invalid option -- '='".to_vec()));
+                }
                 b'c' | b'd' | b'D' | b'i' | b'u' | b'z' | b'0'..=b'9' => {
                     short_index += 1;
                 }
@@ -1833,12 +1789,6 @@ pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
-    if uniq_has_short_all_repeated_assignment(&args, posixly_correct()) {
-        return Err(CtSimpleError::new(
-            1,
-            "invalid option -- '='\nTry 'uniq --help' for more information.",
-        ));
-    }
     if let Some(error) = uniq_invalid_option_error(&args, posixly_correct()) {
         return Err(error);
     }
@@ -2204,27 +2154,18 @@ mod tests {
     }
 
     #[test]
-    fn test_short_all_repeated_assignment_detection_respects_option_values() {
-        assert!(uniq_has_short_all_repeated_assignment(
-            &[OsString::from("uniq"), OsString::from("-D=prepend")],
-            false,
-        ));
-        assert!(!uniq_has_short_all_repeated_assignment(
-            &[
+    fn test_uniq_main_reports_earlier_invalid_option_before_short_d_assignment() {
+        let error = uniq_main(
+            [
                 OsString::from("uniq"),
-                OsString::from("-f"),
-                OsString::from("-D=prepend"),
-            ],
-            false,
-        ));
-        assert!(!uniq_has_short_all_repeated_assignment(
-            &[
-                OsString::from("uniq"),
-                OsString::from("--"),
-                OsString::from("-D=prepend"),
-            ],
-            false,
-        ));
+                OsString::from("--d"),
+                OsString::from("-D=none"),
+            ]
+            .into_iter(),
+        )
+        .expect_err("the earlier unknown option must be rejected");
+
+        assert_eq!(error.to_string(), "unrecognized option '--d'");
     }
 
     #[test]
@@ -2244,14 +2185,20 @@ mod tests {
 
     #[test]
     fn test_required_long_option_prefix_does_not_reparse_short_option_value() {
-        assert!(!uniq_has_short_all_repeated_assignment(
-            &[
+        let error = uniq_main(
+            [
                 OsString::from("uniq"),
                 OsString::from("--skip-f"),
                 OsString::from("-D=prepend"),
-            ],
-            false,
-        ));
+            ]
+            .into_iter(),
+        )
+        .expect_err("--skip-f must consume -D=prepend as its numeric value");
+
+        assert_eq!(
+            error.to_string(),
+            "-D=prepend: invalid number of fields to skip"
+        );
     }
 
     #[test]

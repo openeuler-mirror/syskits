@@ -795,7 +795,7 @@ pub fn ct_app() -> Command {
     let application_info = t!("users.about");
     let usage_description = t!("users.usage");
     let arg = Arg::new(USERS_ARG_FILES)
-        .num_args(1)
+        .num_args(1..)
         .value_hint(clap::ValueHint::FilePath)
         .value_parser(ValueParser::os_string());
 
@@ -1026,6 +1026,19 @@ mod tests {
             let (explicit_file, explicit_checks_pids) = parse_users_files(explicit_matches);
             assert_eq!(explicit_file, PathBuf::from("fixture.utmp"));
             assert!(!explicit_checks_pids);
+        }
+
+        #[test]
+        fn users_posix_mode_accepts_a_single_file() {
+            let matches = with_locale_variables(&[("POSIXLY_CORRECT", Some("1"))], || {
+                ct_app()
+                    .try_get_matches_from([ctcore::ct_util_name(), "fixture.utmp"])
+                    .expect("POSIX mode must accept one FILE operand")
+            });
+            let (file, check_pids) = parse_users_files(matches);
+
+            assert_eq!(file, PathBuf::from("fixture.utmp"));
+            assert!(!check_pids);
         }
 
         #[test]

@@ -17,6 +17,8 @@ use rust_i18n::t;
 use std::borrow::Cow;
 use std::error::Error;
 use std::ffi::OsString;
+#[cfg(target_os = "linux")]
+use std::ffi::{CStr, CString};
 use std::fmt::{Display, Formatter};
 use std::os::unix::ffi::OsStrExt;
 rust_i18n::i18n!("locales", fallback = "en-US");
@@ -44,11 +46,19 @@ enum UsersLongOptionMatch {
 #[derive(Debug)]
 struct UsersUsageError {
     message: Vec<u8>,
+    usage_hint: Vec<u8>,
 }
 
 impl UsersUsageError {
     fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
-        Box::new(Self { message })
+        Self::boxed_for_locale(message, users_uses_simplified_chinese())
+    }
+
+    fn boxed_for_locale(message: Vec<u8>, simplified_chinese: bool) -> Box<dyn CTError> {
+        Box::new(Self {
+            message,
+            usage_hint: users_usage_hint(ctcore::ct_help_utility_name(), simplified_chinese),
+        })
     }
 }
 
@@ -63,6 +73,10 @@ impl Error for UsersUsageError {}
 impl CTError for UsersUsageError {
     fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Borrowed(&self.message)
+    }
+
+    fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
+        Some(Cow::Borrowed(&self.usage_hint))
     }
 
     fn usage(&self) -> bool {
@@ -212,9 +226,11 @@ fn prepare_users_args_with_mode(
     }
 
     if operands.len() > 1 {
-        let mut message = b"extra operand ".to_vec();
-        message.extend(users_quote_c_operand(operands[1].as_os_str()));
-        return Err(UsersUsageError::boxed(message));
+        let simplified_chinese = users_uses_simplified_chinese();
+        return Err(UsersUsageError::boxed_for_locale(
+            users_extra_operand_message(operands[1].as_os_str(), simplified_chinese),
+            simplified_chinese,
+        ));
     }
 
     Ok(args)
@@ -276,6 +292,391 @@ fn match_users_long_option(name: &[u8]) -> UsersLongOptionMatch {
 
 fn users_quote_c_operand(operand: &std::ffi::OsStr) -> Vec<u8> {
     users_quote_c_bytes(operand.as_bytes())
+}
+
+fn users_extra_operand_message(operand: &std::ffi::OsStr, simplified_chinese: bool) -> Vec<u8> {
+    let mut message = if simplified_chinese {
+        users_encode_locale_text("多余的操作对象 ")
+    } else {
+        b"extra operand ".to_vec()
+    };
+    message.extend(users_quote_operand(operand, simplified_chinese));
+    message
+}
+
+fn users_usage_hint(utility_name: &str, simplified_chinese: bool) -> Vec<u8> {
+    if simplified_chinese {
+        users_encode_locale_text(&format!(
+            "请尝试执行 \"{utility_name} --help\" 来获取更多信息。"
+        ))
+    } else {
+        format!("Try '{utility_name} --help' for more information.").into_bytes()
+    }
+}
+
+fn users_uses_simplified_chinese() -> bool {
+    if !users_locale_environment_is_valid() {
+        return false;
+    }
+
+    let simplified_chinese = users_message_locale()
+        .is_some_and(|locale| users_simplified_chinese_locale(locale.as_os_str()));
+    if !simplified_chinese {
+        return false;
+    }
+
+    users_output_codeset().is_none_or(|codeset| {
+        users_encode_locale_text_for_codeset("多余的操作对象", &codeset).is_some()
+    })
+}
+
+fn users_message_locale() -> Option<OsString> {
+    let locale = users_effective_locale(["LC_ALL", "LC_MESSAGES", "LANG"])?;
+    if users_c_message_locale(locale.as_os_str()) {
+        return Some(locale);
+    }
+
+    let Some(language) = std::env::var_os("LANGUAGE").filter(|language| !language.is_empty())
+    else {
+        return Some(locale);
+    };
+    for candidate in language
+        .to_string_lossy()
+        .split(':')
+        .filter(|candidate| !candidate.is_empty())
+    {
+        if users_c_message_locale(std::ffi::OsStr::new(candidate)) {
+            return Some(OsString::from("C"));
+        }
+        if users_simplified_chinese_locale(std::ffi::OsStr::new(candidate)) {
+            return Some(OsString::from(candidate));
+        }
+    }
+
+    Some(OsString::from("C"))
+}
+
+fn users_c_message_locale(locale: &std::ffi::OsStr) -> bool {
+    matches!(
+        locale.to_string_lossy().to_ascii_uppercase().as_str(),
+        "C" | "POSIX"
+    )
+}
+
+fn users_simplified_chinese_locale(locale: &std::ffi::OsStr) -> bool {
+    let locale = locale.to_string_lossy();
+    locale == "zh_CN" || locale.starts_with("zh_CN.") || locale.starts_with("zh_CN@")
+}
+
+fn users_effective_locale<const N: usize>(names: [&str; N]) -> Option<OsString> {
+    names.into_iter().find_map(|name| {
+        let value = std::env::var_os(name)?;
+        (!value.is_empty()).then_some(value)
+    })
+}
+
+fn users_encode_locale_text(text: &str) -> Vec<u8> {
+    if let Some(codeset) = users_output_codeset()
+        && let Some(encoded) = users_encode_locale_text_for_codeset(text, &codeset)
+    {
+        return encoded;
+    }
+
+    text.as_bytes().to_vec()
+}
+
+fn users_output_codeset() -> Option<String> {
+    if !users_locale_environment_is_valid() {
+        return Some("ASCII".to_owned());
+    }
+
+    if let Some(codeset) = std::env::var_os("OUTPUT_CHARSET").filter(|codeset| !codeset.is_empty())
+    {
+        return Some(codeset.to_string_lossy().into_owned());
+    }
+
+    users_ctype_codeset()
+}
+
+fn users_ctype_codeset() -> Option<String> {
+    let locale = users_effective_locale(["LC_ALL", "LC_CTYPE", "LANG"])?;
+    let locale_text = locale.to_string_lossy();
+    let locale_uppercase = locale_text.to_ascii_uppercase();
+    if locale_uppercase.contains("UTF-8") || locale_uppercase.contains("UTF8") {
+        return None;
+    }
+
+    if matches!(locale_uppercase.as_str(), "C" | "POSIX") {
+        return Some("ASCII".to_owned());
+    }
+
+    locale_text
+        .split_once('.')
+        .map(|(_, codeset)| {
+            codeset
+                .split_once('@')
+                .map_or(codeset, |(codeset, _)| codeset)
+        })
+        .map(ToOwned::to_owned)
+        .or_else(|| users_locale_codeset(locale.as_os_str()))
+}
+
+fn users_locale_codeset(locale: &std::ffi::OsStr) -> Option<String> {
+    let locale = CString::new(locale.as_encoded_bytes()).ok()?;
+    let locale_handle = unsafe {
+        ctcore::libc::newlocale(
+            ctcore::libc::LC_CTYPE_MASK,
+            locale.as_ptr(),
+            std::ptr::null_mut(),
+        )
+    };
+    if locale_handle.is_null() {
+        return None;
+    }
+
+    let codeset = unsafe {
+        let codeset = ctcore::libc::nl_langinfo_l(ctcore::libc::CODESET, locale_handle);
+        (!codeset.is_null()).then(|| CStr::from_ptr(codeset).to_bytes().to_vec())
+    };
+    unsafe { ctcore::libc::freelocale(locale_handle) };
+    codeset.and_then(|codeset| String::from_utf8(codeset).ok())
+}
+
+fn users_locale_environment_is_valid() -> bool {
+    let locale_handle = unsafe {
+        ctcore::libc::newlocale(
+            ctcore::libc::LC_ALL_MASK,
+            c"".as_ptr(),
+            std::ptr::null_mut(),
+        )
+    };
+    if locale_handle.is_null() {
+        return false;
+    }
+    unsafe { ctcore::libc::freelocale(locale_handle) };
+    true
+}
+
+fn users_encode_locale_text_for_codeset(text: &str, codeset: &str) -> Option<Vec<u8>> {
+    let target = CString::new(format!("{codeset}//TRANSLIT")).ok()?;
+    let source = CString::new("UTF-8").expect("UTF-8 has no NUL byte");
+    let converter = unsafe { ctcore::libc::iconv_open(target.as_ptr(), source.as_ptr()) };
+    if converter == (-1_isize) as ctcore::libc::iconv_t {
+        return None;
+    }
+
+    let mut input = text.as_ptr().cast_mut().cast::<ctcore::libc::c_char>();
+    let mut input_left = text.len();
+    let mut output = vec![0_u8; text.len().saturating_mul(4).max(16)];
+    let mut output_ptr = output.as_mut_ptr().cast::<ctcore::libc::c_char>();
+    let mut output_left = output.len();
+    let result = unsafe {
+        ctcore::libc::iconv(
+            converter,
+            &mut input,
+            &mut input_left,
+            &mut output_ptr,
+            &mut output_left,
+        )
+    };
+    unsafe { ctcore::libc::iconv_close(converter) };
+    if result == usize::MAX || input_left != 0 {
+        return None;
+    }
+
+    output.truncate(output.len() - output_left);
+    Some(output)
+}
+
+fn users_quote_operand(operand: &std::ffi::OsStr, simplified_chinese: bool) -> Vec<u8> {
+    if simplified_chinese {
+        if let Some(codeset) = users_ctype_codeset() {
+            return users_quote_locale_encoded_operand(operand, &codeset, b"\"", b"\"");
+        }
+        return users_quote_utf8_operand_with_quotes(operand, b"\"", b"\"", Some(b'\"'));
+    }
+
+    if users_locale_is_utf8() {
+        return users_quote_utf8_operand_with_quotes(operand, "‘".as_bytes(), "’".as_bytes(), None);
+    }
+
+    if let Some(codeset) = users_ctype_codeset() {
+        if codeset.eq_ignore_ascii_case("GB18030") {
+            return users_quote_locale_encoded_operand(
+                operand,
+                &codeset,
+                b"\xa1\x07e",
+                b"\xa1\xaf",
+            );
+        }
+        return users_quote_locale_encoded_operand(operand, &codeset, b"'", b"'");
+    }
+
+    users_quote_c_operand(operand)
+}
+
+fn users_locale_is_utf8() -> bool {
+    users_locale_environment_is_valid()
+        && users_effective_locale(["LC_ALL", "LC_CTYPE", "LANG"]).is_some_and(|value| {
+            let value = value.to_string_lossy().to_ascii_uppercase();
+            value.contains("UTF-8") || value.contains("UTF8")
+        })
+}
+
+fn users_quote_utf8_operand_with_quotes(
+    operand: &std::ffi::OsStr,
+    left_quote: &[u8],
+    right_quote: &[u8],
+    quote_to_escape: Option<u8>,
+) -> Vec<u8> {
+    let input = operand.as_encoded_bytes();
+    let mut quoted = Vec::with_capacity(input.len() + left_quote.len() + right_quote.len());
+    quoted.extend_from_slice(left_quote);
+
+    let mut index = 0;
+    while index < input.len() {
+        if input[index..].starts_with(right_quote) {
+            quoted.push(b'\\');
+            quoted.extend_from_slice(right_quote);
+            index += right_quote.len();
+            continue;
+        }
+
+        if input[index].is_ascii() {
+            users_push_quoted_ascii(&mut quoted, input[index], quote_to_escape);
+            index += 1;
+            continue;
+        }
+
+        match std::str::from_utf8(&input[index..]) {
+            Ok(_) => {
+                quoted.extend_from_slice(&input[index..]);
+                break;
+            }
+            Err(error) if error.valid_up_to() > 0 => {
+                let end = index + error.valid_up_to();
+                quoted.extend_from_slice(&input[index..end]);
+                index = end;
+            }
+            Err(error) => {
+                let invalid_length = error.error_len().unwrap_or(input.len() - index);
+                for byte in &input[index..index + invalid_length] {
+                    users_push_octal_escape(&mut quoted, *byte);
+                }
+                index += invalid_length;
+            }
+        }
+    }
+
+    quoted.extend_from_slice(right_quote);
+    quoted
+}
+
+fn users_quote_locale_encoded_operand(
+    operand: &std::ffi::OsStr,
+    codeset: &str,
+    left_quote: &[u8],
+    right_quote: &[u8],
+) -> Vec<u8> {
+    let input = operand.as_encoded_bytes();
+    let mut quoted = Vec::with_capacity(input.len() + left_quote.len() + right_quote.len());
+    quoted.extend_from_slice(left_quote);
+
+    let mut index = 0;
+    while index < input.len() {
+        if input[index..].starts_with(right_quote) {
+            quoted.push(b'\\');
+            quoted.extend_from_slice(right_quote);
+            index += right_quote.len();
+            continue;
+        }
+
+        if input[index].is_ascii() {
+            users_push_quoted_ascii(
+                &mut quoted,
+                input[index],
+                (right_quote.len() == 1).then_some(right_quote[0]),
+            );
+            index += 1;
+            continue;
+        }
+
+        let valid_character_len = users_valid_locale_character_len(&input[index..], codeset);
+        if valid_character_len == 0 {
+            users_push_octal_escape(&mut quoted, input[index]);
+            index += 1;
+        } else {
+            quoted.extend_from_slice(&input[index..index + valid_character_len]);
+            index += valid_character_len;
+        }
+    }
+
+    quoted.extend_from_slice(right_quote);
+    quoted
+}
+
+fn users_valid_locale_character_len(input: &[u8], codeset: &str) -> usize {
+    for length in 1..=input.len().min(4) {
+        if users_locale_bytes_are_valid(&input[..length], codeset) {
+            return length;
+        }
+    }
+    0
+}
+
+fn users_locale_bytes_are_valid(input: &[u8], codeset: &str) -> bool {
+    let source = match CString::new(codeset) {
+        Ok(source) => source,
+        Err(_) => return false,
+    };
+    let target = CString::new("UTF-8").expect("UTF-8 has no NUL byte");
+    let converter = unsafe { ctcore::libc::iconv_open(target.as_ptr(), source.as_ptr()) };
+    if converter == (-1_isize) as ctcore::libc::iconv_t {
+        return false;
+    }
+
+    let mut input_ptr = input.as_ptr().cast_mut().cast::<ctcore::libc::c_char>();
+    let mut input_left = input.len();
+    let mut output = vec![0_u8; input.len().saturating_mul(4).max(16)];
+    let mut output_ptr = output.as_mut_ptr().cast::<ctcore::libc::c_char>();
+    let mut output_left = output.len();
+    let result = unsafe {
+        ctcore::libc::iconv(
+            converter,
+            &mut input_ptr,
+            &mut input_left,
+            &mut output_ptr,
+            &mut output_left,
+        )
+    };
+    unsafe { ctcore::libc::iconv_close(converter) };
+    result != usize::MAX && input_left == 0
+}
+
+fn users_push_quoted_ascii(output: &mut Vec<u8>, byte: u8, quote_to_escape: Option<u8>) {
+    match byte {
+        b'\x07' => output.extend_from_slice(b"\\a"),
+        b'\x08' => output.extend_from_slice(b"\\b"),
+        b'\t' => output.extend_from_slice(b"\\t"),
+        b'\n' => output.extend_from_slice(b"\\n"),
+        b'\x0b' => output.extend_from_slice(b"\\v"),
+        b'\x0c' => output.extend_from_slice(b"\\f"),
+        b'\r' => output.extend_from_slice(b"\\r"),
+        b'\\' => output.extend_from_slice(b"\\\\"),
+        escaped if quote_to_escape == Some(escaped) => {
+            output.push(b'\\');
+            output.push(escaped);
+        }
+        b' '..=b'~' => output.push(byte),
+        _ => users_push_octal_escape(output, byte),
+    }
+}
+
+fn users_push_octal_escape(output: &mut Vec<u8>, byte: u8) {
+    output.push(b'\\');
+    output.push(b'0' + (byte >> 6));
+    output.push(b'0' + ((byte >> 3) & 7));
+    output.push(b'0' + (byte & 7));
 }
 
 fn users_quote_c_bytes(bytes: &[u8]) -> Vec<u8> {
@@ -411,6 +812,31 @@ pub fn ct_app() -> Command {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+    use std::sync::Mutex;
+
+    static LOCALE_LOCK: Mutex<()> = Mutex::new(());
+
+    fn with_locale_variables<T>(variables: &[(&str, Option<&str>)], test: impl FnOnce() -> T) -> T {
+        let _guard = LOCALE_LOCK.lock().unwrap();
+        let previous = variables
+            .iter()
+            .map(|(name, _)| (*name, std::env::var_os(name)))
+            .collect::<Vec<_>>();
+        for (name, value) in variables {
+            match value {
+                Some(value) => unsafe { std::env::set_var(name, value) },
+                None => unsafe { std::env::remove_var(name) },
+            }
+        }
+        let result = test();
+        for (name, value) in previous {
+            match value {
+                Some(value) => unsafe { std::env::set_var(name, value) },
+                None => unsafe { std::env::remove_var(name) },
+            }
+        }
+        result
+    }
 
     #[test]
     fn test_tool_implementation() {
@@ -538,19 +964,29 @@ mod tests {
 
         #[test]
         fn users_reports_second_file_as_extra_operand() {
+            let _guard = LOCALE_LOCK.lock().unwrap();
             let args = [ctcore::ct_util_name(), "first", "second"];
             let error = users_main(args.iter().map(OsString::from)).unwrap_err();
+            let expected = users_extra_operand_message(
+                std::ffi::OsStr::new("second"),
+                users_uses_simplified_chinese(),
+            );
 
-            assert_eq!(error.to_string(), "extra operand 'second'");
+            assert_eq!(error.diagnostic_bytes().as_ref(), expected);
         }
 
         #[test]
         fn users_posix_mode_stops_option_parsing_after_first_file() {
+            let _guard = LOCALE_LOCK.lock().unwrap();
             let args = [ctcore::ct_util_name(), "first", "--version"];
             let error =
                 prepare_users_args_with_mode(args.iter().map(OsString::from), true).unwrap_err();
+            let expected = users_extra_operand_message(
+                std::ffi::OsStr::new("--version"),
+                users_uses_simplified_chinese(),
+            );
 
-            assert_eq!(error.to_string(), "extra operand '--version'");
+            assert_eq!(error.diagnostic_bytes().as_ref(), expected);
         }
 
         #[test]
@@ -600,6 +1036,59 @@ mod tests {
                 users_write_error_message(&error),
                 "write error: No space left on device"
             );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn users_locale_quoting_matches_gnu_utf8_and_gb18030_rules() {
+            use std::ffi::OsStr;
+            use std::os::unix::ffi::OsStrExt;
+
+            assert_eq!(
+                users_quote_utf8_operand_with_quotes(
+                    OsStr::from_bytes(b"a\xe2\x80\x99b\xff"),
+                    "‘".as_bytes(),
+                    "’".as_bytes(),
+                    None,
+                ),
+                "‘a\\’b\\377’".as_bytes()
+            );
+            assert_eq!(
+                users_quote_locale_encoded_operand(
+                    OsStr::from_bytes(b"\xd6\xd0\xff"),
+                    "GB18030",
+                    b"\"",
+                    b"\"",
+                ),
+                b"\"\xd6\xd0\\377\""
+            );
+            assert_eq!(
+                users_encode_locale_text_for_codeset("多余的操作对象", "GB18030"),
+                Some(b"\xb6\xe0\xd3\xe0\xb5\xc4\xb2\xd9\xd7\xf7\xb6\xd4\xcf\xf3".to_vec())
+            );
+            assert!(users_simplified_chinese_locale(OsStr::new("zh_CN.UTF-8")));
+            assert!(!users_simplified_chinese_locale(OsStr::new("zh_TW.UTF-8")));
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn users_message_locale_uses_lc_all_without_language_override() {
+            let (message_locale, simplified_chinese) = with_locale_variables(
+                &[
+                    ("LC_ALL", Some("zh_CN.UTF-8")),
+                    ("LC_MESSAGES", None),
+                    ("LANG", None),
+                    ("LANGUAGE", None),
+                    ("OUTPUT_CHARSET", None),
+                ],
+                || (users_message_locale(), users_uses_simplified_chinese()),
+            );
+
+            assert_eq!(
+                message_locale.as_deref(),
+                Some(std::ffi::OsStr::new("zh_CN.UTF-8"))
+            );
+            assert!(simplified_chinese);
         }
 
         #[cfg(target_os = "linux")]

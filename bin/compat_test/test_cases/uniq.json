@@ -108,6 +108,27 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "abX\ncdX\n",
+            "command": "uniq",
+            "description": "_POSIX2_VERSION=200809时+N不是严格POSIX区间，+2按旧式字符跳过比较两个X，预期仅保留首行",
+            "args": ["+2"],
+            "environment": {
+                "env_vars": {
+                    "_POSIX2_VERSION": "200809",
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "abX\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "a\na\nb\nc\nc\nd\n",
             "command": "uniq",
             "description": "计数重复行",

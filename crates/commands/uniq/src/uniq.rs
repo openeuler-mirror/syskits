@@ -21,6 +21,8 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
 use std::num::IntErrorKind;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
@@ -36,6 +38,7 @@ use sys_locale::get_locale;
 unsafe extern "C" {
     fn __ctype_get_mb_cur_max() -> usize;
     fn iswblank(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
+    fn iswprint(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
     fn mbrtowc(
         wide: *mut ctcore::libc::wchar_t,
         bytes: *const ctcore::libc::c_char,
@@ -192,11 +195,145 @@ fn uniq_write_error(error: std::io::Error) -> Box<dyn CTError> {
 }
 
 fn uniq_read_error(input: Option<&OsStr>, error: std::io::Error) -> Box<dyn CTError> {
-    let input = match input {
-        Some(path) if path != "-" => path.quote().to_string(),
-        _ => "standard input".to_string(),
-    };
-    CtSimpleError::new(1, format!("error reading {input}: {}", strip_errno(&error)))
+    match input {
+        Some(path) if path != "-" => uniq_path_error(path, error, true, Some("error reading ")),
+        _ => CtSimpleError::new(
+            1,
+            format!("error reading standard input: {}", strip_errno(&error)),
+        ),
+    }
+}
+
+fn uniq_open_path_error(path: &OsStr, error: std::io::Error) -> Box<dyn CTError> {
+    uniq_path_error(path, error, false, None)
+}
+
+fn uniq_path_error(
+    path: &OsStr,
+    error: std::io::Error,
+    quote_always: bool,
+    prefix: Option<&str>,
+) -> Box<dyn CTError> {
+    let mut message = prefix.unwrap_or_default().as_bytes().to_vec();
+    message.extend(uniq_quote_path(path, quote_always));
+    message.extend_from_slice(b": ");
+    message.extend_from_slice(strip_errno(&error).as_bytes());
+    UniqRawError::boxed(message)
+}
+
+#[cfg(unix)]
+fn uniq_quote_path(path: &OsStr, quote_always: bool) -> Vec<u8> {
+    let bytes = path.as_bytes();
+    let has_non_printable = uniq_path_has_non_printable(bytes);
+    let has_invalid_utf8 = std::str::from_utf8(bytes).is_err();
+
+    if !has_non_printable && !has_invalid_utf8 {
+        return if quote_always {
+            path.quote().to_string().into_bytes()
+        } else {
+            path.maybe_quote().to_string().into_bytes()
+        };
+    }
+
+    if !has_non_printable && !quote_always && !uniq_path_needs_shell_quotes(bytes) {
+        return bytes.to_vec();
+    }
+
+    uniq_shell_escape_always(bytes)
+}
+
+#[cfg(not(unix))]
+fn uniq_quote_path(path: &OsStr, quote_always: bool) -> Vec<u8> {
+    if quote_always {
+        path.quote().to_string().into_bytes()
+    } else {
+        path.maybe_quote().to_string().into_bytes()
+    }
+}
+
+#[cfg(unix)]
+fn uniq_path_has_non_printable(bytes: &[u8]) -> bool {
+    let mut offset = 0;
+    let mut state: ctcore::libc::mbstate_t = unsafe { std::mem::zeroed() };
+
+    while offset < bytes.len() {
+        let (length, wide) = uniq_next_locale_char(bytes, offset, &mut state);
+        if wide.is_none_or(|wide| unsafe { iswprint(wide as ctcore::libc::c_uint) == 0 }) {
+            return true;
+        }
+        offset += length.min(bytes.len() - offset);
+    }
+
+    false
+}
+
+#[cfg(unix)]
+fn uniq_path_needs_shell_quotes(bytes: &[u8]) -> bool {
+    bytes.iter().enumerate().any(|(index, byte)| {
+        b"|&;<>()$`\\\"'*[]=^{} ".contains(byte)
+            || (index == 0 && matches!(byte, b'#' | b'~' | b'!'))
+    })
+}
+
+/// Render the `shell_escape_always_quoting_style` form used by GNU's
+/// `quotef` and `quoteaf` once an argument contains a non-printable byte.
+#[cfg(unix)]
+fn uniq_shell_escape_always(bytes: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(bytes.len() + 8);
+    let mut offset = 0;
+    let mut state: ctcore::libc::mbstate_t = unsafe { std::mem::zeroed() };
+    let mut plain_quote_open = false;
+
+    while offset < bytes.len() {
+        let (length, wide) = uniq_next_locale_char(bytes, offset, &mut state);
+        let length = length.min(bytes.len() - offset);
+        let printable =
+            wide.is_some_and(|wide| unsafe { iswprint(wide as ctcore::libc::c_uint) != 0 });
+
+        if printable {
+            if !plain_quote_open {
+                output.push(b'\'');
+                plain_quote_open = true;
+            }
+            for byte in &bytes[offset..offset + length] {
+                if *byte == b'\'' {
+                    output.extend_from_slice(b"'\\''");
+                } else {
+                    output.push(*byte);
+                }
+            }
+        } else {
+            if plain_quote_open {
+                output.push(b'\'');
+                plain_quote_open = false;
+            }
+            output.extend_from_slice(b"$'");
+            for byte in &bytes[offset..offset + length] {
+                match byte {
+                    b'\x07' => output.extend_from_slice(b"\\a"),
+                    b'\x08' => output.extend_from_slice(b"\\b"),
+                    b'\x09' => output.extend_from_slice(b"\\t"),
+                    b'\x0a' => output.extend_from_slice(b"\\n"),
+                    b'\x0b' => output.extend_from_slice(b"\\v"),
+                    b'\x0c' => output.extend_from_slice(b"\\f"),
+                    b'\x0d' => output.extend_from_slice(b"\\r"),
+                    b'\\' | b'\'' => {
+                        output.push(b'\\');
+                        output.push(*byte);
+                    }
+                    byte => output.extend_from_slice(format!("\\{byte:03o}").as_bytes()),
+                }
+            }
+            output.push(b'\'');
+        }
+
+        offset += length;
+    }
+
+    if plain_quote_open {
+        output.push(b'\'');
+    }
+    output
 }
 
 #[derive(Default)]
@@ -1933,7 +2070,7 @@ fn uniq_get_delimiter(arg_matches: &ArgMatches) -> UniqDelimiters {
 fn uniq_open_input_file(in_file_name: Option<&OsStr>) -> CTResult<Box<dyn BufRead>> {
     Ok(match in_file_name {
         Some(path) if path != "-" => {
-            let infile = File::open(path).map_err_context(|| format!("{}", path.maybe_quote()))?;
+            let infile = File::open(path).map_err(|error| uniq_open_path_error(path, error))?;
             Box::new(BufReader::new(infile))
         }
         _ => Box::new(BufReader::new(ctcore::ct_io::stdin_reader_box())),
@@ -1968,7 +2105,7 @@ fn uniq_open_output_file(out_file_name: Option<&OsStr>) -> CTResult<Box<dyn Writ
     // 获取原始的输出流（文件或 stdout）
     let out: Box<dyn Write> = match out_file_name {
         Some(path) if path != "-" => {
-            let out = File::create(path).map_err_context(|| format!("{}", path.maybe_quote()))?;
+            let out = File::create(path).map_err(|error| uniq_open_path_error(path, error))?;
             Box::new(out)
         }
         _ => Box::new(stdout().lock()),
@@ -4301,6 +4438,9 @@ mod tests {
         use std::io::{self, Read, Write};
         use tempfile::NamedTempFile;
 
+        #[cfg(unix)]
+        use std::os::unix::ffi::OsStringExt;
+
         #[test]
         fn test_uniq_open_input_file_stdin() {
             // Create a temporary file to simulate stdin
@@ -4362,6 +4502,36 @@ mod tests {
             assert_eq!(
                 error.to_string(),
                 "/invalid/path/to/input.txt: No such file or directory"
+            );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_uniq_open_input_file_quotes_raw_path_like_gnu() {
+            let file_name = OsString::from_vec(b"bad\xffpath".to_vec());
+            let error = match uniq_open_input_file(Some(file_name.as_os_str())) {
+                Ok(_) => panic!("the raw missing input must fail"),
+                Err(error) => error,
+            };
+
+            assert_eq!(
+                error.diagnostic_bytes().as_ref(),
+                b"'bad'$'\\377''path': No such file or directory"
+            );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_uniq_open_input_file_escapes_quote_before_raw_byte_like_gnu() {
+            let file_name = OsString::from_vec(b"a'\xffb".to_vec());
+            let error = match uniq_open_input_file(Some(file_name.as_os_str())) {
+                Ok(_) => panic!("the raw missing input must fail"),
+                Err(error) => error,
+            };
+
+            assert_eq!(
+                error.diagnostic_bytes().as_ref(),
+                b"'a'\\'''$'\\377''b': No such file or directory"
             );
         }
     }

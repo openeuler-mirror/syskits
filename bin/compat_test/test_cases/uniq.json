@@ -275,7 +275,7 @@
             "cleanup_commands": []
         },
         {
-            "tstdin": "a\n",
+            "tstdin": "",
             "command": "uniq",
             "description": "短选项-f不接受等号分隔参数，-f=1中的=1必须按GNU作为无效字段跳过数值报错",
             "args": ["-f=1"],
@@ -1087,6 +1087,27 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "command": "uniq",
+            "description": "原始字节用例：LC_ALL=C、LANG=C；不存在INPUT参数完整十六进制=626164ff70617468，即bad后接0xff再接path；GNU使用quotef将不可打印字节拆分为shell转义片段，stderr完整十六进制保留0xff的八进制引用。",
+            "args": ["626164ff70617468"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "756e69713a20276261642724275c333737272770617468273a204e6f20737563682066696c65206f72206469726563746f72790a"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
         },
         {
             "tstdin": "61e38080580a62e38080590a",

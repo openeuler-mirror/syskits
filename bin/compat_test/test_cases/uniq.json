@@ -163,6 +163,26 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "a X\na X\nb X\nb Y\n",
+            "command": "uniq",
+            "description": "组合短选项-cf1中f后的1是-f的紧随数值参数而非旧式字段跳过值，GNU按-count和-f 1执行并保留两个分组首行及计数",
+            "args": ["-cf1"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "      3 a X\n      1 b Y\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "a\n",
             "command": "uniq",
             "description": "-s后的负数仍是该选项的参数，GNU按skip-chars专用错误文本拒绝而非将其当作未知选项",

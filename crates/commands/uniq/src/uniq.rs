@@ -900,6 +900,22 @@ fn uniq_should_extract_obs_skip_fields(
         && !str_slice.starts_with("-w")
 }
 
+/// Return the first value-taking option in a valid combined short option.
+/// GNU getopt treats all following bytes as that option's value.
+fn uniq_combined_short_option_value(argument: &str) -> Option<(usize, u8)> {
+    let bytes = argument.as_bytes();
+
+    for (index, option) in bytes.iter().copied().enumerate().skip(1) {
+        match option {
+            b'0'..=b'9' | b'c' | b'd' | b'D' | b'i' | b'u' | b'z' => continue,
+            b'f' | b's' | b'w' => return Some((index, option)),
+            _ => return None,
+        }
+    }
+
+    None
+}
+
 /// [`uniq_filter_args`] 的辅助函数
 /// 检查切片是否为真实废弃跳过字符短选项
 fn uniq_should_extract_obs_skip_chars(
@@ -953,6 +969,33 @@ fn uniq_handle_extract_obs_skip_fields(
     str_slice: &str,
     skip_fields_old: &mut Option<String>,
 ) -> Option<OsString> {
+    if let Some((value_index, value_option)) = uniq_combined_short_option_value(str_slice) {
+        let bytes = str_slice.as_bytes();
+        let mut filtered = Vec::from(&bytes[..1]);
+        let mut obsolete_digits = String::new();
+
+        for byte in &bytes[1..value_index] {
+            if byte.is_ascii_digit() {
+                obsolete_digits.push(char::from(*byte));
+            } else {
+                filtered.push(*byte);
+            }
+        }
+
+        if value_option == b'f' {
+            *skip_fields_old = None;
+        } else if !obsolete_digits.is_empty() {
+            let mut extracted = skip_fields_old.take().unwrap_or_default();
+            extracted.push_str(&obsolete_digits);
+            *skip_fields_old = Some(extracted);
+        }
+
+        filtered.extend_from_slice(&bytes[value_index..]);
+        return Some(OsString::from(
+            String::from_utf8(filtered).expect("short options are valid UTF-8"),
+        ));
+    }
+
     let mut obs_extracted_vec: Vec<char> = vec![];
     let mut is_obs_end_reached = false;
     let mut is_obs_overwritten_by_new = false;
@@ -1647,6 +1690,22 @@ mod tests {
                 OsString::from("--group=app"),
             ]
         );
+    }
+
+    #[test]
+    fn test_obsolete_filter_preserves_combined_short_option_attached_value() {
+        let cases = [("-cf1", "-cf1"), ("-c1d2f3", "-cdf3")];
+
+        for (argument, expected) in cases {
+            let (filtered, skip_fields, skip_chars) = uniq_handle_obsolete_with_mode(
+                [OsString::from("uniq"), OsString::from(argument)].into_iter(),
+                false,
+            );
+
+            assert_eq!(filtered, [OsString::from("uniq"), OsString::from(expected)]);
+            assert_eq!(skip_fields, None);
+            assert_eq!(skip_chars, None);
+        }
     }
 
     #[test]

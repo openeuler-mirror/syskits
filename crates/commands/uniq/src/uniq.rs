@@ -1210,6 +1210,54 @@ fn uniq_short_option_requires_next_value(argument: &[u8]) -> bool {
     false
 }
 
+fn uniq_short_option_equals_error(
+    args: &[OsString],
+    posixly_correct: bool,
+) -> Option<Box<dyn CTError>> {
+    let mut parse_options = true;
+    let mut previous_option_requires_value = false;
+
+    for (index, argument) in args.iter().enumerate() {
+        if index == 0 || !parse_options {
+            continue;
+        }
+
+        let bytes = argument.as_encoded_bytes();
+        if previous_option_requires_value {
+            previous_option_requires_value = false;
+            continue;
+        }
+        if bytes == b"--" {
+            parse_options = false;
+            continue;
+        }
+        if posixly_correct && (bytes.is_empty() || bytes[0] != b'-') {
+            parse_options = false;
+            continue;
+        }
+        if let Ok(argument) = std::str::from_utf8(bytes) {
+            if let Some((value_index, option)) = uniq_combined_short_option_value(argument) {
+                let value = &bytes[value_index + 1..];
+                if value.starts_with(b"=") {
+                    let message = uniq_invalid_number_message(match option {
+                        b'f' => uniq_flags::SKIP_FIELDS,
+                        b's' => uniq_flags::SKIP_CHARS,
+                        b'w' => uniq_flags::CHECK_CHARS,
+                        _ => unreachable!("only value-taking short options are returned"),
+                    });
+                    return Some(CtSimpleError::new(
+                        1,
+                        format!("{}: {message}", String::from_utf8_lossy(value)),
+                    ));
+                }
+            }
+        }
+        previous_option_requires_value = uniq_short_option_requires_next_value(bytes);
+    }
+
+    None
+}
+
 fn uniq_non_utf8_delimiter_method_error(
     args: &[OsString],
     posixly_correct: bool,
@@ -1285,6 +1333,9 @@ pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
         return Err(error);
     }
     let (args, skip_fields_old, skip_chars_old) = uniq_handle_obsolete(args.into_iter());
+    if let Some(error) = uniq_short_option_equals_error(&args, posixly_correct()) {
+        return Err(error);
+    }
 
     let matches = match ct_app().try_get_matches_from(args) {
         Ok(matches) => matches,
@@ -1345,6 +1396,9 @@ pub fn uniq_native_semantic(args: impl ctcore::Args) -> CTResult<UniqSemantic> {
         return Err(error);
     }
     let (args, skip_fields_old, skip_chars_old) = uniq_handle_obsolete(args.into_iter());
+    if let Some(error) = uniq_short_option_equals_error(&args, posixly_correct()) {
+        return Err(error);
+    }
     let matches = ct_app()
         .try_get_matches_from(args)
         .map_err(|err| uniq_map_clap_errors(&err))?;
@@ -1705,6 +1759,23 @@ mod tests {
             assert_eq!(filtered, [OsString::from("uniq"), OsString::from(expected)]);
             assert_eq!(skip_fields, None);
             assert_eq!(skip_chars, None);
+        }
+    }
+
+    #[test]
+    fn test_short_option_equals_uses_gnu_numeric_diagnostic() {
+        let cases = [
+            ("-f=1", "=1: invalid number of fields to skip"),
+            ("-s=1", "=1: invalid number of bytes to skip"),
+            ("-w=1", "=1: invalid number of bytes to compare"),
+        ];
+
+        for (argument, expected) in cases {
+            let args = [OsString::from("uniq"), OsString::from(argument)];
+            let error = uniq_short_option_equals_error(&args, false)
+                .expect("GNU rejects '=' in a value-taking short option");
+
+            assert_eq!(error.to_string(), expected);
         }
     }
 

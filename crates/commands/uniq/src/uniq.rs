@@ -28,6 +28,16 @@ use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_posix::{OBSOLETE, ct_posix_version};
 use sys_locale::get_locale;
 
+unsafe extern "C" {
+    fn __ctype_get_mb_cur_max() -> usize;
+    fn mbrtowc(
+        wide: *mut ctcore::libc::wchar_t,
+        bytes: *const ctcore::libc::c_char,
+        length: usize,
+        state: *mut ctcore::libc::mbstate_t,
+    ) -> usize;
+}
+
 pub mod uniq_flags {
     pub const ALL_REPEATED: &str = "all-repeated";
     pub const CHECK_CHARS: &str = "check-chars";
@@ -246,32 +256,6 @@ impl UniqFlags {
         })
     }
 
-    /// 辅助函数：根据 UTF-8 编码规则，向后跳过 n 个字符，返回真实的字节索引
-    fn skip_n_chars(slice: &[u8], n: usize) -> usize {
-        let mut i = 0;
-        let mut count = 0;
-        while i < slice.len() && count < n {
-            let byte = slice[i];
-            // 简单的 UTF-8 字符长度嗅探
-            let len = if byte < 0x80 {
-                1
-            } else if byte & 0xE0 == 0xC0 {
-                2
-            } else if byte & 0xF0 == 0xE0 {
-                3
-            } else if byte & 0xF8 == 0xF0 {
-                4
-            } else {
-                1 // 如果遇到非法的 UTF-8 序列，按单字节推进
-            };
-
-            // 防御性检查，避免超出切片边界
-            i += len.min(slice.len() - i);
-            count += 1;
-        }
-        i
-    }
-
     fn cmp_key<F>(&self, line: &[u8], mut closure: F) -> bool
     where
         F: FnMut(&mut dyn Iterator<Item = u8>) -> bool,
@@ -279,12 +263,12 @@ impl UniqFlags {
         let check_fields = self.skip_fields(line);
 
         // 1. 处理 -s: 跳过指定数量的字符
-        let start_byte = Self::skip_n_chars(&check_fields, self.slice_start.unwrap_or(0));
+        let start_byte = uniq_skip_n_chars(&check_fields, self.slice_start.unwrap_or(0));
         let slice_after_start = &check_fields[start_byte..];
 
-        // 2. 处理 -w: 比较指定数量的字符
+        // GNU uniq 在所有 locale 中均按比较键字节数限制 -w。
         let end_byte = if let Some(w) = self.slice_stop {
-            start_byte + Self::skip_n_chars(slice_after_start, w)
+            start_byte + w.min(slice_after_start.len())
         } else {
             check_fields.len()
         };
@@ -429,6 +413,59 @@ impl UniqFlags {
 
         Ok((rows, classic_output))
     }
+}
+
+fn uniq_initialize_c_locale() {
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
+}
+
+fn uniq_is_multibyte_locale() -> bool {
+    unsafe { __ctype_get_mb_cur_max() > 1 }
+}
+
+/// Return the byte offset after skipping N locale characters.
+///
+/// GNU uniq uses bytes in a single-byte locale and mbrtowc boundaries in a
+/// multibyte locale. Invalid or incomplete sequences consume one byte.
+fn uniq_skip_n_chars(slice: &[u8], n: usize) -> usize {
+    uniq_skip_n_chars_with_locale(slice, n, uniq_is_multibyte_locale())
+}
+
+fn uniq_skip_n_chars_with_locale(slice: &[u8], n: usize, is_multibyte_locale: bool) -> usize {
+    if !is_multibyte_locale {
+        return n.min(slice.len());
+    }
+
+    let mut offset = 0;
+    let mut skipped = 0;
+    let mut state: ctcore::libc::mbstate_t = unsafe { std::mem::zeroed() };
+
+    while offset < slice.len() && skipped < n {
+        let mut wide = 0 as ctcore::libc::wchar_t;
+        let length = unsafe {
+            mbrtowc(
+                &mut wide,
+                slice[offset..].as_ptr().cast(),
+                slice.len() - offset,
+                &mut state,
+            )
+        };
+        let length = match length {
+            length if length == usize::MAX || length == usize::MAX - 1 => {
+                state = unsafe { std::mem::zeroed() };
+                1
+            }
+            0 => 1,
+            length => length,
+        };
+
+        offset += length.min(slice.len() - offset);
+        skipped += 1;
+    }
+
+    offset
 }
 
 fn uniq_delimiter_mode(delimiters: UniqDelimiters) -> &'static str {
@@ -819,6 +856,7 @@ fn uniq_map_clap_errors(clap_err: &Error) -> Box<dyn CTError> {
 }
 
 pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
+    uniq_initialize_c_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let (args, skip_fields_old, skip_chars_old) = uniq_handle_obsolete(args);
@@ -852,6 +890,7 @@ pub fn uniq_main(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn uniq_native_semantic(args: impl ctcore::Args) -> CTResult<UniqSemantic> {
+    uniq_initialize_c_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let (args, skip_fields_old, skip_chars_old) = uniq_handle_obsolete(args);
@@ -1263,6 +1302,19 @@ mod tests {
             let line1 = b"Case";
             let line2 = b"case";
             assert!(!uniq.cmp_keys(line1, line2)); // Expect true as case is ignored
+        }
+
+        #[test]
+        fn test_cmp_keys_skip_chars_uses_bytes_in_c_locale() {
+            assert_eq!(uniq_skip_n_chars_with_locale(b"\xc3\xa9x", 1, false), 1);
+        }
+
+        #[test]
+        fn test_cmp_keys_check_chars_limits_comparison_to_bytes() {
+            let mut uniq = default_uniq();
+            uniq.slice_stop = Some(1);
+
+            assert!(!uniq.cmp_keys(b"\xc3\x84x", b"\xc3\xa4y"));
         }
 
         #[test]

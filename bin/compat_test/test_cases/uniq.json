@@ -71,6 +71,46 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "c3a9780a61780ac3a9780ac3a9790a",
+            "byteMode": true,
+            "command": "uniq",
+            "description": "LC_ALL=C时-s 1按单字节跳过：输入依次为c3a978、6178、c3a978、c3a979，比较键分别为a978、78、a978、a979，预期四行均保留",
+            "setup_commands": [
+                "export LC_ALL=C",
+                "export LANG=C",
+                "unset POSIXLY_CORRECT"
+            ],
+            "args": ["2d73", "31"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "c3a9780a61780ac3a9780ac3a9790a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "c384780ac3a4790a",
+            "byteMode": true,
+            "command": "uniq",
+            "description": "LC_ALL=C.UTF-8时-w 1按比较键的一个字节截断：c38478与c3a479均以c3开头，预期仅保留首行c38478",
+            "setup_commands": [
+                "export LC_ALL=C.UTF-8",
+                "export LANG=C.UTF-8",
+                "unset POSIXLY_CORRECT"
+            ],
+            "args": ["2d77", "31"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "c384780a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "aaa\naab\naac\n",
             "command": "uniq",
             "description": "只比较前N个字符",
@@ -270,4 +310,4 @@
             "cleanup_commands": []
         }
     ]
-} 
+}

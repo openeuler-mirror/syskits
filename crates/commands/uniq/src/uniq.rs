@@ -1214,15 +1214,19 @@ fn uniq_delimiter_value_error(clap_err: &Error) -> Option<String> {
     ))
 }
 
-fn uniq_full_delimiter_method_parts(
+fn uniq_delimiter_method_parts(
     argument: &[u8],
 ) -> Option<(&'static str, &'static [&'static str], &[u8])> {
-    if let Some(value) = argument.strip_prefix(b"--all-repeated=") {
-        Some(("--all-repeated", UNIQ_ALL_REPEATED_METHODS, value))
-    } else if let Some(value) = argument.strip_prefix(b"--group=") {
-        Some(("--group", UNIQ_GROUP_METHODS, value))
-    } else {
-        None
+    let long_option = argument.strip_prefix(b"--")?;
+    let equals = long_option.iter().position(|byte| *byte == b'=')?;
+    let value = &long_option[equals + 1..];
+
+    match uniq_match_long_option(&long_option[..equals]) {
+        UniqLongOptionMatch::Recognized("all-repeated", _) => {
+            Some(("--all-repeated", UNIQ_ALL_REPEATED_METHODS, value))
+        }
+        UniqLongOptionMatch::Recognized("group", _) => Some(("--group", UNIQ_GROUP_METHODS, value)),
+        _ => None,
     }
 }
 
@@ -1565,7 +1569,7 @@ fn uniq_non_utf8_delimiter_method_error(
             parse_options = false;
             continue;
         }
-        if let Some((option, methods, value)) = uniq_full_delimiter_method_parts(bytes) {
+        if let Some((option, methods, value)) = uniq_delimiter_method_parts(bytes) {
             if std::str::from_utf8(value).is_err() {
                 return Some(CtSimpleError::new(
                     1,
@@ -2224,6 +2228,31 @@ mod tests {
         assert!(error.to_string().contains("invalid argument"));
         assert!(error.to_string().contains("\\377"));
         assert!(error.to_string().contains("Valid arguments are:"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_non_utf8_delimiter_method_uses_canonical_long_option_prefix() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let args = [
+            OsString::from("uniq"),
+            OsString::from_vec(b"--all-r=\xff".to_vec()),
+        ];
+        let error = uniq_non_utf8_delimiter_method_error(&args, false)
+            .expect("the GNU long-option prefix must retain the argmatch diagnostic");
+
+        let diagnostic = error.diagnostic_bytes();
+        assert!(
+            diagnostic
+                .windows(b"\\377".len())
+                .any(|part| part == b"\\377")
+        );
+        assert!(
+            diagnostic
+                .windows(b"--all-repeated".len())
+                .any(|part| part == b"--all-repeated")
+        );
     }
 
     mod native_semantic_tests {

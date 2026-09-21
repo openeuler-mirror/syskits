@@ -463,6 +463,27 @@
             "cleanup_commands": []
         },
         {
+            "command": "uniq",
+            "description": "原始字节用例：LC_ALL=C、LANG=C；参数完整十六进制=2d2d616c6c2d723dff，即--all-r后接0xff METHOD；预期RC=1、stdout为0字节、完整十六进制=空，stderr按GNU将唯一长选项前缀规范为--all-repeated并将0xff引用为\\377。",
+            "args": ["2d2d616c6c2d723dff"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "756e69713a20696e76616c696420617267756d656e7420275c3337372720666f7220272d2d616c6c2d7265706561746564270a56616c696420617267756d656e7473206172653a0a20202d20276e6f6e65270a20202d202770726570656e64270a20202d20277365706172617465270a5472792027756e6971202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
+        },
+        {
             "tstdin": "a\na\nb\nb\n",
             "command": "uniq",
             "description": "--group的唯一METHOD前缀app必须按GNU解析为append并在每个分组后输出空行",

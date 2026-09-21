@@ -736,8 +736,7 @@ fn uniq_has_short_all_repeated_assignment(args: &[OsString], posixly_correct: bo
             continue;
         }
         if bytes.starts_with(b"--") {
-            previous_option_requires_value =
-                matches!(bytes, b"--skip-fields" | b"--skip-chars" | b"--check-chars");
+            previous_option_requires_value = uniq_required_long_option(bytes).is_some();
             continue;
         }
         if !bytes.starts_with(b"-") || bytes.len() == 1 {
@@ -982,10 +981,8 @@ fn uniq_handle_preceding_options(
     // 捕获当前切片是否为前置长选项，需要值且不使用 '=' 分配该值
     // 以下切片应被视为此选项的值，即使它以 '-' 开头（这将被视为带连字符的值）
     if str_slice.starts_with("--") {
-        use uniq_flags as O;
-        *is_preceding_long_opt_req_value = &str_slice[2..] == O::SKIP_CHARS
-            || &str_slice[2..] == O::SKIP_FIELDS
-            || &str_slice[2..] == O::CHECK_CHARS;
+        *is_preceding_long_opt_req_value =
+            uniq_required_long_option(str_slice.as_bytes()).is_some();
     }
     // 捕获当前切片是否为前置短选项，需要值且在同一切片中没有值（值由空白分隔）
     // 以下切片应被视为此选项的值，即使它以 '-' 开头（这将被视为带连字符的值）
@@ -1232,10 +1229,7 @@ fn uniq_delimiter_method_parts(
 
 fn uniq_short_option_requires_next_value(argument: &[u8]) -> bool {
     if argument.starts_with(b"--") {
-        return matches!(
-            argument,
-            b"--skip-fields" | b"--skip-chars" | b"--check-chars"
-        );
+        return uniq_required_long_option(argument).is_some();
     }
 
     let Some(short_options) = argument.strip_prefix(b"-") else {
@@ -1988,6 +1982,33 @@ mod tests {
             &[
                 OsString::from("uniq"),
                 OsString::from("--"),
+                OsString::from("-D=prepend"),
+            ],
+            false,
+        ));
+    }
+
+    #[test]
+    fn test_required_long_option_prefix_consumes_its_following_value() {
+        let mut requires_long_value = false;
+        let mut requires_short_value = false;
+        uniq_handle_preceding_options(
+            "--skip-f",
+            &mut requires_long_value,
+            &mut requires_short_value,
+        );
+
+        assert!(requires_long_value);
+        assert!(!requires_short_value);
+        assert!(uniq_short_option_requires_next_value(b"--skip-f"));
+    }
+
+    #[test]
+    fn test_required_long_option_prefix_does_not_reparse_short_option_value() {
+        assert!(!uniq_has_short_all_repeated_assignment(
+            &[
+                OsString::from("uniq"),
+                OsString::from("--skip-f"),
                 OsString::from("-D=prepend"),
             ],
             false,

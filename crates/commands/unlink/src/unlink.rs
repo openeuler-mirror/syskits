@@ -155,11 +155,31 @@ fn unlink_path(path: &Path) -> CTResult<()> {
 
 #[cfg(target_os = "linux")]
 fn unlink_io_error(path: &Path, error: std::io::Error) -> Box<dyn CTError> {
-    let mut message = b"cannot unlink ".to_vec();
-    message.extend_from_slice(&unlink_quote_path(path.as_os_str()));
+    UnlinkRuntimeError::boxed(unlink_runtime_error_message_for_locale(
+        path.as_os_str(),
+        &error,
+        unlink_uses_simplified_chinese(),
+    ))
+}
+
+#[cfg(target_os = "linux")]
+fn unlink_runtime_error_message_for_locale(
+    path: &OsStr,
+    error: &std::io::Error,
+    simplified_chinese: bool,
+) -> Vec<u8> {
+    let mut message = if simplified_chinese {
+        unlink_encode_locale_text("对 ")
+    } else {
+        b"cannot unlink ".to_vec()
+    };
+    message.extend_from_slice(&unlink_quote_path(path));
+    if simplified_chinese {
+        message.extend_from_slice(&unlink_encode_locale_text(" 调用 unlink 失败"));
+    }
     message.extend_from_slice(b": ");
-    message.extend_from_slice(strip_errno(&error).as_bytes());
-    UnlinkRuntimeError::boxed(message)
+    message.extend_from_slice(strip_errno(error).as_bytes());
+    message
 }
 
 #[cfg(target_os = "linux")]
@@ -885,6 +905,16 @@ mod tests {
             assert_eq!(
                 unlink_extra_operand_message_for_locale(OsStr::new("second"), true),
                 "多余的操作对象 \"second\"".as_bytes()
+            );
+        }
+
+        #[test]
+        fn unlink_formats_runtime_error_for_simplified_chinese_locale() {
+            let error = std::io::Error::from_raw_os_error(ctcore::libc::ENOENT);
+
+            assert_eq!(
+                unlink_runtime_error_message_for_locale(OsStr::new("missing"), &error, true),
+                "对 'missing' 调用 unlink 失败: No such file or directory".as_bytes()
             );
         }
     }

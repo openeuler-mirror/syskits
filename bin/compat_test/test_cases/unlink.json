@@ -170,6 +170,27 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "unlink",
+            "description": "LC_ALL=zh_CN.utf8、LANG=zh_CN.utf8下执行unlink missing；GNU将运行时cannot unlink前缀翻译为对FILE调用unlink失败，文件名仍按quoteaf单引号格式输出，预期RC=1、stdout为空、stderr为对应UTF-8诊断。",
+            "args": ["missing"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "unlink: 对 'missing' 调用 unlink 失败: No such file or directory\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "zh_CN.utf8",
+                    "LANG": "zh_CN.utf8"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

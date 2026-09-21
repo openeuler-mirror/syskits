@@ -466,6 +466,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "whoami",
+            "description": "原始字节诊断用例：LC_ALL=zh_CN.UTF-8且LANGUAGE首个候选does_NOT_exist不可用、后续候选zh_CN可用时，GNU gettext跳过不可用候选并输出UTF-8中文诊断；传入alpha后预期RC=1、stdout为空",
+            "setup_commands": [
+                "export LC_ALL='zh_CN.UTF-8'",
+                "export LANGUAGE='does_NOT_exist:zh_CN'"
+            ],
+            "args": ["616c706861"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77686f616d693a20e5a49ae4bd99e79a84e6938de4bd9ce5afb9e8b1a12022616c706861220ae8afb7e5b09de8af95e689a7e8a18c202277686f616d69202d2d68656c702220e69da5e88eb7e58f96e69bb4e5a49ae4bfa1e681afe380820a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

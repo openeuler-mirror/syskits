@@ -327,14 +327,19 @@ fn whoami_message_locale() -> Option<OsString> {
         return Some(locale);
     };
     let language = language.to_string_lossy();
-    let Some(language) = language.split(':').find(|language| !language.is_empty()) else {
-        return Some(locale);
-    };
-    if whoami_simplified_chinese_locale(OsStr::new(language)) {
-        Some(OsString::from(language))
-    } else {
-        Some(OsString::from("C"))
+    for candidate in language
+        .split(':')
+        .filter(|candidate| !candidate.is_empty())
+    {
+        if whoami_c_message_locale(OsStr::new(candidate)) {
+            return Some(OsString::from("C"));
+        }
+        if whoami_simplified_chinese_locale(OsStr::new(candidate)) {
+            return Some(OsString::from(candidate));
+        }
     }
+
+    Some(OsString::from("C"))
 }
 
 fn whoami_c_message_locale(locale: &OsStr) -> bool {
@@ -1365,6 +1370,20 @@ mod tests {
             &[("LC_ALL", Some("en_US")), ("LANGUAGE", Some("zh_CN"))],
             whoami_uses_simplified_chinese,
         );
+        assert!(simplified_chinese);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn whoami_language_skips_unavailable_candidates() {
+        let simplified_chinese = with_locale_variables(
+            &[
+                ("LC_ALL", Some("zh_CN.UTF-8")),
+                ("LANGUAGE", Some("does_NOT_exist:zh_CN")),
+            ],
+            whoami_uses_simplified_chinese,
+        );
+
         assert!(simplified_chinese);
     }
 

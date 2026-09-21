@@ -25,7 +25,7 @@ use clap::{crate_version, error::ContextKind, error::Error, error::ErrorKind};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
-use ctcore::ct_posix::{OBSOLETE, ct_posix_version};
+use ctcore::ct_posix::{GnuGetoptCommandExt, OBSOLETE, ct_posix_version, posixly_correct};
 use sys_locale::get_locale;
 
 unsafe extern "C" {
@@ -637,13 +637,45 @@ fn uniq_opt_parsed(opt_name: &str, arg_matches: &ArgMatches) -> CTResult<Option<
 /// `uniq +1 -s2 file` 等价于 `uniq -s2 file`
 /// `uniq -s2 +3 file` 等价于 `uniq -s3 file`
 fn uniq_handle_obsolete(args: impl ctcore::Args) -> (Vec<OsString>, Option<usize>, Option<usize>) {
+    uniq_handle_obsolete_with_mode(args, posixly_correct())
+}
+
+fn uniq_handle_obsolete_with_mode(
+    args: impl ctcore::Args,
+    posixly_correct: bool,
+) -> (Vec<OsString>, Option<usize>, Option<usize>) {
     let mut skip_fields_old = None;
     let mut skip_chars_old = None;
     let mut is_preceding_long_opt_req_value = false;
     let mut is_preceding_short_opt_req_value = false;
+    let mut parse_options = true;
+    let mut filtered_args = Vec::new();
 
-    let filtered_args = args
-        .filter_map(|os_slice| {
+    for (index, os_slice) in args.enumerate() {
+        let is_option_value = is_preceding_long_opt_req_value || is_preceding_short_opt_req_value;
+        let bytes = os_slice.as_encoded_bytes();
+
+        if index > 0 && parse_options && !is_option_value {
+            if bytes == b"--" {
+                parse_options = false;
+                filtered_args.push(os_slice);
+                continue;
+            }
+
+            let is_obsolete_skip_chars = bytes.len() > 1
+                && bytes[0] == b'+'
+                && bytes[1].is_ascii_digit()
+                && ct_posix_version().is_some_and(|version| version <= OBSOLETE);
+            if posixly_correct && !is_obsolete_skip_chars && (bytes.is_empty() || bytes[0] != b'-')
+            {
+                filtered_args.push(OsString::from("--"));
+                parse_options = false;
+                filtered_args.push(os_slice);
+                continue;
+            }
+        }
+
+        let filtered = if parse_options {
             uniq_filter_args(
                 os_slice,
                 &mut skip_fields_old,
@@ -651,8 +683,18 @@ fn uniq_handle_obsolete(args: impl ctcore::Args) -> (Vec<OsString>, Option<usize
                 &mut is_preceding_long_opt_req_value,
                 &mut is_preceding_short_opt_req_value,
             )
-        })
-        .collect();
+        } else {
+            Some(os_slice)
+        };
+
+        if is_option_value {
+            is_preceding_long_opt_req_value = false;
+            is_preceding_short_opt_req_value = false;
+        }
+        if let Some(argument) = filtered {
+            filtered_args.push(argument);
+        }
+    }
 
     // 提取的 skip_fields_old 和 skip_chars_old 的 String 值（如果有）
     // 保证仅由 ascii 数字字符组成，因此可以安全地解析为 usize 并将 Result 折叠为 Option
@@ -947,6 +989,10 @@ pub fn uniq_native_semantic(args: impl ctcore::Args) -> CTResult<UniqSemantic> {
 }
 
 pub fn ct_app() -> Command {
+    ct_app_with_getopt_mode(posixly_correct())
+}
+
+fn ct_app_with_getopt_mode(posixly_correct: bool) -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
     let application_info = t!("uniq.about");
@@ -1045,6 +1091,7 @@ pub fn ct_app() -> Command {
                 .action(ArgAction::Version),
         )
         .args(args)
+        .gnu_getopt_with_mode(posixly_correct)
 }
 
 fn uniq_get_delimiter(arg_matches: &ArgMatches) -> UniqDelimiters {
@@ -3477,6 +3524,23 @@ mod tests {
             let args = vec![ctcore::ct_util_name()]; // 缺少任何参数
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_posixly_correct_stops_option_parsing_after_input() {
+            let matches = ct_app_with_getopt_mode(true)
+                .try_get_matches_from([ctcore::ct_util_name(), "input", "-c"])
+                .expect("POSIX operands must parse");
+
+            assert!(!matches.get_flag(uniq_flags::COUNT));
+            assert_eq!(
+                matches
+                    .get_many::<OsString>(UNIQ_ARG_FILES)
+                    .expect("input and output operands")
+                    .map(OsString::as_os_str)
+                    .collect::<Vec<_>>(),
+                [OsStr::new("input"), OsStr::new("-c")]
+            );
         }
 
         #[test]

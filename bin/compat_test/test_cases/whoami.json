@@ -408,6 +408,25 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "whoami",
+            "description": "原始字节诊断用例：LC_ALL=zh_CN.UTF-8且OUTPUT_CHARSET=GBK时，GNU仅将中文gettext文本转为GBK；传入UTF-8字节e4b8ad后预期RC=1、stdout为空，stderr中文为GBK而操作数字节保持e4b8ad",
+            "setup_commands": [
+                "export LC_ALL='zh_CN.UTF-8'",
+                "export OUTPUT_CHARSET='GBK'"
+            ],
+            "args": ["e4b8ad"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "77686f616d693a20b6e0d3e0b5c4b2d9d7f7b6d4cff32022e4b8ad220ac7ebb3a2cad4d6b4d0d0202277686f616d69202d2d68656c702220c0b4bbf1c8a1b8fcb6e0d0c5cfa2a1a30a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

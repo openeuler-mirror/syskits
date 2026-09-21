@@ -414,6 +414,25 @@
             "cleanup_commands": []
         },
         {
+            "command": "uniq",
+            "description": "参数预检查必须保留GNU解析顺序：前置未知--d优先于后续-D=none的非法等号选项报错",
+            "args": ["--d", "-D=none"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uniq: unrecognized option '--d'\nTry 'uniq --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "a X\nb X\n",
             "command": "uniq",
             "description": "--all-repeated没有分离取值时，后接旧式-1仍按跳过字段处理；比较键均为X，预期输出两条重复行",

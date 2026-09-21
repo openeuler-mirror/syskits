@@ -23,7 +23,7 @@ use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::FromIo;
 use ctcore::ct_error::{CTError, CTResult, strip_errno};
 #[cfg(target_os = "linux")]
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::ffi::{OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use std::io;
@@ -327,8 +327,8 @@ fn whoami_encode_locale_text(text: &str) -> Vec<u8> {
 #[cfg(target_os = "linux")]
 fn whoami_output_codeset() -> Option<String> {
     let locale = whoami_effective_locale(["LC_ALL", "LC_CTYPE", "LANG"])?;
-    let locale = locale.to_string_lossy();
-    let locale_uppercase = locale.to_ascii_uppercase();
+    let locale_text = locale.to_string_lossy();
+    let locale_uppercase = locale_text.to_ascii_uppercase();
     if locale_uppercase.contains("UTF-8") || locale_uppercase.contains("UTF8") {
         return None;
     }
@@ -337,11 +337,7 @@ fn whoami_output_codeset() -> Option<String> {
         return Some("ASCII".to_owned());
     }
 
-    if locale_uppercase == "ZH_CN" || locale_uppercase.starts_with("ZH_CN@") {
-        return Some("GB2312".to_owned());
-    }
-
-    locale
+    locale_text
         .split_once('.')
         .map(|(_, codeset)| {
             codeset
@@ -349,6 +345,24 @@ fn whoami_output_codeset() -> Option<String> {
                 .map_or(codeset, |(codeset, _)| codeset)
         })
         .map(ToOwned::to_owned)
+        .or_else(|| whoami_locale_codeset(&locale))
+}
+
+#[cfg(target_os = "linux")]
+fn whoami_locale_codeset(locale: &OsStr) -> Option<String> {
+    let locale = CString::new(locale.as_encoded_bytes()).ok()?;
+    let locale_handle =
+        unsafe { libc::newlocale(libc::LC_CTYPE_MASK, locale.as_ptr(), std::ptr::null_mut()) };
+    if locale_handle.is_null() {
+        return None;
+    }
+
+    let codeset = unsafe {
+        let codeset = libc::nl_langinfo_l(libc::CODESET, locale_handle);
+        (!codeset.is_null()).then(|| CStr::from_ptr(codeset).to_bytes().to_vec())
+    };
+    unsafe { libc::freelocale(locale_handle) };
+    codeset.and_then(|codeset| String::from_utf8(codeset).ok())
 }
 
 #[cfg(target_os = "linux")]
@@ -387,12 +401,16 @@ fn quote_whoami_operand(operand: &OsStr, simplified_chinese: bool) -> Vec<u8> {
     if simplified_chinese {
         #[cfg(target_os = "linux")]
         if let Some(codeset) = whoami_output_codeset() {
-            return quote_whoami_locale_encoded_operand(operand, &codeset);
+            return quote_whoami_locale_encoded_operand(operand, &codeset, b'\"');
         }
         quote_whoami_utf8_operand_with_quotes(operand, b"\"", b"\"", Some(b'\"'))
     } else if whoami_locale_is_utf8() {
         quote_whoami_utf8_operand(operand)
     } else {
+        #[cfg(target_os = "linux")]
+        if let Some(codeset) = whoami_output_codeset() {
+            return quote_whoami_locale_encoded_operand(operand, &codeset, b'\'');
+        }
         quote_whoami_c_operand(operand)
     }
 }
@@ -468,15 +486,19 @@ fn quote_whoami_utf8_operand_with_quotes(
 }
 
 #[cfg(target_os = "linux")]
-fn quote_whoami_locale_encoded_operand(operand: &OsStr, codeset: &str) -> Vec<u8> {
+fn quote_whoami_locale_encoded_operand(
+    operand: &OsStr,
+    codeset: &str,
+    quote_to_escape: u8,
+) -> Vec<u8> {
     let input = operand.as_encoded_bytes();
     let mut quoted = Vec::with_capacity(input.len() + 2);
-    quoted.push(b'\"');
+    quoted.push(quote_to_escape);
 
     let mut index = 0;
     while index < input.len() {
         if input[index].is_ascii() {
-            push_whoami_quoted_ascii(&mut quoted, input[index], Some(b'\"'));
+            push_whoami_quoted_ascii(&mut quoted, input[index], Some(quote_to_escape));
             index += 1;
             continue;
         }
@@ -491,7 +513,7 @@ fn quote_whoami_locale_encoded_operand(operand: &OsStr, codeset: &str) -> Vec<u8
         }
     }
 
-    quoted.push(b'\"');
+    quoted.push(quote_to_escape);
     quoted
 }
 
@@ -1028,14 +1050,28 @@ mod tests {
         let operand = OsString::from_vec(vec![0xd6, 0xd0, 0xb9, 0xfa, 0xff]);
 
         assert_eq!(
-            quote_whoami_locale_encoded_operand(&operand, "GBK"),
+            quote_whoami_locale_encoded_operand(&operand, "GBK", b'\"'),
             b"\"\xd6\xd0\xb9\xfa\\377\""
         );
 
         let ascii_trailing_byte = OsString::from_vec(vec![0x81, b'@']);
         assert_eq!(
-            quote_whoami_locale_encoded_operand(&ascii_trailing_byte, "GBK"),
+            quote_whoami_locale_encoded_operand(&ascii_trailing_byte, "GBK", b'\"'),
             b"\"\x81@\""
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn whoami_non_utf8_locale_preserves_valid_single_byte_operand() {
+        use std::os::unix::ffi::OsStrExt;
+
+        with_lc_all("en_US", || {
+            assert_eq!(whoami_output_codeset().as_deref(), Some("ISO-8859-1"));
+            assert_eq!(
+                quote_whoami_operand(OsStr::from_bytes(b"\xe9"), false),
+                b"'\xe9'"
+            );
+        });
     }
 }

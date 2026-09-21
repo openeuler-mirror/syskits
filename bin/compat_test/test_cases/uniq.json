@@ -15,6 +15,56 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "a\n",
+            "command": "uniq",
+            "description": "stdout连接无读端管道且调用方使用默认SIGPIPE时，GNU在首次写入时由SIGPIPE终止，预期RC=141且无输出和诊断",
+            "args": [],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "default",
+                    "useBash": true
+                },
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a\n",
+            "command": "uniq",
+            "description": "stdout连接无读端管道且调用方显式忽略SIGPIPE时，GNU保留忽略处置并报告write error，预期RC=1且无stdout",
+            "args": [],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "ignore",
+                    "useBash": true
+                },
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "uniq: write error: Broken pipe\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "",
             "command": "uniq",
             "description": "POSIXLY_CORRECT=1时在INPUT后停止扫描选项：input -c中的-c是OUTPUT文件名，stdout为空且输出文件只包含去重后的a",

@@ -263,6 +263,46 @@
             "cleanup_commands": []
         },
         {
+            "tstdin": "a\na\nb\nb\n",
+            "command": "uniq",
+            "description": "--all-repeated的唯一METHOD前缀pre必须按GNU解析为prepend并在每个重复组前输出空行",
+            "args": ["--all-repeated=pre"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "\na\na\n\nb\nb\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "a\na\nb\nb\n",
+            "command": "uniq",
+            "description": "--group的唯一METHOD前缀app必须按GNU解析为append并在每个分组后输出空行",
+            "args": ["--group=app"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "a\na\n\nb\nb\n\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
             "tstdin": "",
             "command": "uniq",
             "description": "--all-repeated后面的--必须结束选项解析，-1成为INPUT文件名并按GNU报告不存在，而非继续处理为旧式选项",

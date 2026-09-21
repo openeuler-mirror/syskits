@@ -778,7 +778,11 @@ fn uniq_handle_obsolete_with_mode(
             is_preceding_short_opt_req_value = false;
         }
         if let Some(argument) = filtered {
-            filtered_args.push(argument);
+            if parse_options && !is_option_value {
+                filtered_args.push(uniq_expand_delimiter_method_prefix(argument));
+            } else {
+                filtered_args.push(argument);
+            }
         }
     }
 
@@ -787,6 +791,37 @@ fn uniq_handle_obsolete_with_mode(
     let skip_chars_old = uniq_parse_obsolete_option(skip_chars_old);
 
     (filtered_args, skip_fields_old, skip_chars_old)
+}
+
+fn uniq_expand_delimiter_method_prefix(argument: OsString) -> OsString {
+    let bytes = argument.as_encoded_bytes();
+    let (option, methods, value) = if let Some(value) = bytes.strip_prefix(b"--all-repeated=") {
+        (
+            "--all-repeated",
+            ["none", "prepend", "separate"].as_slice(),
+            value,
+        )
+    } else if let Some(value) = bytes.strip_prefix(b"--group=") {
+        (
+            "--group",
+            ["prepend", "append", "separate", "both"].as_slice(),
+            value,
+        )
+    } else {
+        return argument;
+    };
+
+    let mut matching_methods = methods
+        .iter()
+        .filter(|method| method.as_bytes().starts_with(value));
+    let Some(method) = matching_methods.next() else {
+        return argument;
+    };
+    if matching_methods.next().is_some() {
+        return argument;
+    }
+
+    OsString::from(format!("{option}={method}"))
 }
 
 fn uniq_parse_obsolete_option(value: Option<String>) -> Option<usize> {
@@ -1427,6 +1462,44 @@ mod tests {
         );
         assert_eq!(skip_fields, Some(1));
         assert_eq!(skip_chars, None);
+    }
+
+    #[test]
+    fn test_delimiter_method_prefixes_expand_to_the_unique_gnu_value() {
+        let cases = [
+            ("--all-repeated=pre", "--all-repeated=prepend"),
+            ("--group=app", "--group=append"),
+        ];
+
+        for (argument, expected) in cases {
+            let (filtered, _, _) = uniq_handle_obsolete_with_mode(
+                [OsString::from("uniq"), OsString::from(argument)].into_iter(),
+                false,
+            );
+            assert_eq!(filtered, [OsString::from("uniq"), OsString::from(expected)]);
+        }
+    }
+
+    #[test]
+    fn test_delimiter_method_prefix_is_not_expanded_when_it_is_an_option_value() {
+        let (filtered, _, _) = uniq_handle_obsolete_with_mode(
+            [
+                OsString::from("uniq"),
+                OsString::from("--skip-fields"),
+                OsString::from("--group=app"),
+            ]
+            .into_iter(),
+            false,
+        );
+
+        assert_eq!(
+            filtered,
+            [
+                OsString::from("uniq"),
+                OsString::from("--skip-fields"),
+                OsString::from("--group=app"),
+            ]
+        );
     }
 
     mod native_semantic_tests {

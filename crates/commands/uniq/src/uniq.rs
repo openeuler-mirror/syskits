@@ -897,9 +897,7 @@ fn uniq_handle_preceding_options(
         use uniq_flags as O;
         *is_preceding_long_opt_req_value = &str_slice[2..] == O::SKIP_CHARS
             || &str_slice[2..] == O::SKIP_FIELDS
-            || &str_slice[2..] == O::CHECK_CHARS
-            || &str_slice[2..] == O::GROUP
-            || &str_slice[2..] == O::ALL_REPEATED;
+            || &str_slice[2..] == O::CHECK_CHARS;
     }
     // 捕获当前切片是否为前置短选项，需要值且在同一切片中没有值（值由空白分隔）
     // 以下切片应被视为此选项的值，即使它以 '-' 开头（这将被视为带连字符的值）
@@ -1398,6 +1396,24 @@ mod tests {
             ],
             false,
         ));
+    }
+
+    #[test]
+    fn test_optional_long_options_do_not_consume_the_following_old_option() {
+        let args = [
+            OsString::from("uniq"),
+            OsString::from("--all-repeated"),
+            OsString::from("-1"),
+        ];
+        let (filtered, skip_fields, skip_chars) =
+            uniq_handle_obsolete_with_mode(args.into_iter(), false);
+
+        assert_eq!(
+            filtered,
+            vec![OsString::from("uniq"), OsString::from("--all-repeated")]
+        );
+        assert_eq!(skip_fields, Some(1));
+        assert_eq!(skip_chars, None);
     }
 
     mod native_semantic_tests {

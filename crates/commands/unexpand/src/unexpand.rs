@@ -1301,6 +1301,38 @@ fn unexpand_char_width(ch: char) -> usize {
     }
 }
 
+/// GNU's BOM probe keeps an incomplete EF or EF BB prefix in mbfile's buffer.
+/// The following valid character then supplies its classification and width.
+fn unexpand_initial_non_bom_prefix_len(buf: &[u8]) -> usize {
+    match buf {
+        [0xef, second, ..] if *second != 0xbb => 1,
+        [0xef, 0xbb, third, ..] if *third != 0xbf => 2,
+        _ => 0,
+    }
+}
+
+fn unexpand_bom_prefix_char_info(
+    is_u_flag: bool,
+    buf: &[u8],
+    byte: usize,
+    prefix_len: usize,
+) -> Option<(UnexpandCharType, usize, usize)> {
+    let char_byte = byte.checked_add(prefix_len)?;
+    let remaining = buf.get(char_byte..)?;
+    let valid = if is_u_flag {
+        match from_utf8(remaining) {
+            Ok(text) => !text.is_empty(),
+            Err(error) => error.valid_up_to() != 0,
+        }
+    } else {
+        remaining.first().is_some_and(u8::is_ascii)
+    };
+    valid.then(|| {
+        let (c_type, c_width, n_bytes) = unexpand_next_char_info(is_u_flag, buf, char_byte);
+        (c_type, c_width, prefix_len + n_bytes)
+    })
+}
+
 fn unexpand_incomplete_utf8_suffix_len(buf: &[u8]) -> usize {
     let start = buf.len().saturating_sub(4);
 
@@ -1365,12 +1397,14 @@ struct UnexpandLineState {
     pending: Vec<Vec<u8>>,
     convert: bool,
     invalid_utf8_pending_blanks: usize,
+    is_file_start: bool,
 }
 
 impl UnexpandLineState {
     fn new() -> Self {
         let mut state = Self::default();
         state.reset();
+        state.is_file_start = true;
         state
     }
 
@@ -1419,14 +1453,23 @@ fn unexpand_line_with_state<W: Write>(
 ) -> std::io::Result<()> {
     let mut byte = 0;
     let convert_entire_line = flags.is_a_flag;
+    let mut bom_prefix_len = state
+        .is_file_start
+        .then(|| unexpand_initial_non_bom_prefix_len(buf));
+    state.is_file_start = false;
 
     while byte < buf.len() {
         let (c_type, c_width, n_bytes) = if state.invalid_utf8_pending_blanks != 0 {
             state.invalid_utf8_pending_blanks -= 1;
             (UnexpandCharType::Space, 0, 1)
         } else {
-            let char_info = unexpand_next_char_info(flags.is_u_flag, buf, byte);
-            if flags.is_u_flag {
+            let char_info = bom_prefix_len
+                .take()
+                .and_then(|prefix_len| {
+                    unexpand_bom_prefix_char_info(flags.is_u_flag, buf, byte, prefix_len)
+                })
+                .unwrap_or_else(|| unexpand_next_char_info(flags.is_u_flag, buf, byte));
+            if flags.is_u_flag && char_info.2 == 1 {
                 state.invalid_utf8_pending_blanks =
                     unexpand_invalid_utf8_pending_blank_len(buf, byte);
             }
@@ -1690,6 +1733,7 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
 
             if is_first_chunk {
                 let file_has_bom = data_buf.starts_with(&[0xEF, 0xBB, 0xBF]);
+                line_state.is_file_start = !file_has_bom;
                 if !is_first_file && !using_utf_locale && file_has_bom != first_file_has_bom {
                     report_unexpand_error(
                         &mut stderr_text,
@@ -2329,6 +2373,42 @@ mod tests {
                 .expect("invalid UTF-8 input must be processed");
 
             assert_eq!(output.into_inner(), b"\xe2\tx\n");
+        }
+
+        #[test]
+        fn test_unexpand_line_preserves_invalid_utf8_lead_before_tab_boundary() {
+            let mut buf = [&b"\xef"[..], &b"       x\n"[..]].concat();
+            let mut output = Cursor::new(Vec::new());
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
+                is_a_flag: true,
+                is_u_flag: true,
+            };
+
+            unexpand_line(&mut buf, &mut output, &flags, &[8], RemainingMode::None)
+                .expect("invalid UTF-8 input must be processed");
+
+            assert_eq!(output.into_inner(), b"\xef       x\n");
+        }
+
+        #[test]
+        fn test_unexpand_line_collapses_partial_bom_prefix_as_gnu_blank() {
+            let mut buf = [&b"\xef\xbb"[..], &b"        x\n"[..]].concat();
+            let mut output = Cursor::new(Vec::new());
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
+                is_a_flag: true,
+                is_u_flag: true,
+            };
+
+            unexpand_line(&mut buf, &mut output, &flags, &[8], RemainingMode::None)
+                .expect("partial BOM prefix must be processed");
+
+            assert_eq!(output.into_inner(), b"\tx\n");
         }
 
         #[test]

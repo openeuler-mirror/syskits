@@ -2899,6 +2899,62 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "ef20202020202020780a",
+      "command": "unexpand",
+      "description": "原始字节无效UTF-8前导字节用例：LC_ALL=C.UTF-8；参数为2D61（-a），stdin完整十六进制为EF（无效三字节序列前导字节）、7个ASCII空格、78（x）和换行。GNU mbfile按mbrtoc32状态恢复该序列，7个空格不能单独到达8列tab stop；stdout必须原样保留EF、7个空格、x和换行，即EF20202020202020780A。",
+      "args": [
+        "2d61"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "export LANG=C.UTF-8"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "ef20202020202020780a",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "efbb2020202020202020780a",
+      "command": "unexpand",
+      "description": "原始字节部分BOM前缀用例：LC_ALL=C.UTF-8；参数为2D61（-a），stdin完整十六进制为EF BB（部分BOM前缀）、8个ASCII空格、78（x）和换行。GNU check_bom 保留EF BB并由紧随空格提供空白分类；该组合占1列，8列空白整体替换为制表符，stdout完整十六进制为09780A。",
+      "args": [
+        "2d61"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "export LANG=C.UTF-8"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "09780a",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

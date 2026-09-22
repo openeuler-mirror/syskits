@@ -514,6 +514,12 @@ fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, Parse
         if is_modifier(c) {
             size_string = &size_string[1..];
         }
+        if size_string.ends_with('b') {
+            return Err(ParseSizeError::ParseFailure(format!(
+                "{}",
+                size_string.quote()
+            )));
+        }
         parse_size_u64(size_string).map(match c {
             '+' => TruncateMode::Extend,
             '-' => TruncateMode::Reduce,
@@ -1359,6 +1365,11 @@ mod tests {
         use crate::truncate_parse_mode_and_size;
 
         use super::*;
+
+        #[test]
+        fn test_truncate_parse_mode_and_size_rejects_dd_block_suffix() {
+            assert!(truncate_parse_mode_and_size("1b").is_err());
+        }
 
         #[test]
         fn test_parse_mode_and_size() {

@@ -16,10 +16,15 @@ use rust_i18n::t;
 use std::fs::{OpenOptions, metadata};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
+#[cfg(unix)]
+use std::ffi::CStr;
 use std::io::ErrorKind;
+#[cfg(unix)]
 use std::os::linux::fs::MetadataExt;
 #[cfg(unix)]
-use std::os::unix::fs::FileTypeExt;
+use std::os::unix::fs::OpenOptionsExt;
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -244,28 +249,60 @@ pub fn ct_app() -> Command {
 ///
 /// 如果文件无法被打开，或者设置文件大小时出现错误。
 fn truncate_file(filename: &str, create: bool, size: u64) -> CTResult<()> {
-    #[cfg(unix)]
-    if let Ok(md) = std::fs::metadata(filename) {
-        if md.file_type().is_fifo() {
-            let err_massage = format!(
-                "cannot open {} for writing: No such device or address",
-                filename.quote()
-            );
-            return Err(CtSimpleError::new(1, err_massage));
-        }
-    }
     let path = Path::new(filename);
-    match OpenOptions::new().write(true).create(create).open(path) {
-        Ok(file) => file.set_len(size),
-        Err(e) => {
-            if e.kind() == ErrorKind::NotFound && !create {
-                Ok(())
-            } else {
-                Err(e)
-            }
+    let mut options = OpenOptions::new();
+    options.write(true).create(create);
+    #[cfg(unix)]
+    options.custom_flags(libc::O_NONBLOCK);
+
+    let file = match options.open(path) {
+        Ok(file) => file,
+        Err(error) if !create && error.kind() == ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(
+                error.map_err_context(|| format!("cannot open {} for writing", filename.quote()))
+            );
         }
+    };
+
+    #[cfg(unix)]
+    {
+        let size = libc::off_t::try_from(size).map_err(|_| {
+            CtSimpleError::new(
+                1,
+                format!("failed to truncate {} at {size} bytes", filename.quote()),
+            )
+        })?;
+        if unsafe { libc::ftruncate(file.as_raw_fd(), size) } != 0 {
+            let error = std::io::Error::last_os_error();
+            let error_message = os_error_message(&error);
+            return Err(CtSimpleError::new(
+                1,
+                format!(
+                    "failed to truncate {} at {size} bytes: {error_message}",
+                    filename.quote()
+                ),
+            ));
+        }
+        Ok(())
     }
-    .map_err_context(|| format!("cannot open {} for writing", filename.quote()))
+
+    #[cfg(not(unix))]
+    file.set_len(size)
+        .map_err_context(|| format!("failed to truncate {} at {size} bytes", filename.quote()))
+}
+
+#[cfg(unix)]
+fn os_error_message(error: &std::io::Error) -> String {
+    match error.raw_os_error() {
+        Some(errno) => {
+            // SAFETY: strerror returns a NUL-terminated message for a valid errno value.
+            unsafe { CStr::from_ptr(libc::strerror(errno)) }
+                .to_string_lossy()
+                .into_owned()
+        }
+        None => error.to_string(),
+    }
 }
 
 fn truncate_files<F>(filenames: &[String], mut truncate_one: F) -> CTResult<()>
@@ -423,15 +460,6 @@ fn truncate_size_only(
     truncate_files(filenames, |filename| {
         let (f_size, blocksize) = match metadata(filename) {
             Ok(md) => {
-                #[cfg(unix)]
-                if md.file_type().is_fifo() {
-                    let err_massage = format!(
-                        "cannot open {} for writing: No such device or address",
-                        filename.quote()
-                    );
-                    return Err(CtSimpleError::new(1, err_massage));
-                }
-
                 let blocksize_md = md.st_blksize();
 
                 (md.len(), blocksize_md)
@@ -1278,20 +1306,35 @@ mod tests {
 
         #[test]
         fn test_truncate_file_fifo() {
-            // On Unix systems, we can test FIFO-specific behavior
             #[cfg(unix)]
             {
                 use std::process::Command;
 
-                let fifo_path = "/tmp/test_truncate_file_fifo";
-                Command::new("mkfifo").arg(fifo_path).status().unwrap();
+                let temp_dir = tempfile::tempdir().unwrap();
+                let fifo_path = temp_dir.path().join("fifo");
+                Command::new("mkfifo").arg(&fifo_path).status().unwrap();
 
-                let result = truncate_file(fifo_path, true, 10);
+                let result = truncate_file(fifo_path.to_str().unwrap(), true, 10);
                 assert!(result.is_err());
                 let error_message = format!("{}", result.unwrap_err());
-                assert!(error_message.contains("No such device or address"));
+                assert!(error_message.contains("failed to truncate"));
+                assert!(error_message.contains("at 10 bytes"));
+                assert!(error_message.contains("Invalid argument"));
+                assert!(!error_message.contains("os error"));
+            }
+        }
 
-                std::fs::remove_file(fifo_path).unwrap();
+        #[test]
+        fn test_truncate_file_reports_ftruncate_error_for_character_device() {
+            #[cfg(unix)]
+            {
+                let result = truncate_file("/dev/null", true, 0);
+                assert!(result.is_err());
+                let error_message = format!("{}", result.unwrap_err());
+                assert!(error_message.contains("failed to truncate"));
+                assert!(error_message.contains("at 0 bytes"));
+                assert!(error_message.contains("Invalid argument"));
+                assert!(!error_message.contains("os error"));
             }
         }
 

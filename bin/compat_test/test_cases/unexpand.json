@@ -2312,6 +2312,33 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "61c2ad20202020202020580a",
+      "command": "unexpand",
+      "description": "原始字节字符宽度用例：LC_ALL=C.UTF-8；stdin完整十六进制为61（a）、C2AD（soft hyphen）、7个ASCII空格、58（X）和换行。GNU以 libc wcwidth/非控制不可打印字符规则将soft hyphen计为1列，stdout完整十六进制为61C2AD0920580A。",
+      "args": [
+        "2d61"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "61c2ad0920580a",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

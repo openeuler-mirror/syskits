@@ -195,6 +195,8 @@ pub fn ct_app() -> Command {
             .long(truncate_flags::TRUNCATE_REFERENCE)
             .required_unless_present(truncate_flags::TRUNCATE_SIZE)
             .help(t!("truncate.clap.truncate_reference"))
+            .action(ArgAction::Set)
+            .overrides_with(truncate_flags::TRUNCATE_REFERENCE)
             .value_name("RFILE")
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(truncate_flags::TRUNCATE_SIZE)
@@ -2288,6 +2290,25 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-r", reference_file, file];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_reference_allows_repeated_values_with_last_value() {
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--reference",
+                "first-reference",
+                "-r",
+                "last-reference",
+                "target",
+            ];
+            let matches = command.try_get_matches_from(args).unwrap();
+
+            assert_eq!(
+                matches.get_one::<String>(truncate_flags::TRUNCATE_REFERENCE),
+                Some(&"last-reference".to_string())
+            );
         }
 
         #[test]

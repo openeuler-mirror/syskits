@@ -2508,6 +2508,33 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "610d2020202020202020580a",
+      "command": "unexpand",
+      "description": "原始字节控制字符列宽用例：LC_ALL=C；参数为2D61（-a），stdin完整十六进制为61（a）、0D（carriage return）、8个ASCII空格、58（X）和换行。GNU的mb_width将ASCII控制字符0D计为0列，后续空格按第1列开始压缩，stdout完整十六进制为610D0920580A。",
+      "args": [
+        "2d61"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "610d0920580a",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

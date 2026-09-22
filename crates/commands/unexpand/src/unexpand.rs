@@ -837,13 +837,14 @@ fn unexpand_next_char_info(
     byte: usize,
 ) -> (UnexpandCharType, usize, usize) {
     if !is_u_flag {
-        let c_type = match buf[byte] {
+        let c = buf[byte];
+        let c_type = match c {
             0x20 => UnexpandCharType::Space,
             0x09 => UnexpandCharType::Tab,
             0x08 => UnexpandCharType::Backspace,
             _ => UnexpandCharType::Other,
         };
-        return (c_type, 1, 1);
+        return (c_type, usize::from(!c.is_ascii_control()), 1);
     }
 
     let slice = &buf[byte..];
@@ -1934,20 +1935,29 @@ mod tests {
         }
 
         #[test]
+        fn test_next_char_info_gives_ascii_control_zero_width_in_byte_mode() {
+            let (ctype, cwidth, nbytes) = unexpand_next_char_info(false, b"\r", 0);
+
+            assert_eq!(ctype, UnexpandCharType::Other);
+            assert_eq!(cwidth, 0);
+            assert_eq!(nbytes, 1);
+        }
+
+        #[test]
         fn test_next_char_info_with_ascii_tab() {
             let buf = "Hello\tworld".as_bytes();
             let (ctype, cwidth, nbytes) = unexpand_next_char_info(false, buf, 5);
             assert_eq!(ctype, UnexpandCharType::Tab);
-            assert_eq!(cwidth, 1);
+            assert_eq!(cwidth, 0);
             assert_eq!(nbytes, 1);
         }
 
         #[test]
         fn test_next_char_info_with_backspace() {
-            let buf = "Hello\nworld".as_bytes();
+            let buf = "Hello\x08world".as_bytes();
             let (ctype, cwidth, nbytes) = unexpand_next_char_info(false, buf, 5);
-            assert_eq!(ctype, UnexpandCharType::Other);
-            assert_eq!(cwidth, 1);
+            assert_eq!(ctype, UnexpandCharType::Backspace);
+            assert_eq!(cwidth, 0);
             assert_eq!(nbytes, 1);
         }
 

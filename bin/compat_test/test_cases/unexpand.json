@@ -1824,6 +1824,87 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "a 你      x\\n",
+      "command": "unexpand",
+      "description": "unexpand uses byte columns in the C locale",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "unexpand preserves a vertical tab before eight spaces",
+      "args": [
+        "2d61",
+        "696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "printf '\\v        x\\n' > input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "         x\\n",
+      "command": "unexpand",
+      "description": "unexpand preserves a non-breaking space before eight spaces",
+      "args": [
+        "-a"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

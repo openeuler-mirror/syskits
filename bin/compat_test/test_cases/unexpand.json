@@ -2083,6 +2083,35 @@
       "cleanup_commands": []
     },
     {
+      "byteMode": true,
+      "tstdin": "612020202020202020620a",
+      "command": "unexpand",
+      "description": "LC_ALL=C；参数完整十六进制为2d34（传统-4）、2d74（-t）、33（3）。GNU先累计传统4列tab stop，再由-t启用整行空白转换并追加3列stop，最终按3、4的显式列表处理；输入为a、8个空格、b和换行，stdout完整十六进制为610909202020202020620a。",
+      "args": [
+        "2d34",
+        "2d74",
+        "33"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "610909202020202020620a",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
       "tstdin": "",
       "command": "unexpand",
       "description": "unexpand keeps a UTF-8 wide character intact across the 65536-byte read boundary after compressed leading spaces",

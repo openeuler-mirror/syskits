@@ -25,7 +25,7 @@ use sys_locale::get_locale;
 
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 
 use std::ffi::OsString;
@@ -258,6 +258,26 @@ fn truncate_file(filename: &str, create: bool, size: u64) -> CTResult<()> {
     .map_err_context(|| format!("cannot open {} for writing", filename.quote()))
 }
 
+fn truncate_files<F>(filenames: &[String], mut truncate_one: F) -> CTResult<()>
+where
+    F: FnMut(&str) -> CTResult<()>,
+{
+    let mut failed = false;
+
+    for filename in filenames {
+        if let Err(error) = truncate_one(filename) {
+            ctcore::ct_show!(error);
+            failed = true;
+        }
+    }
+
+    if failed {
+        set_ct_exit_code(1);
+    }
+
+    Ok(())
+}
+
 /// 将文件截断到相对于给定文件的大小。
 ///
 /// `r_file_name` 是参考文件的名称。
@@ -315,10 +335,9 @@ fn truncate_reference_and_size(
         false => truncate_mode.to_size(md_size),
     };
 
-    for filename in filenames {
-        truncate_file(filename, is_create, t_size)?;
-    }
-    Ok(())
+    truncate_files(filenames, |filename| {
+        truncate_file(filename, is_create, t_size)
+    })
 }
 
 /// 将文件截断以匹配给定参考文件的大小。
@@ -348,10 +367,9 @@ fn truncate_reference_file_only(
         _ => e.map_err_context(String::new),
     })?;
     let t_size = md.len();
-    for filename in filenames {
-        truncate_file(filename, is_create, t_size)?;
-    }
-    Ok(())
+    truncate_files(filenames, |filename| {
+        truncate_file(filename, is_create, t_size)
+    })
 }
 
 #[cfg(unix)]
@@ -392,7 +410,7 @@ fn truncate_size_only(
         return Err(CtSimpleError::new(1, "division by zero"));
     }
 
-    for filename in filenames {
+    truncate_files(filenames, |filename| {
         let (f_size, blocksize) = match metadata(filename) {
             Ok(md) => {
                 #[cfg(unix)]
@@ -422,10 +440,8 @@ fn truncate_size_only(
             false => truncate_mode.to_size(f_size),
         };
 
-        // TODO: 修复对stat的重复调用
-        truncate_file(filename, is_create, t_size)?;
-    }
-    Ok(())
+        truncate_file(filename, is_create, t_size)
+    })
 }
 
 fn truncate(
@@ -505,8 +521,12 @@ fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, Parse
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
     use std::ffi::OsString;
     use std::fs::File;
+    use std::sync::Mutex;
+
+    static EXIT_CODE_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_tool_implementation() {
@@ -866,6 +886,27 @@ mod tests {
             truncate_size_only("10", &target_files, true, false).unwrap();
             assert_eq!(metadata(&target_file1_path).unwrap().len(), 10);
             assert_eq!(metadata(&target_file2_path).unwrap().len(), 10);
+        }
+
+        #[test]
+        fn test_truncate_size_only_continues_after_file_error() {
+            let _exit_code_guard = EXIT_CODE_LOCK.lock().unwrap();
+            set_ct_exit_code(0);
+
+            let temp_dir = tempfile::tempdir().unwrap();
+            let missing = temp_dir.path().join("missing").join("child");
+            let valid = temp_dir.path().join("valid");
+            std::fs::write(&valid, b"x").unwrap();
+            let target_files = vec![
+                missing.to_str().unwrap().to_string(),
+                valid.to_str().unwrap().to_string(),
+            ];
+
+            assert!(truncate_size_only("7", &target_files, true, false).is_ok());
+            assert_eq!(metadata(&valid).unwrap().len(), 7);
+            assert_eq!(get_ct_exit_code(), 1);
+
+            set_ct_exit_code(0);
         }
     }
 

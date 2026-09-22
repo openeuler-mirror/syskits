@@ -336,6 +336,38 @@
             "cleanup_commands": [
                 "rm -f file1.txt file2.txt file3.txt"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "前一目标打开失败时仍处理后续目标",
+            "setup_commands": [
+                "printf x > valid_after_error"
+            ],
+            "args": ["-s", "7", "missing/child", "valid_after_error"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: cannot open 'missing/child' for writing: No such file or directory\n"
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %s valid_after_error",
+                        "expected_exit": 0,
+                        "expected_stdout": "7"
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f valid_after_error"
+            ]
         }
     ]
-} 
+}

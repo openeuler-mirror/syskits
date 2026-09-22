@@ -1317,6 +1317,45 @@ fn unexpand_incomplete_utf8_suffix_len(buf: &[u8]) -> usize {
     0
 }
 
+fn unexpand_invalid_utf8_pending_blank_len(buf: &[u8], byte: usize) -> usize {
+    let slice = &buf[byte..];
+    let Err(error) = from_utf8(slice) else {
+        return 0;
+    };
+    if error.valid_up_to() != 0 {
+        return 0;
+    }
+
+    let expected_trailing_bytes = match slice.first() {
+        Some(0xc2..=0xdf) => 1,
+        Some(0xe0..=0xef) => 2,
+        Some(0xf0..=0xf4) => 3,
+        _ => return 0,
+    };
+    let pending_high_bytes = slice
+        .iter()
+        .skip(1)
+        .take(expected_trailing_bytes)
+        .take_while(|byte| !byte.is_ascii())
+        .count();
+    let valid_continuations = slice
+        .iter()
+        .skip(1)
+        .take(expected_trailing_bytes)
+        .take_while(|byte| matches!(byte, 0x80..=0xbf))
+        .count();
+    if pending_high_bytes > valid_continuations {
+        pending_high_bytes
+    } else if valid_continuations != 0
+        && valid_continuations < expected_trailing_bytes
+        && slice.get(1 + pending_high_bytes) == Some(&b' ')
+    {
+        pending_high_bytes + 1
+    } else {
+        0
+    }
+}
+
 #[derive(Default)]
 struct UnexpandLineState {
     column: usize,
@@ -1325,6 +1364,7 @@ struct UnexpandLineState {
     prev_blank: bool,
     pending: Vec<Vec<u8>>,
     convert: bool,
+    invalid_utf8_pending_blanks: usize,
 }
 
 impl UnexpandLineState {
@@ -1341,6 +1381,7 @@ impl UnexpandLineState {
         self.prev_blank = true;
         self.pending.clear();
         self.convert = true;
+        self.invalid_utf8_pending_blanks = 0;
     }
 
     fn flush_pending<W: Write>(&mut self, output: &mut W) -> std::io::Result<()> {
@@ -1380,7 +1421,17 @@ fn unexpand_line_with_state<W: Write>(
     let convert_entire_line = flags.is_a_flag;
 
     while byte < buf.len() {
-        let (c_type, c_width, n_bytes) = unexpand_next_char_info(flags.is_u_flag, buf, byte);
+        let (c_type, c_width, n_bytes) = if state.invalid_utf8_pending_blanks != 0 {
+            state.invalid_utf8_pending_blanks -= 1;
+            (UnexpandCharType::Space, 0, 1)
+        } else {
+            let char_info = unexpand_next_char_info(flags.is_u_flag, buf, byte);
+            if flags.is_u_flag {
+                state.invalid_utf8_pending_blanks =
+                    unexpand_invalid_utf8_pending_blank_len(buf, byte);
+            }
+            char_info
+        };
         let mut emit_tab = false;
 
         if state.convert {
@@ -2260,6 +2311,24 @@ mod tests {
                 String::from_utf8(output.into_inner()).unwrap(),
                 "Hello 世界".to_string()
             );
+        }
+
+        #[test]
+        fn test_unexpand_line_matches_gnu_invalid_utf8_tab_boundary() {
+            let mut buf = [&b"\xe2\x82"[..], &b"        x\n"[..]].concat();
+            let mut output = Cursor::new(Vec::new());
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
+                is_a_flag: true,
+                is_u_flag: true,
+            };
+
+            unexpand_line(&mut buf, &mut output, &flags, &[8], RemainingMode::None)
+                .expect("invalid UTF-8 input must be processed");
+
+            assert_eq!(output.into_inner(), b"\xe2\tx\n");
         }
 
         #[test]

@@ -3151,6 +3151,61 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "fcc22009",
+      "command": "unexpand",
+      "description": "传统超长 UTF-8 前导字节恢复：LC_ALL=C.UTF-8；参数为2D74（-t）和33（3），stdin为FC C2 20 09。GNU mbfile 用 mbrtoc32 逐字节预读，在FC C2失败后保留C2；C2、20和09在下一次读取中继承制表符分类，stdout必须为FC 09，即FC09。",
+      "args": [
+        "2d74",
+        "33"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "export LANG=C.UTF-8"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "fc09",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "c0efc0ef",
+      "command": "unexpand",
+      "description": "无换行 EOF 的 UTF-8 无效序列：LC_ALL=C.UTF-8；stdin为C0 EF C0 EF。GNU mbfile 以 mbrtoc32 状态机保留所有未决前缀并在EOF逐字节输出，stdout必须完整保持C0EFC0EF，不能因strict UTF-8后缀预切分覆盖前缀缓冲而丢失尾字节。",
+      "args": [],
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "export LANG=C.UTF-8"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "c0efc0ef",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

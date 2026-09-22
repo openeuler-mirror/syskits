@@ -632,6 +632,22 @@ fn is_blank_char(ch: char) -> bool {
     unsafe { iswblank(ch as ctcore::libc::c_uint) != 0 }
 }
 
+fn unexpand_incomplete_utf8_suffix_len(buf: &[u8]) -> usize {
+    let start = buf.len().saturating_sub(4);
+
+    for byte in (start..buf.len()).rev() {
+        let suffix = &buf[byte..];
+        if let Err(err) = from_utf8(suffix)
+            && err.valid_up_to() == 0
+            && err.error_len().is_none()
+        {
+            return suffix.len();
+        }
+    }
+
+    0
+}
+
 #[derive(Default)]
 struct UnexpandLineState {
     column: usize,
@@ -906,9 +922,11 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
         };
         let mut is_first_chunk = true;
         let mut line_state = UnexpandLineState::new();
+        let mut utf8_carry = Vec::new();
 
         loop {
             data_buf.clear();
+            data_buf.append(&mut utf8_carry);
             // 使用 take 限制单次读取的上限，防止在无换行符的无限流中陷入死循环
             let mut chunk_reader = (&mut fh).take(65536);
             let n = match chunk_reader.read_until(b'\n', &mut data_buf) {
@@ -919,7 +937,7 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
                 }
             };
 
-            if n == 0 {
+            if n == 0 && data_buf.is_empty() {
                 break;
             }
 
@@ -961,6 +979,17 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
             }
 
             let line_complete = data_buf.last() == Some(&b'\n');
+            if active_flags.is_u_flag && n != 0 && !line_complete {
+                let suffix_len = unexpand_incomplete_utf8_suffix_len(&data_buf);
+                if suffix_len != 0 {
+                    utf8_carry = data_buf.split_off(data_buf.len() - suffix_len);
+                }
+            }
+
+            if data_buf.is_empty() {
+                continue;
+            }
+
             unexpand_line_with_state(
                 &data_buf,
                 output,
@@ -1216,6 +1245,33 @@ mod tests {
         }
 
         #[test]
+        fn test_unexpand_exe_keeps_utf8_character_intact_across_chunks() {
+            let file = NamedTempFile::new().unwrap();
+            let mut input = b"\xEF\xBB\xBF".to_vec();
+            input.extend(std::iter::repeat_n(b' ', 65_531));
+            input.extend_from_slice("你      x\n".as_bytes());
+            write(file.path(), &input).unwrap();
+
+            let flags = UnexpandFlags {
+                files: vec![file.path().to_str().unwrap().to_string()],
+                tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
+                is_a_flag: true,
+                is_u_flag: true,
+            };
+
+            let mut output = Vec::new();
+            unexpand_exe(&flags, &mut output).unwrap();
+
+            let mut expected = b"\xEF\xBB\xBF".to_vec();
+            expected.extend(std::iter::repeat_n(b'\t', 8_191));
+            expected.extend_from_slice(b"   ");
+            expected.extend_from_slice("你\t   x\n".as_bytes());
+
+            assert_eq!(output, expected);
+        }
+
+        #[test]
         fn test_unexpand_native_semantic_collects_rows_and_metadata() {
             let file = NamedTempFile::new().unwrap();
             write(file.path(), b"    alpha\n        beta gamma\n").unwrap();
@@ -1436,6 +1492,14 @@ mod tests {
     #[cfg(test)]
     mod next_char_info_tests {
         use super::*;
+
+        #[test]
+        fn test_incomplete_utf8_suffix_len() {
+            assert_eq!(unexpand_incomplete_utf8_suffix_len(b"text\xE4"), 1);
+            assert_eq!(unexpand_incomplete_utf8_suffix_len(b"text\xE4\xBD"), 2);
+            assert_eq!(unexpand_incomplete_utf8_suffix_len("text你".as_bytes()), 0);
+            assert_eq!(unexpand_incomplete_utf8_suffix_len(b"text\xE4x"), 0);
+        }
 
         #[test]
         fn test_next_char_info_with_utf8() {

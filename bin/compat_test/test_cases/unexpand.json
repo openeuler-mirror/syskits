@@ -1963,6 +1963,35 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "unexpand keeps a UTF-8 wide character intact across the 65536-byte read boundary after compressed leading spaces",
+      "args": [
+        "-a",
+        "input"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "head -c 65535 /dev/zero | tr '\\0' ' ' > input",
+        "printf '你      x\\n' >> input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

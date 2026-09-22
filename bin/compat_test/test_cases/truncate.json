@@ -612,6 +612,31 @@
             "cleanup_commands": [
                 "rm -f io-block-overflow"
             ]
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "truncate",
+            "description": "非UTF-8文件名按原始字节传递给truncate",
+            "setup_commands": [
+                "python3 -c 'open(bytes.fromhex(\"7261772dff\"), \"wb\").close()'"
+            ],
+            "args": ["2d73", "37", "7261772dff"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "python3 -c 'import os; assert os.stat(bytes.fromhex(\"7261772dff\")).st_size == 7'",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "cleanup_commands": []
         }
     ]
 }

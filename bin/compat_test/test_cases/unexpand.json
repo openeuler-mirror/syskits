@@ -2607,6 +2607,35 @@
       "cleanup_commands": [
         "rm -f -- sigpipe-ignored-input"
       ]
+    },
+    {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "原始字节tab-stop参数用例：LC_ALL=C；参数完整十六进制为2D74（-t）和FF（无效单字节）。GNU将参数交给tab-stop解析器，预期RC=1，stdout为0字节，stderr完整十六进制为unexpand: tab size contains invalid character(s): '\\377'加换行，即756e657870616e643a207461622073697a6520636f6e7461696e7320696e76616c6964206368617261637465722873293a20275c333737270a。",
+      "args": [
+        "2d74",
+        "ff"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "export LANG=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "756e657870616e643a207461622073697a6520636f6e7461696e7320696e76616c6964206368617261637465722873293a20275c333737270a"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

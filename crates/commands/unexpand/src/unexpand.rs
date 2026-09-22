@@ -51,7 +51,9 @@ unsafe extern "C" {
 #[derive(Debug, PartialEq)]
 enum UnexpandParseError {
     InvalidCharacter(String),
+    InvalidCharacterBytes(Vec<u8>),
     SpecifierNotAtStartOfNumber(String, String),
+    SpecifierNotAtStartOfNumberBytes(String, Vec<u8>),
     SpecifierOnlyAllowedWithLastValue(String),
     SpecifierMutuallyExclusive,
     TabSizeCannotBeZero,
@@ -62,7 +64,27 @@ enum UnexpandParseError {
 
 impl Error for UnexpandParseError {}
 
-impl CTError for UnexpandParseError {}
+impl CTError for UnexpandParseError {
+    fn diagnostic_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
+        let mut diagnostic = match self {
+            Self::InvalidCharacterBytes(bytes) => {
+                let mut diagnostic = b"tab size contains invalid character(s): ".to_vec();
+                diagnostic.extend_from_slice(&unexpand_quote_diagnostic_argument(bytes));
+                diagnostic
+            }
+            Self::SpecifierNotAtStartOfNumberBytes(specifier, bytes) => {
+                let mut diagnostic = Vec::with_capacity(specifier.len() + bytes.len() + 48);
+                let quoted_specifier = specifier.quote().to_string();
+                diagnostic.extend_from_slice(quoted_specifier.as_bytes());
+                diagnostic.extend_from_slice(b" specifier not at start of number: ");
+                diagnostic.extend_from_slice(&unexpand_quote_diagnostic_argument(bytes));
+                diagnostic
+            }
+            _ => return std::borrow::Cow::Owned(self.to_string().into_bytes()),
+        };
+        std::borrow::Cow::Owned(diagnostic)
+    }
+}
 
 impl fmt::Display for UnexpandParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -70,11 +92,22 @@ impl fmt::Display for UnexpandParseError {
             Self::InvalidCharacter(s) => {
                 write!(f, "tab size contains invalid character(s): {}", s.quote())
             }
+            Self::InvalidCharacterBytes(bytes) => write!(
+                f,
+                "tab size contains invalid character(s): {}",
+                String::from_utf8_lossy(&unexpand_quote_diagnostic_argument(bytes))
+            ),
             Self::SpecifierNotAtStartOfNumber(specifier, s) => write!(
                 f,
                 "{} specifier not at start of number: {}",
                 specifier.quote(),
                 s.quote()
+            ),
+            Self::SpecifierNotAtStartOfNumberBytes(specifier, bytes) => write!(
+                f,
+                "{} specifier not at start of number: {}",
+                specifier.quote(),
+                String::from_utf8_lossy(&unexpand_quote_diagnostic_argument(bytes))
             ),
             Self::SpecifierOnlyAllowedWithLastValue(specifier) => write!(
                 f,
@@ -150,9 +183,9 @@ fn unexpand_rows_from_output(output: &str) -> Vec<UnexpandRow> {
         .collect()
 }
 
-/// 判断字符是否为空格、水平制表符或逗号。
-fn is_space_or_comma(c: char) -> bool {
-    matches!(c, ' ' | '\t' | ',')
+/// 判断字节是否为空格、水平制表符或逗号。
+fn is_space_or_comma(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\t' | b',')
 }
 
 #[cfg(test)]
@@ -160,16 +193,21 @@ fn unexpand_tabstops_parse(
     s: &str,
     from_short_tabs: bool,
 ) -> Result<(RemainingMode, Vec<usize>), UnexpandParseError> {
-    unexpand_tabstops_parse_inner(s, from_short_tabs, false)
+    unexpand_tabstops_parse_inner(OsStr::new(s), from_short_tabs, false)
 }
 
 fn unexpand_tabstops_parse_inner(
-    s: &str,
+    s: &OsStr,
     from_short_tabs: bool,
     preserve_single_extension: bool,
 ) -> Result<(RemainingMode, Vec<usize>), UnexpandParseError> {
-    let str = s.trim_start_matches(is_space_or_comma);
-    if str.is_empty() {
+    let bytes = s.as_encoded_bytes();
+    let first = bytes
+        .iter()
+        .position(|byte| !is_space_or_comma(*byte))
+        .unwrap_or(bytes.len());
+    let bytes = &bytes[first..];
+    if bytes.is_empty() {
         return Ok((RemainingMode::None, vec![UNEXPAND_DEFAULT_TABSTOP]));
     }
 
@@ -178,29 +216,22 @@ fn unexpand_tabstops_parse_inner(
     let mut slash_extension = None;
     let mut plus_extension = None;
 
-    for word in str.split(is_space_or_comma) {
+    for word in bytes.split(|byte| is_space_or_comma(*byte)) {
         if word.is_empty() {
             continue;
         }
-        let bytes = word.as_bytes();
         let mut number_start = None;
-        for index in 0..bytes.len() {
-            match bytes[index] {
+        for index in 0..word.len() {
+            match word[index] {
                 b'+' => {
                     if number_start.is_some() {
-                        return Err(UnexpandParseError::SpecifierNotAtStartOfNumber(
-                            "+".to_string(),
-                            from_utf8(&bytes[index..]).unwrap_or_default().to_string(),
-                        ));
+                        return Err(unexpand_specifier_not_at_start_error("+", &word[index..]));
                     }
                     current_mode = RemainingMode::Plus;
                 }
                 b'/' => {
                     if number_start.is_some() {
-                        return Err(UnexpandParseError::SpecifierNotAtStartOfNumber(
-                            "/".to_string(),
-                            from_utf8(&bytes[index..]).unwrap_or_default().to_string(),
-                        ));
+                        return Err(unexpand_specifier_not_at_start_error("/", &word[index..]));
                     }
                     current_mode = RemainingMode::Slash;
                 }
@@ -208,9 +239,7 @@ fn unexpand_tabstops_parse_inner(
                     number_start.get_or_insert(index);
                 }
                 _ => {
-                    return Err(UnexpandParseError::InvalidCharacter(
-                        from_utf8(&bytes[index..]).unwrap_or_default().to_string(),
-                    ));
+                    return Err(unexpand_invalid_character_error(&word[index..]));
                 }
             }
         }
@@ -218,7 +247,8 @@ fn unexpand_tabstops_parse_inner(
         let Some(number_start) = number_start else {
             continue;
         };
-        let number = from_utf8(&bytes[number_start..]).unwrap_or_default();
+        let number =
+            from_utf8(&word[number_start..]).expect("tab-stop number contains only ASCII digits");
         let num = match number.parse::<usize>() {
             Ok(num) => num,
             Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
@@ -295,6 +325,118 @@ fn unexpand_tabstops_parse_inner(
     Ok((RemainingMode::None, numbers))
 }
 
+fn unexpand_invalid_character_error(bytes: &[u8]) -> UnexpandParseError {
+    match from_utf8(bytes) {
+        Ok(text) => UnexpandParseError::InvalidCharacter(text.to_string()),
+        Err(_) => UnexpandParseError::InvalidCharacterBytes(bytes.to_vec()),
+    }
+}
+
+fn unexpand_specifier_not_at_start_error(specifier: &str, bytes: &[u8]) -> UnexpandParseError {
+    match from_utf8(bytes) {
+        Ok(text) => {
+            UnexpandParseError::SpecifierNotAtStartOfNumber(specifier.to_string(), text.to_string())
+        }
+        Err(_) => UnexpandParseError::SpecifierNotAtStartOfNumberBytes(
+            specifier.to_string(),
+            bytes.to_vec(),
+        ),
+    }
+}
+
+fn unexpand_quote_diagnostic_argument(bytes: &[u8]) -> Vec<u8> {
+    let (left_quote, right_quote) = unexpand_diagnostic_quote_marks();
+    let mut quoted = Vec::with_capacity(bytes.len() + left_quote.len() + right_quote.len());
+    quoted.extend_from_slice(left_quote);
+
+    let mut index = 0;
+    while index < bytes.len() {
+        if !right_quote.is_empty() && bytes[index..].starts_with(right_quote) {
+            quoted.push(b'\\');
+            quoted.extend_from_slice(right_quote);
+            index += right_quote.len();
+            continue;
+        }
+
+        let byte = bytes[index];
+        if byte.is_ascii() {
+            match byte {
+                b'\x07' => quoted.extend_from_slice(b"\\a"),
+                b'\x08' => quoted.extend_from_slice(b"\\b"),
+                b'\t' => quoted.extend_from_slice(b"\\t"),
+                b'\n' => quoted.extend_from_slice(b"\\n"),
+                b'\x0b' => quoted.extend_from_slice(b"\\v"),
+                b'\x0c' => quoted.extend_from_slice(b"\\f"),
+                b'\r' => quoted.extend_from_slice(b"\\r"),
+                b'\\' => quoted.extend_from_slice(b"\\\\"),
+                0x00..=0x1f | 0x7f => unexpand_push_octal_byte(&mut quoted, byte),
+                _ => quoted.push(byte),
+            }
+            index += 1;
+            continue;
+        }
+
+        let (length, printable) = unexpand_classify_locale_sequence(&bytes[index..]);
+        let length = length.clamp(1, bytes.len() - index);
+        if printable {
+            quoted.extend_from_slice(&bytes[index..index + length]);
+        } else {
+            for byte in &bytes[index..index + length] {
+                unexpand_push_octal_byte(&mut quoted, *byte);
+            }
+        }
+        index += length;
+    }
+
+    quoted.extend_from_slice(right_quote);
+    quoted
+}
+
+fn unexpand_diagnostic_quote_marks() -> (&'static [u8], &'static [u8]) {
+    let codeset = unsafe { ctcore::libc::nl_langinfo(ctcore::libc::CODESET) };
+    if codeset.is_null() {
+        return (b"'", b"'");
+    }
+
+    let codeset = unsafe { CStr::from_ptr(codeset) }.to_bytes();
+    if codeset.eq_ignore_ascii_case(b"UTF-8") || codeset.eq_ignore_ascii_case(b"UTF8") {
+        (b"\xe2\x80\x98", b"\xe2\x80\x99")
+    } else if codeset.eq_ignore_ascii_case(b"GB18030") {
+        (b"\xa1\x07e", b"\xa1\xaf")
+    } else {
+        (b"'", b"'")
+    }
+}
+
+fn unexpand_classify_locale_sequence(remaining: &[u8]) -> (usize, bool) {
+    unsafe {
+        let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
+        let mut wide = 0 as ctcore::libc::wchar_t;
+        let length = mbrtowc(
+            &mut wide,
+            remaining.as_ptr().cast(),
+            remaining.len(),
+            &mut state,
+        );
+        if length == usize::MAX {
+            return (1, false);
+        }
+        if length == usize::MAX - 1 {
+            return (remaining.len(), false);
+        }
+
+        let length = if length == 0 { 1 } else { length };
+        (length, iswprint(wide as ctcore::libc::c_uint) != 0)
+    }
+}
+
+fn unexpand_push_octal_byte(output: &mut Vec<u8>, byte: u8) {
+    output.push(b'\\');
+    output.push(b'0' + (byte >> 6));
+    output.push(b'0' + ((byte >> 3) & 0o7));
+    output.push(b'0' + (byte & 0o7));
+}
+
 mod unexpand_flags {
     pub const FILE: &str = "file";
     pub const ALL: &str = "all";
@@ -351,12 +493,16 @@ impl UnexpandFlags {
         matches: &ArgMatches,
     ) -> Result<(RemainingMode, Vec<usize>), UnexpandParseError> {
         let from_short_tabs = matches.get_flag(unexpand_flags::SHORT_TABS);
-        if let Some(s) = matches.get_many::<String>(unexpand_flags::TABS) {
+        if let Some(s) = matches.get_many::<OsString>(unexpand_flags::TABS) {
             let mut tabstops = Vec::new();
             let mut extension = None;
 
             for input in s {
-                if input.trim_start_matches(is_space_or_comma).is_empty() {
+                if input
+                    .as_encoded_bytes()
+                    .iter()
+                    .all(|byte| is_space_or_comma(*byte))
+                {
                     continue;
                 }
 
@@ -668,6 +814,7 @@ fn ct_app_with_posix_mode(posix_mode: bool) -> Command {
                 apart instead of 8 (enables -a)",
             )
             .action(ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .value_name("N, LIST"),
         Arg::new(unexpand_flags::NO_UTF8)
             .short('U')
@@ -2663,6 +2810,30 @@ mod tests {
                 result.err(),
                 Some(UnexpandParseError::InvalidCharacter("x".to_string()))
             );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_unexpand_flags_preserves_non_utf8_tabstop_diagnostic_bytes() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let matches = ct_app()
+                .try_get_matches_from([
+                    OsString::from("unexpand"),
+                    OsString::from("-t"),
+                    OsString::from_vec(vec![0xff]),
+                ])
+                .expect("raw tab-stop bytes must reach the unexpand parser");
+            let error = match UnexpandFlags::new(&matches) {
+                Err(error) => error,
+                Ok(_) => panic!("non-UTF-8 tab-stop must be rejected"),
+            };
+
+            assert!(matches!(
+                error.diagnostic_bytes().as_ref(),
+                b"tab size contains invalid character(s): '\\377'"
+                    | b"tab size contains invalid character(s): \xe2\x80\x98\\377\xe2\x80\x99"
+            ));
         }
 
         #[test]

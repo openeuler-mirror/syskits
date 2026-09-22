@@ -924,10 +924,14 @@ fn ct_app_with_posix_mode(posix_mode: bool) -> Command {
         .gnu_getopt_with_mode(posix_mode)
 }
 
-fn unexpand_open(path: &OsStr) -> CTResult<BufReader<Box<dyn Read + 'static>>> {
+fn unexpand_open(
+    path: &OsStr,
+    last_input_errno: &mut Option<i32>,
+) -> CTResult<BufReader<Box<dyn Read + 'static>>> {
     let file_buf;
     let filename = Path::new(path);
     if filename.is_dir() {
+        *last_input_errno = Some(ctcore::libc::EISDIR);
         Err(Box::new(CtSimpleError {
             code: 1,
             message: format!("{}: Is a directory", unexpand_quote_path(path)),
@@ -935,8 +939,27 @@ fn unexpand_open(path: &OsStr) -> CTResult<BufReader<Box<dyn Read + 'static>>> {
     } else if path == OsStr::new("-") {
         Ok(BufReader::new(ctcore::ct_io::stdin_reader_box()))
     } else {
-        file_buf = File::open(filename).map_err_context(|| unexpand_quote_path(path))?;
+        file_buf = File::open(filename).map_err(|error| {
+            *last_input_errno = error.raw_os_error();
+            error.map_err_context(|| unexpand_quote_path(path)) as Box<dyn CTError>
+        })?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
+    }
+}
+
+fn unexpand_bom_mismatch_message(
+    first_file_has_bom: bool,
+    last_input_errno: Option<i32>,
+) -> String {
+    let errno = first_file_has_bom
+        .then_some(ctcore::libc::ENOENT)
+        .or(last_input_errno);
+    match errno {
+        Some(errno) => format!(
+            "unexpand: combination of files with and without BOM header: {}\n",
+            strip_errno(&std::io::Error::from_raw_os_error(errno))
+        ),
+        None => "unexpand: combination of files with and without BOM header\n".to_string(),
     }
 }
 
@@ -1438,12 +1461,13 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
     let mut data_buf = Vec::new();
     let mut is_first_file = true;
     let mut first_file_has_bom = false;
+    let mut last_input_errno = None;
     let mut stderr_text = String::new();
     let mut exit_code = 0;
     let mut line_state = UnexpandLineState::new();
 
     'files: for file in &flags.files {
-        let mut fh = match unexpand_open(file) {
+        let mut fh = match unexpand_open(file, &mut last_input_errno) {
             Ok(reader) => reader,
             Err(err) => {
                 report_unexpand_ct_error(
@@ -1466,6 +1490,7 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
             let n = match chunk_reader.read_until(b'\n', &mut data_buf) {
                 Ok(size) => size,
                 Err(e) => {
+                    last_input_errno = e.raw_os_error();
                     report_unexpand_io_error(&mut stderr_text, &mut exit_code, &e, emit_stderr);
                     break;
                 }
@@ -1478,17 +1503,11 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
             if is_first_chunk {
                 let file_has_bom = data_buf.starts_with(&[0xEF, 0xBB, 0xBF]);
                 if !is_first_file && !using_utf_locale && file_has_bom != first_file_has_bom {
-                    let message = if first_file_has_bom {
-                        // GNU's BOM probe retains ENOENT on this mismatch direction.
-                        "unexpand: combination of files with and without BOM header: No such file or directory\n"
-                    } else {
-                        "unexpand: combination of files with and without BOM header\n"
-                    };
                     report_unexpand_error(
                         &mut stderr_text,
                         &mut exit_code,
                         1,
-                        message.to_string(),
+                        unexpand_bom_mismatch_message(first_file_has_bom, last_input_errno),
                         emit_stderr,
                     );
                     break 'files;
@@ -1775,6 +1794,41 @@ mod tests {
                 outcome
                     .stderr_text
                     .starts_with("unexpand: combination of files with and without BOM header")
+            );
+        }
+
+        #[test]
+        fn test_unexpand_exe_keeps_open_errno_for_bom_after_plain_file() {
+            let dir = tempdir().unwrap();
+            let missing_path = dir.path().join("missing.txt");
+            let plain_path = dir.path().join("plain.txt");
+            let bom_path = dir.path().join("bom.txt");
+            write(&plain_path, b"        plain\n").unwrap();
+            write(&bom_path, b"\xEF\xBB\xBF        bom\n").unwrap();
+
+            let flags = UnexpandFlags {
+                files: vec![
+                    missing_path.as_os_str().to_os_string(),
+                    plain_path.as_os_str().to_os_string(),
+                    bom_path.as_os_str().to_os_string(),
+                ],
+                tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
+                is_a_flag: false,
+                is_u_flag: false,
+            };
+
+            let mut output = Vec::new();
+            let outcome = unexpand_exe(&flags, &mut output).unwrap();
+
+            assert_eq!(output, b"\tplain\n");
+            assert_eq!(outcome.exit_code, 1);
+            assert_eq!(
+                outcome.stderr_text,
+                format!(
+                    "unexpand: {}: No such file or directory\nunexpand: combination of files with and without BOM header: No such file or directory\n",
+                    missing_path.display()
+                )
             );
         }
 
@@ -2402,7 +2456,8 @@ mod tests {
             let mut file = File::create(&file_path).unwrap();
             writeln!(file, "Test content").unwrap();
 
-            let result = unexpand_open(file_path.as_os_str());
+            let mut last_input_errno = None;
+            let result = unexpand_open(file_path.as_os_str(), &mut last_input_errno);
             assert!(result.is_ok());
 
             let mut reader = result.unwrap();
@@ -2415,7 +2470,8 @@ mod tests {
         fn test_unexpand_open_with_stdin() {
             // This test is a bit tricky because it involves stdin,
             // so we won't actually test reading from stdin here
-            let result = unexpand_open(OsStr::new("-"));
+            let mut last_input_errno = None;
+            let result = unexpand_open(OsStr::new("-"), &mut last_input_errno);
             assert!(result.is_ok());
         }
 

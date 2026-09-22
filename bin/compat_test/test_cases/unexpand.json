@@ -1967,6 +1967,36 @@
     {
       "tstdin": "",
       "command": "unexpand",
+      "description": "LC_ALL=C；先尝试读取不存在文件missing，再读取plain并遇到带BOM的bom。GNU保留失败打开产生的ENOENT，BOM不一致诊断因此带No such file or directory；plain的8个行首空格压缩为制表符。",
+      "args": [
+        "missing",
+        "plain",
+        "bom"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf '        second\\n' > plain",
+        "printf '\\357\\273\\277        first\\n' > bom"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "\tsecond\n",
+          "stderr": "unexpand: missing: No such file or directory\nunexpand: combination of files with and without BOM header: No such file or directory\n"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
       "description": "unexpand keeps a UTF-8 wide character intact across the 65536-byte read boundary after compressed leading spaces",
       "args": [
         "-a",

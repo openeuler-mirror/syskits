@@ -28,9 +28,13 @@ use unicode_width::UnicodeWidthChar;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code};
-use std::ffi::OsString;
+use std::ffi::{CStr, OsString};
 
 const UNEXPAND_DEFAULT_TABSTOP: usize = 8;
+
+unsafe extern "C" {
+    fn iswblank(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
+}
 
 #[derive(Debug, PartialEq)]
 enum UnexpandParseError {
@@ -243,6 +247,7 @@ mod unexpand_flags {
     pub const SHORT_TABS: &str = "short-tabs";
 }
 
+#[derive(Clone)]
 struct UnexpandFlags {
     files: Vec<String>,
     tabstops: Vec<usize>,
@@ -354,6 +359,7 @@ fn expand_shortcuts(args: &[String]) -> Vec<String> {
 }
 
 pub fn unexpand_main(args: impl ctcore::Args) -> CTResult<()> {
+    unexpand_initialize_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect_ignore();
@@ -361,6 +367,31 @@ pub fn unexpand_main(args: impl ctcore::Args) -> CTResult<()> {
     let matches = ct_app().try_get_matches_from(expand_shortcuts(&args))?;
 
     unexpand(&UnexpandFlags::new(&matches)?)
+}
+
+fn unexpand_initialize_locale() {
+    let empty_locale = b"\0";
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, empty_locale.as_ptr().cast());
+    }
+}
+
+fn unexpand_uses_utf8_locale() -> bool {
+    let locale = unsafe { ctcore::libc::setlocale(ctcore::libc::LC_CTYPE, std::ptr::null()) };
+    if locale.is_null() {
+        return false;
+    }
+
+    unexpand_uses_utf8_locale_name(unsafe { CStr::from_ptr(locale) }.to_bytes())
+}
+
+fn unexpand_uses_utf8_locale_name(locale: &[u8]) -> bool {
+    locale
+        .windows(b"utf8".len())
+        .any(|part| part.eq_ignore_ascii_case(b"utf8"))
+        || locale
+            .windows(b"utf-8".len())
+            .any(|part| part.eq_ignore_ascii_case(b"utf-8"))
 }
 
 pub fn ct_app() -> Command {
@@ -598,13 +629,7 @@ fn unexpand_next_char_info(
 }
 
 fn is_blank_char(ch: char) -> bool {
-    if ch == ' ' {
-        return true;
-    }
-    if ch == '\n' || ch == '\r' {
-        return false;
-    }
-    ch.is_whitespace()
+    unsafe { iswblank(ch as ctcore::libc::c_uint) != 0 }
 }
 
 #[derive(Default)]
@@ -857,6 +882,8 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
 ) -> Result<UnexpandRunOutcome, Box<dyn CTError>> {
     let tabstops = &flags.tabstops[..];
     let remaining_mode = flags.remaining_mode;
+    let mut active_flags = flags.clone();
+    active_flags.is_u_flag &= unexpand_uses_utf8_locale();
     let mut data_buf = Vec::new();
     let mut is_first_file = true;
     let mut first_file_has_bom = false;
@@ -902,6 +929,8 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
                             .write_all(&[0xEF, 0xBB, 0xBF])
                             .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
                         first_file_has_bom = true;
+                        // GNU switches a C locale to UTF-8 for a BOM-prefixed first file.
+                        active_flags.is_u_flag = flags.is_u_flag;
                     }
                     data_buf.drain(0..3);
                 }
@@ -916,7 +945,7 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
             unexpand_line_with_state(
                 &data_buf,
                 output,
-                flags,
+                &active_flags,
                 tabstops,
                 remaining_mode,
                 &mut line_state,
@@ -937,6 +966,7 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
 }
 
 pub fn unexpand_native_semantic(args: impl ctcore::Args) -> CTResult<UnexpandSemantic> {
+    unexpand_initialize_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect_ignore();
@@ -2060,6 +2090,14 @@ mod tests {
                 unexpand_tabstops_parse("4,8,+3", false),
                 Ok((RemainingMode::Plus, vec![4, 8, 3]))
             );
+        }
+
+        #[test]
+        fn test_unexpand_blank_classification_excludes_non_blank_whitespace() {
+            assert!(is_blank_char(' '));
+            assert!(!is_blank_char('\u{000B}'));
+            assert!(!is_blank_char('\u{000C}'));
+            assert!(!is_blank_char('\u{00A0}'));
         }
 
         #[test]

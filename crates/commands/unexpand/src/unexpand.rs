@@ -1043,6 +1043,7 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
     let mut first_file_has_bom = false;
     let mut stderr_text = String::new();
     let mut exit_code = 0;
+    let mut line_state = UnexpandLineState::new();
 
     'files: for file in &flags.files {
         let mut fh = match unexpand_open(file) {
@@ -1058,7 +1059,6 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
             }
         };
         let mut is_first_chunk = true;
-        let mut line_state = UnexpandLineState::new();
         let mut utf8_carry = Vec::new();
 
         loop {
@@ -1138,11 +1138,11 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
             )
             .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
         }
-        line_state
-            .finish_line(output)
-            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
         is_first_file = false;
     }
+    line_state
+        .finish_line(output)
+        .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
 
     Ok(UnexpandRunOutcome {
         stderr_text,
@@ -1266,6 +1266,31 @@ mod tests {
 
             let result = String::from_utf8(output).unwrap();
             assert_eq!(result, "\tHello\n\tWorld\n");
+        }
+
+        #[test]
+        fn test_unexpand_exe_keeps_line_state_across_unterminated_files() {
+            let dir = tempdir().unwrap();
+            let first_path = dir.path().join("first.txt");
+            let second_path = dir.path().join("second.txt");
+            write(&first_path, b"X").unwrap();
+            write(&second_path, b"        Y\n").unwrap();
+
+            let flags = UnexpandFlags {
+                files: vec![
+                    first_path.as_os_str().to_os_string(),
+                    second_path.as_os_str().to_os_string(),
+                ],
+                tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
+                is_a_flag: false,
+                is_u_flag: false,
+            };
+
+            let mut output = Vec::new();
+            unexpand_exe(&flags, &mut output).unwrap();
+
+            assert_eq!(output, b"X        Y\n");
         }
 
         #[test]

@@ -3069,6 +3069,62 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "619439fc362020202020580a",
+      "command": "unexpand",
+      "description": "原始字节多字节 locale 用例：LC_ALL=zh_CN.gb18030；参数为2D61（-a），stdin完整十六进制为61（a）、94 39 FC 36（GB18030 四字节字符）、5个20（ASCII空格）、58（X）和0A。GNU mbfile 以 mbrtoc32 将该四字节序列作为一个 locale 字符并按 libc wcwidth 计列，5个空格未到下一个8列tab stop，stdout必须逐字节保持619439FC362020202020580A。",
+      "args": [
+        "2d61"
+      ],
+      "setup_commands": [
+        "export LC_ALL=zh_CN.gb18030",
+        "export LANG=zh_CN.gb18030"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "619439fc362020202020580a",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "e53220202020202020580a",
+      "command": "unexpand",
+      "description": "无效 GB18030 前缀恢复：LC_ALL=zh_CN.gb18030；参数为2D61（-a），stdin为E5、32、7个20（ASCII空格）、58（X）和0A。GNU mbfile 在E5 32 20 20处发现无效多字节序列后仅输出E5，并保留32 20 20；下一次读取将其与一个20作为空白字符计一列，7个空格未到8列tab stop，stdout必须逐字节保持E532加7个20、580A。",
+      "args": [
+        "2d61"
+      ],
+      "setup_commands": [
+        "export LC_ALL=zh_CN.gb18030",
+        "export LANG=zh_CN.gb18030"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "e53220202020202020580a",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

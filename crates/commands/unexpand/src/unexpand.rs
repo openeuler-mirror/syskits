@@ -15,7 +15,7 @@ extern crate rust_i18n;
 use rust_i18n::t;
 use std::error::Error;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::OsStringValueParser, crate_version};
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdout};
@@ -29,7 +29,7 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_posix::{GnuGetoptCommandExt, posixly_correct};
-use std::ffi::{CStr, OsString};
+use std::ffi::{CStr, OsStr, OsString};
 
 const UNEXPAND_DEFAULT_TABSTOP: usize = 8;
 
@@ -250,7 +250,7 @@ mod unexpand_flags {
 
 #[derive(Clone)]
 struct UnexpandFlags {
-    files: Vec<String>,
+    files: Vec<OsString>,
     tabstops: Vec<usize>,
     remaining_mode: RemainingMode,
     is_a_flag: bool,
@@ -278,11 +278,11 @@ impl UnexpandFlags {
         !matches.get_flag(unexpand_flags::NO_UTF8)
     }
 
-    fn parse_files(matches: &ArgMatches) -> Vec<String> {
-        if let Some(v) = matches.get_many::<String>(unexpand_flags::FILE) {
+    fn parse_files(matches: &ArgMatches) -> Vec<OsString> {
+        if let Some(v) = matches.get_many::<OsString>(unexpand_flags::FILE) {
             v.cloned().collect()
         } else {
-            vec!["-".to_owned()]
+            vec![OsString::from("-")]
         }
     }
 
@@ -303,69 +303,93 @@ impl UnexpandFlags {
     }
 }
 
-/// 判断字符是否为数字或逗号。
+/// 判断字节是否为ASCII数字或逗号。
+fn is_ascii_digit_or_comma(c: u8) -> bool {
+    c.is_ascii_digit() || c == b','
+}
+
+#[cfg(test)]
 fn is_digit_or_comma(c: char) -> bool {
-    c.is_ascii_digit() || c == ','
+    c.is_ascii() && is_ascii_digit_or_comma(c as u8)
 }
 
 /// 预处理命令行参数并展开快捷方式。例如，"-7"会被扩展为"--tabs=7 --first-only"，
 /// 而"-1,3"会扩展为"--tabs=1 --tabs=3 --first-only"。
 /// 但是，如果提供了"-a"或"--all"选项，则不会包含"--first-only"。
-fn expand_shortcuts(args: &[String]) -> Vec<String> {
-    let mut processed_args_string = Vec::with_capacity(args.len());
+fn expand_shortcuts_os(args: &[OsString]) -> Vec<OsString> {
+    let mut processed_args = Vec::with_capacity(args.len());
     let mut is_all_arg_provided = false;
     let mut is_has_shortcuts = false;
     let mut options_ended = false;
 
-    for arg_str in args {
-        if !options_ended && arg_str == "--" {
+    for argument in args {
+        let bytes = argument.as_encoded_bytes();
+        if !options_ended && bytes == b"--" {
             options_ended = true;
-            processed_args_string.push(arg_str.to_string());
+            processed_args.push(argument.clone());
             continue;
         }
 
         let short_tab_spec = (!options_ended)
-            .then(|| arg_str.strip_prefix('-'))
+            .then(|| bytes.strip_prefix(b"-"))
             .flatten()
-            .filter(|spec| !spec.is_empty() && spec.chars().all(is_digit_or_comma));
+            .filter(|spec| {
+                !spec.is_empty() && spec.iter().all(|&byte| is_ascii_digit_or_comma(byte))
+            });
 
         if let Some(spec) = short_tab_spec {
-            spec.split(',')
+            spec.split(|&byte| byte == b',')
                 .filter(|value| !value.is_empty())
-                .for_each(|value| processed_args_string.push(format!("--tabs={value}")));
+                .for_each(|value| {
+                    let value = from_utf8(value).expect("tab shortcut only contains ASCII digits");
+                    processed_args.push(OsString::from(format!("--tabs={value}")));
+                });
             is_has_shortcuts = true;
             continue;
         }
 
-        processed_args_string.push(arg_str.to_string());
-        if !options_ended && (arg_str == "--all" || arg_str == "-a") {
+        processed_args.push(argument.clone());
+        if !options_ended && (bytes == b"--all" || bytes == b"-a") {
             is_all_arg_provided = true;
         }
     }
 
     if is_has_shortcuts {
-        let insertion_index = processed_args_string
+        let insertion_index = processed_args
             .iter()
-            .position(|arg| arg == "--")
-            .unwrap_or(processed_args_string.len());
+            .position(|argument| argument.as_encoded_bytes() == b"--")
+            .unwrap_or(processed_args.len());
         let mut shortcuts = Vec::with_capacity(2);
         if !is_all_arg_provided {
-            shortcuts.push("--first-only".into());
+            shortcuts.push(OsString::from("--first-only"));
         }
-        shortcuts.push("--short-tabs".into());
-        processed_args_string.splice(insertion_index..insertion_index, shortcuts);
+        shortcuts.push(OsString::from("--short-tabs"));
+        processed_args.splice(insertion_index..insertion_index, shortcuts);
     }
 
-    processed_args_string
+    processed_args
+}
+
+#[cfg(test)]
+fn expand_shortcuts(args: &[String]) -> Vec<String> {
+    let args = args.iter().cloned().map(OsString::from).collect::<Vec<_>>();
+    expand_shortcuts_os(&args)
+        .into_iter()
+        .map(|argument| {
+            argument
+                .into_string()
+                .expect("test arguments are valid UTF-8")
+        })
+        .collect()
 }
 
 pub fn unexpand_main(args: impl ctcore::Args) -> CTResult<()> {
     unexpand_initialize_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = args.collect_ignore();
+    let args = args.collect::<Vec<_>>();
 
-    let matches = ct_app().try_get_matches_from(expand_shortcuts(&args))?;
+    let matches = ct_app().try_get_matches_from(expand_shortcuts_os(&args))?;
 
     unexpand(&UnexpandFlags::new(&matches)?)
 }
@@ -408,6 +432,7 @@ fn ct_app_with_posix_mode(posix_mode: bool) -> Command {
         Arg::new(unexpand_flags::FILE)
             .hide(true)
             .action(ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(unexpand_flags::ALL)
             .short('a')
@@ -447,7 +472,7 @@ fn ct_app_with_posix_mode(posix_mode: bool) -> Command {
         .gnu_getopt_with_mode(posix_mode)
 }
 
-fn unexpand_open(path: &str) -> CTResult<BufReader<Box<dyn Read + 'static>>> {
+fn unexpand_open(path: &OsStr) -> CTResult<BufReader<Box<dyn Read + 'static>>> {
     let file_buf;
     let filename = Path::new(path);
     if filename.is_dir() {
@@ -455,10 +480,10 @@ fn unexpand_open(path: &str) -> CTResult<BufReader<Box<dyn Read + 'static>>> {
             code: 1,
             message: format!("{}: Is a directory", filename.display()),
         }))
-    } else if path == "-" {
+    } else if path == OsStr::new("-") {
         Ok(BufReader::new(ctcore::ct_io::stdin_reader_box()))
     } else {
-        file_buf = File::open(path).map_err_context(|| path.to_string())?;
+        file_buf = File::open(filename).map_err_context(|| filename.display().to_string())?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }
@@ -1023,8 +1048,8 @@ pub fn unexpand_native_semantic(args: impl ctcore::Args) -> CTResult<UnexpandSem
     unexpand_initialize_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = args.collect_ignore();
-    let matches = ct_app().try_get_matches_from(expand_shortcuts(&args))?;
+    let args = args.collect::<Vec<_>>();
+    let matches = ct_app().try_get_matches_from(expand_shortcuts_os(&args))?;
     let flags = UnexpandFlags::new(&matches)?;
     let mut classic_output = Vec::new();
     let outcome = unexpand_exe(&flags, &mut classic_output)?;
@@ -1096,7 +1121,7 @@ mod tests {
             write(file.path(), b"    Hello\tWorld\n").unwrap();
 
             let flags = UnexpandFlags {
-                files: vec![file.path().to_str().unwrap().to_string()],
+                files: vec![file.path().as_os_str().to_os_string()],
                 tabstops: vec![4],
                 remaining_mode: RemainingMode::None,
                 is_a_flag: false,
@@ -1121,8 +1146,8 @@ mod tests {
 
             let flags = UnexpandFlags {
                 files: vec![
-                    file1_path.to_str().unwrap().to_string(),
-                    file2_path.to_str().unwrap().to_string(),
+                    file1_path.as_os_str().to_os_string(),
+                    file2_path.as_os_str().to_os_string(),
                 ],
                 tabstops: vec![4],
                 remaining_mode: RemainingMode::None,
@@ -1147,8 +1172,8 @@ mod tests {
 
             let flags = UnexpandFlags {
                 files: vec![
-                    bom_path.to_str().unwrap().to_string(),
-                    plain_path.to_str().unwrap().to_string(),
+                    bom_path.as_os_str().to_os_string(),
+                    plain_path.as_os_str().to_os_string(),
                 ],
                 tabstops: vec![8],
                 remaining_mode: RemainingMode::None,
@@ -1174,7 +1199,7 @@ mod tests {
             write(file.path(), "    Hello 世界\n".as_bytes()).unwrap();
 
             let flags = UnexpandFlags {
-                files: vec![file.path().to_str().unwrap().to_string()],
+                files: vec![file.path().as_os_str().to_os_string()],
                 tabstops: vec![4],
                 remaining_mode: RemainingMode::None,
                 is_a_flag: false,
@@ -1194,7 +1219,7 @@ mod tests {
             write(file.path(), b"Hello\n\nWorld\n").unwrap();
 
             let flags = UnexpandFlags {
-                files: vec![file.path().to_str().unwrap().to_string()],
+                files: vec![file.path().as_os_str().to_os_string()],
                 tabstops: vec![4],
                 remaining_mode: RemainingMode::None,
                 is_a_flag: false,
@@ -1233,7 +1258,7 @@ mod tests {
             write(file.path(), &input).unwrap();
 
             let flags = UnexpandFlags {
-                files: vec![file.path().to_str().unwrap().to_string()],
+                files: vec![file.path().as_os_str().to_os_string()],
                 tabstops: vec![3],
                 remaining_mode: RemainingMode::None,
                 is_a_flag: false,
@@ -1259,7 +1284,7 @@ mod tests {
             write(file.path(), &input).unwrap();
 
             let flags = UnexpandFlags {
-                files: vec![file.path().to_str().unwrap().to_string()],
+                files: vec![file.path().as_os_str().to_os_string()],
                 tabstops: vec![8],
                 remaining_mode: RemainingMode::None,
                 is_a_flag: true,
@@ -1335,6 +1360,27 @@ mod tests {
                 format!("unexpand: {}: Is a directory\n", input_dir.display())
             );
             assert_eq!(semantic.exit_code, 1);
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_unexpand_native_semantic_reads_non_utf8_path() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let temp_dir = tempdir().unwrap();
+            let input_path = temp_dir
+                .path()
+                .join(OsString::from_vec(b"\xFFinput".to_vec()));
+            write(&input_path, b"        data\n").unwrap();
+
+            let semantic = unexpand_native_semantic(
+                vec![OsString::from("unexpand"), input_path.into_os_string()].into_iter(),
+            )
+            .unwrap();
+
+            assert_eq!(semantic.classic_text, "\tdata\n");
+            assert_eq!(semantic.stderr_text, "");
+            assert_eq!(semantic.exit_code, 0);
         }
     }
 
@@ -1728,7 +1774,7 @@ mod tests {
             let mut file = File::create(&file_path).unwrap();
             writeln!(file, "Test content").unwrap();
 
-            let result = unexpand_open(file_path.to_str().unwrap());
+            let result = unexpand_open(file_path.as_os_str());
             assert!(result.is_ok());
 
             let mut reader = result.unwrap();
@@ -1741,7 +1787,7 @@ mod tests {
         fn test_unexpand_open_with_stdin() {
             // This test is a bit tricky because it involves stdin,
             // so we won't actually test reading from stdin here
-            let result = unexpand_open("-");
+            let result = unexpand_open(OsStr::new("-"));
             assert!(result.is_ok());
         }
     }
@@ -2000,7 +2046,7 @@ mod tests {
             let flags = UnexpandFlags::new(&matches).unwrap();
             assert_eq!(flags.tabstops, vec![UNEXPAND_DEFAULT_TABSTOP]);
             assert_eq!(flags.remaining_mode, RemainingMode::None);
-            assert_eq!(flags.files, vec!["-".to_string()]);
+            assert_eq!(flags.files, vec![OsString::from("-")]);
             assert!(!flags.is_a_flag);
             assert!(flags.is_u_flag);
         }
@@ -2043,7 +2089,10 @@ mod tests {
             let app = ct_app();
             let matches = app.get_matches_from(vec!["unexpand", "file1", "file2"]);
             let flags = UnexpandFlags::new(&matches).unwrap();
-            assert_eq!(flags.files, vec!["file1".to_string(), "file2".to_string()]);
+            assert_eq!(
+                flags.files,
+                vec![OsString::from("file1"), OsString::from("file2")]
+            );
         }
 
         #[test]
@@ -2127,7 +2176,10 @@ mod tests {
             ]);
             let flags = UnexpandFlags::new(&matches).unwrap();
             assert_eq!(flags.tabstops, vec![4, 8]);
-            assert_eq!(flags.files, vec!["file1".to_string(), "file2".to_string()]);
+            assert_eq!(
+                flags.files,
+                vec![OsString::from("file1"), OsString::from("file2")]
+            );
             assert!(flags.is_a_flag);
             assert!(!flags.is_u_flag);
         }
@@ -2146,7 +2198,10 @@ mod tests {
             ]);
             let flags = UnexpandFlags::new(&matches).unwrap();
             assert_eq!(flags.tabstops, vec![4, 8]);
-            assert_eq!(flags.files, vec!["file1".to_string(), "file2".to_string()]);
+            assert_eq!(
+                flags.files,
+                vec![OsString::from("file1"), OsString::from("file2")]
+            );
             assert!(!flags.is_a_flag);
         }
 
@@ -2156,7 +2211,7 @@ mod tests {
             let matches = app.get_matches_from(vec!["unexpand", "--tabs", "4,8"]);
             let flags = UnexpandFlags::new(&matches).unwrap();
             assert_eq!(flags.tabstops, vec![4, 8]);
-            assert_eq!(flags.files, vec!["-".to_string()]);
+            assert_eq!(flags.files, vec![OsString::from("-")]);
             assert!(flags.is_a_flag);
             assert!(flags.is_u_flag);
         }
@@ -2176,17 +2231,21 @@ mod tests {
             ]);
             let flags = UnexpandFlags::new(&matches).unwrap();
             assert_eq!(flags.tabstops, vec![4, 8, 12]);
-            assert_eq!(flags.files, vec!["file1".to_string(), "file2".to_string()]);
+            assert_eq!(
+                flags.files,
+                vec![OsString::from("file1"), OsString::from("file2")]
+            );
             assert!(!flags.is_a_flag); // Because --first-only is present
             assert!(!flags.is_u_flag);
         }
 
-    #[test]
-    fn test_unexpand_flags_new_with_default_file() {
-        let app = ct_app();
-        let matches = app.get_matches_from(vec!["unexpand", "--tabs", "4,8"]);
-        let flags = UnexpandFlags::new(&matches).unwrap();
-        assert_eq!(flags.files, vec!["-".to_string()]);
+        #[test]
+        fn test_unexpand_flags_new_with_default_file() {
+            let app = ct_app();
+            let matches = app.get_matches_from(vec!["unexpand", "--tabs", "4,8"]);
+            let flags = UnexpandFlags::new(&matches).unwrap();
+            assert_eq!(flags.files, vec![OsString::from("-")]);
+        }
     }
 
     #[cfg(test)]
@@ -2507,11 +2566,11 @@ mod tests {
             assert!(!matches.get_flag(unexpand_flags::ALL));
             assert_eq!(
                 matches
-                    .get_many::<String>(unexpand_flags::FILE)
+                    .get_many::<OsString>(unexpand_flags::FILE)
                     .unwrap()
-                    .map(String::as_str)
+                    .map(OsString::as_os_str)
                     .collect::<Vec<_>>(),
-                ["input", "-a"]
+                [OsStr::new("input"), OsStr::new("-a")]
             );
         }
 

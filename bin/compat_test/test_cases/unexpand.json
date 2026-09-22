@@ -2166,6 +2166,35 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "20202020202020202020202020202020780a",
+      "command": "unexpand",
+      "description": "原始字节tab-stop前缀用例：LC_ALL=C；参数为2d61（-a）、2d74（-t）、342c2f2b33（4,/+3）。GNU在同一数值前以最后一个前缀+决定扩展模式，先使用显式stop 4，再以3列相对增量扩展；输入完整十六进制为16个空格、x和换行，stdout完整十六进制为5个制表符、x和换行，即0909090909780a。",
+      "args": [
+        "2d61",
+        "2d74",
+        "342c2f2b33"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "0909090909780a",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

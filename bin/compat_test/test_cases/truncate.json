@@ -562,6 +562,31 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "相对SIZE扩展超过off_t上限时拒绝",
+            "setup_commands": [
+                "printf x > relative-overflow"
+            ],
+            "args": ["-s", "+9223372036854775807", "relative-overflow"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: overflow extending size of file 'relative-overflow'\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f relative-overflow"
+            ]
         }
     ]
 }

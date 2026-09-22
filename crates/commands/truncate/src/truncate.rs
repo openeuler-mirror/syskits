@@ -30,7 +30,7 @@ use sys_locale::get_locale;
 
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 
 use std::ffi::OsString;
@@ -44,6 +44,11 @@ enum TruncateMode {
     AtLeast(u64),
     RoundDown(u64),
     RoundUp(u64),
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum TruncateSizeError {
+    ExtendOverflow,
 }
 
 impl TruncateMode {
@@ -60,7 +65,7 @@ impl TruncateMode {
     /// ```rust,ignore
     /// let mode = TruncateMode::Extend(5);
     /// let fsize = 10;
-    /// assert_eq!(mode.to_size(fsize), 15);
+    /// assert_eq!(mode.to_size(fsize), Ok(15));
     /// ```
     ///
     /// 如果减小的字节数超过文件的大小，结果将为0：
@@ -68,12 +73,12 @@ impl TruncateMode {
     /// ```rust,ignore
     /// let mode = TruncateMode::Reduce(5);
     /// let fsize = 3;
-    /// assert_eq!(mode.to_size(fsize), 0);
+    /// assert_eq!(mode.to_size(fsize), Ok(0));
     /// ```
-    fn to_size(&self, fsize: u64) -> u64 {
-        match self {
+    fn to_size(&self, fsize: u64) -> Result<u64, TruncateSizeError> {
+        let size = match self {
             Self::Absolute(size) => *size,
-            Self::Extend(size) => fsize + size,
+            Self::Extend(size) => checked_file_size_add(fsize, *size)?,
             Self::Reduce(size) => {
                 if *size > fsize {
                     0
@@ -90,9 +95,11 @@ impl TruncateMode {
                     rp = size - rp;
                 }
 
-                fsize + rp
+                checked_file_size_add(fsize, rp)?
             }
-        }
+        };
+
+        Ok(size)
     }
 
     fn to_block_size(&self, fsize: u64, blocksize: u64) -> u64 {
@@ -118,6 +125,21 @@ impl TruncateMode {
                 fsize + rp
             }
         }
+    }
+}
+
+fn checked_file_size_add(left: u64, right: u64) -> Result<u64, TruncateSizeError> {
+    left.checked_add(right)
+        .filter(|size| *size <= i64::MAX as u64)
+        .ok_or(TruncateSizeError::ExtendOverflow)
+}
+
+fn truncate_size_error(filename: &str, error: TruncateSizeError) -> Box<dyn CTError> {
+    match error {
+        TruncateSizeError::ExtendOverflow => CtSimpleError::new(
+            1,
+            format!("overflow extending size of file {}", filename.quote()),
+        ),
     }
 }
 
@@ -373,16 +395,16 @@ fn truncate_reference_and_size(
     })?;
 
     let md_size = md.len();
-    let t_size = match is_block {
-        true => {
-            let blocksize = md.st_blksize();
-            truncate_mode.to_block_size(md_size, blocksize)
-        }
-
-        false => truncate_mode.to_size(md_size),
-    };
-
     truncate_files(filenames, |filename| {
+        let t_size = match is_block {
+            true => {
+                let blocksize = md.st_blksize();
+                truncate_mode.to_block_size(md_size, blocksize)
+            }
+            false => truncate_mode
+                .to_size(md_size)
+                .map_err(|error| truncate_size_error(filename, error))?,
+        };
         truncate_file(filename, is_create, t_size)
     })
 }
@@ -475,7 +497,9 @@ fn truncate_size_only(
 
         let t_size = match is_blocks {
             true => truncate_mode.to_block_size(f_size, blocksize),
-            false => truncate_mode.to_size(f_size),
+            false => truncate_mode
+                .to_size(f_size)
+                .map_err(|error| truncate_size_error(filename, error))?,
         };
 
         truncate_file(filename, is_create, t_size)
@@ -1371,42 +1395,50 @@ mod tests {
 
     #[cfg(test)]
     mod truncate_mode_to_size_tests {
-        use crate::TruncateMode;
+        use crate::{TruncateMode, TruncateSizeError};
 
         #[test]
         fn test_truncate_mode_to_size() {
             // Absolute mode
-            assert_eq!(TruncateMode::Absolute(100).to_size(50), 100);
+            assert_eq!(TruncateMode::Absolute(100).to_size(50), Ok(100));
 
             // Extend mode
-            assert_eq!(TruncateMode::Extend(50).to_size(100), 150);
+            assert_eq!(TruncateMode::Extend(50).to_size(100), Ok(150));
 
             // Reduce mode
-            assert_eq!(TruncateMode::Reduce(50).to_size(100), 50);
-            assert_eq!(TruncateMode::Reduce(150).to_size(100), 0);
+            assert_eq!(TruncateMode::Reduce(50).to_size(100), Ok(50));
+            assert_eq!(TruncateMode::Reduce(150).to_size(100), Ok(0));
 
             // AtMost mode
-            assert_eq!(TruncateMode::AtMost(75).to_size(100), 75);
-            assert_eq!(TruncateMode::AtMost(150).to_size(100), 100);
+            assert_eq!(TruncateMode::AtMost(75).to_size(100), Ok(75));
+            assert_eq!(TruncateMode::AtMost(150).to_size(100), Ok(100));
 
             // AtLeast mode
-            assert_eq!(TruncateMode::AtLeast(150).to_size(100), 150);
-            assert_eq!(TruncateMode::AtLeast(75).to_size(100), 100);
+            assert_eq!(TruncateMode::AtLeast(150).to_size(100), Ok(150));
+            assert_eq!(TruncateMode::AtLeast(75).to_size(100), Ok(100));
 
             // RoundDown mode
-            assert_eq!(TruncateMode::RoundDown(50).to_size(123), 100);
-            assert_eq!(TruncateMode::RoundDown(1).to_size(123), 123); // Edge case
+            assert_eq!(TruncateMode::RoundDown(50).to_size(123), Ok(100));
+            assert_eq!(TruncateMode::RoundDown(1).to_size(123), Ok(123)); // Edge case
 
             // RoundUp mode
-            assert_eq!(TruncateMode::RoundUp(50).to_size(123), 150);
-            assert_eq!(TruncateMode::RoundUp(1).to_size(123), 123); // Edge case
+            assert_eq!(TruncateMode::RoundUp(50).to_size(123), Ok(150));
+            assert_eq!(TruncateMode::RoundUp(1).to_size(123), Ok(123)); // Edge case
         }
 
         #[test]
         fn test_to_size() {
-            assert_eq!(TruncateMode::Extend(5).to_size(10), 15);
-            assert_eq!(TruncateMode::Reduce(5).to_size(10), 5);
-            assert_eq!(TruncateMode::Reduce(5).to_size(3), 0);
+            assert_eq!(TruncateMode::Extend(5).to_size(10), Ok(15));
+            assert_eq!(TruncateMode::Reduce(5).to_size(10), Ok(5));
+            assert_eq!(TruncateMode::Reduce(5).to_size(3), Ok(0));
+        }
+
+        #[test]
+        fn test_to_size_rejects_extension_above_off_t_max() {
+            assert_eq!(
+                TruncateMode::Extend(i64::MAX as u64).to_size(1),
+                Err(TruncateSizeError::ExtendOverflow)
+            );
         }
     }
     #[cfg(test)]

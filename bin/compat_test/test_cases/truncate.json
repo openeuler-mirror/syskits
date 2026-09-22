@@ -490,6 +490,33 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "SIZE超过off_t上限时在创建目标前拒绝",
+            "args": ["-s", "9223372036854775808", "off-t-overflow-target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: Invalid number: '9223372036854775808': Value too large for defined data type\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e off-t-overflow-target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

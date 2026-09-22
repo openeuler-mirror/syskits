@@ -1332,6 +1332,12 @@ fn unexpand_mbfile_next_char_info(
 
     if !is_u_flag {
         let c = *remaining.first()?;
+        if prefix_len != 0 {
+            *buffered_prefix_len = 0;
+            let (c_type, c_width, _) = unexpand_char_info_from_char(char::from(c));
+            return Some((c_type, c_width, prefix_len + 1));
+        }
+
         if c.is_ascii() {
             *buffered_prefix_len = 0;
             let (c_type, c_width, n_bytes) = unexpand_char_info_from_char(char::from(c));
@@ -2409,6 +2415,24 @@ mod tests {
                 .expect("invalid UTF-8 input must be processed");
 
             assert_eq!(output.into_inner(), b"\xe2\x82 \t");
+        }
+
+        #[test]
+        fn test_unexpand_line_keeps_c_locale_partial_bom_prefix_bytewise() {
+            let mut buf = b"\xef\x80\x80\xe2\x82 \t".to_vec();
+            let mut output = Cursor::new(Vec::new());
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![3],
+                remaining_mode: RemainingMode::None,
+                is_a_flag: true,
+                is_u_flag: false,
+            };
+
+            unexpand_line(&mut buf, &mut output, &flags, &[3], RemainingMode::None)
+                .expect("C locale invalid bytes must be processed bytewise");
+
+            assert_eq!(output.into_inner(), b"\xef\x80\x80\xe2\x82\t");
         }
 
         #[test]

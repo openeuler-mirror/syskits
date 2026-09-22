@@ -517,6 +517,51 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "FIFO以非阻塞方式打开并报告截断失败",
+            "setup_commands": [
+                "mkfifo truncate-fifo"
+            ],
+            "args": ["-s", "0", "truncate-fifo"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: failed to truncate 'truncate-fifo' at 0 bytes: Invalid argument\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f truncate-fifo"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "字符设备截断失败使用ftruncate诊断",
+            "args": ["-s", "0", "/dev/null"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: failed to truncate '/dev/null' at 0 bytes: Invalid argument\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

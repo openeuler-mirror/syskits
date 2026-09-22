@@ -13,7 +13,7 @@
 
 extern crate rust_i18n;
 use rust_i18n::t;
-use std::fs::{OpenOptions, metadata};
+use std::fs::{File, OpenOptions, metadata};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 #[cfg(unix)]
@@ -315,7 +315,11 @@ pub fn ct_app() -> Command {
 /// # 错误
 ///
 /// 如果文件无法被打开，或者设置文件大小时出现错误。
-fn truncate_file<P: AsRef<OsStr>>(filename: P, create: bool, size: u64) -> CTResult<()> {
+fn truncate_file_with_size<P, F>(filename: P, create: bool, size_for_file: F) -> CTResult<()>
+where
+    P: AsRef<OsStr>,
+    F: FnOnce(&File) -> CTResult<u64>,
+{
     let filename = filename.as_ref();
     let path = Path::new(filename);
     let mut options = OpenOptions::new();
@@ -332,6 +336,7 @@ fn truncate_file<P: AsRef<OsStr>>(filename: P, create: bool, size: u64) -> CTRes
             );
         }
     };
+    let size = size_for_file(&file)?;
 
     #[cfg(unix)]
     {
@@ -358,6 +363,10 @@ fn truncate_file<P: AsRef<OsStr>>(filename: P, create: bool, size: u64) -> CTRes
     #[cfg(not(unix))]
     file.set_len(size)
         .map_err_context(|| format!("failed to truncate {} at {size} bytes", filename.quote()))
+}
+
+fn truncate_file<P: AsRef<OsStr>>(filename: P, create: bool, size: u64) -> CTResult<()> {
+    truncate_file_with_size(filename, create, |_| Ok(size))
 }
 
 #[cfg(unix)]
@@ -446,20 +455,24 @@ where
         _ => e.map_err_context(String::new),
     })?;
 
-    let md_size = md.len();
+    let reference_size = md.len();
     truncate_files(filenames, |filename| {
-        let t_size = match is_block {
-            true => {
-                let blocksize = md.st_blksize();
+        if is_block {
+            truncate_file_with_size(filename, is_create, |file| {
+                let blocksize = file
+                    .metadata()
+                    .map_err_context(|| format!("cannot fstat {}", filename.quote()))?
+                    .st_blksize();
                 truncate_mode
-                    .to_block_size(md_size, blocksize)
-                    .map_err(|error| truncate_size_error(filename, error))?
-            }
-            false => truncate_mode
-                .to_size(md_size)
-                .map_err(|error| truncate_size_error(filename, error))?,
-        };
-        truncate_file(filename, is_create, t_size)
+                    .to_block_size(reference_size, blocksize)
+                    .map_err(|error| truncate_size_error(filename, error))
+            })
+        } else {
+            let target_size = truncate_mode
+                .to_size(reference_size)
+                .map_err(|error| truncate_size_error(filename, error))?;
+            truncate_file(filename, is_create, target_size)
+        }
     })
 }
 
@@ -1251,6 +1264,19 @@ mod tests {
         use tempfile::NamedTempFile;
 
         use super::*;
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_truncate_reference_and_size_io_blocks_uses_target_block_size() {
+            let mut target_file = NamedTempFile::new().unwrap();
+            target_file.write_all(b"target").unwrap();
+
+            truncate_reference_and_size("/proc/cpuinfo", "+1", &[target_file.path()], false, true)
+                .unwrap();
+
+            let target_metadata = metadata(target_file.path()).unwrap();
+            assert_eq!(target_metadata.len(), target_metadata.st_blksize());
+        }
 
         #[test]
         fn test_truncate_reference_and_size() {

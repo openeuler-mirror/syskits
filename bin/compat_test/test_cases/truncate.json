@@ -853,6 +853,38 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "--reference与--io-blocks必须使用目标文件I/O块大小",
+            "setup_commands": [
+                "printf target > reference-io-block-target"
+            ],
+            "args": ["--io-blocks", "--reference", "/proc/cpuinfo", "--size", "+1", "reference-io-block-target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %s reference-io-block-target)\" = \"$(stat -c %o reference-io-block-target)\"",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f reference-io-block-target"
+            ]
         }
     ]
 }

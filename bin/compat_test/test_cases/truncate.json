@@ -396,6 +396,26 @@
             "cleanup_commands": [
                 "rm -f first-reference last-reference target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "--io-blocks未指定--size时拒绝reference组合",
+            "args": ["--io-blocks", "--reference", "reference", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: '--io-blocks' was specified but '--size' was not\nTry 'truncate --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

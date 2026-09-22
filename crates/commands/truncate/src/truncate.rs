@@ -195,7 +195,8 @@ pub fn ct_app() -> Command {
             .short('c')
             .long(truncate_flags::TRUNCATE_NO_CREATE)
             .help(t!("truncate.clap.truncate_no_create"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(truncate_flags::TRUNCATE_NO_CREATE),
         Arg::new(truncate_flags::TRUNCATE_REFERENCE)
             .short('r')
             .long(truncate_flags::TRUNCATE_REFERENCE)
@@ -2300,6 +2301,22 @@ mod tests {
                 result.unwrap_err().kind(),
                 ErrorKind::MissingRequiredArgument
             );
+        }
+
+        #[test]
+        fn test_ct_app_no_create_allows_repeated_flags() {
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-c",
+                "--no-create",
+                "-s",
+                "0",
+                "target",
+            ];
+            let matches = command.try_get_matches_from(args).unwrap();
+
+            assert!(matches.get_flag(truncate_flags::TRUNCATE_NO_CREATE));
         }
 
         #[test]

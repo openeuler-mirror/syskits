@@ -597,6 +597,19 @@ impl UnexpandFlags {
                     continue;
                 }
 
+                if let Some(mode) =
+                    unexpand_reused_zero_extension_mode(input, extension.map(|(mode, _)| mode))
+                {
+                    let specifier = match mode {
+                        RemainingMode::Slash => "/",
+                        RemainingMode::Plus => "+",
+                        RemainingMode::None => unreachable!("zero extension has a prefix"),
+                    };
+                    return Err(UnexpandParseError::SpecifierOnlyAllowedWithLastValue(
+                        specifier.to_string(),
+                    ));
+                }
+
                 let (mode, mut option_tabstops) =
                     unexpand_tabstops_parse_inner(input, from_short_tabs, true)?;
                 let option_extension = if mode == RemainingMode::None {
@@ -644,6 +657,53 @@ impl UnexpandFlags {
         }
         Ok((RemainingMode::None, vec![UNEXPAND_DEFAULT_TABSTOP]))
     }
+}
+
+/// GNU records a nonzero extension before assigning the next value.  Therefore
+/// a later `/0` or `+0` still triggers the duplicate-extension diagnostic.
+fn unexpand_reused_zero_extension_mode(
+    input: &OsStr,
+    existing_mode: Option<RemainingMode>,
+) -> Option<RemainingMode> {
+    let bytes = input.as_encoded_bytes();
+    let mut mode = RemainingMode::None;
+    let mut have_number = false;
+    let mut number = 0usize;
+
+    let check_number = |mode: RemainingMode, number: usize| {
+        (number == 0 && Some(mode) == existing_mode).then_some(mode)
+    };
+
+    for byte in bytes {
+        match *byte {
+            byte if is_space_or_comma(byte) => {
+                if have_number {
+                    if let Some(mode) = check_number(mode, number) {
+                        return Some(mode);
+                    }
+                    have_number = false;
+                }
+            }
+            b'/' | b'+' if have_number => {
+                // GNU reports the misplaced prefix and does not commit this value.
+                return None;
+            }
+            b'/' => mode = RemainingMode::Slash,
+            b'+' => mode = RemainingMode::Plus,
+            byte @ b'0'..=b'9' => {
+                if !have_number {
+                    number = 0;
+                }
+                have_number = true;
+                number = number
+                    .checked_mul(10)
+                    .and_then(|value| value.checked_add(usize::from(byte - b'0')))?;
+            }
+            _ => return None,
+        }
+    }
+
+    have_number.then(|| check_number(mode, number)).flatten()
 }
 
 /// 判断字节是否为ASCII数字或逗号。
@@ -2921,6 +2981,26 @@ mod tests {
             let flags = UnexpandFlags::new(&explicit_tabs).unwrap();
             assert_eq!(flags.tabstops, vec![4, 3]);
             assert_eq!(flags.remaining_mode, RemainingMode::Slash);
+        }
+
+        #[test]
+        fn test_unexpand_flags_rejects_zero_slash_extension_after_nonzero_slash_extension() {
+            let matches = ct_app().get_matches_from(vec!["unexpand", "-t", "/3", "-t", "/0"]);
+
+            assert!(matches!(
+                UnexpandFlags::new(&matches),
+                Err(UnexpandParseError::SpecifierOnlyAllowedWithLastValue(specifier)) if specifier == "/"
+            ));
+        }
+
+        #[test]
+        fn test_unexpand_flags_rejects_zero_plus_extension_after_nonzero_plus_extension() {
+            let matches = ct_app().get_matches_from(vec!["unexpand", "-t", "+3", "-t", "+0"]);
+
+            assert!(matches!(
+                UnexpandFlags::new(&matches),
+                Err(UnexpandParseError::SpecifierOnlyAllowedWithLastValue(specifier)) if specifier == "+"
+            ));
         }
 
         #[test]

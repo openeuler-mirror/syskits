@@ -23,7 +23,6 @@ use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use sys_locale::get_locale;
-use unicode_width::UnicodeWidthChar;
 
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
@@ -38,6 +37,7 @@ const UNEXPAND_UTF8_LOCALES: [&CStr; 3] = [c"C.UTF8", c"en_US.UTF8", c"en_GB.UTF
 
 unsafe extern "C" {
     fn iswblank(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
+    fn iswcntrl(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
     fn iswprint(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
     fn mbrtowc(
         wide: *mut ctcore::libc::wchar_t,
@@ -45,6 +45,7 @@ unsafe extern "C" {
         length: usize,
         state: *mut ctcore::libc::mbstate_t,
     ) -> usize;
+    fn wcwidth(wide: ctcore::libc::wchar_t) -> ctcore::libc::c_int;
 }
 
 #[derive(Debug, PartialEq)]
@@ -807,13 +808,24 @@ fn unexpand_next_char_info(
     let c_width = if matches!(c_type, UnexpandCharType::Tab | UnexpandCharType::Backspace) {
         0
     } else {
-        UnicodeWidthChar::width(ch).unwrap_or(0)
+        unexpand_char_width(ch)
     };
     (c_type, c_width, n_bytes)
 }
 
 fn is_blank_char(ch: char) -> bool {
     unsafe { iswblank(ch as ctcore::libc::c_uint) != 0 }
+}
+
+fn unexpand_char_width(ch: char) -> usize {
+    let width = unsafe { wcwidth(ch as ctcore::libc::wchar_t) };
+    if width >= 0 {
+        width as usize
+    } else if unsafe { iswcntrl(ch as ctcore::libc::c_uint) } != 0 {
+        0
+    } else {
+        1
+    }
 }
 
 fn unexpand_incomplete_utf8_suffix_len(buf: &[u8]) -> usize {
@@ -1823,11 +1835,20 @@ mod tests {
 
         #[test]
         fn test_next_char_info_with_utf8() {
-            let buf = "Hello, 世界!".as_bytes();
+            let buf = "Hello, é!".as_bytes();
             let (ctype, cwidth, nbytes) = unexpand_next_char_info(true, buf, 7);
             assert_eq!(ctype, UnexpandCharType::Other);
-            assert_eq!(cwidth, 2); // "世"的字符宽度
-            assert_eq!(nbytes, 3); // "世"的UTF-8字节数
+            assert_eq!(cwidth, 1);
+            assert_eq!(nbytes, 2);
+        }
+
+        #[test]
+        fn test_next_char_info_gives_non_control_soft_hyphen_width_one() {
+            let (ctype, cwidth, nbytes) = unexpand_next_char_info(true, "\u{00AD}".as_bytes(), 0);
+
+            assert_eq!(ctype, UnexpandCharType::Other);
+            assert_eq!(cwidth, 1);
+            assert_eq!(nbytes, 2);
         }
 
         #[test]

@@ -1319,6 +1319,12 @@ fn unexpand_mbfile_next_char_info(
     buffered_prefix_len: &mut usize,
 ) -> Option<(UnexpandCharType, usize, usize)> {
     let prefix_len = *buffered_prefix_len;
+
+    if is_u_flag && prefix_len == 1 && buf.get(byte).is_some_and(u8::is_ascii) {
+        *buffered_prefix_len = 0;
+        return Some(unexpand_char_info_from_char(char::from(buf[byte])));
+    }
+
     let char_byte = byte.checked_add(prefix_len)?;
     let remaining = buf.get(char_byte..)?;
 
@@ -2415,6 +2421,24 @@ mod tests {
                 .expect("invalid UTF-8 input must be processed");
 
             assert_eq!(output.into_inner(), b"\xe2\x82 \t");
+        }
+
+        #[test]
+        fn test_unexpand_line_consumes_buffered_ascii_after_invalid_utf8() {
+            let mut buf = b"\xe2 \t".to_vec();
+            let mut output = Cursor::new(Vec::new());
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
+                is_a_flag: true,
+                is_u_flag: true,
+            };
+
+            unexpand_line(&mut buf, &mut output, &flags, &[8], RemainingMode::None)
+                .expect("invalid UTF-8 input must be processed");
+
+            assert_eq!(output.into_inner(), b"\xe2\t");
         }
 
         #[test]

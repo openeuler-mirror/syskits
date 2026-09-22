@@ -3041,6 +3041,34 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "e22009",
+      "command": "unexpand",
+      "description": "原始字节无效UTF-8单字节缓冲用例：LC_ALL=C.UTF-8；参数为2D61（-a），stdin完整十六进制为E2 20 09。GNU mbfile 在E2判为无效后仅暂存ASCII空格；下一次读取先通过ASCII fast path单独处理空格，再由输入制表符替换它。stdout完整十六进制必须为E2 09。",
+      "args": [
+        "2d61"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "export LANG=C.UTF-8"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "e209",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

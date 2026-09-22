@@ -833,6 +833,26 @@
             "cleanup_commands": [
                 "rm -f off-t-min-block-target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "已指定SIZE但没有FILE时必须报告GNU缺少操作数诊断",
+            "args": ["-s", "0"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: missing file operand\nTry 'truncate --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

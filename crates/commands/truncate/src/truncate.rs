@@ -293,7 +293,6 @@ pub fn ct_app() -> Command {
         Arg::new(truncate_flags::TRUNCATE_ARG_FILES)
             .value_name("FILE")
             .action(ArgAction::Append)
-            .required(true)
             .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
     ];
@@ -1861,6 +1860,15 @@ mod tests {
             let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }
+
+        #[test]
+        fn test_truncate_main_reports_missing_file_operand() {
+            let args = [ctcore::ct_util_name(), "-s", "0"];
+            let error = truncate_main(args.iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(error.to_string(), "missing file operand");
+        }
+
         #[test]
         fn test_truncate_main_io_blocks_long() {
             let file = "test_truncate_main_io_blocks_long";
@@ -2562,11 +2570,7 @@ mod tests {
 
             let args = vec![ctcore::ct_util_name()]; // 缺少任何参数
             let result = command.try_get_matches_from(args);
-            assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().kind(),
-                ErrorKind::MissingRequiredArgument
-            );
+            assert!(result.is_ok());
         }
 
         #[test]

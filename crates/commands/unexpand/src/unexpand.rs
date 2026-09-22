@@ -152,9 +152,18 @@ fn is_space_or_comma(c: char) -> bool {
     matches!(c, ' ' | '\t' | ',')
 }
 
+#[cfg(test)]
 fn unexpand_tabstops_parse(
     s: &str,
     from_short_tabs: bool,
+) -> Result<(RemainingMode, Vec<usize>), UnexpandParseError> {
+    unexpand_tabstops_parse_inner(s, from_short_tabs, false)
+}
+
+fn unexpand_tabstops_parse_inner(
+    s: &str,
+    from_short_tabs: bool,
+    preserve_single_extension: bool,
 ) -> Result<(RemainingMode, Vec<usize>), UnexpandParseError> {
     let str = s.trim_start_matches(is_space_or_comma);
     if str.is_empty() {
@@ -240,7 +249,7 @@ fn unexpand_tabstops_parse(
         numbers = vec![UNEXPAND_DEFAULT_TABSTOP];
     }
 
-    if numbers.len() < 2 {
+    if !preserve_single_extension && numbers.len() < 2 {
         remaining_mode = RemainingMode::None;
     }
 
@@ -304,8 +313,61 @@ impl UnexpandFlags {
     ) -> Result<(RemainingMode, Vec<usize>), UnexpandParseError> {
         let from_short_tabs = matches.get_flag(unexpand_flags::SHORT_TABS);
         if let Some(s) = matches.get_many::<String>(unexpand_flags::TABS) {
-            let input = s.map(|s| s.as_str()).collect::<Vec<_>>().join(",");
-            return unexpand_tabstops_parse(&input, from_short_tabs);
+            let mut tabstops = Vec::new();
+            let mut extension = None;
+
+            for input in s {
+                if input.trim_start_matches(is_space_or_comma).is_empty() {
+                    continue;
+                }
+
+                let (mode, mut option_tabstops) =
+                    unexpand_tabstops_parse_inner(input, from_short_tabs, true)?;
+                let option_extension = if mode == RemainingMode::None {
+                    None
+                } else {
+                    option_tabstops.pop()
+                };
+
+                for tabstop in option_tabstops {
+                    if tabstops.last().is_some_and(|last| *last >= tabstop) {
+                        return Err(UnexpandParseError::TabSizesMustBeAscending);
+                    }
+                    tabstops.push(tabstop);
+                }
+
+                if let Some(tabstop) = option_extension {
+                    if let Some((existing_mode, _)) = extension {
+                        return Err(if existing_mode == mode {
+                            let specifier = match mode {
+                                RemainingMode::Slash => "/",
+                                RemainingMode::Plus => "+",
+                                RemainingMode::None => unreachable!(),
+                            };
+                            UnexpandParseError::SpecifierOnlyAllowedWithLastValue(
+                                specifier.to_string(),
+                            )
+                        } else {
+                            UnexpandParseError::SpecifierMutuallyExclusive
+                        });
+                    }
+                    extension = Some((mode, tabstop));
+                }
+            }
+
+            if let Some((mode, tabstop)) = extension {
+                if tabstops.is_empty() {
+                    return Ok((RemainingMode::None, vec![tabstop]));
+                }
+                tabstops.push(tabstop);
+                return Ok((mode, tabstops));
+            }
+
+            if tabstops.is_empty() {
+                return Ok((RemainingMode::None, vec![UNEXPAND_DEFAULT_TABSTOP]));
+            }
+
+            return Ok((RemainingMode::None, tabstops));
         }
         Ok((RemainingMode::None, vec![UNEXPAND_DEFAULT_TABSTOP]))
     }
@@ -2131,6 +2193,17 @@ mod tests {
             let flags = UnexpandFlags::new(&matches).unwrap();
             assert_eq!(flags.tabstops, vec![4, 8, 12]);
             assert_eq!(flags.remaining_mode, RemainingMode::None);
+        }
+
+        #[test]
+        fn test_unexpand_flags_keeps_extension_across_tabs_options() {
+            let app = ct_app();
+            let matches = app.get_matches_from(vec!["unexpand", "-t", "/3", "-t", "4,8"]);
+            let flags = UnexpandFlags::new(&matches).unwrap();
+
+            assert_eq!(flags.tabstops, vec![4, 8, 3]);
+            assert_eq!(flags.remaining_mode, RemainingMode::Slash);
+            assert!(flags.is_a_flag);
         }
 
         #[test]

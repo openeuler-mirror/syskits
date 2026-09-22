@@ -2106,6 +2106,37 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "20202020202020202020202020202020780a",
+      "command": "unexpand",
+      "description": "原始字节参数用例：LC_ALL=C；参数依次为2d61（-a）、2d74（-t）、2f33（/3）、2d74（-t）、342c38（4,8）。GNU分别解析两个-t值，保留第一个参数中的/3扩展间隔并在后续参数中追加显式stop 4、8；输入完整十六进制为16个空格、x和换行，stdout完整十六进制为5个制表符、一个空格、x和换行，即090909090920780a。",
+      "args": [
+        "2d61",
+        "2d74",
+        "2f33",
+        "2d74",
+        "342c38"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "090909090920780a",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

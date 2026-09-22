@@ -716,6 +716,14 @@ fn unexpand_is_all_option(argument: &[u8]) -> bool {
     argument.len() > 2 && b"--all".starts_with(argument)
 }
 
+fn unexpand_is_tabs_option(argument: &[u8]) -> bool {
+    let option = argument
+        .split(|byte| *byte == b'=')
+        .next()
+        .expect("split always returns the first field");
+    option.len() > 2 && b"--tabs".starts_with(option)
+}
+
 fn unexpand_short_option_from_bytes(bytes: &[u8]) -> OsString {
     #[cfg(unix)]
     {
@@ -737,7 +745,7 @@ fn is_digit_or_comma(c: char) -> bool {
 
 /// 预处理命令行参数并展开快捷方式。例如，"-7"会被扩展为"--tabs=7 --first-only"，
 /// 而"-1,3"会扩展为"--tabs=1 --tabs=3 --first-only"。
-/// 但是，如果提供了"-a"或"--all"选项，则不会包含"--first-only"。
+/// 但是，如果提供了"-a"、"--all"或"-t"/"--tabs"选项，则不会包含"--first-only"。
 fn expand_shortcuts_os(args: &[OsString], posix_mode: bool) -> Vec<OsString> {
     let mut processed_args = Vec::with_capacity(args.len() + 3);
     let Some((program_name, args)) = args.split_first() else {
@@ -745,6 +753,7 @@ fn expand_shortcuts_os(args: &[OsString], posix_mode: bool) -> Vec<OsString> {
     };
     processed_args.push(program_name.clone());
     let mut is_all_arg_provided = false;
+    let mut is_tabs_arg_provided = false;
     let mut is_has_shortcuts = false;
     let mut options_ended = false;
     let mut generated_options_index = None;
@@ -791,6 +800,7 @@ fn expand_shortcuts_os(args: &[OsString], posix_mode: bool) -> Vec<OsString> {
                         is_all_arg_provided = true;
                     }
                     b't' => {
+                        is_tabs_arg_provided = true;
                         processed_args.push(unexpand_short_option_from_bytes(
                             &[&b"-"[..], &short_options[option_index..]].concat(),
                         ));
@@ -816,6 +826,9 @@ fn expand_shortcuts_os(args: &[OsString], posix_mode: bool) -> Vec<OsString> {
         if !options_ended && (unexpand_is_all_option(bytes) || bytes == b"-a") {
             is_all_arg_provided = true;
         }
+        if !options_ended && unexpand_is_tabs_option(bytes) {
+            is_tabs_arg_provided = true;
+        }
     }
 
     let generated_options_index = generated_options_index.unwrap_or(processed_args.len());
@@ -829,7 +842,7 @@ fn expand_shortcuts_os(args: &[OsString], posix_mode: bool) -> Vec<OsString> {
 
     if is_has_shortcuts {
         let mut shortcuts = Vec::with_capacity(2);
-        if !is_all_arg_provided {
+        if !is_all_arg_provided && !is_tabs_arg_provided {
             shortcuts.push(OsString::from("--first-only"));
         }
         shortcuts.push(OsString::from("--short-tabs"));
@@ -2635,6 +2648,19 @@ mod tests {
         }
 
         #[test]
+        fn test_expand_shortcuts_does_not_add_first_only_with_explicit_tabs() {
+            let args = vec!["-4".to_string(), "-t".to_string(), "3".to_string()];
+            let expected = vec![
+                "-t".to_string(),
+                "3".to_string(),
+                "--tabs=4".to_string(),
+                "--short-tabs".to_string(),
+            ];
+
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
         fn test_expand_shortcuts_with_multiple_shortcuts() {
             let args = vec![
                 "-4,8".to_string(),
@@ -2663,7 +2689,6 @@ mod tests {
                 "--tabs=4".to_string(),
                 "--tabs=16".to_string(),
                 "--tabs=89".to_string(),
-                "--first-only".to_string(),
                 "--short-tabs".to_string(),
             ];
 

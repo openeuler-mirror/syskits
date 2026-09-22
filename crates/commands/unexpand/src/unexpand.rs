@@ -25,7 +25,7 @@ use sys_locale::get_locale;
 
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code, strip_errno};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, set_ct_exit_code, strip_errno};
 use ctcore::ct_posix::{GnuGetoptCommandExt, posixly_correct};
 use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
 use std::ffi::{CStr, OsStr, OsString};
@@ -192,6 +192,29 @@ pub struct UnexpandSemantic {
 struct UnexpandRunOutcome {
     stderr_text: String,
     exit_code: i32,
+}
+
+#[derive(Debug)]
+struct UnexpandPathError {
+    diagnostic: Vec<u8>,
+}
+
+impl fmt::Display for UnexpandPathError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&String::from_utf8_lossy(&self.diagnostic))
+    }
+}
+
+impl Error for UnexpandPathError {}
+
+impl CTError for UnexpandPathError {
+    fn code(&self) -> i32 {
+        1
+    }
+
+    fn diagnostic_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
+        std::borrow::Cow::Borrowed(&self.diagnostic)
+    }
 }
 
 fn unexpand_tabstop_mode(remaining_mode: RemainingMode) -> UnexpandTabstopMode {
@@ -1048,10 +1071,7 @@ fn unexpand_open(
     let filename = Path::new(path);
     if filename.is_dir() {
         *last_input_errno = Some(ctcore::libc::EISDIR);
-        Err(Box::new(CtSimpleError {
-            code: 1,
-            message: format!("{}: Is a directory", unexpand_quote_path(path)),
-        }))
+        Err(unexpand_path_error(path, b"Is a directory"))
     } else if path == OsStr::new("-") {
         if stdin_was_closed {
             *last_input_errno = Some(ctcore::libc::EBADF);
@@ -1061,10 +1081,17 @@ fn unexpand_open(
     } else {
         file_buf = File::open(filename).map_err(|error| {
             *last_input_errno = error.raw_os_error();
-            error.map_err_context(|| unexpand_quote_path(path)) as Box<dyn CTError>
+            unexpand_path_error(path, strip_errno(&error).as_bytes())
         })?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
+}
+
+fn unexpand_path_error(path: &OsStr, message: &[u8]) -> Box<dyn CTError> {
+    let mut diagnostic = unexpand_quote_path_bytes(path);
+    diagnostic.extend_from_slice(b": ");
+    diagnostic.extend_from_slice(message);
+    Box::new(UnexpandPathError { diagnostic })
 }
 
 fn unexpand_stdin_read_error() -> CtSimpleError {
@@ -1090,9 +1117,9 @@ fn unexpand_bom_mismatch_message(
     }
 }
 
-fn unexpand_quote_path(path: &OsStr) -> String {
+fn unexpand_quote_path_bytes(path: &OsStr) -> Vec<u8> {
     let bytes = path.as_encoded_bytes();
-    let quoted = escape_shell_bytes_with_classifier(bytes, |remaining| unsafe {
+    escape_shell_bytes_with_classifier(bytes, |remaining| unsafe {
         let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
         let mut wide = 0 as ctcore::libc::wchar_t;
         let length = mbrtowc(
@@ -1109,14 +1136,8 @@ fn unexpand_quote_path(path: &OsStr) -> String {
         }
 
         let length = if length == 0 { 1 } else { length };
-        let is_utf8 = from_utf8(&remaining[..length]).is_ok();
-        (
-            length,
-            is_utf8 && iswprint(wide as ctcore::libc::c_uint) != 0,
-        )
-    });
-
-    String::from_utf8(quoted).expect("shell-escaped paths are valid UTF-8")
+        (length, iswprint(wide as ctcore::libc::c_uint) != 0)
+    })
 }
 
 #[cfg(test)]
@@ -1675,34 +1696,47 @@ fn unexpand_line_with_state<W: Write>(
     Ok(None)
 }
 
-fn report_unexpand_error<F: FnMut(&str)>(
+fn report_unexpand_bytes<F: FnMut(&[u8])>(
+    stderr_text: &mut String,
+    exit_code: &mut i32,
+    code: i32,
+    message: Vec<u8>,
+    emit_stderr: &mut F,
+) {
+    stderr_text.push_str(&String::from_utf8_lossy(&message));
+    *exit_code = (*exit_code).max(code);
+    emit_stderr(&message);
+}
+
+fn report_unexpand_error<F: FnMut(&[u8])>(
     stderr_text: &mut String,
     exit_code: &mut i32,
     code: i32,
     message: String,
     emit_stderr: &mut F,
 ) {
-    stderr_text.push_str(&message);
-    *exit_code = (*exit_code).max(code);
-    emit_stderr(&message);
+    report_unexpand_bytes(
+        stderr_text,
+        exit_code,
+        code,
+        message.into_bytes(),
+        emit_stderr,
+    );
 }
 
-fn report_unexpand_ct_error<F: FnMut(&str)>(
+fn report_unexpand_ct_error<F: FnMut(&[u8])>(
     stderr_text: &mut String,
     exit_code: &mut i32,
     err: &dyn CTError,
     emit_stderr: &mut F,
 ) {
-    report_unexpand_error(
-        stderr_text,
-        exit_code,
-        err.code(),
-        format!("unexpand: {err}\n"),
-        emit_stderr,
-    );
+    let mut message = b"unexpand: ".to_vec();
+    message.extend_from_slice(err.diagnostic_bytes().as_ref());
+    message.push(b'\n');
+    report_unexpand_bytes(stderr_text, exit_code, err.code(), message, emit_stderr);
 }
 
-fn report_unexpand_io_error<F: FnMut(&str)>(
+fn report_unexpand_io_error<F: FnMut(&[u8])>(
     stderr_text: &mut String,
     exit_code: &mut i32,
     err: &std::io::Error,
@@ -1765,7 +1799,9 @@ fn unexpand_line<W: Write>(
 
 fn unexpand(flags: &UnexpandFlags) -> CTResult<()> {
     let mut output = BufWriter::new(stdout());
-    let mut emit_stderr = |message: &str| eprint!("{message}");
+    let mut emit_stderr = |message: &[u8]| {
+        let _ = std::io::stderr().write_all(message);
+    };
     let outcome = unexpand_to_writer(flags, &mut output, &mut emit_stderr)?;
     output.flush().map_err(unexpand_output_error)?;
 
@@ -1779,11 +1815,11 @@ fn unexpand_exe<W: Write>(
     flags: &UnexpandFlags,
     output: &mut W,
 ) -> Result<UnexpandRunOutcome, Box<dyn CTError>> {
-    let mut discard_stderr = |_message: &str| {};
+    let mut discard_stderr = |_message: &[u8]| {};
     unexpand_to_writer(flags, output, &mut discard_stderr)
 }
 
-fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
+fn unexpand_to_writer<W: Write, F: FnMut(&[u8])>(
     flags: &UnexpandFlags,
     output: &mut W,
     emit_stderr: &mut F,
@@ -3185,8 +3221,37 @@ mod tests {
             use std::os::unix::ffi::OsStrExt;
 
             assert_eq!(
-                unexpand_quote_path(OsStr::from_bytes(b"missing-\xFF")),
-                "'missing-'$'\\377'"
+                unexpand_quote_path_bytes(OsStr::from_bytes(b"missing-\xFF")),
+                b"'missing-'$'\\377'"
+            );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_unexpand_path_error_preserves_printable_gb18030_bytes() {
+            use std::os::unix::ffi::OsStrExt;
+
+            let _locale = TestThreadLocale::activate(c"zh_CN.gb18030");
+            let error = unexpand_path_error(
+                OsStr::from_bytes(b"missing-\xD6\xD0"),
+                b"No such file or directory",
+            );
+            let mut stderr_text = String::new();
+            let mut exit_code = 0;
+            let mut stderr = Vec::new();
+            let mut emit_stderr = |message: &[u8]| stderr.extend_from_slice(message);
+
+            report_unexpand_ct_error(
+                &mut stderr_text,
+                &mut exit_code,
+                error.as_ref(),
+                &mut emit_stderr,
+            );
+
+            assert_eq!(exit_code, 1);
+            assert_eq!(
+                stderr,
+                b"unexpand: missing-\xD6\xD0: No such file or directory\n"
             );
         }
     }

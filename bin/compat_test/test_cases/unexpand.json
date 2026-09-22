@@ -1905,6 +1905,64 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "unexpand rejects a plain file following a BOM file in the C locale",
+      "args": [
+        "bom",
+        "plain"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf '\\357\\273\\277        first\\n' > bom",
+        "printf '        second\\n' > plain"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "unexpand rejects a BOM file following a plain file in the C locale",
+      "args": [
+        "plain",
+        "bom"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf '\\357\\273\\277        first\\n' > bom",
+        "printf '        second\\n' > plain"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

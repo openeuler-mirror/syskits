@@ -884,13 +884,14 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
     let remaining_mode = flags.remaining_mode;
     let mut active_flags = flags.clone();
     active_flags.is_u_flag &= unexpand_uses_utf8_locale();
+    let using_utf_locale = active_flags.is_u_flag;
     let mut data_buf = Vec::new();
     let mut is_first_file = true;
     let mut first_file_has_bom = false;
     let mut stderr_text = String::new();
     let mut exit_code = 0;
 
-    for file in &flags.files {
+    'files: for file in &flags.files {
         let mut fh = match unexpand_open(file) {
             Ok(reader) => reader,
             Err(err) => {
@@ -923,7 +924,25 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
             }
 
             if is_first_chunk {
-                if data_buf.starts_with(&[0xEF, 0xBB, 0xBF]) {
+                let file_has_bom = data_buf.starts_with(&[0xEF, 0xBB, 0xBF]);
+                if !is_first_file && !using_utf_locale && file_has_bom != first_file_has_bom {
+                    let message = if first_file_has_bom {
+                        // GNU's BOM probe retains ENOENT on this mismatch direction.
+                        "unexpand: combination of files with and without BOM header: No such file or directory\n"
+                    } else {
+                        "unexpand: combination of files with and without BOM header\n"
+                    };
+                    report_unexpand_error(
+                        &mut stderr_text,
+                        &mut exit_code,
+                        1,
+                        message.to_string(),
+                        emit_stderr,
+                    );
+                    break 'files;
+                }
+
+                if file_has_bom {
                     if is_first_file && !first_file_has_bom {
                         output
                             .write_all(&[0xEF, 0xBB, 0xBF])
@@ -1081,6 +1100,37 @@ mod tests {
 
             let result = String::from_utf8(output).unwrap();
             assert_eq!(result, "\tHello\n\tWorld\n");
+        }
+
+        #[test]
+        fn test_unexpand_exe_rejects_mixed_bom_files_in_a_non_utf8_locale() {
+            let dir = tempdir().unwrap();
+            let bom_path = dir.path().join("bom.txt");
+            let plain_path = dir.path().join("plain.txt");
+            write(&bom_path, b"\xEF\xBB\xBF        first\n").unwrap();
+            write(&plain_path, b"        second\n").unwrap();
+
+            let flags = UnexpandFlags {
+                files: vec![
+                    bom_path.to_str().unwrap().to_string(),
+                    plain_path.to_str().unwrap().to_string(),
+                ],
+                tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
+                is_a_flag: false,
+                is_u_flag: false,
+            };
+
+            let mut output = Vec::new();
+            let outcome = unexpand_exe(&flags, &mut output).unwrap();
+
+            assert_eq!(outcome.exit_code, 1);
+            assert_eq!(output, b"\xEF\xBB\xBF\tfirst\n");
+            assert!(
+                outcome
+                    .stderr_text
+                    .starts_with("unexpand: combination of files with and without BOM header")
+            );
         }
 
         #[test]

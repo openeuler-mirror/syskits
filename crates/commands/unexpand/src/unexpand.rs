@@ -139,9 +139,9 @@ fn unexpand_rows_from_output(output: &str) -> Vec<UnexpandRow> {
         .collect()
 }
 
-/// 判断字符是否为空格或逗号。
+/// 判断字符是否为空格、水平制表符或逗号。
 fn is_space_or_comma(c: char) -> bool {
-    c == ' ' || c == ','
+    matches!(c, ' ' | '\t' | ',')
 }
 
 fn unexpand_tabstops_parse(
@@ -2348,6 +2348,13 @@ mod tests {
         fn test_unexpand_tabstops_parse_spaces_in_values() {
             let input = "1, 2,3, 4,5";
             let expected = Ok((RemainingMode::None, vec![1, 2, 3, 4, 5]));
+            assert_eq!(unexpand_tabstops_parse(input, false), expected);
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_tabs_in_values() {
+            let input = "4\t8";
+            let expected = Ok((RemainingMode::None, vec![4, 8]));
             assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
 

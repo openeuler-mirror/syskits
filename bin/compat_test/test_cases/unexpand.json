@@ -2051,6 +2051,35 @@
       "cleanup_commands": [
         "rm -f -- \"$(printf '\\377input')\""
       ]
+    },
+    {
+      "byteMode": true,
+      "tstdin": "2020202020202020780a",
+      "command": "unexpand",
+      "description": "原始字节选项用例：LC_ALL=C；参数完整十六进制为2d61（-a）、2d74（-t）和340938（tab stops为4、水平制表符、8）；GNU将水平制表符视为tab-stop列表分隔符，输入8个空格后跟x换行时stdout完整十六进制为0909780a。",
+      "args": [
+        "2d61",
+        "2d74",
+        "340938"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

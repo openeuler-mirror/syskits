@@ -1232,6 +1232,7 @@ enum UnexpandCharType {
     Other,
 }
 
+#[cfg(test)]
 fn unexpand_next_char_info(
     is_u_flag: bool,
     buf: &[u8],
@@ -1239,36 +1240,16 @@ fn unexpand_next_char_info(
 ) -> (UnexpandCharType, usize, usize) {
     if !is_u_flag {
         let c = buf[byte];
-        let c_type = match c {
-            0x20 => UnexpandCharType::Space,
-            0x09 => UnexpandCharType::Tab,
-            0x08 => UnexpandCharType::Backspace,
-            _ => UnexpandCharType::Other,
-        };
-        return (c_type, usize::from(!c.is_ascii_control()), 1);
+        return unexpand_char_info_from_char(char::from(c));
     }
 
-    let slice = &buf[byte..];
-    let (ch, n_bytes) = match from_utf8(slice) {
-        Ok(s) => match s.chars().next() {
-            Some(ch) => (ch, ch.len_utf8()),
-            None => return (UnexpandCharType::Other, 1, 1),
-        },
-        Err(e) => {
-            let valid = e.valid_up_to();
-            if valid > 0 {
-                let prefix = from_utf8(&slice[..valid]).unwrap_or_default();
-                if let Some(ch) = prefix.chars().next() {
-                    (ch, ch.len_utf8())
-                } else {
-                    return (UnexpandCharType::Other, 1, 1);
-                }
-            } else {
-                return (UnexpandCharType::Other, 1, 1);
-            }
-        }
-    };
+    match unexpand_utf8_first_char(&buf[byte..]) {
+        Some(Ok((ch, _))) => unexpand_char_info_from_char(ch),
+        Some(Err(_)) | None => (UnexpandCharType::Other, 1, 1),
+    }
+}
 
+fn unexpand_char_info_from_char(ch: char) -> (UnexpandCharType, usize, usize) {
     let c_type = if ch == '\t' {
         UnexpandCharType::Tab
     } else if ch == '\x08' {
@@ -1283,7 +1264,24 @@ fn unexpand_next_char_info(
     } else {
         unexpand_char_width(ch)
     };
-    (c_type, c_width, n_bytes)
+    (c_type, c_width, ch.len_utf8())
+}
+
+/// Return the first complete UTF-8 character, the number of bytes read before
+/// a conversion error, or None when EOF is reached in an incomplete sequence.
+fn unexpand_utf8_first_char(buf: &[u8]) -> Option<Result<(char, usize), usize>> {
+    for length in 1..=buf.len().min(4) {
+        match from_utf8(&buf[..length]) {
+            Ok(text) => {
+                if let Some(ch) = text.chars().next() {
+                    return Some(Ok((ch, ch.len_utf8())));
+                }
+            }
+            Err(error) if error.error_len().is_some() => return Some(Err(length)),
+            Err(_) => {}
+        }
+    }
+    None
 }
 
 fn is_blank_char(ch: char) -> bool {
@@ -1311,26 +1309,54 @@ fn unexpand_initial_non_bom_prefix_len(buf: &[u8]) -> usize {
     }
 }
 
-fn unexpand_bom_prefix_char_info(
+/// Reproduce GNU mbfile's recovery after mbrtoc32 consumes bytes past a
+/// malformed sequence.  Bytes already buffered by mbfile prefix the next
+/// character and inherit that character's classification and display width.
+fn unexpand_mbfile_next_char_info(
     is_u_flag: bool,
     buf: &[u8],
     byte: usize,
-    prefix_len: usize,
+    buffered_prefix_len: &mut usize,
 ) -> Option<(UnexpandCharType, usize, usize)> {
+    let prefix_len = *buffered_prefix_len;
     let char_byte = byte.checked_add(prefix_len)?;
     let remaining = buf.get(char_byte..)?;
-    let valid = if is_u_flag {
-        match from_utf8(remaining) {
-            Ok(text) => !text.is_empty(),
-            Err(error) => error.valid_up_to() != 0,
+
+    if remaining.is_empty() {
+        if prefix_len == 0 {
+            return None;
         }
-    } else {
-        remaining.first().is_some_and(u8::is_ascii)
-    };
-    valid.then(|| {
-        let (c_type, c_width, n_bytes) = unexpand_next_char_info(is_u_flag, buf, char_byte);
-        (c_type, c_width, prefix_len + n_bytes)
-    })
+        *buffered_prefix_len = 0;
+        return Some((UnexpandCharType::Other, 1, prefix_len));
+    }
+
+    if !is_u_flag {
+        let c = *remaining.first()?;
+        if c.is_ascii() {
+            *buffered_prefix_len = 0;
+            let (c_type, c_width, n_bytes) = unexpand_char_info_from_char(char::from(c));
+            return Some((c_type, c_width, prefix_len + n_bytes));
+        }
+
+        *buffered_prefix_len = prefix_len;
+        return Some((UnexpandCharType::Other, 1, 1));
+    }
+
+    match unexpand_utf8_first_char(remaining) {
+        Some(Ok((ch, n_bytes))) => {
+            *buffered_prefix_len = 0;
+            let (c_type, c_width, _) = unexpand_char_info_from_char(ch);
+            Some((c_type, c_width, prefix_len + n_bytes))
+        }
+        Some(Err(read_len)) => {
+            *buffered_prefix_len = prefix_len + read_len - 1;
+            Some((UnexpandCharType::Other, 1, 1))
+        }
+        None => {
+            *buffered_prefix_len = 0;
+            Some((UnexpandCharType::Other, 1, prefix_len + remaining.len()))
+        }
+    }
 }
 
 fn unexpand_incomplete_utf8_suffix_len(buf: &[u8]) -> usize {
@@ -1349,45 +1375,6 @@ fn unexpand_incomplete_utf8_suffix_len(buf: &[u8]) -> usize {
     0
 }
 
-fn unexpand_invalid_utf8_pending_blank_len(buf: &[u8], byte: usize) -> usize {
-    let slice = &buf[byte..];
-    let Err(error) = from_utf8(slice) else {
-        return 0;
-    };
-    if error.valid_up_to() != 0 {
-        return 0;
-    }
-
-    let expected_trailing_bytes = match slice.first() {
-        Some(0xc2..=0xdf) => 1,
-        Some(0xe0..=0xef) => 2,
-        Some(0xf0..=0xf4) => 3,
-        _ => return 0,
-    };
-    let pending_high_bytes = slice
-        .iter()
-        .skip(1)
-        .take(expected_trailing_bytes)
-        .take_while(|byte| !byte.is_ascii())
-        .count();
-    let valid_continuations = slice
-        .iter()
-        .skip(1)
-        .take(expected_trailing_bytes)
-        .take_while(|byte| matches!(byte, 0x80..=0xbf))
-        .count();
-    if pending_high_bytes > valid_continuations {
-        pending_high_bytes
-    } else if valid_continuations != 0
-        && valid_continuations < expected_trailing_bytes
-        && slice.get(1 + pending_high_bytes) == Some(&b' ')
-    {
-        pending_high_bytes + 1
-    } else {
-        0
-    }
-}
-
 #[derive(Default)]
 struct UnexpandLineState {
     column: usize,
@@ -1396,7 +1383,7 @@ struct UnexpandLineState {
     prev_blank: bool,
     pending: Vec<Vec<u8>>,
     convert: bool,
-    invalid_utf8_pending_blanks: usize,
+    mbfile_buffered_prefix_len: usize,
     is_file_start: bool,
 }
 
@@ -1415,7 +1402,7 @@ impl UnexpandLineState {
         self.prev_blank = true;
         self.pending.clear();
         self.convert = true;
-        self.invalid_utf8_pending_blanks = 0;
+        self.mbfile_buffered_prefix_len = 0;
     }
 
     fn flush_pending<W: Write>(&mut self, output: &mut W) -> std::io::Result<()> {
@@ -1453,27 +1440,21 @@ fn unexpand_line_with_state<W: Write>(
 ) -> std::io::Result<()> {
     let mut byte = 0;
     let convert_entire_line = flags.is_a_flag;
-    let mut bom_prefix_len = state
-        .is_file_start
-        .then(|| unexpand_initial_non_bom_prefix_len(buf));
-    state.is_file_start = false;
+    if state.is_file_start {
+        state.mbfile_buffered_prefix_len = unexpand_initial_non_bom_prefix_len(buf);
+        state.is_file_start = false;
+    }
+    let mut reached_mbfile_eof = false;
 
     while byte < buf.len() {
-        let (c_type, c_width, n_bytes) = if state.invalid_utf8_pending_blanks != 0 {
-            state.invalid_utf8_pending_blanks -= 1;
-            (UnexpandCharType::Space, 0, 1)
-        } else {
-            let char_info = bom_prefix_len
-                .take()
-                .and_then(|prefix_len| {
-                    unexpand_bom_prefix_char_info(flags.is_u_flag, buf, byte, prefix_len)
-                })
-                .unwrap_or_else(|| unexpand_next_char_info(flags.is_u_flag, buf, byte));
-            if flags.is_u_flag && char_info.2 == 1 {
-                state.invalid_utf8_pending_blanks =
-                    unexpand_invalid_utf8_pending_blank_len(buf, byte);
-            }
-            char_info
+        let Some((c_type, c_width, n_bytes)) = unexpand_mbfile_next_char_info(
+            flags.is_u_flag,
+            buf,
+            byte,
+            &mut state.mbfile_buffered_prefix_len,
+        ) else {
+            reached_mbfile_eof = true;
+            break;
         };
         let mut emit_tab = false;
 
@@ -1561,7 +1542,7 @@ fn unexpand_line_with_state<W: Write>(
         byte += n_bytes;
     }
 
-    if line_complete {
+    if line_complete || reached_mbfile_eof {
         state.finish_line(output)?;
     }
 
@@ -1734,6 +1715,7 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
             if is_first_chunk {
                 let file_has_bom = data_buf.starts_with(&[0xEF, 0xBB, 0xBF]);
                 line_state.is_file_start = !file_has_bom;
+                line_state.mbfile_buffered_prefix_len = 0;
                 if !is_first_file && !using_utf_locale && file_has_bom != first_file_has_bom {
                     report_unexpand_error(
                         &mut stderr_text,
@@ -2409,6 +2391,42 @@ mod tests {
                 .expect("partial BOM prefix must be processed");
 
             assert_eq!(output.into_inner(), b"\tx\n");
+        }
+
+        #[test]
+        fn test_unexpand_line_preserves_mbfile_invalid_sequence_before_tab() {
+            let mut buf = b"\xe2\x82 \t".to_vec();
+            let mut output = Cursor::new(Vec::new());
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
+                is_a_flag: true,
+                is_u_flag: true,
+            };
+
+            unexpand_line(&mut buf, &mut output, &flags, &[8], RemainingMode::None)
+                .expect("invalid UTF-8 input must be processed");
+
+            assert_eq!(output.into_inner(), b"\xe2\x82 \t");
+        }
+
+        #[test]
+        fn test_unexpand_line_keeps_incomplete_utf8_at_eof() {
+            let mut buf = b"\xef".to_vec();
+            let mut output = Cursor::new(Vec::new());
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
+                is_a_flag: true,
+                is_u_flag: true,
+            };
+
+            unexpand_line(&mut buf, &mut output, &flags, &[8], RemainingMode::None)
+                .expect("incomplete UTF-8 at EOF must be preserved");
+
+            assert_eq!(output.into_inner(), b"\xef");
         }
 
         #[test]

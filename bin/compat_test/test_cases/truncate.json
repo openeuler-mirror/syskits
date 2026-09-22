@@ -637,6 +637,27 @@
                 ]
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "POSIXLY_CORRECT下首个文件后的-s作为文件操作数",
+            "args": ["input", "-s", "7"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: you must specify either '--size' or '--reference'\nTry 'truncate --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "POSIXLY_CORRECT": "1"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

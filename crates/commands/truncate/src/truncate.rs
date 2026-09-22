@@ -32,6 +32,7 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
+use ctcore::ct_posix::GnuGetoptCommandExt;
 
 use std::ffi::{OsStr, OsString};
 
@@ -200,30 +201,36 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
         }
     })?;
 
+    let is_io_blocks = matches.get_flag(truncate_flags::TRUNCATE_IO_BLOCKS);
+    let is_no_create = matches.get_flag(truncate_flags::TRUNCATE_NO_CREATE);
+    let reference = matches
+        .get_one::<OsString>(truncate_flags::TRUNCATE_REFERENCE)
+        .cloned();
+    let size = matches
+        .get_one::<String>(truncate_flags::TRUNCATE_SIZE)
+        .map(String::from);
     let files: Vec<OsString> = matches
         .get_many::<OsString>(truncate_flags::TRUNCATE_ARG_FILES)
         .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
-    if files.is_empty() {
-        Err(CTsageError::new(1, "missing file operand"))
-    } else {
-        let is_io_blocks = matches.get_flag(truncate_flags::TRUNCATE_IO_BLOCKS);
-        let is_no_create = matches.get_flag(truncate_flags::TRUNCATE_NO_CREATE);
-        let reference = matches
-            .get_one::<OsString>(truncate_flags::TRUNCATE_REFERENCE)
-            .cloned();
-        let size = matches
-            .get_one::<String>(truncate_flags::TRUNCATE_SIZE)
-            .map(String::from);
-        if is_io_blocks && size.is_none() {
-            return Err(CTsageError::new(
-                1,
-                "'--io-blocks' was specified but '--size' was not",
-            ));
-        }
-        truncate(is_no_create, is_io_blocks, reference, size, &files)
+    if reference.is_none() && size.is_none() {
+        return Err(CTsageError::new(
+            1,
+            "you must specify either '--size' or '--reference'",
+        ));
     }
+    if is_io_blocks && size.is_none() {
+        return Err(CTsageError::new(
+            1,
+            "'--io-blocks' was specified but '--size' was not",
+        ));
+    }
+    if files.is_empty() {
+        return Err(CTsageError::new(1, "missing file operand"));
+    }
+
+    truncate(is_no_create, is_io_blocks, reference, size, &files)
 }
 
 pub fn ct_app() -> Command {
@@ -250,7 +257,6 @@ pub fn ct_app() -> Command {
         Arg::new(truncate_flags::TRUNCATE_REFERENCE)
             .short('r')
             .long(truncate_flags::TRUNCATE_REFERENCE)
-            .required_unless_present(truncate_flags::TRUNCATE_SIZE)
             .help(t!("truncate.clap.truncate_reference"))
             .action(ArgAction::Set)
             .overrides_with(truncate_flags::TRUNCATE_REFERENCE)
@@ -260,7 +266,6 @@ pub fn ct_app() -> Command {
         Arg::new(truncate_flags::TRUNCATE_SIZE)
             .short('s')
             .long(truncate_flags::TRUNCATE_SIZE)
-            .required_unless_present(truncate_flags::TRUNCATE_REFERENCE)
             .help(
                 "set or adjust the size of each file according to SIZE, which is in \
             bytes unless --io-blocks is specified",
@@ -284,6 +289,7 @@ pub fn ct_app() -> Command {
         .infer_long_args(true)
         .after_help(t!("truncate.after_help"))
         .args(args)
+        .gnu_getopt()
 }
 
 /// 将指定文件截断到给定的大小。
@@ -648,6 +654,7 @@ mod tests {
     use std::sync::Mutex;
 
     static EXIT_CODE_LOCK: Mutex<()> = Mutex::new(());
+    static POSIXLY_CORRECT_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_tool_implementation() {
@@ -664,6 +671,34 @@ mod tests {
         let args = vec![OsString::from("truncate"), OsString::from("--help")];
         let result = tool.execute(&args);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_posixly_correct_stops_option_parsing_after_file_operand() {
+        let _guard = POSIXLY_CORRECT_LOCK.lock().unwrap();
+        let previous = std::env::var_os("POSIXLY_CORRECT");
+        unsafe { std::env::set_var("POSIXLY_CORRECT", "1") };
+
+        let error = truncate_main(
+            [
+                OsString::from("truncate"),
+                OsString::from("input"),
+                OsString::from("-s"),
+                OsString::from("7"),
+            ]
+            .into_iter(),
+        )
+        .unwrap_err();
+
+        match previous {
+            Some(value) => unsafe { std::env::set_var("POSIXLY_CORRECT", value) },
+            None => unsafe { std::env::remove_var("POSIXLY_CORRECT") },
+        }
+
+        assert_eq!(
+            error.to_string(),
+            "you must specify either '--size' or '--reference'"
+        );
     }
 
     #[cfg(test)]
@@ -2440,11 +2475,7 @@ mod tests {
             let file = "test_ct_app_io_blocks_long";
             let args = vec![ctcore::ct_util_name(), "--io-blocks", file];
             let result = command.try_get_matches_from(args);
-            assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().kind(),
-                ErrorKind::MissingRequiredArgument
-            );
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2453,11 +2484,7 @@ mod tests {
             let file = "test_ct_app_io_blocks_long";
             let args = vec![ctcore::ct_util_name(), "-o", file];
             let result = command.try_get_matches_from(args);
-            assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().kind(),
-                ErrorKind::MissingRequiredArgument
-            );
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2482,11 +2509,7 @@ mod tests {
             let file = "test_ct_app_io_blocks_long";
             let args = vec![ctcore::ct_util_name(), "--no-create", file];
             let result = command.try_get_matches_from(args);
-            assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().kind(),
-                ErrorKind::MissingRequiredArgument
-            );
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -2495,11 +2518,7 @@ mod tests {
             let file = "test_ct_app_io_blocks_long";
             let args = vec![ctcore::ct_util_name(), "-c", file];
             let result = command.try_get_matches_from(args);
-            assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().kind(),
-                ErrorKind::MissingRequiredArgument
-            );
+            assert!(result.is_ok());
         }
 
         #[test]

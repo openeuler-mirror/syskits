@@ -190,7 +190,8 @@ pub fn ct_app() -> Command {
                 "treat SIZE as the number of I/O blocks of the file rather than bytes \
             (NOT IMPLEMENTED)",
             )
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(truncate_flags::TRUNCATE_IO_BLOCKS),
         Arg::new(truncate_flags::TRUNCATE_NO_CREATE)
             .short('c')
             .long(truncate_flags::TRUNCATE_NO_CREATE)
@@ -2275,6 +2276,22 @@ mod tests {
                 result.unwrap_err().kind(),
                 ErrorKind::MissingRequiredArgument
             );
+        }
+
+        #[test]
+        fn test_ct_app_io_blocks_allows_repeated_flags() {
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-o",
+                "--io-blocks",
+                "-s",
+                "1",
+                "target",
+            ];
+            let matches = command.try_get_matches_from(args).unwrap();
+
+            assert!(matches.get_flag(truncate_flags::TRUNCATE_IO_BLOCKS));
         }
 
         #[test]

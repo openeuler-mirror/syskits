@@ -437,6 +437,32 @@
                 ]
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "重复--io-blocks保持按块截断语义",
+            "setup_commands": [
+                ": > block-target"
+            ],
+            "args": ["-o", "--io-blocks", "-s", "1", "block-target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %s block-target)\" = \"$(stat -c %o block-target)\"",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f block-target"
+            ]
         }
     ]
 }

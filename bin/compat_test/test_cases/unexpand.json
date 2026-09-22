@@ -2285,6 +2285,33 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "efbbbf20202020e380802020580a",
+      "command": "unexpand",
+      "description": "原始字节BOM locale用例：LC_ALL=C；stdin完整十六进制为UTF-8 BOM、4个ASCII空格、E38080（全角空格）、2个ASCII空格、X和换行。GNU发现BOM后切换至可用UTF-8 locale，使全角空格参与空白和列宽计算，stdout完整十六进制为EFBBBF09580A。",
+      "args": [
+        "2d61"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "efbbbf09580a",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

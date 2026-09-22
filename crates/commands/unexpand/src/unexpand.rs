@@ -34,6 +34,7 @@ use std::ffi::{CStr, OsStr, OsString};
 
 const UNEXPAND_DEFAULT_TABSTOP: usize = 8;
 const UNEXPAND_INPUT_LINE_TOO_LONG: &str = "input line is too long";
+const UNEXPAND_UTF8_LOCALES: [&CStr; 3] = [c"C.UTF8", c"en_US.UTF8", c"en_GB.UTF8"];
 
 unsafe extern "C" {
     fn iswblank(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
@@ -524,6 +525,22 @@ fn unexpand_uses_utf8_locale_name(locale: &[u8]) -> bool {
         || locale
             .windows(b"utf-8".len())
             .any(|part| part.eq_ignore_ascii_case(b"utf-8"))
+}
+
+fn unexpand_find_utf8_locale(mut set_locale: impl FnMut(&CStr) -> bool) -> bool {
+    UNEXPAND_UTF8_LOCALES
+        .iter()
+        .any(|locale| set_locale(locale))
+}
+
+fn unexpand_set_utf8_locale() -> std::io::Result<()> {
+    if unexpand_find_utf8_locale(|locale| unsafe {
+        !ctcore::libc::setlocale(ctcore::libc::LC_ALL, locale.as_ptr()).is_null()
+    }) {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
 }
 
 pub fn ct_app() -> Command {
@@ -1139,6 +1156,16 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
 
                 if file_has_bom {
                     if is_first_file && !first_file_has_bom {
+                        if !using_utf_locale {
+                            unexpand_set_utf8_locale().map_err(|error| {
+                                let message = if error.raw_os_error() == Some(0) {
+                                    "cannot set UTF-8 locale".to_string()
+                                } else {
+                                    format!("cannot set UTF-8 locale: {}", strip_errno(&error))
+                                };
+                                CtSimpleError::new(1, message)
+                            })?;
+                        }
                         output
                             .write_all(&[0xEF, 0xBB, 0xBF])
                             .map_err(unexpand_output_error)?;
@@ -1261,6 +1288,18 @@ mod tests {
         use tempfile::{NamedTempFile, tempdir};
 
         use super::*;
+
+        #[test]
+        fn test_unexpand_selects_first_available_utf8_locale() {
+            let mut attempted = Vec::new();
+            let found = unexpand_find_utf8_locale(|locale| {
+                attempted.push(locale.to_bytes().to_vec());
+                locale.to_bytes() == b"en_US.UTF8"
+            });
+
+            assert!(found);
+            assert_eq!(attempted, vec![b"C.UTF8".to_vec(), b"en_US.UTF8".to_vec()]);
+        }
 
         struct FullWriter;
 

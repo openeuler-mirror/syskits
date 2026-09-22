@@ -587,6 +587,31 @@
             "cleanup_commands": [
                 "rm -f relative-overflow"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "io-blocks乘法超过off_t上限时拒绝而不panic",
+            "setup_commands": [
+                ": > io-block-overflow"
+            ],
+            "args": ["--io-blocks", "--size", "1E", "io-block-overflow"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: overflow in 1152921504606846976 * 4096 byte blocks for file 'io-block-overflow'\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f io-block-overflow"
+            ]
         }
     ]
 }

@@ -197,7 +197,7 @@ fn unexpand_tabstops_parse_inner(
                     let s = from_utf8(&bytes[index..]).unwrap_or_default();
                     match s.parse::<usize>() {
                         Ok(num) => {
-                            if num == 0 {
+                            if num == 0 && remaining_mode == RemainingMode::None {
                                 return Err(UnexpandParseError::TabSizeCannotBeZero);
                             }
                             if specifier_used {
@@ -245,7 +245,14 @@ fn unexpand_tabstops_parse_inner(
         }
     }
 
-    if numbers.is_empty() {
+    let zero_extension = remaining_mode != RemainingMode::None
+        && numbers.last().is_some_and(|tabstop| *tabstop == 0);
+    if zero_extension {
+        numbers.pop();
+        remaining_mode = RemainingMode::None;
+    }
+
+    if numbers.is_empty() && !(preserve_single_extension && zero_extension) {
         numbers = vec![UNEXPAND_DEFAULT_TABSTOP];
     }
 
@@ -2204,6 +2211,27 @@ mod tests {
             assert_eq!(flags.tabstops, vec![4, 8, 3]);
             assert_eq!(flags.remaining_mode, RemainingMode::Slash);
             assert!(flags.is_a_flag);
+        }
+
+        #[test]
+        fn test_unexpand_flags_accepts_zero_extension_size() {
+            let app = ct_app();
+
+            let default_tabs = app.clone().get_matches_from(vec!["unexpand", "-t", "/0"]);
+            let flags = UnexpandFlags::new(&default_tabs).unwrap();
+            assert_eq!(flags.tabstops, vec![UNEXPAND_DEFAULT_TABSTOP]);
+            assert_eq!(flags.remaining_mode, RemainingMode::None);
+
+            let explicit_tabs = app.get_matches_from(vec!["unexpand", "-t", "4,8,+0"]);
+            let flags = UnexpandFlags::new(&explicit_tabs).unwrap();
+            assert_eq!(flags.tabstops, vec![4, 8]);
+            assert_eq!(flags.remaining_mode, RemainingMode::None);
+
+            let cross_option_tabs =
+                ct_app().get_matches_from(vec!["unexpand", "-t", "/0", "-t", "4,8"]);
+            let flags = UnexpandFlags::new(&cross_option_tabs).unwrap();
+            assert_eq!(flags.tabstops, vec![4, 8]);
+            assert_eq!(flags.remaining_mode, RemainingMode::None);
         }
 
         #[test]

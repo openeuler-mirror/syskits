@@ -2137,6 +2137,35 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "20202020202020202020202020202020780a",
+      "command": "unexpand",
+      "description": "原始字节tab-stop扩展用例：LC_ALL=C；参数为2d61（-a）、2d74（-t）、2f30（/0）。GNU将零值/扩展视为未设置扩展，因无显式stop而使用默认8列；输入完整十六进制为16个空格、x和换行，stdout完整十六进制为两个制表符、x和换行，即0909780a。",
+      "args": [
+        "2d61",
+        "2d74",
+        "2f30"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "0909780a",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

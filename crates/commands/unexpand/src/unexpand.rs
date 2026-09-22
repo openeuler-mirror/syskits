@@ -182,13 +182,13 @@ fn unexpand_tabstops_parse_inner(
         for index in 0..bytes.len() {
             match bytes[index] {
                 b'+' => {
-                    if remaining_mode == RemainingMode::Slash {
+                    if specifier_used && remaining_mode == RemainingMode::Slash {
                         return Err(UnexpandParseError::SpecifierMutuallyExclusive);
                     }
                     remaining_mode = RemainingMode::Plus;
                 }
                 b'/' => {
-                    if remaining_mode == RemainingMode::Plus {
+                    if specifier_used && remaining_mode == RemainingMode::Plus {
                         return Err(UnexpandParseError::SpecifierMutuallyExclusive);
                     }
                     remaining_mode = RemainingMode::Slash;
@@ -2232,6 +2232,33 @@ mod tests {
             let flags = UnexpandFlags::new(&cross_option_tabs).unwrap();
             assert_eq!(flags.tabstops, vec![4, 8]);
             assert_eq!(flags.remaining_mode, RemainingMode::None);
+        }
+
+        #[test]
+        fn test_unexpand_flags_uses_last_extension_prefix_before_number() {
+            let app = ct_app();
+
+            let slash_tabs = app
+                .clone()
+                .get_matches_from(vec!["unexpand", "-t", "4,+/3"]);
+            let flags = UnexpandFlags::new(&slash_tabs).unwrap();
+            assert_eq!(flags.tabstops, vec![4, 3]);
+            assert_eq!(flags.remaining_mode, RemainingMode::Slash);
+
+            let plus_tabs = app.get_matches_from(vec!["unexpand", "-t", "4,/+3"]);
+            let flags = UnexpandFlags::new(&plus_tabs).unwrap();
+            assert_eq!(flags.tabstops, vec![4, 3]);
+            assert_eq!(flags.remaining_mode, RemainingMode::Plus);
+        }
+
+        #[test]
+        fn test_unexpand_flags_rejects_distinct_nonzero_extension_modes() {
+            let matches = ct_app().get_matches_from(vec!["unexpand", "-t", "4,/3,+4"]);
+
+            assert!(matches!(
+                UnexpandFlags::new(&matches),
+                Err(UnexpandParseError::SpecifierMutuallyExclusive)
+            ));
         }
 
         #[test]

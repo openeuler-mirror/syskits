@@ -2053,6 +2053,36 @@
       "cleanup_commands": []
     },
     {
+      "byteMode": true,
+      "tstdin": "2020202020202020780a",
+      "command": "unexpand",
+      "description": "LC_ALL=C；参数完整十六进制依次为2d74（-t）、2f33（/3）、2d74（-t）、2f30（/0）。GNU在已有非零/扩展后遇到同类零扩展，仍按重复specifier报错；预期RC=1、stdout为空、stderr完整十六进制为unexpand: '/' specifier only allowed with the last value换行。",
+      "args": [
+        "2d74",
+        "2f33",
+        "2d74",
+        "2f30"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "756e657870616e643a20272f2720737065636966696572206f6e6c7920616c6c6f776564207769746820746865206c6173742076616c75650a"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
       "tstdin": "",
       "command": "unexpand",
       "description": "unexpand keeps a UTF-8 wide character intact across the 65536-byte read boundary after compressed leading spaces",

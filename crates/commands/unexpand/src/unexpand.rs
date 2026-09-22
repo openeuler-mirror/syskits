@@ -413,8 +413,27 @@ impl UnexpandFlags {
 }
 
 /// 判断字节是否为ASCII数字或逗号。
+#[cfg(test)]
 fn is_ascii_digit_or_comma(c: u8) -> bool {
     c.is_ascii_digit() || c == b','
+}
+
+fn unexpand_is_all_option(argument: &[u8]) -> bool {
+    argument.len() > 2 && b"--all".starts_with(argument)
+}
+
+fn unexpand_short_option_from_bytes(bytes: &[u8]) -> OsString {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStringExt;
+
+        OsString::from_vec(bytes.to_vec())
+    }
+
+    #[cfg(not(unix))]
+    {
+        OsString::from(String::from_utf8_lossy(bytes).into_owned())
+    }
 }
 
 #[cfg(test)]
@@ -425,54 +444,102 @@ fn is_digit_or_comma(c: char) -> bool {
 /// 预处理命令行参数并展开快捷方式。例如，"-7"会被扩展为"--tabs=7 --first-only"，
 /// 而"-1,3"会扩展为"--tabs=1 --tabs=3 --first-only"。
 /// 但是，如果提供了"-a"或"--all"选项，则不会包含"--first-only"。
-fn expand_shortcuts_os(args: &[OsString]) -> Vec<OsString> {
-    let mut processed_args = Vec::with_capacity(args.len());
+fn expand_shortcuts_os(args: &[OsString], posix_mode: bool) -> Vec<OsString> {
+    let mut processed_args = Vec::with_capacity(args.len() + 3);
+    let Some((program_name, args)) = args.split_first() else {
+        return processed_args;
+    };
+    processed_args.push(program_name.clone());
     let mut is_all_arg_provided = false;
     let mut is_has_shortcuts = false;
     let mut options_ended = false;
+    let mut generated_options_index = None;
+    let mut pending_short_tab = Vec::new();
 
     for argument in args {
         let bytes = argument.as_encoded_bytes();
         if !options_ended && bytes == b"--" {
+            generated_options_index = Some(processed_args.len());
             options_ended = true;
             processed_args.push(argument.clone());
             continue;
         }
 
-        let short_tab_spec = (!options_ended)
-            .then(|| bytes.strip_prefix(b"-"))
-            .flatten()
-            .filter(|spec| {
-                !spec.is_empty() && spec.iter().all(|&byte| is_ascii_digit_or_comma(byte))
-            });
+        if !options_ended && posix_mode && (bytes == b"-" || !bytes.starts_with(b"-")) {
+            generated_options_index = Some(processed_args.len());
+            options_ended = true;
+            processed_args.push(argument.clone());
+            continue;
+        }
 
-        if let Some(spec) = short_tab_spec {
-            spec.split(|&byte| byte == b',')
-                .filter(|value| !value.is_empty())
-                .for_each(|value| {
-                    let value = from_utf8(value).expect("tab shortcut only contains ASCII digits");
-                    processed_args.push(OsString::from(format!("--tabs={value}")));
-                });
-            is_has_shortcuts = true;
+        if !options_ended
+            && let Some(short_options) = bytes
+                .strip_prefix(b"-")
+                .filter(|options| !options.is_empty() && !options.starts_with(b"-"))
+        {
+            let mut option_index = 0;
+            while option_index < short_options.len() {
+                match short_options[option_index] {
+                    b'0'..=b'9' => {
+                        pending_short_tab.push(short_options[option_index]);
+                        is_has_shortcuts = true;
+                    }
+                    b',' => {
+                        if !pending_short_tab.is_empty() {
+                            let value = from_utf8(&pending_short_tab)
+                                .expect("tab shortcut only contains ASCII digits");
+                            processed_args.push(OsString::from(format!("--tabs={value}")));
+                            pending_short_tab.clear();
+                        }
+                    }
+                    b'a' => {
+                        processed_args.push(OsString::from("-a"));
+                        is_all_arg_provided = true;
+                    }
+                    b't' => {
+                        processed_args.push(unexpand_short_option_from_bytes(
+                            &[&b"-"[..], &short_options[option_index..]].concat(),
+                        ));
+                        break;
+                    }
+                    _ => {
+                        if option_index == 0 {
+                            processed_args.push(argument.clone());
+                        } else {
+                            processed_args.push(unexpand_short_option_from_bytes(
+                                &[&b"-"[..], &short_options[option_index..]].concat(),
+                            ));
+                        }
+                        break;
+                    }
+                }
+                option_index += 1;
+            }
             continue;
         }
 
         processed_args.push(argument.clone());
-        if !options_ended && (bytes == b"--all" || bytes == b"-a") {
+        if !options_ended && (unexpand_is_all_option(bytes) || bytes == b"-a") {
             is_all_arg_provided = true;
         }
     }
 
+    let generated_options_index = generated_options_index.unwrap_or(processed_args.len());
+    if !pending_short_tab.is_empty() {
+        let value = from_utf8(&pending_short_tab).expect("tab shortcut only contains ASCII digits");
+        processed_args.insert(
+            generated_options_index,
+            OsString::from(format!("--tabs={value}")),
+        );
+    }
+
     if is_has_shortcuts {
-        let insertion_index = processed_args
-            .iter()
-            .position(|argument| argument.as_encoded_bytes() == b"--")
-            .unwrap_or(processed_args.len());
         let mut shortcuts = Vec::with_capacity(2);
         if !is_all_arg_provided {
             shortcuts.push(OsString::from("--first-only"));
         }
         shortcuts.push(OsString::from("--short-tabs"));
+        let insertion_index = generated_options_index + usize::from(!pending_short_tab.is_empty());
         processed_args.splice(insertion_index..insertion_index, shortcuts);
     }
 
@@ -481,9 +548,11 @@ fn expand_shortcuts_os(args: &[OsString]) -> Vec<OsString> {
 
 #[cfg(test)]
 fn expand_shortcuts(args: &[String]) -> Vec<String> {
-    let args = args.iter().cloned().map(OsString::from).collect::<Vec<_>>();
-    expand_shortcuts_os(&args)
+    let mut command_args = vec![OsString::from("unexpand")];
+    command_args.extend(args.iter().cloned().map(OsString::from));
+    expand_shortcuts_os(&command_args, false)
         .into_iter()
+        .skip(1)
         .map(|argument| {
             argument
                 .into_string()
@@ -498,7 +567,9 @@ pub fn unexpand_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
 
-    let matches = ct_app().try_get_matches_from(expand_shortcuts_os(&args))?;
+    let posix_mode = posixly_correct();
+    let matches = ct_app_with_posix_mode(posix_mode)
+        .try_get_matches_from(expand_shortcuts_os(&args, posix_mode))?;
 
     unexpand(&UnexpandFlags::new(&matches)?)
 }
@@ -1234,7 +1305,9 @@ pub fn unexpand_native_semantic(args: impl ctcore::Args) -> CTResult<UnexpandSem
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
-    let matches = ct_app().try_get_matches_from(expand_shortcuts_os(&args))?;
+    let posix_mode = posixly_correct();
+    let matches = ct_app_with_posix_mode(posix_mode)
+        .try_get_matches_from(expand_shortcuts_os(&args, posix_mode))?;
     let flags = UnexpandFlags::new(&matches)?;
     let mut classic_output = Vec::new();
     let outcome = unexpand_exe(&flags, &mut classic_output)?;
@@ -2117,8 +2190,8 @@ mod tests {
             let expected = vec![
                 "--tabs=4".to_string(),
                 "--tabs=8".to_string(),
-                "--tabs=12".to_string(),
                 "file1".to_string(),
+                "--tabs=12".to_string(),
                 "--first-only".to_string(),
                 "--short-tabs".to_string(),
             ];
@@ -2134,13 +2207,54 @@ mod tests {
             ];
             let expected = vec![
                 "--tabs=4".to_string(),
-                "--tabs=8".to_string(),
-                "--tabs=12".to_string(),
-                "--tabs=16".to_string(),
+                "--tabs=812".to_string(),
                 "file1".to_string(),
+                "--tabs=16".to_string(),
                 "--first-only".to_string(),
                 "--short-tabs".to_string(),
             ];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_accumulate_terminal_tab_value_across_options() {
+            let args = vec![
+                "-4,8".to_string(),
+                "--tabs=16".to_string(),
+                "-9".to_string(),
+            ];
+            let expected = vec![
+                "--tabs=4".to_string(),
+                "--tabs=16".to_string(),
+                "--tabs=89".to_string(),
+                "--first-only".to_string(),
+                "--short-tabs".to_string(),
+            ];
+
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_handles_numeric_short_option_cluster() {
+            let args = vec!["-a4".to_string()];
+            let expected = vec![
+                "-a".to_string(),
+                "--tabs=4".to_string(),
+                "--short-tabs".to_string(),
+            ];
+
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_preserves_all_option_abbreviation() {
+            let args = vec!["-4".to_string(), "--al".to_string()];
+            let expected = vec![
+                "--al".to_string(),
+                "--tabs=4".to_string(),
+                "--short-tabs".to_string(),
+            ];
+
             assert_eq!(expand_shortcuts(&args), expected);
         }
 
@@ -2149,9 +2263,9 @@ mod tests {
             let args = vec!["-4,8".to_string(), "--all".to_string(), "file1".to_string()];
             let expected = vec![
                 "--tabs=4".to_string(),
-                "--tabs=8".to_string(),
                 "--all".to_string(),
                 "file1".to_string(),
+                "--tabs=8".to_string(),
                 "--short-tabs".to_string(),
             ];
             assert_eq!(expand_shortcuts(&args), expected);
@@ -2162,9 +2276,9 @@ mod tests {
             let args = vec!["-4,8".to_string(), "-a".to_string(), "file1".to_string()];
             let expected = vec![
                 "--tabs=4".to_string(),
-                "--tabs=8".to_string(),
                 "-a".to_string(),
                 "file1".to_string(),
+                "--tabs=8".to_string(),
                 "--short-tabs".to_string(),
             ];
             assert_eq!(expand_shortcuts(&args), expected);
@@ -2189,19 +2303,23 @@ mod tests {
             let expected = vec![
                 "--all".to_string(),
                 "--tabs=4".to_string(),
-                "--tabs=8".to_string(),
                 "--some-flag".to_string(),
                 "file1".to_string(),
-                "--tabs=12".to_string(),
+                "--tabs=812".to_string(),
                 "--short-tabs".to_string(),
             ];
             assert_eq!(expand_shortcuts(&args), expected);
         }
 
         #[test]
-        fn test_expand_shortcuts_with_invalid_shortcuts() {
+        fn test_expand_shortcuts_handles_comma_and_all_short_options() {
             let args = vec!["-4,a".to_string(), "file1".to_string()];
-            let expected = vec!["-4,a".to_string(), "file1".to_string()];
+            let expected = vec![
+                "--tabs=4".to_string(),
+                "-a".to_string(),
+                "file1".to_string(),
+                "--short-tabs".to_string(),
+            ];
             assert_eq!(expand_shortcuts(&args), expected);
         }
 
@@ -2224,8 +2342,8 @@ mod tests {
                 "--tabs=4".to_string(),
                 "--tabs=8".to_string(),
                 "--tabs=8".to_string(),
-                "--tabs=12".to_string(),
                 "file1".to_string(),
+                "--tabs=12".to_string(),
                 "--first-only".to_string(),
                 "--short-tabs".to_string(),
             ];
@@ -2257,8 +2375,8 @@ mod tests {
             let args = vec!["-4,,8".to_string(), "file1".to_string()];
             let expected = vec![
                 "--tabs=4".to_string(),
-                "--tabs=8".to_string(),
                 "file1".to_string(),
+                "--tabs=8".to_string(),
                 "--first-only".to_string(),
                 "--short-tabs".to_string(),
             ];
@@ -2274,9 +2392,9 @@ mod tests {
             ];
             let expected = vec![
                 "--tabs=4".to_string(),
-                "--tabs=8".to_string(),
                 "--no-utf8".to_string(),
                 "file1".to_string(),
+                "--tabs=8".to_string(),
                 "--first-only".to_string(),
                 "--short-tabs".to_string(),
             ];
@@ -2301,6 +2419,26 @@ mod tests {
                 "-4".to_string(),
             ];
             assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_inserts_legacy_options_before_posix_operands() {
+            let args = [
+                OsString::from("unexpand"),
+                OsString::from("-4"),
+                OsString::from("input"),
+                OsString::from("-8"),
+            ];
+            let expected = [
+                OsString::from("unexpand"),
+                OsString::from("--tabs=4"),
+                OsString::from("--first-only"),
+                OsString::from("--short-tabs"),
+                OsString::from("input"),
+                OsString::from("-8"),
+            ];
+
+            assert_eq!(expand_shortcuts_os(&args, true), expected);
         }
 
         #[test]

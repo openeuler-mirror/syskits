@@ -2394,6 +2394,120 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "20202020202020202020202020202020780a",
+      "command": "unexpand",
+      "description": "原始字节传统短选项用例：LC_ALL=C；参数完整十六进制为2D34（-4）和2D38（-8）。GNU getopt 将两个数字累计为单个48列tab stop，输入16个ASCII空格、58（X）和换行不会压缩，stdout完整十六进制仍为20202020202020202020202020202020780A。",
+      "args": [
+        "2d34",
+        "2d38"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "20202020202020202020202020202020780a",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "202020202020202061202020202020202020620a",
+      "command": "unexpand",
+      "description": "原始字节组合短选项用例：LC_ALL=C；参数完整十六进制为2D6134（-a4）。GNU逐字符识别-a和传统数字4，按4列处理整行空白；输入为8个ASCII空格、61（a）、8个ASCII空格、62（b）和换行，stdout完整十六进制为09096109092020620A。",
+      "args": [
+        "2d6134"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "09096109092020620a",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "LC_ALL=C、POSIXLY_CORRECT=1；传统-4在首个文件操作数前仍作为选项，生成4列tab stop。随后-8停止选项解析并按不存在文件报告；input的8个行首空格压缩为两个制表符。",
+      "args": [
+        "-4",
+        "input",
+        "-8"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "export POSIXLY_CORRECT=1",
+        "printf '        X\\n' > input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "\t\tX\n",
+          "stderr": "unexpand: -8: No such file or directory\n"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f -- input"
+      ]
+    },
+    {
+      "tstdin": "a    X\n",
+      "command": "unexpand",
+      "description": "LC_ALL=C；GNU将--al识别为--all的无歧义缩写。与传统-4同用时，4列tab stop仍启用整行空白转换，a后的4个空格输出为制表符和一个空格。",
+      "args": [
+        "-4",
+        "--al"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "a\t X\n",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

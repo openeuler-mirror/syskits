@@ -690,6 +690,64 @@
             "cleanup_commands": [
                 "rm -f hexadecimal-size-target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "SIZE末尾空白必须被拒绝且保留原始诊断",
+            "setup_commands": [
+                "printf x > trailing-space-target"
+            ],
+            "args": ["-s", "+1 ", "trailing-space-target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: Invalid number: '+1 '\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %s trailing-space-target)\" = 1",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f trailing-space-target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "相对修饰符后的前导空白必须被忽略",
+            "setup_commands": [
+                "printf xx > modifier-space-target"
+            ],
+            "args": ["-s", "< 1", "modifier-space-target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %s modifier-space-target)\" = 1",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f modifier-space-target"
+            ]
         }
     ]
 }

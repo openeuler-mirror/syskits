@@ -28,6 +28,7 @@ use unicode_width::UnicodeWidthChar;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_posix::{GnuGetoptCommandExt, posixly_correct};
 use std::ffi::{CStr, OsString};
 
 const UNEXPAND_DEFAULT_TABSTOP: usize = 8;
@@ -395,6 +396,10 @@ fn unexpand_uses_utf8_locale_name(locale: &[u8]) -> bool {
 }
 
 pub fn ct_app() -> Command {
+    ct_app_with_posix_mode(posixly_correct())
+}
+
+fn ct_app_with_posix_mode(posix_mode: bool) -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
     let application_info = t!("unexpand.about");
@@ -439,6 +444,7 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .args(args)
+        .gnu_getopt_with_mode(posix_mode)
 }
 
 fn unexpand_open(path: &str) -> CTResult<BufReader<Box<dyn Read + 'static>>> {
@@ -2490,6 +2496,23 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--no-utf8"];
             let executable = command.try_get_matches_from(args);
             assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_posix_mode_treats_late_option_as_file() {
+            let matches = ct_app_with_posix_mode(true)
+                .try_get_matches_from(["unexpand", "input", "-a"])
+                .unwrap();
+
+            assert!(!matches.get_flag(unexpand_flags::ALL));
+            assert_eq!(
+                matches
+                    .get_many::<String>(unexpand_flags::FILE)
+                    .unwrap()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+                ["input", "-a"]
+            );
         }
 
         #[test]

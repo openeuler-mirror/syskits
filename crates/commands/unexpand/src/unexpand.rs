@@ -1802,6 +1802,7 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
     let mut stderr_text = String::new();
     let mut exit_code = 0;
     let mut line_state = UnexpandLineState::new();
+    let mut abort_after_bom_mismatch = false;
 
     'files: for file in &flags.files {
         read_stdin |= file == OsStr::new("-");
@@ -1851,6 +1852,7 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
                         unexpand_bom_mismatch_message(first_file_has_bom, last_input_errno),
                         emit_stderr,
                     );
+                    abort_after_bom_mismatch = true;
                     break 'files;
                 }
 
@@ -1900,9 +1902,11 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
         }
         is_first_file = false;
     }
-    line_state
-        .finish_line(output)
-        .map_err(unexpand_output_error)?;
+    if !abort_after_bom_mismatch {
+        line_state
+            .finish_line(output)
+            .map_err(unexpand_output_error)?;
+    }
 
     if read_stdin && stdin_was_closed {
         let error = unexpand_stdin_read_error();
@@ -2173,6 +2177,33 @@ mod tests {
                     .stderr_text
                     .starts_with("unexpand: combination of files with and without BOM header")
             );
+        }
+
+        #[test]
+        fn test_unexpand_exe_does_not_flush_pending_blanks_after_bom_mismatch() {
+            let _locale = TestThreadLocale::activate(c"C");
+            let dir = tempdir().unwrap();
+            let bom_path = dir.path().join("bom.txt");
+            let plain_path = dir.path().join("plain.txt");
+            write(&bom_path, b"\xEF\xBB\xBF    ").unwrap();
+            write(&plain_path, b"plain\n").unwrap();
+
+            let flags = UnexpandFlags {
+                files: vec![
+                    bom_path.as_os_str().to_os_string(),
+                    plain_path.as_os_str().to_os_string(),
+                ],
+                tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
+                is_a_flag: false,
+                is_u_flag: false,
+            };
+
+            let mut output = Vec::new();
+            let outcome = unexpand_exe(&flags, &mut output).unwrap();
+
+            assert_eq!(outcome.exit_code, 1);
+            assert_eq!(output, b"\xEF\xBB\xBF");
         }
 
         #[test]

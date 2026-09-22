@@ -3265,6 +3265,34 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "2020202020202020580a",
+      "command": "unexpand",
+      "description": "传统短选项等号参数用例：LC_ALL=C；参数完整十六进制为2D743D（-t=）。GNU getopt 将等号作为-t的参数交给tab-stop解析器，必须返回1并诊断等号为非法字符，不能把它当作空tab-stop值后回退默认8列。",
+      "args": [
+        "2d743d"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "export LANG=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "756e657870616e643a207461622073697a6520636f6e7461696e7320696e76616c6964206368617261637465722873293a20273d270a"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

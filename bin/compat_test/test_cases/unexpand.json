@@ -3011,6 +3011,36 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "ef8080e2822009",
+      "command": "unexpand",
+      "description": "原始字节C locale部分BOM前缀用例：LC_ALL=C；参数为2D61（-a）和2D74、33（-t 3），stdin完整十六进制为EF 80 80 E2 82 20 09。GNU check_bom 暂存EF，再由后续80完成一个宽度为1的字符；余下高字节分别占1列，末尾空格和制表符按3列tab stop折叠。stdout完整十六进制必须为EF 80 80 E2 82 09。",
+      "args": [
+        "2d61",
+        "2d74",
+        "33"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "export LANG=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "ef8080e28209",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

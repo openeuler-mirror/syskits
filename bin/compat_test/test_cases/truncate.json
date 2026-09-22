@@ -463,6 +463,33 @@
             "cleanup_commands": [
                 "rm -f block-target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "SIZE拒绝dd块后缀b且不创建目标",
+            "args": ["-s", "1b", "block-suffix-target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: Invalid number: '1b'\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e block-suffix-target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

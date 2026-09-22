@@ -15,7 +15,7 @@ extern crate rust_i18n;
 use rust_i18n::t;
 use std::fs::{OpenOptions, metadata};
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 #[cfg(unix)]
 use std::ffi::CStr;
 use std::io::ErrorKind;
@@ -33,7 +33,7 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateMode {
@@ -149,7 +149,7 @@ fn checked_block_size(blocks: u64, block_size: u64) -> Result<u64, TruncateSizeE
         .ok_or(TruncateSizeError::BlockOverflow { blocks, block_size })
 }
 
-fn truncate_size_error(filename: &str, error: TruncateSizeError) -> Box<dyn CTError> {
+fn truncate_size_error(filename: &OsStr, error: TruncateSizeError) -> Box<dyn CTError> {
     match error {
         TruncateSizeError::ExtendOverflow => CtSimpleError::new(
             1,
@@ -200,9 +200,9 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
         }
     })?;
 
-    let files: Vec<String> = matches
-        .get_many::<String>(truncate_flags::TRUNCATE_ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
+    let files: Vec<OsString> = matches
+        .get_many::<OsString>(truncate_flags::TRUNCATE_ARG_FILES)
+        .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
     if files.is_empty() {
@@ -211,8 +211,8 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
         let is_io_blocks = matches.get_flag(truncate_flags::TRUNCATE_IO_BLOCKS);
         let is_no_create = matches.get_flag(truncate_flags::TRUNCATE_NO_CREATE);
         let reference = matches
-            .get_one::<String>(truncate_flags::TRUNCATE_REFERENCE)
-            .map(String::from);
+            .get_one::<OsString>(truncate_flags::TRUNCATE_REFERENCE)
+            .cloned();
         let size = matches
             .get_one::<String>(truncate_flags::TRUNCATE_SIZE)
             .map(String::from);
@@ -254,6 +254,7 @@ pub fn ct_app() -> Command {
             .help(t!("truncate.clap.truncate_reference"))
             .action(ArgAction::Set)
             .overrides_with(truncate_flags::TRUNCATE_REFERENCE)
+            .value_parser(OsStringValueParser::new())
             .value_name("RFILE")
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(truncate_flags::TRUNCATE_SIZE)
@@ -272,6 +273,7 @@ pub fn ct_app() -> Command {
             .value_name("FILE")
             .action(ArgAction::Append)
             .required(true)
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
     ];
 
@@ -292,7 +294,8 @@ pub fn ct_app() -> Command {
 /// # 错误
 ///
 /// 如果文件无法被打开，或者设置文件大小时出现错误。
-fn truncate_file(filename: &str, create: bool, size: u64) -> CTResult<()> {
+fn truncate_file<P: AsRef<OsStr>>(filename: P, create: bool, size: u64) -> CTResult<()> {
+    let filename = filename.as_ref();
     let path = Path::new(filename);
     let mut options = OpenOptions::new();
     options.write(true).create(create);
@@ -349,14 +352,15 @@ fn os_error_message(error: &std::io::Error) -> String {
     }
 }
 
-fn truncate_files<F>(filenames: &[String], mut truncate_one: F) -> CTResult<()>
+fn truncate_files<P, F>(filenames: &[P], mut truncate_one: F) -> CTResult<()>
 where
-    F: FnMut(&str) -> CTResult<()>,
+    P: AsRef<OsStr>,
+    F: FnMut(&OsStr) -> CTResult<()>,
 {
     let mut failed = false;
 
     for filename in filenames {
-        if let Err(error) = truncate_one(filename) {
+        if let Err(error) = truncate_one(filename.as_ref()) {
             ctcore::ct_show!(error);
             failed = true;
         }
@@ -383,13 +387,18 @@ where
 /// 如果有任何文件无法被打开，或者在设置至少一个文件的大小时出现问题。
 ///
 /// 如果至少有一个文件是命名管道（也称为FIFO）。
-fn truncate_reference_and_size(
-    r_file_name: &str,
+fn truncate_reference_and_size<P, R>(
+    r_file_name: R,
     size_string: &str,
-    filenames: &[String],
+    filenames: &[P],
     is_create: bool,
     is_block: bool,
-) -> CTResult<()> {
+) -> CTResult<()>
+where
+    P: AsRef<OsStr>,
+    R: AsRef<OsStr>,
+{
+    let r_file_name = r_file_name.as_ref();
     let truncate_mode = match truncate_parse_mode_and_size(size_string) {
         Err(e) => {
             let err_massage = format!("Invalid number: {e}");
@@ -444,11 +453,16 @@ fn truncate_reference_and_size(
 /// 如果有任何文件无法被打开，或者在设置至少一个文件的大小时出现问题。
 ///
 /// 如果至少有一个文件是命名管道（也称为FIFO）。
-fn truncate_reference_file_only(
-    r_file_name: &str,
-    filenames: &[String],
+fn truncate_reference_file_only<P, R>(
+    r_file_name: R,
+    filenames: &[P],
     is_create: bool,
-) -> CTResult<()> {
+) -> CTResult<()>
+where
+    P: AsRef<OsStr>,
+    R: AsRef<OsStr>,
+{
+    let r_file_name = r_file_name.as_ref();
     let md = metadata(r_file_name).map_err(|e| match e.kind() {
         ErrorKind::NotFound => {
             let err_massage = format!(
@@ -466,7 +480,7 @@ fn truncate_reference_file_only(
 }
 
 #[cfg(unix)]
-fn io_block_size_for_new_file(filename: &str) -> u64 {
+fn io_block_size_for_new_file(filename: &OsStr) -> u64 {
     let path = Path::new(filename);
     let parent = path.parent().filter(|p| !p.as_os_str().is_empty());
     let parent = parent.unwrap_or_else(|| Path::new("."));
@@ -475,7 +489,7 @@ fn io_block_size_for_new_file(filename: &str) -> u64 {
 }
 
 #[cfg(not(unix))]
-fn io_block_size_for_new_file(_filename: &str) -> u64 {
+fn io_block_size_for_new_file(_filename: &OsStr) -> u64 {
     0
 }
 
@@ -491,12 +505,15 @@ fn io_block_size_for_new_file(_filename: &str) -> u64 {
 /// 如果有任何文件无法打开，或者至少有一个文件设置大小时出现问题。
 ///
 /// 如果至少有一个文件是命名管道（也称为fifo）。
-fn truncate_size_only(
+fn truncate_size_only<P>(
     size_string: &str,
-    filenames: &[String],
+    filenames: &[P],
     is_create: bool,
     is_blocks: bool,
-) -> CTResult<()> {
+) -> CTResult<()>
+where
+    P: AsRef<OsStr>,
+{
     let truncate_mode = truncate_parse_mode_and_size(size_string)
         .map_err(|e| CtSimpleError::new(1, format!("Invalid number: {e}")))?;
     if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = truncate_mode {
@@ -532,13 +549,16 @@ fn truncate_size_only(
     })
 }
 
-fn truncate(
+fn truncate<P>(
     is_no_create: bool,
     is_io_blocks: bool,
-    reference: Option<String>,
+    reference: Option<OsString>,
     size: Option<String>,
-    filenames: &[String],
-) -> CTResult<()> {
+    filenames: &[P],
+) -> CTResult<()>
+where
+    P: AsRef<OsStr>,
+{
     let is_create = !is_no_create;
     // 存在四种可能的情况：
     // - 已给出参考文件且已给出大小，
@@ -704,7 +724,7 @@ mod tests {
             truncate(
                 false,
                 false,
-                Some(reference_file_path.clone()),
+                Some(reference_file_path.clone().into()),
                 Some("+5".to_string()),
                 &target_files,
             )
@@ -714,7 +734,7 @@ mod tests {
             truncate(
                 false,
                 false,
-                Some(reference_file_path.clone()),
+                Some(reference_file_path.clone().into()),
                 Some("-3".to_string()),
                 &target_files,
             )
@@ -740,7 +760,7 @@ mod tests {
             truncate(
                 false,
                 false,
-                Some(reference_file_path.clone()),
+                Some(reference_file_path.clone().into()),
                 None,
                 &target_files,
             )
@@ -811,7 +831,7 @@ mod tests {
             let result = truncate(
                 false,
                 false,
-                Some("test_truncate_errors2".to_string()),
+                Some("test_truncate_errors2".into()),
                 Some("+5".to_string()),
                 &target_files,
             );
@@ -1662,6 +1682,8 @@ mod tests {
     mod ct_main_tests {
         use std::ffi::OsString;
         use std::io::Write;
+        #[cfg(unix)]
+        use std::os::unix::ffi::OsStringExt;
 
         use tempfile::tempdir;
 
@@ -1679,6 +1701,25 @@ mod tests {
         //     let result = truncate_main(args.iter().map(|s| OsString::from(s)));
         //     assert!(result.is_ok());
         // }
+        #[cfg(unix)]
+        #[test]
+        fn test_truncate_main_accepts_non_utf8_file_name() {
+            let dir = tempdir().unwrap();
+            let file_name = OsString::from_vec(b"raw-\xff".to_vec());
+            let file_path = dir.path().join(&file_name);
+            File::create(&file_path).unwrap();
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-s"),
+                OsString::from("7"),
+                file_path.clone().into_os_string(),
+            ];
+
+            truncate_main(args.into_iter()).unwrap();
+
+            assert_eq!(std::fs::metadata(file_path).unwrap().len(), 7);
+        }
+
         #[test]
         fn test_truncate_main_support_missing_argument() {
             let args = [ctcore::ct_util_name()]; // 缺少任何参数
@@ -2511,8 +2552,8 @@ mod tests {
             let matches = command.try_get_matches_from(args).unwrap();
 
             assert_eq!(
-                matches.get_one::<String>(truncate_flags::TRUNCATE_REFERENCE),
-                Some(&"last-reference".to_string())
+                matches.get_one::<OsString>(truncate_flags::TRUNCATE_REFERENCE),
+                Some(&OsString::from("last-reference"))
             );
         }
 

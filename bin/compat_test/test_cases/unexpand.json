@@ -2955,6 +2955,62 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "e2822009",
+      "command": "unexpand",
+      "description": "原始字节mbfile恢复用例：LC_ALL=C.UTF-8；参数为2D61（-a），stdin完整十六进制为E2 82 20 09。GNU在E2 82后检测到无效空格，将82、20和09保留在mbfile缓冲区并按输入制表符处理；stdout必须原样为E2822009。",
+      "args": [
+        "2d61"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "export LANG=C.UTF-8"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "e2822009",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "ef",
+      "command": "unexpand",
+      "description": "原始字节不完整UTF-8 EOF用例：LC_ALL=C.UTF-8；参数为2D61（-a），stdin仅含EF。GNU mbfile在输入结束时将不完整序列作为原始无效字符输出，stdout完整十六进制必须为EF。",
+      "args": [
+        "2d61"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "export LANG=C.UTF-8"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "ef",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

@@ -860,10 +860,17 @@ fn expand_shortcuts_os(args: &[OsString], posix_mode: bool) -> Vec<OsString> {
                     }
                     b't' => {
                         is_tabs_arg_provided = true;
-                        tabs_value_expected = option_index + 1 == short_options.len();
-                        processed_args.push(unexpand_short_option_from_bytes(
-                            &[&b"-"[..], &short_options[option_index..]].concat(),
-                        ));
+                        if short_options.get(option_index + 1) == Some(&b'=') {
+                            processed_args.push(OsString::from("-t"));
+                            processed_args.push(unexpand_short_option_from_bytes(
+                                &short_options[option_index + 1..],
+                            ));
+                        } else {
+                            tabs_value_expected = option_index + 1 == short_options.len();
+                            processed_args.push(unexpand_short_option_from_bytes(
+                                &[&b"-"[..], &short_options[option_index..]].concat(),
+                            ));
+                        }
                         break;
                     }
                     _ => {
@@ -3634,6 +3641,19 @@ mod tests {
             let flags = UnexpandFlags::new(&matches).unwrap();
             assert_eq!(flags.tabstops, vec![4, 8, 12]);
             assert_eq!(flags.remaining_mode, RemainingMode::None);
+        }
+
+        #[test]
+        fn test_unexpand_flags_rejects_short_tabs_value_starting_with_equals() {
+            let args = vec![OsString::from("unexpand"), OsString::from("-t=")];
+            let matches = ct_app()
+                .try_get_matches_from(expand_shortcuts_os(&args, false))
+                .expect("-t= must be parsed as a tabs option with value =");
+
+            assert!(matches!(
+                UnexpandFlags::new(&matches),
+                Err(UnexpandParseError::InvalidCharacter(value)) if value == "="
+            ));
         }
 
         #[test]

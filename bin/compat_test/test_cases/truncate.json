@@ -368,6 +368,34 @@
             "cleanup_commands": [
                 "rm -f valid_after_error"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "重复--reference时使用最后一个参考文件",
+            "setup_commands": [
+                "printf first > first-reference",
+                "printf second > last-reference",
+                "printf x > target"
+            ],
+            "args": ["--reference", "first-reference", "-r", "last-reference", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %s target",
+                        "expected_exit": 0,
+                        "expected_stdout": "6"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f first-reference last-reference target"
+            ]
         }
     ]
 }

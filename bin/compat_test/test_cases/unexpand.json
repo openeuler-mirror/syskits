@@ -2535,6 +2535,78 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "LC_ALL=C；输入文件sigpipe-input内容为8个ASCII空格、x和换行；stdout连接无读端管道且直接父进程保持默认SIGPIPE处置。GNU在首次写入压缩后的制表符时被SIGPIPE终止，预期RC=141、stdout和stderr均为空。",
+      "args": [
+        "sigpipe-input"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf '        x\\n' > sigpipe-input"
+      ],
+      "environment": {
+        "standardStreams": {
+          "stdout": "closed_pipe",
+          "sigpipe": "default",
+          "useBash": true
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 141,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f -- sigpipe-input"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "LC_ALL=C；输入文件sigpipe-ignored-input内容为8个ASCII空格、x和换行；stdout连接无读端管道且直接父进程显式忽略SIGPIPE。GNU保留该处置并将EPIPE报告为write error: Broken pipe，预期RC=1、stdout为空、stderr为对应诊断。",
+      "args": [
+        "sigpipe-ignored-input"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf '        x\\n' > sigpipe-ignored-input"
+      ],
+      "environment": {
+        "standardStreams": {
+          "stdout": "closed_pipe",
+          "sigpipe": "ignore",
+          "useBash": true
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "unexpand: write error: Broken pipe\\n"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f -- sigpipe-ignored-input"
+      ]
     }
   ]
 }

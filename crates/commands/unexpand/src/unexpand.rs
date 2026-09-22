@@ -29,12 +29,20 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_posix::{GnuGetoptCommandExt, posixly_correct};
+use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
 use std::ffi::{CStr, OsStr, OsString};
 
 const UNEXPAND_DEFAULT_TABSTOP: usize = 8;
 
 unsafe extern "C" {
     fn iswblank(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
+    fn iswprint(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
+    fn mbrtowc(
+        wide: *mut ctcore::libc::wchar_t,
+        bytes: *const ctcore::libc::c_char,
+        length: usize,
+        state: *mut ctcore::libc::mbstate_t,
+    ) -> usize;
 }
 
 #[derive(Debug, PartialEq)]
@@ -478,14 +486,43 @@ fn unexpand_open(path: &OsStr) -> CTResult<BufReader<Box<dyn Read + 'static>>> {
     if filename.is_dir() {
         Err(Box::new(CtSimpleError {
             code: 1,
-            message: format!("{}: Is a directory", filename.display()),
+            message: format!("{}: Is a directory", unexpand_quote_path(path)),
         }))
     } else if path == OsStr::new("-") {
         Ok(BufReader::new(ctcore::ct_io::stdin_reader_box()))
     } else {
-        file_buf = File::open(filename).map_err_context(|| filename.display().to_string())?;
+        file_buf = File::open(filename).map_err_context(|| unexpand_quote_path(path))?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
+}
+
+fn unexpand_quote_path(path: &OsStr) -> String {
+    let bytes = path.as_encoded_bytes();
+    let quoted = escape_shell_bytes_with_classifier(bytes, |remaining| unsafe {
+        let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
+        let mut wide = 0 as ctcore::libc::wchar_t;
+        let length = mbrtowc(
+            &mut wide,
+            remaining.as_ptr().cast(),
+            remaining.len(),
+            &mut state,
+        );
+        if length == usize::MAX {
+            return (1, false);
+        }
+        if length == usize::MAX - 1 {
+            return (remaining.len(), false);
+        }
+
+        let length = if length == 0 { 1 } else { length };
+        let is_utf8 = from_utf8(&remaining[..length]).is_ok();
+        (
+            length,
+            is_utf8 && iswprint(wide as ctcore::libc::c_uint) != 0,
+        )
+    });
+
+    String::from_utf8(quoted).expect("shell-escaped paths are valid UTF-8")
 }
 
 #[cfg(test)]
@@ -1362,6 +1399,31 @@ mod tests {
             assert_eq!(semantic.exit_code, 1);
         }
 
+        #[test]
+        fn test_unexpand_native_semantic_quotes_missing_path_with_space() {
+            let temp_dir = tempdir().unwrap();
+            let input_path = temp_dir.path().join("missing path");
+
+            let semantic = unexpand_native_semantic(
+                vec![
+                    OsString::from("unexpand"),
+                    input_path.clone().into_os_string(),
+                ]
+                .into_iter(),
+            )
+            .unwrap();
+
+            assert_eq!(semantic.classic_text, "");
+            assert_eq!(
+                semantic.stderr_text,
+                format!(
+                    "unexpand: '{}': No such file or directory\n",
+                    input_path.display()
+                )
+            );
+            assert_eq!(semantic.exit_code, 1);
+        }
+
         #[cfg(unix)]
         #[test]
         fn test_unexpand_native_semantic_reads_non_utf8_path() {
@@ -1789,6 +1851,17 @@ mod tests {
             // so we won't actually test reading from stdin here
             let result = unexpand_open(OsStr::new("-"));
             assert!(result.is_ok());
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_unexpand_quote_path_escapes_non_utf8_bytes() {
+            use std::os::unix::ffi::OsStrExt;
+
+            assert_eq!(
+                unexpand_quote_path(OsStr::from_bytes(b"missing-\xFF")),
+                "'missing-'$'\\377'"
+            );
         }
     }
 

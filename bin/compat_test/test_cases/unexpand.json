@@ -2021,6 +2021,36 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "原始字节路径用例：LC_ALL=C；参数完整十六进制为ff696e707574，表示文件名由单字节0xff和ASCII input组成；输入文件为8个ASCII空格后跟data换行，GNU按原始路径字节读取并输出制表符data换行，stdout完整十六进制为09646174610a。",
+      "args": [
+        "ff696e707574"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf '        data\\n' > \"$(printf '\\377input')\""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": [
+        "rm -f -- \"$(printf '\\377input')\""
+      ]
     }
   ]
 }

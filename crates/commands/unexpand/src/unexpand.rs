@@ -343,8 +343,8 @@ impl UnexpandFlags {
     }
 
     fn parse_a_flag(matches: &ArgMatches) -> bool {
-        (matches.get_flag(unexpand_flags::ALL) || matches.contains_id(unexpand_flags::TABS))
-            && !matches.get_flag(unexpand_flags::FIRST_ONLY)
+        (matches.get_count(unexpand_flags::ALL) > 0 || matches.contains_id(unexpand_flags::TABS))
+            && matches.get_count(unexpand_flags::FIRST_ONLY) == 0
     }
 
     fn parse_tabstops(
@@ -563,11 +563,11 @@ fn ct_app_with_posix_mode(posix_mode: bool) -> Command {
             .short('a')
             .long(unexpand_flags::ALL)
             .help(t!("unexpand.clap.all"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(unexpand_flags::FIRST_ONLY)
             .long(unexpand_flags::FIRST_ONLY)
             .help(t!("unexpand.clap.first_only"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(unexpand_flags::TABS)
             .short('t')
             .long(unexpand_flags::TABS)
@@ -2453,6 +2453,19 @@ mod tests {
         }
 
         #[test]
+        fn test_unexpand_flags_accept_repeated_boolean_options() {
+            let repeated_all = ct_app()
+                .try_get_matches_from(["unexpand", "-a", "--all"])
+                .expect("GNU accepts repeated --all options");
+            assert!(UnexpandFlags::new(&repeated_all).unwrap().is_a_flag);
+
+            let repeated_first_only = ct_app()
+                .try_get_matches_from(["unexpand", "--first-only", "--first-only"])
+                .expect("GNU accepts repeated --first-only options");
+            assert!(!UnexpandFlags::new(&repeated_first_only).unwrap().is_a_flag);
+        }
+
+        #[test]
         fn test_unexpand_flags_new_with_no_utf8_flag() {
             let app = ct_app();
             let matches = app.get_matches_from(vec!["unexpand", "--no-utf8"]);
@@ -2946,7 +2959,7 @@ mod tests {
                 .try_get_matches_from(["unexpand", "input", "-a"])
                 .unwrap();
 
-            assert!(!matches.get_flag(unexpand_flags::ALL));
+            assert_eq!(matches.get_count(unexpand_flags::ALL), 0);
             assert_eq!(
                 matches
                     .get_many::<OsString>(unexpand_flags::FILE)

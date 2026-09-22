@@ -2339,6 +2339,61 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "        X\n",
+      "command": "unexpand",
+      "description": "LC_ALL=C；GNU允许重复-a和--all。重复无参all选项仍启用整行空白转换，8个行首空格压缩为一个制表符。",
+      "args": [
+        "-a",
+        "--all"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "\tX\n",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "a        X\n",
+      "command": "unexpand",
+      "description": "LC_ALL=C；GNU允许重复--first-only。该选项继续覆盖-a，因此非行首的8个空格保持原样。",
+      "args": [
+        "-a",
+        "--first-only",
+        "--first-only"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "a        X\n",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

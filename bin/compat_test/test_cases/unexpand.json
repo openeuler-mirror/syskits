@@ -3125,6 +3125,32 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "e2308282",
+      "command": "unexpand",
+      "description": "无换行 EOF 的无效 GB18030 序列：LC_ALL=zh_CN.gb18030；stdin为E2 30 82 82且没有换行。GNU mbfile 读取到E2 30 82 82后仅先输出无效首字节E2，保留30 82 82等待后续输入；EOF到达时将保留字节原样输出，stdout完整十六进制必须为E2308282。",
+      "args": [],
+      "setup_commands": [
+        "export LC_ALL=zh_CN.gb18030",
+        "export LANG=zh_CN.gb18030"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "e2308282",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

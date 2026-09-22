@@ -1493,36 +1493,6 @@ fn unexpand_incomplete_utf8_suffix_len(buf: &[u8]) -> usize {
     0
 }
 
-fn unexpand_incomplete_multibyte_suffix_len(buf: &[u8], is_utf8_locale: bool) -> usize {
-    if is_utf8_locale {
-        return unexpand_incomplete_utf8_suffix_len(buf);
-    }
-
-    let mut byte = 0;
-    while byte < buf.len() {
-        let mut state: ctcore::libc::mbstate_t = unsafe { std::mem::zeroed() };
-        let mut wide = 0 as ctcore::libc::wchar_t;
-        let length = unsafe {
-            mbrtowc(
-                &mut wide,
-                buf[byte..].as_ptr().cast(),
-                buf.len() - byte,
-                &mut state,
-            )
-        };
-
-        if length == usize::MAX - 1 {
-            return buf.len() - byte;
-        }
-        byte += if length == usize::MAX {
-            1
-        } else {
-            length.max(1)
-        };
-    }
-    0
-}
-
 #[derive(Default)]
 struct UnexpandLineState {
     column: usize,
@@ -1587,15 +1557,13 @@ fn unexpand_line_with_state<W: Write>(
     remaining_mode: RemainingMode,
     state: &mut UnexpandLineState,
     line_complete: bool,
-) -> std::io::Result<()> {
+) -> std::io::Result<Option<usize>> {
     let mut byte = 0;
     let convert_entire_line = flags.is_a_flag;
     if state.is_file_start {
         state.mbfile_buffered_prefix_len = unexpand_initial_non_bom_prefix_len(buf);
         state.is_file_start = false;
     }
-    let mut reached_mbfile_eof = false;
-
     while byte < buf.len() {
         let Some((c_type, c_width, n_bytes)) = unexpand_mbfile_next_char_info(
             flags.is_u_flag,
@@ -1605,8 +1573,8 @@ fn unexpand_line_with_state<W: Write>(
             &mut state.mbfile_buffered_prefix_len,
             state.input_at_eof,
         ) else {
-            reached_mbfile_eof = true;
-            break;
+            output.flush()?;
+            return Ok(Some(byte));
         };
         let mut emit_tab = false;
 
@@ -1694,12 +1662,12 @@ fn unexpand_line_with_state<W: Write>(
         byte += n_bytes;
     }
 
-    if line_complete || reached_mbfile_eof {
+    if line_complete {
         state.finish_line(output)?;
     }
 
     output.flush()?;
-    Ok(())
+    Ok(None)
 }
 
 fn report_unexpand_error<F: FnMut(&str)>(
@@ -1778,7 +1746,7 @@ fn unexpand_line<W: Write>(
     let mut state = UnexpandLineState::new();
     state.is_utf8_locale = flags.is_u_flag;
     state.input_at_eof = true;
-    unexpand_line_with_state(
+    let _ = unexpand_line_with_state(
         buf,
         output,
         flags,
@@ -1912,9 +1880,8 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
             }
 
             let line_complete = data_buf.last() == Some(&b'\n');
-            if active_flags.is_u_flag && n != 0 && !line_complete {
-                let suffix_len =
-                    unexpand_incomplete_multibyte_suffix_len(&data_buf, active_uses_utf8_locale);
+            if active_flags.is_u_flag && active_uses_utf8_locale && n != 0 && !line_complete {
+                let suffix_len = unexpand_incomplete_utf8_suffix_len(&data_buf);
                 if suffix_len != 0 {
                     utf8_carry = data_buf.split_off(data_buf.len() - suffix_len);
                 }
@@ -1926,7 +1893,7 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
 
             line_state.is_utf8_locale = active_uses_utf8_locale;
             line_state.input_at_eof = n == 0;
-            unexpand_line_with_state(
+            let carry_start = unexpand_line_with_state(
                 &data_buf,
                 output,
                 &active_flags,
@@ -1936,6 +1903,9 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
                 line_complete,
             )
             .map_err(unexpand_output_error)?;
+            if let Some(carry_start) = carry_start {
+                utf8_carry = data_buf.split_off(carry_start);
+            }
         }
         is_first_file = false;
     }
@@ -2268,6 +2238,25 @@ mod tests {
 
             let result = String::from_utf8(output).unwrap();
             assert_eq!(result, "\tHello 世界\n");
+        }
+
+        #[test]
+        fn test_unexpand_exe_keeps_invalid_gb18030_suffix_at_eof() {
+            let _locale = TestThreadLocale::activate(c"zh_CN.gb18030");
+            let file = NamedTempFile::new().unwrap();
+            write(file.path(), b"\xe2\x30\x82\x82").unwrap();
+            let flags = UnexpandFlags {
+                files: vec![file.path().as_os_str().to_os_string()],
+                tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
+                is_a_flag: false,
+                is_u_flag: true,
+            };
+
+            let mut output = Vec::new();
+            unexpand_exe(&flags, &mut output).unwrap();
+
+            assert_eq!(output, b"\xe2\x30\x82\x82");
         }
 
         #[test]

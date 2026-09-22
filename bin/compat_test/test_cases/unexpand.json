@@ -2811,6 +2811,35 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "原始字节诊断用例：LC_ALL=C.UTF-8；参数完整十六进制为2D74（-t）和332F78（3/x）。GNU的quotearg在UTF-8 codeset下以E28098和E28099包裹每个诊断参数，先报告2F不在数字开头，再报告78为非法字符；stderr完整十六进制保留两个unexpand前缀和换行。",
+      "args": [
+        "2d74",
+        "332f78"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C.UTF-8",
+        "export LANG=C.UTF-8"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "756e657870616e643a20272f2720737065636966696572206e6f74206174207374617274206f66206e756d6265723a20e280982f78e280990a756e657870616e643a207461622073697a6520636f6e7461696e7320696e76616c6964206368617261637465722873293a20e2809878e280990a"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

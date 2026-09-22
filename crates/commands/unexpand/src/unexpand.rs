@@ -927,6 +927,7 @@ fn ct_app_with_posix_mode(posix_mode: bool) -> Command {
 fn unexpand_open(
     path: &OsStr,
     last_input_errno: &mut Option<i32>,
+    stdin_was_closed: bool,
 ) -> CTResult<BufReader<Box<dyn Read + 'static>>> {
     let file_buf;
     let filename = Path::new(path);
@@ -937,6 +938,10 @@ fn unexpand_open(
             message: format!("{}: Is a directory", unexpand_quote_path(path)),
         }))
     } else if path == OsStr::new("-") {
+        if stdin_was_closed {
+            *last_input_errno = Some(ctcore::libc::EBADF);
+            return Err(Box::new(unexpand_stdin_read_error()));
+        }
         Ok(BufReader::new(ctcore::ct_io::stdin_reader_box()))
     } else {
         file_buf = File::open(filename).map_err(|error| {
@@ -944,6 +949,13 @@ fn unexpand_open(
             error.map_err_context(|| unexpand_quote_path(path)) as Box<dyn CTError>
         })?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
+    }
+}
+
+fn unexpand_stdin_read_error() -> CtSimpleError {
+    CtSimpleError {
+        code: 1,
+        message: "-: Bad file descriptor".to_string(),
     }
 }
 
@@ -1462,12 +1474,15 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
     let mut is_first_file = true;
     let mut first_file_has_bom = false;
     let mut last_input_errno = None;
+    let stdin_was_closed = ctcore::ct_stdin_was_closed();
+    let mut read_stdin = false;
     let mut stderr_text = String::new();
     let mut exit_code = 0;
     let mut line_state = UnexpandLineState::new();
 
     'files: for file in &flags.files {
-        let mut fh = match unexpand_open(file, &mut last_input_errno) {
+        read_stdin |= file == OsStr::new("-");
+        let mut fh = match unexpand_open(file, &mut last_input_errno, stdin_was_closed) {
             Ok(reader) => reader,
             Err(err) => {
                 report_unexpand_ct_error(
@@ -1569,6 +1584,11 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
     line_state
         .finish_line(output)
         .map_err(unexpand_output_error)?;
+
+    if read_stdin && stdin_was_closed {
+        let error = unexpand_stdin_read_error();
+        report_unexpand_ct_error(&mut stderr_text, &mut exit_code, &error, emit_stderr);
+    }
 
     Ok(UnexpandRunOutcome {
         stderr_text,
@@ -2457,7 +2477,7 @@ mod tests {
             writeln!(file, "Test content").unwrap();
 
             let mut last_input_errno = None;
-            let result = unexpand_open(file_path.as_os_str(), &mut last_input_errno);
+            let result = unexpand_open(file_path.as_os_str(), &mut last_input_errno, false);
             assert!(result.is_ok());
 
             let mut reader = result.unwrap();
@@ -2471,8 +2491,21 @@ mod tests {
             // This test is a bit tricky because it involves stdin,
             // so we won't actually test reading from stdin here
             let mut last_input_errno = None;
-            let result = unexpand_open(OsStr::new("-"), &mut last_input_errno);
+            let result = unexpand_open(OsStr::new("-"), &mut last_input_errno, false);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_unexpand_open_reports_closed_stdin_as_bad_file_descriptor() {
+            let mut last_input_errno = None;
+
+            let error = match unexpand_open(OsStr::new("-"), &mut last_input_errno, true) {
+                Ok(_) => panic!("closed stdin must be rejected"),
+                Err(error) => error,
+            };
+
+            assert_eq!(error.to_string(), "-: Bad file descriptor");
+            assert_eq!(last_input_errno, Some(ctcore::libc::EBADF));
         }
 
         #[cfg(unix)]

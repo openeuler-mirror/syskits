@@ -1997,6 +1997,35 @@
     {
       "tstdin": "",
       "command": "unexpand",
+      "description": "Linux关闭stdin用例：启动前关闭fd 0后执行unexpand。GNU把每个标准输入操作数-报告为Bad file descriptor，并在清理stdin时再报告一次；单个-的预期RC为1、stderr有两行相同诊断。",
+      "args": [],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "environment": {
+        "standardStreams": {
+          "stdin": "closed"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "unexpand: -: Bad file descriptor\nunexpand: -: Bad file descriptor\n"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
       "description": "unexpand keeps a UTF-8 wide character intact across the 65536-byte read boundary after compressed leading spaces",
       "args": [
         "-a",

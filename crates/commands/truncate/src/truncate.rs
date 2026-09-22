@@ -49,6 +49,7 @@ enum TruncateMode {
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateSizeError {
     ExtendOverflow,
+    BlockOverflow { blocks: u64, block_size: u64 },
 }
 
 impl TruncateMode {
@@ -102,29 +103,36 @@ impl TruncateMode {
         Ok(size)
     }
 
-    fn to_block_size(&self, fsize: u64, blocksize: u64) -> u64 {
-        match self {
-            Self::Absolute(size) => *size * blocksize,
-            Self::Extend(size) => fsize + size * blocksize,
-            Self::Reduce(size) => {
-                if *size * blocksize > fsize {
-                    0
-                } else {
-                    fsize - size * blocksize
-                }
-            }
-            Self::AtMost(size) => fsize.min(*size * blocksize),
-            Self::AtLeast(size) => fsize.max(*size * blocksize),
-            Self::RoundDown(size) => fsize - fsize % (size * blocksize),
-            Self::RoundUp(size) => {
-                let mut rp = fsize % (size * blocksize);
+    fn to_block_size(&self, fsize: u64, blocksize: u64) -> Result<u64, TruncateSizeError> {
+        let blocks = match self {
+            Self::Absolute(size)
+            | Self::Extend(size)
+            | Self::Reduce(size)
+            | Self::AtMost(size)
+            | Self::AtLeast(size)
+            | Self::RoundDown(size)
+            | Self::RoundUp(size) => *size,
+        };
+        let size = checked_block_size(blocks, blocksize)?;
+
+        let target_size = match self {
+            Self::Absolute(_) => size,
+            Self::Extend(_) => checked_file_size_add(fsize, size)?,
+            Self::Reduce(_) => fsize.saturating_sub(size),
+            Self::AtMost(_) => fsize.min(size),
+            Self::AtLeast(_) => fsize.max(size),
+            Self::RoundDown(_) => fsize - fsize % size,
+            Self::RoundUp(_) => {
+                let mut rp = fsize % size;
                 if rp != 0 {
-                    rp = (size * blocksize) - rp;
+                    rp = size - rp;
                 }
 
-                fsize + rp
+                checked_file_size_add(fsize, rp)?
             }
-        }
+        };
+
+        Ok(target_size)
     }
 }
 
@@ -134,11 +142,25 @@ fn checked_file_size_add(left: u64, right: u64) -> Result<u64, TruncateSizeError
         .ok_or(TruncateSizeError::ExtendOverflow)
 }
 
+fn checked_block_size(blocks: u64, block_size: u64) -> Result<u64, TruncateSizeError> {
+    blocks
+        .checked_mul(block_size)
+        .filter(|size| *size <= i64::MAX as u64)
+        .ok_or(TruncateSizeError::BlockOverflow { blocks, block_size })
+}
+
 fn truncate_size_error(filename: &str, error: TruncateSizeError) -> Box<dyn CTError> {
     match error {
         TruncateSizeError::ExtendOverflow => CtSimpleError::new(
             1,
             format!("overflow extending size of file {}", filename.quote()),
+        ),
+        TruncateSizeError::BlockOverflow { blocks, block_size } => CtSimpleError::new(
+            1,
+            format!(
+                "overflow in {blocks} * {block_size} byte blocks for file {}",
+                filename.quote()
+            ),
         ),
     }
 }
@@ -399,7 +421,9 @@ fn truncate_reference_and_size(
         let t_size = match is_block {
             true => {
                 let blocksize = md.st_blksize();
-                truncate_mode.to_block_size(md_size, blocksize)
+                truncate_mode
+                    .to_block_size(md_size, blocksize)
+                    .map_err(|error| truncate_size_error(filename, error))?
             }
             false => truncate_mode
                 .to_size(md_size)
@@ -496,7 +520,9 @@ fn truncate_size_only(
         };
 
         let t_size = match is_blocks {
-            true => truncate_mode.to_block_size(f_size, blocksize),
+            true => truncate_mode
+                .to_block_size(f_size, blocksize)
+                .map_err(|error| truncate_size_error(filename, error))?,
             false => truncate_mode
                 .to_size(f_size)
                 .map_err(|error| truncate_size_error(filename, error))?,
@@ -1439,6 +1465,23 @@ mod tests {
                 TruncateMode::Extend(i64::MAX as u64).to_size(1),
                 Err(TruncateSizeError::ExtendOverflow)
             );
+        }
+
+        #[test]
+        fn test_to_block_size_rejects_product_above_off_t_max() {
+            assert_eq!(
+                TruncateMode::Absolute(1_152_921_504_606_846_976).to_block_size(0, 4096),
+                Err(TruncateSizeError::BlockOverflow {
+                    blocks: 1_152_921_504_606_846_976,
+                    block_size: 4096,
+                })
+            );
+        }
+
+        #[test]
+        fn test_to_block_size_uses_block_bytes_for_relative_modes() {
+            assert_eq!(TruncateMode::Extend(1).to_block_size(4096, 4096), Ok(8192));
+            assert_eq!(TruncateMode::Reduce(1).to_block_size(8192, 4096), Ok(4096));
         }
     }
     #[cfg(test)]

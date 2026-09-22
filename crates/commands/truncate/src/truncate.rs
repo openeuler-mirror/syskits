@@ -565,6 +565,10 @@ fn truncate<P>(
 where
     P: AsRef<OsStr>,
 {
+    if size.as_deref().is_some_and(has_multiple_relative_modifiers) {
+        return Err(CTsageError::new(1, "multiple relative modifiers specified"));
+    }
+
     let is_create = !is_no_create;
     // 存在四种可能的情况：
     // - 已给出参考文件且已给出大小，
@@ -592,6 +596,18 @@ where
 /// 判断一个字符是否是大小修饰符，如 '+' 或 '<'。
 fn is_modifier(c: char) -> bool {
     c == '+' || c == '-' || c == '<' || c == '>' || c == '/' || c == '%'
+}
+
+fn has_multiple_relative_modifiers(size_string: &str) -> bool {
+    let size_string =
+        size_string.trim_start_matches(|character: char| character.is_ascii_whitespace());
+    if !matches!(size_string.chars().next(), Some('<' | '>' | '/' | '%')) {
+        return false;
+    }
+
+    let remaining =
+        size_string[1..].trim_start_matches(|character: char| character.is_ascii_whitespace());
+    matches!(remaining.chars().next(), Some('+' | '-'))
 }
 
 /// 解析带有可选修饰符符号作为第一个字符的大小字符串。
@@ -835,6 +851,20 @@ mod tests {
             truncate(false, false, None, Some("10".to_string()), &target_files).unwrap();
             assert_eq!(metadata(&target_file1_path).unwrap().len(), 10);
             assert_eq!(metadata(&target_file2_path).unwrap().len(), 10);
+        }
+
+        #[test]
+        fn test_truncate_rejects_multiple_relative_modifiers() {
+            let error = truncate(
+                false,
+                false,
+                None,
+                Some(">+0".to_string()),
+                &["multiple-relative-modifier-target"],
+            )
+            .unwrap_err();
+
+            assert_eq!(error.to_string(), "multiple relative modifiers specified");
         }
 
         #[test]

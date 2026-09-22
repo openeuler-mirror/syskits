@@ -624,6 +624,12 @@ fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, Parse
                 size_string.quote()
             )));
         }
+        if size_string.starts_with("0x") {
+            return Err(ParseSizeError::ParseFailure(format!(
+                "{}",
+                size_string.quote()
+            )));
+        }
         let size = parse_size_u64(size_string)?;
         if size > i64::MAX as u64 {
             return Err(ParseSizeError::SizeTooBig(format!(
@@ -1549,6 +1555,14 @@ mod tests {
         #[test]
         fn test_truncate_parse_mode_and_size_rejects_dd_block_suffix() {
             assert!(truncate_parse_mode_and_size("1b").is_err());
+        }
+
+        #[test]
+        fn test_truncate_parse_mode_and_size_rejects_hexadecimal_values() {
+            assert_eq!(
+                truncate_parse_mode_and_size("0x10"),
+                Err(ParseSizeError::ParseFailure("'0x10'".to_string()))
+            );
         }
 
         #[test]

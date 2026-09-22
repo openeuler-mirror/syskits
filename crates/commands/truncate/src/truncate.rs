@@ -167,6 +167,12 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
         let size = matches
             .get_one::<String>(truncate_flags::TRUNCATE_SIZE)
             .map(String::from);
+        if is_io_blocks && size.is_none() {
+            return Err(CTsageError::new(
+                1,
+                "'--io-blocks' was specified but '--size' was not",
+            ));
+        }
         truncate(is_no_create, is_io_blocks, reference, size, &files)
     }
 }
@@ -1679,7 +1685,7 @@ mod tests {
                 file_name,
             ];
             let result = truncate_main(args.iter().map(OsString::from));
-            assert!(result.is_ok());
+            assert!(result.is_err());
         }
         #[test]
         fn test_truncate_main_io_blocks_short_reference_short() {
@@ -1708,7 +1714,31 @@ mod tests {
                 file_name,
             ];
             let result = truncate_main(args.iter().map(OsString::from));
-            assert!(result.is_ok());
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_truncate_main_io_blocks_with_reference_requires_size() {
+            let dir = tempdir().unwrap();
+            let reference_path = dir.path().join("reference");
+            let target_path = dir.path().join("target");
+            std::fs::write(&reference_path, b"reference").unwrap();
+            std::fs::write(&target_path, b"target").unwrap();
+
+            let args = [
+                ctcore::ct_util_name(),
+                "--io-blocks",
+                "--reference",
+                reference_path.to_str().unwrap(),
+                target_path.to_str().unwrap(),
+            ];
+            let error = truncate_main(args.iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(
+                error.to_string(),
+                "'--io-blocks' was specified but '--size' was not"
+            );
+            assert_eq!(metadata(&target_path).unwrap().len(), 6);
         }
         #[test]
         fn test_truncate_main_no_create_long_reference_short() {

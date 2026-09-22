@@ -2024,6 +2024,35 @@
       "cleanup_commands": []
     },
     {
+      "tstdin": "        x\n",
+      "command": "unexpand",
+      "description": "Linux关闭stdout用例：启动前关闭fd 1并输入8个空格、x和换行。GNU在写入压缩制表符时返回RC=1，stderr为write error: Bad file descriptor；syskits补接/dev/full后的底层ENOSPC不得改变该诊断。",
+      "args": [],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "environment": {
+        "standardStreams": {
+          "stdout": "closed"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "unexpand: write error: Bad file descriptor\n"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
       "tstdin": "",
       "command": "unexpand",
       "description": "unexpand keeps a UTF-8 wide character intact across the 65536-byte read boundary after compressed leading spaces",

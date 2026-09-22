@@ -1408,11 +1408,23 @@ fn report_unexpand_io_error<F: FnMut(&str)>(
 }
 
 fn unexpand_output_error(error: std::io::Error) -> Box<dyn CTError> {
+    unexpand_output_error_with_stdout_state(error, ctcore::ct_stdout_was_closed())
+}
+
+fn unexpand_output_error_with_stdout_state(
+    error: std::io::Error,
+    stdout_was_closed: bool,
+) -> Box<dyn CTError> {
     if error.kind() == std::io::ErrorKind::InvalidData
         && error.to_string() == UNEXPAND_INPUT_LINE_TOO_LONG
     {
         CtSimpleError::new(1, UNEXPAND_INPUT_LINE_TOO_LONG)
     } else {
+        let error = if stdout_was_closed {
+            std::io::Error::from_raw_os_error(ctcore::libc::EBADF)
+        } else {
+            error
+        };
         CtSimpleError::new(1, format!("write error: {}", strip_errno(&error)))
     }
 }
@@ -1732,6 +1744,15 @@ mod tests {
             };
 
             assert_eq!(format!("{error}"), "write error: No space left on device");
+        }
+
+        #[test]
+        fn test_unexpand_closed_stdout_reports_bad_file_descriptor() {
+            let error = std::io::Error::from_raw_os_error(ctcore::libc::ENOSPC);
+
+            let error = unexpand_output_error_with_stdout_state(error, true);
+
+            assert_eq!(format!("{error}"), "write error: Bad file descriptor");
         }
 
         #[test]

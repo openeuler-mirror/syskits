@@ -67,20 +67,40 @@ impl Error for UnexpandParseError {}
 impl CTError for UnexpandParseError {
     fn diagnostic_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         let diagnostic = match self {
+            Self::InvalidCharacter(text) => {
+                let mut diagnostic = b"tab size contains invalid character(s): ".to_vec();
+                diagnostic.extend_from_slice(&unexpand_quote_diagnostic_argument(text.as_bytes()));
+                diagnostic
+            }
             Self::InvalidCharacterBytes(bytes) => {
                 let mut diagnostic = b"tab size contains invalid character(s): ".to_vec();
                 diagnostic.extend_from_slice(&unexpand_quote_diagnostic_argument(bytes));
                 diagnostic
             }
+            Self::SpecifierNotAtStartOfNumber(specifier, text) => {
+                let mut diagnostic = Vec::with_capacity(specifier.len() + text.len() + 48);
+                diagnostic.push(b'\'');
+                diagnostic.extend_from_slice(specifier.as_bytes());
+                diagnostic.push(b'\'');
+                diagnostic.extend_from_slice(b" specifier not at start of number: ");
+                diagnostic.extend_from_slice(&unexpand_quote_diagnostic_argument(text.as_bytes()));
+                diagnostic
+            }
             Self::SpecifierNotAtStartOfNumberBytes(specifier, bytes) => {
                 let mut diagnostic = Vec::with_capacity(specifier.len() + bytes.len() + 48);
-                let quoted_specifier = specifier.quote().to_string();
-                diagnostic.extend_from_slice(quoted_specifier.as_bytes());
+                diagnostic.push(b'\'');
+                diagnostic.extend_from_slice(specifier.as_bytes());
+                diagnostic.push(b'\'');
                 diagnostic.extend_from_slice(b" specifier not at start of number: ");
                 diagnostic.extend_from_slice(&unexpand_quote_diagnostic_argument(bytes));
                 diagnostic
             }
             Self::Multiple(errors) => unexpand_join_diagnostic_bytes(errors),
+            Self::TabStopTooLarge(text) => {
+                let mut diagnostic = b"tab stop is too large ".to_vec();
+                diagnostic.extend_from_slice(&unexpand_quote_diagnostic_argument(text.as_bytes()));
+                diagnostic
+            }
             _ => return std::borrow::Cow::Owned(self.to_string().into_bytes()),
         };
         std::borrow::Cow::Owned(diagnostic)
@@ -423,6 +443,14 @@ fn unexpand_specifier_not_at_start_error(specifier: &str, bytes: &[u8]) -> Unexp
 
 fn unexpand_quote_diagnostic_argument(bytes: &[u8]) -> Vec<u8> {
     let (left_quote, right_quote) = unexpand_diagnostic_quote_marks();
+    unexpand_quote_diagnostic_argument_with_quote_marks(bytes, left_quote, right_quote)
+}
+
+fn unexpand_quote_diagnostic_argument_with_quote_marks(
+    bytes: &[u8],
+    left_quote: &[u8],
+    right_quote: &[u8],
+) -> Vec<u8> {
     let mut quoted = Vec::with_capacity(bytes.len() + left_quote.len() + right_quote.len());
     quoted.extend_from_slice(left_quote);
 
@@ -3333,6 +3361,18 @@ mod tests {
                 diagnostic
                     .as_ref()
                     .ends_with(b": tab size contains invalid character(s): 'x'")
+            );
+        }
+
+        #[test]
+        fn test_unexpand_diagnostic_quote_uses_utf8_quote_marks() {
+            assert_eq!(
+                unexpand_quote_diagnostic_argument_with_quote_marks(
+                    b"/x",
+                    b"\xe2\x80\x98",
+                    b"\xe2\x80\x99"
+                ),
+                b"\xe2\x80\x98/x\xe2\x80\x99"
             );
         }
 

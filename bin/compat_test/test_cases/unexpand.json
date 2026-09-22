@@ -2225,6 +2225,35 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "20202020202020202020202020202020780a",
+      "command": "unexpand",
+      "description": "原始字节tab-stop零扩展衔接用例：LC_ALL=C；参数为2d61（-a）、2d74（-t）、2f302c2b33（/0,+3）。GNU不将/0计入已设置的扩展，随后+3成为唯一扩展；因没有显式stop，使用3列间隔。输入完整十六进制为16个空格、x和换行，stdout完整十六进制为5个制表符、一个空格、x和换行，即090909090920780a。",
+      "args": [
+        "2d61",
+        "2d74",
+        "2f302c2b33"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "090909090920780a",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

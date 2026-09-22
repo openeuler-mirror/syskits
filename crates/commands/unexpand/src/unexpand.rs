@@ -171,96 +171,125 @@ fn unexpand_tabstops_parse_inner(
     }
 
     let mut numbers = vec![];
-    let mut remaining_mode = RemainingMode::None;
-    let mut specifier_used = false;
+    let mut current_mode = RemainingMode::None;
+    let mut slash_extension = None;
+    let mut plus_extension = None;
 
     for word in str.split(is_space_or_comma) {
         if word.is_empty() {
             continue;
         }
         let bytes = word.as_bytes();
+        let mut number_start = None;
         for index in 0..bytes.len() {
             match bytes[index] {
                 b'+' => {
-                    if specifier_used && remaining_mode == RemainingMode::Slash {
-                        return Err(UnexpandParseError::SpecifierMutuallyExclusive);
+                    if number_start.is_some() {
+                        return Err(UnexpandParseError::SpecifierNotAtStartOfNumber(
+                            "+".to_string(),
+                            from_utf8(&bytes[index..]).unwrap_or_default().to_string(),
+                        ));
                     }
-                    remaining_mode = RemainingMode::Plus;
+                    current_mode = RemainingMode::Plus;
                 }
                 b'/' => {
-                    if specifier_used && remaining_mode == RemainingMode::Plus {
-                        return Err(UnexpandParseError::SpecifierMutuallyExclusive);
+                    if number_start.is_some() {
+                        return Err(UnexpandParseError::SpecifierNotAtStartOfNumber(
+                            "/".to_string(),
+                            from_utf8(&bytes[index..]).unwrap_or_default().to_string(),
+                        ));
                     }
-                    remaining_mode = RemainingMode::Slash;
+                    current_mode = RemainingMode::Slash;
+                }
+                b'0'..=b'9' => {
+                    number_start.get_or_insert(index);
                 }
                 _ => {
-                    let s = from_utf8(&bytes[index..]).unwrap_or_default();
-                    match s.parse::<usize>() {
-                        Ok(num) => {
-                            if num == 0 && remaining_mode == RemainingMode::None {
-                                return Err(UnexpandParseError::TabSizeCannotBeZero);
-                            }
-                            if specifier_used {
-                                let specifier = match remaining_mode {
-                                    RemainingMode::Slash => "/",
-                                    RemainingMode::Plus => "+",
-                                    RemainingMode::None => "",
-                                };
-                                return Err(UnexpandParseError::SpecifierOnlyAllowedWithLastValue(
-                                    specifier.to_string(),
-                                ));
-                            }
+                    return Err(UnexpandParseError::InvalidCharacter(
+                        from_utf8(&bytes[index..]).unwrap_or_default().to_string(),
+                    ));
+                }
+            }
+        }
 
-                            if remaining_mode != RemainingMode::None {
-                                specifier_used = true;
-                            } else if let Some(last) = numbers.last() {
-                                if *last >= num {
-                                    return Err(UnexpandParseError::TabSizesMustBeAscending);
-                                }
-                            }
-                            numbers.push(num);
-                            break;
-                        }
-                        Err(e) => {
-                            if *e.kind() == IntErrorKind::PosOverflow {
-                                return Err(if from_short_tabs {
-                                    UnexpandParseError::TabStopValueTooLarge
-                                } else {
-                                    UnexpandParseError::TabStopTooLarge(s.to_string())
-                                });
-                            }
+        let Some(number_start) = number_start else {
+            continue;
+        };
+        let number = from_utf8(&bytes[number_start..]).unwrap_or_default();
+        let num = match number.parse::<usize>() {
+            Ok(num) => num,
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
+                return Err(if from_short_tabs {
+                    UnexpandParseError::TabStopValueTooLarge
+                } else {
+                    UnexpandParseError::TabStopTooLarge(number.to_string())
+                });
+            }
+            Err(_) => unreachable!("tab-stop number contains only ASCII digits"),
+        };
 
-                            let s = s.trim_start_matches(char::is_numeric);
-                            if s.starts_with('/') || s.starts_with('+') {
-                                return Err(UnexpandParseError::SpecifierNotAtStartOfNumber(
-                                    s[0..1].to_string(),
-                                    s.to_string(),
-                                ));
-                            }
-                            return Err(UnexpandParseError::InvalidCharacter(s.to_string()));
-                        }
-                    }
+        match current_mode {
+            RemainingMode::None => {
+                if num == 0 {
+                    return Err(UnexpandParseError::TabSizeCannotBeZero);
+                }
+                if numbers.last().is_some_and(|last| *last >= num) {
+                    return Err(UnexpandParseError::TabSizesMustBeAscending);
+                }
+                numbers.push(num);
+            }
+            RemainingMode::Slash => {
+                if slash_extension.is_some() {
+                    return Err(UnexpandParseError::SpecifierOnlyAllowedWithLastValue(
+                        "/".to_string(),
+                    ));
+                }
+                if num != 0 {
+                    slash_extension = Some(num);
+                }
+            }
+            RemainingMode::Plus => {
+                if plus_extension.is_some() {
+                    return Err(UnexpandParseError::SpecifierOnlyAllowedWithLastValue(
+                        "+".to_string(),
+                    ));
+                }
+                if num != 0 {
+                    plus_extension = Some(num);
                 }
             }
         }
     }
 
-    let zero_extension = remaining_mode != RemainingMode::None
-        && numbers.last().is_some_and(|tabstop| *tabstop == 0);
-    if zero_extension {
-        numbers.pop();
-        remaining_mode = RemainingMode::None;
+    if slash_extension.is_some() && plus_extension.is_some() {
+        return Err(UnexpandParseError::SpecifierMutuallyExclusive);
     }
 
-    if numbers.is_empty() && !(preserve_single_extension && zero_extension) {
-        numbers = vec![UNEXPAND_DEFAULT_TABSTOP];
+    let extension = slash_extension
+        .map(|tabstop| (RemainingMode::Slash, tabstop))
+        .or_else(|| plus_extension.map(|tabstop| (RemainingMode::Plus, tabstop)));
+
+    if let Some((remaining_mode, tabstop)) = extension {
+        if numbers.is_empty() {
+            return Ok(if preserve_single_extension {
+                (remaining_mode, vec![tabstop])
+            } else {
+                (RemainingMode::None, vec![tabstop])
+            });
+        }
+        numbers.push(tabstop);
+        return Ok((remaining_mode, numbers));
     }
 
-    if !preserve_single_extension && numbers.len() < 2 {
-        remaining_mode = RemainingMode::None;
+    if numbers.is_empty() && preserve_single_extension && current_mode != RemainingMode::None {
+        return Ok((RemainingMode::None, vec![]));
     }
 
-    Ok((remaining_mode, numbers))
+    if numbers.is_empty() {
+        return Ok((RemainingMode::None, vec![UNEXPAND_DEFAULT_TABSTOP]));
+    }
+
+    Ok((RemainingMode::None, numbers))
 }
 
 mod unexpand_flags {
@@ -2257,6 +2286,23 @@ mod tests {
             let flags = UnexpandFlags::new(&cross_option_tabs).unwrap();
             assert_eq!(flags.tabstops, vec![4, 8]);
             assert_eq!(flags.remaining_mode, RemainingMode::None);
+        }
+
+        #[test]
+        fn test_unexpand_flags_allows_extension_after_zero_extension() {
+            let app = ct_app();
+
+            let default_tabs = app
+                .clone()
+                .get_matches_from(vec!["unexpand", "-t", "/0,+3"]);
+            let flags = UnexpandFlags::new(&default_tabs).unwrap();
+            assert_eq!(flags.tabstops, vec![3]);
+            assert_eq!(flags.remaining_mode, RemainingMode::None);
+
+            let explicit_tabs = app.get_matches_from(vec!["unexpand", "-t", "4,/3,+0"]);
+            let flags = UnexpandFlags::new(&explicit_tabs).unwrap();
+            assert_eq!(flags.tabstops, vec![4, 3]);
+            assert_eq!(flags.remaining_mode, RemainingMode::Slash);
         }
 
         #[test]

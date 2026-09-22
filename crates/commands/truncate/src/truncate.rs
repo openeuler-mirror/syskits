@@ -50,7 +50,7 @@ enum TruncateMode {
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateSizeError {
     ExtendOverflow,
-    BlockOverflow { blocks: u64, block_size: u64 },
+    BlockOverflow { blocks: String, block_size: u64 },
 }
 
 impl TruncateMode {
@@ -114,7 +114,8 @@ impl TruncateMode {
             | Self::RoundDown(size)
             | Self::RoundUp(size) => *size,
         };
-        let size = checked_block_size(blocks, blocksize)?;
+        let is_off_t_min = matches!(self, Self::Reduce(_)) && blocks == off_t_min_magnitude();
+        let size = checked_block_size(blocks, blocksize, is_off_t_min)?;
 
         let target_size = match self {
             Self::Absolute(_) => size,
@@ -143,11 +144,26 @@ fn checked_file_size_add(left: u64, right: u64) -> Result<u64, TruncateSizeError
         .ok_or(TruncateSizeError::ExtendOverflow)
 }
 
-fn checked_block_size(blocks: u64, block_size: u64) -> Result<u64, TruncateSizeError> {
+fn off_t_min_magnitude() -> u64 {
+    i64::MAX as u64 + 1
+}
+
+fn checked_block_size(
+    blocks: u64,
+    block_size: u64,
+    is_off_t_min: bool,
+) -> Result<u64, TruncateSizeError> {
     blocks
         .checked_mul(block_size)
-        .filter(|size| *size <= i64::MAX as u64)
-        .ok_or(TruncateSizeError::BlockOverflow { blocks, block_size })
+        .filter(|size| *size <= i64::MAX as u64 || (is_off_t_min && *size == off_t_min_magnitude()))
+        .ok_or_else(|| TruncateSizeError::BlockOverflow {
+            blocks: if is_off_t_min {
+                i64::MIN.to_string()
+            } else {
+                blocks.to_string()
+            },
+            block_size,
+        })
 }
 
 fn truncate_size_error(filename: &OsStr, error: TruncateSizeError) -> Box<dyn CTError> {
@@ -666,7 +682,7 @@ fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, Parse
         )),
         _ => invalid_number(),
     })?;
-    if size > i64::MAX as u64 {
+    if size > i64::MAX as u64 && !(modifier == '-' && size == off_t_min_magnitude()) {
         return Err(ParseSizeError::SizeTooBig(format!(
             "{}: Value too large for defined data type",
             displayed_size.quote()
@@ -1572,7 +1588,18 @@ mod tests {
             assert_eq!(
                 TruncateMode::Absolute(1_152_921_504_606_846_976).to_block_size(0, 4096),
                 Err(TruncateSizeError::BlockOverflow {
-                    blocks: 1_152_921_504_606_846_976,
+                    blocks: "1152921504606846976".to_string(),
+                    block_size: 4096,
+                })
+            );
+        }
+
+        #[test]
+        fn test_to_block_size_reports_off_t_min_as_negative() {
+            assert_eq!(
+                TruncateMode::Reduce(9_223_372_036_854_775_808).to_block_size(0, 4096),
+                Err(TruncateSizeError::BlockOverflow {
+                    blocks: "-9223372036854775808".to_string(),
                     block_size: 4096,
                 })
             );
@@ -1619,6 +1646,14 @@ mod tests {
         #[test]
         fn test_truncate_parse_mode_and_size_rejects_values_above_off_t_max() {
             assert!(truncate_parse_mode_and_size("9223372036854775808").is_err());
+        }
+
+        #[test]
+        fn test_truncate_parse_mode_and_size_accepts_off_t_min_for_reduction() {
+            assert_eq!(
+                truncate_parse_mode_and_size("-9223372036854775808"),
+                Ok(TruncateMode::Reduce(9_223_372_036_854_775_808))
+            );
         }
 
         #[test]

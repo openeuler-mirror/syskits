@@ -2195,6 +2195,36 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "原始字节多文件用例：LC_ALL=C；参数为6669727374（first）和7365636f6e64（second）。first内容为58（X）且不含换行，second内容为8个空格、Y和换行；GNU跨文件保留未完成行的转换状态，因空格不再位于行首而保持原样，stdout完整十六进制为582020202020202020590a。",
+      "args": [
+        "6669727374",
+        "7365636f6e64"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "printf X > first",
+        "printf '        Y\\n' > second"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "582020202020202020590a",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

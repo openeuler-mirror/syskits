@@ -786,9 +786,16 @@ fn expand_shortcuts_os(args: &[OsString], posix_mode: bool) -> Vec<OsString> {
     let mut options_ended = false;
     let mut generated_options_index = None;
     let mut pending_short_tab = Vec::new();
+    let mut tabs_value_expected = false;
 
     for argument in args {
         let bytes = argument.as_encoded_bytes();
+        if tabs_value_expected {
+            processed_args.push(argument.clone());
+            tabs_value_expected = false;
+            continue;
+        }
+
         if !options_ended && bytes == b"--" {
             generated_options_index = Some(processed_args.len());
             options_ended = true;
@@ -829,6 +836,7 @@ fn expand_shortcuts_os(args: &[OsString], posix_mode: bool) -> Vec<OsString> {
                     }
                     b't' => {
                         is_tabs_arg_provided = true;
+                        tabs_value_expected = option_index + 1 == short_options.len();
                         processed_args.push(unexpand_short_option_from_bytes(
                             &[&b"-"[..], &short_options[option_index..]].concat(),
                         ));
@@ -856,6 +864,7 @@ fn expand_shortcuts_os(args: &[OsString], posix_mode: bool) -> Vec<OsString> {
         }
         if !options_ended && unexpand_is_tabs_option(bytes) {
             is_tabs_arg_provided = true;
+            tabs_value_expected = !bytes.contains(&b'=');
         }
     }
 
@@ -2928,6 +2937,41 @@ mod tests {
             ];
 
             assert_eq!(expand_shortcuts_os(&args, true), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_keeps_tabs_value_before_posix_operand_detection() {
+            let args = [
+                OsString::from("unexpand"),
+                OsString::from("-t"),
+                OsString::from("4"),
+                OsString::from("-4"),
+            ];
+            let expected = [
+                OsString::from("unexpand"),
+                OsString::from("-t"),
+                OsString::from("4"),
+                OsString::from("--tabs=4"),
+                OsString::from("--short-tabs"),
+            ];
+
+            assert_eq!(expand_shortcuts_os(&args, true), expected);
+
+            let reverse_args = [
+                OsString::from("unexpand"),
+                OsString::from("-4"),
+                OsString::from("-t"),
+                OsString::from("4"),
+            ];
+            let reverse_expected = [
+                OsString::from("unexpand"),
+                OsString::from("-t"),
+                OsString::from("4"),
+                OsString::from("--tabs=4"),
+                OsString::from("--short-tabs"),
+            ];
+
+            assert_eq!(expand_shortcuts_os(&reverse_args, true), reverse_expected);
         }
 
         #[test]

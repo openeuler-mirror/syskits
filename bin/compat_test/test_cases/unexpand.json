@@ -2840,6 +2840,37 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "原始字节传统tab选项用例：LC_ALL=C且POSIXLY_CORRECT=1；参数完整十六进制为2D74（-t）、34（4）和2D34（-4）。GNU先消费-t的必需参数，再继续把-4识别为传统tab stop，两个相同stop触发tab sizes must be ascending；预期RC=1、stdout为空、stderr完整十六进制为该诊断加换行。",
+      "args": [
+        "2d74",
+        "34",
+        "2d34"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "export LANG=C",
+        "export POSIXLY_CORRECT=1"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "756e657870616e643a207461622073697a6573206d75737420626520617363656e64696e670a"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

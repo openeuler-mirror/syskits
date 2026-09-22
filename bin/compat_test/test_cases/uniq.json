@@ -394,6 +394,27 @@
             "cleanup_commands": []
         },
         {
+            "command": "uniq",
+            "description": "原始字节用例：LC_ALL=C、LANG=C；第三个操作数完整十六进制=626164ff70617468，即bad后接0xff再接path；GNU quote() 必须将不可打印字节表示为\\377，而不能将原始字节或shell_escape样式写入extra operand诊断。",
+            "args": ["2d", "2d", "626164ff70617468"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "756e69713a206578747261206f706572616e6420276261645c33373770617468270a5472792027756e6971202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": [],
+            "tstdin": "",
+            "byteMode": true
+        },
+        {
             "tstdin": "a\na\n",
             "command": "uniq",
             "description": "-D是无参数短选项，只有--all-repeated允许=METHOD；-D=prepend必须按GNU报告非法=选项",

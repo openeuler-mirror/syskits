@@ -35,6 +35,7 @@ const UNEXPAND_INPUT_LINE_TOO_LONG: &str = "input line is too long";
 const UNEXPAND_UTF8_LOCALES: [&CStr; 3] = [c"C.UTF8", c"en_US.UTF8", c"en_GB.UTF8"];
 
 unsafe extern "C" {
+    fn __ctype_get_mb_cur_max() -> usize;
     fn iswblank(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
     fn iswcntrl(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
     fn iswprint(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
@@ -947,12 +948,16 @@ fn unexpand_initialize_locale() {
 }
 
 fn unexpand_uses_utf8_locale() -> bool {
-    let locale = unsafe { ctcore::libc::setlocale(ctcore::libc::LC_CTYPE, std::ptr::null()) };
-    if locale.is_null() {
+    let codeset = unsafe { ctcore::libc::nl_langinfo(ctcore::libc::CODESET) };
+    if codeset.is_null() {
         return false;
     }
 
-    unexpand_uses_utf8_locale_name(unsafe { CStr::from_ptr(locale) }.to_bytes())
+    unexpand_uses_utf8_locale_name(unsafe { CStr::from_ptr(codeset) }.to_bytes())
+}
+
+fn unexpand_uses_multibyte_locale() -> bool {
+    unsafe { __ctype_get_mb_cur_max() > 1 }
 }
 
 fn unexpand_uses_utf8_locale_name(locale: &[u8]) -> bool {
@@ -1249,12 +1254,12 @@ fn unexpand_next_char_info(
     }
 }
 
-fn unexpand_char_info_from_char(ch: char) -> (UnexpandCharType, usize, usize) {
-    let c_type = if ch == '\t' {
+fn unexpand_char_info_from_wide(wide: ctcore::libc::wchar_t) -> (UnexpandCharType, usize) {
+    let c_type = if wide == b'\t' as ctcore::libc::wchar_t {
         UnexpandCharType::Tab
-    } else if ch == '\x08' {
+    } else if wide == b'\x08' as ctcore::libc::wchar_t {
         UnexpandCharType::Backspace
-    } else if is_blank_char(ch) {
+    } else if unsafe { iswblank(wide as ctcore::libc::c_uint) != 0 } {
         UnexpandCharType::Space
     } else {
         UnexpandCharType::Other
@@ -1262,9 +1267,22 @@ fn unexpand_char_info_from_char(ch: char) -> (UnexpandCharType, usize, usize) {
     let c_width = if matches!(c_type, UnexpandCharType::Tab | UnexpandCharType::Backspace) {
         0
     } else {
-        unexpand_char_width(ch)
+        unexpand_wide_char_width(wide)
     };
+    (c_type, c_width)
+}
+
+fn unexpand_char_info_from_char(ch: char) -> (UnexpandCharType, usize, usize) {
+    let (c_type, c_width) = unexpand_char_info_from_wide(ch as ctcore::libc::wchar_t);
     (c_type, c_width, ch.len_utf8())
+}
+
+#[cfg(test)]
+fn is_blank_char(ch: char) -> bool {
+    matches!(
+        unexpand_char_info_from_wide(ch as ctcore::libc::wchar_t).0,
+        UnexpandCharType::Space
+    )
 }
 
 /// Return the first complete UTF-8 character, the number of bytes read before
@@ -1284,15 +1302,11 @@ fn unexpand_utf8_first_char(buf: &[u8]) -> Option<Result<(char, usize), usize>> 
     None
 }
 
-fn is_blank_char(ch: char) -> bool {
-    unsafe { iswblank(ch as ctcore::libc::c_uint) != 0 }
-}
-
-fn unexpand_char_width(ch: char) -> usize {
-    let width = unsafe { wcwidth(ch as ctcore::libc::wchar_t) };
+fn unexpand_wide_char_width(wide: ctcore::libc::wchar_t) -> usize {
+    let width = unsafe { wcwidth(wide) };
     if width >= 0 {
         width as usize
-    } else if unsafe { iswcntrl(ch as ctcore::libc::c_uint) } != 0 {
+    } else if unsafe { iswcntrl(wide as ctcore::libc::c_uint) } != 0 {
         0
     } else {
         1
@@ -1309,15 +1323,107 @@ fn unexpand_initial_non_bom_prefix_len(buf: &[u8]) -> usize {
     }
 }
 
+#[cfg(test)]
+fn unexpand_locale_next_char_info(
+    buf: &[u8],
+    byte: usize,
+    input_at_eof: bool,
+) -> Option<(UnexpandCharType, usize, usize)> {
+    let mut buffered_prefix_len = 0;
+    unexpand_locale_mbfile_next_char_info(buf, byte, &mut buffered_prefix_len, input_at_eof)
+}
+
+/// Match GNU mbfile_multi_getc for a non-UTF-8 multibyte locale.
+///
+/// An invalid sequence returns just its first byte, while any bytes already
+/// read to discover the error remain buffered.  The next valid character is
+/// returned together with that prefix and therefore supplies its column width
+/// and blank classification for all of those bytes.
+fn unexpand_locale_mbfile_next_char_info(
+    buf: &[u8],
+    byte: usize,
+    buffered_prefix_len: &mut usize,
+    input_at_eof: bool,
+) -> Option<(UnexpandCharType, usize, usize)> {
+    const MBCHAR_BUF_SIZE: usize = 4;
+
+    let remaining = buf.get(byte..)?;
+    let prefix_len = *buffered_prefix_len;
+    if prefix_len > remaining.len() {
+        *buffered_prefix_len = 0;
+        return None;
+    }
+
+    let mut bufcount = prefix_len;
+    let mut new_bufcount = prefix_len;
+    let mut state: ctcore::libc::mbstate_t = unsafe { std::mem::zeroed() };
+
+    if prefix_len == 0 {
+        let first = *remaining.first()?;
+        if first.is_ascii() {
+            return Some(unexpand_char_info_from_char(char::from(first)));
+        }
+        new_bufcount = 1;
+    }
+
+    loop {
+        let mut wide = 0 as ctcore::libc::wchar_t;
+        let length = unsafe {
+            mbrtowc(
+                &mut wide,
+                remaining[bufcount..new_bufcount].as_ptr().cast(),
+                new_bufcount - bufcount,
+                &mut state,
+            )
+        };
+
+        if length == usize::MAX {
+            *buffered_prefix_len = new_bufcount.saturating_sub(1);
+            return Some((UnexpandCharType::Other, 1, 1));
+        }
+
+        if length == usize::MAX - 1 {
+            bufcount = new_bufcount;
+            if new_bufcount == MBCHAR_BUF_SIZE {
+                *buffered_prefix_len = new_bufcount - 1;
+                return Some((UnexpandCharType::Other, 1, 1));
+            }
+            if new_bufcount == remaining.len() {
+                if input_at_eof {
+                    *buffered_prefix_len = 0;
+                    return Some((UnexpandCharType::Other, 1, new_bufcount));
+                }
+                return None;
+            }
+            new_bufcount += 1;
+            continue;
+        }
+
+        let mut length = bufcount + length;
+        if length == 0 {
+            length = 1;
+        }
+        *buffered_prefix_len = new_bufcount - length;
+        let (c_type, c_width) = unexpand_char_info_from_wide(wide);
+        return Some((c_type, c_width, length));
+    }
+}
+
 /// Reproduce GNU mbfile's recovery after mbrtoc32 consumes bytes past a
 /// malformed sequence.  Bytes already buffered by mbfile prefix the next
 /// character and inherit that character's classification and display width.
 fn unexpand_mbfile_next_char_info(
     is_u_flag: bool,
+    is_utf8_locale: bool,
     buf: &[u8],
     byte: usize,
     buffered_prefix_len: &mut usize,
+    input_at_eof: bool,
 ) -> Option<(UnexpandCharType, usize, usize)> {
+    if is_u_flag && !is_utf8_locale {
+        return unexpand_locale_mbfile_next_char_info(buf, byte, buffered_prefix_len, input_at_eof);
+    }
+
     let prefix_len = *buffered_prefix_len;
 
     if is_u_flag && prefix_len == 1 && buf.get(byte).is_some_and(u8::is_ascii) {
@@ -1387,6 +1493,36 @@ fn unexpand_incomplete_utf8_suffix_len(buf: &[u8]) -> usize {
     0
 }
 
+fn unexpand_incomplete_multibyte_suffix_len(buf: &[u8], is_utf8_locale: bool) -> usize {
+    if is_utf8_locale {
+        return unexpand_incomplete_utf8_suffix_len(buf);
+    }
+
+    let mut byte = 0;
+    while byte < buf.len() {
+        let mut state: ctcore::libc::mbstate_t = unsafe { std::mem::zeroed() };
+        let mut wide = 0 as ctcore::libc::wchar_t;
+        let length = unsafe {
+            mbrtowc(
+                &mut wide,
+                buf[byte..].as_ptr().cast(),
+                buf.len() - byte,
+                &mut state,
+            )
+        };
+
+        if length == usize::MAX - 1 {
+            return buf.len() - byte;
+        }
+        byte += if length == usize::MAX {
+            1
+        } else {
+            length.max(1)
+        };
+    }
+    0
+}
+
 #[derive(Default)]
 struct UnexpandLineState {
     column: usize,
@@ -1397,6 +1533,8 @@ struct UnexpandLineState {
     convert: bool,
     mbfile_buffered_prefix_len: usize,
     is_file_start: bool,
+    is_utf8_locale: bool,
+    input_at_eof: bool,
 }
 
 impl UnexpandLineState {
@@ -1461,9 +1599,11 @@ fn unexpand_line_with_state<W: Write>(
     while byte < buf.len() {
         let Some((c_type, c_width, n_bytes)) = unexpand_mbfile_next_char_info(
             flags.is_u_flag,
+            state.is_utf8_locale,
             buf,
             byte,
             &mut state.mbfile_buffered_prefix_len,
+            state.input_at_eof,
         ) else {
             reached_mbfile_eof = true;
             break;
@@ -1636,6 +1776,8 @@ fn unexpand_line<W: Write>(
     remaining_mode: RemainingMode,
 ) -> std::io::Result<()> {
     let mut state = UnexpandLineState::new();
+    state.is_utf8_locale = flags.is_u_flag;
+    state.input_at_eof = true;
     unexpand_line_with_state(
         buf,
         output,
@@ -1676,9 +1818,10 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
 ) -> Result<UnexpandRunOutcome, Box<dyn CTError>> {
     let tabstops = &flags.tabstops[..];
     let remaining_mode = flags.remaining_mode;
+    let using_utf_locale = unexpand_uses_utf8_locale();
+    let mut active_uses_utf8_locale = using_utf_locale;
     let mut active_flags = flags.clone();
-    active_flags.is_u_flag &= unexpand_uses_utf8_locale();
-    let using_utf_locale = active_flags.is_u_flag;
+    active_flags.is_u_flag &= unexpand_uses_multibyte_locale();
     let mut data_buf = Vec::new();
     let mut is_first_file = true;
     let mut first_file_has_bom = false;
@@ -1757,6 +1900,7 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
                         first_file_has_bom = true;
                         // GNU switches a C locale to UTF-8 for a BOM-prefixed first file.
                         active_flags.is_u_flag = flags.is_u_flag;
+                        active_uses_utf8_locale = true;
                     }
                     data_buf.drain(0..3);
                 }
@@ -1769,7 +1913,8 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
 
             let line_complete = data_buf.last() == Some(&b'\n');
             if active_flags.is_u_flag && n != 0 && !line_complete {
-                let suffix_len = unexpand_incomplete_utf8_suffix_len(&data_buf);
+                let suffix_len =
+                    unexpand_incomplete_multibyte_suffix_len(&data_buf, active_uses_utf8_locale);
                 if suffix_len != 0 {
                     utf8_carry = data_buf.split_off(data_buf.len() - suffix_len);
                 }
@@ -1779,6 +1924,8 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
                 continue;
             }
 
+            line_state.is_utf8_locale = active_uses_utf8_locale;
+            line_state.input_at_eof = n == 0;
             unexpand_line_with_state(
                 &data_buf,
                 output,
@@ -1854,6 +2001,35 @@ mod tests {
     use std::ffi::OsString;
 
     use super::*;
+
+    struct TestThreadLocale {
+        locale: ctcore::libc::locale_t,
+        previous: ctcore::libc::locale_t,
+    }
+
+    impl TestThreadLocale {
+        fn activate(name: &CStr) -> Self {
+            let locale = unsafe {
+                ctcore::libc::newlocale(
+                    ctcore::libc::LC_CTYPE_MASK,
+                    name.as_ptr(),
+                    std::ptr::null_mut(),
+                )
+            };
+            assert!(!locale.is_null());
+            let previous = unsafe { ctcore::libc::uselocale(locale) };
+            Self { locale, previous }
+        }
+    }
+
+    impl Drop for TestThreadLocale {
+        fn drop(&mut self) {
+            unsafe {
+                ctcore::libc::uselocale(self.previous);
+                ctcore::libc::freelocale(self.locale);
+            }
+        }
+    }
 
     #[test]
     fn test_tool_implementation() {
@@ -2008,6 +2184,7 @@ mod tests {
 
         #[test]
         fn test_unexpand_exe_rejects_mixed_bom_files_in_a_non_utf8_locale() {
+            let _locale = TestThreadLocale::activate(c"C");
             let dir = tempdir().unwrap();
             let bom_path = dir.path().join("bom.txt");
             let plain_path = dir.path().join("plain.txt");
@@ -2039,6 +2216,7 @@ mod tests {
 
         #[test]
         fn test_unexpand_exe_keeps_open_errno_for_bom_after_plain_file() {
+            let _locale = TestThreadLocale::activate(c"C");
             let dir = tempdir().unwrap();
             let missing_path = dir.path().join("missing.txt");
             let plain_path = dir.path().join("plain.txt");
@@ -2349,6 +2527,68 @@ mod tests {
                 String::from_utf8(output.into_inner()).unwrap(),
                 "Hello 世界".to_string()
             );
+        }
+
+        #[test]
+        fn test_unexpand_locale_decoder_uses_gb18030_character_width() {
+            let locale = unsafe {
+                ctcore::libc::newlocale(
+                    ctcore::libc::LC_CTYPE_MASK,
+                    c"zh_CN.gb18030".as_ptr(),
+                    std::ptr::null_mut(),
+                )
+            };
+            assert!(!locale.is_null());
+            let previous_locale = unsafe { ctcore::libc::uselocale(locale) };
+
+            let result = unexpand_locale_next_char_info(b"a\x94\x39\xfc\x36", 1, true);
+            unsafe {
+                ctcore::libc::uselocale(previous_locale);
+                ctcore::libc::freelocale(locale);
+            }
+
+            assert_eq!(result, Some((UnexpandCharType::Other, 1, 4)));
+        }
+
+        #[test]
+        fn test_unexpand_line_recovers_invalid_gb18030_prefix_like_gnu_mbfile() {
+            let _locale = TestThreadLocale::activate(c"zh_CN.gb18030");
+            let buf = b"\xe5\x32       X\n".to_vec();
+            let mut buffered_prefix_len = 0;
+            assert_eq!(
+                unexpand_locale_mbfile_next_char_info(&buf, 0, &mut buffered_prefix_len, true),
+                Some((UnexpandCharType::Other, 1, 1))
+            );
+            assert_eq!(buffered_prefix_len, 3);
+            assert_eq!(
+                unexpand_locale_mbfile_next_char_info(&buf, 1, &mut buffered_prefix_len, true),
+                Some((UnexpandCharType::Space, 1, 4))
+            );
+            assert_eq!(buffered_prefix_len, 0);
+            let mut output = Cursor::new(Vec::new());
+            let flags = UnexpandFlags {
+                files: vec![],
+                tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
+                is_a_flag: true,
+                is_u_flag: true,
+            };
+            let mut state = UnexpandLineState::new();
+            state.is_utf8_locale = false;
+            state.input_at_eof = true;
+
+            unexpand_line_with_state(
+                &buf,
+                &mut output,
+                &flags,
+                &[8],
+                RemainingMode::None,
+                &mut state,
+                true,
+            )
+            .expect("invalid GB18030 input must be processed");
+
+            assert_eq!(output.into_inner(), b"\xe5\x32       X\n");
         }
 
         #[test]
@@ -3607,6 +3847,7 @@ mod tests {
 
         #[test]
         fn test_unexpand_tabstops_parse_reports_all_errors_before_invalid_character() {
+            let _locale = TestThreadLocale::activate(c"C");
             let error = unexpand_tabstops_parse("3/x", false)
                 .expect_err("GNU reports the misplaced specifier and invalid character");
             let diagnostic = error.diagnostic_bytes();
@@ -3637,6 +3878,7 @@ mod tests {
 
         #[test]
         fn test_unexpand_tabstops_parse_skips_terminal_value_after_a_prior_error() {
+            let _locale = TestThreadLocale::activate(c"C");
             let error = unexpand_tabstops_parse("3/4,5", false)
                 .expect_err("the misplaced slash must be reported");
 

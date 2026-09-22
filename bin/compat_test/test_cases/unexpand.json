@@ -1774,6 +1774,56 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "    x        y\\n",
+      "command": "unexpand",
+      "description": "unexpand accepts a smaller slash extension size",
+      "args": [
+        "-t",
+        "4,8,/3"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "    x        y\\n",
+      "command": "unexpand",
+      "description": "unexpand accepts a smaller plus extension size",
+      "args": [
+        "-t",
+        "4,8,+3"
+      ],
+      "setup_commands": [],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

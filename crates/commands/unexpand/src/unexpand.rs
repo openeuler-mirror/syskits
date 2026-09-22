@@ -178,11 +178,6 @@ fn unexpand_tabstops_parse(
                             if num == 0 {
                                 return Err(UnexpandParseError::TabSizeCannotBeZero);
                             }
-                            if let Some(last) = numbers.last() {
-                                if *last >= num {
-                                    return Err(UnexpandParseError::TabSizesMustBeAscending);
-                                }
-                            }
                             if specifier_used {
                                 let specifier = match remaining_mode {
                                     RemainingMode::Slash => "/",
@@ -192,8 +187,14 @@ fn unexpand_tabstops_parse(
                                 return Err(UnexpandParseError::SpecifierOnlyAllowedWithLastValue(
                                     specifier.to_string(),
                                 ));
-                            } else if remaining_mode != RemainingMode::None {
+                            }
+
+                            if remaining_mode != RemainingMode::None {
                                 specifier_used = true;
+                            } else if let Some(last) = numbers.last() {
+                                if *last >= num {
+                                    return Err(UnexpandParseError::TabSizesMustBeAscending);
+                                }
                             }
                             numbers.push(num);
                             break;
@@ -2047,6 +2048,18 @@ mod tests {
             let input = "1,2,3,4,5";
             let expected = Ok((RemainingMode::None, vec![1, 2, 3, 4, 5]));
             assert_eq!(unexpand_tabstops_parse(input, false), expected);
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_allows_smaller_extension_size() {
+            assert_eq!(
+                unexpand_tabstops_parse("4,8,/3", false),
+                Ok((RemainingMode::Slash, vec![4, 8, 3]))
+            );
+            assert_eq!(
+                unexpand_tabstops_parse("4,8,+3", false),
+                Ok((RemainingMode::Plus, vec![4, 8, 3]))
+            );
         }
 
         #[test]

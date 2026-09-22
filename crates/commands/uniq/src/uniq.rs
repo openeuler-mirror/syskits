@@ -1785,7 +1785,10 @@ fn uniq_extra_operand_error(args: &[OsString], posixly_correct: bool) -> Option<
         if operands > 2 {
             return Some(CTsageError::new(
                 1,
-                format!("extra operand {}", argument.quote()),
+                format!(
+                    "extra operand {}",
+                    uniq_quote_argmatch_bytes(argument.as_encoded_bytes())
+                ),
             ));
         }
     }
@@ -2511,7 +2514,30 @@ mod tests {
         let error = uniq_extra_operand_error(&args, false)
             .expect("GNU permits only INPUT and OUTPUT operands");
 
-        assert_eq!(error.to_string(), "extra operand 'extra'");
+        let (left_quote, right_quote) = locale_quote_marks();
+        assert_eq!(
+            error.to_string(),
+            format!("extra operand {left_quote}extra{right_quote}")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_third_file_operand_escapes_raw_non_utf8_byte_like_gnu_quote() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let args = [
+            OsString::from("uniq"),
+            OsString::from("input"),
+            OsString::from("output"),
+            OsString::from_vec(b"bad\xffpath".to_vec()),
+        ];
+        let error =
+            uniq_extra_operand_error(&args, false).expect("GNU rejects a third non-UTF-8 operand");
+        let (left_quote, right_quote) = locale_quote_marks();
+        let expected = format!("extra operand {left_quote}bad\\377path{right_quote}");
+
+        assert_eq!(error.diagnostic_bytes().as_ref(), expected.as_bytes());
     }
 
     #[cfg(unix)]

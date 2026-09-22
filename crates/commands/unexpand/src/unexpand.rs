@@ -562,6 +562,7 @@ fn expand_shortcuts(args: &[String]) -> Vec<String> {
 }
 
 pub fn unexpand_main(args: impl ctcore::Args) -> CTResult<()> {
+    unexpand_configure_sigpipe();
     unexpand_initialize_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -572,6 +573,26 @@ pub fn unexpand_main(args: impl ctcore::Args) -> CTResult<()> {
         .try_get_matches_from(expand_shortcuts_os(&args, posix_mode))?;
 
     unexpand(&UnexpandFlags::new(&matches)?)
+}
+
+#[cfg(target_os = "linux")]
+fn unexpand_configure_sigpipe() {
+    unexpand_restore_default_sigpipe_if_needed(ctcore::ct_sigpipe_was_default(), || {
+        let _ = ctcore::ct_signals::enable_pipe_errors();
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
+fn unexpand_configure_sigpipe() {}
+
+#[cfg(target_os = "linux")]
+fn unexpand_restore_default_sigpipe_if_needed(
+    inherited_sigpipe_was_default: bool,
+    restore_default: impl FnOnce(),
+) {
+    if inherited_sigpipe_was_default {
+        restore_default();
+    }
 }
 
 fn unexpand_initialize_locale() {
@@ -3140,6 +3161,17 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-U"];
             let executable = command.try_get_matches_from(args);
             assert!(executable.is_ok());
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_unexpand_restores_default_sigpipe_only_for_default_callers() {
+            let restored = std::cell::Cell::new(false);
+            unexpand_restore_default_sigpipe_if_needed(false, || restored.set(true));
+            assert!(!restored.get());
+
+            unexpand_restore_default_sigpipe_if_needed(true, || restored.set(true));
+            assert!(restored.get());
         }
     }
 }

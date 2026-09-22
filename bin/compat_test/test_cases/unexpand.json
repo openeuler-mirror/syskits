@@ -2636,6 +2636,34 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "LC_ALL=C；--tabs=3/x中斜杠在数字后。GNU解析器先报告'/'不在数字开头，再继续报告x为非法tab-stop字符；预期RC=1、stdout为空、stderr依次包含两条带unexpand前缀的诊断。",
+      "args": [
+        "-t",
+        "3/x"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "export LANG=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "unexpand: '/' specifier not at start of number: '/x'\nunexpand: tab size contains invalid character(s): 'x'\n"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

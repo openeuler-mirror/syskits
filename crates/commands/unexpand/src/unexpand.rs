@@ -19,7 +19,6 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::OsStringValueParser, cr
 use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdout};
-use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use sys_locale::get_locale;
@@ -54,6 +53,7 @@ enum UnexpandParseError {
     InvalidCharacterBytes(Vec<u8>),
     SpecifierNotAtStartOfNumber(String, String),
     SpecifierNotAtStartOfNumberBytes(String, Vec<u8>),
+    Multiple(Vec<UnexpandParseError>),
     SpecifierOnlyAllowedWithLastValue(String),
     SpecifierMutuallyExclusive,
     TabSizeCannotBeZero,
@@ -66,7 +66,7 @@ impl Error for UnexpandParseError {}
 
 impl CTError for UnexpandParseError {
     fn diagnostic_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
-        let mut diagnostic = match self {
+        let diagnostic = match self {
             Self::InvalidCharacterBytes(bytes) => {
                 let mut diagnostic = b"tab size contains invalid character(s): ".to_vec();
                 diagnostic.extend_from_slice(&unexpand_quote_diagnostic_argument(bytes));
@@ -80,6 +80,7 @@ impl CTError for UnexpandParseError {
                 diagnostic.extend_from_slice(&unexpand_quote_diagnostic_argument(bytes));
                 diagnostic
             }
+            Self::Multiple(errors) => unexpand_join_diagnostic_bytes(errors),
             _ => return std::borrow::Cow::Owned(self.to_string().into_bytes()),
         };
         std::borrow::Cow::Owned(diagnostic)
@@ -109,6 +110,15 @@ impl fmt::Display for UnexpandParseError {
                 specifier.quote(),
                 String::from_utf8_lossy(&unexpand_quote_diagnostic_argument(bytes))
             ),
+            Self::Multiple(errors) => {
+                for (index, error) in errors.iter().enumerate() {
+                    if index > 0 {
+                        f.write_str("; ")?;
+                    }
+                    error.fmt(f)?;
+                }
+                Ok(())
+            }
             Self::SpecifierOnlyAllowedWithLastValue(specifier) => write!(
                 f,
                 "{} specifier only allowed with the last value",
@@ -193,7 +203,14 @@ fn unexpand_tabstops_parse(
     s: &str,
     from_short_tabs: bool,
 ) -> Result<(RemainingMode, Vec<usize>), UnexpandParseError> {
-    unexpand_tabstops_parse_inner(OsStr::new(s), from_short_tabs, false)
+    let (mode, tabstops) = unexpand_tabstops_parse_inner(OsStr::new(s), from_short_tabs, false)?;
+    let explicit_end = if mode == RemainingMode::None {
+        tabstops.len()
+    } else {
+        tabstops.len() - 1
+    };
+    unexpand_validate_tabstops(&tabstops[..explicit_end])?;
+    Ok((mode, tabstops))
 }
 
 fn unexpand_tabstops_parse_inner(
@@ -211,87 +228,96 @@ fn unexpand_tabstops_parse_inner(
         return Ok((RemainingMode::None, vec![UNEXPAND_DEFAULT_TABSTOP]));
     }
 
-    let mut numbers = vec![];
+    let mut numbers = Vec::new();
     let mut current_mode = RemainingMode::None;
     let mut slash_extension = None;
     let mut plus_extension = None;
+    let mut errors = Vec::new();
+    let mut have_number = false;
+    let mut number = 0usize;
+    let mut number_start = 0usize;
+    let mut index = 0;
 
-    for word in bytes.split(|byte| is_space_or_comma(*byte)) {
-        if word.is_empty() {
-            continue;
-        }
-        let mut number_start = None;
-        for index in 0..word.len() {
-            match word[index] {
-                b'+' => {
-                    if number_start.is_some() {
-                        return Err(unexpand_specifier_not_at_start_error("+", &word[index..]));
-                    }
-                    current_mode = RemainingMode::Plus;
+    while index < bytes.len() {
+        match bytes[index] {
+            byte if is_space_or_comma(byte) => {
+                if have_number {
+                    unexpand_record_tabstop(
+                        number,
+                        current_mode,
+                        &mut numbers,
+                        &mut slash_extension,
+                        &mut plus_extension,
+                        &mut errors,
+                    );
+                    have_number = false;
                 }
-                b'/' => {
-                    if number_start.is_some() {
-                        return Err(unexpand_specifier_not_at_start_error("/", &word[index..]));
-                    }
-                    current_mode = RemainingMode::Slash;
-                }
-                b'0'..=b'9' => {
-                    number_start.get_or_insert(index);
-                }
-                _ => {
-                    return Err(unexpand_invalid_character_error(&word[index..]));
-                }
+                index += 1;
             }
-        }
+            b'/' => {
+                if have_number {
+                    errors.push(unexpand_specifier_not_at_start_error("/", &bytes[index..]));
+                }
+                current_mode = RemainingMode::Slash;
+                index += 1;
+            }
+            b'+' => {
+                if have_number {
+                    errors.push(unexpand_specifier_not_at_start_error("+", &bytes[index..]));
+                }
+                current_mode = RemainingMode::Plus;
+                index += 1;
+            }
+            byte @ b'0'..=b'9' => {
+                if !have_number {
+                    have_number = true;
+                    number = 0;
+                    number_start = index;
+                }
 
-        let Some(number_start) = number_start else {
-            continue;
-        };
-        let number =
-            from_utf8(&word[number_start..]).expect("tab-stop number contains only ASCII digits");
-        let num = match number.parse::<usize>() {
-            Ok(num) => num,
-            Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
-                return Err(if from_short_tabs {
-                    UnexpandParseError::TabStopValueTooLarge
+                let digit = usize::from(byte - b'0');
+                if let Some(value) = number
+                    .checked_mul(10)
+                    .and_then(|value| value.checked_add(digit))
+                {
+                    number = value;
+                    index += 1;
                 } else {
-                    UnexpandParseError::TabStopTooLarge(number.to_string())
-                });
-            }
-            Err(_) => unreachable!("tab-stop number contains only ASCII digits"),
-        };
-
-        match current_mode {
-            RemainingMode::None => {
-                if num == 0 {
-                    return Err(UnexpandParseError::TabSizeCannotBeZero);
-                }
-                if numbers.last().is_some_and(|last| *last >= num) {
-                    return Err(UnexpandParseError::TabSizesMustBeAscending);
-                }
-                numbers.push(num);
-            }
-            RemainingMode::Slash => {
-                if slash_extension.is_some() {
-                    return Err(UnexpandParseError::SpecifierOnlyAllowedWithLastValue(
-                        "/".to_string(),
-                    ));
-                }
-                if num != 0 {
-                    slash_extension = Some(num);
+                    let number_end = bytes[number_start..]
+                        .iter()
+                        .position(|byte| !byte.is_ascii_digit())
+                        .map_or(bytes.len(), |offset| number_start + offset);
+                    let overflowing_number = from_utf8(&bytes[number_start..number_end])
+                        .expect("tab-stop number contains only ASCII digits");
+                    errors.push(if from_short_tabs {
+                        UnexpandParseError::TabStopValueTooLarge
+                    } else {
+                        UnexpandParseError::TabStopTooLarge(overflowing_number.to_string())
+                    });
+                    have_number = false;
+                    index = number_end;
                 }
             }
-            RemainingMode::Plus => {
-                if plus_extension.is_some() {
-                    return Err(UnexpandParseError::SpecifierOnlyAllowedWithLastValue(
-                        "+".to_string(),
-                    ));
-                }
-                if num != 0 {
-                    plus_extension = Some(num);
-                }
+            _ => {
+                errors.push(unexpand_invalid_character_error(&bytes[index..]));
+                break;
             }
         }
+    }
+
+    if have_number && errors.is_empty() {
+        unexpand_record_tabstop(
+            number,
+            current_mode,
+            &mut numbers,
+            &mut slash_extension,
+            &mut plus_extension,
+            &mut errors,
+        );
+    }
+
+    if !errors.is_empty() {
+        return Err(unexpand_combine_parse_errors(errors));
     }
 
     if slash_extension.is_some() && plus_extension.is_some() {
@@ -323,6 +349,57 @@ fn unexpand_tabstops_parse_inner(
     }
 
     Ok((RemainingMode::None, numbers))
+}
+
+fn unexpand_record_tabstop(
+    number: usize,
+    mode: RemainingMode,
+    numbers: &mut Vec<usize>,
+    slash_extension: &mut Option<usize>,
+    plus_extension: &mut Option<usize>,
+    errors: &mut Vec<UnexpandParseError>,
+) {
+    match mode {
+        RemainingMode::None => numbers.push(number),
+        RemainingMode::Slash => {
+            if slash_extension.is_some() {
+                errors.push(UnexpandParseError::SpecifierOnlyAllowedWithLastValue(
+                    "/".to_string(),
+                ));
+            }
+            *slash_extension = (number != 0).then_some(number);
+        }
+        RemainingMode::Plus => {
+            if plus_extension.is_some() {
+                errors.push(UnexpandParseError::SpecifierOnlyAllowedWithLastValue(
+                    "+".to_string(),
+                ));
+            }
+            *plus_extension = (number != 0).then_some(number);
+        }
+    }
+}
+
+fn unexpand_combine_parse_errors(mut errors: Vec<UnexpandParseError>) -> UnexpandParseError {
+    if errors.len() == 1 {
+        errors.pop().expect("one parse error")
+    } else {
+        UnexpandParseError::Multiple(errors)
+    }
+}
+
+fn unexpand_validate_tabstops(tabstops: &[usize]) -> Result<(), UnexpandParseError> {
+    let mut previous = None;
+    for tabstop in tabstops {
+        if *tabstop == 0 {
+            return Err(UnexpandParseError::TabSizeCannotBeZero);
+        }
+        if previous.is_some_and(|previous| previous >= *tabstop) {
+            return Err(UnexpandParseError::TabSizesMustBeAscending);
+        }
+        previous = Some(*tabstop);
+    }
+    Ok(())
 }
 
 fn unexpand_invalid_character_error(bytes: &[u8]) -> UnexpandParseError {
@@ -390,6 +467,20 @@ fn unexpand_quote_diagnostic_argument(bytes: &[u8]) -> Vec<u8> {
 
     quoted.extend_from_slice(right_quote);
     quoted
+}
+
+fn unexpand_join_diagnostic_bytes(errors: &[UnexpandParseError]) -> Vec<u8> {
+    let utility_name = ctcore::ct_util_name();
+    let mut diagnostic = Vec::new();
+    for (index, error) in errors.iter().enumerate() {
+        if index > 0 {
+            diagnostic.push(b'\n');
+            diagnostic.extend_from_slice(utility_name.as_bytes());
+            diagnostic.extend_from_slice(b": ");
+        }
+        diagnostic.extend_from_slice(error.diagnostic_bytes().as_ref());
+    }
+    diagnostic
 }
 
 fn unexpand_diagnostic_quote_marks() -> (&'static [u8], &'static [u8]) {
@@ -514,12 +605,7 @@ impl UnexpandFlags {
                     option_tabstops.pop()
                 };
 
-                for tabstop in option_tabstops {
-                    if tabstops.last().is_some_and(|last| *last >= tabstop) {
-                        return Err(UnexpandParseError::TabSizesMustBeAscending);
-                    }
-                    tabstops.push(tabstop);
-                }
+                tabstops.extend(option_tabstops);
 
                 if let Some(tabstop) = option_extension {
                     if let Some((existing_mode, _)) = extension {
@@ -541,6 +627,7 @@ impl UnexpandFlags {
             }
 
             if let Some((mode, tabstop)) = extension {
+                unexpand_validate_tabstops(&tabstops)?;
                 if tabstops.is_empty() {
                     return Ok((RemainingMode::None, vec![tabstop]));
                 }
@@ -552,6 +639,7 @@ impl UnexpandFlags {
                 return Ok((RemainingMode::None, vec![UNEXPAND_DEFAULT_TABSTOP]));
             }
 
+            unexpand_validate_tabstops(&tabstops)?;
             return Ok((RemainingMode::None, tabstops));
         }
         Ok((RemainingMode::None, vec![UNEXPAND_DEFAULT_TABSTOP]))
@@ -2808,7 +2896,7 @@ mod tests {
             assert!(result.is_err());
             assert_eq!(
                 result.err(),
-                Some(UnexpandParseError::InvalidCharacter("x".to_string()))
+                Some(UnexpandParseError::InvalidCharacter("x,12".to_string()))
             );
         }
 
@@ -3011,8 +3099,37 @@ mod tests {
         #[test]
         fn test_unexpand_tabstops_parse_invalid_character() {
             let input = "1,2,x,4,5";
-            let expected = Err(UnexpandParseError::InvalidCharacter("x".to_string()));
+            let expected = Err(UnexpandParseError::InvalidCharacter("x,4,5".to_string()));
             assert_eq!(unexpand_tabstops_parse(input, false), expected);
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_reports_all_errors_before_invalid_character() {
+            let error = unexpand_tabstops_parse("3/x", false)
+                .expect_err("GNU reports the misplaced specifier and invalid character");
+            let diagnostic = error.diagnostic_bytes();
+
+            assert!(
+                diagnostic
+                    .as_ref()
+                    .starts_with(b"'/' specifier not at start of number: '/x'\n")
+            );
+            assert!(
+                diagnostic
+                    .as_ref()
+                    .ends_with(b": tab size contains invalid character(s): 'x'")
+            );
+        }
+
+        #[test]
+        fn test_unexpand_tabstops_parse_skips_terminal_value_after_a_prior_error() {
+            let error = unexpand_tabstops_parse("3/4,5", false)
+                .expect_err("the misplaced slash must be reported");
+
+            assert_eq!(
+                error.diagnostic_bytes().as_ref(),
+                b"'/' specifier not at start of number: '/4,5'"
+            );
         }
 
         #[test]
@@ -3097,7 +3214,7 @@ mod tests {
         #[test]
         fn test_unexpand_tabstops_parse_mixed_invalid_characters() {
             let input = "1,2,3,a4,5";
-            let expected = Err(UnexpandParseError::InvalidCharacter("a4".to_string()));
+            let expected = Err(UnexpandParseError::InvalidCharacter("a4,5".to_string()));
             assert_eq!(unexpand_tabstops_parse(input, false), expected);
         }
 

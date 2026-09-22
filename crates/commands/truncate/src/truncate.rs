@@ -610,45 +610,54 @@ fn is_modifier(c: char) -> bool {
 /// assert_eq!(parse_mode_and_size("+123"), (TruncateMode::Extend, 123));
 /// ```
 fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError> {
-    // 删除任何空白字符。
-    let mut size_string = size_string.trim();
+    let size_string =
+        size_string.trim_start_matches(|character: char| character.is_ascii_whitespace());
+    let Some(modifier) = size_string.chars().next() else {
+        return Err(ParseSizeError::ParseFailure(size_string.to_string()));
+    };
 
-    // 从大小字符串中获取任何存在的修饰符字符。例如，如果参数是 "+123"，那么修饰符就是 '+'。
-    if let Some(c) = size_string.chars().next() {
-        if is_modifier(c) {
-            size_string = &size_string[1..];
-        }
-        if size_string.ends_with('b') {
-            return Err(ParseSizeError::ParseFailure(format!(
-                "{}",
-                size_string.quote()
-            )));
-        }
-        if size_string.starts_with("0x") {
-            return Err(ParseSizeError::ParseFailure(format!(
-                "{}",
-                size_string.quote()
-            )));
-        }
-        let size = parse_size_u64(size_string)?;
-        if size > i64::MAX as u64 {
-            return Err(ParseSizeError::SizeTooBig(format!(
-                "{}: Value too large for defined data type",
-                size_string.quote()
-            )));
-        }
-        Ok(match c {
-            '+' => TruncateMode::Extend,
-            '-' => TruncateMode::Reduce,
-            '<' => TruncateMode::AtMost,
-            '>' => TruncateMode::AtLeast,
-            '/' => TruncateMode::RoundDown,
-            '%' => TruncateMode::RoundUp,
-            _ => TruncateMode::Absolute,
-        }(size))
-    } else {
-        Err(ParseSizeError::ParseFailure(size_string.to_string()))
+    let (mode, number, displayed_size): (fn(u64) -> TruncateMode, &str, &str) =
+        if is_modifier(modifier) {
+            match modifier {
+                '<' | '>' | '/' | '%' => {
+                    let number = size_string[1..]
+                        .trim_start_matches(|character: char| character.is_ascii_whitespace());
+                    let mode = match modifier {
+                        '<' => TruncateMode::AtMost,
+                        '>' => TruncateMode::AtLeast,
+                        '/' => TruncateMode::RoundDown,
+                        '%' => TruncateMode::RoundUp,
+                        _ => unreachable!(),
+                    };
+                    (mode, number, number)
+                }
+                '+' => (TruncateMode::Extend, &size_string[1..], size_string),
+                '-' => (TruncateMode::Reduce, &size_string[1..], size_string),
+                _ => unreachable!(),
+            }
+        } else {
+            (TruncateMode::Absolute, size_string, size_string)
+        };
+
+    let invalid_number = || ParseSizeError::ParseFailure(format!("{}", displayed_size.quote()));
+    if number.ends_with('b') || number.starts_with("0x") {
+        return Err(invalid_number());
     }
+    let size = parse_size_u64(number).map_err(|error| match error {
+        ParseSizeError::SizeTooBig(_) => ParseSizeError::SizeTooBig(format!(
+            "{}: Value too large for defined data type",
+            displayed_size.quote()
+        )),
+        _ => invalid_number(),
+    })?;
+    if size > i64::MAX as u64 {
+        return Err(ParseSizeError::SizeTooBig(format!(
+            "{}: Value too large for defined data type",
+            displayed_size.quote()
+        )));
+    }
+
+    Ok(mode(size))
 }
 
 #[cfg(test)]
@@ -1566,6 +1575,18 @@ mod tests {
         }
 
         #[test]
+        fn test_truncate_parse_mode_and_size_uses_gnu_whitespace_rules() {
+            assert_eq!(
+                truncate_parse_mode_and_size("+1 "),
+                Err(ParseSizeError::ParseFailure("'+1 '".to_string()))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("< 1"),
+                Ok(TruncateMode::AtMost(1))
+            );
+        }
+
+        #[test]
         fn test_truncate_parse_mode_and_size_rejects_values_above_off_t_max() {
             assert!(truncate_parse_mode_and_size("9223372036854775808").is_err());
         }
@@ -1693,7 +1714,7 @@ mod tests {
             );
             assert_eq!(
                 truncate_parse_mode_and_size("+invalid"),
-                Err(ParseSizeError::ParseFailure("'invalid'".to_string()))
+                Err(ParseSizeError::ParseFailure("'+invalid'".to_string()))
             );
             assert_eq!(
                 truncate_parse_mode_and_size(""),
@@ -1718,7 +1739,7 @@ mod tests {
             );
             assert_eq!(
                 truncate_parse_mode_and_size("+ "),
-                Err(ParseSizeError::ParseFailure("''".to_string()))
+                Err(ParseSizeError::ParseFailure("'+ '".to_string()))
             );
             assert_eq!(
                 truncate_parse_mode_and_size(" 100"),

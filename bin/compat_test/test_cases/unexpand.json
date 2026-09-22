@@ -3206,6 +3206,37 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "BOM组合错误终止用例：LC_ALL=C；first文件为EF BB BF和4个ASCII空格且无换行，second文件无BOM。GNU在读取second发现BOM组合不一致后立即退出，不刷新first文件行末待定空格；stdout只能保留已写出的BOM，即EFBBBF。",
+      "args": [
+        "6669727374",
+        "7365636f6e64"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "export LANG=C",
+        "printf '\\357\\273\\277    ' > first",
+        "printf 'plain\\n' > second"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "efbbbf",
+          "stderr": "756e657870616e643a20636f6d62696e6174696f6e206f662066696c6573207769746820616e6420776974686f757420424f4d206865616465723a204e6f20737563682066696c65206f72206469726563746f72790a"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

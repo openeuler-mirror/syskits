@@ -1992,6 +1992,35 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "unexpand stops option parsing after the first file operand in POSIXLY_CORRECT mode",
+      "args": [
+        "input",
+        "-a"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C",
+        "export POSIXLY_CORRECT=1",
+        "printf 'a        b\\n' > input"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

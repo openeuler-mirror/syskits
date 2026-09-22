@@ -2080,6 +2080,32 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "LC_ALL=C；以包含ASCII空格的不存在路径missing path执行unexpand；GNU使用quotef引用文件操作数，预期RC=1、stderr为unexpand: 'missing path': No such file or directory换行。",
+      "args": [
+        "missing path"
+      ],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

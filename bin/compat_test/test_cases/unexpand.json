@@ -1720,6 +1720,60 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "unexpand",
+      "description": "unexpand treats numeric name after double dash as a file",
+      "args": [
+        "--",
+        "-4"
+      ],
+      "setup_commands": [
+        "printf '        literal-four\\n' > ./-4"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "        stdin\\n",
+      "command": "unexpand",
+      "description": "unexpand reads a literal stdin marker after a regular file",
+      "args": [
+        "regular",
+        "-"
+      ],
+      "setup_commands": [
+        "printf '        regular\\n' > regular"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

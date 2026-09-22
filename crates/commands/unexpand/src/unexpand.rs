@@ -308,28 +308,45 @@ fn expand_shortcuts(args: &[String]) -> Vec<String> {
     let mut processed_args_string = Vec::with_capacity(args.len());
     let mut is_all_arg_provided = false;
     let mut is_has_shortcuts = false;
+    let mut options_ended = false;
 
     for arg_str in args {
-        if arg_str.starts_with('-') && arg_str[1..].chars().all(is_digit_or_comma) {
-            arg_str[1..]
-                .split(',')
-                .filter(|s| !s.is_empty())
-                .for_each(|s| processed_args_string.push(format!("--tabs={s}")));
-            is_has_shortcuts = true;
-        } else {
+        if !options_ended && arg_str == "--" {
+            options_ended = true;
             processed_args_string.push(arg_str.to_string());
+            continue;
+        }
 
-            if arg_str == "--all" || arg_str == "-a" {
-                is_all_arg_provided = true;
-            }
+        let short_tab_spec = (!options_ended)
+            .then(|| arg_str.strip_prefix('-'))
+            .flatten()
+            .filter(|spec| !spec.is_empty() && spec.chars().all(is_digit_or_comma));
+
+        if let Some(spec) = short_tab_spec {
+            spec.split(',')
+                .filter(|value| !value.is_empty())
+                .for_each(|value| processed_args_string.push(format!("--tabs={value}")));
+            is_has_shortcuts = true;
+            continue;
+        }
+
+        processed_args_string.push(arg_str.to_string());
+        if !options_ended && (arg_str == "--all" || arg_str == "-a") {
+            is_all_arg_provided = true;
         }
     }
 
-    if is_has_shortcuts && !is_all_arg_provided {
-        processed_args_string.push("--first-only".into());
-    }
     if is_has_shortcuts {
-        processed_args_string.push("--short-tabs".into());
+        let insertion_index = processed_args_string
+            .iter()
+            .position(|arg| arg == "--")
+            .unwrap_or(processed_args_string.len());
+        let mut shortcuts = Vec::with_capacity(2);
+        if !is_all_arg_provided {
+            shortcuts.push("--first-only".into());
+        }
+        shortcuts.push("--short-tabs".into());
+        processed_args_string.splice(insertion_index..insertion_index, shortcuts);
     }
 
     processed_args_string
@@ -1774,6 +1791,25 @@ mod tests {
             let args = vec!["--all".to_string(), "--no-utf8".to_string()];
             let expected = vec!["--all".to_string(), "--no-utf8".to_string()];
             assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_preserves_numeric_filename_after_double_dash() {
+            let args = vec!["-4".to_string(), "--".to_string(), "-4".to_string()];
+            let expected = vec![
+                "--tabs=4".to_string(),
+                "--first-only".to_string(),
+                "--short-tabs".to_string(),
+                "--".to_string(),
+                "-4".to_string(),
+            ];
+            assert_eq!(expand_shortcuts(&args), expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_preserves_stdin_file_marker() {
+            let args = vec!["regular".to_string(), "-".to_string()];
+            assert_eq!(expand_shortcuts(&args), args);
         }
     }
 

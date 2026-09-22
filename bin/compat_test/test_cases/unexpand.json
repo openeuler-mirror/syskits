@@ -2254,6 +2254,37 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "byteMode": true,
+      "tstdin": "2020202020202020780a",
+      "command": "unexpand",
+      "description": "标准输出写失败用例：LC_ALL=C；stdin完整十六进制为8个空格、x和换行，stdout连接/dev/full。GNU在写入压缩后的制表符时返回RC=1，stdout为空，stderr完整十六进制为unexpand: write error: No space left on device换行，即756e657870616e643a207772697465206572726f723a204e6f207370616365206c656674206f6e206465766963650a。",
+      "args": [],
+      "setup_commands": [
+        "export LC_ALL=C"
+      ],
+      "environment": {
+        "standardStreams": {
+          "stdout": "full",
+          "stderr": "capture"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "756e657870616e643a207772697465206572726f723a204e6f207370616365206c656674206f6e206465766963650a"
+        },
+        "verifications": [],
+        "ignore_fields": {
+          "ignore_exit_code": false,
+          "ignore_stdout": false,
+          "ignore_stderr": false,
+          "ignore_verifications": false
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

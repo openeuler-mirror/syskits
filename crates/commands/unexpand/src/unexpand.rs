@@ -27,12 +27,13 @@ use unicode_width::UnicodeWidthChar;
 
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code, strip_errno};
 use ctcore::ct_posix::{GnuGetoptCommandExt, posixly_correct};
 use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
 use std::ffi::{CStr, OsStr, OsString};
 
 const UNEXPAND_DEFAULT_TABSTOP: usize = 8;
+const UNEXPAND_INPUT_LINE_TOO_LONG: &str = "input line is too long";
 
 unsafe extern "C" {
     fn iswblank(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
@@ -896,7 +897,7 @@ fn unexpand_line_with_state<W: Write>(
                     if next_tab_column < state.column {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
-                            "input line is too long",
+                            UNEXPAND_INPUT_LINE_TOO_LONG,
                         ));
                     }
                     if c_type == UnexpandCharType::Tab {
@@ -909,7 +910,7 @@ fn unexpand_line_with_state<W: Write>(
                         if next_column < state.column {
                             return Err(std::io::Error::new(
                                 std::io::ErrorKind::InvalidData,
-                                "input line is too long",
+                                UNEXPAND_INPUT_LINE_TOO_LONG,
                             ));
                         }
                         state.column = next_column;
@@ -945,7 +946,7 @@ fn unexpand_line_with_state<W: Write>(
                 if state.column < orig {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
-                        "input line is too long",
+                        UNEXPAND_INPUT_LINE_TOO_LONG,
                     ));
                 }
             }
@@ -1014,6 +1015,16 @@ fn report_unexpand_io_error<F: FnMut(&str)>(
     );
 }
 
+fn unexpand_output_error(error: std::io::Error) -> Box<dyn CTError> {
+    if error.kind() == std::io::ErrorKind::InvalidData
+        && error.to_string() == UNEXPAND_INPUT_LINE_TOO_LONG
+    {
+        CtSimpleError::new(1, UNEXPAND_INPUT_LINE_TOO_LONG)
+    } else {
+        CtSimpleError::new(1, format!("write error: {}", strip_errno(&error)))
+    }
+}
+
 #[allow(clippy::cognitive_complexity)]
 #[cfg(test)]
 fn unexpand_line<W: Write>(
@@ -1041,7 +1052,7 @@ fn unexpand(flags: &UnexpandFlags) -> CTResult<()> {
     let mut output = BufWriter::new(stdout());
     let mut emit_stderr = |message: &str| eprint!("{message}");
     let outcome = unexpand_to_writer(flags, &mut output, &mut emit_stderr)?;
-    output.flush()?;
+    output.flush().map_err(unexpand_output_error)?;
 
     if outcome.exit_code != 0 {
         set_ct_exit_code(outcome.exit_code);
@@ -1130,7 +1141,7 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
                     if is_first_file && !first_file_has_bom {
                         output
                             .write_all(&[0xEF, 0xBB, 0xBF])
-                            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+                            .map_err(unexpand_output_error)?;
                         first_file_has_bom = true;
                         // GNU switches a C locale to UTF-8 for a BOM-prefixed first file.
                         active_flags.is_u_flag = flags.is_u_flag;
@@ -1165,13 +1176,13 @@ fn unexpand_to_writer<W: Write, F: FnMut(&str)>(
                 &mut line_state,
                 line_complete,
             )
-            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+            .map_err(unexpand_output_error)?;
         }
         is_first_file = false;
     }
     line_state
         .finish_line(output)
-        .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+        .map_err(unexpand_output_error)?;
 
     Ok(UnexpandRunOutcome {
         stderr_text,
@@ -1245,10 +1256,23 @@ mod tests {
     #[cfg(test)]
     mod unexpand_tests {
         use std::fs::write;
+        use std::io::Write;
 
         use tempfile::{NamedTempFile, tempdir};
 
         use super::*;
+
+        struct FullWriter;
+
+        impl Write for FullWriter {
+            fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::from_raw_os_error(ctcore::libc::ENOSPC))
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
 
         #[test]
         fn test_unexpand_exe_with_single_file() {
@@ -1268,6 +1292,26 @@ mod tests {
 
             let result = String::from_utf8(output).unwrap();
             assert_eq!(result, "\tHello\tWorld\n");
+        }
+
+        #[test]
+        fn test_unexpand_exe_reports_gnu_style_write_error() {
+            let file = NamedTempFile::new().unwrap();
+            write(file.path(), b"        x\n").unwrap();
+            let flags = UnexpandFlags {
+                files: vec![file.path().as_os_str().to_os_string()],
+                tabstops: vec![8],
+                remaining_mode: RemainingMode::None,
+                is_a_flag: false,
+                is_u_flag: false,
+            };
+
+            let error = match unexpand_exe(&flags, &mut FullWriter) {
+                Ok(_) => panic!("unexpand unexpectedly wrote to a full output"),
+                Err(error) => error,
+            };
+
+            assert_eq!(format!("{error}"), "write error: No space left on device");
         }
 
         #[test]

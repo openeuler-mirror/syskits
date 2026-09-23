@@ -439,6 +439,18 @@ fn parse_datetime_gnu_compat_impl(
     let mut normalized_input = input_trim
         .replace(" UTC", " +0000")
         .replace(" GMT", " +0000");
+    let has_iso_utc_designator = normalized_input
+        .as_bytes()
+        .last()
+        .is_some_and(|byte| matches!(byte, b'Z' | b'z'))
+        && normalized_input
+            .as_bytes()
+            .get(normalized_input.len().saturating_sub(2))
+            .is_some_and(u8::is_ascii_digit);
+    if has_iso_utc_designator {
+        normalized_input.pop();
+        normalized_input.push_str("+0000");
+    }
 
     // 修复简写时区偏移 (如 "+0", "-5" 转换为标准 "+0000", "-0500")
     if let Some(pos) = normalized_input.rfind(['+', '-']) {
@@ -453,13 +465,15 @@ fn parse_datetime_gnu_compat_impl(
         }
     }
 
-    // 精确覆盖所有标准和边缘 ISO/RFC 组合
-    // 删除了无用的字面量 'Z'，统一依赖强大的 %z 来接管所有时区解析
+    // 精确覆盖所有标准和边缘 ISO/RFC 组合。
     let formats_with_tz = [
         "%Y-%m-%d %H:%M:%S %z",
         "%Y-%m-%d %H:%M:%S %:z",
         "%Y-%m-%d %H:%M %z",
         "%Y-%m-%d %H:%M %:z",
+        "%Y-%m-%d %H%z",
+        "%Y-%m-%d%z",
+        "%Y-%m-%dT%H%z",
         "%Y-%m-%dT%H:%M:%S%z",
         "%Y-%m-%dT%H:%M:%S%:z",
         "%Y-%m-%dT%H:%M:%S%.f%z",
@@ -485,6 +499,10 @@ fn parse_datetime_gnu_compat_impl(
                 return Ok(dt.with_timezone(&Local));
             }
         }
+    }
+
+    if let Some(dt) = parse_gnu_iso_utc_without_minutes(&normalized_input) {
+        return Ok(dt);
     }
 
     if let Some(space_idx) = normalized_input.rfind(' ') {
@@ -1216,6 +1234,26 @@ fn parse_compact_time_of_day(
     }
 }
 
+/// Parse ISO UTC forms whose omitted minute field cannot be represented by
+/// chrono's `DateTime::parse_from_str` formats.
+fn parse_gnu_iso_utc_without_minutes(input: &str) -> Option<DateTime<Local>> {
+    let date_or_hour = input.strip_suffix("+0000")?;
+    let naive = if let Ok(date) = NaiveDate::parse_from_str(date_or_hour, "%Y-%m-%d") {
+        date.and_hms_opt(0, 0, 0)?
+    } else {
+        let (date, hour) = date_or_hour
+            .split_once('T')
+            .or_else(|| date_or_hour.split_once(' '))?;
+        if hour.contains(':') {
+            return None;
+        }
+        let date = NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()?;
+        date.and_hms_opt(hour.parse().ok()?, 0, 0)?
+    };
+
+    Some(DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc).with_timezone(&Local))
+}
+
 #[derive(Clone, Copy)]
 enum Meridian {
     Am,
@@ -1922,6 +1960,28 @@ mod tests {
                 expected_nanos,
                 "input {input}"
             );
+        }
+    }
+
+    #[test]
+    fn test_parse_iso_utc_designator_without_seconds() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, expected_hour, expected_minute) in [
+            ("2024-02-29Z", 0, 0),
+            ("2024-02-29T12Z", 12, 0),
+            ("2024-02-29T12:34Z", 12, 34),
+            ("2024-02-29 12:34z", 12, 34),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(
+                parsed.date_naive(),
+                NaiveDate::from_ymd_opt(2024, 2, 29).unwrap(),
+                "input {input}"
+            );
+            assert_eq!(parsed.hour(), expected_hour, "input {input}");
+            assert_eq!(parsed.minute(), expected_minute, "input {input}");
+            assert_eq!(parsed.offset().local_minus_utc(), 0, "input {input}");
         }
     }
 

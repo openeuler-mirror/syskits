@@ -22,7 +22,7 @@ use ctcore::ct_error::{CTError, CTResult, strip_errno};
 use ctcore::Tool;
 use ctcore::ct_gnu_regex::{GnuRegex, GnuRegexCompileOptions, GnuRegexError, GnuRegexMatch};
 use ctcore::ct_posix::GnuGetoptCommandExt;
-use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
+use ctcore::ct_quoting_style::gnu_quote_shell;
 use memchr::memmem;
 use memmap2::Mmap;
 use std::borrow::Cow;
@@ -38,16 +38,6 @@ use std::{fs::File, fs::OpenOptions, path::Path, path::PathBuf};
 use tempfile::{Builder, NamedTempFile};
 
 const GNU_TAC_READ_SIZE: usize = 8192;
-
-unsafe extern "C" {
-    fn mbrtowc(
-        wide: *mut ctcore::libc::wchar_t,
-        bytes: *const ctcore::libc::c_char,
-        length: usize,
-        state: *mut ctcore::libc::mbstate_t,
-    ) -> usize;
-    fn iswprint(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
-}
 
 // 定义配置标志常量
 pub mod tac_flags {
@@ -250,37 +240,7 @@ impl CTError for TacUsageError {
 impl Error for TacError {}
 
 fn tac_quote_path(path: &OsStr, always_quote: bool) -> String {
-    let bytes = path.as_bytes();
-    let mut quoted = escape_shell_bytes_with_classifier(bytes, |remaining| unsafe {
-        let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
-        let mut wide = 0 as ctcore::libc::wchar_t;
-        let length = mbrtowc(
-            &mut wide,
-            remaining.as_ptr().cast(),
-            remaining.len(),
-            &mut state,
-        );
-        if length == usize::MAX {
-            return (1, false);
-        }
-        if length == usize::MAX - 1 {
-            return (remaining.len(), false);
-        }
-
-        let length = if length == 0 { 1 } else { length };
-        let is_utf8 = std::str::from_utf8(&remaining[..length]).is_ok();
-        (
-            length,
-            is_utf8 && iswprint(wide as ctcore::libc::c_uint) != 0,
-        )
-    });
-
-    if always_quote && quoted.as_slice() == bytes {
-        quoted.insert(0, b'\'');
-        quoted.push(b'\'');
-    }
-
-    String::from_utf8(quoted).expect("shell-escaped file names are valid UTF-8")
+    gnu_quote_shell(path, always_quote)
 }
 
 impl Display for TacError {

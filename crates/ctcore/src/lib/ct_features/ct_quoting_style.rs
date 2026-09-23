@@ -12,9 +12,23 @@ use std::char::from_digit;
 use std::ffi::OsStr;
 use std::fmt;
 
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStrExt;
+
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 unsafe extern "C" {
     fn __ctype_get_mb_cur_max() -> usize;
+}
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn mbrtowc(
+        wide: *mut crate::libc::wchar_t,
+        bytes: *const crate::libc::c_char,
+        length: usize,
+        state: *mut crate::libc::mbstate_t,
+    ) -> usize;
+    fn iswprint(wide: crate::libc::c_uint) -> crate::libc::c_int;
 }
 
 // 这些是在shell（如bash）中有特殊含义的字符。
@@ -498,6 +512,57 @@ where
     }
 }
 
+/// Quote a diagnostic operand with GNU coreutils shell-quoting semantics.
+///
+/// This matches GNU's `quoteaf` behavior on Linux: printable locale sequences
+/// remain literal, while control and invalid bytes are split into `$'...'`
+/// segments with GNU escape spellings. `always_quote` requests the outer
+/// single quotes used by `quoteaf` when the operand otherwise needs no escape.
+#[cfg(target_os = "linux")]
+pub fn gnu_quote_shell(name: &OsStr, always_quote: bool) -> String {
+    let bytes = name.as_bytes();
+    let mut quoted = escape_shell_bytes_with_classifier(bytes, |remaining| unsafe {
+        let mut state: crate::libc::mbstate_t = std::mem::zeroed();
+        let mut wide = 0 as crate::libc::wchar_t;
+        let length = mbrtowc(
+            &mut wide,
+            remaining.as_ptr().cast(),
+            remaining.len(),
+            &mut state,
+        );
+        if length == usize::MAX {
+            return (1, false);
+        }
+        if length == usize::MAX - 1 {
+            return (remaining.len(), false);
+        }
+
+        let length = if length == 0 { 1 } else { length };
+        let is_utf8 = std::str::from_utf8(&remaining[..length]).is_ok();
+        (
+            length,
+            is_utf8 && iswprint(wide as crate::libc::c_uint) != 0,
+        )
+    });
+
+    if always_quote && quoted.as_slice() == bytes {
+        quoted.insert(0, b'\'');
+        quoted.push(b'\'');
+    }
+
+    String::from_utf8(quoted).expect("GNU shell-escaped file names are valid UTF-8")
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn gnu_quote_shell(name: &OsStr, always_quote: bool) -> String {
+    let name = name.to_string_lossy();
+    if always_quote {
+        format!("'{}'", name.replace('\\', "\\\\").replace('\'', "\\'"))
+    } else {
+        name.into_owned()
+    }
+}
+
 fn escape_shell_byte_segments_pass(
     name: &[u8],
     segments: &[ShellByteSegment],
@@ -723,7 +788,7 @@ impl fmt::Display for CtQuotes {
 mod tests {
     use crate::ct_quoting_style::{
         CtQuotes, CtQuotingStyle, escape_name, escape_shell_bytes_with_classifier,
-        escape_unibyte_c_bytes, escape_unibyte_shell_bytes,
+        escape_unibyte_c_bytes, escape_unibyte_shell_bytes, gnu_quote_shell,
     };
     use std::ffi::OsStr;
 
@@ -1275,6 +1340,15 @@ mod tests {
         assert_eq!(
             escape_shell_bytes_with_classifier(&[0xff], |_| (1, true)),
             vec![0xff]
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn gnu_shell_quoting_splits_control_bytes_from_plain_text() {
+        assert_eq!(
+            gnu_quote_shell(OsStr::new("line\nbreak"), true),
+            "'line'$'\\n''break'"
         );
     }
 

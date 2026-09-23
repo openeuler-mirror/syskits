@@ -29,10 +29,10 @@ use std::path::Path;
 use sys_locale::get_locale;
 
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_parse_size::{CtParser, ParseSizeError};
 use ctcore::ct_posix::GnuGetoptCommandExt;
+use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name, gnu_quote_shell};
 
 use std::ffi::{OsStr, OsString};
 
@@ -176,16 +176,32 @@ fn truncate_size_error(filename: &OsStr, error: TruncateSizeError) -> Box<dyn CT
     match error {
         TruncateSizeError::ExtendOverflow => CtSimpleError::new(
             1,
-            format!("overflow extending size of file {}", filename.quote()),
+            format!(
+                "overflow extending size of file {}",
+                truncate_quote_operand(filename)
+            ),
         ),
         TruncateSizeError::BlockOverflow { blocks, block_size } => CtSimpleError::new(
             1,
             format!(
                 "overflow in {blocks} * {block_size} byte blocks for file {}",
-                filename.quote()
+                truncate_quote_operand(filename)
             ),
         ),
     }
+}
+
+fn truncate_quote_operand(operand: &OsStr) -> String {
+    gnu_quote_shell(operand, true)
+}
+
+fn truncate_quote_size(size: &str) -> String {
+    escape_name(
+        OsStr::new(size),
+        &CtQuotingStyle::C {
+            quotes: CtQuotes::Single,
+        },
+    )
 }
 
 pub mod truncate_flags {
@@ -337,9 +353,12 @@ where
         Ok(file) => file,
         Err(error) if !create && error.kind() == ErrorKind::NotFound => return Ok(()),
         Err(error) => {
-            return Err(
-                error.map_err_context(|| format!("cannot open {} for writing", filename.quote()))
-            );
+            return Err(error.map_err_context(|| {
+                format!(
+                    "cannot open {} for writing",
+                    truncate_quote_operand(filename)
+                )
+            }));
         }
     };
     let size = size_for_file(&file)?;
@@ -349,7 +368,10 @@ where
         let size = libc::off_t::try_from(size).map_err(|_| {
             CtSimpleError::new(
                 1,
-                format!("failed to truncate {} at {size} bytes", filename.quote()),
+                format!(
+                    "failed to truncate {} at {size} bytes",
+                    truncate_quote_operand(filename)
+                ),
             )
         })?;
         if unsafe { libc::ftruncate(file.as_raw_fd(), size) } != 0 {
@@ -359,7 +381,7 @@ where
                 1,
                 format!(
                     "failed to truncate {} at {size} bytes: {error_message}",
-                    filename.quote()
+                    truncate_quote_operand(filename)
                 ),
             ));
         }
@@ -367,8 +389,12 @@ where
     }
 
     #[cfg(not(unix))]
-    file.set_len(size)
-        .map_err_context(|| format!("failed to truncate {} at {size} bytes", filename.quote()))
+    file.set_len(size).map_err_context(|| {
+        format!(
+            "failed to truncate {} at {size} bytes",
+            truncate_quote_operand(filename)
+        )
+    })
 }
 
 fn truncate_file<P: AsRef<OsStr>>(filename: P, create: bool, size: u64) -> CTResult<()> {
@@ -418,7 +444,7 @@ fn reference_file_size<R: AsRef<OsStr>>(reference: R) -> CTResult<u64> {
             1,
             format!(
                 "cannot stat {}: {}",
-                reference.quote(),
+                truncate_quote_operand(reference),
                 os_error_message(&error)
             ),
         )
@@ -433,7 +459,7 @@ fn reference_file_size<R: AsRef<OsStr>>(reference: R) -> CTResult<u64> {
             1,
             format!(
                 "cannot get the size of {}: {}",
-                reference.quote(),
+                truncate_quote_operand(reference),
                 os_error_message(&error)
             ),
         )
@@ -445,7 +471,7 @@ fn reference_file_size<R: AsRef<OsStr>>(reference: R) -> CTResult<u64> {
             1,
             format!(
                 "cannot get the size of {}: {}",
-                reference.quote(),
+                truncate_quote_operand(reference),
                 os_error_message(&error)
             ),
         ));
@@ -459,7 +485,7 @@ fn reference_file_size<R: AsRef<OsStr>>(reference: R) -> CTResult<u64> {
     let reference = reference.as_ref();
     metadata(Path::new(reference))
         .map(|metadata| metadata.len())
-        .map_err_context(|| format!("cannot stat {}", reference.quote()))
+        .map_err_context(|| format!("cannot stat {}", truncate_quote_operand(reference)))
 }
 
 /// 将文件截断到相对于给定文件的大小。
@@ -509,7 +535,9 @@ where
             truncate_file_with_size(filename, is_create, |file| {
                 let blocksize = file
                     .metadata()
-                    .map_err_context(|| format!("cannot fstat {}", filename.quote()))?
+                    .map_err_context(|| {
+                        format!("cannot fstat {}", truncate_quote_operand(filename))
+                    })?
                     .st_blksize();
                 truncate_mode
                     .to_block_size(reference_size, blocksize)
@@ -739,7 +767,7 @@ fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, Parse
             (TruncateMode::Absolute, size_string, size_string)
         };
 
-    let invalid_number = || ParseSizeError::ParseFailure(format!("{}", displayed_size.quote()));
+    let invalid_number = || ParseSizeError::ParseFailure(truncate_quote_size(displayed_size));
     if number.ends_with('b')
         || number.starts_with("0x")
         || matches!(modifier, '+' | '-')
@@ -758,14 +786,14 @@ fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, Parse
         .map_err(|error| match error {
             ParseSizeError::SizeTooBig(_) => ParseSizeError::SizeTooBig(format!(
                 "{}: Value too large for defined data type",
-                displayed_size.quote()
+                truncate_quote_size(displayed_size)
             )),
             _ => invalid_number(),
         })?;
     if size > i64::MAX as u64 && !(modifier == '-' && size == off_t_min_magnitude()) {
         return Err(ParseSizeError::SizeTooBig(format!(
             "{}: Value too large for defined data type",
-            displayed_size.quote()
+            truncate_quote_size(displayed_size)
         )));
     }
 
@@ -859,6 +887,24 @@ mod tests {
             assert!(!is_modifier('\t')); // 制表符
         }
     }
+    #[test]
+    fn invalid_size_diagnostic_uses_gnu_shell_always_quotes() {
+        let error = truncate_parse_mode_and_size("1\tK").unwrap_err();
+
+        assert_eq!(error.to_string(), "'1\\tK'");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn path_diagnostic_uses_gnu_quoteaf_segments() {
+        use std::os::unix::ffi::OsStrExt;
+
+        assert_eq!(
+            truncate_quote_operand(OsStr::from_bytes(b"line\nbreak")),
+            "'line'$'\\n''break'"
+        );
+    }
+
     #[cfg(test)]
     mod truncate_tests {
         use std::fs::metadata;

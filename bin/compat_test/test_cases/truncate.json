@@ -1189,6 +1189,72 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "truncate",
+            "description": "原始UTF-8 SIZE字节用例：LC_ALL=C下SIZE=c3a9（UTF-8字符é）不是合法数值；GNU按C locale逐字节引用，预期RC=1、stdout为空、stderr字节7472756e636174653a20496e76616c6964206e756d6265723a20275c3330335c323531270a对应\"truncate: Invalid number: '\\303\\251'\\n\"，且不得创建目标文件",
+            "setup_commands": [],
+            "args": [
+                "2d73",
+                "c3a9",
+                "63747970652d6c6f63616c652d73697a652d746172676574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7472756e636174653a20496e76616c6964206e756d6265723a20275c3330335c323531270a"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e ctype-locale-size-target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "truncate",
+            "description": "混合原始SIZE字节用例：LC_ALL=C.UTF-8下SIZE=61c3a9ffe2809962（字符a、合法UTF-8字符é、无效字节ff、右弯引号、字符b）不是合法数值；GNU保留合法UTF-8并以弯引号引用，无效ff输出\\377且右弯引号前加反斜杠，预期RC=1、stdout为空、stderr完整字节为7472756e636174653a20496e76616c6964206e756d6265723a20e2809861c3a95c3337375ce2809962e280990a，且不得创建目标文件",
+            "setup_commands": [],
+            "args": [
+                "2d73",
+                "61c3a9ffe2809962",
+                "757466382d6c6f63616c652d73697a652d746172676574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7472756e636174653a20496e76616c6964206e756d6265723a20e2809861c3a95c3337375ce2809962e280990a"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e utf8-locale-size-target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -1062,6 +1062,37 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date='tomorrow 12:34:56'必须把相对日期和显式时刻组合，target日期为明天且时间为12:34:56。",
+            "args": ["--date=tomorrow 12:34:56", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "expected=$(date -d \"$(date +%F) + 1 day\" +%F); test \"$(date -r target +%F)\" = \"$expected\" && test \"$(date -r target +%T)\" = 12:34:56",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "日期解析 - 相对时间 yesterday",
             "args": ["--date=yesterday", "test_yesterday.txt"],
             "expectation": {

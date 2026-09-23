@@ -18,8 +18,8 @@
 
 use crate::ct_error::{CTResult, CtSimpleError};
 use chrono::{
-    DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, NaiveDateTime, TimeZone, Utc,
-    Weekday,
+    DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, NaiveDateTime, NaiveTime,
+    TimeZone, Utc, Weekday,
 };
 use chrono_tz::Tz;
 #[cfg(target_os = "linux")]
@@ -188,6 +188,12 @@ fn parse_datetime_gnu_compat_impl(
     }
 
     if let Some(dt) = parse_rfc5322_datetime(input_trim) {
+        return Ok(dt);
+    }
+
+    // GNU parse-datetime parses day shifts and times as independent grammar
+    // items, so both "tomorrow 12:34" and "12:34 tomorrow" are valid.
+    if let Some(dt) = parse_relative_day_with_explicit_time(input_trim, reference_time) {
         return Ok(dt);
     }
 
@@ -1248,6 +1254,46 @@ fn parse_relative_time(input: &str, reference_time: DateTime<Local>) -> Option<D
     None
 }
 
+/// Parse the GNU day-shift words when they are combined with one clock time.
+///
+/// GNU's grammar treats a day shift (for example, `tomorrow`) and a time of
+/// day as separate items, independent of their order.  The generic fallback
+/// parser does not compose these items, so handle this narrow grammar before
+/// falling back to the individual relative-time paths.
+fn parse_relative_day_with_explicit_time(
+    input: &str,
+    reference_time: DateTime<Local>,
+) -> Option<DateTime<Local>> {
+    let mut day_offset = None;
+    let mut time = None;
+
+    for token in input.split_ascii_whitespace() {
+        match token.to_ascii_lowercase().as_str() {
+            "tomorrow" if day_offset.is_none() => day_offset = Some(1),
+            "yesterday" if day_offset.is_none() => day_offset = Some(-1),
+            "today" | "now" if day_offset.is_none() => day_offset = Some(0),
+            _ if time.is_none() => {
+                time = ["%H:%M:%S%.f", "%H:%M:%S", "%H:%M"]
+                    .into_iter()
+                    .find_map(|format| NaiveTime::parse_from_str(token, format).ok());
+                time?;
+            }
+            _ => return None,
+        }
+    }
+
+    let date = reference_time
+        .date_naive()
+        .checked_add_signed(Duration::days(day_offset?))?;
+    match reference_time
+        .timezone()
+        .from_local_datetime(&date.and_time(time?))
+    {
+        chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => Some(dt),
+        chrono::LocalResult::None => None,
+    }
+}
+
 /// 为兼容性提供的简化接口，与filetime::FileTime一起使用
 pub fn parse_datetime_to_filetime(
     input: &str,
@@ -1352,6 +1398,23 @@ mod tests {
 
         let today = parse_datetime_gnu_compat("today", ref_time).unwrap();
         assert_eq!(today.day(), 24);
+    }
+
+    #[test]
+    fn test_parse_relative_day_with_explicit_time() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 8, 0, 0).unwrap();
+
+        for (input, expected_day, expected_hour, expected_minute, expected_second) in [
+            ("tomorrow 12:34:56", 25, 12, 34, 56),
+            ("yesterday 01:02:03", 23, 1, 2, 3),
+            ("today 23:45:00", 24, 23, 45, 0),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.day(), expected_day, "input {input}");
+            assert_eq!(parsed.hour(), expected_hour, "input {input}");
+            assert_eq!(parsed.minute(), expected_minute, "input {input}");
+            assert_eq!(parsed.second(), expected_second, "input {input}");
+        }
     }
 
     #[test]

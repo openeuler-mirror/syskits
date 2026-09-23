@@ -740,7 +740,14 @@ fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, Parse
         };
 
     let invalid_number = || ParseSizeError::ParseFailure(format!("{}", displayed_size.quote()));
-    if number.ends_with('b') || number.starts_with("0x") {
+    if number.ends_with('b')
+        || number.starts_with("0x")
+        || matches!(modifier, '+' | '-')
+            && number
+                .chars()
+                .next()
+                .is_some_and(|character| !character.is_ascii_digit())
+    {
         return Err(invalid_number());
     }
     let mut parser = CtParser::default();
@@ -1758,6 +1765,16 @@ mod tests {
                 truncate_parse_mode_and_size("00K"),
                 Ok(TruncateMode::Absolute(0))
             );
+        }
+
+        #[test]
+        fn test_truncate_parse_mode_and_size_rejects_unit_only_relative_sizes() {
+            for size in ["+K", "-K", "+kB", "-KiB"] {
+                assert_eq!(
+                    truncate_parse_mode_and_size(size),
+                    Err(ParseSizeError::ParseFailure(format!("'{size}'")))
+                );
+            }
         }
 
         #[test]

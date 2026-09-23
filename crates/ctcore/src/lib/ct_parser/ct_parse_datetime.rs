@@ -214,6 +214,11 @@ fn parse_datetime_gnu_compat_impl(
         processed_lower = processed_lower.trim().to_string();
         processed_trim.truncate(processed_trim.len() - 4);
         processed_trim = processed_trim.trim().to_string();
+    } else if processed_lower.ends_with(" hence") {
+        processed_lower.truncate(processed_lower.len() - 6);
+        processed_lower = processed_lower.trim().to_string();
+        processed_trim.truncate(processed_trim.len() - 6);
+        processed_trim = processed_trim.trim().to_string();
     }
 
     // 预处理自然语言相对时间词汇 (now, yesterday 等标准化为精准的加减法)
@@ -1446,6 +1451,9 @@ mod tests {
 
         let today = parse_datetime_gnu_compat("today", ref_time).unwrap();
         assert_eq!(today.day(), 24);
+
+        let hence = parse_datetime_gnu_compat("1 day hence", ref_time).unwrap();
+        assert_eq!(hence.day(), 25);
     }
 
     #[test]

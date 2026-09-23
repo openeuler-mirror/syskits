@@ -598,7 +598,10 @@ fn touch_parse_date(ref_time: DateTime<Local>, s: &str) -> CTResult<FileTime> {
         return Ok(touch_datetime_to_filetime(&parsed));
     }
 
-    Err(CtSimpleError::new(1, format!("Unable to parse date: {s}")))
+    Err(CtSimpleError::new(
+        1,
+        format!("invalid date format {}", s.quote()),
+    ))
 }
 
 // 获取提供路径的元数据
@@ -1251,7 +1254,10 @@ mod tests {
             // 测试无效格式的日期
             let date_str = "invalid date string";
             let result = touch_parse_date(ref_time, date_str);
-            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "invalid date format 'invalid date string'"
+            );
 
             let date_str = "2022-13-15"; // 无效的月份
             let result = touch_parse_date(ref_time, date_str);

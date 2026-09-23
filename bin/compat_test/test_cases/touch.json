@@ -715,6 +715,42 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C下--date无法解析时必须输出GNU格式的invalid date format诊断，且不得创建target。",
+            "setup_commands": [],
+            "args": [
+                "--date",
+                "invalid",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: invalid date format 'invalid'\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "更新符号链接本身的时间戳",
             "setup_commands": [
                 "touch -t 202001010000.00 target_file",

@@ -1724,6 +1724,58 @@
         {
             "tstdin": "",
             "command": "truncate",
+            "description": "LC_ALL=C下--size非法值必须在后续--help前按GNU顺序报错；不得输出帮助或以RC=0退出",
+            "setup_commands": [],
+            "args": [
+                "--size",
+                "invalid",
+                "--help"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: Invalid number: 'invalid'\n"
+                },
+                "verifications": []
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "LC_ALL=C下SIZE除零必须在后续--version前按GNU顺序报错；不得输出版本或以RC=0退出",
+            "setup_commands": [],
+            "args": [
+                "--size",
+                "/0",
+                "--version"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: division by zero\n"
+                },
+                "verifications": []
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
             "description": "LC_ALL=C下GNU保留历史SIZE尾缀D：1KD表示1000字节而不是无效数值；预期RC=0、无标准输出和诊断，并创建大小为1000字节的目标文件",
             "setup_commands": [
                 "rm -f gnu-decimal-d-suffix"

@@ -759,6 +759,7 @@ fn truncate_validate_short_options(argument: &[u8], has_next: bool) -> CTResult<
 }
 
 fn truncate_validate_options(args: &[OsString], posixly_correct: bool) -> CTResult<()> {
+    let mut sizes = Vec::new();
     let mut index = 1;
     while index < args.len() {
         let argument = args[index].as_encoded_bytes();
@@ -776,6 +777,10 @@ fn truncate_validate_options(args: &[OsString], posixly_correct: bool) -> CTResu
         if argument.starts_with(b"--") {
             let (consumes_next, terminal) =
                 truncate_validate_long_option(argument, index + 1 < args.len())?;
+            if let Some(size) = truncate_long_size_argument(argument, args.get(index + 1)) {
+                sizes.push(size);
+                validate_truncate_size_options(&sizes)?;
+            }
             if terminal {
                 return Ok(());
             }
@@ -784,10 +789,96 @@ fn truncate_validate_options(args: &[OsString], posixly_correct: bool) -> CTResu
         }
 
         let consumes_next = truncate_validate_short_options(argument, index + 1 < args.len())?;
+        if let Some(size) = truncate_short_size_argument(argument, args.get(index + 1)) {
+            sizes.push(size);
+            validate_truncate_size_options(&sizes)?;
+        }
         index += 1 + usize::from(consumes_next);
     }
 
     Ok(())
+}
+
+#[cfg(unix)]
+fn truncate_long_size_argument(argument: &[u8], next: Option<&OsString>) -> Option<OsString> {
+    let long = argument.strip_prefix(b"--")?;
+    let separator = long.iter().position(|byte| *byte == b'=');
+    let name = &long[..separator.unwrap_or(long.len())];
+    if !matches!(
+        truncate_match_long_option(name),
+        TruncateLongOptionMatch::Recognized("size", true)
+    ) {
+        return None;
+    }
+
+    separator
+        .map(|index| OsString::from_vec(long[index + 1..].to_vec()))
+        .or_else(|| next.cloned())
+}
+
+#[cfg(not(unix))]
+fn truncate_long_size_argument(argument: &[u8], next: Option<&OsString>) -> Option<OsString> {
+    let long = std::str::from_utf8(argument.strip_prefix(b"--")?).ok()?;
+    let (name, value) = long
+        .split_once('=')
+        .map_or((long, None), |(name, value)| (name, Some(value)));
+    if !matches!(
+        truncate_match_long_option(name.as_bytes()),
+        TruncateLongOptionMatch::Recognized("size", true)
+    ) {
+        return None;
+    }
+
+    value.map(OsString::from).or_else(|| next.cloned())
+}
+
+#[cfg(unix)]
+fn truncate_short_size_argument(argument: &[u8], next: Option<&OsString>) -> Option<OsString> {
+    let short_options = argument.strip_prefix(b"-")?;
+    if short_options.is_empty() || short_options.starts_with(b"-") {
+        return None;
+    }
+
+    for (index, option) in short_options.iter().copied().enumerate() {
+        match option {
+            b'c' | b'o' => continue,
+            b'r' => return None,
+            b's' => {
+                let value = &short_options[index + 1..];
+                return (!value.is_empty())
+                    .then(|| OsString::from_vec(value.to_vec()))
+                    .or_else(|| next.cloned());
+            }
+            _ => return None,
+        }
+    }
+
+    None
+}
+
+#[cfg(not(unix))]
+fn truncate_short_size_argument(argument: &[u8], next: Option<&OsString>) -> Option<OsString> {
+    let short_options = std::str::from_utf8(argument.strip_prefix(b"-")?).ok()?;
+    if short_options.is_empty() || short_options.starts_with('-') {
+        return None;
+    }
+
+    let mut options = short_options.chars();
+    while let Some(option) = options.next() {
+        match option {
+            'c' | 'o' => continue,
+            'r' => return None,
+            's' => {
+                let value = options.as_str();
+                return (!value.is_empty())
+                    .then(|| OsString::from(value))
+                    .or_else(|| next.cloned());
+            }
+            _ => return None,
+        }
+    }
+
+    None
 }
 
 #[cfg(unix)]
@@ -3235,6 +3326,38 @@ mod tests {
                     truncate_quote_size(OsStr::new("invalid"))
                 )
             );
+        }
+
+        #[test]
+        fn truncate_option_scan_validates_size_before_later_help_or_version() {
+            for terminal_option in ["--help", "--version"] {
+                let error = prepare_truncate_args(
+                    [ctcore::ct_util_name(), "--size", "invalid", terminal_option]
+                        .iter()
+                        .map(OsString::from),
+                )
+                .unwrap_err();
+
+                assert_eq!(
+                    error.to_string(),
+                    format!(
+                        "Invalid number: {}",
+                        truncate_quote_size(OsStr::new("invalid"))
+                    )
+                );
+            }
+        }
+
+        #[test]
+        fn truncate_option_scan_validates_division_before_later_terminal_option() {
+            let error = prepare_truncate_args(
+                [ctcore::ct_util_name(), "--size", "/0", "--help"]
+                    .iter()
+                    .map(OsString::from),
+            )
+            .unwrap_err();
+
+            assert_eq!(error.to_string(), "division by zero");
         }
 
         #[test]

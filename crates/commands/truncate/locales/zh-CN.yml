@@ -1,6 +1,21 @@
 truncate:
   errors:
     invalid_number: 无效的数字
+    try_help: '请尝试执行 "truncate --help" 来获取更多信息。'
+    missing_size_or_reference: "您必须在 %{size} 或 %{reference} 中指定一个"
+    relative_size_with_reference: "使用 %{reference} 时，您必须指定一个相对的 %{size}"
+    option_specified_without_option: "指定了 %{specified} 但未指定 %{missing}"
+    missing_file_operand: 缺少要操作的文件
+    multiple_relative_modifiers: 指定了多个相对修饰符
+    division_by_zero: 除以零
+    cannot_open_for_writing: "无法以写模式打开 %{file}"
+    cannot_stat: "对 %{file} 调用 stat 失败"
+    cannot_fstat: "对 %{file} 调用 fstat 失败"
+    cannot_get_size: "无法获得 %{file} 的大小"
+    failed_to_truncate: "在 %{size} 字节处截断 %{file} 失败"
+    failed_to_close: "关闭 %{file} 失败"
+    overflow_extending_size: "扩大文件 %{file} 的大小时溢出"
+    overflow_block_size: "文件 %{file} 的大小溢出：%{blocks} * %{block_size} 字节的块"
   clap:
     truncate_no_create: 不创建不存在的文件
     truncate_reference: 基于参考文件大小作为每个文件的大小

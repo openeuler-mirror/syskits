@@ -197,8 +197,12 @@ fn truncate_quote_operand(operand: &OsStr) -> String {
 }
 
 fn truncate_quote_size(size: &OsStr) -> String {
+    truncate_quote_size_bytes(size.as_encoded_bytes())
+}
+
+fn truncate_quote_size_bytes(bytes: &[u8]) -> String {
     let (left_quote, right_quote) = locale_quote_marks();
-    truncate_quote_size_with_marks(size.as_encoded_bytes(), left_quote, right_quote)
+    truncate_quote_size_with_marks(bytes, left_quote, right_quote)
 }
 
 fn truncate_quote_size_with_marks(bytes: &[u8], left_quote: &str, right_quote: &str) -> String {
@@ -264,6 +268,27 @@ fn truncate_quote_size_with_marks(bytes: &[u8], left_quote: &str, right_quote: &
     quoted
 }
 
+fn truncate_non_utf8_size_diagnostic_bytes(bytes: &[u8]) -> &[u8] {
+    let bytes = trim_gnu_ascii_whitespace_bytes(bytes);
+    if matches!(bytes.first(), Some(b'<' | b'>' | b'/' | b'%')) {
+        trim_gnu_ascii_whitespace_bytes(&bytes[1..])
+    } else {
+        bytes
+    }
+}
+
+fn trim_gnu_ascii_whitespace_bytes(bytes: &[u8]) -> &[u8] {
+    let index = bytes
+        .iter()
+        .position(|byte| !is_gnu_ascii_whitespace_byte(*byte))
+        .unwrap_or(bytes.len());
+    &bytes[index..]
+}
+
+fn is_gnu_ascii_whitespace_byte(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r')
+}
+
 pub mod truncate_flags {
     pub const TRUNCATE_IO_BLOCKS: &str = "io-blocks";
     pub const TRUNCATE_NO_CREATE: &str = "no-create";
@@ -313,11 +338,16 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
         .unwrap_or_default();
 
     let size = size
-        .map(OsString::into_string)
-        .transpose()
-        .map_err(|size| {
-            CtSimpleError::new(1, format!("Invalid number: {}", truncate_quote_size(&size)))
-        })?;
+        .map(|size| {
+            size.into_string().map_err(|size| {
+                let bytes = truncate_non_utf8_size_diagnostic_bytes(size.as_encoded_bytes());
+                CtSimpleError::new(
+                    1,
+                    format!("Invalid number: {}", truncate_quote_size_bytes(bytes)),
+                )
+            })
+        })
+        .transpose()?;
     let parsed_size = validate_truncate_size_option(size.as_deref())?;
 
     if reference.is_none() && parsed_size.is_none() {
@@ -2223,6 +2253,27 @@ mod tests {
                 OsString::from(ctcore::ct_util_name()),
                 OsString::from("-s"),
                 OsString::from_vec(vec![0xff]),
+                OsString::from("non-utf8-size-target"),
+            ];
+
+            let error = truncate_main(args.into_iter()).unwrap_err();
+
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "Invalid number: {}",
+                    truncate_quote_size(OsStr::from_bytes(&[0xff]))
+                )
+            );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_truncate_main_skips_gnu_whitespace_before_non_utf8_size_diagnostic() {
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-s"),
+                OsString::from_vec(b" < \xff".to_vec()),
                 OsString::from("non-utf8-size-target"),
             ];
 

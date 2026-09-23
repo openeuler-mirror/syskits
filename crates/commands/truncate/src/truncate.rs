@@ -273,13 +273,27 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
         .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
-    if reference.is_none() && size.is_none() {
+    let size = size
+        .map(OsString::into_string)
+        .transpose()
+        .map_err(|size| {
+            CtSimpleError::new(1, format!("Invalid number: {}", truncate_quote_size(&size)))
+        })?;
+    let parsed_size = validate_truncate_size_option(size.as_deref())?;
+
+    if reference.is_none() && parsed_size.is_none() {
         return Err(CTsageError::new(
             1,
             "you must specify either '--size' or '--reference'",
         ));
     }
-    if is_io_blocks && size.is_none() {
+    if reference.is_some() && matches!(parsed_size, Some(TruncateMode::Absolute(_))) {
+        return Err(CTsageError::new(
+            1,
+            "you must specify a relative '--size' with '--reference'",
+        ));
+    }
+    if is_io_blocks && parsed_size.is_none() {
         return Err(CTsageError::new(
             1,
             "'--io-blocks' was specified but '--size' was not",
@@ -288,13 +302,6 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
     if files.is_empty() {
         return Err(CTsageError::new(1, "missing file operand"));
     }
-
-    let size = size
-        .map(OsString::into_string)
-        .transpose()
-        .map_err(|size| {
-            CtSimpleError::new(1, format!("Invalid number: {}", truncate_quote_size(&size)))
-        })?;
 
     truncate(is_no_create, is_io_blocks, reference, size, &files)
 }
@@ -752,6 +759,23 @@ fn is_gnu_ascii_whitespace(character: char) -> bool {
         character,
         ' ' | '\t' | '\n' | '\u{000b}' | '\u{000c}' | '\r'
     )
+}
+
+fn validate_truncate_size_option(size: Option<&str>) -> CTResult<Option<TruncateMode>> {
+    let Some(size) = size else {
+        return Ok(None);
+    };
+    if has_multiple_relative_modifiers(size) {
+        return Err(CTsageError::new(1, "multiple relative modifiers specified"));
+    }
+
+    let truncate_mode = truncate_parse_mode_and_size(size)
+        .map_err(|error| CtSimpleError::new(1, format!("Invalid number: {error}")))?;
+    if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = truncate_mode {
+        return Err(CtSimpleError::new(1, "division by zero"));
+    }
+
+    Ok(Some(truncate_mode))
 }
 
 fn has_multiple_relative_modifiers(size_string: &str) -> bool {
@@ -2166,6 +2190,14 @@ mod tests {
             let error = truncate_main(args.iter().map(OsString::from)).unwrap_err();
 
             assert_eq!(error.to_string(), "missing file operand");
+        }
+
+        #[test]
+        fn test_truncate_main_validates_size_before_file_operand() {
+            let args = [ctcore::ct_util_name(), "-s", "invalid"];
+            let error = truncate_main(args.iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(error.to_string(), "Invalid number: 'invalid'");
         }
 
         #[test]

@@ -22,6 +22,8 @@ use std::io::ErrorKind;
 #[cfg(unix)]
 use std::os::linux::fs::MetadataExt;
 #[cfg(unix)]
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
+#[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
@@ -316,6 +318,7 @@ impl Tool for Truncate {
 pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = normalize_truncate_short_option_equals(args.collect());
     let matches = ct_app().try_get_matches_from(args).map_err(|e| {
         e.print().expect("Error writing clap::Error");
         match e.kind() {
@@ -378,6 +381,116 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     truncate(is_no_create, is_io_blocks, reference, size, &files)
+}
+
+#[cfg(unix)]
+fn normalize_truncate_short_option_equals(args: Vec<OsString>) -> Vec<OsString> {
+    let posixly_correct = ctcore::ct_posix::posixly_correct();
+    let mut normalized = Vec::with_capacity(args.len());
+    let mut options_enabled = true;
+    let mut next_is_option_value = false;
+
+    for (index, argument) in args.into_iter().enumerate() {
+        if index == 0 || !options_enabled {
+            normalized.push(argument);
+            continue;
+        }
+
+        let bytes = argument.as_os_str().as_bytes();
+        if next_is_option_value {
+            normalized.push(argument);
+            next_is_option_value = false;
+            continue;
+        }
+
+        if bytes == b"--" {
+            options_enabled = false;
+            normalized.push(argument);
+            continue;
+        }
+
+        if posixly_correct && (bytes == b"-" || !bytes.starts_with(b"-")) {
+            options_enabled = false;
+            normalized.push(argument);
+            continue;
+        }
+
+        if let Some(expanded) = split_truncate_short_option_equals(bytes) {
+            normalized.extend(expanded);
+            continue;
+        }
+
+        next_is_option_value = truncate_option_requires_next_value(bytes);
+        normalized.push(argument);
+    }
+
+    normalized
+}
+
+#[cfg(not(unix))]
+fn normalize_truncate_short_option_equals(args: Vec<OsString>) -> Vec<OsString> {
+    args
+}
+
+#[cfg(unix)]
+fn split_truncate_short_option_equals(bytes: &[u8]) -> Option<Vec<OsString>> {
+    let short_options = bytes.strip_prefix(b"-")?;
+    if short_options.is_empty() || short_options.starts_with(b"-") {
+        return None;
+    }
+
+    for (index, option) in short_options.iter().copied().enumerate() {
+        match option {
+            b'c' | b'o' => continue,
+            b'r' | b's' => {
+                let value = &short_options[index + 1..];
+                if !value.starts_with(b"=") {
+                    return None;
+                }
+
+                let mut expanded = short_options[..index]
+                    .iter()
+                    .map(|option| OsString::from_vec(vec![b'-', *option]))
+                    .collect::<Vec<_>>();
+                expanded.push(OsString::from_vec(vec![b'-', option]));
+                expanded.push(OsString::from_vec(value.to_vec()));
+                return Some(expanded);
+            }
+            _ => return None,
+        }
+    }
+
+    None
+}
+
+#[cfg(unix)]
+fn truncate_option_requires_next_value(bytes: &[u8]) -> bool {
+    let Some(short_options) = bytes.strip_prefix(b"-") else {
+        return false;
+    };
+    if short_options.is_empty() || short_options.starts_with(b"-") {
+        return truncate_long_option_requires_next_value(bytes);
+    }
+
+    for (index, option) in short_options.iter().copied().enumerate() {
+        match option {
+            b'c' | b'o' => continue,
+            b'r' | b's' => return index + 1 == short_options.len(),
+            _ => return false,
+        }
+    }
+
+    false
+}
+
+#[cfg(unix)]
+fn truncate_long_option_requires_next_value(bytes: &[u8]) -> bool {
+    let Some(name) = bytes.strip_prefix(b"--") else {
+        return false;
+    };
+    !name.is_empty()
+        && !name.contains(&b'=')
+        && (b"size".starts_with(name) || b"reference".starts_with(name))
 }
 
 pub fn ct_app() -> Command {
@@ -2439,6 +2552,25 @@ mod tests {
         }
 
         #[test]
+        fn test_truncate_main_short_size_keeps_equals_as_value() {
+            let directory = tempdir().unwrap();
+            let target = directory.path().join("target");
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-s=0"),
+                target.clone().into_os_string(),
+            ];
+
+            let error = truncate_main(args.into_iter()).unwrap_err();
+
+            assert_eq!(
+                error.to_string(),
+                format!("Invalid number: {}", truncate_quote_size(OsStr::new("=0")))
+            );
+            assert!(!target.exists());
+        }
+
+        #[test]
         fn test_truncate_main_io_blocks_long() {
             let file = "test_truncate_main_io_blocks_long";
             let dir = tempdir().unwrap();
@@ -2954,7 +3086,7 @@ mod tests {
             let mut tmp_file = File::create(&file_path).unwrap();
             writeln!(tmp_file, "test\nctyunos\nhello\nworld\n").unwrap();
             let file_name = file_path.to_str().unwrap();
-            let args = [ctcore::ct_util_name(), "-s=-100", file_name];
+            let args = [ctcore::ct_util_name(), "-s", "-100", file_name];
             let result = truncate_main(args.iter().map(OsString::from));
             assert!(result.is_ok());
         }
@@ -3507,7 +3639,7 @@ mod tests {
         fn test_ct_app_size_short_reduce_by_100() {
             let command = ct_app();
             let file = "test_ct_app_size_short_reduce_by_100";
-            let args = vec![ctcore::ct_util_name(), "-s=-100", file];
+            let args = vec![ctcore::ct_util_name(), "-s", "-100", file];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
         }

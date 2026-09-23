@@ -1321,6 +1321,34 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "短选项-s=0中的等号必须作为SIZE值保留；GNU将其解释为=0并输出Invalid number，不得创建目标文件",
+            "setup_commands": [],
+            "args": ["-s=0", "short-size-equals-target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: Invalid number: '=0'"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e short-size-equals-target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -751,6 +751,30 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C下无参长选项--no-create带等号参数时必须报告GNU的doesn't allow an argument诊断。",
+            "args": ["--no-create=ignored", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: option '--no-create' doesn't allow an argument\nTry 'touch --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "更新符号链接本身的时间戳",
             "setup_commands": [
                 "touch -t 202001010000.00 target_file",

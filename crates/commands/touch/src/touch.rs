@@ -252,13 +252,15 @@ pub fn ct_app() -> Command {
         Arg::new(touch_flags::sources::TOUCH_TIMESTAMP)
             .short('t')
             .help(t!("touch.clap.touch_timestamp"))
-            .value_name("STAMP"),
+            .value_name("STAMP")
+            .action(ArgAction::Append),
         Arg::new(touch_flags::sources::TOUCH_DATE)
             .short('d')
             .long(touch_flags::sources::TOUCH_DATE)
             .allow_hyphen_values(true)
             .help(t!("touch.clap.touch_date"))
             .value_name("STRING")
+            .action(ArgAction::Append)
             .conflicts_with(touch_flags::sources::TOUCH_TIMESTAMP),
         Arg::new(touch_flags::TOUCH_MODIFICATION)
             .short('m')
@@ -288,6 +290,7 @@ pub fn ct_app() -> Command {
             .value_name("FILE")
             .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::AnyPath)
+            .action(ArgAction::Append)
             .conflicts_with(touch_flags::sources::TOUCH_TIMESTAMP),
         Arg::new(touch_flags::TOUCH_TIME)
             .long(touch_flags::TOUCH_TIME)
@@ -327,8 +330,12 @@ pub fn ct_app() -> Command {
 // 确定访问和修改时间
 fn touch_determine_times(matches: &ArgMatches, obs_time: Option<FileTime>) -> CTResult<TouchTimes> {
     match (
-        matches.get_one::<OsString>(touch_flags::sources::TOUCH_REFERENCE),
-        matches.get_one::<String>(touch_flags::sources::TOUCH_DATE),
+        matches
+            .get_many::<OsString>(touch_flags::sources::TOUCH_REFERENCE)
+            .and_then(Iterator::last),
+        matches
+            .get_many::<String>(touch_flags::sources::TOUCH_DATE)
+            .and_then(Iterator::last),
     ) {
         (Some(reference), Some(date)) => {
             let (a_time, m_time) = touch_stat(
@@ -361,7 +368,10 @@ fn touch_determine_times(matches: &ArgMatches, obs_time: Option<FileTime>) -> CT
             Ok(TouchTimes::timestamps(timestamp, timestamp))
         }
         (None, None) => {
-            if let Some(ts) = matches.get_one::<String>(touch_flags::sources::TOUCH_TIMESTAMP) {
+            if let Some(ts) = matches
+                .get_many::<String>(touch_flags::sources::TOUCH_TIMESTAMP)
+                .and_then(Iterator::last)
+            {
                 let timestamp = parse_timestamp(ts)?;
                 return Ok(TouchTimes::timestamps(timestamp, timestamp));
             }
@@ -865,6 +875,44 @@ mod tests {
             let (atime, mtime) = timestamp_pair(touch_determine_times(&matches, None).unwrap());
             assert_eq!(atime.unix_seconds(), custom_time.unix_seconds());
             assert_eq!(mtime.unix_seconds(), custom_time.unix_seconds());
+        }
+
+        #[test]
+        fn determine_times_uses_last_repeated_source_value() {
+            let tmp = tempdir().unwrap();
+            let first_reference = tmp.path().join("first-reference");
+            let last_reference = tmp.path().join("last-reference");
+            std::fs::write(&first_reference, b"first").unwrap();
+            std::fs::write(&last_reference, b"last").unwrap();
+            let first_time = FileTime::from_unix_time(946_684_800, 0);
+            let last_time = FileTime::from_unix_time(978_307_200, 0);
+            set_file_times(&first_reference, first_time, first_time).unwrap();
+            set_file_times(&last_reference, last_time, last_time).unwrap();
+
+            let matches = build_matches(&[
+                "-r",
+                first_reference.to_str().unwrap(),
+                "-r",
+                last_reference.to_str().unwrap(),
+                "dummy",
+            ]);
+            let (atime, mtime) = timestamp_pair(touch_determine_times(&matches, None).unwrap());
+            assert_eq!(atime, last_time);
+            assert_eq!(mtime, last_time);
+
+            let matches = build_matches(&["-d", "2000-01-01", "-d", "2001-01-01", "dummy"]);
+            let (atime, mtime) = timestamp_pair(touch_determine_times(&matches, None).unwrap());
+            let expected = Local
+                .with_ymd_and_hms(2001, 1, 1, 0, 0, 0)
+                .unwrap()
+                .timestamp();
+            assert_eq!(atime.unix_seconds(), expected);
+            assert_eq!(mtime.unix_seconds(), expected);
+
+            let matches = build_matches(&["-t", "200001010000", "-t", "200101010000", "dummy"]);
+            let (atime, mtime) = timestamp_pair(touch_determine_times(&matches, None).unwrap());
+            assert_eq!(atime.unix_seconds(), expected);
+            assert_eq!(mtime.unix_seconds(), expected);
         }
 
         #[test]

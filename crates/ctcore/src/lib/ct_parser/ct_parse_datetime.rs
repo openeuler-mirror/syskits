@@ -599,6 +599,10 @@ fn parse_datetime_gnu_compat_impl(
         }
     }
 
+    if let Some(dt) = parse_gnu_date_without_year(input_trim, reference_time) {
+        return Ok(dt);
+    }
+
     // 纯星期几与相对词 (如 "next monday")
     if let Some(dt) = parse_weekday_expression(&input_lower, reference_time) {
         return Ok(dt);
@@ -652,6 +656,55 @@ fn expand_year_for_format<T: Datelike>(value: T, format: &str) -> Option<T> {
         two_digit_year + 1900
     };
     value.with_year(expanded)
+}
+
+/// Parse GNU month/day forms whose omitted year defaults to the reference year.
+fn parse_gnu_date_without_year(
+    input: &str,
+    reference_time: DateTime<Local>,
+) -> Option<DateTime<Local>> {
+    let parts = input.split_ascii_whitespace().collect::<Vec<_>>();
+    let (month, day) = match parts.as_slice() {
+        [slash_date] => {
+            let (month, day) = slash_date.split_once('/')?;
+            (month.parse().ok()?, day.parse().ok()?)
+        }
+        [first, second] => {
+            if let Some(month) = gnu_month_number(first) {
+                (month, second.parse().ok()?)
+            } else {
+                (gnu_month_number(second)?, first.parse().ok()?)
+            }
+        }
+        _ => return None,
+    };
+
+    let date = NaiveDate::from_ymd_opt(reference_time.year(), month, day)?;
+    match reference_time
+        .timezone()
+        .from_local_datetime(&date.and_time(NaiveTime::MIN))
+    {
+        chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => Some(dt),
+        chrono::LocalResult::None => None,
+    }
+}
+
+fn gnu_month_number(input: &str) -> Option<u32> {
+    match input.to_ascii_lowercase().as_str() {
+        "jan" | "january" => Some(1),
+        "feb" | "february" => Some(2),
+        "mar" | "march" => Some(3),
+        "apr" | "april" => Some(4),
+        "may" => Some(5),
+        "jun" | "june" => Some(6),
+        "jul" | "july" => Some(7),
+        "aug" | "august" => Some(8),
+        "sep" | "sept" | "september" => Some(9),
+        "oct" | "october" => Some(10),
+        "nov" | "november" => Some(11),
+        "dec" | "december" => Some(12),
+        _ => None,
+    }
 }
 
 fn parse_epoch_decimal(input: &str) -> Option<(i64, u32)> {
@@ -2031,6 +2084,21 @@ mod tests {
             NaiveDate::from_ymd_opt(2024, 1, 2).unwrap()
         );
         assert_eq!(parsed.time(), NaiveTime::MIN);
+    }
+
+    #[test]
+    fn test_parse_gnu_date_without_year_uses_reference_year() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for input in ["01/02", "Jan 2", "2 Jan"] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(
+                parsed.date_naive(),
+                NaiveDate::from_ymd_opt(2025, 1, 2).unwrap(),
+                "input {input}"
+            );
+            assert_eq!(parsed.time(), NaiveTime::MIN, "input {input}");
+        }
     }
 
     #[test]

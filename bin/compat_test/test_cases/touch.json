@@ -1598,6 +1598,40 @@
             "cleanup_commands": [
                 "rm -f target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date='Jan 2'必须按GNU使用-r参考时间的年份2025。",
+            "setup_commands": [
+                "touch -t 202507241200 reference"
+            ],
+            "args": ["-r", "reference", "--date=Jan 2", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2025-01-02T00:00:00Z'",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f reference target"
+            ]
         }
     ]
 }

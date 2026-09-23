@@ -197,7 +197,8 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
         if let Err(e) = md_result {
             if e.kind() != std::io::ErrorKind::NotFound {
                 let err_message = format!("setting times of {}", filename.quote());
-                return Err(e.map_err_context(|| err_message));
+                ct_show!(e.map_err_context(|| err_message));
+                continue;
             }
 
             if arg_matches.get_flag(touch_flags::TOUCH_NO_CREATE) {
@@ -225,7 +226,9 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
             }
         }
 
-        touch_update_times(&arg_matches, path, times, filename)?;
+        if let Err(error) = touch_update_times(&arg_matches, path, times, filename) {
+            ct_show!(error);
+        }
     }
     Ok(())
 }
@@ -1636,6 +1639,7 @@ mod tests {
 
     #[cfg(test)]
     mod ct_main_tests {
+        use ctcore::ct_error::set_ct_exit_code;
         use tempfile::tempdir;
 
         use super::*;
@@ -1676,6 +1680,26 @@ mod tests {
             let args = [ctcore::ct_util_name(), "--invalid-argument"];
             let result = touch_main(args.iter().map(OsString::from));
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_touch_main_continues_after_target_error() {
+            let dir = tempdir().unwrap();
+            let regular_file = dir.path().join("regular");
+            let valid_file = dir.path().join("valid");
+            File::create(&regular_file).unwrap();
+            let invalid_path = format!("{}/", regular_file.display());
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from(invalid_path),
+                valid_file.clone().into_os_string(),
+            ];
+
+            let result = touch_main(args.into_iter());
+            set_ct_exit_code(0);
+
+            assert!(result.is_ok());
+            assert!(valid_file.exists());
         }
 
         #[test]

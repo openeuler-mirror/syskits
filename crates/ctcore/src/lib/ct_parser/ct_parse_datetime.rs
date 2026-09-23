@@ -603,6 +603,12 @@ fn parse_datetime_gnu_compat_impl(
         return Ok(Local.from_local_datetime(&naive_dt).unwrap());
     }
 
+    if let Some(dt) =
+        parse_gnu_compact_time_with_date(input_trim, reference_time, normalized_extended_year)
+    {
+        return Ok(dt);
+    }
+
     if let Some(dt) = parse_gnu_date_without_year(input_trim, reference_time) {
         return Ok(dt);
     }
@@ -702,6 +708,41 @@ fn parse_gnu_iso_hour(input: &str) -> Option<NaiveDateTime> {
     NaiveDate::parse_from_str(date, "%Y-%m-%d")
         .ok()?
         .and_hms_opt(hour.parse().ok()?, 0, 0)
+}
+
+fn parse_gnu_compact_time_with_date(
+    input: &str,
+    reference_time: DateTime<Local>,
+    normalized_extended_year: bool,
+) -> Option<DateTime<Local>> {
+    let tokens = input.split_ascii_whitespace().collect::<Vec<_>>();
+    let [first, second] = tokens.as_slice() else {
+        return None;
+    };
+
+    for (time_input, date_input) in [(*first, *second), (*second, *first)] {
+        if parse_weekday_name(date_input).is_some() {
+            continue;
+        }
+        let Some(time) = parse_compact_time_of_day(time_input, reference_time).map(|dt| dt.time())
+        else {
+            continue;
+        };
+        let Ok(date) =
+            parse_datetime_gnu_compat_impl(date_input, reference_time, normalized_extended_year)
+        else {
+            continue;
+        };
+        let naive = date.date_naive().and_time(time);
+        match date.timezone().from_local_datetime(&naive) {
+            chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => {
+                return Some(dt);
+            }
+            chrono::LocalResult::None => {}
+        }
+    }
+
+    None
 }
 
 fn gnu_month_number(input: &str) -> Option<u32> {
@@ -2129,6 +2170,25 @@ mod tests {
             parsed.with_timezone(&Utc).time(),
             NaiveTime::from_hms_opt(7, 0, 0).unwrap()
         );
+    }
+
+    #[test]
+    fn test_parse_gnu_compact_time_with_date_in_either_order() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for input in ["2024-02-29 1234", "1234 2024-02-29"] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(
+                parsed.date_naive(),
+                NaiveDate::from_ymd_opt(2024, 2, 29).unwrap(),
+                "input {input}"
+            );
+            assert_eq!(
+                parsed.time(),
+                NaiveTime::from_hms_opt(12, 34, 0).unwrap(),
+                "input {input}"
+            );
+        }
     }
 
     #[test]

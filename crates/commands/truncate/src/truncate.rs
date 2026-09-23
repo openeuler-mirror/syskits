@@ -13,6 +13,9 @@
 
 extern crate rust_i18n;
 use rust_i18n::t;
+use std::borrow::Cow;
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions, metadata};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
@@ -318,7 +321,7 @@ impl Tool for Truncate {
 pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = normalize_truncate_short_option_equals(args.collect());
+    let args = prepare_truncate_args(args)?;
     let matches = ct_app().try_get_matches_from(args).map_err(|e| {
         e.print().expect("Error writing clap::Error");
         match e.kind() {
@@ -367,6 +370,188 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     truncate(is_no_create, is_io_blocks, reference, size, &files)
+}
+
+const TRUNCATE_GNU_LONG_OPTIONS: &[(&str, bool)] = &[
+    ("no-create", false),
+    ("io-blocks", false),
+    ("reference", true),
+    ("size", true),
+    ("help", false),
+    ("version", false),
+];
+
+enum TruncateLongOptionMatch {
+    None,
+    Recognized(&'static str, bool),
+    Ambiguous(Vec<&'static str>),
+}
+
+#[derive(Debug)]
+struct TruncateUsageError {
+    message: Vec<u8>,
+}
+
+impl TruncateUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl Display for TruncateUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl Error for TruncateUsageError {}
+
+impl CTError for TruncateUsageError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
+fn prepare_truncate_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
+    let args = args.collect::<Vec<_>>();
+    truncate_validate_options(&args, ctcore::ct_posix::posixly_correct())?;
+    Ok(normalize_truncate_short_option_equals(args))
+}
+
+fn truncate_match_long_option(name: &[u8]) -> TruncateLongOptionMatch {
+    if let Some((option, takes_value)) = TRUNCATE_GNU_LONG_OPTIONS
+        .iter()
+        .find(|(option, _)| option.as_bytes() == name)
+    {
+        return TruncateLongOptionMatch::Recognized(option, *takes_value);
+    }
+
+    let matches = TRUNCATE_GNU_LONG_OPTIONS
+        .iter()
+        .filter(|(option, _)| option.as_bytes().starts_with(name))
+        .map(|(option, _)| *option)
+        .collect::<Vec<_>>();
+    match matches.as_slice() {
+        [] => TruncateLongOptionMatch::None,
+        [option] => {
+            let takes_value = TRUNCATE_GNU_LONG_OPTIONS
+                .iter()
+                .find(|(candidate, _)| candidate == option)
+                .is_some_and(|(_, takes_value)| *takes_value);
+            TruncateLongOptionMatch::Recognized(option, takes_value)
+        }
+        _ => TruncateLongOptionMatch::Ambiguous(matches),
+    }
+}
+
+fn truncate_validate_long_option(argument: &[u8], has_next: bool) -> CTResult<(bool, bool)> {
+    let long = &argument[2..];
+    let separator = long.iter().position(|byte| *byte == b'=');
+    let name = &long[..separator.unwrap_or(long.len())];
+
+    match truncate_match_long_option(name) {
+        TruncateLongOptionMatch::None => {
+            let mut message = b"unrecognized option '".to_vec();
+            message.extend_from_slice(argument);
+            message.push(b'\'');
+            Err(TruncateUsageError::boxed(message))
+        }
+        TruncateLongOptionMatch::Ambiguous(matches) => {
+            let possibilities = matches
+                .into_iter()
+                .map(|option| format!("'--{option}'"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let mut message = b"option '".to_vec();
+            message.extend_from_slice(argument);
+            message.extend_from_slice(b"' is ambiguous; possibilities: ");
+            message.extend_from_slice(possibilities.as_bytes());
+            Err(TruncateUsageError::boxed(message))
+        }
+        TruncateLongOptionMatch::Recognized(option, false) if separator.is_some() => {
+            Err(TruncateUsageError::boxed(
+                format!("option '--{option}' doesn't allow an argument").into_bytes(),
+            ))
+        }
+        TruncateLongOptionMatch::Recognized(option, true) if separator.is_none() && !has_next => {
+            Err(TruncateUsageError::boxed(
+                format!("option '--{option}' requires an argument").into_bytes(),
+            ))
+        }
+        TruncateLongOptionMatch::Recognized("help" | "version", _) => Ok((false, true)),
+        TruncateLongOptionMatch::Recognized(_, takes_value) => {
+            Ok((takes_value && separator.is_none(), false))
+        }
+    }
+}
+
+fn truncate_validate_short_options(argument: &[u8], has_next: bool) -> CTResult<bool> {
+    let mut index = 1;
+    while index < argument.len() {
+        match argument[index] {
+            b'c' | b'o' => index += 1,
+            b'r' | b's' => {
+                if index + 1 == argument.len() {
+                    if !has_next {
+                        return Err(TruncateUsageError::boxed(
+                            format!(
+                                "option requires an argument -- '{}'",
+                                char::from(argument[index])
+                            )
+                            .into_bytes(),
+                        ));
+                    }
+                    return Ok(true);
+                }
+                return Ok(false);
+            }
+            b'h' | b'V' if argument.len() == 2 => return Ok(false),
+            option => {
+                let mut message = b"invalid option -- '".to_vec();
+                message.push(option);
+                message.push(b'\'');
+                return Err(TruncateUsageError::boxed(message));
+            }
+        }
+    }
+
+    Ok(false)
+}
+
+fn truncate_validate_options(args: &[OsString], posixly_correct: bool) -> CTResult<()> {
+    let mut index = 1;
+    while index < args.len() {
+        let argument = args[index].as_encoded_bytes();
+        if argument == b"--" {
+            break;
+        }
+        if argument.len() <= 1 || argument[0] != b'-' {
+            if posixly_correct {
+                break;
+            }
+            index += 1;
+            continue;
+        }
+
+        if argument.starts_with(b"--") {
+            let (consumes_next, terminal) =
+                truncate_validate_long_option(argument, index + 1 < args.len())?;
+            if terminal {
+                return Ok(());
+            }
+            index += 1 + usize::from(consumes_next);
+            continue;
+        }
+
+        let consumes_next = truncate_validate_short_options(argument, index + 1 < args.len())?;
+        index += 1 + usize::from(consumes_next);
+    }
+
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -1228,6 +1413,29 @@ mod tests {
             error.to_string(),
             "you must specify either '--size' or '--reference'"
         );
+    }
+
+    #[test]
+    fn truncate_option_errors_use_gnu_getopt_diagnostics() {
+        let cases = [
+            (
+                &["--no-create=0"][..],
+                "option '--no-create' doesn't allow an argument",
+            ),
+            (&["--size"][..], "option '--size' requires an argument"),
+            (&["-s"][..], "option requires an argument -- 's'"),
+            (&["-c=0"][..], "invalid option -- '='"),
+            (&["--unknown"][..], "unrecognized option '--unknown'"),
+        ];
+
+        for (arguments, expected) in cases {
+            let args = std::iter::once(OsString::from("truncate"))
+                .chain(arguments.iter().map(OsString::from));
+            let error = truncate_main(args).expect_err("invalid option must fail");
+
+            assert_eq!(error.diagnostic_bytes().as_ref(), expected.as_bytes());
+            assert!(error.usage());
+        }
     }
 
     #[cfg(test)]

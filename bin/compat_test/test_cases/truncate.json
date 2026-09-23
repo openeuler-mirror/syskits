@@ -1437,6 +1437,28 @@
             "cleanup_commands": [
                 "rm -f repeated-size-relative-target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "LC_ALL=C下--no-create是无参数选项；输入--no-create=0必须以GNU规范长选项名报告doesn't allow an argument，退出码为1且不产生文件副作用",
+            "setup_commands": [],
+            "args": ["--no-create=0"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: option '--no-create' doesn't allow an argument\nTry 'truncate --help' for more information.\n"
+                },
+                "verifications": []
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

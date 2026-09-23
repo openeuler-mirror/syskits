@@ -718,15 +718,20 @@ fn is_modifier(c: char) -> bool {
     c == '+' || c == '-' || c == '<' || c == '>' || c == '/' || c == '%'
 }
 
+fn is_gnu_ascii_whitespace(character: char) -> bool {
+    matches!(
+        character,
+        ' ' | '\t' | '\n' | '\u{000b}' | '\u{000c}' | '\r'
+    )
+}
+
 fn has_multiple_relative_modifiers(size_string: &str) -> bool {
-    let size_string =
-        size_string.trim_start_matches(|character: char| character.is_ascii_whitespace());
+    let size_string = size_string.trim_start_matches(is_gnu_ascii_whitespace);
     if !matches!(size_string.chars().next(), Some('<' | '>' | '/' | '%')) {
         return false;
     }
 
-    let remaining =
-        size_string[1..].trim_start_matches(|character: char| character.is_ascii_whitespace());
+    let remaining = size_string[1..].trim_start_matches(is_gnu_ascii_whitespace);
     matches!(remaining.chars().next(), Some('+' | '-'))
 }
 
@@ -756,7 +761,7 @@ fn normalize_truncate_decimal_number(number: &str) -> String {
 ///
 /// # 错误情况
 ///
-/// 如果 `size_string` 为空，或者无法从给定的字符串中解析出数字（例如，字符串为 "abc"）时，函数会引发恐慌（panic）。
+/// 如果 `size_string` 为空，或者无法从给定的字符串中解析出数字（例如，字符串为 "abc"），函数会返回解析错误。
 ///
 /// # Examples
 ///
@@ -764,18 +769,18 @@ fn normalize_truncate_decimal_number(number: &str) -> String {
 /// assert_eq!(parse_mode_and_size("+123"), (TruncateMode::Extend, 123));
 /// ```
 fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError> {
-    let size_string =
-        size_string.trim_start_matches(|character: char| character.is_ascii_whitespace());
+    let size_string = size_string.trim_start_matches(is_gnu_ascii_whitespace);
     let Some(modifier) = size_string.chars().next() else {
-        return Err(ParseSizeError::ParseFailure(size_string.to_string()));
+        return Err(ParseSizeError::ParseFailure(truncate_quote_size(
+            size_string,
+        )));
     };
 
     let (mode, number, displayed_size): (fn(u64) -> TruncateMode, &str, &str) =
         if is_modifier(modifier) {
             match modifier {
                 '<' | '>' | '/' | '%' => {
-                    let number = size_string[1..]
-                        .trim_start_matches(|character: char| character.is_ascii_whitespace());
+                    let number = size_string[1..].trim_start_matches(is_gnu_ascii_whitespace);
                     let mode = match modifier {
                         '<' => TruncateMode::AtMost,
                         '>' => TruncateMode::AtLeast,
@@ -2028,7 +2033,7 @@ mod tests {
             );
             assert_eq!(
                 truncate_parse_mode_and_size(""),
-                Err(ParseSizeError::ParseFailure("".to_string()))
+                Err(ParseSizeError::ParseFailure("''".to_string()))
             );
             assert_eq!(
                 truncate_parse_mode_and_size("/0"),
@@ -2041,15 +2046,18 @@ mod tests {
         }
 
         #[test]
-        fn test_truncate_parse_mode_and_size_edge_cases() {
-            // 边界条件测试
+        fn test_truncate_parse_mode_and_size_skips_all_gnu_c_whitespace() {
             assert_eq!(
                 truncate_parse_mode_and_size(" "),
-                Err(ParseSizeError::ParseFailure("".to_string()))
+                Err(ParseSizeError::ParseFailure("''".to_string()))
             );
             assert_eq!(
-                truncate_parse_mode_and_size("+ "),
-                Err(ParseSizeError::ParseFailure("'+ '".to_string()))
+                truncate_parse_mode_and_size("\t\u{000b}\u{000c}\r"),
+                Err(ParseSizeError::ParseFailure("''".to_string()))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("\t\u{000b}\u{000c}\r100"),
+                Ok(TruncateMode::Absolute(100))
             );
             assert_eq!(
                 truncate_parse_mode_and_size(" 100"),

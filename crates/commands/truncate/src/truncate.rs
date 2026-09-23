@@ -24,7 +24,7 @@ use std::os::linux::fs::MetadataExt;
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
-use std::os::unix::io::AsRawFd;
+use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -471,40 +471,92 @@ where
             }));
         }
     };
-    let size = size_for_file(&file)?;
-
     #[cfg(unix)]
     {
-        let size = libc::off_t::try_from(size).map_err(|_| {
-            CtSimpleError::new(
-                1,
-                format!(
-                    "failed to truncate {} at {size} bytes",
-                    truncate_quote_operand(filename)
-                ),
-            )
-        })?;
-        if unsafe { libc::ftruncate(file.as_raw_fd(), size) } != 0 {
-            let error = std::io::Error::last_os_error();
-            let error_message = os_error_message(&error);
-            return Err(CtSimpleError::new(
-                1,
-                format!(
-                    "failed to truncate {} at {size} bytes: {error_message}",
-                    truncate_quote_operand(filename)
-                ),
-            ));
-        }
-        Ok(())
+        let operation = (|| {
+            let size = size_for_file(&file)?;
+            let size = libc::off_t::try_from(size).map_err(|_| {
+                CtSimpleError::new(
+                    1,
+                    format!(
+                        "failed to truncate {} at {size} bytes",
+                        truncate_quote_operand(filename)
+                    ),
+                )
+            })?;
+            if unsafe { libc::ftruncate(file.as_raw_fd(), size) } != 0 {
+                let error = std::io::Error::last_os_error();
+                let error_message = os_error_message(&error);
+                return Err(CtSimpleError::new(
+                    1,
+                    format!(
+                        "failed to truncate {} at {size} bytes: {error_message}",
+                        truncate_quote_operand(filename)
+                    ),
+                ));
+            }
+            Ok(())
+        })();
+
+        finish_truncate_file(operation, close_truncate_file(file, filename))
     }
 
     #[cfg(not(unix))]
-    file.set_len(size).map_err_context(|| {
+    {
+        let size = size_for_file(&file)?;
+        file.set_len(size).map_err_context(|| {
+            format!(
+                "failed to truncate {} at {size} bytes",
+                truncate_quote_operand(filename)
+            )
+        })
+    }
+}
+
+#[cfg(unix)]
+fn close_truncate_file(file: File, filename: &OsStr) -> CTResult<()> {
+    close_truncate_file_with(
+        file,
+        filename,
+        |fd| unsafe { libc::close(fd) },
+        std::io::Error::last_os_error,
+    )
+}
+
+#[cfg(unix)]
+fn close_truncate_file_with<C, E>(file: File, filename: &OsStr, close: C, error: E) -> CTResult<()>
+where
+    C: FnOnce(RawFd) -> libc::c_int,
+    E: FnOnce() -> std::io::Error,
+{
+    let fd = file.into_raw_fd();
+    if close(fd) == 0 {
+        return Ok(());
+    }
+
+    Err(CtSimpleError::new(
+        1,
         format!(
-            "failed to truncate {} at {size} bytes",
-            truncate_quote_operand(filename)
-        )
-    })
+            "failed to close {}: {}",
+            truncate_quote_operand(filename),
+            os_error_message(&error())
+        ),
+    ))
+}
+
+#[cfg(unix)]
+fn finish_truncate_file(operation: CTResult<()>, close: CTResult<()>) -> CTResult<()> {
+    match (operation, close) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(error), Ok(())) | (Ok(()), Err(error)) => Err(error),
+        (Err(operation_error), Err(close_error)) => Err(CtSimpleError::new(
+            operation_error.code(),
+            format!(
+                "{operation_error}\n{}: {close_error}",
+                ctcore::ct_util_name()
+            ),
+        )),
+    }
 }
 
 fn truncate_file<P: AsRef<OsStr>>(filename: P, create: bool, size: u64) -> CTResult<()> {
@@ -1806,6 +1858,51 @@ mod tests {
 
             // Clean up
             std::fs::remove_file(non_existent_file).unwrap();
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_close_truncate_file_reports_close_error() {
+            let file = NamedTempFile::new().unwrap().into_file();
+            let error = close_truncate_file_with(
+                file,
+                OsStr::new("file"),
+                |fd| {
+                    assert_eq!(unsafe { libc::close(fd) }, 0);
+                    -1
+                },
+                || std::io::Error::from_raw_os_error(libc::EIO),
+            )
+            .unwrap_err();
+
+            assert_eq!(
+                error.to_string(),
+                "failed to close 'file': Input/output error"
+            );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_finish_truncate_file_reports_operation_then_close_error() {
+            let error = finish_truncate_file(
+                Err(CtSimpleError::new(
+                    1,
+                    "failed to truncate 'file' at 0 bytes: Invalid argument",
+                )),
+                Err(CtSimpleError::new(
+                    1,
+                    "failed to close 'file': Input/output error",
+                )),
+            )
+            .unwrap_err();
+
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "failed to truncate 'file' at 0 bytes: Invalid argument\n{}: failed to close 'file': Input/output error",
+                    ctcore::ct_util_name()
+                )
+            );
         }
 
         #[test]

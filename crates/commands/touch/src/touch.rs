@@ -596,13 +596,22 @@ fn parse_timestamp(s: &str) -> CTResult<FileTime> {
     use touch_format::*;
 
     let current_year = || Local::now().year();
+    let two_digit_year_prefix = || {
+        let year = s.chars().take(2).collect::<String>();
+        match year.parse::<u8>() {
+            Ok(69..=99) => "19",
+            _ => "20",
+        }
+    };
 
     let (format, ts) = match s.chars().count() {
         15 => (YYYYMMDDHHMM_DOT_SS, s.to_owned()),
         12 => (YYYYMMDDHHMM, s.to_owned()),
-        // 如果我们不添加"20"，我们就没有足够的信息来解析
-        13 => (YYYYMMDDHHMM_DOT_SS, format!("20{s}")),
-        10 => (YYYYMMDDHHMM, format!("20{s}")),
+        13 => (
+            YYYYMMDDHHMM_DOT_SS,
+            format!("{}{s}", two_digit_year_prefix()),
+        ),
+        10 => (YYYYMMDDHHMM, format!("{}{s}", two_digit_year_prefix())),
         11 => (YYYYMMDDHHMM_DOT_SS, format!("{}{}", current_year(), s)),
         8 => (YYYYMMDDHHMM, format!("{}{}", current_year(), s)),
         _ => {
@@ -934,6 +943,23 @@ mod tests {
                 .timestamp();
             assert_eq!(filetime.unix_seconds(), expected_time);
             assert_eq!(filetime.nanoseconds(), 0);
+
+            // 两位年份按 POSIX 规则映射到世纪：69..99 属于 19xx，00..68 属于 20xx。
+            let timestamp_str = "9912312359";
+            let filetime = parse_timestamp(timestamp_str).unwrap();
+            let expected_time = Local
+                .with_ymd_and_hms(1999, 12, 31, 23, 59, 0)
+                .unwrap()
+                .timestamp();
+            assert_eq!(filetime.unix_seconds(), expected_time);
+
+            let timestamp_str = "6812312359";
+            let filetime = parse_timestamp(timestamp_str).unwrap();
+            let expected_time = Local
+                .with_ymd_and_hms(2068, 12, 31, 23, 59, 0)
+                .unwrap()
+                .timestamp();
+            assert_eq!(filetime.unix_seconds(), expected_time);
 
             // 测试格式为 %Y%m%d%H%M.%S 并带有当前年份
             let current_year = Local::now().year();

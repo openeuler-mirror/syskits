@@ -522,6 +522,7 @@ pub fn ct_app() -> Command {
             .overrides_with(truncate_flags::TRUNCATE_REFERENCE)
             .value_parser(OsStringValueParser::new())
             .value_name("RFILE")
+            .allow_hyphen_values(true)
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(truncate_flags::TRUNCATE_SIZE)
             .short('s')
@@ -3350,6 +3351,23 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--reference", reference_file, file];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_reference_accepts_hyphen_prefixed_value() {
+            let matches = ct_app()
+                .try_get_matches_from([
+                    ctcore::ct_util_name(),
+                    "--reference",
+                    "-r=missing",
+                    "target",
+                ])
+                .unwrap();
+
+            assert_eq!(
+                matches.get_one::<OsString>(truncate_flags::TRUNCATE_REFERENCE),
+                Some(&OsString::from("-r=missing"))
+            );
         }
 
         #[test]

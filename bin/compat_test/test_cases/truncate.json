@@ -1349,6 +1349,34 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "--reference的以连字符开头参数必须作为引用路径；GNU在stat阶段报告原始路径，不得被误解析为选项或创建目标文件",
+            "setup_commands": [],
+            "args": ["--reference", "-r=missing", "reference-hyphen-value-target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: cannot stat '-r=missing': No such file or directory"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e reference-hyphen-value-target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

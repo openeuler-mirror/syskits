@@ -565,6 +565,9 @@ fn parse_datetime_gnu_compat_impl(
         "%b-%d-%Y %H:%M:%S",
         "%b-%d-%Y %H:%M",
         "%b-%d-%Y",
+        "%d-%b-%Y %H:%M:%S",
+        "%d-%b-%Y %H:%M",
+        "%d-%b-%Y",
         "%d %b %Y %H:%M:%S",
         "%d %b %Y %H:%M",
         "%d %b %Y",
@@ -1983,6 +1986,18 @@ mod tests {
             assert_eq!(parsed.minute(), expected_minute, "input {input}");
             assert_eq!(parsed.offset().local_minus_utc(), 0, "input {input}");
         }
+    }
+
+    #[test]
+    fn test_parse_gnu_day_month_name_hyphen_date() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("17-JUN-1992", ref_time).unwrap();
+
+        assert_eq!(
+            parsed.date_naive(),
+            NaiveDate::from_ymd_opt(1992, 6, 17).unwrap()
+        );
+        assert_eq!(parsed.time(), NaiveTime::MIN);
     }
 
     #[test]

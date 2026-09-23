@@ -34,7 +34,9 @@ use sys_locale::get_locale;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_parse_datetime;
-use ctcore::ct_posix::{MODERN, TRADITIONAL, ct_posix_version, posixly_correct};
+use ctcore::ct_posix::{
+    GnuGetoptCommandExt, MODERN, TRADITIONAL, ct_posix_version, posixly_correct,
+};
 use ctcore::{Tool, ct_show};
 
 pub mod touch_flags {
@@ -318,6 +320,7 @@ pub fn ct_app() -> Command {
                 ])
                 .multiple(true),
         )
+        .gnu_getopt()
 }
 
 // 确定访问和修改时间
@@ -1920,8 +1923,11 @@ mod tests {
     #[cfg(test)]
     mod ct_app_tests {
         use clap::error::ErrorKind;
+        use std::sync::Mutex;
 
         use super::*;
+
+        static POSIXLY_CORRECT_LOCK: Mutex<()> = Mutex::new(());
 
         // touch 接口: touch [OPTION]... FILE...
         //
@@ -1998,6 +2004,29 @@ mod tests {
             let args = vec![ctcore::ct_util_name()]; // 缺少任何参数
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_posixly_correct_stops_option_parsing_at_first_operand() {
+            let _guard = POSIXLY_CORRECT_LOCK.lock().unwrap();
+            let previous = std::env::var_os("POSIXLY_CORRECT");
+            unsafe { std::env::set_var("POSIXLY_CORRECT", "1") };
+            let result = ct_app().try_get_matches_from([ctcore::ct_util_name(), "first", "-a"]);
+            match previous {
+                Some(value) => unsafe { std::env::set_var("POSIXLY_CORRECT", value) },
+                None => unsafe { std::env::remove_var("POSIXLY_CORRECT") },
+            }
+
+            let matches = result.unwrap();
+            assert!(!matches.get_flag(touch_flags::TOUCH_ACCESS));
+            assert_eq!(
+                matches
+                    .get_many::<OsString>(TOUCH_ARG_FILES)
+                    .unwrap()
+                    .map(OsString::as_os_str)
+                    .collect::<Vec<_>>(),
+                [std::ffi::OsStr::new("first"), std::ffi::OsStr::new("-a")]
+            );
         }
 
         #[test]

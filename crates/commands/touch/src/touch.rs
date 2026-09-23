@@ -335,6 +335,19 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&lang_code);
     let arg_matches = ct_app().try_get_matches_from(touch_prepare_args(args)?)?;
 
+    if arg_matches.contains_id(touch_flags::sources::TOUCH_TIMESTAMP)
+        && (arg_matches.contains_id(touch_flags::sources::TOUCH_DATE)
+            || arg_matches.contains_id(touch_flags::sources::TOUCH_REFERENCE))
+    {
+        return Err(CtSimpleError::new(
+            1,
+            format!(
+                "cannot specify times from more than one source\nTry '{} --help' for more information.",
+                ctcore::ct_help_utility_name()
+            ),
+        ));
+    }
+
     // 1. 将 files 收集为 Vec，以便我们可以移出作为时间戳的元素
     let mut files: Vec<OsString> = arg_matches
         .get_many::<OsString>(TOUCH_ARG_FILES)
@@ -455,8 +468,7 @@ pub fn ct_app() -> Command {
             .allow_hyphen_values(true)
             .help(t!("touch.clap.touch_date"))
             .value_name("STRING")
-            .action(ArgAction::Append)
-            .conflicts_with(touch_flags::sources::TOUCH_TIMESTAMP),
+            .action(ArgAction::Append),
         Arg::new(touch_flags::TOUCH_MODIFICATION)
             .short('m')
             .help(t!("touch.clap.touch_modification"))
@@ -486,8 +498,7 @@ pub fn ct_app() -> Command {
             .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::AnyPath)
             .allow_hyphen_values(true)
-            .action(ArgAction::Append)
-            .conflicts_with(touch_flags::sources::TOUCH_TIMESTAMP),
+            .action(ArgAction::Append),
         Arg::new(touch_flags::TOUCH_TIME)
             .long(touch_flags::TOUCH_TIME)
             .help(
@@ -1956,6 +1967,26 @@ mod tests {
             let args = [ctcore::ct_util_name(), "--invalid-argument"];
             let result = touch_main(args.iter().map(OsString::from));
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_touch_main_source_conflict_uses_gnu_diagnostic() {
+            let args = [
+                ctcore::ct_util_name(),
+                "-d",
+                "2020-01-01",
+                "-t",
+                "202001010000",
+                "target",
+            ];
+            let error = touch_main(args.iter().map(OsString::from)).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "cannot specify times from more than one source\nTry '{} --help' for more information.",
+                    ctcore::ct_help_utility_name()
+                )
+            );
         }
 
         #[test]

@@ -13,8 +13,11 @@ use clap::{Arg, ArgAction, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, set_ct_exit_code};
-use std::{ffi::OsString, io::Write};
+use ctcore::ct_error::{CTResult, set_ct_exit_code, strip_errno};
+use std::{
+    ffi::OsString,
+    io::{self, Write},
+};
 use sys_locale::get_locale;
 #[derive(Default)]
 pub struct True;
@@ -66,17 +69,39 @@ fn args_process(command: &mut Command, args: Vec<OsString>) -> CTResult<()> {
         };
 
         if let Err(print_fail) = error {
+            let print_fail = true_display_output_error(print_fail, ctcore::ct_stdout_was_closed());
             // 如果错误信息打印失败，则在标准错误输出打印错误，并设置退出码
             let _ = writeln!(
                 std::io::stderr(),
                 "{}: {}",
                 ctcore::ct_util_name(),
-                print_fail
+                true_write_error_message(&print_fail)
             );
             set_ct_exit_code(1); // 设置退出码为1，表示错误
         }
     }
     Ok(())
+}
+
+fn true_write_error_message(error: &io::Error) -> String {
+    format!("write error: {}", strip_errno(error))
+}
+
+fn true_display_output_error(error: io::Error, stdout_was_closed: bool) -> io::Error {
+    true_closed_stdout_error(stdout_was_closed).unwrap_or(error)
+}
+
+fn true_closed_stdout_error(stdout_was_closed: bool) -> Option<io::Error> {
+    #[cfg(unix)]
+    {
+        stdout_was_closed.then(|| io::Error::from_raw_os_error(libc::EBADF))
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = stdout_was_closed;
+        None
+    }
 }
 
 /// 创建并配置命令行解析器。
@@ -109,6 +134,7 @@ pub fn ct_app() -> Command {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+    use std::io;
 
     #[test]
     fn test_tool_implementation() {
@@ -174,5 +200,28 @@ mod tests {
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn true_display_output_error_preserves_enospc_or_restores_closed_stdout_ebadf() {
+        let enospc = io::Error::from_raw_os_error(libc::ENOSPC);
+        assert_eq!(
+            true_display_output_error(enospc, false).raw_os_error(),
+            Some(libc::ENOSPC)
+        );
+
+        let remapped = true_display_output_error(io::Error::from_raw_os_error(libc::ENOSPC), true);
+        assert_eq!(remapped.raw_os_error(), Some(libc::EBADF));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn true_write_error_uses_gnu_errno_diagnostic() {
+        let error = io::Error::from_raw_os_error(libc::ENOSPC);
+        assert_eq!(
+            true_write_error_message(&error),
+            "write error: No space left on device"
+        );
     }
 }

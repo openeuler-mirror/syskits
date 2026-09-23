@@ -13,6 +13,110 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "true",
+            "description": "LC_ALL=C、LANG=C下执行true --help并将stdout连接到/dev/full；GNU帮助文本写入失败时返回RC=1，stdout为空，stderr为true: write error: No space left on device。",
+            "args": [
+                "--help"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "true: write error: No space left on device\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "full"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "true",
+            "description": "LC_ALL=C、LANG=C下执行true --version并将stdout连接到/dev/full；GNU版本文本写入失败时返回RC=1，stdout为空，stderr为true: write error: No space left on device。",
+            "args": [
+                "--version"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "true: write error: No space left on device\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "full"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "true",
+            "description": "LC_ALL=C、LANG=C下启动前关闭stdout并执行true --help；GNU写入关闭描述符时返回RC=1，stdout为空，stderr为true: write error: Bad file descriptor。",
+            "args": [
+                "--help"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "true: write error: Bad file descriptor\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "true",
+            "description": "LC_ALL=C、LANG=C下启动前关闭stdout并执行true --version；GNU写入关闭描述符时返回RC=1，stdout为空，stderr为true: write error: Bad file descriptor。",
+            "args": [
+                "--version"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "true: write error: Bad file descriptor\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
-} 
+}

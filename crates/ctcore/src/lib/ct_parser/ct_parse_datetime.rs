@@ -77,7 +77,8 @@ fn parse_datetime_gnu_compat_impl(
     reference_time: DateTime<Local>,
     normalized_extended_year: bool,
 ) -> Result<DateTime<Local>, ParseDateTimeError> {
-    let input_trim = input.trim();
+    let input_without_comments = strip_gnu_parenthesized_comments(input);
+    let input_trim = input_without_comments.trim();
     let input_lower = input_trim.to_lowercase();
 
     if contains_leap_second(input_trim) {
@@ -577,6 +578,30 @@ fn parse_datetime_gnu_compat_impl(
             message: format!("Unable to parse date: {input}"),
         }),
     }
+}
+
+/// GNU date syntax ignores parenthesized comments.  Nested and unterminated
+/// comments are accepted; an unmatched closing parenthesis remains input.
+fn strip_gnu_parenthesized_comments(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    let mut depth = 0usize;
+
+    for character in input.chars() {
+        match character {
+            '(' if depth == 0 => {
+                if !result.ends_with(char::is_whitespace) {
+                    result.push(' ');
+                }
+                depth = 1;
+            }
+            '(' => depth += 1,
+            ')' if depth > 0 => depth -= 1,
+            _ if depth == 0 => result.push(character),
+            _ => {}
+        }
+    }
+
+    result
 }
 
 fn expand_year_for_format<T: Datelike>(value: T, format: &str) -> Option<T> {
@@ -1725,6 +1750,21 @@ mod tests {
         let parsed = parse_datetime_gnu_compat("January 1, 2024 12:00 UTC", ref_time).unwrap();
 
         assert_eq!(parsed.timestamp(), 1_704_110_400);
+    }
+
+    #[test]
+    fn test_ignores_gnu_parenthesized_comments() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for input in [
+            "(comment) 2024-01-01 12:34 UTC",
+            "2024-01-01 (comment) 12:34 UTC",
+            "2024-01-01 12:34 UTC (comment)",
+            "2024-01-01 ((nested) comment) 12:34 UTC",
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.timestamp(), 1_704_112_440, "input {input}");
+        }
     }
 
     #[test]

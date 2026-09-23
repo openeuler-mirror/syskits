@@ -1626,6 +1626,42 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "LC_ALL=C下GNU保留历史SIZE尾缀D：1KD表示1000字节而不是无效数值；预期RC=0、无标准输出和诊断，并创建大小为1000字节的目标文件",
+            "setup_commands": [
+                "rm -f gnu-decimal-d-suffix"
+            ],
+            "args": [
+                "--size",
+                "1KD",
+                "gnu-decimal-d-suffix"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %s gnu-decimal-d-suffix",
+                        "expected_exit": 0,
+                        "expected_stdout": "1000"
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f gnu-decimal-d-suffix"
+            ]
         }
     ]
 }

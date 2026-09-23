@@ -1288,6 +1288,39 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "truncate",
+            "description": "原始非UTF-8 SIZE多修饰符用例：LC_ALL=C下SIZE=3c2bff（<、+、无效字节ff）包含两个相对修饰符；GNU在数值转换前优先拒绝修饰符组合，预期RC=1、stdout为空、stderr字节7472756e636174653a206d756c7469706c652072656c6174697665206d6f64696669657273207370656369666965640a54727920277472756e63617465202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a对应GNU专用multiple relative modifiers诊断，不得错误输出Invalid number，且不得创建目标文件",
+            "setup_commands": [],
+            "args": [
+                "2d73",
+                "3c2bff",
+                "6e6f6e2d757466382d6d756c7469706c652d6d6f6469666965722d746172676574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7472756e636174653a206d756c7469706c652072656c6174697665206d6f64696669657273207370656369666965640a54727920277472756e63617465202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e non-utf8-multiple-modifier-target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

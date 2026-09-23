@@ -337,17 +337,22 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
         .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
-    let size = size
-        .map(|size| {
-            size.into_string().map_err(|size| {
+    let size = match size {
+        Some(size) => match size.into_string() {
+            Ok(size) => Some(size),
+            Err(size) => {
+                if has_multiple_relative_modifiers_bytes(size.as_encoded_bytes()) {
+                    return Err(CTsageError::new(1, "multiple relative modifiers specified"));
+                }
                 let bytes = truncate_non_utf8_size_diagnostic_bytes(size.as_encoded_bytes());
-                CtSimpleError::new(
+                return Err(CtSimpleError::new(
                     1,
                     format!("Invalid number: {}", truncate_quote_size_bytes(bytes)),
-                )
-            })
-        })
-        .transpose()?;
+                ));
+            }
+        },
+        None => None,
+    };
     let parsed_size = validate_truncate_size_option(size.as_deref())?;
 
     if reference.is_none() && parsed_size.is_none() {
@@ -848,13 +853,17 @@ fn validate_truncate_size_option(size: Option<&str>) -> CTResult<Option<Truncate
 }
 
 fn has_multiple_relative_modifiers(size_string: &str) -> bool {
-    let size_string = size_string.trim_start_matches(is_gnu_ascii_whitespace);
-    if !matches!(size_string.chars().next(), Some('<' | '>' | '/' | '%')) {
+    has_multiple_relative_modifiers_bytes(size_string.as_bytes())
+}
+
+fn has_multiple_relative_modifiers_bytes(size: &[u8]) -> bool {
+    let size = trim_gnu_ascii_whitespace_bytes(size);
+    if !matches!(size.first(), Some(b'<' | b'>' | b'/' | b'%')) {
         return false;
     }
 
-    let remaining = size_string[1..].trim_start_matches(is_gnu_ascii_whitespace);
-    matches!(remaining.chars().next(), Some('+' | '-'))
+    let remaining = trim_gnu_ascii_whitespace_bytes(&size[1..]);
+    matches!(remaining.first(), Some(b'+' | b'-'))
 }
 
 fn normalize_truncate_decimal_number(number: &str) -> String {
@@ -2286,6 +2295,21 @@ mod tests {
                     truncate_quote_size(OsStr::from_bytes(&[0xff]))
                 )
             );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_truncate_main_prioritizes_non_utf8_multiple_relative_modifiers() {
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-s"),
+                OsString::from_vec(b"<+\xff".to_vec()),
+                OsString::from("non-utf8-size-target"),
+            ];
+
+            let error = truncate_main(args.into_iter()).unwrap_err();
+
+            assert_eq!(error.to_string(), "multiple relative modifiers specified");
         }
 
         #[test]

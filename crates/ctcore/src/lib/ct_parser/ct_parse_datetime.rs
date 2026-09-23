@@ -599,6 +599,10 @@ fn parse_datetime_gnu_compat_impl(
         }
     }
 
+    if let Some(naive_dt) = parse_gnu_iso_hour(input_trim) {
+        return Ok(Local.from_local_datetime(&naive_dt).unwrap());
+    }
+
     if let Some(dt) = parse_gnu_date_without_year(input_trim, reference_time) {
         return Ok(dt);
     }
@@ -687,6 +691,17 @@ fn parse_gnu_date_without_year(
         chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => Some(dt),
         chrono::LocalResult::None => None,
     }
+}
+
+fn parse_gnu_iso_hour(input: &str) -> Option<NaiveDateTime> {
+    let (date, hour) = input.split_once(['T', 't'])?;
+    if !(1..=2).contains(&hour.len()) || !hour.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+
+    NaiveDate::parse_from_str(date, "%Y-%m-%d")
+        .ok()?
+        .and_hms_opt(hour.parse().ok()?, 0, 0)
 }
 
 fn gnu_month_number(input: &str) -> Option<u32> {
@@ -891,9 +906,12 @@ fn parse_gnu_numeric_timezone(
 
     let wall_time_input = input[..sign_index].trim_end();
     let last_word = wall_time_input.split_ascii_whitespace().next_back()?;
+    let last_time_token = last_word
+        .rsplit_once(['T', 't'])
+        .map_or(last_word, |(_, token)| token);
     let has_explicit_time = wall_time_input.contains(':')
-        || ((1..=2).contains(&last_word.len())
-            && last_word.bytes().all(|byte| byte.is_ascii_digit()));
+        || ((1..=2).contains(&last_time_token.len())
+            && last_time_token.bytes().all(|byte| byte.is_ascii_digit()));
     if !has_explicit_time {
         return None;
     }
@@ -2099,6 +2117,18 @@ mod tests {
             );
             assert_eq!(parsed.time(), NaiveTime::MIN, "input {input}");
         }
+    }
+
+    #[test]
+    fn test_parse_gnu_iso_hour_with_numeric_timezone() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("2024-02-29T12+05", ref_time).unwrap();
+
+        assert_eq!(parsed.with_timezone(&Utc).timestamp(), 1_709_190_000);
+        assert_eq!(
+            parsed.with_timezone(&Utc).time(),
+            NaiveTime::from_hms_opt(7, 0, 0).unwrap()
+        );
     }
 
     #[test]

@@ -1,6 +1,21 @@
 truncate:
   errors:
     invalid_number: Invalid number
+    try_help: "Try 'truncate --help' for more information."
+    missing_size_or_reference: "you must specify either %{size} or %{reference}"
+    relative_size_with_reference: "you must specify a relative %{size} with %{reference}"
+    option_specified_without_option: "%{specified} was specified but %{missing} was not"
+    missing_file_operand: missing file operand
+    multiple_relative_modifiers: multiple relative modifiers specified
+    division_by_zero: division by zero
+    cannot_open_for_writing: "cannot open %{file} for writing"
+    cannot_stat: "cannot stat %{file}"
+    cannot_fstat: "cannot fstat %{file}"
+    cannot_get_size: "cannot get the size of %{file}"
+    failed_to_truncate: "failed to truncate %{file} at %{size} bytes"
+    failed_to_close: "failed to close %{file}"
+    overflow_extending_size: "overflow extending size of file %{file}"
+    overflow_block_size: "overflow in %{blocks} * %{block_size} byte blocks for file %{file}"
   clap:
     truncate_no_create: do not create files that do not exist
     truncate_reference: base the size of each file on the size of RFILE

@@ -1552,6 +1552,80 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "LC_ALL=zh_CN.UTF-8下--io-blocks没有SIZE时必须使用GNU简体中文语义诊断、双引号选项及简体中文帮助提示，而不能退回英文默认错误",
+            "setup_commands": [],
+            "args": ["--io-blocks", "--reference", "reference", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: 指定了 \"--io-blocks\" 但未指定 \"--size\"\n请尝试执行 \"truncate --help\" 来获取更多信息。\n"
+                },
+                "verifications": []
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zh_CN.UTF-8",
+                    "LANG": "zh_CN.UTF-8"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "LC_ALL=zh_CN.UTF-8下目标文件无法创建时必须翻译truncate运行时诊断，同时保留Linux errno文本和GNU单引号文件名",
+            "setup_commands": [],
+            "args": ["--size", "0", "missing/target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: 无法以写模式打开 'missing/target': No such file or directory\n"
+                },
+                "verifications": []
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zh_CN.UTF-8",
+                    "LANG": "zh_CN.UTF-8"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "truncate",
+            "description": "原始字节用例：LC_MESSAGES=zh_CN.UTF-8、LC_CTYPE=zh_CN.gb18030、LANG=C；--io-blocks没有SIZE时，语义诊断和帮助提示必须按GB18030输出；参数完整十六进制=2d2d696f2d626c6f636b73 2d2d7265666572656e6365 7265666572656e6365 746172676574；stdin为0字节；预期RC=1、stdout为空、stderr完整十六进制为7472756e636174653a20d6b8b6a8c1cb20222d2d696f2d626c6f636b732220b5abceb4d6b8b6a820222d2d73697a65220ac7ebb3a2cad4d6b4d0d020227472756e63617465202d2d68656c702220c0b4bbf1c8a1b8fcb6e0d0c5cfa2a1a30a，对应GNU的GB18030诊断与帮助提示",
+            "setup_commands": [],
+            "args": [
+                "2d2d696f2d626c6f636b73",
+                "2d2d7265666572656e6365",
+                "7265666572656e6365",
+                "746172676574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7472756e636174653a20d6b8b6a8c1cb20222d2d696f2d626c6f636b732220b5abceb4d6b8b6a820222d2d73697a65220ac7ebb3a2cad4d6b4d0d020227472756e63617465202d2d68656c702220c0b4bbf1c8a1b8fcb6e0d0c5cfa2a1a30a"
+                },
+                "verifications": []
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_MESSAGES": "zh_CN.UTF-8",
+                    "LC_CTYPE": "zh_CN.gb18030",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -37,7 +37,7 @@ use std::path::Path;
 
 use ctcore::Tool;
 use ctcore::ct_display::locale_quote_marks;
-use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_error::{CTError, CTResult, set_ct_exit_code};
 use ctcore::ct_parse_size::{CtParser, ParseSizeError};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::ct_quoting_style::gnu_quote_shell;
@@ -182,20 +182,16 @@ fn checked_block_size(
 
 fn truncate_size_error(filename: &OsStr, error: TruncateSizeError) -> Box<dyn CTError> {
     match error {
-        TruncateSizeError::ExtendOverflow => CtSimpleError::new(
-            1,
-            format!(
-                "overflow extending size of file {}",
-                truncate_quote_operand(filename)
-            ),
-        ),
-        TruncateSizeError::BlockOverflow { blocks, block_size } => CtSimpleError::new(
-            1,
-            format!(
-                "overflow in {blocks} * {block_size} byte blocks for file {}",
-                truncate_quote_operand(filename)
-            ),
-        ),
+        TruncateSizeError::ExtendOverflow => truncate_diagnostic_error(t!(
+            "truncate.errors.overflow_extending_size",
+            file = truncate_quote_operand(filename)
+        )),
+        TruncateSizeError::BlockOverflow { blocks, block_size } => truncate_diagnostic_error(t!(
+            "truncate.errors.overflow_block_size",
+            blocks = blocks,
+            block_size = block_size,
+            file = truncate_quote_operand(filename)
+        )),
     }
 }
 
@@ -233,9 +229,29 @@ fn truncate_invalid_number_message_with_label(error: impl Display, label: impl D
 }
 
 fn truncate_invalid_number_error(error: impl Display) -> Box<dyn CTError> {
-    TruncateDiagnosticError::boxed(truncate_locale_diagnostic_bytes(
-        &truncate_invalid_number_message(error),
-    ))
+    truncate_diagnostic_error(truncate_invalid_number_message(error))
+}
+
+fn truncate_diagnostic_error(message: impl Display) -> Box<dyn CTError> {
+    TruncateDiagnosticError::boxed(truncate_locale_diagnostic_bytes(&message.to_string()), None)
+}
+
+fn truncate_usage_error(message: impl Display, usage_hint: impl Display) -> Box<dyn CTError> {
+    TruncateDiagnosticError::boxed(
+        truncate_locale_diagnostic_bytes(&message.to_string()),
+        Some(truncate_locale_diagnostic_bytes(&usage_hint.to_string())),
+    )
+}
+
+fn truncate_usage_hint() -> String {
+    t!("truncate.errors.try_help").to_string()
+}
+
+fn truncate_diagnostic_error_with_os_error(
+    message: impl Display,
+    error: &std::io::Error,
+) -> Box<dyn CTError> {
+    truncate_diagnostic_error(format!("{message}: {}", os_error_message(error)))
 }
 
 fn truncate_locale_diagnostic_bytes(text: &str) -> Vec<u8> {
@@ -464,25 +480,40 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
     let size = parsed_size.as_ref().map(truncate_size_string_from_mode);
 
     if reference.is_none() && parsed_size.is_none() {
-        return Err(CTsageError::new(
-            1,
-            "you must specify either '--size' or '--reference'",
+        return Err(truncate_usage_error(
+            t!(
+                "truncate.errors.missing_size_or_reference",
+                size = truncate_quote_size(OsStr::new("--size")),
+                reference = truncate_quote_size(OsStr::new("--reference"))
+            ),
+            truncate_usage_hint(),
         ));
     }
     if reference.is_some() && matches!(parsed_size.as_ref(), Some(TruncateMode::Absolute(_))) {
-        return Err(CTsageError::new(
-            1,
-            "you must specify a relative '--size' with '--reference'",
+        return Err(truncate_usage_error(
+            t!(
+                "truncate.errors.relative_size_with_reference",
+                size = truncate_quote_size(OsStr::new("--size")),
+                reference = truncate_quote_size(OsStr::new("--reference"))
+            ),
+            truncate_usage_hint(),
         ));
     }
     if is_io_blocks && parsed_size.is_none() {
-        return Err(CTsageError::new(
-            1,
-            "'--io-blocks' was specified but '--size' was not",
+        return Err(truncate_usage_error(
+            t!(
+                "truncate.errors.option_specified_without_option",
+                specified = truncate_quote_size(OsStr::new("--io-blocks")),
+                missing = truncate_quote_size(OsStr::new("--size"))
+            ),
+            truncate_usage_hint(),
         ));
     }
     if files.is_empty() {
-        return Err(CTsageError::new(1, "missing file operand"));
+        return Err(truncate_usage_error(
+            t!("truncate.errors.missing_file_operand"),
+            truncate_usage_hint(),
+        ));
     }
 
     truncate(is_no_create, is_io_blocks, reference, size, &files)
@@ -549,11 +580,15 @@ enum TruncateLongOptionMatch {
 #[derive(Debug)]
 struct TruncateUsageError {
     message: Vec<u8>,
+    usage_hint: Vec<u8>,
 }
 
 impl TruncateUsageError {
     fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
-        Box::new(Self { message })
+        Box::new(Self {
+            message,
+            usage_hint: truncate_locale_diagnostic_bytes(&truncate_usage_hint()),
+        })
     }
 }
 
@@ -570,6 +605,10 @@ impl CTError for TruncateUsageError {
         Cow::Borrowed(&self.message)
     }
 
+    fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
+        Some(Cow::Borrowed(&self.usage_hint))
+    }
+
     fn usage(&self) -> bool {
         true
     }
@@ -578,11 +617,15 @@ impl CTError for TruncateUsageError {
 #[derive(Debug)]
 struct TruncateDiagnosticError {
     message: Vec<u8>,
+    usage_hint: Option<Vec<u8>>,
 }
 
 impl TruncateDiagnosticError {
-    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
-        Box::new(Self { message })
+    fn boxed(message: Vec<u8>, usage_hint: Option<Vec<u8>>) -> Box<dyn CTError> {
+        Box::new(Self {
+            message,
+            usage_hint,
+        })
     }
 }
 
@@ -597,6 +640,14 @@ impl Error for TruncateDiagnosticError {}
 impl CTError for TruncateDiagnosticError {
     fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Borrowed(&self.message)
+    }
+
+    fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
+        self.usage_hint.as_deref().map(Cow::Borrowed)
+    }
+
+    fn usage(&self) -> bool {
+        self.usage_hint.is_some()
     }
 }
 
@@ -928,12 +979,13 @@ where
         Ok(file) => file,
         Err(error) if !create && error.kind() == ErrorKind::NotFound => return Ok(()),
         Err(error) => {
-            return Err(error.map_err_context(|| {
-                format!(
-                    "cannot open {} for writing",
-                    truncate_quote_operand(filename)
-                )
-            }));
+            return Err(truncate_diagnostic_error_with_os_error(
+                t!(
+                    "truncate.errors.cannot_open_for_writing",
+                    file = truncate_quote_operand(filename)
+                ),
+                &error,
+            ));
         }
     };
     #[cfg(unix)]
@@ -941,23 +993,21 @@ where
         let operation = (|| {
             let size = size_for_file(&file)?;
             let size = libc::off_t::try_from(size).map_err(|_| {
-                CtSimpleError::new(
-                    1,
-                    format!(
-                        "failed to truncate {} at {size} bytes",
-                        truncate_quote_operand(filename)
-                    ),
-                )
+                truncate_diagnostic_error(t!(
+                    "truncate.errors.failed_to_truncate",
+                    file = truncate_quote_operand(filename),
+                    size = size
+                ))
             })?;
             if unsafe { libc::ftruncate(file.as_raw_fd(), size) } != 0 {
                 let error = std::io::Error::last_os_error();
-                let error_message = os_error_message(&error);
-                return Err(CtSimpleError::new(
-                    1,
-                    format!(
-                        "failed to truncate {} at {size} bytes: {error_message}",
-                        truncate_quote_operand(filename)
+                return Err(truncate_diagnostic_error_with_os_error(
+                    t!(
+                        "truncate.errors.failed_to_truncate",
+                        file = truncate_quote_operand(filename),
+                        size = size
                     ),
+                    &error,
                 ));
             }
             Ok(())
@@ -969,10 +1019,14 @@ where
     #[cfg(not(unix))]
     {
         let size = size_for_file(&file)?;
-        file.set_len(size).map_err_context(|| {
-            format!(
-                "failed to truncate {} at {size} bytes",
-                truncate_quote_operand(filename)
+        file.set_len(size).map_err(|error| {
+            truncate_diagnostic_error_with_os_error(
+                t!(
+                    "truncate.errors.failed_to_truncate",
+                    file = truncate_quote_operand(filename),
+                    size = size
+                ),
+                &error,
             )
         })
     }
@@ -999,13 +1053,12 @@ where
         return Ok(());
     }
 
-    Err(CtSimpleError::new(
-        1,
-        format!(
-            "failed to close {}: {}",
-            truncate_quote_operand(filename),
-            os_error_message(&error())
+    Err(truncate_diagnostic_error_with_os_error(
+        t!(
+            "truncate.errors.failed_to_close",
+            file = truncate_quote_operand(filename)
         ),
+        &error(),
     ))
 }
 
@@ -1014,13 +1067,14 @@ fn finish_truncate_file(operation: CTResult<()>, close: CTResult<()>) -> CTResul
     match (operation, close) {
         (Ok(()), Ok(())) => Ok(()),
         (Err(error), Ok(())) | (Ok(()), Err(error)) => Err(error),
-        (Err(operation_error), Err(close_error)) => Err(CtSimpleError::new(
-            operation_error.code(),
-            format!(
-                "{operation_error}\n{}: {close_error}",
-                ctcore::ct_util_name()
-            ),
-        )),
+        (Err(operation_error), Err(close_error)) => {
+            let mut message = operation_error.diagnostic_bytes().into_owned();
+            message.push(b'\n');
+            message.extend_from_slice(ctcore::ct_util_name().as_bytes());
+            message.extend_from_slice(b": ");
+            message.extend_from_slice(close_error.diagnostic_bytes().as_ref());
+            Err(TruncateDiagnosticError::boxed(message, None))
+        }
     }
 }
 
@@ -1029,8 +1083,15 @@ fn truncate_file<P: AsRef<OsStr>>(filename: P, create: bool, size: u64) -> CTRes
 }
 
 fn file_metadata_for_truncate(file: &File, filename: &OsStr) -> CTResult<std::fs::Metadata> {
-    file.metadata()
-        .map_err_context(|| format!("cannot fstat {}", truncate_quote_operand(filename)))
+    file.metadata().map_err(|error| {
+        truncate_diagnostic_error_with_os_error(
+            t!(
+                "truncate.errors.cannot_fstat",
+                file = truncate_quote_operand(filename)
+            ),
+            &error,
+        )
+    })
 }
 
 #[cfg(unix)]
@@ -1046,13 +1107,12 @@ fn relative_file_size(
     let size = unsafe { libc::lseek(file.as_raw_fd(), 0, libc::SEEK_END) };
     if size < 0 {
         let error = std::io::Error::last_os_error();
-        return Err(CtSimpleError::new(
-            1,
-            format!(
-                "cannot get the size of {}: {}",
-                truncate_quote_operand(filename),
-                os_error_message(&error)
+        return Err(truncate_diagnostic_error_with_os_error(
+            t!(
+                "truncate.errors.cannot_get_size",
+                file = truncate_quote_operand(filename)
             ),
+            &error,
         ));
     }
 
@@ -1068,8 +1128,8 @@ fn relative_file_size(
     Ok(metadata.len())
 }
 
-#[cfg(unix)]
 fn os_error_message(error: &std::io::Error) -> String {
+    #[cfg(unix)]
     match error.raw_os_error() {
         Some(errno) => {
             // SAFETY: strerror returns a NUL-terminated message for a valid errno value.
@@ -1078,6 +1138,11 @@ fn os_error_message(error: &std::io::Error) -> String {
                 .into_owned()
         }
         None => error.to_string(),
+    }
+
+    #[cfg(not(unix))]
+    {
+        error.to_string()
     }
 }
 
@@ -1107,13 +1172,12 @@ fn reference_file_size<R: AsRef<OsStr>>(reference: R) -> CTResult<u64> {
     let reference = reference.as_ref();
     let reference_path = Path::new(reference);
     let metadata = metadata(reference_path).map_err(|error| {
-        CtSimpleError::new(
-            1,
-            format!(
-                "cannot stat {}: {}",
-                truncate_quote_operand(reference),
-                os_error_message(&error)
+        truncate_diagnostic_error_with_os_error(
+            t!(
+                "truncate.errors.cannot_stat",
+                file = truncate_quote_operand(reference)
             ),
+            &error,
         )
     })?;
 
@@ -1122,25 +1186,23 @@ fn reference_file_size<R: AsRef<OsStr>>(reference: R) -> CTResult<u64> {
     }
 
     let file = File::open(reference_path).map_err(|error| {
-        CtSimpleError::new(
-            1,
-            format!(
-                "cannot get the size of {}: {}",
-                truncate_quote_operand(reference),
-                os_error_message(&error)
+        truncate_diagnostic_error_with_os_error(
+            t!(
+                "truncate.errors.cannot_get_size",
+                file = truncate_quote_operand(reference)
             ),
+            &error,
         )
     })?;
     let size = unsafe { libc::lseek(file.as_raw_fd(), 0, libc::SEEK_END) };
     if size < 0 {
         let error = std::io::Error::last_os_error();
-        return Err(CtSimpleError::new(
-            1,
-            format!(
-                "cannot get the size of {}: {}",
-                truncate_quote_operand(reference),
-                os_error_message(&error)
+        return Err(truncate_diagnostic_error_with_os_error(
+            t!(
+                "truncate.errors.cannot_get_size",
+                file = truncate_quote_operand(reference)
             ),
+            &error,
         ));
     }
 
@@ -1152,7 +1214,15 @@ fn reference_file_size<R: AsRef<OsStr>>(reference: R) -> CTResult<u64> {
     let reference = reference.as_ref();
     metadata(Path::new(reference))
         .map(|metadata| metadata.len())
-        .map_err_context(|| format!("cannot stat {}", truncate_quote_operand(reference)))
+        .map_err(|error| {
+            truncate_diagnostic_error_with_os_error(
+                t!(
+                    "truncate.errors.cannot_stat",
+                    file = truncate_quote_operand(reference)
+                ),
+                &error,
+            )
+        })
 }
 
 /// 将文件截断到相对于给定文件的大小。
@@ -1182,19 +1252,20 @@ where
 {
     let r_file_name = r_file_name.as_ref();
     let truncate_mode = match truncate_parse_mode_and_size(size_string) {
-        Err(e) => {
-            let err_massage = truncate_invalid_number_message(e);
-            return Err(CtSimpleError::new(1, err_massage));
-        }
+        Err(error) => return Err(truncate_invalid_number_error(error)),
         Ok(TruncateMode::Absolute(_)) => {
-            let err_massage =
-                String::from("you must specify a relative '--size' with '--reference'");
-            return Err(CtSimpleError::new(1, err_massage));
+            return Err(truncate_diagnostic_error(t!(
+                "truncate.errors.relative_size_with_reference",
+                size = truncate_quote_size(OsStr::new("--size")),
+                reference = truncate_quote_size(OsStr::new("--reference"))
+            )));
         }
         Ok(mode) => mode,
     };
     if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = truncate_mode {
-        return Err(CtSimpleError::new(1, "division by zero"));
+        return Err(truncate_diagnostic_error(t!(
+            "truncate.errors.division_by_zero"
+        )));
     }
     let reference_size = reference_file_size(r_file_name)?;
     truncate_files(filenames, |filename| {
@@ -1202,8 +1273,14 @@ where
             truncate_file_with_size(filename, is_create, |file| {
                 let blocksize = file
                     .metadata()
-                    .map_err_context(|| {
-                        format!("cannot fstat {}", truncate_quote_operand(filename))
+                    .map_err(|error| {
+                        truncate_diagnostic_error_with_os_error(
+                            t!(
+                                "truncate.errors.cannot_fstat",
+                                file = truncate_quote_operand(filename)
+                            ),
+                            &error,
+                        )
                     })?
                     .st_blksize();
                 truncate_mode
@@ -1267,10 +1344,12 @@ fn truncate_size_only<P>(
 where
     P: AsRef<OsStr>,
 {
-    let truncate_mode = truncate_parse_mode_and_size(size_string)
-        .map_err(|e| CtSimpleError::new(1, truncate_invalid_number_message(e)))?;
+    let truncate_mode =
+        truncate_parse_mode_and_size(size_string).map_err(truncate_invalid_number_error)?;
     if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = truncate_mode {
-        return Err(CtSimpleError::new(1, "division by zero"));
+        return Err(truncate_diagnostic_error(t!(
+            "truncate.errors.division_by_zero"
+        )));
     }
 
     truncate_files(filenames, |filename| {
@@ -1313,7 +1392,10 @@ where
     P: AsRef<OsStr>,
 {
     if size.as_deref().is_some_and(has_multiple_relative_modifiers) {
-        return Err(CTsageError::new(1, "multiple relative modifiers specified"));
+        return Err(truncate_usage_error(
+            t!("truncate.errors.multiple_relative_modifiers"),
+            truncate_usage_hint(),
+        ));
     }
 
     let is_create = !is_no_create;
@@ -1358,14 +1440,20 @@ fn validate_truncate_size_options(sizes: &[OsString]) -> CTResult<Option<Truncat
     for size in sizes {
         let bytes = size.as_encoded_bytes();
         if has_multiple_relative_modifiers_bytes(bytes) {
-            return Err(CTsageError::new(1, "multiple relative modifiers specified"));
+            return Err(truncate_usage_error(
+                t!("truncate.errors.multiple_relative_modifiers"),
+                truncate_usage_hint(),
+            ));
         }
         if truncate_size_starts_with_sign(bytes)
             && mode
                 .as_ref()
                 .is_some_and(|mode| !matches!(mode, TruncateMode::Absolute(_)))
         {
-            return Err(CTsageError::new(1, "multiple relative modifiers specified"));
+            return Err(truncate_usage_error(
+                t!("truncate.errors.multiple_relative_modifiers"),
+                truncate_usage_hint(),
+            ));
         }
 
         let size = match size.to_str() {
@@ -1404,7 +1492,9 @@ fn validate_truncate_size_options(sizes: &[OsString]) -> CTResult<Option<Truncat
             mode.as_ref(),
             Some(TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0))
         ) {
-            return Err(CtSimpleError::new(1, "division by zero"));
+            return Err(truncate_diagnostic_error(t!(
+                "truncate.errors.division_by_zero"
+            )));
         }
     }
 
@@ -1593,7 +1683,11 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "you must specify either '--size' or '--reference'"
+            format!(
+                "you must specify either {} or {}",
+                truncate_quote_size(OsStr::new("--size")),
+                truncate_quote_size(OsStr::new("--reference"))
+            )
         );
     }
 
@@ -1629,6 +1723,40 @@ mod tests {
                 "无效的数字",
             ),
             "无效的数字: \"invalid\""
+        );
+    }
+
+    #[test]
+    fn truncate_usage_error_preserves_simplified_chinese_diagnostic_and_hint() {
+        let error = truncate_usage_error(
+            "指定了 \"--io-blocks\" 但未指定 \"--size\"",
+            "请尝试执行 \"truncate --help\" 来获取更多信息。",
+        );
+
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            "指定了 \"--io-blocks\" 但未指定 \"--size\"".as_bytes()
+        );
+        assert_eq!(
+            error.usage_hint_bytes().as_deref(),
+            Some("请尝试执行 \"truncate --help\" 来获取更多信息。".as_bytes())
+        );
+    }
+
+    #[test]
+    fn truncate_runtime_error_preserves_simplified_chinese_template_and_errno() {
+        let error = truncate_diagnostic_error_with_os_error(
+            t!(
+                "truncate.errors.cannot_open_for_writing",
+                locale = "zh-CN",
+                file = "'missing/target'"
+            ),
+            &std::io::Error::from_raw_os_error(libc::ENOENT),
+        );
+
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            "无法以写模式打开 'missing/target': No such file or directory".as_bytes()
         );
     }
 
@@ -2335,8 +2463,13 @@ mod tests {
             );
             assert!(result.is_err());
             let error_message = format!("{}", result.unwrap_err());
-            assert!(
-                error_message.contains("you must specify a relative '--size' with '--reference'")
+            assert_eq!(
+                error_message,
+                format!(
+                    "you must specify a relative {} with {}",
+                    truncate_quote_size(OsStr::new("--size")),
+                    truncate_quote_size(OsStr::new("--reference"))
+                )
             );
 
             // 测试除以零的情况
@@ -2486,11 +2619,11 @@ mod tests {
         #[test]
         fn test_finish_truncate_file_reports_operation_then_close_error() {
             let error = finish_truncate_file(
-                Err(CtSimpleError::new(
+                Err(ctcore::ct_error::CtSimpleError::new(
                     1,
                     "failed to truncate 'file' at 0 bytes: Invalid argument",
                 )),
-                Err(CtSimpleError::new(
+                Err(ctcore::ct_error::CtSimpleError::new(
                     1,
                     "failed to close 'file': Input/output error",
                 )),
@@ -3315,7 +3448,11 @@ mod tests {
 
             assert_eq!(
                 error.to_string(),
-                "'--io-blocks' was specified but '--size' was not"
+                format!(
+                    "{} was specified but {} was not",
+                    truncate_quote_size(OsStr::new("--io-blocks")),
+                    truncate_quote_size(OsStr::new("--size"))
+                )
             );
             assert_eq!(metadata(&target_path).unwrap().len(), 6);
         }

@@ -190,6 +190,12 @@ fn parse_datetime_gnu_compat_impl(
         return Ok(dt);
     }
 
+    if let Some(dt) =
+        parse_gnu_meridian_datetime(input_trim, reference_time, normalized_extended_year)
+    {
+        return Ok(dt);
+    }
+
     if let Some(dt) = parse_embedded_timezone(input_trim) {
         return Ok(dt);
     }
@@ -1210,6 +1216,131 @@ fn parse_compact_time_of_day(
     }
 }
 
+#[derive(Clone, Copy)]
+enum Meridian {
+    Am,
+    Pm,
+}
+
+/// Parse GNU's 12-hour clock item independently from the date item.
+fn parse_gnu_meridian_datetime(
+    input: &str,
+    reference_time: DateTime<Local>,
+    normalized_extended_year: bool,
+) -> Option<DateTime<Local>> {
+    let tokens: Vec<&str> = input.split_ascii_whitespace().collect();
+    let (time, time_start, time_end) = find_gnu_meridian_time(&tokens)?;
+    let date_input = tokens
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index < time_start || *index >= time_end)
+        .map(|(_, token)| *token)
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let date_time = if date_input.is_empty() {
+        reference_time
+    } else {
+        parse_datetime_gnu_compat_impl(&date_input, reference_time, normalized_extended_year)
+            .ok()?
+    };
+    let naive = date_time.date_naive().and_time(time);
+
+    match date_time.timezone().from_local_datetime(&naive) {
+        chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => Some(dt),
+        chrono::LocalResult::None => None,
+    }
+}
+
+fn find_gnu_meridian_time(tokens: &[&str]) -> Option<(NaiveTime, usize, usize)> {
+    let mut result = None;
+
+    for (index, token) in tokens.iter().enumerate() {
+        if let Some((clock, meridian)) = split_gnu_meridian_suffix(token) {
+            let time = parse_gnu_meridian_clock(clock, meridian)?;
+            if result.replace((time, index, index + 1)).is_some() {
+                return None;
+            }
+        }
+    }
+    if result.is_some() {
+        return result;
+    }
+
+    for (index, pair) in tokens.windows(2).enumerate() {
+        if let Some(meridian) = parse_gnu_meridian_word(pair[1]) {
+            let time = parse_gnu_meridian_clock(pair[0], meridian)?;
+            if result.replace((time, index, index + 2)).is_some() {
+                return None;
+            }
+        }
+    }
+
+    result
+}
+
+fn split_gnu_meridian_suffix(input: &str) -> Option<(&str, Meridian)> {
+    let lower = input.to_ascii_lowercase();
+    for (suffix, meridian) in [
+        ("a.m.", Meridian::Am),
+        ("p.m.", Meridian::Pm),
+        ("am", Meridian::Am),
+        ("pm", Meridian::Pm),
+    ] {
+        if lower.ends_with(suffix) && input.len() > suffix.len() {
+            return Some((&input[..input.len() - suffix.len()], meridian));
+        }
+    }
+    None
+}
+
+fn parse_gnu_meridian_word(input: &str) -> Option<Meridian> {
+    match input.to_ascii_lowercase().as_str() {
+        "am" | "a.m." => Some(Meridian::Am),
+        "pm" | "p.m." => Some(Meridian::Pm),
+        _ => None,
+    }
+}
+
+fn parse_gnu_meridian_clock(input: &str, meridian: Meridian) -> Option<NaiveTime> {
+    let mut components = input.split(':');
+    let hour = components.next()?.parse::<u32>().ok()?;
+    let minute = components
+        .next()
+        .map_or(Some(0), |value| value.parse().ok())?;
+    let seconds = components.next().unwrap_or("0");
+    if components.next().is_some() || !(1..=12).contains(&hour) || minute > 59 {
+        return None;
+    }
+
+    let (second, nanoseconds) = if let Some((second, fraction)) = seconds.split_once('.') {
+        if fraction.is_empty() || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+        let mut nanos = fraction
+            .bytes()
+            .take(9)
+            .fold(0u32, |value, digit| value * 10 + u32::from(digit - b'0'));
+        for _ in fraction.len().min(9)..9 {
+            nanos *= 10;
+        }
+        (second.parse::<u32>().ok()?, nanos)
+    } else {
+        (seconds.parse::<u32>().ok()?, 0)
+    };
+    if second > 59 {
+        return None;
+    }
+
+    let hour = match meridian {
+        Meridian::Am if hour == 12 => 0,
+        Meridian::Am => hour,
+        Meridian::Pm if hour == 12 => 12,
+        Meridian::Pm => hour + 12,
+    };
+    NaiveTime::from_hms_nano_opt(hour, minute, second, nanoseconds)
+}
+
 fn parse_weekday_name(input: &str) -> Option<Weekday> {
     match input.trim_end_matches(',').to_ascii_lowercase().as_str() {
         "sunday" | "sun" => Some(Weekday::Sun),
@@ -1764,6 +1895,33 @@ mod tests {
         ] {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
             assert_eq!(parsed.timestamp(), 1_704_112_440, "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_parse_gnu_meridian_times() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, expected_hour, expected_minute, expected_second, expected_nanos) in [
+            ("2024-02-29 12pm UTC", 12, 0, 0, 0),
+            ("2024-02-29 12:34pm UTC", 12, 34, 0, 0),
+            ("2024-02-29 12:34:56.5pm UTC", 12, 34, 56, 500_000_000),
+            ("12pm 2024-02-29 UTC", 12, 0, 0, 0),
+            ("2024-02-29 1:2 p.m. UTC", 13, 2, 0, 0),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(
+                parsed.date_naive(),
+                NaiveDate::from_ymd_opt(2024, 2, 29).unwrap()
+            );
+            assert_eq!(parsed.hour(), expected_hour, "input {input}");
+            assert_eq!(parsed.minute(), expected_minute, "input {input}");
+            assert_eq!(parsed.second(), expected_second, "input {input}");
+            assert_eq!(
+                parsed.timestamp_subsec_nanos(),
+                expected_nanos,
+                "input {input}"
+            );
         }
     }
 

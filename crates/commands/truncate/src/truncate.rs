@@ -1552,6 +1552,24 @@ fn normalize_truncate_decimal_number(number: &str) -> String {
     format!("{normalized_digits}{}", &number[number_end..])
 }
 
+fn normalize_truncate_gnu_decimal_suffix(number: String) -> String {
+    let Some(prefix) = number.strip_suffix('D') else {
+        return number;
+    };
+    let Some(unit) = prefix.chars().last() else {
+        return number;
+    };
+
+    if matches!(
+        unit,
+        'E' | 'G' | 'g' | 'k' | 'K' | 'M' | 'm' | 'P' | 'Q' | 'R' | 'T' | 't' | 'Y' | 'Z'
+    ) {
+        format!("{prefix}B")
+    } else {
+        number
+    }
+}
+
 /// 解析带有可选修饰符符号作为第一个字符的大小字符串。
 ///
 /// 大小字符串的描述与 `parse_size_u64` 函数相同。`size_string` 的第一个字符可能是一个修饰符符号，
@@ -1611,7 +1629,8 @@ fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, Parse
     }
     let mut parser = CtParser::default();
     parser.with_allow_list(TRUNCATE_SIZE_UNITS);
-    let normalized_number = normalize_truncate_decimal_number(number);
+    let normalized_number =
+        normalize_truncate_gnu_decimal_suffix(normalize_truncate_decimal_number(number));
     let size = parser
         .parse_u64(&normalized_number)
         .map_err(|error| match error {
@@ -2821,6 +2840,18 @@ mod tests {
         #[test]
         fn test_truncate_parse_mode_and_size_rejects_dd_block_suffix() {
             assert!(truncate_parse_mode_and_size("1b").is_err());
+        }
+
+        #[test]
+        fn test_truncate_parse_mode_and_size_accepts_gnu_decimal_d_suffix() {
+            assert_eq!(
+                truncate_parse_mode_and_size("1KD"),
+                Ok(TruncateMode::Absolute(1_000))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("1MD"),
+                Ok(TruncateMode::Absolute(1_000_000))
+            );
         }
 
         #[test]

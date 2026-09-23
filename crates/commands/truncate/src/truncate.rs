@@ -401,6 +401,46 @@ fn truncate_file<P: AsRef<OsStr>>(filename: P, create: bool, size: u64) -> CTRes
     truncate_file_with_size(filename, create, |_| Ok(size))
 }
 
+fn file_metadata_for_truncate(file: &File, filename: &OsStr) -> CTResult<std::fs::Metadata> {
+    file.metadata()
+        .map_err_context(|| format!("cannot fstat {}", truncate_quote_operand(filename)))
+}
+
+#[cfg(unix)]
+fn relative_file_size(
+    file: &File,
+    filename: &OsStr,
+    metadata: &std::fs::Metadata,
+) -> CTResult<u64> {
+    if metadata.file_type().is_file() {
+        return Ok(metadata.len());
+    }
+
+    let size = unsafe { libc::lseek(file.as_raw_fd(), 0, libc::SEEK_END) };
+    if size < 0 {
+        let error = std::io::Error::last_os_error();
+        return Err(CtSimpleError::new(
+            1,
+            format!(
+                "cannot get the size of {}: {}",
+                truncate_quote_operand(filename),
+                os_error_message(&error)
+            ),
+        ));
+    }
+
+    Ok(size as u64)
+}
+
+#[cfg(not(unix))]
+fn relative_file_size(
+    _file: &File,
+    _filename: &OsStr,
+    metadata: &std::fs::Metadata,
+) -> CTResult<u64> {
+    Ok(metadata.len())
+}
+
 #[cfg(unix)]
 fn os_error_message(error: &std::io::Error) -> String {
     match error.raw_os_error() {
@@ -579,20 +619,6 @@ where
     })
 }
 
-#[cfg(unix)]
-fn io_block_size_for_new_file(filename: &OsStr) -> u64 {
-    let path = Path::new(filename);
-    let parent = path.parent().filter(|p| !p.as_os_str().is_empty());
-    let parent = parent.unwrap_or_else(|| Path::new("."));
-
-    metadata(parent).map(|md| md.st_blksize()).unwrap_or(0)
-}
-
-#[cfg(not(unix))]
-fn io_block_size_for_new_file(_filename: &OsStr) -> u64 {
-    0
-}
-
 /// 将文件截断到指定的大小。
 ///
 /// `size_string` 提供的是绝对大小或相对大小。相对大小会根据文件的当前大小调整每个文件的大小。
@@ -621,31 +647,31 @@ where
     }
 
     truncate_files(filenames, |filename| {
-        let (f_size, blocksize) = match metadata(filename) {
-            Ok(md) => {
-                let blocksize_md = md.st_blksize();
+        truncate_file_with_size(filename, is_create, |file| {
+            let needs_current_size = !matches!(truncate_mode, TruncateMode::Absolute(_));
+            let metadata = (is_blocks || needs_current_size)
+                .then(|| file_metadata_for_truncate(file, filename))
+                .transpose()?;
+            let current_size = if needs_current_size {
+                relative_file_size(file, filename, metadata.as_ref().unwrap())?
+            } else {
+                0
+            };
 
-                (md.len(), blocksize_md)
+            if is_blocks {
+                let block_size = metadata
+                    .as_ref()
+                    .expect("I/O block mode always retrieves target metadata")
+                    .st_blksize();
+                truncate_mode
+                    .to_block_size(current_size, block_size)
+                    .map_err(|error| truncate_size_error(filename, error))
+            } else {
+                truncate_mode
+                    .to_size(current_size)
+                    .map_err(|error| truncate_size_error(filename, error))
             }
-            Err(_) => {
-                if is_blocks && is_create {
-                    (0, io_block_size_for_new_file(filename))
-                } else {
-                    (0, 0)
-                }
-            }
-        };
-
-        let t_size = match is_blocks {
-            true => truncate_mode
-                .to_block_size(f_size, blocksize)
-                .map_err(|error| truncate_size_error(filename, error))?,
-            false => truncate_mode
-                .to_size(f_size)
-                .map_err(|error| truncate_size_error(filename, error))?,
-        };
-
-        truncate_file(filename, is_create, t_size)
+        })
     })
 }
 
@@ -1646,6 +1672,33 @@ mod tests {
                 assert!(error_message.contains("Invalid argument"));
                 assert!(!error_message.contains("os error"));
             }
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_relative_fifo_size_uses_lseek_diagnostic() {
+            use std::os::unix::fs::OpenOptionsExt;
+            use std::process::Command;
+
+            let temp_dir = tempfile::tempdir().unwrap();
+            let fifo_path = temp_dir.path().join("relative-size-fifo");
+            Command::new("mkfifo").arg(&fifo_path).status().unwrap();
+
+            let file = OpenOptions::new()
+                .write(true)
+                .custom_flags(libc::O_NONBLOCK)
+                .open(&fifo_path)
+                .unwrap();
+            let metadata = file_metadata_for_truncate(&file, fifo_path.as_os_str()).unwrap();
+            let error = relative_file_size(&file, fifo_path.as_os_str(), &metadata).unwrap_err();
+
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "cannot get the size of {}: Illegal seek",
+                    truncate_quote_operand(fifo_path.as_os_str())
+                )
+            );
         }
 
         #[test]

@@ -1073,6 +1073,35 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "相对SIZE作用于FIFO时必须先按GNU在已打开描述符上获取长度：FIFO没有可用st_size且lseek(SEEK_END)返回ESPIPE，预期RC=1、stdout为空、stderr为cannot get the size of 'relative-size-fifo': Illegal seek，不得错误调用ftruncate",
+            "setup_commands": [
+                "mkfifo relative-size-fifo"
+            ],
+            "args": [
+                "--size",
+                "+1",
+                "relative-size-fifo"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: cannot get the size of 'relative-size-fifo': Illegal seek\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f relative-size-fifo"
+            ]
         }
     ]
 }

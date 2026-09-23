@@ -1,4 +1,6 @@
 truncate:
+  errors:
+    invalid_number: 无效的数字
   clap:
     truncate_no_create: 不创建不存在的文件
     truncate_reference: 基于参考文件大小作为每个文件的大小

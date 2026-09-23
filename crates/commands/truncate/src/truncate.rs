@@ -206,8 +206,28 @@ fn truncate_quote_size(size: &OsStr) -> String {
 }
 
 fn truncate_quote_size_bytes(bytes: &[u8]) -> String {
-    let (left_quote, right_quote) = locale_quote_marks();
+    let (left_quote, right_quote) = truncate_size_quote_marks();
     truncate_quote_size_with_marks(bytes, left_quote, right_quote)
+}
+
+fn truncate_size_quote_marks() -> (&'static str, &'static str) {
+    truncate_size_quote_marks_for_locale(&rust_i18n::locale())
+}
+
+fn truncate_size_quote_marks_for_locale(locale: &str) -> (&'static str, &'static str) {
+    if locale == "zh-CN" {
+        ("\"", "\"")
+    } else {
+        locale_quote_marks()
+    }
+}
+
+fn truncate_invalid_number_message(error: impl Display) -> String {
+    truncate_invalid_number_message_with_label(error, t!("truncate.errors.invalid_number"))
+}
+
+fn truncate_invalid_number_message_with_label(error: impl Display, label: impl Display) -> String {
+    format!("{label}: {error}")
 }
 
 fn truncate_quote_size_with_marks(bytes: &[u8], left_quote: &str, right_quote: &str) -> String {
@@ -999,7 +1019,7 @@ where
     let r_file_name = r_file_name.as_ref();
     let truncate_mode = match truncate_parse_mode_and_size(size_string) {
         Err(e) => {
-            let err_massage = format!("Invalid number: {e}");
+            let err_massage = truncate_invalid_number_message(e);
             return Err(CtSimpleError::new(1, err_massage));
         }
         Ok(TruncateMode::Absolute(_)) => {
@@ -1084,7 +1104,7 @@ where
     P: AsRef<OsStr>,
 {
     let truncate_mode = truncate_parse_mode_and_size(size_string)
-        .map_err(|e| CtSimpleError::new(1, format!("Invalid number: {e}")))?;
+        .map_err(|e| CtSimpleError::new(1, truncate_invalid_number_message(e)))?;
     if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = truncate_mode {
         return Err(CtSimpleError::new(1, "division by zero"));
     }
@@ -1190,12 +1210,12 @@ fn validate_truncate_size_options(sizes: &[OsString]) -> CTResult<Option<Truncat
                 let bytes = truncate_non_utf8_size_diagnostic_bytes(bytes);
                 return Err(CtSimpleError::new(
                     1,
-                    format!("Invalid number: {}", truncate_quote_size_bytes(bytes)),
+                    truncate_invalid_number_message(truncate_quote_size_bytes(bytes)),
                 ));
             }
         };
         let parsed = truncate_parse_mode_and_size(size)
-            .map_err(|error| CtSimpleError::new(1, format!("Invalid number: {error}")))?;
+            .map_err(|error| CtSimpleError::new(1, truncate_invalid_number_message(error)))?;
         mode = Some(match (mode, parsed) {
             (Some(TruncateMode::Extend(_)), TruncateMode::Absolute(size)) => {
                 TruncateMode::Extend(size)
@@ -1436,6 +1456,18 @@ mod tests {
             assert_eq!(error.diagnostic_bytes().as_ref(), expected.as_bytes());
             assert!(error.usage());
         }
+    }
+
+    #[test]
+    fn truncate_invalid_size_uses_gnu_simplified_chinese_diagnostic() {
+        let (left_quote, right_quote) = truncate_size_quote_marks_for_locale("zh-CN");
+        assert_eq!(
+            truncate_invalid_number_message_with_label(
+                truncate_quote_size_with_marks(b"invalid", left_quote, right_quote),
+                "无效的数字",
+            ),
+            "无效的数字: \"invalid\""
+        );
     }
 
     #[cfg(test)]

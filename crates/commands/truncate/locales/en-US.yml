@@ -1,4 +1,6 @@
 truncate:
+  errors:
+    invalid_number: Invalid number
   clap:
     truncate_no_create: do not create files that do not exist
     truncate_reference: base the size of each file on the size of RFILE

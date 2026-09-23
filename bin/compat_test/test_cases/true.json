@@ -117,6 +117,60 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "true",
+            "description": "LC_ALL=C、LANG=C下调用方保留默认SIGPIPE且stdout连接无读端管道，执行true --help；GNU首次写入时由SIGPIPE终止，预期RC=141，stdout和stderr均为空。",
+            "args": [
+                "--help"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "default"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "true",
+            "description": "LC_ALL=C、LANG=C下调用方显式忽略SIGPIPE且stdout连接无读端管道，执行true --help；GNU将EPIPE报告为write error: Broken pipe，预期RC=1、stdout为空。",
+            "args": [
+                "--help"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "true: write error: Broken pipe\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "ignore"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

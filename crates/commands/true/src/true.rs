@@ -49,6 +49,10 @@ pub fn true_main(args: impl ctcore::Args) -> CTResult<()> {
     let mut command = ct_app(); // 创建命令行解析器
 
     let input_args: Vec<OsString> = args.collect(); // 从 `ctcore::Args` 收集命令行参数
+
+    #[cfg(unix)]
+    true_restore_default_sigpipe(ctcore::ct_sigpipe_was_default());
+
     if input_args.len() > 2 {
         // 如果参数数量超过2个，直接返回成功，不进行进一步的解析
         return Ok(());
@@ -102,6 +106,18 @@ fn true_closed_stdout_error(stdout_was_closed: bool) -> Option<io::Error> {
         let _ = stdout_was_closed;
         None
     }
+}
+
+#[cfg(unix)]
+fn true_restore_default_sigpipe(was_default: bool) {
+    if true_should_restore_default_sigpipe(was_default) {
+        let _ = ctcore::ct_signals::enable_pipe_errors();
+    }
+}
+
+#[cfg(unix)]
+fn true_should_restore_default_sigpipe(was_default: bool) -> bool {
+    was_default
 }
 
 /// 创建并配置命令行解析器。
@@ -223,5 +239,12 @@ mod tests {
             true_write_error_message(&error),
             "write error: No space left on device"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn true_restores_sigpipe_only_for_a_default_initial_disposition() {
+        assert!(true_should_restore_default_sigpipe(true));
+        assert!(!true_should_restore_default_sigpipe(false));
     }
 }

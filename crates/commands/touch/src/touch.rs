@@ -578,10 +578,10 @@ fn touch_parse_date(ref_time: DateTime<Local>, s: &str) -> CTResult<FileTime> {
 
 // 获取提供路径的元数据
 // 如果`follow`为`true`，函数将尝试跟随符号链接
-// 如果`follow`为`false`或符号链接损坏，函数将返回符号链接本身的元数据
+// 如果`follow`为`false`，函数将返回符号链接本身的元数据
 fn touch_stat(path: &Path, is_follow: bool) -> CTResult<(FileTime, FileTime)> {
     let md = match is_follow {
-        true => fs::metadata(path).or_else(|_| fs::symlink_metadata(path)),
+        true => fs::metadata(path),
         false => fs::symlink_metadata(path),
     }
     .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?;
@@ -1197,6 +1197,15 @@ mod tests {
 
             // 检查结果是否为错误
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_stat_following_dangling_symlink_reports_missing_referent() {
+            let dir = tempdir().unwrap();
+            let symlink_path = dir.path().join("dangling");
+            symlink("missing-target", &symlink_path).unwrap();
+
+            assert!(touch_stat(&symlink_path, true).is_err());
         }
 
         #[test]

@@ -1102,6 +1102,39 @@
             "cleanup_commands": [
                 "rm -f relative-size-fifo"
             ]
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "truncate",
+            "description": "原始SIZE空白字节用例：LC_ALL=C下SIZE=20090b0c0d（空格、制表符、垂直制表符、换页符、回车）应全部按GNU C isspace作为前导空白忽略；规范化为空后，预期RC=1、stdout为空，stderr字节7472756e636174653a20496e76616c6964206e756d6265723a2027270a对应\"truncate: Invalid number: ''\\n\"，且不得创建目标文件",
+            "setup_commands": [],
+            "args": [
+                "2d73",
+                "20090b0c0d",
+                "6773752d776869746573706163652d746172676574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7472756e636174653a20496e76616c6964206e756d6265723a2027270a"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e gnu-whitespace-target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

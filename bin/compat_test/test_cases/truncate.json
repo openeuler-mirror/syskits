@@ -885,6 +885,39 @@
             "cleanup_commands": [
                 "rm -f reference-io-block-target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "目录--reference必须按GNU的seek回退规则获取长度",
+            "setup_commands": [
+                "mkdir reference-directory",
+                "printf target > reference-directory-target"
+            ],
+            "args": ["--reference", "reference-directory", "reference-directory-target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: failed to truncate 'reference-directory-target' at 9223372036854775807 bytes: File too large\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %s reference-directory-target)\" = 6",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf reference-directory reference-directory-target"
+            ]
         }
     ]
 }

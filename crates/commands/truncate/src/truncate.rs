@@ -403,6 +403,59 @@ where
     Ok(())
 }
 
+#[cfg(unix)]
+fn reference_file_size<R: AsRef<OsStr>>(reference: R) -> CTResult<u64> {
+    let reference = reference.as_ref();
+    let reference_path = Path::new(reference);
+    let metadata = metadata(reference_path).map_err(|error| {
+        CtSimpleError::new(
+            1,
+            format!(
+                "cannot stat {}: {}",
+                reference.quote(),
+                os_error_message(&error)
+            ),
+        )
+    })?;
+
+    if metadata.file_type().is_file() {
+        return Ok(metadata.len());
+    }
+
+    let file = File::open(reference_path).map_err(|error| {
+        CtSimpleError::new(
+            1,
+            format!(
+                "cannot get the size of {}: {}",
+                reference.quote(),
+                os_error_message(&error)
+            ),
+        )
+    })?;
+    let size = unsafe { libc::lseek(file.as_raw_fd(), 0, libc::SEEK_END) };
+    if size < 0 {
+        let error = std::io::Error::last_os_error();
+        return Err(CtSimpleError::new(
+            1,
+            format!(
+                "cannot get the size of {}: {}",
+                reference.quote(),
+                os_error_message(&error)
+            ),
+        ));
+    }
+
+    Ok(size as u64)
+}
+
+#[cfg(not(unix))]
+fn reference_file_size<R: AsRef<OsStr>>(reference: R) -> CTResult<u64> {
+    let reference = reference.as_ref();
+    metadata(Path::new(reference))
+        .map(|metadata| metadata.len())
+        .map_err_context(|| format!("cannot stat {}", reference.quote()))
+}
+
 /// 将文件截断到相对于给定文件的大小。
 ///
 /// `r_file_name` 是参考文件的名称。
@@ -444,18 +497,7 @@ where
     if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = truncate_mode {
         return Err(CtSimpleError::new(1, "division by zero"));
     }
-    let md = metadata(r_file_name).map_err(|e| match e.kind() {
-        ErrorKind::NotFound => {
-            let err_massage = format!(
-                "cannot stat {}: No such file or directory",
-                r_file_name.quote()
-            );
-            CtSimpleError::new(1, err_massage)
-        }
-        _ => e.map_err_context(String::new),
-    })?;
-
-    let reference_size = md.len();
+    let reference_size = reference_file_size(r_file_name)?;
     truncate_files(filenames, |filename| {
         if is_block {
             truncate_file_with_size(filename, is_create, |file| {
@@ -497,19 +539,9 @@ where
     R: AsRef<OsStr>,
 {
     let r_file_name = r_file_name.as_ref();
-    let md = metadata(r_file_name).map_err(|e| match e.kind() {
-        ErrorKind::NotFound => {
-            let err_massage = format!(
-                "cannot stat {}: No such file or directory",
-                r_file_name.quote()
-            );
-            CtSimpleError::new(1, err_massage)
-        }
-        _ => e.map_err_context(String::new),
-    })?;
-    let t_size = md.len();
+    let target_size = reference_file_size(r_file_name)?;
     truncate_files(filenames, |filename| {
-        truncate_file(filename, is_create, t_size)
+        truncate_file(filename, is_create, target_size)
     })
 }
 
@@ -1147,6 +1179,25 @@ mod tests {
         use tempfile::NamedTempFile;
 
         use super::*;
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_truncate_reference_directory_uses_seek_fallback() {
+            let _exit_code_guard = EXIT_CODE_LOCK.lock().unwrap();
+            set_ct_exit_code(0);
+
+            let temp_dir = tempfile::tempdir().unwrap();
+            let reference_directory = temp_dir.path().join("reference-directory");
+            std::fs::create_dir(&reference_directory).unwrap();
+            let target = temp_dir.path().join("target");
+            std::fs::write(&target, b"target").unwrap();
+
+            truncate_reference_file_only(&reference_directory, &[&target], false).unwrap();
+
+            assert_eq!(metadata(&target).unwrap().len(), 6);
+            assert_eq!(get_ct_exit_code(), 1);
+            set_ct_exit_code(0);
+        }
 
         #[test]
         fn test_truncate_reference_file_only() {

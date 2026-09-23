@@ -14,6 +14,7 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 use std::borrow::Cow;
+use std::env;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions, metadata};
@@ -31,7 +32,6 @@ use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 use std::path::Path;
-use sys_locale::get_locale;
 
 use ctcore::Tool;
 use ctcore::ct_display::locale_quote_marks;
@@ -339,7 +339,7 @@ impl Tool for Truncate {
 }
 
 pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    let lang_code = truncate_message_locale();
     rust_i18n::set_locale(&lang_code);
     let args = prepare_truncate_args(args)?;
     let matches = ct_app().try_get_matches_from(args).map_err(|e| {
@@ -390,6 +390,49 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     truncate(is_no_create, is_io_blocks, reference, size, &files)
+}
+
+fn truncate_message_locale() -> String {
+    let language = env::var("LANGUAGE").ok();
+    let lc_all = env::var("LC_ALL").ok();
+    let lc_messages = env::var("LC_MESSAGES").ok();
+    let lang = env::var("LANG").ok();
+    truncate_message_locale_from_values(
+        language.as_deref(),
+        lc_all.as_deref(),
+        lc_messages.as_deref(),
+        lang.as_deref(),
+    )
+}
+
+fn truncate_message_locale_from_values(
+    language: Option<&str>,
+    lc_all: Option<&str>,
+    lc_messages: Option<&str>,
+    lang: Option<&str>,
+) -> String {
+    let locale = [lc_all, lc_messages, lang]
+        .into_iter()
+        .flatten()
+        .find(|locale| !locale.is_empty())
+        .unwrap_or("en-US");
+    let locale = if truncate_is_c_locale(locale) {
+        locale
+    } else {
+        language
+            .filter(|languages| !languages.is_empty())
+            .and_then(|languages| languages.split(':').find(|locale| !locale.is_empty()))
+            .unwrap_or(locale)
+    };
+    locale
+        .split(['.', '@'])
+        .next()
+        .unwrap_or(locale)
+        .replace('_', "-")
+}
+
+fn truncate_is_c_locale(locale: &str) -> bool {
+    matches!(locale, "C" | "POSIX")
 }
 
 const TRUNCATE_GNU_LONG_OPTIONS: &[(&str, bool)] = &[
@@ -1467,6 +1510,36 @@ mod tests {
                 "无效的数字",
             ),
             "无效的数字: \"invalid\""
+        );
+    }
+
+    #[test]
+    fn truncate_message_locale_uses_gnu_lc_messages_precedence() {
+        assert_eq!(
+            truncate_message_locale_from_values(None, None, Some("C"), Some("zh_CN.UTF-8"),),
+            "C"
+        );
+        assert_eq!(
+            truncate_message_locale_from_values(None, Some(""), Some("zh_CN.UTF-8"), Some("C"),),
+            "zh-CN"
+        );
+        assert_eq!(
+            truncate_message_locale_from_values(
+                Some("zh_CN:en_US"),
+                None,
+                Some("en_US.UTF-8"),
+                Some("C"),
+            ),
+            "zh-CN"
+        );
+        assert_eq!(
+            truncate_message_locale_from_values(
+                Some("zh_CN"),
+                Some("C"),
+                Some("en_US.UTF-8"),
+                Some("en_US.UTF-8"),
+            ),
+            "C"
         );
     }
 

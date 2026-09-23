@@ -1487,6 +1487,36 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "LC_ALL未设置时Invalid number翻译必须遵循GNU的LC_MESSAGES而非LC_CTYPE；LC_MESSAGES=C和UTF-8 LC_CTYPE组合应输出英文消息及弯引号",
+            "setup_commands": [],
+            "args": ["--size", "invalid", "message-locale-target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: Invalid number: ‘invalid’\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e message-locale-target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_MESSAGES": "C",
+                    "LC_CTYPE": "zh_CN.UTF-8",
+                    "LANG": "zh_CN.UTF-8"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

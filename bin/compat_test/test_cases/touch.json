@@ -1378,6 +1378,40 @@
             "cleanup_commands": [
                 "rm -f test_next_month.txt"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date='1 day hence'必须按GNU把hence解释为正向相对时间，并以reference为基准设置target。",
+            "setup_commands": [
+                "touch -d '2024-06-15 08:30:45 UTC' reference"
+            ],
+            "args": ["-r", "reference", "--date=1 day hence", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %Y target)\" = 1718526645",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f reference target"
+            ]
         }
     ]
 }

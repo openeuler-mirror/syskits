@@ -36,9 +36,9 @@
             "args": ["-c", "-s", "1024", "nonexist.txt"],
             "expectation": {
                 "execution": {
-                    "exit_code": 1,
+                    "exit_code": 0,
                     "stdout": "",
-                    "stderr": "truncate: nonexist.txt: No such file or directory"
+                    "stderr": ""
                 },
                 "verifications": [
                     {

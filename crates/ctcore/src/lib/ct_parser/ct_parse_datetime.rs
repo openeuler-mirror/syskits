@@ -178,6 +178,12 @@ fn parse_datetime_gnu_compat_impl(
         });
     }
 
+    if let Some(dt) =
+        parse_gnu_military_timezone(input_trim, reference_time, normalized_extended_year)
+    {
+        return Ok(dt);
+    }
+
     if let Some(dt) = parse_gnu_named_timezone(input_trim, reference_time, normalized_extended_year)
     {
         return Ok(dt);
@@ -835,6 +841,41 @@ fn parse_military_timezone_only(
     }
 }
 
+/// Parse a GNU military timezone used as a standalone item after a date/time.
+///
+/// GNU's grammar accepts a zone token independently, for example
+/// `2024-01-01 12:34 A`.  `J` denotes local time; all other military letters
+/// represent fixed UTC offsets.
+fn parse_gnu_military_timezone(
+    input: &str,
+    reference_time: DateTime<Local>,
+    normalized_extended_year: bool,
+) -> Option<DateTime<Local>> {
+    let zone = input.split_ascii_whitespace().next_back()?;
+    let mut chars = zone.chars();
+    let zone_char = chars.next()?;
+    if chars.next().is_some() {
+        return None;
+    }
+
+    let offset_hours = military_timezone_offset_hours(zone_char)?;
+    let wall_time_input = input[..input.len().checked_sub(zone.len())?].trim_end();
+    if wall_time_input.is_empty() {
+        return None;
+    }
+    let wall_time =
+        parse_datetime_gnu_compat_impl(wall_time_input, reference_time, normalized_extended_year)
+            .ok()?;
+
+    let Some(offset_hours) = offset_hours else {
+        return Some(wall_time);
+    };
+    let utc_naive = wall_time
+        .naive_local()
+        .checked_sub_signed(Duration::hours(i64::from(offset_hours)))?;
+    Some(DateTime::<Utc>::from_naive_utc_and_offset(utc_naive, Utc).with_timezone(&Local))
+}
+
 const GNU_NAMED_TIMEZONES: &[(&str, i32)] = &[
     ("GMT", 0),
     ("UT", 0),
@@ -1437,6 +1478,33 @@ mod tests {
             assert_eq!(parsed.hour(), 3);
             assert_eq!(parsed.minute(), 4);
             assert_eq!(parsed.second(), 5);
+        }
+    }
+
+    #[test]
+    fn test_parse_military_timezone_after_datetime() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 8, 0, 0).unwrap();
+
+        for (input, expected_utc) in [
+            (
+                "2024-01-01 12:34 A",
+                Utc.with_ymd_and_hms(2024, 1, 1, 11, 34, 0).unwrap(),
+            ),
+            (
+                "2024-01-01 12:34 N",
+                Utc.with_ymd_and_hms(2024, 1, 1, 13, 34, 0).unwrap(),
+            ),
+            (
+                "2024-01-01 12:34 Z",
+                Utc.with_ymd_and_hms(2024, 1, 1, 12, 34, 0).unwrap(),
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(
+                parsed.timestamp(),
+                expected_utc.timestamp(),
+                "input {input}"
+            );
         }
     }
 

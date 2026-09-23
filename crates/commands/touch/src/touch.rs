@@ -34,6 +34,7 @@ use sys_locale::get_locale;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_parse_datetime;
+use ctcore::ct_posix::{MODERN, TRADITIONAL, ct_posix_version, posixly_correct};
 use ctcore::{Tool, ct_show};
 
 pub mod touch_flags {
@@ -160,20 +161,12 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
     let mut obs_time = None;
     if !arg_matches.contains_id(touch_flags::TOUCH_SOURCES) && files.len() >= 2 {
         if let Some(s) = files[0].to_str() {
-            let is_obsolescent = if s.len() == 8 && s.chars().all(|c| c.is_ascii_digit()) {
-                true
-            } else if s.len() == 10 && s.chars().all(|c| c.is_ascii_digit()) {
-                let yy = s[8..10].parse::<i32>().unwrap_or(0);
-                // 关键点：POSIX.2-1992 严格规定 10 位过时时间戳的 YY 必须在 69 到 99 之间
-                // 如果是 00 (比如 Y2000 用例)，则不属于此格式，必须作为普通文件处理
-                (69..=99).contains(&yy)
-            } else {
-                false
-            };
-
-            if is_obsolescent {
-                obs_time = Some(parse_obsolescent_timestamp(s)?);
-                // 从目标文件列表中移除已被解析为时间戳的元素
+            let posix2_version = ct_posix_version().unwrap_or(MODERN as i32);
+            if let Some(timestamp) = touch_obsolescent_timestamp(s, posix2_version) {
+                if !posixly_correct() {
+                    touch_warn_obsolescent_timestamp(s, timestamp);
+                }
+                obs_time = Some(timestamp);
                 files.remove(0);
             }
         }
@@ -225,7 +218,7 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
             };
 
             // 小优化：如果没有指定参考时间，我们就完成了。
-            if !arg_matches.contains_id(touch_flags::TOUCH_SOURCES) {
+            if !arg_matches.contains_id(touch_flags::TOUCH_SOURCES) && obs_time.is_none() {
                 continue;
             }
         }
@@ -724,6 +717,38 @@ fn parse_obsolescent_timestamp(s: &str) -> CTResult<FileTime> {
     Ok(touch_datetime_to_filetime(&local))
 }
 
+fn touch_obsolescent_timestamp(s: &str, posix2_version: i32) -> Option<FileTime> {
+    if posix2_version >= TRADITIONAL as i32 {
+        return None;
+    }
+
+    let bytes = s.as_bytes();
+    let is_timestamp = match bytes.len() {
+        8 => bytes.iter().all(u8::is_ascii_digit),
+        10 if bytes.iter().all(u8::is_ascii_digit) => {
+            let year = std::str::from_utf8(&bytes[8..10])
+                .ok()?
+                .parse::<u8>()
+                .ok()?;
+            (69..=99).contains(&year)
+        }
+        _ => false,
+    };
+
+    is_timestamp
+        .then(|| parse_obsolescent_timestamp(s).ok())
+        .flatten()
+}
+
+fn touch_warn_obsolescent_timestamp(input: &str, timestamp: FileTime) {
+    if let Some(timestamp) = touch_filetime_to_datetime(&timestamp) {
+        ctcore::ct_show_warning!(
+            "'touch {input}' is obsolete; use 'touch -t {}'",
+            timestamp.format("%Y%m%d%H%M.%S")
+        );
+    }
+}
+
 // TODO: 这可能是放入ct_fsext的好候选项
 /// 返回指向标准输出的PathBuf。
 ///
@@ -1126,6 +1151,28 @@ mod tests {
             let timestamp_str = "202406150830.1234567890"; // 超过纳秒位数
             let result = parse_timestamp(timestamp_str);
             assert!(result.is_err());
+        }
+    }
+
+    #[cfg(test)]
+    mod obsolescent_timestamp_tests {
+        use super::*;
+
+        #[test]
+        fn obsolete_timestamp_is_only_enabled_for_pre_200112_posix() {
+            assert!(
+                touch_obsolescent_timestamp("01010000", ctcore::ct_posix::MODERN as i32).is_none()
+            );
+
+            let timestamp =
+                touch_obsolescent_timestamp("0101000099", ctcore::ct_posix::OBSOLETE as i32)
+                    .unwrap();
+            assert_eq!(timestamp.unix_seconds(), 915_148_800);
+
+            assert!(
+                touch_obsolescent_timestamp("02310000", ctcore::ct_posix::OBSOLETE as i32)
+                    .is_none()
+            );
         }
     }
 

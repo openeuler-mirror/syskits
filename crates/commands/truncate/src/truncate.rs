@@ -332,31 +332,17 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
     let reference = matches
         .get_one::<OsString>(truncate_flags::TRUNCATE_REFERENCE)
         .cloned();
-    let size = matches
-        .get_one::<OsString>(truncate_flags::TRUNCATE_SIZE)
-        .cloned();
+    let sizes = matches
+        .get_many::<OsString>(truncate_flags::TRUNCATE_SIZE)
+        .map(|sizes| sizes.cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
     let files: Vec<OsString> = matches
         .get_many::<OsString>(truncate_flags::TRUNCATE_ARG_FILES)
         .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
-    let size = match size {
-        Some(size) => match size.into_string() {
-            Ok(size) => Some(size),
-            Err(size) => {
-                if has_multiple_relative_modifiers_bytes(size.as_encoded_bytes()) {
-                    return Err(CTsageError::new(1, "multiple relative modifiers specified"));
-                }
-                let bytes = truncate_non_utf8_size_diagnostic_bytes(size.as_encoded_bytes());
-                return Err(CtSimpleError::new(
-                    1,
-                    format!("Invalid number: {}", truncate_quote_size_bytes(bytes)),
-                ));
-            }
-        },
-        None => None,
-    };
-    let parsed_size = validate_truncate_size_option(size.as_deref())?;
+    let parsed_size = validate_truncate_size_options(&sizes)?;
+    let size = parsed_size.as_ref().map(truncate_size_string_from_mode);
 
     if reference.is_none() && parsed_size.is_none() {
         return Err(CTsageError::new(
@@ -364,7 +350,7 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
             "you must specify either '--size' or '--reference'",
         ));
     }
-    if reference.is_some() && matches!(parsed_size, Some(TruncateMode::Absolute(_))) {
+    if reference.is_some() && matches!(parsed_size.as_ref(), Some(TruncateMode::Absolute(_))) {
         return Err(CTsageError::new(
             1,
             "you must specify a relative '--size' with '--reference'",
@@ -531,8 +517,7 @@ pub fn ct_app() -> Command {
                 "set or adjust the size of each file according to SIZE, which is in \
             bytes unless --io-blocks is specified",
             )
-            .action(ArgAction::Set)
-            .overrides_with(truncate_flags::TRUNCATE_SIZE)
+            .action(ArgAction::Append)
             .value_parser(OsStringValueParser::new())
             .value_name("SIZE")
             .allow_hyphen_values(true),
@@ -1001,21 +986,84 @@ fn is_gnu_ascii_whitespace(character: char) -> bool {
     )
 }
 
-fn validate_truncate_size_option(size: Option<&str>) -> CTResult<Option<TruncateMode>> {
-    let Some(size) = size else {
-        return Ok(None);
-    };
-    if has_multiple_relative_modifiers(size) {
-        return Err(CTsageError::new(1, "multiple relative modifiers specified"));
+fn validate_truncate_size_options(sizes: &[OsString]) -> CTResult<Option<TruncateMode>> {
+    let mut mode = None;
+
+    for size in sizes {
+        let bytes = size.as_encoded_bytes();
+        if has_multiple_relative_modifiers_bytes(bytes) {
+            return Err(CTsageError::new(1, "multiple relative modifiers specified"));
+        }
+        if truncate_size_starts_with_sign(bytes)
+            && mode
+                .as_ref()
+                .is_some_and(|mode| !matches!(mode, TruncateMode::Absolute(_)))
+        {
+            return Err(CTsageError::new(1, "multiple relative modifiers specified"));
+        }
+
+        let size = match size.to_str() {
+            Some(size) => size,
+            None => {
+                let bytes = truncate_non_utf8_size_diagnostic_bytes(bytes);
+                return Err(CtSimpleError::new(
+                    1,
+                    format!("Invalid number: {}", truncate_quote_size_bytes(bytes)),
+                ));
+            }
+        };
+        let parsed = truncate_parse_mode_and_size(size)
+            .map_err(|error| CtSimpleError::new(1, format!("Invalid number: {error}")))?;
+        mode = Some(match (mode, parsed) {
+            (Some(TruncateMode::Extend(_)), TruncateMode::Absolute(size)) => {
+                TruncateMode::Extend(size)
+            }
+            (Some(TruncateMode::Reduce(_)), TruncateMode::Absolute(size)) => {
+                TruncateMode::Reduce(size)
+            }
+            (Some(TruncateMode::AtMost(_)), TruncateMode::Absolute(size)) => {
+                TruncateMode::AtMost(size)
+            }
+            (Some(TruncateMode::AtLeast(_)), TruncateMode::Absolute(size)) => {
+                TruncateMode::AtLeast(size)
+            }
+            (Some(TruncateMode::RoundDown(_)), TruncateMode::Absolute(size)) => {
+                TruncateMode::RoundDown(size)
+            }
+            (Some(TruncateMode::RoundUp(_)), TruncateMode::Absolute(size)) => {
+                TruncateMode::RoundUp(size)
+            }
+            (_, parsed) => parsed,
+        });
+
+        if matches!(
+            mode.as_ref(),
+            Some(TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0))
+        ) {
+            return Err(CtSimpleError::new(1, "division by zero"));
+        }
     }
 
-    let truncate_mode = truncate_parse_mode_and_size(size)
-        .map_err(|error| CtSimpleError::new(1, format!("Invalid number: {error}")))?;
-    if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = truncate_mode {
-        return Err(CtSimpleError::new(1, "division by zero"));
-    }
+    Ok(mode)
+}
 
-    Ok(Some(truncate_mode))
+fn truncate_size_starts_with_sign(size: &[u8]) -> bool {
+    matches!(
+        trim_gnu_ascii_whitespace_bytes(size).first(),
+        Some(b'+' | b'-')
+    )
+}
+
+fn truncate_size_string_from_mode(mode: &TruncateMode) -> String {
+    match mode {
+        TruncateMode::Absolute(size) => size.to_string(),
+        TruncateMode::Extend(size) => format!("+{size}"),
+        TruncateMode::Reduce(size) => format!("-{size}"),
+        TruncateMode::AtMost(size) => format!("<{size}"),
+        TruncateMode::AtLeast(size) => format!(">{size}"),
+        TruncateMode::RoundDown(size) => format!("/{size}"),
+        TruncateMode::RoundUp(size) => format!("%{size}"),
+    }
 }
 
 fn has_multiple_relative_modifiers(size_string: &str) -> bool {
@@ -2572,6 +2620,69 @@ mod tests {
         }
 
         #[test]
+        fn test_truncate_main_validates_each_repeated_size_in_order() {
+            let directory = tempdir().unwrap();
+            let target = directory.path().join("target");
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--size"),
+                OsString::from("invalid"),
+                OsString::from("--size"),
+                OsString::from("0"),
+                target.clone().into_os_string(),
+            ];
+
+            let error = truncate_main(args.into_iter()).unwrap_err();
+
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "Invalid number: {}",
+                    truncate_quote_size(OsStr::new("invalid"))
+                )
+            );
+            assert!(!target.exists());
+        }
+
+        #[test]
+        fn test_truncate_main_repeated_size_keeps_prior_relative_mode() {
+            let directory = tempdir().unwrap();
+            let target = directory.path().join("target");
+            std::fs::write(&target, b"x").unwrap();
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--size"),
+                OsString::from("+1"),
+                OsString::from("--size"),
+                OsString::from("0"),
+                target.clone().into_os_string(),
+            ];
+
+            truncate_main(args.into_iter()).unwrap();
+
+            assert_eq!(std::fs::metadata(target).unwrap().len(), 1);
+        }
+
+        #[test]
+        fn test_truncate_main_prioritizes_repeated_size_modifier_conflict() {
+            let directory = tempdir().unwrap();
+            let target = directory.path().join("target");
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--size"),
+                OsString::from("<1"),
+                OsString::from("--size"),
+                OsString::from("+invalid"),
+                target.clone().into_os_string(),
+            ];
+
+            let error = truncate_main(args.into_iter()).unwrap_err();
+
+            assert_eq!(error.to_string(), "multiple relative modifiers specified");
+            assert!(!target.exists());
+        }
+
+        #[test]
         fn test_truncate_main_io_blocks_long() {
             let file = "test_truncate_main_io_blocks_long";
             let dir = tempdir().unwrap();
@@ -3461,15 +3572,19 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_app_size_allows_repeated_size_with_last_value() {
+        fn test_ct_app_collects_repeated_size_values_in_order() {
             let command = ct_app();
             let file = "test_ct_app_size_allows_repeated_size";
             let args = vec![ctcore::ct_util_name(), "--size", "1", "-s", "2", file];
             let matches = command.try_get_matches_from(args).unwrap();
 
             assert_eq!(
-                matches.get_one::<OsString>(truncate_flags::TRUNCATE_SIZE),
-                Some(&OsString::from("2"))
+                matches
+                    .get_many::<OsString>(truncate_flags::TRUNCATE_SIZE)
+                    .unwrap()
+                    .cloned()
+                    .collect::<Vec<_>>(),
+                vec![OsString::from("1"), OsString::from("2")]
             );
         }
 

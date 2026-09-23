@@ -1536,6 +1536,37 @@
             "cleanup_commands": [
                 "rm -f target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date='1/2/24'必须按GNU月/日/两位年语义设置2024-01-02。",
+            "args": ["--date=1/2/24", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2024-01-02T00:00:00Z'",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
         }
     ]
 }

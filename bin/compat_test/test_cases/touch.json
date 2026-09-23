@@ -606,6 +606,78 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C下-r后以连字符开头的-missing必须作为参考文件名解析，再报告GNU的引用文件不存在错误。",
+            "setup_commands": [],
+            "args": [
+                "-r",
+                "-missing",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: failed to get attributes of '-missing': No such file or directory\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f -- -missing target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C下-t后以连字符开头的-stamp必须作为时间戳解析，再报告GNU的非法日期格式错误。",
+            "setup_commands": [],
+            "args": [
+                "-t",
+                "-stamp",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: invalid date format '-stamp'\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "更新符号链接本身的时间戳",
             "setup_commands": [
                 "touch -t 202001010000.00 target_file",

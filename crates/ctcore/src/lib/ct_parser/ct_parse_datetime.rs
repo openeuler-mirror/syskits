@@ -503,7 +503,14 @@ fn parse_datetime_gnu_compat_impl(
         "%Y-%m-%dT%H:%M:%S",
         "%Y-%m-%dT%H:%M",
         "%Y-%m-%d",
+        "%Y/%m/%d %H:%M:%S%.f",
+        "%Y/%m/%d %H:%M:%S",
+        "%Y/%m/%d %H:%M",
         "%Y/%m/%d",
+        "%Y%m%d %H:%M:%S%.f",
+        "%Y%m%d %H:%M:%S",
+        "%Y%m%d %H:%M",
+        "%Y%m%d",
         // 两位年份必须先于%Y尝试，因为chrono的%Y也接受短年份。
         "%m/%d/%y %H:%M:%S",
         "%m/%d/%y %H:%M",
@@ -1414,6 +1421,22 @@ mod tests {
             assert_eq!(parsed.hour(), expected_hour, "input {input}");
             assert_eq!(parsed.minute(), expected_minute, "input {input}");
             assert_eq!(parsed.second(), expected_second, "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_parse_numeric_dates_with_explicit_time() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 8, 0, 0).unwrap();
+
+        for input in ["2020/01/02 03:04:05", "20200102 03:04:05"] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(
+                parsed.date_naive(),
+                NaiveDate::from_ymd_opt(2020, 1, 2).unwrap()
+            );
+            assert_eq!(parsed.hour(), 3);
+            assert_eq!(parsed.minute(), 4);
+            assert_eq!(parsed.second(), 5);
         }
     }
 

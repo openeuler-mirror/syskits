@@ -490,6 +490,10 @@ fn parse_datetime_gnu_compat_impl(
         "%m/%d/%Y %H:%M:%S %:z",
         "%m/%d/%Y %H:%M %z",
         "%m/%d/%Y %H:%M %:z",
+        "%b %d, %Y %H:%M:%S %z",
+        "%b %d, %Y %H:%M:%S %:z",
+        "%b %d, %Y %H:%M %z",
+        "%b %d, %Y %H:%M %:z",
         "%B %d, %Y %H:%M:%S %z",
         "%B %d, %Y %H:%M %z",
     ];
@@ -573,6 +577,9 @@ fn parse_datetime_gnu_compat_impl(
         "%d %b %Y %H:%M:%S",
         "%d %b %Y %H:%M",
         "%d %b %Y",
+        "%b %d, %Y %H:%M:%S",
+        "%b %d, %Y %H:%M",
+        "%b %d, %Y",
         // 6位纯数字紧凑格式
         "%y%m%d",
     ];
@@ -2006,6 +2013,18 @@ mod tests {
     fn test_parse_gnu_slash_date_prefers_month_day_two_digit_year() {
         let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
         let parsed = parse_datetime_gnu_compat("1/2/24", ref_time).unwrap();
+
+        assert_eq!(
+            parsed.date_naive(),
+            NaiveDate::from_ymd_opt(2024, 1, 2).unwrap()
+        );
+        assert_eq!(parsed.time(), NaiveTime::MIN);
+    }
+
+    #[test]
+    fn test_parse_gnu_month_name_comma_date() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("Jan 2, 2024", ref_time).unwrap();
 
         assert_eq!(
             parsed.date_naive(),

@@ -2311,7 +2311,7 @@ mod tests {
                 reference
                     .get_many::<OsString>(touch_flags::sources::TOUCH_REFERENCE)
                     .unwrap()
-                    .last()
+                    .next_back()
                     .unwrap(),
                 &OsString::from("-missing")
             );
@@ -2323,7 +2323,7 @@ mod tests {
                 timestamp
                     .get_many::<String>(touch_flags::sources::TOUCH_TIMESTAMP)
                     .unwrap()
-                    .last()
+                    .next_back()
                     .unwrap(),
                 "-stamp"
             );

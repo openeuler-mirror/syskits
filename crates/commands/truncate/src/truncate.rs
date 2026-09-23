@@ -676,6 +676,24 @@ fn has_multiple_relative_modifiers(size_string: &str) -> bool {
     matches!(remaining.chars().next(), Some('+' | '-'))
 }
 
+fn normalize_truncate_decimal_number(number: &str) -> String {
+    let number_end = number
+        .find(|character: char| !character.is_ascii_digit())
+        .unwrap_or(number.len());
+    let digits = &number[..number_end];
+    if digits.len() <= 1 || !digits.starts_with('0') {
+        return number.to_string();
+    }
+
+    let normalized_digits = digits.trim_start_matches('0');
+    let normalized_digits = if normalized_digits.is_empty() {
+        "0"
+    } else {
+        normalized_digits
+    };
+    format!("{normalized_digits}{}", &number[number_end..])
+}
+
 /// 解析带有可选修饰符符号作为第一个字符的大小字符串。
 ///
 /// 大小字符串的描述与 `parse_size_u64` 函数相同。`size_string` 的第一个字符可能是一个修饰符符号，
@@ -727,13 +745,16 @@ fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, Parse
     }
     let mut parser = CtParser::default();
     parser.with_allow_list(TRUNCATE_SIZE_UNITS);
-    let size = parser.parse_u64(number).map_err(|error| match error {
-        ParseSizeError::SizeTooBig(_) => ParseSizeError::SizeTooBig(format!(
-            "{}: Value too large for defined data type",
-            displayed_size.quote()
-        )),
-        _ => invalid_number(),
-    })?;
+    let normalized_number = normalize_truncate_decimal_number(number);
+    let size = parser
+        .parse_u64(&normalized_number)
+        .map_err(|error| match error {
+            ParseSizeError::SizeTooBig(_) => ParseSizeError::SizeTooBig(format!(
+                "{}: Value too large for defined data type",
+                displayed_size.quote()
+            )),
+            _ => invalid_number(),
+        })?;
     if size > i64::MAX as u64 && !(modifier == '-' && size == off_t_min_magnitude()) {
         return Err(ParseSizeError::SizeTooBig(format!(
             "{}: Value too large for defined data type",
@@ -1725,6 +1746,18 @@ mod tests {
                     Err(ParseSizeError::ParseFailure(format!("'{size}'")))
                 );
             }
+        }
+
+        #[test]
+        fn test_truncate_parse_mode_and_size_treats_leading_zeroes_as_decimal() {
+            assert_eq!(
+                truncate_parse_mode_and_size("010K"),
+                Ok(TruncateMode::Absolute(10 * 1024))
+            );
+            assert_eq!(
+                truncate_parse_mode_and_size("00K"),
+                Ok(TruncateMode::Absolute(0))
+            );
         }
 
         #[test]

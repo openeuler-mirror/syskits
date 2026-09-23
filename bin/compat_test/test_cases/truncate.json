@@ -1459,6 +1459,34 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "LC_ALL=zh_CN.UTF-8下非法SIZE必须输出GNU简体中文无效数字诊断并使用双引号，不得退回英文或UTF-8弯引号",
+            "setup_commands": [],
+            "args": ["--size", "invalid", "chinese-invalid-size-target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: 无效的数字: \"invalid\"\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e chinese-invalid-size-target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zh_CN.UTF-8",
+                    "LANG": "zh_CN.UTF-8"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

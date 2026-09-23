@@ -462,6 +462,114 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0且未设置_POSIX2_VERSION时，现代GNU touch不再把01010000识别为旧式时间戳，必须创建01010000和target两个文件。",
+            "setup_commands": [],
+            "args": [
+                "01010000",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -e 01010000 -a -e target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f 01010000 target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0、_POSIX2_VERSION=199209下旧式MMDDhhmmYY时间戳必须设置target为1999-01-01并输出GNU废弃警告。",
+            "setup_commands": [],
+            "args": [
+                "0101000099",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": "touch: warning: 'touch 0101000099' is obsolete; use 'touch -t 199901010000.00'\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %Y target)\" = 915148800",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0",
+                    "_POSIX2_VERSION": "199209"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f 0101000099 target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0、_POSIX2_VERSION=199209且POSIXLY_CORRECT=1下旧式时间戳仍生效，但必须抑制废弃警告。",
+            "setup_commands": [],
+            "args": [
+                "0101000099",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %Y target)\" = 915148800",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0",
+                    "_POSIX2_VERSION": "199209",
+                    "POSIXLY_CORRECT": "1"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f 0101000099 target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "更新符号链接本身的时间戳",
             "setup_commands": [
                 "touch -t 202001010000.00 target_file",

@@ -1155,7 +1155,7 @@ where
 
     for filename in filenames {
         if let Err(error) = truncate_one(filename.as_ref()) {
-            ctcore::ct_show!(error);
+            let _ = ctcore::ct_error::write_error_diagnostic(error.as_ref());
             failed = true;
         }
     }
@@ -1786,6 +1786,20 @@ mod tests {
         assert_eq!(
             truncate_transcode_utf8(&message, c"GB18030"),
             Some(b"\xce\xde\xd0\xa7\xb5\xc4\xca\xfd\xd7\xd6: \"invalid\"".to_vec())
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn truncate_runtime_error_transcodes_simplified_chinese_to_gbk() {
+        let message = "无法以写模式打开 'missing/target': No such file or directory";
+        assert_eq!(
+            truncate_transcode_utf8(message, c"GBK"),
+            Some(
+                b"\xce\xde\xb7\xa8\xd2\xd4\xd0\xb4\xc4\xa3\xca\xbd\xb4\xf2\xbf\xaa \
+                  'missing/target': No such file or directory"
+                    .to_vec()
+            )
         );
     }
 

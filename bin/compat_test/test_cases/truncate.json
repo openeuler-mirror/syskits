@@ -1629,6 +1629,34 @@
         },
         {
             "tstdin": "",
+            "byteMode": true,
+            "command": "truncate",
+            "description": "原始字节用例：LC_ALL=zh_CN.gbk时逐文件打开失败的简体中文诊断必须按GBK原始字节写入stderr；参数完整十六进制=2d2d73697a65 30 6d697373696e672f67626b2d746172676574；stdin为空；预期RC=1、stdout为空、stderr为7472756e636174653a20cedeb7a8d2d4d0b4c4a3cabdb4f2bfaa20276d697373696e672f67626b2d746172676574273a204e6f20737563682066696c65206f72206469726563746f72790a，对应GNU的GBK编码，不能经UTF-8 Display替换",
+            "setup_commands": [],
+            "args": [
+                "2d2d73697a65",
+                "30",
+                "6d697373696e672f67626b2d746172676574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7472756e636174653a20cedeb7a8d2d4d0b4c4a3cabdb4f2bfaa20276d697373696e672f67626b2d746172676574273a204e6f20737563682066696c65206f72206469726563746f72790a"
+                },
+                "verifications": []
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "zh_CN.gbk",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
             "command": "truncate",
             "description": "LC_ALL=C下GNU保留历史SIZE尾缀D：1KD表示1000字节而不是无效数值；预期RC=0、无标准输出和诊断，并创建大小为1000字节的目标文件",
             "setup_commands": [

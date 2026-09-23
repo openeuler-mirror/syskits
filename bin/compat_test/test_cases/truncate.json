@@ -1168,6 +1168,27 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "SIZE校验顺序用例：LC_ALL=C下--size invalid且没有FILE时，GNU在检查FILE操作数前解析SIZE；预期RC=1、stdout为空、stderr仅为Invalid number诊断，不得附加缺少FILE操作数或帮助文本",
+            "setup_commands": [],
+            "args": ["--size", "invalid"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: Invalid number: 'invalid'\n"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

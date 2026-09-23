@@ -532,6 +532,15 @@ fn parse_datetime_gnu_compat_impl(
     }
 
     let naive_formats = [
+        // Chrono's ISO parser accepts slash separators too, so GNU slash
+        // dates must be attempted before the general year-first formats.
+        // Two-digit years must precede %Y because chrono accepts short years.
+        "%m/%d/%y %H:%M:%S",
+        "%m/%d/%y %H:%M",
+        "%m/%d/%y",
+        "%m/%d/%Y %H:%M:%S",
+        "%m/%d/%Y %H:%M",
+        "%m/%d/%Y",
         "%Y-%m-%d %H:%M:%S%.f",
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%d %H:%M",
@@ -547,13 +556,6 @@ fn parse_datetime_gnu_compat_impl(
         "%Y%m%d %H:%M:%S",
         "%Y%m%d %H:%M",
         "%Y%m%d",
-        // 两位年份必须先于%Y尝试，因为chrono的%Y也接受短年份。
-        "%m/%d/%y %H:%M:%S",
-        "%m/%d/%y %H:%M",
-        "%m/%d/%y",
-        "%m/%d/%Y %H:%M:%S",
-        "%m/%d/%Y %H:%M",
-        "%m/%d/%Y",
         // 包含英文月份名称的格式 (完美解决 "Nov 10 1996" 和 "May-23-2003" 测试)
         "%b %d %Y %H:%M:%S",
         "%b %d %Y %H:%M",
@@ -1996,6 +1998,18 @@ mod tests {
         assert_eq!(
             parsed.date_naive(),
             NaiveDate::from_ymd_opt(1992, 6, 17).unwrap()
+        );
+        assert_eq!(parsed.time(), NaiveTime::MIN);
+    }
+
+    #[test]
+    fn test_parse_gnu_slash_date_prefers_month_day_two_digit_year() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("1/2/24", ref_time).unwrap();
+
+        assert_eq!(
+            parsed.date_naive(),
+            NaiveDate::from_ymd_opt(2024, 1, 2).unwrap()
         );
         assert_eq!(parsed.time(), NaiveTime::MIN);
     }

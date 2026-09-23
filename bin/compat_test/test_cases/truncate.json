@@ -1517,6 +1517,41 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "truncate",
+            "description": "LC_MESSAGES=zh_CN.UTF-8且LC_CTYPE=zh_CN.gb18030时，SIZE非法数值诊断的简体中文文本必须按GB18030编码输出；RC=1、stdout为空、stderr字节7472756e636174653a20ceded0a7b5c4cafdd7d63a2022696e76616c6964220a对应\"truncate: 无效的数字: \\\"invalid\\\"\\n\"的GB18030编码，且不得创建目标文件",
+            "setup_commands": [],
+            "args": [
+                "2d2d73697a65",
+                "696e76616c6964",
+                "676231383033302d6d6573736167652d746172676574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7472756e636174653a20ceded0a7b5c4cafdd7d63a2022696e76616c6964220a"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e gb18030-message-target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_MESSAGES": "zh_CN.UTF-8",
+                    "LC_CTYPE": "zh_CN.gb18030",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

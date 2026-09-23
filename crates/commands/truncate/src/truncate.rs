@@ -22,6 +22,8 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 #[cfg(unix)]
 use std::ffi::CStr;
+#[cfg(target_os = "linux")]
+use std::ffi::CString;
 use std::io::ErrorKind;
 #[cfg(unix)]
 use std::os::linux::fs::MetadataExt;
@@ -228,6 +230,100 @@ fn truncate_invalid_number_message(error: impl Display) -> String {
 
 fn truncate_invalid_number_message_with_label(error: impl Display, label: impl Display) -> String {
     format!("{label}: {error}")
+}
+
+fn truncate_invalid_number_error(error: impl Display) -> Box<dyn CTError> {
+    TruncateDiagnosticError::boxed(truncate_locale_diagnostic_bytes(
+        &truncate_invalid_number_message(error),
+    ))
+}
+
+fn truncate_locale_diagnostic_bytes(text: &str) -> Vec<u8> {
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(codeset) = truncate_ctype_codeset() {
+            let normalized = codeset.to_string_lossy().to_ascii_uppercase();
+            if normalized == "UTF-8" || normalized == "UTF8" {
+                return text.as_bytes().to_vec();
+            }
+            if let Some(converted) = truncate_transcode_utf8(text, &codeset) {
+                return converted;
+            }
+        }
+    }
+
+    text.as_bytes().to_vec()
+}
+
+#[cfg(target_os = "linux")]
+fn truncate_ctype_codeset() -> Option<CString> {
+    let locale_name = ["LC_ALL", "LC_CTYPE", "LANG"]
+        .into_iter()
+        .filter_map(env::var_os)
+        .find(|locale| !locale.is_empty())
+        .unwrap_or_else(|| OsString::from("C"));
+    let locale_name = CString::new(locale_name.as_encoded_bytes()).ok()?;
+    let locale = unsafe {
+        ctcore::libc::newlocale(
+            ctcore::libc::LC_CTYPE_MASK,
+            locale_name.as_ptr(),
+            std::ptr::null_mut(),
+        )
+    };
+    if locale.is_null() {
+        return None;
+    }
+
+    unsafe {
+        let codeset = ctcore::libc::nl_langinfo_l(ctcore::libc::CODESET, locale);
+        let result = (!codeset.is_null())
+            .then(|| CStr::from_ptr(codeset).to_bytes())
+            .and_then(|bytes| CString::new(bytes).ok());
+        ctcore::libc::freelocale(locale);
+        result
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn truncate_transcode_utf8(text: &str, codeset: &CStr) -> Option<Vec<u8>> {
+    let mut target_codeset = codeset.to_bytes().to_vec();
+    target_codeset.extend_from_slice(b"//TRANSLIT");
+    let target_codeset = CString::new(target_codeset).ok()?;
+    let converter = unsafe { ctcore::libc::iconv_open(target_codeset.as_ptr(), c"UTF-8".as_ptr()) };
+    if converter == (-1_isize) as ctcore::libc::iconv_t {
+        return None;
+    }
+
+    let mut input = text.as_ptr().cast_mut().cast::<ctcore::libc::c_char>();
+    let mut input_left = text.len();
+    let mut output = vec![0_u8; text.len().saturating_mul(4).max(32)];
+    let mut output_used = 0;
+    let converted = loop {
+        let mut output_pointer =
+            unsafe { output.as_mut_ptr().add(output_used) }.cast::<ctcore::libc::c_char>();
+        let mut output_left = output.len() - output_used;
+        let result = unsafe {
+            ctcore::libc::iconv(
+                converter,
+                &mut input,
+                &mut input_left,
+                &mut output_pointer,
+                &mut output_left,
+            )
+        };
+        output_used = output.len() - output_left;
+        if result != usize::MAX {
+            output.truncate(output_used);
+            break Some(output);
+        }
+        if std::io::Error::last_os_error().raw_os_error() != Some(ctcore::libc::E2BIG) {
+            break None;
+        }
+        output.resize(output.len().saturating_mul(2), 0);
+    };
+
+    unsafe { ctcore::libc::iconv_close(converter) };
+    converted
 }
 
 fn truncate_quote_size_with_marks(bytes: &[u8], left_quote: &str, right_quote: &str) -> String {
@@ -476,6 +572,31 @@ impl CTError for TruncateUsageError {
 
     fn usage(&self) -> bool {
         true
+    }
+}
+
+#[derive(Debug)]
+struct TruncateDiagnosticError {
+    message: Vec<u8>,
+}
+
+impl TruncateDiagnosticError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl Display for TruncateDiagnosticError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl Error for TruncateDiagnosticError {}
+
+impl CTError for TruncateDiagnosticError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
     }
 }
 
@@ -1251,14 +1372,12 @@ fn validate_truncate_size_options(sizes: &[OsString]) -> CTResult<Option<Truncat
             Some(size) => size,
             None => {
                 let bytes = truncate_non_utf8_size_diagnostic_bytes(bytes);
-                return Err(CtSimpleError::new(
-                    1,
-                    truncate_invalid_number_message(truncate_quote_size_bytes(bytes)),
-                ));
+                return Err(truncate_invalid_number_error(truncate_quote_size_bytes(
+                    bytes,
+                )));
             }
         };
-        let parsed = truncate_parse_mode_and_size(size)
-            .map_err(|error| CtSimpleError::new(1, truncate_invalid_number_message(error)))?;
+        let parsed = truncate_parse_mode_and_size(size).map_err(truncate_invalid_number_error)?;
         mode = Some(match (mode, parsed) {
             (Some(TruncateMode::Extend(_)), TruncateMode::Absolute(size)) => {
                 TruncateMode::Extend(size)
@@ -1510,6 +1629,16 @@ mod tests {
                 "无效的数字",
             ),
             "无效的数字: \"invalid\""
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn truncate_invalid_size_transcodes_simplified_chinese_diagnostic_to_gb18030() {
+        let message = truncate_invalid_number_message_with_label("\"invalid\"", "无效的数字");
+        assert_eq!(
+            truncate_transcode_utf8(&message, c"GB18030"),
+            Some(b"\xce\xde\xd0\xa7\xb5\xc4\xca\xfd\xd7\xd6: \"invalid\"".to_vec())
         );
     }
 

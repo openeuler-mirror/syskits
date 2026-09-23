@@ -368,7 +368,14 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
 
     // 4. 注意这里的循环变量改为借用引用 &files
     for filename in &files {
-        // ... 原来的逻辑保持不变 ...
+        #[cfg(target_os = "linux")]
+        if filename == "-" {
+            if let Err(error) = touch_update_times(&arg_matches, Path::new(""), times, filename) {
+                ct_show!(error);
+            }
+            continue;
+        }
+
         let path_buf = if filename == "-" {
             touch_pathbuf_from_stdout()?
         } else {
@@ -687,12 +694,49 @@ fn touch_set_times_with_utimensat(
     }
 }
 
+#[cfg(target_os = "linux")]
+fn touch_set_times_on_fd(fd: ctcore::libc::c_int, times: TouchTimes) -> io::Result<()> {
+    let timespecs = [
+        touch_timespec(times.access),
+        touch_timespec(times.modification),
+    ];
+    let timespecs = if times.access == TouchTime::Now && times.modification == TouchTime::Now {
+        std::ptr::null()
+    } else {
+        timespecs.as_ptr()
+    };
+
+    let result = unsafe { ctcore::libc::futimens(fd, timespecs) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
 fn touch_set_times(
     arg_matches: &ArgMatches,
     path: &Path,
     times: TouchTimes,
     file_name: &OsString,
 ) -> CTResult<()> {
+    #[cfg(target_os = "linux")]
+    if file_name == "-" {
+        let result = if ctcore::ct_stdout_was_closed() {
+            Err(io::Error::from_raw_os_error(ctcore::libc::EBADF))
+        } else {
+            touch_set_times_on_fd(ctcore::libc::STDOUT_FILENO, times)
+        };
+        if arg_matches.get_flag(touch_flags::TOUCH_NO_CREATE)
+            && result
+                .as_ref()
+                .is_err_and(|error| error.raw_os_error() == Some(ctcore::libc::EBADF))
+        {
+            return Ok(());
+        }
+        return result.map_err_context(|| format!("setting times of {}", file_name.quote()));
+    }
+
     let no_follow = file_name != "-" && arg_matches.get_flag(touch_flags::TOUCH_NO_DEREF);
     let result = if let Some((a_time, m_time)) = times.as_timestamps() {
         if file_name == "-" {
@@ -720,7 +764,7 @@ fn touch_set_times(
         }
     };
 
-    result.map_err_context(|| format!("setting times of {}", path.quote()))
+    result.map_err_context(|| format!("setting times of {}", file_name.quote()))
 }
 
 // 根据用户指定的选项更新文件访问和修改时间
@@ -1194,6 +1238,13 @@ mod tests {
             assert_eq!(atime.unix_seconds(), expected);
             assert_eq!(mtime.unix_seconds(), expected);
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn touch_set_times_on_invalid_file_descriptor_reports_ebadf() {
+        let error = touch_set_times_on_fd(-1, TouchTimes::now()).unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(ctcore::libc::EBADF));
     }
 
     #[test]

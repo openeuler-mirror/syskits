@@ -159,6 +159,54 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C下stdout在exec前关闭时，touch -必须按GNU对原始标准输出描述符报Bad file descriptor。",
+            "args": ["-"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: setting times of '-': Bad file descriptor\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C下stdout在exec前关闭时，touch -c -必须忽略GNU定义的EBADF并返回成功。",
+            "args": ["-c", "-"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "参考文件时间",
             "setup_commands": [
                 "touch -t 202001010000.00 reference_file",

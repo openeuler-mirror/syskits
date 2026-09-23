@@ -1014,6 +1014,65 @@
             "cleanup_commands": [
                 "rm -f unit-only-relative-target"
             ]
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "truncate",
+            "description": "原始字节错误用例：LC_ALL=C下SIZE=31094b（字符1、制表符、字符K）不是合法数值；预期RC=1、stdout为空，stderr完整十六进制为7472756e636174653a20496e76616c6964206e756d6265723a2027315c744b270a，对应GNU将普通字节放在单引号内且控制字节使用\\t转义",
+            "setup_commands": [],
+            "args": [
+                "2d73",
+                "31094b",
+                "7472756e636174652d71756f74652d746172676574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7472756e636174653a20496e76616c6964206e756d6265723a2027315c744b270a"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e truncate-quote-target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "truncate",
+            "description": "原始字节路径错误用例：LC_ALL=C下目标路径=6d697373696e672f6c696e650a627265616b（missing/line、换行、break）无法创建；预期RC=1、stdout为空，stderr完整十六进制为7472756e636174653a2063616e6e6f74206f70656e20276d697373696e672f6c696e652724275c6e2727627265616b2720666f722077726974696e673a204e6f20737563682066696c65206f72206469726563746f72790a，对应GNU quoteaf按普通字节与换行控制字节分段引用",
+            "setup_commands": [],
+            "args": [
+                "2d73",
+                "31",
+                "6d697373696e672f6c696e650a627265616b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7472756e636174653a2063616e6e6f74206f70656e20276d697373696e672f6c696e652724275c6e2727627265616b2720666f722077726974696e673a204e6f20737563682066696c65206f72206469726563746f72790a"
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

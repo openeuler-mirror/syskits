@@ -31,7 +31,7 @@ use sys_locale::get_locale;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code};
-use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
+use ctcore::ct_parse_size::{CtParser, ParseSizeError};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 
 use std::ffi::{OsStr, OsString};
@@ -52,6 +52,12 @@ enum TruncateSizeError {
     ExtendOverflow,
     BlockOverflow { blocks: String, block_size: u64 },
 }
+
+const TRUNCATE_SIZE_UNITS: &[&str] = &[
+    "K", "k", "M", "m", "G", "g", "T", "t", "P", "E", "Z", "Y", "R", "Q", "KB", "kB", "MB", "mB",
+    "GB", "gB", "TB", "tB", "PB", "EB", "ZB", "YB", "RB", "QB", "KiB", "kiB", "MiB", "miB", "GiB",
+    "giB", "TiB", "tiB", "PiB", "EiB", "ZiB", "YiB", "RiB", "QiB",
+];
 
 impl TruncateMode {
     /// 根据这个截断模式计算目标文件的字节数。
@@ -719,7 +725,9 @@ fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, Parse
     if number.ends_with('b') || number.starts_with("0x") {
         return Err(invalid_number());
     }
-    let size = parse_size_u64(number).map_err(|error| match error {
+    let mut parser = CtParser::default();
+    parser.with_allow_list(TRUNCATE_SIZE_UNITS);
+    let size = parser.parse_u64(number).map_err(|error| match error {
         ParseSizeError::SizeTooBig(_) => ParseSizeError::SizeTooBig(format!(
             "{}: Value too large for defined data type",
             displayed_size.quote()
@@ -1705,6 +1713,18 @@ mod tests {
                 truncate_parse_mode_and_size("0x10"),
                 Err(ParseSizeError::ParseFailure("'0x10'".to_string()))
             );
+        }
+
+        #[test]
+        fn test_truncate_parse_mode_and_size_rejects_unsupported_lowercase_units() {
+            for size in [
+                "1p", "1pB", "1piB", "1e", "1eB", "1eiB", "1z", "1zB", "1ziB", "1y", "1yB", "1yiB",
+            ] {
+                assert_eq!(
+                    truncate_parse_mode_and_size(size),
+                    Err(ParseSizeError::ParseFailure(format!("'{size}'")))
+                );
+            }
         }
 
         #[test]

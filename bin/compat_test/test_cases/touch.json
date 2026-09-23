@@ -1149,6 +1149,37 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date='2024-01-01 12:34 A'必须把GNU军用时区A解释为UTC+01，并设置target为11:34 UTC。",
+            "args": ["--date=2024-01-01 12:34 A", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %Y target)\" = 1704108840",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "日期解析 - 相对时间 yesterday",
             "args": ["--date=yesterday", "test_yesterday.txt"],
             "expectation": {

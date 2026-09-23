@@ -552,10 +552,11 @@ fn touch_determine_times(matches: &ArgMatches, obs_time: Option<FileTime>) -> CT
             Ok(TouchTimes::timestamps(a_time, m_time))
         }
         (None, Some(date)) => {
-            if touch_is_now_date(date) {
+            let now = Local::now();
+            let timestamp = touch_parse_date(now, date)?;
+            if touch_date_uses_current_time(date, now, timestamp) {
                 return Ok(TouchTimes::now());
             }
-            let timestamp = touch_parse_date(Local::now(), date)?;
             Ok(TouchTimes::timestamps(timestamp, timestamp))
         }
         (None, None) => {
@@ -576,8 +577,29 @@ fn touch_determine_times(matches: &ArgMatches, obs_time: Option<FileTime>) -> CT
     }
 }
 
-fn touch_is_now_date(date: &str) -> bool {
-    date.trim().eq_ignore_ascii_case("now")
+/// Return whether DATE evaluates to its reference timestamp unchanged.
+///
+/// GNU touch makes this distinction so that expressions such as `0 seconds`
+/// use `UTIME_NOW`, which permits a writable non-owned file to be updated.
+fn touch_date_uses_current_time(
+    date: &str,
+    reference_time: DateTime<Local>,
+    parsed_time: FileTime,
+) -> bool {
+    if parsed_time != touch_datetime_to_filetime(&reference_time) {
+        return false;
+    }
+
+    let alternate_seconds = reference_time.timestamp() ^ 1;
+    let Some(alternate_time) = Local
+        .timestamp_opt(alternate_seconds, reference_time.timestamp_subsec_nanos())
+        .single()
+    else {
+        return false;
+    };
+
+    touch_parse_date(alternate_time, date)
+        .is_ok_and(|parsed_time| parsed_time == touch_datetime_to_filetime(&alternate_time))
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -1066,6 +1088,14 @@ mod tests {
         #[test]
         fn determine_times_date_now_uses_current_time_semantics() {
             let matches = build_matches(&["-d", "now", "dummy"]);
+            let times = touch_determine_times(&matches, None).unwrap();
+            assert_eq!(times.access, TouchTime::Now);
+            assert_eq!(times.modification, TouchTime::Now);
+        }
+
+        #[test]
+        fn determine_times_zero_relative_date_uses_current_time_semantics() {
+            let matches = build_matches(&["-d", "0 seconds", "dummy"]);
             let times = touch_determine_times(&matches, None).unwrap();
             assert_eq!(times.access, TouchTime::Now);
             assert_eq!(times.modification, TouchTime::Now);

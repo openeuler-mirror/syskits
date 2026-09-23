@@ -1117,6 +1117,40 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date='0 seconds'必须作为GNU相对当前时刻表达式成功更新target。",
+            "setup_commands": [
+                "touch target"
+            ],
+            "args": ["--date=0 seconds", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C、TZ=UTC0下--date必须接受GNU数值日期加时刻格式2020/01/02 03:04:05和20200102 03:04:05。",
             "setup_commands": [],
             "args": ["--date=2020/01/02 03:04:05", "target"],

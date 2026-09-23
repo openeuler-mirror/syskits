@@ -17,7 +17,10 @@
 
 extern crate rust_i18n;
 use rust_i18n::t;
+use std::borrow::Cow;
+use std::error::Error;
 use std::ffi::OsString;
+use std::fmt::{Display, Formatter};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use chrono::{
     DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, NaiveTime,
@@ -32,7 +35,7 @@ use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_parse_datetime;
 use ctcore::ct_posix::{
     GnuGetoptCommandExt, MODERN, TRADITIONAL, ct_posix_version, posixly_correct,
@@ -58,6 +61,192 @@ pub mod touch_flags {
 }
 
 static TOUCH_ARG_FILES: &str = "files";
+
+const TOUCH_LONG_OPTIONS: &[(&str, bool)] = &[
+    ("time", true),
+    ("no-create", false),
+    ("date", true),
+    ("reference", true),
+    ("no-dereference", false),
+    ("help", false),
+    ("version", false),
+];
+const TOUCH_SHORT_OPTIONS: &[u8] = b"acdfhmrtV";
+
+enum TouchLongOptionMatch {
+    None,
+    Recognized {
+        canonical: &'static str,
+        takes_value: bool,
+    },
+    Ambiguous(Vec<&'static str>),
+}
+
+#[derive(Debug)]
+struct TouchUsageError {
+    message: Vec<u8>,
+}
+
+impl TouchUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl Display for TouchUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl Error for TouchUsageError {}
+
+impl CTError for TouchUsageError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
+fn touch_match_long_option(name: &[u8]) -> TouchLongOptionMatch {
+    if let Some((canonical, takes_value)) = TOUCH_LONG_OPTIONS
+        .iter()
+        .find(|(option, _)| option.as_bytes() == name)
+    {
+        return TouchLongOptionMatch::Recognized {
+            canonical,
+            takes_value: *takes_value,
+        };
+    }
+
+    let matches = TOUCH_LONG_OPTIONS
+        .iter()
+        .filter(|(option, _)| option.as_bytes().starts_with(name))
+        .map(|(option, _)| *option)
+        .collect::<Vec<_>>();
+    match matches.as_slice() {
+        [] => TouchLongOptionMatch::None,
+        [canonical] => {
+            let takes_value = TOUCH_LONG_OPTIONS
+                .iter()
+                .find(|(option, _)| option == canonical)
+                .expect("matched long option must be declared")
+                .1;
+            TouchLongOptionMatch::Recognized {
+                canonical,
+                takes_value,
+            }
+        }
+        _ => TouchLongOptionMatch::Ambiguous(matches),
+    }
+}
+
+fn touch_prepare_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
+    touch_prepare_args_with_mode(args, posixly_correct())
+}
+
+fn touch_prepare_args_with_mode(
+    args: impl ctcore::Args,
+    posixly_correct: bool,
+) -> CTResult<Vec<OsString>> {
+    let args = args.collect::<Vec<_>>();
+    let mut parse_options = true;
+    let mut expects_value = false;
+
+    for argument in args.iter().skip(1) {
+        if expects_value {
+            expects_value = false;
+            continue;
+        }
+
+        let bytes = argument.as_encoded_bytes();
+        if !parse_options {
+            continue;
+        }
+        if bytes == b"--" {
+            parse_options = false;
+            continue;
+        }
+        if bytes.len() <= 1 || bytes[0] != b'-' {
+            if posixly_correct {
+                parse_options = false;
+            }
+            continue;
+        }
+
+        if let Some(long) = bytes.strip_prefix(b"--") {
+            let separator = long.iter().position(|byte| *byte == b'=');
+            let name = &long[..separator.unwrap_or(long.len())];
+            match touch_match_long_option(name) {
+                TouchLongOptionMatch::None => {
+                    let mut message = b"unrecognized option '".to_vec();
+                    message.extend_from_slice(bytes);
+                    message.push(b'\'');
+                    return Err(TouchUsageError::boxed(message));
+                }
+                TouchLongOptionMatch::Ambiguous(matches) => {
+                    let possibilities = matches
+                        .into_iter()
+                        .map(|option| format!("'--{option}'"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let mut message = b"option '".to_vec();
+                    message.extend_from_slice(bytes);
+                    message.extend_from_slice(b"' is ambiguous; possibilities: ");
+                    message.extend_from_slice(possibilities.as_bytes());
+                    return Err(TouchUsageError::boxed(message));
+                }
+                TouchLongOptionMatch::Recognized {
+                    canonical,
+                    takes_value: false,
+                } if separator.is_some() => {
+                    return Err(TouchUsageError::boxed(
+                        format!("option '--{canonical}' doesn't allow an argument").into_bytes(),
+                    ));
+                }
+                TouchLongOptionMatch::Recognized {
+                    canonical: "help" | "version",
+                    takes_value: false,
+                } => {
+                    return Ok(args
+                        .first()
+                        .into_iter()
+                        .cloned()
+                        .chain(std::iter::once(argument.clone()))
+                        .collect());
+                }
+                TouchLongOptionMatch::Recognized {
+                    takes_value: true, ..
+                } if separator.is_none() => expects_value = true,
+                TouchLongOptionMatch::Recognized { .. } => {}
+            }
+            continue;
+        }
+
+        let short_options = &bytes[1..];
+        if let Some(unknown) = short_options
+            .iter()
+            .find(|option| !TOUCH_SHORT_OPTIONS.contains(option))
+        {
+            let mut message = b"invalid option -- '".to_vec();
+            message.push(*unknown);
+            message.push(b'\'');
+            return Err(TouchUsageError::boxed(message));
+        }
+
+        if let Some(value_index) = short_options
+            .iter()
+            .position(|option| matches!(option, b'd' | b'r' | b't'))
+        {
+            expects_value = value_index + 1 == short_options.len();
+        }
+    }
+
+    Ok(args)
+}
 
 fn touch_parse_time_word(value: &str) -> Result<String, String> {
     let access = ["atime", "access", "use"]
@@ -144,7 +333,7 @@ impl TouchTimes {
 pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let arg_matches = ct_app().try_get_matches_from(args)?;
+    let arg_matches = ct_app().try_get_matches_from(touch_prepare_args(args)?)?;
 
     // 1. 将 files 收集为 Vec，以便我们可以移出作为时间戳的元素
     let mut files: Vec<OsString> = arg_matches
@@ -2028,6 +2217,57 @@ mod tests {
             let result = command.try_get_matches_from(invalid_args);
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_touch_prepare_args_uses_gnu_option_diagnostics() {
+            let cases = [
+                (
+                    "--no-c=ignored",
+                    b"option '--no-create' doesn't allow an argument".as_slice(),
+                ),
+                (
+                    "--no=ignored",
+                    b"option '--no=ignored' is ambiguous; possibilities: '--no-create' '--no-dereference'"
+                        .as_slice(),
+                ),
+                ("--unknown", b"unrecognized option '--unknown'".as_slice()),
+                ("-c=ignored", b"invalid option -- '='".as_slice()),
+            ];
+
+            for (argument, expected) in cases {
+                let error = touch_prepare_args_with_mode(
+                    [OsString::from("touch"), OsString::from(argument)].into_iter(),
+                    false,
+                )
+                .expect_err("GNU option error must be detected before clap");
+                assert_eq!(error.diagnostic_bytes().as_ref(), expected);
+                assert!(error.usage());
+            }
+        }
+
+        #[test]
+        fn test_touch_prepare_args_skips_option_values_and_honors_posix_mode() {
+            let date_value = [
+                OsString::from("touch"),
+                OsString::from("-d"),
+                OsString::from("--no-create=ignored"),
+                OsString::from("target"),
+            ];
+            assert_eq!(
+                touch_prepare_args_with_mode(date_value.clone().into_iter(), false).unwrap(),
+                date_value
+            );
+
+            let posix_args = [
+                OsString::from("touch"),
+                OsString::from("target"),
+                OsString::from("--no-create=ignored"),
+            ];
+            assert_eq!(
+                touch_prepare_args_with_mode(posix_args.clone().into_iter(), true).unwrap(),
+                posix_args
+            );
         }
 
         #[test]

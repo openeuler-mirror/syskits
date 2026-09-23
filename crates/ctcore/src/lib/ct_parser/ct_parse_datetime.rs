@@ -210,6 +210,10 @@ fn parse_datetime_gnu_compat_impl(
         return Ok(dt);
     }
 
+    if let Some(dt) = parse_gnu_explicit_time_before_iso_date(input_trim, reference_time) {
+        return Ok(dt);
+    }
+
     let mut processed_lower = input_lower.clone();
     let mut processed_trim = input_trim.to_string();
 
@@ -733,6 +737,30 @@ fn parse_gnu_iso_hour(input: &str) -> Option<NaiveDateTime> {
     NaiveDate::parse_from_str(date, "%Y-%m-%d")
         .ok()?
         .and_hms_opt(hour.parse().ok()?, 0, 0)
+}
+
+/// GNU parses date and time items independently, including a clock item that
+/// precedes an ISO date such as `12:34 2024-02-29`.
+fn parse_gnu_explicit_time_before_iso_date(
+    input: &str,
+    reference_time: DateTime<Local>,
+) -> Option<DateTime<Local>> {
+    let tokens = input.split_ascii_whitespace().collect::<Vec<_>>();
+    let [time_input, date_input] = tokens.as_slice() else {
+        return None;
+    };
+    let time = ["%H:%M:%S%.f", "%H:%M:%S", "%H:%M"]
+        .into_iter()
+        .find_map(|format| NaiveTime::parse_from_str(time_input, format).ok())?;
+    let date = NaiveDate::parse_from_str(date_input, "%Y-%m-%d").ok()?;
+
+    match reference_time
+        .timezone()
+        .from_local_datetime(&date.and_time(time))
+    {
+        chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => Some(dt),
+        chrono::LocalResult::None => None,
+    }
 }
 
 fn parse_gnu_compact_time_with_date(
@@ -2288,6 +2316,20 @@ mod tests {
                 "input {input}"
             );
         }
+    }
+
+    #[test]
+    fn test_parse_gnu_explicit_time_before_iso_date() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("12:34 2024-02-29", ref_time).unwrap();
+
+        assert_eq!(
+            parsed.naive_local(),
+            NaiveDate::from_ymd_opt(2024, 2, 29)
+                .unwrap()
+                .and_hms_opt(12, 34, 0)
+                .unwrap()
+        );
     }
 
     #[test]

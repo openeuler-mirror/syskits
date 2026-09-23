@@ -1808,6 +1808,40 @@
             "cleanup_commands": [
                 "rm -f target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date必须接受GNU时刻在ISO日期前的12:34 2024-02-29形式。",
+            "setup_commands": [
+                "touch -d '2025-07-24 12:00:00 UTC' reference"
+            ],
+            "args": ["-r", "reference", "--date=12:34 2024-02-29", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2024-02-29T12:34:00Z'",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f reference target"
+            ]
         }
     ]
 }

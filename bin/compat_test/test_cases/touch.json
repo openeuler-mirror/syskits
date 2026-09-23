@@ -260,6 +260,91 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--time=a是GNU接受的access别名缩写；配合-r时只更新target的atime，mtime保留原值。",
+            "setup_commands": [
+                "touch -t 203001010000 reference",
+                "touch -t 200001010000 target",
+                "touch -a -t 200101010000 target"
+            ],
+            "args": [
+                "--time=a",
+                "-r",
+                "reference",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c '%X:%Y' target)\" = 1893456000:946684800",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f reference target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下重复--time必须累积access和modify掩码；两者配合-r时更新target的atime和mtime。",
+            "setup_commands": [
+                "touch -t 203001010000 reference",
+                "touch -t 200001010000 target",
+                "touch -a -t 200101010000 target"
+            ],
+            "args": [
+                "--time",
+                "access",
+                "--time",
+                "modify",
+                "-r",
+                "reference",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c '%X:%Y' target)\" = 1893456000:1893456000",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f reference target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "更新符号链接本身的时间戳",
             "setup_commands": [
                 "touch -t 202001010000.00 target_file",

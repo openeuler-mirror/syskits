@@ -56,6 +56,21 @@ pub mod touch_flags {
 
 static TOUCH_ARG_FILES: &str = "files";
 
+fn touch_parse_time_word(value: &str) -> Result<String, String> {
+    let access = ["atime", "access", "use"]
+        .iter()
+        .any(|candidate| candidate.starts_with(value));
+    let modification = ["mtime", "modify"]
+        .iter()
+        .any(|candidate| candidate.starts_with(value));
+
+    match (access, modification) {
+        (true, false) => Ok("access".to_string()),
+        (false, true) => Ok("modify".to_string()),
+        _ => Err(format!("invalid time type {value:?}")),
+    }
+}
+
 mod touch_format {
     pub(crate) const POSIX_LOCALE: &str = "%a %b %e %H:%M:%S %Y";
     pub(crate) const ISO_8601: &str = "%Y-%m-%d";
@@ -282,7 +297,8 @@ pub fn ct_app() -> Command {
                      equivalent to -m",
             )
             .value_name("WORD")
-            .value_parser(["access", "atime", "use", "modify", "mtime"]),
+            .action(ArgAction::Append)
+            .value_parser(touch_parse_time_word),
         Arg::new(TOUCH_ARG_FILES)
             .action(ArgAction::Append)
             .num_args(1..)
@@ -497,22 +513,19 @@ fn touch_update_times(
         || arg_matches.get_flag(touch_flags::TOUCH_MODIFICATION)
         || arg_matches.contains_id(touch_flags::TOUCH_TIME)
     {
-        let time = arg_matches
-            .get_one::<String>(touch_flags::TOUCH_TIME)
-            .map(|s| s.as_str())
-            .unwrap_or("");
+        let time_words = arg_matches
+            .get_many::<String>(touch_flags::TOUCH_TIME)
+            .into_iter()
+            .flatten()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
 
-        if !(arg_matches.get_flag(touch_flags::TOUCH_ACCESS)
-            || time.contains(&"access".to_owned())
-            || time.contains(&"atime".to_owned())
-            || time.contains(&"use".to_owned()))
-        {
+        if !(arg_matches.get_flag(touch_flags::TOUCH_ACCESS) || time_words.contains(&"access")) {
             times.access = TouchTime::Omit;
         }
 
         if !(arg_matches.get_flag(touch_flags::TOUCH_MODIFICATION)
-            || time.contains(&"modify".to_owned())
-            || time.contains(&"mtime".to_owned()))
+            || time_words.contains(&"modify"))
         {
             times.modification = TouchTime::Omit;
         }
@@ -2064,6 +2077,27 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--time", "mtime", file_name];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_time_accepts_group_prefixes_and_repeats() {
+            let matches = ct_app()
+                .try_get_matches_from([
+                    ctcore::ct_util_name(),
+                    "--time",
+                    "a",
+                    "--time",
+                    "m",
+                    "file",
+                ])
+                .unwrap();
+
+            let values = matches
+                .get_many::<String>(touch_flags::TOUCH_TIME)
+                .unwrap()
+                .map(String::as_str)
+                .collect::<Vec<_>>();
+            assert_eq!(values, ["access", "modify"]);
         }
 
         #[test]

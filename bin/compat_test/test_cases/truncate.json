@@ -1377,6 +1377,66 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "重复SIZE必须按GNU选项顺序校验；前一个无效值即使被后续合法值覆盖也必须立即报错且不创建目标文件",
+            "setup_commands": [],
+            "args": ["--size", "invalid", "--size", "0", "repeated-size-invalid-target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "truncate: Invalid number: 'invalid'"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e repeated-size-invalid-target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
+            "description": "重复SIZE中前次相对修饰符必须影响后续未修饰的数值；+1后跟0按GNU仍表示相对+0，文件大小保持1字节",
+            "setup_commands": [
+                "printf x > repeated-size-relative-target"
+            ],
+            "args": ["--size", "+1", "--size", "0", "repeated-size-relative-target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %s repeated-size-relative-target",
+                        "expected_exit": 0,
+                        "expected_stdout": "1"
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f repeated-size-relative-target"
+            ]
         }
     ]
 }

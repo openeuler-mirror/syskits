@@ -1135,6 +1135,39 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "truncate",
+            "description": "原始非UTF-8 SIZE用例：LC_ALL=C下SIZE=ff，预期将无效字节作为GNU数值参数诊断而非在参数解析阶段拒绝；RC=1、stdout为空，stderr字节7472756e636174653a20496e76616c6964206e756d6265723a20275c333737270a对应\"truncate: Invalid number: '\\377'\\n\"，且不得创建目标文件",
+            "setup_commands": [],
+            "args": [
+                "2d73",
+                "ff",
+                "6e6f6e2d757466382d73697a652d746172676574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7472756e636174653a20496e76616c6964206e756d6265723a20275c333737270a"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e non-utf8-size-target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -195,13 +195,34 @@ fn truncate_quote_operand(operand: &OsStr) -> String {
     gnu_quote_shell(operand, true)
 }
 
-fn truncate_quote_size(size: &str) -> String {
-    escape_name(
-        OsStr::new(size),
-        &CtQuotingStyle::C {
-            quotes: CtQuotes::Single,
-        },
-    )
+fn truncate_quote_size(size: &OsStr) -> String {
+    if let Some(size) = size.to_str() {
+        return escape_name(
+            OsStr::new(size),
+            &CtQuotingStyle::C {
+                quotes: CtQuotes::Single,
+            },
+        );
+    }
+
+    let mut quoted = String::from("'");
+    for byte in size.as_encoded_bytes() {
+        match byte {
+            b'\x07' => quoted.push_str("\\a"),
+            b'\x08' => quoted.push_str("\\b"),
+            b'\t' => quoted.push_str("\\t"),
+            b'\n' => quoted.push_str("\\n"),
+            b'\x0b' => quoted.push_str("\\v"),
+            b'\x0c' => quoted.push_str("\\f"),
+            b'\r' => quoted.push_str("\\r"),
+            b'\\' => quoted.push_str("\\\\"),
+            b'\'' => quoted.push_str("\\'"),
+            b' '..=b'~' => quoted.push(char::from(*byte)),
+            _ => quoted.push_str(&format!("\\{byte:03o}")),
+        }
+    }
+    quoted.push('\'');
+    quoted
 }
 
 pub mod truncate_flags {
@@ -245,8 +266,8 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
         .get_one::<OsString>(truncate_flags::TRUNCATE_REFERENCE)
         .cloned();
     let size = matches
-        .get_one::<String>(truncate_flags::TRUNCATE_SIZE)
-        .map(String::from);
+        .get_one::<OsString>(truncate_flags::TRUNCATE_SIZE)
+        .cloned();
     let files: Vec<OsString> = matches
         .get_many::<OsString>(truncate_flags::TRUNCATE_ARG_FILES)
         .map(|v| v.cloned().collect())
@@ -267,6 +288,13 @@ pub fn truncate_main(args: impl ctcore::Args) -> CTResult<()> {
     if files.is_empty() {
         return Err(CTsageError::new(1, "missing file operand"));
     }
+
+    let size = size
+        .map(OsString::into_string)
+        .transpose()
+        .map_err(|size| {
+            CtSimpleError::new(1, format!("Invalid number: {}", truncate_quote_size(&size)))
+        })?;
 
     truncate(is_no_create, is_io_blocks, reference, size, &files)
 }
@@ -310,6 +338,7 @@ pub fn ct_app() -> Command {
             )
             .action(ArgAction::Set)
             .overrides_with(truncate_flags::TRUNCATE_SIZE)
+            .value_parser(OsStringValueParser::new())
             .value_name("SIZE")
             .allow_hyphen_values(true),
         Arg::new(truncate_flags::TRUNCATE_ARG_FILES)
@@ -772,7 +801,7 @@ fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, Parse
     let size_string = size_string.trim_start_matches(is_gnu_ascii_whitespace);
     let Some(modifier) = size_string.chars().next() else {
         return Err(ParseSizeError::ParseFailure(truncate_quote_size(
-            size_string,
+            OsStr::new(size_string),
         )));
     };
 
@@ -798,7 +827,8 @@ fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, Parse
             (TruncateMode::Absolute, size_string, size_string)
         };
 
-    let invalid_number = || ParseSizeError::ParseFailure(truncate_quote_size(displayed_size));
+    let invalid_number =
+        || ParseSizeError::ParseFailure(truncate_quote_size(OsStr::new(displayed_size)));
     if number.ends_with('b')
         || number.starts_with("0x")
         || matches!(modifier, '+' | '-')
@@ -817,14 +847,14 @@ fn truncate_parse_mode_and_size(size_string: &str) -> Result<TruncateMode, Parse
         .map_err(|error| match error {
             ParseSizeError::SizeTooBig(_) => ParseSizeError::SizeTooBig(format!(
                 "{}: Value too large for defined data type",
-                truncate_quote_size(displayed_size)
+                truncate_quote_size(OsStr::new(displayed_size))
             )),
             _ => invalid_number(),
         })?;
     if size > i64::MAX as u64 && !(modifier == '-' && size == off_t_min_magnitude()) {
         return Err(ParseSizeError::SizeTooBig(format!(
             "{}: Value too large for defined data type",
-            truncate_quote_size(displayed_size)
+            truncate_quote_size(OsStr::new(displayed_size))
         )));
     }
 
@@ -2108,6 +2138,21 @@ mod tests {
             assert_eq!(std::fs::metadata(file_path).unwrap().len(), 7);
         }
 
+        #[cfg(unix)]
+        #[test]
+        fn test_truncate_main_reports_non_utf8_size_with_gnu_quoting() {
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-s"),
+                OsString::from_vec(vec![0xff]),
+                OsString::from("non-utf8-size-target"),
+            ];
+
+            let error = truncate_main(args.into_iter()).unwrap_err();
+
+            assert_eq!(error.to_string(), "Invalid number: '\\377'");
+        }
+
         #[test]
         fn test_truncate_main_support_missing_argument() {
             let args = [ctcore::ct_util_name()]; // 缺少任何参数
@@ -3003,8 +3048,8 @@ mod tests {
             let matches = command.try_get_matches_from(args).unwrap();
 
             assert_eq!(
-                matches.get_one::<String>(truncate_flags::TRUNCATE_SIZE),
-                Some(&"2".to_string())
+                matches.get_one::<OsString>(truncate_flags::TRUNCATE_SIZE),
+                Some(&OsString::from("2"))
             );
         }
 

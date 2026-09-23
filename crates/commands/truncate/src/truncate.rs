@@ -128,8 +128,8 @@ impl TruncateMode {
             | Self::RoundDown(size)
             | Self::RoundUp(size) => *size,
         };
-        let is_off_t_min = matches!(self, Self::Reduce(_)) && blocks == off_t_min_magnitude();
-        let size = checked_block_size(blocks, blocksize, is_off_t_min)?;
+        let is_negative = matches!(self, Self::Reduce(_));
+        let size = checked_block_size(blocks, blocksize, is_negative)?;
 
         let target_size = match self {
             Self::Absolute(_) => size,
@@ -165,14 +165,15 @@ fn off_t_min_magnitude() -> u64 {
 fn checked_block_size(
     blocks: u64,
     block_size: u64,
-    is_off_t_min: bool,
+    is_negative: bool,
 ) -> Result<u64, TruncateSizeError> {
+    let maximum_size = i64::MAX as u64 + u64::from(is_negative);
     blocks
         .checked_mul(block_size)
-        .filter(|size| *size <= i64::MAX as u64 || (is_off_t_min && *size == off_t_min_magnitude()))
+        .filter(|size| *size <= maximum_size)
         .ok_or_else(|| TruncateSizeError::BlockOverflow {
-            blocks: if is_off_t_min {
-                i64::MIN.to_string()
+            blocks: if is_negative {
+                format!("-{blocks}")
             } else {
                 blocks.to_string()
             },
@@ -2829,6 +2830,25 @@ mod tests {
                 TruncateMode::Reduce(9_223_372_036_854_775_808).to_block_size(0, 4096),
                 Err(TruncateSizeError::BlockOverflow {
                     blocks: "-9223372036854775808".to_string(),
+                    block_size: 4096,
+                })
+            );
+        }
+
+        #[test]
+        fn test_to_block_size_allows_negative_off_t_min_product() {
+            assert_eq!(
+                TruncateMode::Reduce(2_251_799_813_685_248).to_block_size(0, 4096),
+                Ok(0)
+            );
+        }
+
+        #[test]
+        fn test_to_block_size_reports_negative_blocks_on_overflow() {
+            assert_eq!(
+                TruncateMode::Reduce(i64::MAX as u64).to_block_size(0, 4096),
+                Err(TruncateSizeError::BlockOverflow {
+                    blocks: "-9223372036854775807".to_string(),
                     block_size: 4096,
                 })
             );

@@ -1658,6 +1658,72 @@
         {
             "tstdin": "",
             "command": "truncate",
+            "description": "LC_ALL=C下--io-blocks的负SIZE乘积恰好为OFF_T_MIN时必须按GNU接受：-2251799813685248乘4096等于-9223372036854775808，文件截断到0而非报正数溢出",
+            "setup_commands": [
+                "printf data > negative-off-t-min-block-target"
+            ],
+            "args": [
+                "--io-blocks",
+                "--size",
+                "-2251799813685248",
+                "negative-off-t-min-block-target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %s negative-off-t-min-block-target",
+                        "expected_exit": 0,
+                        "expected_stdout": "0"
+                    }
+                ]
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f negative-off-t-min-block-target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "truncate",
+            "description": "原始字节用例：LC_ALL=C下--io-blocks的负SIZE溢出必须保留GNU有符号块数；参数完整十六进制=2d2d696f2d626c6f636b73 2d2d73697a65 2d39323233333732303336383534373735383037 6e656761746976652d626c6f636b2d6f766572666c6f772d746172676574；stdin为空；预期RC=1、stdout为空、stderr为7472756e636174653a206f766572666c6f7720696e202d39323233333732303336383534373735383037202a2034303936206279746520626c6f636b7320666f722066696c6520276e656761746976652d626c6f636b2d6f766572666c6f772d746172676574270a，不能丢失负号",
+            "setup_commands": [],
+            "args": [
+                "2d2d696f2d626c6f636b73",
+                "2d2d73697a65",
+                "2d39323233333732303336383534373735383037",
+                "6e656761746976652d626c6f636b2d6f766572666c6f772d746172676574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7472756e636174653a206f766572666c6f7720696e202d39323233333732303336383534373735383037202a2034303936206279746520626c6f636b7320666f722066696c6520276e656761746976652d626c6f636b2d6f766572666c6f772d746172676574270a"
+                },
+                "verifications": []
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "truncate",
             "description": "LC_ALL=C下GNU保留历史SIZE尾缀D：1KD表示1000字节而不是无效数值；预期RC=0、无标准输出和诊断，并创建大小为1000字节的目标文件",
             "setup_commands": [
                 "rm -f gnu-decimal-d-suffix"

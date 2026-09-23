@@ -26,6 +26,28 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C下无文件参数必须按GNU使用子命令名输出缺少文件操作数诊断。",
+            "args": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: missing file operand\nTry 'touch --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "更新已存在文件的时间戳",
             "setup_commands": [
                 "touch -d '2000-01-01' old_file"

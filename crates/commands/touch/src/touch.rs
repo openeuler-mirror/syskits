@@ -354,7 +354,7 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
         .ok_or_else(|| {
             let err_message = format!(
                 "missing file operand\nTry '{} --help' for more information.",
-                ctcore::ct_execute_phrase()
+                ctcore::ct_help_utility_name()
             );
             CtSimpleError::new(1, err_message)
         })?
@@ -2012,8 +2012,14 @@ mod tests {
         #[test]
         fn test_touch_main_support_missing_argument() {
             let args = [ctcore::ct_util_name()]; // 缺少任何参数
-            let result = touch_main(args.iter().map(OsString::from));
-            assert!(result.is_err());
+            let error = touch_main(args.iter().map(OsString::from)).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "missing file operand\nTry '{} --help' for more information.",
+                    ctcore::ct_help_utility_name()
+                )
+            );
         }
 
         #[test]

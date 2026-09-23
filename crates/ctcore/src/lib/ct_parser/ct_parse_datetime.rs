@@ -230,6 +230,16 @@ fn parse_datetime_gnu_compat_impl(
 
     // 预处理自然语言相对时间词汇 (now, yesterday 等标准化为精准的加减法)
     let word_replacements = [
+        ("year", "+1 year"),
+        ("month", "+1 month"),
+        ("fortnight", "+1 fortnight"),
+        ("week", "+1 week"),
+        ("day", "+1 day"),
+        ("hour", "+1 hour"),
+        ("minute", "+1 minute"),
+        ("min", "+1 minute"),
+        ("second", "+1 sec"),
+        ("sec", "+1 sec"),
         ("yesterday", "-1 day"),
         ("tomorrow", "+1 day"),
         ("today", "+0 day"),
@@ -2189,6 +2199,18 @@ mod tests {
                 "input {input}"
             );
         }
+    }
+
+    #[test]
+    fn test_parse_gnu_bare_month_uses_calendar_arithmetic() {
+        let ref_time = Local.with_ymd_and_hms(2024, 1, 31, 12, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("month", ref_time).unwrap();
+
+        assert_eq!(
+            parsed.date_naive(),
+            NaiveDate::from_ymd_opt(2024, 3, 2).unwrap()
+        );
+        assert_eq!(parsed.time(), NaiveTime::from_hms_opt(12, 0, 0).unwrap());
     }
 
     #[test]

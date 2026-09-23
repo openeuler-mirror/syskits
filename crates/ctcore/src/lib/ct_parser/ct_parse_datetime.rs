@@ -230,16 +230,6 @@ fn parse_datetime_gnu_compat_impl(
 
     // 预处理自然语言相对时间词汇 (now, yesterday 等标准化为精准的加减法)
     let word_replacements = [
-        ("year", "+1 year"),
-        ("month", "+1 month"),
-        ("fortnight", "+1 fortnight"),
-        ("week", "+1 week"),
-        ("day", "+1 day"),
-        ("hour", "+1 hour"),
-        ("minute", "+1 minute"),
-        ("min", "+1 minute"),
-        ("second", "+1 sec"),
-        ("sec", "+1 sec"),
         ("yesterday", "-1 day"),
         ("tomorrow", "+1 day"),
         ("today", "+0 day"),
@@ -281,6 +271,25 @@ fn parse_datetime_gnu_compat_impl(
                 break;
             }
         }
+    }
+
+    if let Some((_, replacement)) = [
+        ("year", "+1 year"),
+        ("month", "+1 month"),
+        ("fortnight", "+1 fortnight"),
+        ("week", "+1 week"),
+        ("day", "+1 day"),
+        ("hour", "+1 hour"),
+        ("minute", "+1 minute"),
+        ("min", "+1 minute"),
+        ("second", "+1 sec"),
+        ("sec", "+1 sec"),
+    ]
+    .into_iter()
+    .find(|(word, _)| processed_lower == *word)
+    {
+        processed_lower = replacement.to_string();
+        processed_trim = replacement.to_string();
     }
 
     // 强大的混合相对时间解析 (避免 f64 精度丢失，支持无符号隐式正数，支持闰年滚动计算)
@@ -619,6 +628,12 @@ fn parse_datetime_gnu_compat_impl(
         return Ok(dt);
     }
 
+    if let Some(dt) =
+        parse_gnu_relative_unit_with_weekday(input_trim, reference_time, normalized_extended_year)
+    {
+        return Ok(dt);
+    }
+
     if let Some(dt) = parse_gnu_date_without_year(input_trim, reference_time) {
         return Ok(dt);
     }
@@ -734,6 +749,9 @@ fn parse_gnu_compact_time_with_date(
         if parse_weekday_name(date_input).is_some() {
             continue;
         }
+        if is_gnu_relative_unit_expression(&[date_input]) {
+            continue;
+        }
         let Some(time) = parse_compact_time_of_day(time_input, reference_time).map(|dt| dt.time())
         else {
             continue;
@@ -753,6 +771,77 @@ fn parse_gnu_compact_time_with_date(
     }
 
     None
+}
+
+fn parse_gnu_relative_unit_with_weekday(
+    input: &str,
+    reference_time: DateTime<Local>,
+    normalized_extended_year: bool,
+) -> Option<DateTime<Local>> {
+    let tokens = input.split_ascii_whitespace().collect::<Vec<_>>();
+    let weekday_indexes = tokens
+        .iter()
+        .enumerate()
+        .filter_map(|(index, token)| parse_weekday_name(token).map(|_| index))
+        .collect::<Vec<_>>();
+    let [weekday_index] = weekday_indexes.as_slice() else {
+        return None;
+    };
+
+    let relative_tokens = tokens
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index != *weekday_index)
+        .map(|(_, token)| *token)
+        .collect::<Vec<_>>();
+    if !is_gnu_relative_unit_expression(&relative_tokens) {
+        return None;
+    }
+
+    let weekday = parse_weekday_expression(tokens[*weekday_index], reference_time)?;
+    parse_datetime_gnu_compat_impl(
+        &relative_tokens.join(" "),
+        weekday,
+        normalized_extended_year,
+    )
+    .ok()
+}
+
+fn is_gnu_relative_unit_expression(tokens: &[&str]) -> bool {
+    match tokens {
+        [unit] => is_gnu_relative_unit(unit),
+        [amount, unit]
+            if amount.parse::<f64>().is_ok()
+                || matches!(amount.to_ascii_lowercase().as_str(), "next" | "last") =>
+        {
+            is_gnu_relative_unit(unit)
+        }
+        _ => false,
+    }
+}
+
+fn is_gnu_relative_unit(input: &str) -> bool {
+    matches!(
+        input.to_ascii_lowercase().as_str(),
+        "year"
+            | "years"
+            | "month"
+            | "months"
+            | "fortnight"
+            | "fortnights"
+            | "week"
+            | "weeks"
+            | "day"
+            | "days"
+            | "hour"
+            | "hours"
+            | "minute"
+            | "minutes"
+            | "min"
+            | "second"
+            | "seconds"
+            | "sec"
+    )
 }
 
 fn gnu_month_number(input: &str) -> Option<u32> {
@@ -2211,6 +2300,33 @@ mod tests {
             NaiveDate::from_ymd_opt(2024, 3, 2).unwrap()
         );
         assert_eq!(parsed.time(), NaiveTime::from_hms_opt(12, 0, 0).unwrap());
+    }
+
+    #[test]
+    fn test_parse_gnu_relative_unit_with_weekday() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap(); // Thursday
+
+        for (input, expected_date, expected_time) in [
+            (
+                "second monday",
+                NaiveDate::from_ymd_opt(2025, 7, 28).unwrap(),
+                NaiveTime::from_hms_opt(0, 0, 1).unwrap(),
+            ),
+            (
+                "day monday",
+                NaiveDate::from_ymd_opt(2025, 7, 29).unwrap(),
+                NaiveTime::MIN,
+            ),
+            (
+                "monday 1 second",
+                NaiveDate::from_ymd_opt(2025, 7, 28).unwrap(),
+                NaiveTime::from_hms_opt(0, 0, 1).unwrap(),
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.date_naive(), expected_date, "input {input}");
+            assert_eq!(parsed.time(), expected_time, "input {input}");
+        }
     }
 
     #[test]

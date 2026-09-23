@@ -1728,6 +1728,40 @@
             "cleanup_commands": [
                 "rm -f reference target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date='second monday'必须按GNU组合星期一零点与一秒相对单位。",
+            "setup_commands": [
+                "touch -t 202507241200 reference"
+            ],
+            "args": ["-r", "reference", "--date=second monday", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2025-07-28T00:00:01Z'",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f reference target"
+            ]
         }
     ]
 }

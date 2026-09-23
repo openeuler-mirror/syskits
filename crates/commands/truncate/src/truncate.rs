@@ -488,10 +488,7 @@ pub fn ct_app() -> Command {
         Arg::new(truncate_flags::TRUNCATE_IO_BLOCKS)
             .short('o')
             .long(truncate_flags::TRUNCATE_IO_BLOCKS)
-            .help(
-                "treat SIZE as the number of I/O blocks of the file rather than bytes \
-            (NOT IMPLEMENTED)",
-            )
+            .help("treat SIZE as the number of I/O blocks of the file rather than bytes")
             .action(ArgAction::SetTrue)
             .overrides_with(truncate_flags::TRUNCATE_IO_BLOCKS),
         Arg::new(truncate_flags::TRUNCATE_NO_CREATE)
@@ -3309,7 +3306,6 @@ mod tests {
         //   <FILE>...
         //
         // Options:
-        //   -o, --io-blocks          treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)
         //   -c, --no-create          do not create files that do not exist
         //   -r, --reference <RFILE>  base the size of each file on the size of RFILE
         //   -s, --size <SIZE>        set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified
@@ -3393,6 +3389,13 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--io-blocks", file];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_io_blocks_help_does_not_claim_feature_is_unimplemented() {
+            let help = ct_app().render_help().to_string();
+
+            assert!(!help.contains("NOT"));
         }
 
         #[test]

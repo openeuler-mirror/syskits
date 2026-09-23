@@ -678,6 +678,43 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C下前一目标regular/因普通文件不是目录而失败时，touch必须继续创建后一目标valid，并以RC=1汇总失败。",
+            "setup_commands": [
+                "printf data > regular"
+            ],
+            "args": [
+                "regular/",
+                "valid"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: setting times of 'regular/': Not a directory\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test -e valid",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f regular valid"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "更新符号链接本身的时间戳",
             "setup_commands": [
                 "touch -t 202001010000.00 target_file",

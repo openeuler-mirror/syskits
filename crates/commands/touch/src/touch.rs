@@ -248,6 +248,7 @@ pub fn ct_app() -> Command {
             .short('t')
             .help(t!("touch.clap.touch_timestamp"))
             .value_name("STAMP")
+            .allow_hyphen_values(true)
             .action(ArgAction::Append),
         Arg::new(touch_flags::sources::TOUCH_DATE)
             .short('d')
@@ -285,6 +286,7 @@ pub fn ct_app() -> Command {
             .value_name("FILE")
             .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::AnyPath)
+            .allow_hyphen_values(true)
             .action(ArgAction::Append)
             .conflicts_with(touch_flags::sources::TOUCH_TIMESTAMP),
         Arg::new(touch_flags::TOUCH_TIME)
@@ -295,6 +297,7 @@ pub fn ct_app() -> Command {
                      equivalent to -m",
             )
             .value_name("WORD")
+            .allow_hyphen_values(true)
             .action(ArgAction::Append)
             .value_parser(touch_parse_time_word),
         Arg::new(TOUCH_ARG_FILES)
@@ -2027,6 +2030,41 @@ mod tests {
                     .collect::<Vec<_>>(),
                 [std::ffi::OsStr::new("first"), std::ffi::OsStr::new("-a")]
             );
+        }
+
+        #[test]
+        fn test_ct_app_accepts_hyphen_prefixed_option_values() {
+            let reference = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "-r", "-missing", "target"])
+                .unwrap();
+            assert_eq!(
+                reference
+                    .get_many::<OsString>(touch_flags::sources::TOUCH_REFERENCE)
+                    .unwrap()
+                    .last()
+                    .unwrap(),
+                &OsString::from("-missing")
+            );
+
+            let timestamp = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "-t", "-stamp", "target"])
+                .unwrap();
+            assert_eq!(
+                timestamp
+                    .get_many::<String>(touch_flags::sources::TOUCH_TIMESTAMP)
+                    .unwrap()
+                    .last()
+                    .unwrap(),
+                "-stamp"
+            );
+
+            let error = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "--time", "-bad", "target"])
+                .unwrap_err();
+            assert!(matches!(
+                error.kind(),
+                ErrorKind::InvalidValue | ErrorKind::ValueValidation
+            ));
         }
 
         #[test]

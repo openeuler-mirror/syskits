@@ -29,10 +29,11 @@ use std::path::Path;
 use sys_locale::get_locale;
 
 use ctcore::Tool;
+use ctcore::ct_display::locale_quote_marks;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_parse_size::{CtParser, ParseSizeError};
 use ctcore::ct_posix::GnuGetoptCommandExt;
-use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name, gnu_quote_shell};
+use ctcore::ct_quoting_style::gnu_quote_shell;
 
 use std::ffi::{OsStr, OsString};
 
@@ -196,32 +197,70 @@ fn truncate_quote_operand(operand: &OsStr) -> String {
 }
 
 fn truncate_quote_size(size: &OsStr) -> String {
-    if let Some(size) = size.to_str() {
-        return escape_name(
-            OsStr::new(size),
-            &CtQuotingStyle::C {
-                quotes: CtQuotes::Single,
-            },
-        );
+    let (left_quote, right_quote) = locale_quote_marks();
+    truncate_quote_size_with_marks(size.as_encoded_bytes(), left_quote, right_quote)
+}
+
+fn truncate_quote_size_with_marks(bytes: &[u8], left_quote: &str, right_quote: &str) -> String {
+    let mut quoted = String::from(left_quote);
+    let mut remaining = bytes;
+    let is_utf8_locale = left_quote == "‘" && right_quote == "’";
+
+    while let Some((&byte, tail)) = remaining.split_first() {
+        if remaining.starts_with(right_quote.as_bytes()) {
+            quoted.push('\\');
+            quoted.push_str(right_quote);
+            remaining = &remaining[right_quote.len()..];
+            continue;
+        }
+
+        if byte.is_ascii() {
+            match byte {
+                b'\x07' => quoted.push_str("\\a"),
+                b'\x08' => quoted.push_str("\\b"),
+                b'\t' => quoted.push_str("\\t"),
+                b'\n' => quoted.push_str("\\n"),
+                b'\x0b' => quoted.push_str("\\v"),
+                b'\x0c' => quoted.push_str("\\f"),
+                b'\r' => quoted.push_str("\\r"),
+                b'\\' => quoted.push_str("\\\\"),
+                b'\'' => quoted.push_str("\\'"),
+                b' '..=b'~' => quoted.push(char::from(byte)),
+                _ => quoted.push_str(&format!("\\{byte:03o}")),
+            }
+            remaining = tail;
+            continue;
+        }
+
+        if is_utf8_locale {
+            match std::str::from_utf8(remaining) {
+                Ok(valid) => {
+                    quoted.push_str(valid);
+                    break;
+                }
+                Err(error) if error.valid_up_to() > 0 => {
+                    let valid = std::str::from_utf8(&remaining[..error.valid_up_to()])
+                        .expect("valid_up_to must identify valid UTF-8");
+                    quoted.push_str(valid);
+                    remaining = &remaining[error.valid_up_to()..];
+                    continue;
+                }
+                Err(error) => {
+                    let invalid_len = error.error_len().unwrap_or(remaining.len());
+                    for byte in &remaining[..invalid_len] {
+                        quoted.push_str(&format!("\\{byte:03o}"));
+                    }
+                    remaining = &remaining[invalid_len..];
+                    continue;
+                }
+            }
+        }
+
+        quoted.push_str(&format!("\\{byte:03o}"));
+        remaining = tail;
     }
 
-    let mut quoted = String::from("'");
-    for byte in size.as_encoded_bytes() {
-        match byte {
-            b'\x07' => quoted.push_str("\\a"),
-            b'\x08' => quoted.push_str("\\b"),
-            b'\t' => quoted.push_str("\\t"),
-            b'\n' => quoted.push_str("\\n"),
-            b'\x0b' => quoted.push_str("\\v"),
-            b'\x0c' => quoted.push_str("\\f"),
-            b'\r' => quoted.push_str("\\r"),
-            b'\\' => quoted.push_str("\\\\"),
-            b'\'' => quoted.push_str("\\'"),
-            b' '..=b'~' => quoted.push(char::from(*byte)),
-            _ => quoted.push_str(&format!("\\{byte:03o}")),
-        }
-    }
-    quoted.push('\'');
+    quoted.push_str(right_quote);
     quoted
 }
 
@@ -976,7 +1015,24 @@ mod tests {
     fn invalid_size_diagnostic_uses_gnu_shell_always_quotes() {
         let error = truncate_parse_mode_and_size("1\tK").unwrap_err();
 
-        assert_eq!(error.to_string(), "'1\\tK'");
+        assert_eq!(error.to_string(), truncate_quote_size(OsStr::new("1\tK")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn invalid_size_diagnostic_quotes_bytes_by_ctype_locale() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let size = OsStr::from_bytes(b"a\xc3\xa9\xff\xe2\x80\x99b");
+
+        assert_eq!(
+            truncate_quote_size_with_marks(size.as_bytes(), "'", "'"),
+            "'a\\303\\251\\377\\342\\200\\231b'"
+        );
+        assert_eq!(
+            truncate_quote_size_with_marks(size.as_bytes(), "‘", "’"),
+            "‘aé\\377\\’b’"
+        );
     }
 
     #[cfg(unix)]
@@ -1888,6 +1944,10 @@ mod tests {
 
         use super::*;
 
+        fn invalid_number(size: &str) -> ParseSizeError {
+            ParseSizeError::ParseFailure(truncate_quote_size(OsStr::new(size)))
+        }
+
         #[test]
         fn test_truncate_parse_mode_and_size_rejects_dd_block_suffix() {
             assert!(truncate_parse_mode_and_size("1b").is_err());
@@ -1897,7 +1957,7 @@ mod tests {
         fn test_truncate_parse_mode_and_size_rejects_hexadecimal_values() {
             assert_eq!(
                 truncate_parse_mode_and_size("0x10"),
-                Err(ParseSizeError::ParseFailure("'0x10'".to_string()))
+                Err(invalid_number("0x10"))
             );
         }
 
@@ -1908,7 +1968,7 @@ mod tests {
             ] {
                 assert_eq!(
                     truncate_parse_mode_and_size(size),
-                    Err(ParseSizeError::ParseFailure(format!("'{size}'")))
+                    Err(invalid_number(size))
                 );
             }
         }
@@ -1930,7 +1990,7 @@ mod tests {
             for size in ["+K", "-K", "+kB", "-KiB"] {
                 assert_eq!(
                     truncate_parse_mode_and_size(size),
-                    Err(ParseSizeError::ParseFailure(format!("'{size}'")))
+                    Err(invalid_number(size))
                 );
             }
         }
@@ -1939,7 +1999,7 @@ mod tests {
         fn test_truncate_parse_mode_and_size_uses_gnu_whitespace_rules() {
             assert_eq!(
                 truncate_parse_mode_and_size("+1 "),
-                Err(ParseSizeError::ParseFailure("'+1 '".to_string()))
+                Err(invalid_number("+1 "))
             );
             assert_eq!(
                 truncate_parse_mode_and_size("< 1"),
@@ -2079,16 +2139,13 @@ mod tests {
         fn test_truncate_parse_mode_and_size_invalid() {
             assert_eq!(
                 truncate_parse_mode_and_size("invalid"),
-                Err(ParseSizeError::ParseFailure("'invalid'".to_string()))
+                Err(invalid_number("invalid"))
             );
             assert_eq!(
                 truncate_parse_mode_and_size("+invalid"),
-                Err(ParseSizeError::ParseFailure("'+invalid'".to_string()))
+                Err(invalid_number("+invalid"))
             );
-            assert_eq!(
-                truncate_parse_mode_and_size(""),
-                Err(ParseSizeError::ParseFailure("''".to_string()))
-            );
+            assert_eq!(truncate_parse_mode_and_size(""), Err(invalid_number("")));
             assert_eq!(
                 truncate_parse_mode_and_size("/0"),
                 Ok(TruncateMode::RoundDown(0))
@@ -2101,13 +2158,10 @@ mod tests {
 
         #[test]
         fn test_truncate_parse_mode_and_size_skips_all_gnu_c_whitespace() {
-            assert_eq!(
-                truncate_parse_mode_and_size(" "),
-                Err(ParseSizeError::ParseFailure("''".to_string()))
-            );
+            assert_eq!(truncate_parse_mode_and_size(" "), Err(invalid_number("")));
             assert_eq!(
                 truncate_parse_mode_and_size("\t\u{000b}\u{000c}\r"),
-                Err(ParseSizeError::ParseFailure("''".to_string()))
+                Err(invalid_number(""))
             );
             assert_eq!(
                 truncate_parse_mode_and_size("\t\u{000b}\u{000c}\r100"),
@@ -2125,7 +2179,7 @@ mod tests {
         use std::ffi::OsString;
         use std::io::Write;
         #[cfg(unix)]
-        use std::os::unix::ffi::OsStringExt;
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
         use tempfile::tempdir;
 
@@ -2174,7 +2228,13 @@ mod tests {
 
             let error = truncate_main(args.into_iter()).unwrap_err();
 
-            assert_eq!(error.to_string(), "Invalid number: '\\377'");
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "Invalid number: {}",
+                    truncate_quote_size(OsStr::from_bytes(&[0xff]))
+                )
+            );
         }
 
         #[test]
@@ -2197,7 +2257,13 @@ mod tests {
             let args = [ctcore::ct_util_name(), "-s", "invalid"];
             let error = truncate_main(args.iter().map(OsString::from)).unwrap_err();
 
-            assert_eq!(error.to_string(), "Invalid number: 'invalid'");
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "Invalid number: {}",
+                    truncate_quote_size(OsStr::new("invalid"))
+                )
+            );
         }
 
         #[test]

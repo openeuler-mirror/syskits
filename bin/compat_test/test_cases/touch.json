@@ -2478,6 +2478,37 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date必须接受GNU日期加相对单位1970-01-01 1 second，并把target设为epoch第1秒。",
+            "args": ["--date=1970-01-01 1 second", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %.9Y target",
+                        "expected_exit": 0,
+                        "expected_stdout": "1.000000000"
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C、TZ=UTC0下--date必须接受GNU完整英文月名日期January 1 1970，并把target设为epoch零点。",
             "args": ["--date=January 1 1970", "target"],
             "expectation": {

@@ -455,6 +455,14 @@ fn parse_datetime_gnu_compat_impl(
                     &amount_part
                 };
 
+                if amount_abs.contains('.')
+                    && !matches!(suffix, " second" | " seconds" | " sec" | " secs")
+                {
+                    return Err(ParseDateTimeError {
+                        message: format!("Unable to parse date: {input}"),
+                    });
+                }
+
                 let (mut secs, mut nanos) = if let Some(dot_idx) = amount_abs.find('.') {
                     let secs = amount_abs[..dot_idx].parse().unwrap_or(0);
                     let frac = &amount_abs[dot_idx + 1..];
@@ -2181,6 +2189,41 @@ mod tests {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
             assert_eq!(parsed.date_naive(), expected_date, "input {input}");
             assert_eq!(parsed.time(), expected_time, "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_parse_gnu_fractional_relative_units() {
+        let ref_time = Local.timestamp_opt(1_000_000, 0).unwrap();
+
+        for input in [
+            "1.5 years",
+            "1.5 months",
+            "1.5 fortnights",
+            "1.5 weeks",
+            "1.5 days",
+            "1.5 hours",
+            "1.5 minutes",
+            "1.0 days",
+        ] {
+            assert!(
+                parse_datetime_gnu_compat(input, ref_time).is_err(),
+                "input {input} must be rejected"
+            );
+        }
+
+        for input in ["1.5 seconds", "1.5 sec", "1.5 secs"] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(
+                parsed.timestamp(),
+                ref_time.timestamp() + 1,
+                "input {input}"
+            );
+            assert_eq!(
+                parsed.timestamp_subsec_nanos(),
+                500_000_000,
+                "input {input}"
+            );
         }
     }
 

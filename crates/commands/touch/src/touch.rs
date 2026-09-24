@@ -29,7 +29,7 @@ use chrono::{
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, crate_version};
 use filetime::{FileTime, set_file_times, set_symlink_file_times};
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
@@ -540,11 +540,17 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
                 continue;
             }
 
-            if let Err(e) = File::create(path) {
-                let err_message = format!("cannot touch {}", path.quote());
-                ct_show!(e.map_err_context(|| err_message));
+            if let Err(error) = touch_open_for_creation(path) {
+                if error.raw_os_error() == Some(ctcore::libc::EISDIR) {
+                    if let Err(error) = touch_update_times(&arg_matches, path, times, filename) {
+                        ct_show!(error);
+                    }
+                } else {
+                    let err_message = format!("cannot touch {}", path.quote());
+                    ct_show!(error.map_err_context(|| err_message));
+                }
                 continue;
-            };
+            }
 
             // 小优化：如果没有指定参考时间，我们就完成了。
             if !arg_matches.contains_id(touch_flags::TOUCH_SOURCES) && obs_time.is_none() {
@@ -557,6 +563,22 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
         }
     }
     Ok(())
+}
+
+/// Open a target exactly as GNU touch does before updating its timestamps.
+///
+/// In particular, this must not use `File::create`, which implies `O_TRUNC`
+/// and can destroy a path that appears between metadata lookup and open.
+fn touch_open_for_creation(path: &Path) -> io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.write(true).create(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+
+        options.custom_flags(ctcore::libc::O_NONBLOCK | ctcore::libc::O_NOCTTY);
+    }
+    options.open(path)
 }
 
 pub fn ct_app() -> Command {
@@ -2124,6 +2146,17 @@ mod tests {
 
             assert!(result.is_ok());
             assert!(valid_file.exists());
+        }
+
+        #[test]
+        fn test_touch_open_for_creation_preserves_existing_content() {
+            let dir = tempdir().unwrap();
+            let file = dir.path().join("file");
+            std::fs::write(&file, b"preserve me").unwrap();
+
+            let _opened = touch_open_for_creation(&file).unwrap();
+
+            assert_eq!(std::fs::read(file).unwrap(), b"preserve me");
         }
 
         #[test]

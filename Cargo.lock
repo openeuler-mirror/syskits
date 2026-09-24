@@ -2629,6 +2629,7 @@ name = "ct_touch"
 version = "3.3.8"
 dependencies = [
  "chrono",
+ "chrono-tz",
  "clap",
  "ctcore",
  "filetime",

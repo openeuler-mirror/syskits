@@ -2443,6 +2443,37 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "TZ=America/New_York下DST回拨重叠时刻2024-11-03 01:30必须按GNU接受并选择较早的EDT实例，-t 202411030130设置target为epoch 1730611800。",
+            "args": ["-t", "202411030130", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %.9Y target",
+                        "expected_exit": 0,
+                        "expected_stdout": "1730611800.000000000"
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "America/New_York"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
         }
     ]
 }

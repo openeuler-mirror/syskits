@@ -583,21 +583,40 @@ fn parse_datetime_gnu_compat_impl(
         "%b %d %Y %H:%M",
         "%b %d %H:%M:%S %Y",
         "%b %d %H:%M %Y",
+        "%B %d %Y %H:%M:%S",
+        "%B %d %Y %H:%M",
+        "%B %d %H:%M:%S %Y",
+        "%B %d %H:%M %Y",
         "%H:%M:%S %b %d %Y",
         "%H:%M %b %d %Y",
+        "%H:%M:%S %B %d %Y",
+        "%H:%M %B %d %Y",
         "%b %d %Y",
+        "%B %d %Y",
         "%b-%d-%Y %H:%M:%S",
         "%b-%d-%Y %H:%M",
         "%b-%d-%Y",
+        "%B-%d-%Y %H:%M:%S",
+        "%B-%d-%Y %H:%M",
+        "%B-%d-%Y",
         "%d-%b-%Y %H:%M:%S",
         "%d-%b-%Y %H:%M",
         "%d-%b-%Y",
+        "%d-%B-%Y %H:%M:%S",
+        "%d-%B-%Y %H:%M",
+        "%d-%B-%Y",
         "%d %b %Y %H:%M:%S",
         "%d %b %Y %H:%M",
         "%d %b %Y",
+        "%d %B %Y %H:%M:%S",
+        "%d %B %Y %H:%M",
+        "%d %B %Y",
         "%b %d, %Y %H:%M:%S",
         "%b %d, %Y %H:%M",
         "%b %d, %Y",
+        "%B %d, %Y %H:%M:%S",
+        "%B %d, %Y %H:%M",
+        "%B %d, %Y",
         // 6位纯数字紧凑格式
         "%y%m%d",
     ];
@@ -2385,6 +2404,18 @@ mod tests {
         assert_eq!(
             parsed.date_naive(),
             NaiveDate::from_ymd_opt(2024, 1, 2).unwrap()
+        );
+        assert_eq!(parsed.time(), NaiveTime::MIN);
+    }
+
+    #[test]
+    fn test_parse_gnu_full_month_name_without_comma() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("January 1 1970", ref_time).unwrap();
+
+        assert_eq!(
+            parsed.date_naive(),
+            NaiveDate::from_ymd_opt(1970, 1, 1).unwrap()
         );
         assert_eq!(parsed.time(), NaiveTime::MIN);
     }

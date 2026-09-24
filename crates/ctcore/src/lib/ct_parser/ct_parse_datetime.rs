@@ -1351,10 +1351,28 @@ fn gnu_word_month_is_adjacent_to_day(input: &str, day_start: usize, day_end: usi
 
     let before_day =
         input[..day_start].trim_end_matches(|character: char| character.is_ascii_whitespace());
-    let hyphenated_month_day = before_day.ends_with('-');
     let before_day = before_day.strip_suffix('-').unwrap_or(before_day);
-    gnu_trailing_ascii_word(before_day).is_some_and(|month| gnu_month_number(month).is_some())
-        && (after_day.starts_with(',') || (hyphenated_month_day && after_day.starts_with('-')))
+    gnu_trailing_ascii_word(before_day).is_some_and(|month| {
+        gnu_month_number(month).is_some() && !gnu_word_month_has_preceding_day(before_day, month)
+    })
+}
+
+/// Return whether WORD_MONTH already has a day field before it.
+///
+/// In `24 Sep 0007`, the final field is a year.  In `Sep 024 UTC`, it is
+/// the day, regardless of the following timezone.  GNU's grammar resolves
+/// that distinction from the date-item order, not from the field after it.
+fn gnu_word_month_has_preceding_day(prefix: &str, month: &str) -> bool {
+    let month_start = prefix.len() - month.len();
+    let before_month = prefix[..month_start]
+        .trim_end_matches(|character: char| character.is_ascii_whitespace() || character == '-');
+    let day_start = before_month
+        .bytes()
+        .rposition(|byte| !byte.is_ascii_digit())
+        .map_or(0, |index| index + 1);
+    let day = &before_month[day_start..];
+
+    !day.is_empty() && day.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 fn gnu_leading_ascii_word(input: &str) -> Option<&str> {
@@ -4249,6 +4267,17 @@ mod tests {
                 "input {input}"
             );
         }
+    }
+
+    #[test]
+    fn test_parse_gnu_month_name_date_with_leading_zero_day_uses_reference_year() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("Sep 024 UTC", ref_time).unwrap();
+
+        assert_eq!(
+            parsed.with_timezone(&Utc),
+            Utc.with_ymd_and_hms(2025, 9, 24, 0, 0, 0).unwrap()
+        );
     }
 
     #[test]

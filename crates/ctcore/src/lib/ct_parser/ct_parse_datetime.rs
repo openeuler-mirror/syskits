@@ -288,6 +288,12 @@ fn parse_datetime_gnu_compat_impl(
         });
     }
 
+    if gnu_rejects_space_separated_numeric_date(input_trim) {
+        return Err(ParseDateTimeError {
+            message: format!("Unable to parse date: {input}"),
+        });
+    }
+
     if let Some(normalized) = normalize_comma_fractional_seconds(input_trim) {
         return parse_datetime_gnu_compat_impl(
             &normalized,
@@ -946,6 +952,21 @@ fn gnu_slash_date_has_two_digit_year(input: &str) -> bool {
     };
 
     year.len() == 2 && year.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// GNU's grammar requires date fields to use an ISO, slash, or word-month
+/// separator. Chrono accepts whitespace before adjacent numeric directives,
+/// causing our compact `%Y%m%d` format to accept this non-GNU form.
+fn gnu_rejects_space_separated_numeric_date(input: &str) -> bool {
+    let mut fields = input.split_ascii_whitespace();
+    let (Some(first), Some(second), Some(third)) = (fields.next(), fields.next(), fields.next())
+    else {
+        return false;
+    };
+
+    [first, second, third]
+        .iter()
+        .all(|field| field.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
 /// Normalize the two dotted-word forms accepted by GNU `parse-datetime`.
@@ -3079,6 +3100,13 @@ mod tests {
         let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
 
         assert!(parse_datetime_gnu_compat("24/1/2", ref_time).is_err());
+    }
+
+    #[test]
+    fn test_rejects_gnu_invalid_space_separated_numeric_date() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        assert!(parse_datetime_gnu_compat("2024 02 29", ref_time).is_err());
     }
 
     #[test]

@@ -378,6 +378,22 @@ fn parse_datetime_gnu_compat_impl(
         );
     }
 
+    if let Some(normalized) = normalize_gnu_word_month_leading_zero_day(input_trim) {
+        return parse_datetime_gnu_compat_impl(
+            &normalized,
+            reference_time,
+            normalized_extended_year,
+        );
+    }
+
+    if let Some(normalized) = normalize_gnu_single_digit_word_month_year(input_trim) {
+        return parse_datetime_gnu_compat_impl(
+            &normalized,
+            reference_time,
+            normalized_extended_year,
+        );
+    }
+
     if let Some(normalized) = normalize_gnu_lowercase_iso_separator(input_trim) {
         return parse_datetime_gnu_compat_impl(
             &normalized,
@@ -412,7 +428,7 @@ fn parse_datetime_gnu_compat_impl(
         });
     }
 
-    if is_gnu_date_only_with_numeric_timezone(input_trim) {
+    if is_gnu_date_only_with_numeric_timezone(input_trim, reference_time) {
         return Err(ParseDateTimeError {
             message: format!("Unable to parse date: {input}"),
         });
@@ -941,8 +957,12 @@ fn parse_datetime_gnu_compat_impl(
         "%H:%M %B %d %Y",
         "%H:%M:%S %d %b %y",
         "%H:%M %d %b %y",
+        "%H:%M:%S %d %b %Y",
+        "%H:%M %d %b %Y",
         "%H:%M:%S %d %B %y",
         "%H:%M %d %B %y",
+        "%H:%M:%S %d %B %Y",
+        "%H:%M %d %B %Y",
         "%b %d %Y",
         "%B %d %Y",
         "%b-%d-%y %H:%M:%S",
@@ -996,6 +1016,9 @@ fn parse_datetime_gnu_compat_impl(
         "%d%b%y %H:%M:%S",
         "%d%b%y %H:%M",
         "%d%b%y",
+        "%d%b%Y %H:%M:%S",
+        "%d%b%Y %H:%M",
+        "%d%b%Y",
         // 6位纯数字紧凑格式
         "%y%m%d",
     ];
@@ -1274,6 +1297,177 @@ fn normalize_gnu_two_digit_hyphen_year(input: &str) -> Option<String> {
     }
 
     None
+}
+
+/// Normalize a leading-zero day in a GNU word-month date.
+///
+/// GNU's `tUNUMBER` accepts an arbitrary number of leading zeroes, while
+/// chrono's day directives accept at most two source digits.  Normalize only
+/// a day adjacent to a recognized word-month production before parsing it.
+fn normalize_gnu_word_month_leading_zero_day(input: &str) -> Option<String> {
+    let bytes = input.as_bytes();
+    let mut start = 0;
+
+    while start < bytes.len() {
+        if !bytes[start].is_ascii_digit() {
+            start += 1;
+            continue;
+        }
+
+        let mut end = start + 1;
+        while end < bytes.len() && bytes[end].is_ascii_digit() {
+            end += 1;
+        }
+
+        let field = &input[start..end];
+        let parsed_day = field.parse::<u32>().ok();
+        if field.len() > 2
+            && field.starts_with('0')
+            && parsed_day.is_some_and(|day| (1..=31).contains(&day))
+            && gnu_word_month_is_adjacent_to_day(input, start, end)
+        {
+            return Some(format!(
+                "{}{}{}",
+                &input[..start],
+                parsed_day.expect("validated day is present"),
+                &input[end..]
+            ));
+        }
+
+        start = end;
+    }
+
+    None
+}
+
+fn gnu_word_month_is_adjacent_to_day(input: &str, day_start: usize, day_end: usize) -> bool {
+    let after_day = &input[day_end..];
+    let after_day = after_day.trim_start_matches(|character: char| character.is_ascii_whitespace());
+    if let Some(month) = gnu_leading_ascii_word(after_day.strip_prefix('-').unwrap_or(after_day)) {
+        if gnu_month_number(month).is_some() {
+            return true;
+        }
+    }
+
+    let before_day =
+        input[..day_start].trim_end_matches(|character: char| character.is_ascii_whitespace());
+    let hyphenated_month_day = before_day.ends_with('-');
+    let before_day = before_day.strip_suffix('-').unwrap_or(before_day);
+    gnu_trailing_ascii_word(before_day).is_some_and(|month| gnu_month_number(month).is_some())
+        && (after_day.starts_with(',') || (hyphenated_month_day && after_day.starts_with('-')))
+}
+
+fn gnu_leading_ascii_word(input: &str) -> Option<&str> {
+    let end = input
+        .as_bytes()
+        .iter()
+        .take_while(|byte| byte.is_ascii_alphabetic())
+        .count();
+    (end > 0).then_some(&input[..end])
+}
+
+fn gnu_trailing_ascii_word(input: &str) -> Option<&str> {
+    let bytes = input.as_bytes();
+    let mut start = bytes.len();
+    while start > 0 && bytes[start - 1].is_ascii_alphabetic() {
+        start -= 1;
+    }
+    (start < bytes.len()).then_some(&input[start..])
+}
+
+/// Preserve a one-digit word-month year literally, as GNU does.
+///
+/// Chrono's `%y` accepts one digit and expands it as a two-digit year.  GNU
+/// only applies the XPG4 century window when the source year has exactly two
+/// digits.  Restrict this normalization to unambiguous date productions so
+/// `Sep 24 7` remains the GNU month-day-time form (07:00).
+fn normalize_gnu_single_digit_word_month_year(input: &str) -> Option<String> {
+    let bytes = input.as_bytes();
+    let year_start = bytes.iter().enumerate().find_map(|(index, byte)| {
+        let follows_multi_digit_number = bytes
+            .get(index + 1)
+            .is_some_and(|next| next.is_ascii_digit());
+        let starts_clock = bytes.get(index + 1) == Some(&b':');
+
+        ((*byte).is_ascii_digit()
+            && !follows_multi_digit_number
+            && !starts_clock
+            && gnu_word_month_date_precedes_year(&input[..index]))
+        .then_some(index)
+    })?;
+
+    Some(format!(
+        "{}000{}",
+        &input[..year_start],
+        &input[year_start..]
+    ))
+}
+
+fn gnu_word_month_date_precedes_year(prefix: &str) -> bool {
+    let prefix = prefix.trim_end_matches(|character: char| character.is_ascii_whitespace());
+    gnu_day_month_prefix(prefix)
+        || gnu_month_day_comma_prefix(prefix)
+        || gnu_hyphenated_word_month_prefix(prefix)
+        || gnu_compact_day_month_prefix(prefix)
+}
+
+fn gnu_day_month_prefix(prefix: &str) -> bool {
+    let mut fields = prefix.split_ascii_whitespace();
+    let (Some(month), Some(day)) = (fields.next_back(), fields.next_back()) else {
+        return false;
+    };
+
+    gnu_month_number(month).is_some() && gnu_date_day_field(day)
+}
+
+fn gnu_month_day_comma_prefix(prefix: &str) -> bool {
+    let Some(prefix) = prefix.strip_suffix(',') else {
+        return false;
+    };
+    let mut fields = prefix.split_ascii_whitespace();
+    let (Some(day), Some(month)) = (fields.next_back(), fields.next_back()) else {
+        return false;
+    };
+
+    gnu_date_day_field(day) && gnu_month_number(month).is_some()
+}
+
+fn gnu_hyphenated_word_month_prefix(prefix: &str) -> bool {
+    let Some(prefix) = prefix.strip_suffix('-') else {
+        return false;
+    };
+    let Some((left, right)) = prefix.rsplit_once('-') else {
+        return false;
+    };
+
+    let left = left
+        .split_ascii_whitespace()
+        .next_back()
+        .unwrap_or_default();
+    (gnu_date_day_field(left) && gnu_month_number(right).is_some())
+        || (gnu_month_number(left).is_some() && gnu_date_day_field(right))
+}
+
+fn gnu_compact_day_month_prefix(prefix: &str) -> bool {
+    let bytes = prefix.as_bytes();
+    let mut month_start = bytes.len();
+    while month_start > 0 && bytes[month_start - 1].is_ascii_alphabetic() {
+        month_start -= 1;
+    }
+    if month_start == bytes.len() || gnu_month_number(&prefix[month_start..]).is_none() {
+        return false;
+    }
+
+    let mut day_start = month_start;
+    while day_start > 0 && bytes[day_start - 1].is_ascii_digit() {
+        day_start -= 1;
+    }
+    gnu_date_day_field(&prefix[day_start..month_start])
+        && (day_start == 0 || !bytes[day_start - 1].is_ascii_alphanumeric())
+}
+
+fn gnu_date_day_field(field: &str) -> bool {
+    (1..=2).contains(&field.len()) && field.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 /// Parse GNU month/day forms whose omitted year defaults to the reference year.
@@ -1818,7 +2012,7 @@ fn parse_gnu_numeric_timezone(
 
 /// GNU accepts a numeric UTC offset only as part of an explicit time item.
 /// Keep date-only forms out of generic parser fallbacks that synthesize midnight.
-fn is_gnu_date_only_with_numeric_timezone(input: &str) -> bool {
+fn is_gnu_date_only_with_numeric_timezone(input: &str, reference_time: DateTime<Local>) -> bool {
     let Some(sign_index) = input.rfind(['+', '-']) else {
         return false;
     };
@@ -1828,11 +2022,30 @@ fn is_gnu_date_only_with_numeric_timezone(input: &str) -> bool {
     }
 
     let date = input[..sign_index].trim_end();
-    [
+    let numeric_date = [
         "%Y-%m-%d", "%Y/%m/%d", "%m/%d/%y", "%m/%d/%Y", "%Y%m%d", "%y%m%d",
     ]
     .into_iter()
-    .any(|format| NaiveDate::parse_from_str(date, format).is_ok())
+    .any(|format| NaiveDate::parse_from_str(date, format).is_ok());
+    if numeric_date {
+        return true;
+    }
+
+    let word_month_date = [
+        "%d %b %Y",
+        "%d %B %Y",
+        "%b %d, %Y",
+        "%B %d, %Y",
+        "%b-%d-%Y",
+        "%B-%d-%Y",
+        "%d-%b-%Y",
+        "%d-%B-%Y",
+        "%d%b%Y",
+    ]
+    .into_iter()
+    .any(|format| NaiveDate::parse_from_str(date, format).is_ok());
+
+    word_month_date || parse_gnu_date_without_year(date, reference_time).is_some()
 }
 
 /// GNU's `T` token is both the UTC-7 military timezone and the ISO 8601
@@ -2342,6 +2555,13 @@ fn parse_gnu_named_timezone(
         suffix_start = end + (suffix.len() - trimmed_suffix.len()) + 3;
     }
 
+    if let Some((correction_seconds, correction_end)) =
+        parse_gnu_named_timezone_correction(&input[suffix_start..])
+    {
+        offset_seconds = offset_seconds.checked_add(correction_seconds)?;
+        suffix_start += correction_end;
+    }
+
     let wall_time_input = format!("{} {}", &input[..start], &input[suffix_start..]);
     let wall_time_input = wall_time_input.trim();
     let naive = if wall_time_input.is_empty() {
@@ -2356,6 +2576,34 @@ fn parse_gnu_named_timezone(
         .from_local_datetime(&naive)
         .earliest()
         .map(|date| date.with_timezone(&Local))
+}
+
+/// Parse a signed numeric correction following a named GNU timezone item.
+///
+/// In the GNU grammar `GMT+3` and `UTC +2:30` are a single timezone item,
+/// whereas `UTC -5 days` leaves `-5 days` as a relative-time expression.
+fn parse_gnu_named_timezone_correction(input: &str) -> Option<(i32, usize)> {
+    let whitespace_len = input.len() - input.trim_start().len();
+    let correction = &input[whitespace_len..];
+    if !correction.starts_with(['+', '-']) {
+        return None;
+    }
+    let correction_end = gnu_numeric_timezone_offset_end(correction.as_bytes(), 0)?;
+    let numeric_offset = &correction[..correction_end];
+
+    let remainder = correction[correction_end..].trim_start();
+    if remainder
+        .split_ascii_whitespace()
+        .next()
+        .is_some_and(is_gnu_relative_time_unit)
+    {
+        return None;
+    }
+
+    Some((
+        parse_gnu_numeric_timezone_offset(numeric_offset)?,
+        whitespace_len + correction_end,
+    ))
 }
 
 fn parse_embedded_timezone(input: &str) -> Option<DateTime<Local>> {
@@ -3946,6 +4194,60 @@ mod tests {
             );
             assert_eq!(parsed.with_timezone(&Utc).month(), 9, "input {input}");
             assert_eq!(parsed.with_timezone(&Utc).day(), 24, "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_parse_gnu_month_name_date_preserves_single_digit_year() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for input in [
+            "24 Sep 7 UTC",
+            "24-Sep-7 UTC",
+            "Sep 24, 7 UTC",
+            "024 Sep 7 UTC",
+            "Sep 024, 7 UTC",
+            "024-Sep-7 UTC",
+            "Sep-024-7 UTC",
+            "024Sep7 UTC",
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            let parsed = parsed.with_timezone(&Utc);
+
+            assert_eq!(parsed.year(), 7, "input {input}");
+            assert_eq!(parsed.month(), 9, "input {input}");
+            assert_eq!(parsed.day(), 24, "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_parse_gnu_single_digit_word_month_year_with_timezone() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, expected) in [
+            (
+                "24 Sep 7 GMT+3",
+                Utc.with_ymd_and_hms(7, 9, 23, 21, 0, 0).unwrap(),
+            ),
+            (
+                "24-Sep-72 GMT+3",
+                Utc.with_ymd_and_hms(1972, 9, 23, 21, 0, 0).unwrap(),
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.with_timezone(&Utc), expected, "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_parse_gnu_word_month_date_rejects_bare_numeric_timezone() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for input in ["24 Sep 7 +0000", "24 Sep 7 -0500"] {
+            assert!(
+                parse_datetime_gnu_compat(input, ref_time).is_err(),
+                "input {input}"
+            );
         }
     }
 

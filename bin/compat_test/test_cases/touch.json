@@ -3634,6 +3634,74 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下月名日期的单数字显式年份及前导零日字段必须按GNU保留字面值；024 Sep 7 GMT+3必须按时区设置为0007-09-23 21:00 UTC。",
+            "args": [
+                "--date=024 Sep 7 GMT+3",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '-61923322800.000000000'",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下仅含月名日期时，裸数值时区不构成时刻项，GNU必须拒绝24 Sep 7 +0000且不得创建target。",
+            "args": [
+                "--date=24 Sep 7 +0000",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: invalid date format '24 Sep 7 +0000'\\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C、TZ=UTC0下无逗号月名日期后的短数字必须按GNU解析为时刻；Sep 24 7 UTC使用reference年份并设置07:00。",
             "setup_commands": [
                 "/usr/bin/touch -d '2025-01-01 UTC' reference"

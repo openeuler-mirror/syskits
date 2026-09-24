@@ -200,14 +200,19 @@ fn collect_gnu_calendar_relative_offsets(
     let mut offset = GnuCalendarRelativeOffset::default();
     let mut index = tokens.len();
 
-    while index >= 2 {
-        let amount = tokens[index - 2].parse::<i64>().ok()?;
-        let amount = if is_ago && offset.terms == 0 {
-            amount.checked_neg()?
-        } else {
-            amount
-        };
+    while index > 0 {
         let unit = tokens[index - 1].to_ascii_lowercase();
+        let (mut amount, consumed) = if index >= 2 {
+            match tokens[index - 2].parse::<i64>() {
+                Ok(amount) => (amount, 2),
+                Err(_) => (1, 1),
+            }
+        } else {
+            (1, 1)
+        };
+        if is_ago && offset.terms == 0 {
+            amount = amount.checked_neg()?;
+        }
 
         match unit.as_str() {
             "year" | "years" => offset.years = offset.years.checked_add(amount)?,
@@ -221,7 +226,7 @@ fn collect_gnu_calendar_relative_offsets(
         }
 
         offset.terms += 1;
-        index -= 2;
+        index -= consumed;
     }
 
     (offset.terms >= 2).then(|| (tokens[..index].join(" "), offset))
@@ -2895,6 +2900,20 @@ mod tests {
         assert!(
             parse_datetime_gnu_compat("TZ=\"America/Los_Angeles\" 2024-03-10 02:30", ref_time)
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn test_parse_multiple_bare_calendar_relative_units_together() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 34, 56).unwrap();
+        let parsed = parse_datetime_gnu_compat("day month", ref_time).unwrap();
+
+        assert_eq!(
+            parsed.naive_local(),
+            NaiveDate::from_ymd_opt(2025, 8, 25)
+                .unwrap()
+                .and_hms_opt(12, 34, 56)
+                .unwrap()
         );
     }
 

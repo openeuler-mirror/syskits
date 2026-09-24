@@ -1826,7 +1826,28 @@ fn gnu_has_multiple_timezones(input: &str) -> bool {
         .filter(|window| window[0].is_ascii_digit() && matches!(window[1], b'Z' | b'z'))
         .count();
 
-    named_count + military_count + numeric_count + attached_utc_count > 1
+    let named_corrections = gnu_named_timezone_numeric_correction_count(input);
+    named_count
+        + military_count
+        + numeric_count.saturating_sub(named_corrections)
+        + attached_utc_count
+        > 1
+}
+
+/// A signed numeric value immediately after a named timezone is a correction
+/// to that same timezone, not a second GNU timezone item.
+fn gnu_named_timezone_numeric_correction_count(input: &str) -> usize {
+    let fields = input.split_ascii_whitespace().collect::<Vec<_>>();
+
+    fields
+        .windows(2)
+        .filter(|pair| {
+            GNU_NAMED_TIMEZONES
+                .iter()
+                .any(|(name, _)| pair[0].eq_ignore_ascii_case(name))
+                && is_gnu_numeric_timezone_offset(pair[1])
+        })
+        .count()
 }
 
 /// Count GNU numeric timezone items without confusing signed relative values
@@ -3400,6 +3421,29 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_gnu_named_timezone_with_numeric_correction() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, expected) in [
+            (
+                "2024-02-29 12:34:56 UTC +2",
+                Utc.with_ymd_and_hms(2024, 2, 29, 10, 34, 56).unwrap(),
+            ),
+            (
+                "2024-02-29 12:34:56 UTC +2:30",
+                Utc.with_ymd_and_hms(2024, 2, 29, 10, 4, 56).unwrap(),
+            ),
+            (
+                "2024-02-29 12:34:56 PST -2",
+                Utc.with_ymd_and_hms(2024, 2, 29, 22, 34, 56).unwrap(),
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
+        }
+    }
+
+    #[test]
     fn test_rejects_multiple_gnu_timezone_items() {
         let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
 
@@ -3413,6 +3457,7 @@ mod tests {
             "2024-01-01 12:00 +0000 +0100",
             "2024-01-01 12:00+0000 +0100",
             "2024-01-01 12:00+0100 UTC",
+            "2024-01-01 12:00 UTC +2 +3",
         ] {
             assert!(
                 parse_datetime_gnu_compat(input, ref_time).is_err(),

@@ -2336,6 +2336,46 @@
             "cleanup_commands": [
                 "rm -f loop"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C下非所有者设置显式时间时必须保留GNU的EPERM文本Operation not permitted，不得按ErrorKind误报Permission denied。",
+            "args": [
+                "-d",
+                "2000-01-01",
+                "root-owned"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: setting times of 'root-owned': Operation not permitted\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "files": [
+                    {
+                        "path": "root-owned",
+                        "content": "data",
+                        "permissions": "666",
+                        "owner": null,
+                        "group": null,
+                        "file_type": "Regular",
+                        "symlink_target": null,
+                        "size": null,
+                        "timestamp": null
+                    }
+                ],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "run_as_user": "nobody"
+            },
+            "cleanup_commands": []
         }
     ]
 }

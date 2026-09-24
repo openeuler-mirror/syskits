@@ -22,7 +22,7 @@ use nix::fcntl::{FcntlArg, OFlag, fcntl};
 use nix::pty::{Winsize, openpty};
 use nix::sys::resource::{self, Resource};
 use nix::sys::signal::{self};
-use nix::unistd::{dup, setsid};
+use nix::unistd::{User, dup, setsid};
 use nix::{errno::Errno, libc};
 use rand::Rng;
 use std::collections::HashMap;
@@ -50,6 +50,25 @@ fn tty_stdin_needs_eof(stdin_content: Option<&[u8]>) -> bool {
 pub(crate) struct CommandStreamOptions<'a> {
     pub output_hex: bool,
     pub streams: &'a StandardStreams,
+}
+
+#[derive(Clone, Copy)]
+struct RunAsUser {
+    uid: u32,
+    gid: u32,
+}
+
+fn resolve_run_as_user(name: &str) -> Result<RunAsUser> {
+    let user = User::from_name(name)
+        .map_err(|error| {
+            TestError::TestCaseError(format!("Failed to resolve user {name:?}: {error}"))
+        })?
+        .ok_or_else(|| TestError::TestCaseError(format!("Unknown user {name:?}")))?;
+
+    Ok(RunAsUser {
+        uid: user.uid.as_raw(),
+        gid: user.gid.as_raw(),
+    })
 }
 
 struct PipeOutputCapture {
@@ -373,6 +392,8 @@ pub struct IsolatedSandbox {
     exit_code: i32,
     /// 是否启用调试输出
     debug: bool,
+    /// 主命令使用的非特权用户身份。
+    run_as_user: Option<RunAsUser>,
 }
 
 fn split_shell_words(input: &str) -> std::result::Result<Vec<String>, &'static str> {
@@ -447,6 +468,7 @@ impl IsolatedSandbox {
             umask: 0o022,
             exit_code: 0,
             debug,
+            run_as_user: None,
         })
     }
 
@@ -465,6 +487,15 @@ impl IsolatedSandbox {
             self.raw_env.clear();
         }
         self.clear_environment = test_case.environment.clear_env;
+        self.run_as_user = test_case
+            .environment
+            .run_as_user
+            .as_deref()
+            .map(resolve_run_as_user)
+            .transpose()?;
+        if self.run_as_user.is_some() {
+            fs::set_permissions(self.path(), Permissions::from_mode(0o755))?;
+        }
         self.current_env
             .extend(test_case.environment.env_vars.clone());
         for (name, value) in &test_case.environment.env_bytes {
@@ -785,6 +816,12 @@ impl IsolatedSandbox {
         }
     }
 
+    fn configure_command_user(&self, command: &mut Command) {
+        if let Some(user) = self.run_as_user {
+            command.uid(user.uid).gid(user.gid);
+        }
+    }
+
     /// 执行命令（字符串参数）
     pub fn execute_command(
         &mut self,
@@ -933,6 +970,7 @@ impl IsolatedSandbox {
             .current_dir(&self.current_dir)
             .envs(&self.current_env)
             .envs(&self.raw_env);
+        self.configure_command_user(&mut command);
 
         let sigpipe = streams.sigpipe;
         unsafe {
@@ -1211,6 +1249,7 @@ impl IsolatedSandbox {
             .current_dir(&self.current_dir)
             .envs(&self.current_env)
             .envs(&self.raw_env);
+        self.configure_command_user(&mut command);
 
         unsafe {
             command.pre_exec(move || {
@@ -1524,6 +1563,49 @@ mod tests {
         assert_eq!(result.exit_code, 0);
         assert_eq!(result.stdout, "test input");
         assert_eq!(result.stderr, "");
+        Ok(())
+    }
+
+    #[test]
+    fn test_execute_command_runs_as_configured_user() -> Result<()> {
+        let mut sandbox = IsolatedSandbox::new(false)?;
+        let test_case = TestCase {
+            tstdin: String::new(),
+            byte_mode: false,
+            tty: false,
+            compare_use_bash: false,
+            command: "id".to_string(),
+            description: "run command as nobody".to_string(),
+            args: vec![],
+            expectation: TestExpectation {
+                execution: CommandExecution {
+                    exit_code: None,
+                    stdout: None,
+                    stderr: None,
+                },
+                verifications: vec![],
+                use_patterns: false,
+                env_changes: HashMap::new(),
+                file_changes: vec![],
+                ignore_fields: IgnoreFields::default(),
+            },
+            setup_commands: vec![],
+            cleanup_commands: vec![],
+            requires_root: false,
+            timeout: None,
+            tags: vec![],
+            environment: TestEnvironment {
+                run_as_user: Some("nobody".to_string()),
+                ..TestEnvironment::default()
+            },
+        };
+        sandbox.setup(&test_case)?;
+
+        let result = sandbox.execute_command("id", &["-un".to_string()], None, true, None)?;
+
+        assert_eq!(result.exit_code, 0);
+        assert_eq!(result.stdout, "nobody\n");
+        assert!(result.stderr.is_empty());
         Ok(())
     }
 

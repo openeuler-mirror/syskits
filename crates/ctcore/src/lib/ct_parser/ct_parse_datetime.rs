@@ -229,7 +229,7 @@ fn collect_gnu_calendar_relative_offsets(
         index -= consumed;
     }
 
-    (offset.terms >= 2).then(|| (tokens[..index].join(" "), offset))
+    (offset.terms >= 1).then(|| (tokens[..index].join(" "), offset))
 }
 
 fn apply_gnu_calendar_relative_offsets(
@@ -2964,6 +2964,52 @@ mod tests {
                 .and_hms_opt(12, 34, 56)
                 .unwrap()
         );
+    }
+
+    #[test]
+    fn test_parse_bare_clock_relative_units_with_calendar_unit() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 34, 56).unwrap();
+
+        for (input, expected) in [
+            (
+                "second month",
+                NaiveDate::from_ymd_opt(2025, 8, 24)
+                    .unwrap()
+                    .and_hms_opt(12, 34, 57)
+                    .unwrap(),
+            ),
+            (
+                "sec month",
+                NaiveDate::from_ymd_opt(2025, 8, 24)
+                    .unwrap()
+                    .and_hms_opt(12, 34, 57)
+                    .unwrap(),
+            ),
+            (
+                "minute month",
+                NaiveDate::from_ymd_opt(2025, 8, 24)
+                    .unwrap()
+                    .and_hms_opt(12, 35, 56)
+                    .unwrap(),
+            ),
+            (
+                "hour month",
+                NaiveDate::from_ymd_opt(2025, 8, 24)
+                    .unwrap()
+                    .and_hms_opt(13, 34, 56)
+                    .unwrap(),
+            ),
+            (
+                "1 second month",
+                NaiveDate::from_ymd_opt(2025, 8, 24)
+                    .unwrap()
+                    .and_hms_opt(12, 34, 57)
+                    .unwrap(),
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.naive_local(), expected, "input {input}");
+        }
     }
 
     #[test]

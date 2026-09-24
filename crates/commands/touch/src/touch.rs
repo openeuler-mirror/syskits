@@ -1959,6 +1959,18 @@ mod tests {
         }
 
         #[test]
+        fn parse_date_rejects_multiple_timezones_with_separated_offset() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            for input in ["2024-01-01 12:00 + 2 + 3", "2024-01-01 12:00 + 2 UTC"] {
+                assert!(
+                    touch_parse_date(reference, input).is_err(),
+                    "GNU rejects multiple timezone items: {input}"
+                );
+            }
+        }
+
+        #[test]
         fn parse_date_ignores_weekday_after_word_month_year() {
             let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
 

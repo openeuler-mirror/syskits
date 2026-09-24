@@ -2084,14 +2084,7 @@ fn gnu_rejects_meridian_time_with_numeric_timezone(input: &str) -> bool {
             && !fields
                 .get(index + 1)
                 .is_some_and(|next| is_gnu_relative_time_unit(next));
-        let separated_sign = matches!(*field, "+" | "-")
-            && fields.get(index + 1).is_some_and(|offset| {
-                let numeric_offset = format!("{field}{offset}");
-                is_gnu_numeric_timezone_offset(&numeric_offset)
-                    && !fields
-                        .get(index + 2)
-                        .is_some_and(|next| is_gnu_relative_time_unit(next))
-            });
+        let separated_sign = gnu_separated_numeric_timezone_offset(&fields, index);
         standalone || separated_sign || gnu_attached_numeric_timezone_count(field) > 0
     });
 
@@ -2297,12 +2290,16 @@ fn gnu_named_timezone_numeric_correction_count(input: &str) -> usize {
     let fields = input.split_ascii_whitespace().collect::<Vec<_>>();
 
     fields
-        .windows(2)
-        .filter(|pair| {
+        .iter()
+        .enumerate()
+        .filter(|(index, field)| {
             GNU_NAMED_TIMEZONES
                 .iter()
-                .any(|(name, _)| pair[0].eq_ignore_ascii_case(name))
-                && is_gnu_numeric_timezone_offset(pair[1])
+                .any(|(name, _)| field.eq_ignore_ascii_case(name))
+                && (fields
+                    .get(index + 1)
+                    .is_some_and(|offset| is_gnu_numeric_timezone_offset(offset))
+                    || gnu_separated_numeric_timezone_offset(&fields, index + 1))
         })
         .count()
 }
@@ -2322,9 +2319,24 @@ fn gnu_numeric_timezone_item_count(input: &str) -> usize {
                 && !fields
                     .get(index + 1)
                     .is_some_and(|next| is_gnu_relative_time_unit(next));
-            usize::from(standalone) + gnu_attached_numeric_timezone_count(field)
+            usize::from(standalone)
+                + usize::from(gnu_separated_numeric_timezone_offset(&fields, index))
+                + gnu_attached_numeric_timezone_count(field)
         })
         .sum()
+}
+
+/// A separated sign and offset are one GNU numeric timezone item, unless the
+/// following word makes the signed number a relative-time expression.
+fn gnu_separated_numeric_timezone_offset(fields: &[&str], sign_index: usize) -> bool {
+    matches!(fields.get(sign_index), Some(&"+" | &"-"))
+        && fields.get(sign_index + 1).is_some_and(|offset| {
+            let numeric_offset = format!("{}{}", fields[sign_index], offset);
+            is_gnu_numeric_timezone_offset(&numeric_offset)
+                && !fields
+                    .get(sign_index + 2)
+                    .is_some_and(|next| is_gnu_relative_time_unit(next))
+        })
 }
 
 fn is_gnu_relative_time_unit(input: &str) -> bool {
@@ -4061,6 +4073,8 @@ mod tests {
             "2024-01-01 12:00+0000 +0100",
             "2024-01-01 12:00+0100 UTC",
             "2024-01-01 12:00 UTC +2 +3",
+            "2024-01-01 12:00 + 2 + 3",
+            "2024-01-01 12:00 + 2 UTC",
         ] {
             assert!(
                 parse_datetime_gnu_compat(input, ref_time).is_err(),

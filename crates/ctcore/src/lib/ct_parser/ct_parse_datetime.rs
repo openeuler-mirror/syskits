@@ -132,6 +132,12 @@ fn parse_datetime_gnu_compat_impl(
         });
     }
 
+    if is_gnu_date_only_with_numeric_timezone(input_trim) {
+        return Err(ParseDateTimeError {
+            message: format!("Unable to parse date: {input}"),
+        });
+    }
+
     if let Some(dt) =
         parse_gnu_numeric_timezone(input_trim, reference_time, normalized_extended_year)
     {
@@ -495,7 +501,6 @@ fn parse_datetime_gnu_compat_impl(
         "%Y-%m-%d %H:%M %z",
         "%Y-%m-%d %H:%M %:z",
         "%Y-%m-%d %H%z",
-        "%Y-%m-%d%z",
         "%Y-%m-%dT%H%z",
         "%Y-%m-%dT%H:%M:%S%z",
         "%Y-%m-%dT%H:%M:%S%:z",
@@ -530,32 +535,6 @@ fn parse_datetime_gnu_compat_impl(
 
     if let Some(dt) = parse_gnu_iso_utc_without_minutes(&normalized_input) {
         return Ok(dt);
-    }
-
-    if let Some(space_idx) = normalized_input.rfind(' ') {
-        let date_str = &normalized_input[..space_idx];
-        let tz_str = &normalized_input[space_idx + 1..];
-
-        // 确认末尾像是一个时区偏移 (以 +/- 开头，且后面全是数字)
-        if (tz_str.starts_with('+') || tz_str.starts_with('-'))
-            && tz_str.len() >= 3
-            && tz_str.chars().skip(1).all(|c| c.is_ascii_digit())
-        {
-            // 强行插入 00:00:00 午夜时间，伪装成标准格式交给 chrono 解析
-            let synthesized = format!("{date_str} 00:00:00 {tz_str}");
-            let synth_formats = [
-                "%Y-%m-%d %H:%M:%S %z",
-                "%m/%d/%y %H:%M:%S %z",
-                "%m/%d/%Y %H:%M:%S %z",
-            ];
-            for fmt in synth_formats {
-                if let Ok(dt) = DateTime::parse_from_str(&synthesized, fmt) {
-                    if let Some(dt) = expand_year_for_format(dt, fmt) {
-                        return Ok(dt.with_timezone(&Local));
-                    }
-                }
-            }
-        }
     }
 
     let naive_formats = [
@@ -1157,6 +1136,25 @@ fn parse_gnu_numeric_timezone(
         .naive_local()
         .checked_sub_signed(Duration::minutes(offset_minutes))?;
     Some(DateTime::<Utc>::from_naive_utc_and_offset(utc_naive, Utc).with_timezone(&Local))
+}
+
+/// GNU accepts a numeric UTC offset only as part of an explicit time item.
+/// Keep date-only forms out of generic parser fallbacks that synthesize midnight.
+fn is_gnu_date_only_with_numeric_timezone(input: &str) -> bool {
+    let Some(sign_index) = input.rfind(['+', '-']) else {
+        return false;
+    };
+    let offset = &input[sign_index + 1..];
+    if offset.is_empty() || !offset.bytes().all(|byte| byte.is_ascii_digit()) {
+        return false;
+    }
+
+    let date = input[..sign_index].trim_end();
+    [
+        "%Y-%m-%d", "%Y/%m/%d", "%m/%d/%y", "%m/%d/%Y", "%Y%m%d", "%y%m%d",
+    ]
+    .into_iter()
+    .any(|format| NaiveDate::parse_from_str(date, format).is_ok())
 }
 
 fn parse_military_timezone_only(
@@ -2174,6 +2172,27 @@ mod tests {
                 .with_ymd_and_hms(year, month, day, hour, minute, second)
                 .unwrap();
             assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_rejects_numeric_timezone_without_time_of_day() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for input in [
+            "2024-02-29 +0",
+            "2024-02-29 +00",
+            "2024-02-29 +000",
+            "2024-02-29 +0000",
+            "2024-02-29+0000",
+            "2024-02-29 +0530",
+            "2024-02-29 -0500",
+            "1/2/24 +0530",
+        ] {
+            assert!(
+                parse_datetime_gnu_compat(input, ref_time).is_err(),
+                "input {input} should fail"
+            );
         }
     }
 

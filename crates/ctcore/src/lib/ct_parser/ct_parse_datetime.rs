@@ -434,6 +434,12 @@ fn parse_datetime_gnu_compat_impl(
         });
     }
 
+    if gnu_rejects_meridian_time_with_numeric_timezone(input_trim) {
+        return Err(ParseDateTimeError {
+            message: format!("Unable to parse date: {input}"),
+        });
+    }
+
     if gnu_rejects_iso_date_followed_by_standalone_t_timezone(input_trim) {
         return Err(ParseDateTimeError {
             message: format!("Unable to parse date: {input}"),
@@ -2066,6 +2072,23 @@ fn is_gnu_date_only_with_numeric_timezone(input: &str, reference_time: DateTime<
     .any(|format| NaiveDate::parse_from_str(date, format).is_ok());
 
     word_month_date || parse_gnu_date_without_year(date, reference_time).is_some()
+}
+
+/// GNU permits numeric UTC offsets only in its 24-hour ISO time grammar.
+/// A meridian clock is a separate grammar item and therefore cannot be
+/// followed by a numeric timezone, while signed relative values remain valid.
+fn gnu_rejects_meridian_time_with_numeric_timezone(input: &str) -> bool {
+    let Some(sign_index) = input.rfind(['+', '-']) else {
+        return false;
+    };
+    if !is_gnu_numeric_timezone_offset(&input[sign_index..]) {
+        return false;
+    }
+
+    let fields = input[..sign_index]
+        .split_ascii_whitespace()
+        .collect::<Vec<_>>();
+    find_gnu_meridian_time(&fields).is_some()
 }
 
 /// GNU's `T` token is both the UTC-7 military timezone and the ISO 8601
@@ -4295,6 +4318,22 @@ mod tests {
             assert_eq!(parsed.day(), 24, "input {input}");
             assert_eq!(parsed.hour(), hour, "input {input}");
             assert_eq!(parsed.minute(), minute, "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_parse_gnu_meridian_time_rejects_numeric_timezone() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for input in [
+            "2024-02-29 7:30pm+0200",
+            "2024-02-29 7:30pm +0200",
+            "2024-02-29 7:30 pm +0200",
+        ] {
+            assert!(
+                parse_datetime_gnu_compat(input, ref_time).is_err(),
+                "input {input}"
+            );
         }
     }
 

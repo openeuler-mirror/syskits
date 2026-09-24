@@ -1903,6 +1903,18 @@ mod tests {
         }
 
         #[test]
+        fn parse_date_treats_short_number_after_month_day_as_time() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            let parsed = touch_parse_date(reference, "Sep 24 7 UTC").unwrap();
+            let expected = Utc.with_ymd_and_hms(2025, 9, 24, 7, 0, 0).unwrap();
+
+            assert_eq!(parsed.unix_seconds(), expected.timestamp());
+            assert_eq!(parsed.nanoseconds(), 0);
+            assert!(touch_parse_date(reference, "Sep 24 24 UTC").is_err());
+        }
+
+        #[test]
         fn test_parse_date_valid() {
             // 测试POSIX_LOCALE格式的日期
             let ref_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();

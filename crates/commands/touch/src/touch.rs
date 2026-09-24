@@ -603,6 +603,7 @@ pub fn ct_app() -> Command {
             .short('t')
             .help(t!("touch.clap.touch_timestamp"))
             .value_name("STAMP")
+            .value_parser(ValueParser::os_string())
             .allow_hyphen_values(true)
             .action(ArgAction::Append),
         Arg::new(touch_flags::sources::TOUCH_DATE)
@@ -611,6 +612,7 @@ pub fn ct_app() -> Command {
             .allow_hyphen_values(true)
             .help(t!("touch.clap.touch_date"))
             .value_name("STRING")
+            .value_parser(ValueParser::os_string())
             .action(ArgAction::Append),
         Arg::new(touch_flags::TOUCH_MODIFICATION)
             .short('m')
@@ -679,6 +681,18 @@ pub fn ct_app() -> Command {
         .gnu_getopt()
 }
 
+fn touch_date_source_value(value: &OsString) -> CTResult<&str> {
+    value.to_str().ok_or_else(|| {
+        let (left_quote, right_quote) = locale_quote_marks();
+        let quoted = touch_quote_argmatch_bytes_with_marks(
+            value.as_encoded_bytes(),
+            left_quote,
+            right_quote,
+        );
+        CtSimpleError::new(1, format!("invalid date format {quoted}"))
+    })
+}
+
 // 确定访问和修改时间
 fn touch_determine_times(matches: &ArgMatches, obs_time: Option<FileTime>) -> CTResult<TouchTimes> {
     match (
@@ -686,10 +700,11 @@ fn touch_determine_times(matches: &ArgMatches, obs_time: Option<FileTime>) -> CT
             .get_many::<OsString>(touch_flags::sources::TOUCH_REFERENCE)
             .and_then(Iterator::last),
         matches
-            .get_many::<String>(touch_flags::sources::TOUCH_DATE)
+            .get_many::<OsString>(touch_flags::sources::TOUCH_DATE)
             .and_then(Iterator::last),
     ) {
         (Some(reference), Some(date)) => {
+            let date = touch_date_source_value(date)?;
             let (a_time, m_time) = touch_stat(
                 Path::new(&reference),
                 !touch_option_is_set(matches, touch_flags::TOUCH_NO_DEREF),
@@ -713,6 +728,7 @@ fn touch_determine_times(matches: &ArgMatches, obs_time: Option<FileTime>) -> CT
             Ok(TouchTimes::timestamps(a_time, m_time))
         }
         (None, Some(date)) => {
+            let date = touch_date_source_value(date)?;
             let now = Local::now();
             let timestamp = touch_parse_date(now, date)?;
             if touch_date_uses_current_time(date, now, timestamp) {
@@ -722,10 +738,10 @@ fn touch_determine_times(matches: &ArgMatches, obs_time: Option<FileTime>) -> CT
         }
         (None, None) => {
             if let Some(ts) = matches
-                .get_many::<String>(touch_flags::sources::TOUCH_TIMESTAMP)
+                .get_many::<OsString>(touch_flags::sources::TOUCH_TIMESTAMP)
                 .and_then(Iterator::last)
             {
-                let timestamp = parse_timestamp(ts)?;
+                let timestamp = parse_timestamp(touch_date_source_value(ts)?)?;
                 return Ok(TouchTimes::timestamps(timestamp, timestamp));
             }
 
@@ -2423,6 +2439,8 @@ mod tests {
     #[cfg(test)]
     mod ct_app_tests {
         use clap::error::ErrorKind;
+        #[cfg(unix)]
+        use std::os::unix::ffi::OsStringExt;
         use std::sync::Mutex;
 
         use super::*;
@@ -2628,11 +2646,11 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 timestamp
-                    .get_many::<String>(touch_flags::sources::TOUCH_TIMESTAMP)
+                    .get_many::<OsString>(touch_flags::sources::TOUCH_TIMESTAMP)
                     .unwrap()
                     .next_back()
                     .unwrap(),
-                "-stamp"
+                &OsString::from("-stamp")
             );
 
             let error = ct_app()
@@ -2642,6 +2660,31 @@ mod tests {
                 error.kind(),
                 ErrorKind::InvalidValue | ErrorKind::ValueValidation
             ));
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_ct_app_preserves_non_utf8_date_source_values() {
+            for (option, source) in [
+                ("-d", touch_flags::sources::TOUCH_DATE),
+                ("-t", touch_flags::sources::TOUCH_TIMESTAMP),
+            ] {
+                let matches = ct_app()
+                    .try_get_matches_from([
+                        OsString::from(ctcore::ct_util_name()),
+                        OsString::from(option),
+                        OsString::from_vec(vec![0xff]),
+                        OsString::from("target"),
+                    ])
+                    .expect("date source values must preserve non-UTF-8 bytes");
+                assert_eq!(
+                    matches
+                        .get_one::<OsString>(source)
+                        .unwrap()
+                        .as_encoded_bytes(),
+                    b"\xff"
+                );
+            }
         }
 
         #[test]

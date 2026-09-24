@@ -2141,6 +2141,42 @@
             "cleanup_commands": [
                 "rm -f target"
             ]
+        },
+        {
+            "byteMode": true,
+            "tstdin": "",
+            "command": "touch",
+            "description": "原始字节日期参数用例：LC_ALL=C；-d后接十六进制ff时必须保留字节并按GNU输出invalid date format的\\377引号诊断。",
+            "args": [
+                "2d64",
+                "ff",
+                "746172676574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "746f7563683a20696e76616c6964206461746520666f726d617420275c333737270a"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
         }
     ]
 }

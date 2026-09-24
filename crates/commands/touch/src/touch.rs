@@ -452,9 +452,16 @@ fn touch_parse_full_naive_date(input: &str, format: &str) -> Option<NaiveDate> {
     remainder.is_empty().then_some(date)
 }
 
+#[cfg(test)]
 fn touch_parse_posix_locale_datetime<T: TimeZone>(input: &str, timezone: T) -> Option<FileTime> {
     let parsed = touch_parse_full_naive_datetime(input, touch_format::POSIX_LOCALE)?;
     touch_select_local_datetime(timezone, parsed)
+        .map(|datetime| touch_datetime_to_filetime(&datetime))
+}
+
+fn touch_parse_system_posix_locale_datetime(input: &str) -> Option<FileTime> {
+    let parsed = touch_parse_full_naive_datetime(input, touch_format::POSIX_LOCALE)?;
+    ct_parse_datetime::resolve_local_datetime_gnu_compat(parsed)
         .map(|datetime| touch_datetime_to_filetime(&datetime))
 }
 
@@ -1103,7 +1110,7 @@ fn touch_parse_date(ref_time: DateTime<Local>, s: &str) -> CTResult<FileTime> {
     // 周二12月3日...
     // ("%c", POSIX_LOCALE_FORMAT),
     //
-    if let Some(parsed) = touch_parse_posix_locale_datetime(s, Local) {
+    if let Some(parsed) = touch_parse_system_posix_locale_datetime(s) {
         return Ok(parsed);
     }
 
@@ -1125,16 +1132,19 @@ fn touch_parse_date(ref_time: DateTime<Local>, s: &str) -> CTResult<FileTime> {
         touch_format::YYYY_MM_DD_HH_MM,
     ] {
         if let Some(parsed) = touch_parse_full_naive_datetime(s, fmt) {
-            return Ok(touch_datetime_to_filetime(&parsed.and_utc()));
+            let parsed = ct_parse_datetime::resolve_local_datetime_gnu_compat(parsed)
+                .ok_or_else(|| CtSimpleError::new(1, touch_invalid_date_format(s.as_bytes())))?;
+            return Ok(touch_datetime_to_filetime(&parsed));
         }
     }
 
     // "相当于%Y-%m-%d (ISO 8601日期格式)。 (C99)"
     // ("%F", ISO_8601_FORMAT),
     if let Some(parsed_date) = touch_parse_full_naive_date(s, touch_format::ISO_8601) {
-        let parsed = Local
-            .from_local_datetime(&parsed_date.and_time(NaiveTime::MIN))
-            .unwrap();
+        let parsed = ct_parse_datetime::resolve_local_datetime_gnu_compat(
+            parsed_date.and_time(NaiveTime::MIN),
+        )
+        .ok_or_else(|| CtSimpleError::new(1, touch_invalid_date_format(s.as_bytes())))?;
         return Ok(touch_datetime_to_filetime(&parsed));
     }
 
@@ -1835,6 +1845,35 @@ mod tests {
         use chrono::{Local, TimeZone, Utc};
 
         use super::*;
+
+        #[test]
+        fn parse_date_rejects_new_york_dst_gap_in_legacy_datetime_fallback() {
+            const CHILD_ENV: &str = "CT_TOUCH_PARSE_DATE_NEW_YORK_DST_CHILD";
+
+            if std::env::var_os(CHILD_ENV).is_some() {
+                let reference = Local.timestamp_opt(1_720_000_000, 0).unwrap();
+                assert_eq!(reference.offset().local_minus_utc(), -4 * 60 * 60);
+                assert!(
+                    touch_parse_date(reference, "2024-03-10 02:00:00").is_err(),
+                    "GNU rejects a local wall time skipped by the DST transition"
+                );
+                return;
+            }
+
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .arg("parse_date_rejects_new_york_dst_gap_in_legacy_datetime_fallback")
+                .env(CHILD_ENV, "1")
+                .env("TZ", "America/New_York")
+                .output()
+                .expect("run isolated touch DST parser test");
+
+            assert!(
+                output.status.success(),
+                "isolated touch DST parser test failed:\nstdout:\n{}\nstderr:\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
 
         #[test]
         fn parse_date_rejects_out_of_range_numeric_timezone() {

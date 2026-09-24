@@ -19,7 +19,7 @@
 use crate::ct_error::{CTResult, CtSimpleError};
 use chrono::{
     DateTime, Datelike, Duration, FixedOffset, Local, LocalResult, NaiveDate, NaiveDateTime,
-    NaiveTime, TimeZone, Utc, Weekday,
+    NaiveTime, TimeZone, Timelike, Utc, Weekday,
 };
 use chrono_tz::Tz;
 #[cfg(target_os = "linux")]
@@ -255,6 +255,49 @@ fn apply_gnu_calendar_relative_offsets(
             .from_local_datetime(&(target + Duration::hours(1)))
             .earliest(),
     }
+}
+
+/// Resolve a local wall-clock time using GNU parse-datetime semantics.
+///
+/// A daylight-saving gap is not a valid timestamp, while a repeated wall
+/// time denotes the first instant in the overlap.  Chrono can represent an
+/// invalid local wall time directly, so Linux validates the selected instant
+/// by round-tripping it through libc's timezone database.
+pub fn resolve_local_datetime_gnu_compat(naive: NaiveDateTime) -> Option<DateTime<Local>> {
+    let datetime = match Local.from_local_datetime(&naive) {
+        LocalResult::Single(datetime) => Some(datetime),
+        LocalResult::Ambiguous(first, second) => Some(if first.timestamp() <= second.timestamp() {
+            first
+        } else {
+            second
+        }),
+        LocalResult::None => None,
+    }?;
+
+    local_datetime_matches_timestamp(naive, &datetime).then_some(datetime)
+}
+
+#[cfg(target_os = "linux")]
+fn local_datetime_matches_timestamp(naive: NaiveDateTime, datetime: &DateTime<Local>) -> bool {
+    let timestamp: libc::time_t = datetime.timestamp();
+    let mut local_tm = std::mem::MaybeUninit::<libc::tm>::uninit();
+    let result = unsafe { libc::localtime_r(&timestamp, local_tm.as_mut_ptr()) };
+    if result.is_null() {
+        return false;
+    }
+    let local_tm = unsafe { local_tm.assume_init() };
+
+    local_tm.tm_year == naive.year() - 1900
+        && local_tm.tm_mon == naive.month0() as i32
+        && local_tm.tm_mday == naive.day() as i32
+        && local_tm.tm_hour == naive.hour() as i32
+        && local_tm.tm_min == naive.minute() as i32
+        && local_tm.tm_sec == naive.second() as i32
+}
+
+#[cfg(not(target_os = "linux"))]
+fn local_datetime_matches_timestamp(naive: NaiveDateTime, datetime: &DateTime<Local>) -> bool {
+    datetime.naive_local() == naive
 }
 
 fn parse_datetime_gnu_compat_impl(
@@ -923,13 +966,21 @@ fn parse_datetime_gnu_compat_impl(
         }
         if let Ok(naive_dt) = NaiveDateTime::parse_from_str(input_trim, fmt) {
             if let Some(naive_dt) = expand_year_for_format(naive_dt, fmt) {
-                return Ok(Local.from_local_datetime(&naive_dt).unwrap());
+                return resolve_local_datetime_gnu_compat(naive_dt).ok_or_else(|| {
+                    ParseDateTimeError {
+                        message: format!("Unable to parse date: {input}"),
+                    }
+                });
             }
         }
         if let Ok(naive_date) = NaiveDate::parse_from_str(input_trim, fmt) {
             if let Some(naive_date) = expand_year_for_format(naive_date, fmt) {
                 if let Some(naive_dt) = naive_date.and_hms_opt(0, 0, 0) {
-                    return Ok(Local.from_local_datetime(&naive_dt).unwrap());
+                    return resolve_local_datetime_gnu_compat(naive_dt).ok_or_else(|| {
+                        ParseDateTimeError {
+                            message: format!("Unable to parse date: {input}"),
+                        }
+                    });
                 }
             }
         }
@@ -2795,6 +2846,46 @@ pub fn parse_datetime_to_filetime(
 mod tests {
     use super::*;
     use chrono::{Local, TimeZone, Timelike, Utc};
+
+    #[test]
+    fn test_parse_gnu_local_datetime_observes_new_york_dst_transitions() {
+        const CHILD_ENV: &str = "CTCORE_PARSE_DATETIME_NEW_YORK_DST_CHILD";
+
+        if std::env::var_os(CHILD_ENV).is_some() {
+            let reference = Local.timestamp_opt(1_720_000_000, 0).unwrap();
+            assert_eq!(reference.offset().local_minus_utc(), -4 * 60 * 60);
+            let gap = NaiveDate::from_ymd_opt(2024, 3, 10)
+                .unwrap()
+                .and_hms_opt(2, 0, 0)
+                .unwrap();
+            let normalized = Local.from_local_datetime(&gap).single().unwrap();
+            assert!(!local_datetime_matches_timestamp(gap, &normalized));
+
+            assert!(
+                parse_datetime_gnu_compat("2024-03-10 02:00:00", reference).is_err(),
+                "GNU rejects a local wall time skipped by the DST transition"
+            );
+
+            let fold = parse_datetime_gnu_compat("2024-11-03 01:30:00", reference)
+                .expect("GNU accepts an ambiguous local wall time");
+            assert_eq!(fold.timestamp(), 1_730_611_800);
+            return;
+        }
+
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("test_parse_gnu_local_datetime_observes_new_york_dst_transitions")
+            .env(CHILD_ENV, "1")
+            .env("TZ", "America/New_York")
+            .output()
+            .expect("run isolated DST parser test");
+
+        assert!(
+            output.status.success(),
+            "isolated DST parser test failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 
     #[test]
     fn test_parse_weekday_simple() {

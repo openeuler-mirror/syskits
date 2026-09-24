@@ -372,7 +372,7 @@ fn parse_datetime_gnu_compat_impl(
         });
     }
 
-    if gnu_has_multiple_named_or_military_timezones(input_trim) {
+    if gnu_has_multiple_timezones(input_trim) {
         return Err(ParseDateTimeError {
             message: format!("Unable to parse date: {input}"),
         });
@@ -1764,12 +1764,13 @@ fn parse_gnu_military_timezone(
     Some(DateTime::<Utc>::from_naive_utc_and_offset(utc_naive, Utc).with_timezone(&Local))
 }
 
-/// GNU accepts at most one named or military timezone item in a date string.
+/// GNU accepts at most one timezone item in a date string.
 ///
 /// The specialized parsers below remove a recognized item before recursively
-/// parsing the remaining date expression.  Count these lexical items first so
-/// that a second timezone cannot be accepted by that recursive parse.
-fn gnu_has_multiple_named_or_military_timezones(input: &str) -> bool {
+/// parsing the remaining date expression.  Count named, military, numeric,
+/// and attached UTC-designator items first so a second timezone cannot be
+/// accepted by that recursive parse.
+fn gnu_has_multiple_timezones(input: &str) -> bool {
     let bytes = input.as_bytes();
     let mut named_count = 0;
     let mut index = 0;
@@ -1804,7 +1805,32 @@ fn gnu_has_multiple_named_or_military_timezones(input: &str) -> bool {
         })
         .count();
 
-    named_count + military_count > 1
+    let numeric_count = input
+        .split_ascii_whitespace()
+        .filter(|field| is_gnu_numeric_timezone_offset(field))
+        .count();
+    let attached_utc_count = input
+        .as_bytes()
+        .windows(2)
+        .filter(|window| window[0].is_ascii_digit() && matches!(window[1], b'Z' | b'z'))
+        .count();
+
+    named_count + military_count + numeric_count + attached_utc_count > 1
+}
+
+fn is_gnu_numeric_timezone_offset(input: &str) -> bool {
+    let Some(offset) = input.strip_prefix(['+', '-']) else {
+        return false;
+    };
+
+    if let Some((hours, minutes)) = offset.split_once(':') {
+        return (1..=2).contains(&hours.len())
+            && minutes.len() == 2
+            && hours.bytes().all(|byte| byte.is_ascii_digit())
+            && minutes.bytes().all(|byte| byte.is_ascii_digit());
+    }
+
+    (1..=4).contains(&offset.len()) && offset.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 const GNU_NAMED_TIMEZONES: &[(&str, i32)] = &[
@@ -3097,6 +3123,8 @@ mod tests {
             "2024-01-01 UTC UTC",
             "2024-01-01 12:00 UTC PST",
             "A UTC",
+            "12Z UTC",
+            "2024-01-01 12:00 +0000 +0100",
         ] {
             assert!(
                 parse_datetime_gnu_compat(input, ref_time).is_err(),

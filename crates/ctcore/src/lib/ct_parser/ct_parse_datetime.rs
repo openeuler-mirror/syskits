@@ -72,6 +72,67 @@ pub fn parse_datetime_gnu_compat(
     parse_datetime_gnu_compat_impl(input, reference_time, false)
 }
 
+/// Normalize GNU's named ordinal relative-time forms into numeric forms that
+/// the relative-time parser handles below.
+fn normalize_gnu_ordinal_relative_units(input: &str) -> Option<String> {
+    let tokens = input
+        .split_ascii_whitespace()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    let mut date_tokens = Vec::with_capacity(tokens.len());
+    let mut relative_tokens = Vec::new();
+    let mut changed = false;
+    let mut index = 0;
+
+    while index < tokens.len() {
+        let Some(unit_token) = tokens.get(index + 1) else {
+            date_tokens.push(tokens[index].clone());
+            break;
+        };
+
+        let amount = match tokens[index].as_str() {
+            "first" => 1,
+            "third" => 3,
+            "fourth" => 4,
+            "fifth" => 5,
+            "sixth" => 6,
+            "seventh" => 7,
+            "eighth" => 8,
+            "ninth" => 9,
+            "tenth" => 10,
+            "eleventh" => 11,
+            "twelfth" => 12,
+            _ => {
+                date_tokens.push(tokens[index].clone());
+                index += 1;
+                continue;
+            }
+        };
+
+        let unit = unit_token.strip_suffix('s').unwrap_or(unit_token);
+        let canonical_unit = match unit {
+            "year" | "month" | "fortnight" | "week" | "day" | "hour" | "minute" => unit.to_owned(),
+            "min" => "minute".to_owned(),
+            "second" | "sec" => "sec".to_owned(),
+            _ => {
+                date_tokens.push(tokens[index].clone());
+                index += 1;
+                continue;
+            }
+        };
+
+        relative_tokens.push(format!("+{amount}"));
+        relative_tokens.push(canonical_unit);
+        changed = true;
+        index += 2;
+    }
+
+    changed.then(|| {
+        date_tokens.extend(relative_tokens);
+        date_tokens.join(" ")
+    })
+}
+
 fn parse_datetime_gnu_compat_impl(
     input: &str,
     reference_time: DateTime<Local>,
@@ -252,6 +313,11 @@ fn parse_datetime_gnu_compat_impl(
         processed_lower = processed_lower.trim().to_string();
         processed_trim.truncate(processed_trim.len() - 6);
         processed_trim = processed_trim.trim().to_string();
+    }
+
+    if let Some(normalized) = normalize_gnu_ordinal_relative_units(&processed_lower) {
+        processed_lower = normalized.clone();
+        processed_trim = normalized;
     }
 
     // 预处理自然语言相对时间词汇 (now, yesterday 等标准化为精准的加减法)
@@ -2043,6 +2109,78 @@ mod tests {
         ] {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
             assert_eq!(parsed, ref_time, "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_parse_gnu_ordinal_relative_units() {
+        let ref_time = Local.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+
+        for (input, expected_date, expected_time) in [
+            (
+                "first fortnight",
+                NaiveDate::from_ymd_opt(2024, 1, 15).unwrap(),
+                NaiveTime::MIN,
+            ),
+            (
+                "third years",
+                NaiveDate::from_ymd_opt(2027, 1, 1).unwrap(),
+                NaiveTime::MIN,
+            ),
+            (
+                "fourth months",
+                NaiveDate::from_ymd_opt(2024, 5, 1).unwrap(),
+                NaiveTime::MIN,
+            ),
+            (
+                "fifth weeks",
+                NaiveDate::from_ymd_opt(2024, 2, 5).unwrap(),
+                NaiveTime::MIN,
+            ),
+            (
+                "sixth days",
+                NaiveDate::from_ymd_opt(2024, 1, 7).unwrap(),
+                NaiveTime::MIN,
+            ),
+            (
+                "seventh hours",
+                NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                NaiveTime::from_hms_opt(7, 0, 0).unwrap(),
+            ),
+            (
+                "eighth minutes",
+                NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                NaiveTime::from_hms_opt(0, 8, 0).unwrap(),
+            ),
+            (
+                "ninth mins",
+                NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                NaiveTime::from_hms_opt(0, 9, 0).unwrap(),
+            ),
+            (
+                "tenth seconds",
+                NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                NaiveTime::from_hms_opt(0, 0, 10).unwrap(),
+            ),
+            (
+                "eleventh secs",
+                NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                NaiveTime::from_hms_opt(0, 0, 11).unwrap(),
+            ),
+            (
+                "twelfth day",
+                NaiveDate::from_ymd_opt(2024, 1, 13).unwrap(),
+                NaiveTime::MIN,
+            ),
+            (
+                "third day 2024-01-01",
+                NaiveDate::from_ymd_opt(2024, 1, 4).unwrap(),
+                NaiveTime::MIN,
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.date_naive(), expected_date, "input {input}");
+            assert_eq!(parsed.time(), expected_time, "input {input}");
         }
     }
 

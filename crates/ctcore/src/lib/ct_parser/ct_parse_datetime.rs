@@ -2078,17 +2078,34 @@ fn is_gnu_date_only_with_numeric_timezone(input: &str, reference_time: DateTime<
 /// A meridian clock is a separate grammar item and therefore cannot be
 /// followed by a numeric timezone, while signed relative values remain valid.
 fn gnu_rejects_meridian_time_with_numeric_timezone(input: &str) -> bool {
-    let Some(sign_index) = input.rfind(['+', '-']) else {
-        return false;
-    };
-    if !is_gnu_numeric_timezone_offset(&input[sign_index..]) {
-        return false;
-    }
+    let fields = input.split_ascii_whitespace().collect::<Vec<_>>();
+    let has_numeric_timezone = fields.iter().enumerate().any(|(index, field)| {
+        let standalone = is_gnu_numeric_timezone_offset(field)
+            && !fields
+                .get(index + 1)
+                .is_some_and(|next| is_gnu_relative_time_unit(next));
+        standalone || gnu_attached_numeric_timezone_count(field) > 0
+    });
 
-    let fields = input[..sign_index]
-        .split_ascii_whitespace()
+    let meridian_fields = fields
+        .iter()
+        .map(|field| strip_gnu_attached_numeric_timezone(field))
         .collect::<Vec<_>>();
-    find_gnu_meridian_time(&fields).is_some()
+    has_numeric_timezone && find_gnu_meridian_time(&meridian_fields).is_some()
+}
+
+fn strip_gnu_attached_numeric_timezone(field: &str) -> &str {
+    let Some(sign_index) = field.rfind(['+', '-']) else {
+        return field;
+    };
+    let bytes = field.as_bytes();
+    if gnu_numeric_timezone_follows_clock(field, sign_index)
+        && gnu_numeric_timezone_offset_end(bytes, sign_index) == Some(bytes.len())
+    {
+        &field[..sign_index]
+    } else {
+        field
+    }
 }
 
 /// GNU's `T` token is both the UTC-7 military timezone and the ISO 8601
@@ -4566,15 +4583,24 @@ mod tests {
     #[test]
     fn test_parse_gnu_explicit_time_before_iso_date() {
         let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
-        let parsed = parse_datetime_gnu_compat("12:34 2024-02-29", ref_time).unwrap();
 
-        assert_eq!(
-            parsed.naive_local(),
-            NaiveDate::from_ymd_opt(2024, 2, 29)
-                .unwrap()
-                .and_hms_opt(12, 34, 0)
-                .unwrap()
-        );
+        for (input, expected) in [
+            (
+                "12:34 2024-02-29",
+                Utc.with_ymd_and_hms(2024, 2, 29, 12, 34, 0).unwrap(),
+            ),
+            (
+                "UTC 7pm 2024-02-29",
+                Utc.with_ymd_and_hms(2024, 2, 29, 19, 0, 0).unwrap(),
+            ),
+            (
+                "PST 7:30 pm 2024-02-29",
+                Utc.with_ymd_and_hms(2024, 3, 1, 3, 30, 0).unwrap(),
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
+        }
     }
 
     #[test]

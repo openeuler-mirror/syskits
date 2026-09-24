@@ -2177,6 +2177,37 @@
             "cleanup_commands": [
                 "rm -f target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下三字段斜杠日期仅首字段至少四位时才按YYYY/MM/DD解析；24/1/2必须按GNU拒绝而不得创建target。",
+            "args": ["--date=24/1/2", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: invalid date format '24/1/2'\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
         }
     ]
 }

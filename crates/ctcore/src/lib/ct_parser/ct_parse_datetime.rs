@@ -589,8 +589,17 @@ fn parse_datetime_gnu_compat_impl(
         // 6位纯数字紧凑格式
         "%y%m%d",
     ];
+    // GNU only interprets a three-field slash date as year-first when the
+    // first field has at least four digits; otherwise it is MM/DD/YY[YY].
+    let slash_year_first = input_trim.split_once('/').is_some_and(|(year, remainder)| {
+        remainder.contains('/') && year.len() >= 4 && year.as_bytes().iter().all(u8::is_ascii_digit)
+    });
+
     // 这个 Naive 循环彻底解决了外部 crate 误解单数字月日导致 %U/%V 偏移的问题
     for fmt in naive_formats {
+        if fmt.starts_with("%Y/") && !slash_year_first {
+            continue;
+        }
         if let Ok(naive_dt) = NaiveDateTime::parse_from_str(input_trim, fmt) {
             if let Some(naive_dt) = expand_year_for_format(naive_dt, fmt) {
                 return Ok(Local.from_local_datetime(&naive_dt).unwrap());
@@ -2347,6 +2356,13 @@ mod tests {
             NaiveDate::from_ymd_opt(2024, 1, 2).unwrap()
         );
         assert_eq!(parsed.time(), NaiveTime::MIN);
+    }
+
+    #[test]
+    fn test_rejects_short_year_first_slash_date() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        assert!(parse_datetime_gnu_compat("24/1/2", ref_time).is_err());
     }
 
     #[test]

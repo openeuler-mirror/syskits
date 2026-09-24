@@ -632,6 +632,10 @@ fn touch_open_error_message(path: &OsStr, error: &io::Error) -> String {
     format!("cannot touch {}: {}", path.quote(), strip_errno(error))
 }
 
+fn touch_setting_times_error_message(path: &OsStr, error: &io::Error) -> String {
+    format!("setting times of {}: {}", path.quote(), strip_errno(error))
+}
+
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
@@ -945,7 +949,12 @@ fn touch_set_times(
         {
             return Ok(());
         }
-        return result.map_err_context(|| format!("setting times of {}", file_name.quote()));
+        return result.map_err(|error| {
+            CtSimpleError::new(
+                1,
+                touch_setting_times_error_message(file_name.as_os_str(), &error),
+            )
+        });
     }
 
     let no_follow =
@@ -976,7 +985,12 @@ fn touch_set_times(
         }
     };
 
-    result.map_err_context(|| format!("setting times of {}", file_name.quote()))
+    result.map_err(|error| {
+        CtSimpleError::new(
+            1,
+            touch_setting_times_error_message(file_name.as_os_str(), &error),
+        )
+    })
 }
 
 // 根据用户指定的选项更新文件访问和修改时间
@@ -2259,6 +2273,16 @@ mod tests {
             assert_eq!(
                 touch_open_error_message(OsStr::new("loop"), &error),
                 "cannot touch 'loop': Too many levels of symbolic links"
+            );
+        }
+
+        #[test]
+        fn test_touch_setting_times_error_message_preserves_eperm() {
+            let error = io::Error::from_raw_os_error(ctcore::libc::EPERM);
+
+            assert_eq!(
+                touch_setting_times_error_message(OsStr::new("root-owned"), &error),
+                "setting times of 'root-owned': Operation not permitted"
             );
         }
 

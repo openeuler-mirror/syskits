@@ -2667,6 +2667,45 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date中的a是GNU军用时区A（UTC+1）；以reference为基准的a day ago必须按时区换算后将target的mtime回退25小时。",
+            "setup_commands": [
+                "touch -d '2025-07-24 12:34:56 UTC' reference"
+            ],
+            "args": [
+                "-r",
+                "reference",
+                "--date=a day ago",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %Y target)\" = \"$(( $(stat -c %Y reference) - 90000 ))\"",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f reference target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C、TZ=UTC0下--date的GNU相对秒小数支持逗号分隔；1970-01-01 1,5 seconds必须设置target为epoch后1.5秒。",
             "args": ["--date=1970-01-01 1,5 seconds", "target"],
             "expectation": {

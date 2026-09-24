@@ -3188,6 +3188,40 @@
             "cleanup_commands": [
                 "rm -f reference target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下GNU日期语法只允许一个数值时区偏移；连续+0000和+0100必须报invalid date format且不得创建target。",
+            "args": [
+                "--date=2024-01-01 12:00 +0000 +0100",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: invalid date format '2024-01-01 12:00 +0000 +0100'\\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
         }
     ]
 }

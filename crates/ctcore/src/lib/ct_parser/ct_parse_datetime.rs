@@ -361,6 +361,12 @@ fn parse_datetime_gnu_compat_impl(
         });
     }
 
+    if gnu_rejects_iso_date_followed_by_standalone_t_timezone(input_trim) {
+        return Err(ParseDateTimeError {
+            message: format!("Unable to parse date: {input}"),
+        });
+    }
+
     if let Some(dt) = parse_gnu_time_only_utc_designator(input_trim, reference_time) {
         return Ok(dt);
     }
@@ -1627,6 +1633,38 @@ fn is_gnu_date_only_with_numeric_timezone(input: &str) -> bool {
     ]
     .into_iter()
     .any(|format| NaiveDate::parse_from_str(date, format).is_ok())
+}
+
+/// GNU's `T` token is both the UTC-7 military timezone and the ISO 8601
+/// date-time separator. After a hyphenated numeric date, the ISO production
+/// takes precedence and therefore requires a following time item.
+fn gnu_rejects_iso_date_followed_by_standalone_t_timezone(input: &str) -> bool {
+    let mut fields = input.split_ascii_whitespace();
+    let Some(date) = fields.next() else {
+        return false;
+    };
+    let Some(zone) = fields.next() else {
+        return false;
+    };
+    if fields.next().is_some() || !zone.eq_ignore_ascii_case("t") {
+        return false;
+    }
+
+    let mut date_fields = date.split('-');
+    let Some(year) = date_fields.next() else {
+        return false;
+    };
+    let Some(month) = date_fields.next() else {
+        return false;
+    };
+    let Some(day) = date_fields.next() else {
+        return false;
+    };
+
+    date_fields.next().is_none()
+        && [year, month, day]
+            .into_iter()
+            .all(|field| !field.is_empty() && field.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
 fn parse_military_timezone_only(
@@ -3220,6 +3258,18 @@ mod tests {
         let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
 
         for input in ["2024-02-29T1", "2024-02-29T12"] {
+            assert!(
+                parse_datetime_gnu_compat(input, ref_time).is_err(),
+                "input {input} should fail"
+            );
+        }
+    }
+
+    #[test]
+    fn test_rejects_iso_date_followed_by_standalone_t_timezone() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for input in ["2024-02-29 T", "2024-02-29 t"] {
             assert!(
                 parse_datetime_gnu_compat(input, ref_time).is_err(),
                 "input {input} should fail"

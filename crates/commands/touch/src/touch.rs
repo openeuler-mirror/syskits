@@ -40,6 +40,7 @@ use ctcore::ct_parse_datetime;
 use ctcore::ct_posix::{
     GnuGetoptCommandExt, MODERN, TRADITIONAL, ct_posix_version, posixly_correct,
 };
+use ctcore::ct_quoting_style::gnu_quote_shell;
 use ctcore::{Tool, ct_show};
 
 pub mod touch_flags {
@@ -575,7 +576,7 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
                         touch_open_error_message(filename.as_os_str(), open_error),
                     ));
                 } else {
-                    let err_message = format!("setting times of {}", filename.quote());
+                    let err_message = format!("setting times of {}", touch_quote_path(filename));
                     ct_show!(e.map_err_context(|| err_message));
                 }
                 continue;
@@ -588,7 +589,7 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
             if touch_option_is_set(&arg_matches, touch_flags::TOUCH_NO_DEREF) {
                 let err_message = format!(
                     "setting times of {}: No such file or directory",
-                    filename.quote()
+                    touch_quote_path(filename)
                 );
                 ct_show!(CtSimpleError::new(1, err_message));
                 continue;
@@ -652,11 +653,23 @@ fn touch_open_error_is_directory(path: &Path, error: &io::Error) -> bool {
 }
 
 fn touch_open_error_message(path: &OsStr, error: &io::Error) -> String {
-    format!("cannot touch {}: {}", path.quote(), strip_errno(error))
+    format!(
+        "cannot touch {}: {}",
+        touch_quote_path(path),
+        strip_errno(error)
+    )
 }
 
 fn touch_setting_times_error_message(path: &OsStr, error: &io::Error) -> String {
-    format!("setting times of {}: {}", path.quote(), strip_errno(error))
+    format!(
+        "setting times of {}: {}",
+        touch_quote_path(path),
+        strip_errno(error)
+    )
+}
+
+fn touch_quote_path(path: &OsStr) -> String {
+    gnu_quote_shell(path, true)
 }
 
 pub fn ct_app() -> Command {
@@ -1118,7 +1131,12 @@ fn touch_stat(path: &Path, is_follow: bool) -> CTResult<(FileTime, FileTime)> {
         true => fs::metadata(path),
         false => fs::symlink_metadata(path),
     }
-    .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?;
+    .map_err_context(|| {
+        format!(
+            "failed to get attributes of {}",
+            touch_quote_path(path.as_os_str())
+        )
+    })?;
 
     Ok((
         FileTime::from_last_access_time(&md),
@@ -2183,6 +2201,9 @@ mod tests {
         use ctcore::ct_error::set_ct_exit_code;
         use tempfile::tempdir;
 
+        #[cfg(unix)]
+        use std::os::unix::ffi::OsStrExt;
+
         use super::*;
 
         #[test]
@@ -2240,6 +2261,17 @@ mod tests {
                     "cannot specify times from more than one source\nTry '{} --help' for more information.",
                     ctcore::ct_help_utility_name()
                 )
+            );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_touch_open_error_quotes_non_utf8_path_like_gnu_quoteaf() {
+            let error = std::io::Error::from_raw_os_error(ctcore::libc::ENOENT);
+
+            assert_eq!(
+                touch_open_error_message(OsStr::from_bytes(b"\xff/missing"), &error),
+                "cannot touch ''$'\\377''/missing': No such file or directory"
             );
         }
 

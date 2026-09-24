@@ -1690,6 +1690,17 @@ mod tests {
         }
 
         #[test]
+        fn test_parse_date_double_dash_uses_reference_date_midnight() {
+            let reference = Local.with_ymd_and_hms(2024, 2, 29, 12, 34, 56).unwrap();
+
+            let parsed = touch_parse_date(reference, "--").unwrap();
+            let expected = Local.with_ymd_and_hms(2024, 2, 29, 0, 0, 0).unwrap();
+
+            assert_eq!(parsed.unix_seconds(), expected.timestamp());
+            assert_eq!(parsed.nanoseconds(), 0);
+        }
+
+        #[test]
         fn test_parse_date_invalid() {
             let ref_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
 

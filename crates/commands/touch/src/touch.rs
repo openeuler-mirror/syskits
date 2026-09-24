@@ -1144,6 +1144,27 @@ fn touch_stat(path: &Path, is_follow: bool) -> CTResult<(FileTime, FileTime)> {
     ))
 }
 
+fn touch_select_local_datetime<T: TimeZone>(
+    timezone: T,
+    local: NaiveDateTime,
+) -> Option<DateTime<T>> {
+    touch_choose_local_datetime(timezone.from_local_datetime(&local))
+}
+
+fn touch_choose_local_datetime<T: TimeZone>(
+    local_result: LocalResult<DateTime<T>>,
+) -> Option<DateTime<T>> {
+    match local_result {
+        LocalResult::Single(datetime) => Some(datetime),
+        LocalResult::Ambiguous(first, second) => Some(if first.timestamp() <= second.timestamp() {
+            first
+        } else {
+            second
+        }),
+        LocalResult::None => None,
+    }
+}
+
 fn parse_timestamp(s: &str) -> CTResult<FileTime> {
     use touch_format::*;
 
@@ -1176,9 +1197,9 @@ fn parse_timestamp(s: &str) -> CTResult<FileTime> {
 
     let local = NaiveDateTime::parse_from_str(&ts, format)
         .map_err(|_| CtSimpleError::new(1, touch_invalid_date_format(s.as_bytes())))?;
-    let mut local = match chrono::Local.from_local_datetime(&local) {
-        LocalResult::Single(dt) => dt,
-        _ => {
+    let mut local = match touch_select_local_datetime(Local, local) {
+        Some(datetime) => datetime,
+        None => {
             return Err(CtSimpleError::new(
                 1,
                 touch_invalid_date_format(s.as_bytes()),
@@ -1535,7 +1556,8 @@ mod tests {
 
     #[cfg(test)]
     mod parse_timestamp_tests {
-        use chrono::{Datelike, Local, TimeZone};
+        use chrono::{Datelike, FixedOffset, Local, LocalResult, NaiveDate, TimeZone};
+        use chrono_tz::America::New_York;
 
         use super::*;
 
@@ -1628,6 +1650,46 @@ mod tests {
                 .timestamp();
             assert_eq!(filetime.unix_seconds(), expected_time);
             assert_eq!(filetime.nanoseconds(), 0);
+        }
+
+        #[test]
+        fn test_touch_select_local_datetime_uses_earlier_dst_fold() {
+            let local = NaiveDate::from_ymd_opt(2024, 11, 3)
+                .unwrap()
+                .and_hms_opt(1, 30, 0)
+                .unwrap();
+
+            let selected = touch_select_local_datetime(New_York, local)
+                .expect("DST fold must select GNU's earlier local-time instance");
+
+            assert_eq!(selected.timestamp(), 1_730_611_800);
+        }
+
+        #[test]
+        fn test_touch_choose_local_datetime_prefers_earlier_fold_regardless_of_order() {
+            let later = FixedOffset::west_opt(5 * 60 * 60)
+                .unwrap()
+                .with_ymd_and_hms(2024, 11, 3, 1, 30, 0)
+                .unwrap();
+            let earlier = FixedOffset::west_opt(4 * 60 * 60)
+                .unwrap()
+                .with_ymd_and_hms(2024, 11, 3, 1, 30, 0)
+                .unwrap();
+
+            let selected = touch_choose_local_datetime(LocalResult::Ambiguous(later, earlier))
+                .expect("DST fold must select an instant");
+
+            assert_eq!(selected.timestamp(), earlier.timestamp());
+        }
+
+        #[test]
+        fn test_touch_select_local_datetime_rejects_dst_gap() {
+            let local = NaiveDate::from_ymd_opt(2024, 3, 10)
+                .unwrap()
+                .and_hms_opt(2, 30, 0)
+                .unwrap();
+
+            assert!(touch_select_local_datetime(New_York, local).is_none());
         }
 
         #[test]

@@ -25,6 +25,7 @@ parse_datetime = { workspace = true }
 ctcore = { workspace = true, features = ["libc", "datetime"] }
 [dev-dependencies]
 tempfile = { workspace = true }
+chrono-tz = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [

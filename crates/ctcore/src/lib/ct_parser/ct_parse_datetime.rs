@@ -372,6 +372,12 @@ fn parse_datetime_gnu_compat_impl(
         });
     }
 
+    if gnu_has_multiple_named_or_military_timezones(input_trim) {
+        return Err(ParseDateTimeError {
+            message: format!("Unable to parse date: {input}"),
+        });
+    }
+
     if let Some(dt) = parse_gnu_time_only_utc_designator(input_trim, reference_time) {
         return Ok(dt);
     }
@@ -1758,6 +1764,49 @@ fn parse_gnu_military_timezone(
     Some(DateTime::<Utc>::from_naive_utc_and_offset(utc_naive, Utc).with_timezone(&Local))
 }
 
+/// GNU accepts at most one named or military timezone item in a date string.
+///
+/// The specialized parsers below remove a recognized item before recursively
+/// parsing the remaining date expression.  Count these lexical items first so
+/// that a second timezone cannot be accepted by that recursive parse.
+fn gnu_has_multiple_named_or_military_timezones(input: &str) -> bool {
+    let bytes = input.as_bytes();
+    let mut named_count = 0;
+    let mut index = 0;
+
+    while index < bytes.len() {
+        let name_len = GNU_NAMED_TIMEZONES
+            .iter()
+            .filter_map(|(name, _)| {
+                let end = index.checked_add(name.len())?;
+                (end <= bytes.len()
+                    && bytes[index..end].eq_ignore_ascii_case(name.as_bytes())
+                    && (index == 0 || !bytes[index - 1].is_ascii_alphabetic())
+                    && (end == bytes.len() || !bytes[end].is_ascii_alphabetic()))
+                .then_some(name.len())
+            })
+            .max();
+        if let Some(name_len) = name_len {
+            named_count += 1;
+            index += name_len;
+        } else {
+            index += 1;
+        }
+    }
+
+    let military_count = input
+        .split_ascii_whitespace()
+        .filter(|field| {
+            let mut chars = field.chars();
+            chars.next().is_some_and(|character| {
+                chars.next().is_none() && military_timezone_offset_hours(character).is_some()
+            })
+        })
+        .count();
+
+    named_count + military_count > 1
+}
+
 const GNU_NAMED_TIMEZONES: &[(&str, i32)] = &[
     ("GMT", 0),
     ("UT", 0),
@@ -2990,6 +3039,24 @@ mod tests {
         }
 
         assert!(parse_datetime_gnu_compat("2024-01-01 12:00 EDT DST", ref_time).is_err());
+    }
+
+    #[test]
+    fn test_rejects_multiple_gnu_timezone_items() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for input in [
+            "UTC UTC",
+            "UTC PST",
+            "2024-01-01 UTC UTC",
+            "2024-01-01 12:00 UTC PST",
+            "A UTC",
+        ] {
+            assert!(
+                parse_datetime_gnu_compat(input, ref_time).is_err(),
+                "input {input} must be rejected"
+            );
+        }
     }
 
     #[test]

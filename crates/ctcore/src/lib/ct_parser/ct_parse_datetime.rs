@@ -785,7 +785,11 @@ fn parse_datetime_gnu_compat_impl(
         "%B %d, %Y %H:%M:%S %z",
         "%B %d, %Y %H:%M %z",
     ];
+    let slash_date_has_two_digit_year = gnu_slash_date_has_two_digit_year(input_trim);
     for fmt in formats_with_tz {
+        if fmt.contains("%m/%d/%y") && !slash_date_has_two_digit_year {
+            continue;
+        }
         if let Ok(dt) = DateTime::parse_from_str(&normalized_input, fmt) {
             if let Some(dt) = expand_year_for_format(dt, fmt) {
                 return Ok(dt.with_timezone(&Local));
@@ -875,6 +879,9 @@ fn parse_datetime_gnu_compat_impl(
         if fmt.starts_with("%Y/") && !slash_year_first {
             continue;
         }
+        if fmt.starts_with("%m/%d/%y") && !slash_date_has_two_digit_year {
+            continue;
+        }
         if let Ok(naive_dt) = NaiveDateTime::parse_from_str(input_trim, fmt) {
             if let Some(naive_dt) = expand_year_for_format(naive_dt, fmt) {
                 return Ok(Local.from_local_datetime(&naive_dt).unwrap());
@@ -924,6 +931,21 @@ fn parse_datetime_gnu_compat_impl(
             message: format!("Unable to parse date: {input}"),
         }),
     }
+}
+
+/// Return whether a slash date has the exact two-digit year form that GNU
+/// maps with its XPG4 century rule.  One-digit and three-or-more-digit years
+/// are literal years, even though chrono's `%y` parser accepts them too.
+fn gnu_slash_date_has_two_digit_year(input: &str) -> bool {
+    let date = input.split_ascii_whitespace().next().unwrap_or_default();
+    let Some((_, month_and_year)) = date.split_once('/') else {
+        return false;
+    };
+    let Some((_, year)) = month_and_year.split_once('/') else {
+        return false;
+    };
+
+    year.len() == 2 && year.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 /// Normalize the two dotted-word forms accepted by GNU `parse-datetime`.
@@ -3036,6 +3058,18 @@ mod tests {
         assert_eq!(
             parsed.date_naive(),
             NaiveDate::from_ymd_opt(2024, 1, 2).unwrap()
+        );
+        assert_eq!(parsed.time(), NaiveTime::MIN);
+    }
+
+    #[test]
+    fn test_parse_gnu_slash_date_keeps_single_digit_year_literal() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("1/2/1", ref_time).unwrap();
+
+        assert_eq!(
+            parsed.date_naive(),
+            NaiveDate::from_ymd_opt(1, 1, 2).unwrap()
         );
         assert_eq!(parsed.time(), NaiveTime::MIN);
     }

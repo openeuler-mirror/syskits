@@ -1044,7 +1044,12 @@ fn normalize_gnu_dotted_words(input: &str, reference_time: DateTime<Local>) -> O
         }
         let word = &input[start..index];
 
-        if word.len() == 4
+        if word.eq_ignore_ascii_case("sept") {
+            normalized.push_str(&input[copied_until..start]);
+            normalized.push_str("sep");
+            copied_until = index;
+            changed = true;
+        } else if word.len() == 4
             && word.ends_with('.')
             && DATE_ABBREVIATIONS
                 .iter()
@@ -3661,6 +3666,18 @@ mod tests {
         assert_eq!(
             parsed.date_naive(),
             NaiveDate::from_ymd_opt(1970, 1, 1).unwrap()
+        );
+        assert_eq!(parsed.time(), NaiveTime::MIN);
+    }
+
+    #[test]
+    fn test_parse_gnu_sept_month_abbreviation() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("Sept 14 2022", ref_time).unwrap();
+
+        assert_eq!(
+            parsed.date_naive(),
+            NaiveDate::from_ymd_opt(2022, 9, 14).unwrap()
         );
         assert_eq!(parsed.time(), NaiveTime::MIN);
     }

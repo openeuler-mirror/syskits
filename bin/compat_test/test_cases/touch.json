@@ -1894,6 +1894,30 @@
             "cleanup_commands": [
                 "rm -f target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C下不存在且带尾随斜杠的目标必须保留GNU打开后utimensat失败的优先级，报告setting times而不是cannot touch。",
+            "args": ["missing/"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: setting times of 'missing/': No such file or directory\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f missing"
+            ]
         }
     ]
 }

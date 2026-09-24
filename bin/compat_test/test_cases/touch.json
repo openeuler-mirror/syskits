@@ -3532,6 +3532,40 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下命名时区修正符号后的空格必须按GNU忽略；UTC + 2:30必须将target设为10:04:56 UTC。",
+            "args": [
+                "--date=2024-02-29 12:34:56 UTC + 2:30",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %.9Y target)\" = '1709201096.000000000'",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C、TZ=America/New_York下DST前跳跳过的本地墙上时间必须按GNU拒绝且不得创建target。",
             "args": [
                 "--date=2024-03-10 02:00:00",

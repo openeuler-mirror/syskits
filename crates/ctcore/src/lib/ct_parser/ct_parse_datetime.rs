@@ -642,6 +642,10 @@ fn parse_datetime_gnu_compat_impl(
         return Ok(dt);
     }
 
+    if let Some(dt) = parse_gnu_time_only(input_trim, reference_time) {
+        return Ok(dt);
+    }
+
     // 纯星期几与相对词 (如 "next monday")
     if let Some(dt) = parse_weekday_expression(&input_lower, reference_time) {
         return Ok(dt);
@@ -761,6 +765,45 @@ fn parse_gnu_explicit_time_before_iso_date(
         chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => Some(dt),
         chrono::LocalResult::None => None,
     }
+}
+
+/// Parse a GNU 24-hour clock item with the date inherited from the reference.
+fn parse_gnu_time_only(input: &str, reference_time: DateTime<Local>) -> Option<DateTime<Local>> {
+    let time = parse_gnu_24_hour_clock(input)?;
+    let naive = reference_time.date_naive().and_time(time);
+
+    match reference_time.timezone().from_local_datetime(&naive) {
+        chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => Some(dt),
+        chrono::LocalResult::None => None,
+    }
+}
+
+fn parse_gnu_24_hour_clock(input: &str) -> Option<NaiveTime> {
+    let mut components = input.split(':');
+    let hour = components.next()?.parse::<u32>().ok()?;
+    let minute = components.next()?.parse::<u32>().ok()?;
+    let seconds = components.next().unwrap_or("0");
+    if components.next().is_some() || minute > 59 {
+        return None;
+    }
+
+    let (second, nanoseconds) = if let Some((second, fraction)) = seconds.split_once('.') {
+        if fraction.is_empty() || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+        let mut nanoseconds = fraction
+            .bytes()
+            .take(9)
+            .fold(0_u32, |value, digit| value * 10 + u32::from(digit - b'0'));
+        for _ in fraction.len().min(9)..9 {
+            nanoseconds *= 10;
+        }
+        (second.parse::<u32>().ok()?, nanoseconds)
+    } else {
+        (seconds.parse::<u32>().ok()?, 0)
+    };
+
+    NaiveTime::from_hms_nano_opt(hour, minute, second, nanoseconds)
 }
 
 fn parse_gnu_compact_time_with_date(
@@ -2329,6 +2372,18 @@ mod tests {
                 .unwrap()
                 .and_hms_opt(12, 34, 0)
                 .unwrap()
+        );
+    }
+
+    #[test]
+    fn test_parse_gnu_time_only_with_fractional_seconds() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("12:34:56.123456789", ref_time).unwrap();
+
+        assert_eq!(parsed.date_naive(), ref_time.date_naive());
+        assert_eq!(
+            parsed.time(),
+            NaiveTime::from_hms_nano_opt(12, 34, 56, 123_456_789).unwrap()
         );
     }
 

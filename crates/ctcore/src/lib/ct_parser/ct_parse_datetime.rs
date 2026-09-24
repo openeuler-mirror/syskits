@@ -316,7 +316,7 @@ fn parse_datetime_gnu_compat_impl(
     }
 
     // GNU ignores a weekday when an explicit date is also present.
-    if let Some(input_without_weekday) = strip_weekday_from_explicit_iso_date(input_trim) {
+    if let Some(input_without_weekday) = strip_weekday_from_explicit_date(input_trim) {
         return parse_datetime_gnu_compat_impl(
             &input_without_weekday,
             reference_time,
@@ -2124,7 +2124,42 @@ fn parse_weekday_ordinal(input: &str) -> Option<i32> {
     }
 }
 
-fn strip_weekday_from_explicit_iso_date(input: &str) -> Option<String> {
+fn is_gnu_month_name(input: &str) -> bool {
+    matches!(
+        input.trim_matches(',').to_ascii_lowercase().as_str(),
+        "january"
+            | "jan"
+            | "february"
+            | "feb"
+            | "march"
+            | "mar"
+            | "april"
+            | "apr"
+            | "may"
+            | "june"
+            | "jun"
+            | "july"
+            | "jul"
+            | "august"
+            | "aug"
+            | "september"
+            | "sep"
+            | "sept"
+            | "october"
+            | "oct"
+            | "november"
+            | "nov"
+            | "december"
+            | "dec"
+    )
+}
+
+fn is_gnu_date_number(input: &str) -> bool {
+    let input = input.trim_matches(',');
+    !input.is_empty() && input.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn strip_weekday_from_explicit_date(input: &str) -> Option<String> {
     let parts: Vec<&str> = input.split_whitespace().collect();
     let weekday_index = parts
         .iter()
@@ -2140,31 +2175,32 @@ fn strip_weekday_from_explicit_iso_date(input: &str) -> Option<String> {
         weekday_index
     };
 
-    let has_explicit_iso_date = parts
+    let remaining = parts
         .iter()
         .enumerate()
         .filter(|(index, _)| *index < weekday_start || *index > weekday_index)
-        .any(|(_, part)| {
-            let date = part
-                .trim_matches(',')
-                .split(['T', 't'])
-                .next()
-                .unwrap_or(part);
-            NaiveDate::parse_from_str(date, "%Y-%m-%d").is_ok()
-        });
-    if !has_explicit_iso_date {
+        .map(|(_, part)| *part)
+        .collect::<Vec<_>>();
+    let has_explicit_iso_date = remaining.iter().any(|part| {
+        let date = part
+            .trim_matches(',')
+            .split(['T', 't'])
+            .next()
+            .unwrap_or(part);
+        NaiveDate::parse_from_str(date, "%Y-%m-%d").is_ok()
+    });
+    let has_explicit_word_month_date = remaining.windows(2).any(|parts| {
+        let [first, second] = parts else {
+            return false;
+        };
+        (is_gnu_date_number(first) && is_gnu_month_name(second))
+            || (is_gnu_month_name(first) && is_gnu_date_number(second))
+    });
+    if !(has_explicit_iso_date || has_explicit_word_month_date) {
         return None;
     }
 
-    Some(
-        parts
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| *index < weekday_start || *index > weekday_index)
-            .map(|(_, part)| *part)
-            .collect::<Vec<_>>()
-            .join(" "),
-    )
+    Some(remaining.join(" "))
 }
 
 /// 解析包含星期几名称的表达式
@@ -2750,6 +2786,29 @@ mod tests {
             "Thu, 29 Feb 2024 12:34:56 +0530",
             "Fri, 29 Feb 2024 12:34:56 +0530",
             "29 Feb 2024 12:34:56 +0530",
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_weekday_is_ignored_for_explicit_word_month_dates() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, expected) in [
+            (
+                "Friday, 29 February 2024",
+                Utc.with_ymd_and_hms(2024, 2, 29, 0, 0, 0).unwrap(),
+            ),
+            (
+                "Fri, 29 Feb 2024",
+                Utc.with_ymd_and_hms(2024, 2, 29, 0, 0, 0).unwrap(),
+            ),
+            (
+                "Thu, 29 Feb 2024 12:34:56 UTC",
+                Utc.with_ymd_and_hms(2024, 2, 29, 12, 34, 56).unwrap(),
+            ),
         ] {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
             assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");

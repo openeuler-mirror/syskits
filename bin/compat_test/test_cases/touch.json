@@ -2794,6 +2794,45 @@
             "cleanup_commands": [
                 "rm -f 1031013099 target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date的多个日历相对项必须按GNU合并后一次归一化；2024-02-29 1 day 1 month必须设置target为2024-03-30。",
+            "setup_commands": [
+                "touch -d '2025-07-24 12:34:56 UTC' reference"
+            ],
+            "args": [
+                "-r",
+                "reference",
+                "--date=2024-02-29 1 day 1 month",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %.9Y target",
+                        "expected_exit": 0,
+                        "expected_stdout": "1711756800.000000000"
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f reference target"
+            ]
         }
     ]
 }

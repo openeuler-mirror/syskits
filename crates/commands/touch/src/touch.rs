@@ -1936,6 +1936,16 @@ mod tests {
         }
 
         #[test]
+        fn parse_date_rejects_numeric_timezone_after_meridian() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            assert!(
+                touch_parse_date(reference, "2024-02-29 7:30pm +0200").is_err(),
+                "GNU rejects a numeric timezone after a meridian clock"
+            );
+        }
+
+        #[test]
         fn parse_date_treats_short_number_after_month_day_as_time() {
             let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
 

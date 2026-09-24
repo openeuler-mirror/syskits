@@ -2540,6 +2540,37 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date必须接受GNU序数零相对时间缩写this min，并创建目标文件。",
+            "args": ["--date=this min", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "TZ=America/New_York、_POSIX2_VERSION=199209和POSIXLY_CORRECT=1下，旧式1031013099位于DST回拨重叠时刻，必须按GNU识别为时间戳、选择较早实例且不得创建同名文件。",
             "args": ["1031013099", "target"],
             "expectation": {

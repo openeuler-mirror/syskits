@@ -260,13 +260,26 @@ fn parse_datetime_gnu_compat_impl(
         ("tomorrow", "+1 day"),
         ("today", "+0 day"),
         ("now", "+0 sec"),
-        ("this second", "+0 sec"),
-        ("this minute", "+0 minute"),
-        ("this hour", "+0 hour"),
-        ("this day", "+0 day"),
-        ("this week", "+0 week"),
-        ("this month", "+0 month"),
         ("this year", "+0 year"),
+        ("this years", "+0 year"),
+        ("this month", "+0 month"),
+        ("this months", "+0 month"),
+        ("this fortnight", "+0 fortnight"),
+        ("this fortnights", "+0 fortnight"),
+        ("this week", "+0 week"),
+        ("this weeks", "+0 week"),
+        ("this day", "+0 day"),
+        ("this days", "+0 day"),
+        ("this hour", "+0 hour"),
+        ("this hours", "+0 hour"),
+        ("this minute", "+0 minute"),
+        ("this minutes", "+0 minute"),
+        ("this min", "+0 minute"),
+        ("this mins", "+0 minute"),
+        ("this second", "+0 sec"),
+        ("this seconds", "+0 sec"),
+        ("this sec", "+0 sec"),
+        ("this secs", "+0 sec"),
         ("next second", "+1 sec"),
         ("next minute", "+1 minute"),
         ("next hour", "+1 hour"),
@@ -2000,6 +2013,37 @@ mod tests {
 
         let hence = parse_datetime_gnu_compat("1 day hence", ref_time).unwrap();
         assert_eq!(hence.day(), 25);
+    }
+
+    #[test]
+    fn test_parse_gnu_this_relative_unit_aliases() {
+        let ref_time = Local.timestamp_opt(1_000_000, 123_456_789).unwrap();
+
+        for input in [
+            "this year",
+            "this years",
+            "this month",
+            "this months",
+            "this fortnight",
+            "this fortnights",
+            "this week",
+            "this weeks",
+            "this day",
+            "this days",
+            "this hour",
+            "this hours",
+            "this minute",
+            "this minutes",
+            "this min",
+            "this mins",
+            "this second",
+            "this seconds",
+            "this sec",
+            "this secs",
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed, ref_time, "input {input}");
+        }
     }
 
     #[test]

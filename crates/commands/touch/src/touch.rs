@@ -1231,11 +1231,18 @@ fn parse_timestamp(s: &str) -> CTResult<FileTime> {
 }
 
 fn parse_obsolescent_timestamp(s: &str) -> CTResult<FileTime> {
-    let current_year = || Local::now().year();
+    parse_obsolescent_timestamp_with_timezone(s, Local::now().year(), Local)
+}
+
+fn parse_obsolescent_timestamp_with_timezone<T: TimeZone>(
+    s: &str,
+    current_year: i32,
+    timezone: T,
+) -> CTResult<FileTime> {
     let format = touch_format::YYYYMMDDHHMM;
 
     let ts = if s.len() == 8 {
-        format!("{}{}", current_year(), s)
+        format!("{current_year}{s}")
     } else if s.len() == 10 {
         // 由于外层已经保证了 YY 必然在 69-99 之间，直接 +1900 即可
         let mmddhhmm = &s[0..8];
@@ -1252,9 +1259,9 @@ fn parse_obsolescent_timestamp(s: &str) -> CTResult<FileTime> {
     let local = NaiveDateTime::parse_from_str(&ts, format)
         .map_err(|_| CtSimpleError::new(1, format!("invalid date ts format {}", ts.quote())))?;
 
-    let local = match chrono::Local.from_local_datetime(&local) {
-        LocalResult::Single(dt) => dt,
-        _ => {
+    let local = match touch_select_local_datetime(timezone, local) {
+        Some(datetime) => datetime,
+        None => {
             return Err(CtSimpleError::new(
                 1,
                 format!("invalid date ts format {}", ts.quote()),
@@ -1263,7 +1270,7 @@ fn parse_obsolescent_timestamp(s: &str) -> CTResult<FileTime> {
     };
 
     // 夏令时跳变校验
-    let local2 = local + Duration::try_hours(1).unwrap() - Duration::try_hours(1).unwrap();
+    let local2 = local.clone() + Duration::try_hours(1).unwrap() - Duration::try_hours(1).unwrap();
     if local.hour() != local2.hour() {
         return Err(CtSimpleError::new(
             1,
@@ -1772,6 +1779,8 @@ mod tests {
 
     #[cfg(test)]
     mod obsolescent_timestamp_tests {
+        use chrono_tz::America::New_York;
+
         use super::*;
 
         #[test]
@@ -1789,6 +1798,14 @@ mod tests {
                 touch_obsolescent_timestamp("02310000", ctcore::ct_posix::OBSOLETE as i32)
                     .is_none()
             );
+        }
+
+        #[test]
+        fn obsolescent_timestamp_uses_earlier_dst_fold() {
+            let timestamp = parse_obsolescent_timestamp_with_timezone("1031013099", 2026, New_York)
+                .expect("GNU legacy timestamp must accept the DST fold");
+
+            assert_eq!(timestamp.unix_seconds(), 941_347_800);
         }
     }
 

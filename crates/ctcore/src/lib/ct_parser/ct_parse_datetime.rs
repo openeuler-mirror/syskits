@@ -601,10 +601,6 @@ fn parse_datetime_gnu_compat_impl(
         }
     }
 
-    if let Some(naive_dt) = parse_gnu_iso_hour(input_trim) {
-        return Ok(Local.from_local_datetime(&naive_dt).unwrap());
-    }
-
     if let Some(dt) =
         parse_gnu_compact_time_with_date(input_trim, reference_time, normalized_extended_year)
     {
@@ -1129,9 +1125,15 @@ fn parse_gnu_numeric_timezone(
         return None;
     }
 
-    let wall_time =
+    let wall_time = if let Some(naive) = parse_gnu_iso_hour(wall_time_input) {
+        match Local.from_local_datetime(&naive) {
+            chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => dt,
+            chrono::LocalResult::None => return None,
+        }
+    } else {
         parse_datetime_gnu_compat_impl(wall_time_input, reference_time, normalized_extended_year)
-            .ok()?;
+            .ok()?
+    };
     let utc_naive = wall_time
         .naive_local()
         .checked_sub_signed(Duration::minutes(offset_minutes))?;
@@ -2361,6 +2363,18 @@ mod tests {
             parsed.with_timezone(&Utc).time(),
             NaiveTime::from_hms_opt(7, 0, 0).unwrap()
         );
+    }
+
+    #[test]
+    fn test_rejects_timezone_less_iso_hour() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for input in ["2024-02-29T1", "2024-02-29T12"] {
+            assert!(
+                parse_datetime_gnu_compat(input, ref_time).is_err(),
+                "input {input} should fail"
+            );
+        }
     }
 
     #[test]

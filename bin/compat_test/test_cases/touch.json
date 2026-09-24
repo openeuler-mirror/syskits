@@ -2045,6 +2045,37 @@
             "cleanup_commands": [
                 "rm -f reference target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date不得接受无数值时区的ISO小时简写2024-02-29T12，必须按GNU报告非法日期且不得创建目标。",
+            "args": ["--date=2024-02-29T12", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: invalid date format '2024-02-29T12'\\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
         }
     ]
 }

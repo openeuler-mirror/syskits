@@ -138,6 +138,10 @@ fn parse_datetime_gnu_compat_impl(
         });
     }
 
+    if let Some(dt) = parse_gnu_time_only_utc_designator(input_trim, reference_time) {
+        return Ok(dt);
+    }
+
     if let Some(dt) =
         parse_gnu_numeric_timezone(input_trim, reference_time, normalized_extended_year)
     {
@@ -1510,6 +1514,16 @@ fn parse_compact_time_of_day(
     input: &str,
     reference_time: DateTime<Local>,
 ) -> Option<DateTime<Local>> {
+    let time = parse_gnu_compact_clock(input)?;
+    let naive = reference_time.date_naive().and_time(time);
+
+    match Local.from_local_datetime(&naive) {
+        chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => Some(dt),
+        chrono::LocalResult::None => None,
+    }
+}
+
+fn parse_gnu_compact_clock(input: &str) -> Option<NaiveTime> {
     let (hour_part, minute_part) = match input.len() {
         1 | 2 => (input, "0"),
         3 => input.split_at(1),
@@ -1519,13 +1533,22 @@ fn parse_compact_time_of_day(
 
     let hour = hour_part.parse::<u32>().ok()?;
     let minute = minute_part.parse::<u32>().ok()?;
-    let time = chrono::NaiveTime::from_hms_opt(hour, minute, 0)?;
+    chrono::NaiveTime::from_hms_opt(hour, minute, 0)
+}
+
+/// Parse a GNU time-of-day with a directly attached UTC designator, such as
+/// `12Z` or `12:34:56.123z`.
+fn parse_gnu_time_only_utc_designator(
+    input: &str,
+    reference_time: DateTime<Local>,
+) -> Option<DateTime<Local>> {
+    let clock = input
+        .strip_suffix('Z')
+        .or_else(|| input.strip_suffix('z'))?;
+    let time = parse_gnu_24_hour_clock(clock).or_else(|| parse_gnu_compact_clock(clock))?;
     let naive = reference_time.date_naive().and_time(time);
 
-    match Local.from_local_datetime(&naive) {
-        chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => Some(dt),
-        chrono::LocalResult::None => None,
-    }
+    Some(DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc).with_timezone(&Local))
 }
 
 /// Parse a GNU date-only UTC form after its `Z`, `UTC`, or `GMT` suffix has
@@ -2374,6 +2397,27 @@ mod tests {
                 parse_datetime_gnu_compat(input, ref_time).is_err(),
                 "input {input} should fail"
             );
+        }
+    }
+
+    #[test]
+    fn test_parses_time_only_utc_designator() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, expected) in [
+            ("12Z", NaiveTime::from_hms_opt(12, 0, 0).unwrap()),
+            ("001Z", NaiveTime::from_hms_opt(0, 1, 0).unwrap()),
+            (
+                "12:34:56.123Z",
+                NaiveTime::from_hms_nano_opt(12, 34, 56, 123_000_000).unwrap(),
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(
+                parsed.with_timezone(&Utc).date_naive(),
+                ref_time.date_naive()
+            );
+            assert_eq!(parsed.with_timezone(&Utc).time(), expected, "input {input}");
         }
     }
 

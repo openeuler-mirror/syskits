@@ -2833,6 +2833,40 @@
             "cleanup_commands": [
                 "rm -f reference target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date的两位连字符年份必须遵循GNU世纪映射；24-2-29必须设置target为2024-02-29。",
+            "args": [
+                "--date=24-2-29",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %.9Y target",
+                        "expected_exit": 0,
+                        "expected_stdout": "1709164800.000000000"
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
         }
     ]
 }

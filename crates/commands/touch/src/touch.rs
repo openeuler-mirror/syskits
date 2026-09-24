@@ -34,7 +34,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::{Quotable, locale_quote_marks};
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_parse_datetime;
 use ctcore::ct_posix::{
@@ -72,6 +72,8 @@ const TOUCH_LONG_OPTIONS: &[(&str, bool)] = &[
     ("version", false),
 ];
 const TOUCH_SHORT_OPTIONS: &[u8] = b"acdfhmrtV";
+const TOUCH_TIME_ACCESS_WORDS: &[&str] = &["atime", "access", "use"];
+const TOUCH_TIME_MODIFICATION_WORDS: &[&str] = &["mtime", "modify"];
 
 enum TouchLongOptionMatch {
     None,
@@ -155,10 +157,15 @@ fn touch_prepare_args_with_mode(
     let args = args.collect::<Vec<_>>();
     let mut parse_options = true;
     let mut expects_value = false;
+    let mut expects_time_word = false;
 
     for argument in args.iter().skip(1) {
         if expects_value {
             expects_value = false;
+            if expects_time_word {
+                expects_time_word = false;
+                touch_validate_time_word(argument.as_encoded_bytes())?;
+            }
             continue;
         }
 
@@ -219,8 +226,19 @@ fn touch_prepare_args_with_mode(
                         .collect());
                 }
                 TouchLongOptionMatch::Recognized {
-                    takes_value: true, ..
-                } if separator.is_none() => expects_value = true,
+                    canonical,
+                    takes_value: true,
+                } if separator.is_none() => {
+                    expects_value = true;
+                    expects_time_word = canonical == "time";
+                }
+                TouchLongOptionMatch::Recognized {
+                    canonical: "time",
+                    takes_value: true,
+                } => {
+                    let value = &long[separator.expect("time option has an attached value") + 1..];
+                    touch_validate_time_word(value)?;
+                }
                 TouchLongOptionMatch::Recognized { .. } => {}
             }
             continue;
@@ -249,18 +267,117 @@ fn touch_prepare_args_with_mode(
 }
 
 fn touch_parse_time_word(value: &str) -> Result<String, String> {
-    let access = ["atime", "access", "use"]
+    match touch_match_time_word(value.as_bytes()) {
+        Ok("access") => Ok("access".to_string()),
+        Ok("modify") => Ok("modify".to_string()),
+        Ok(_) => unreachable!("time word matcher only returns known modes"),
+        Err(_) => Err(format!("invalid time type {value:?}")),
+    }
+}
+
+fn touch_validate_time_word(value: &[u8]) -> CTResult<()> {
+    let Err(ambiguous) = touch_match_time_word(value) else {
+        return Ok(());
+    };
+
+    let kind = if ambiguous { "ambiguous" } else { "invalid" };
+    Err(TouchUsageError::boxed(
+        touch_time_word_diagnostic_message(value, kind).into_bytes(),
+    ))
+}
+
+fn touch_match_time_word(value: &[u8]) -> Result<&'static str, bool> {
+    let access = TOUCH_TIME_ACCESS_WORDS
         .iter()
-        .any(|candidate| candidate.starts_with(value));
-    let modification = ["mtime", "modify"]
+        .any(|candidate| candidate.as_bytes().starts_with(value));
+    let modification = TOUCH_TIME_MODIFICATION_WORDS
         .iter()
-        .any(|candidate| candidate.starts_with(value));
+        .any(|candidate| candidate.as_bytes().starts_with(value));
 
     match (access, modification) {
-        (true, false) => Ok("access".to_string()),
-        (false, true) => Ok("modify".to_string()),
-        _ => Err(format!("invalid time type {value:?}")),
+        (true, false) => Ok("access"),
+        (false, true) => Ok("modify"),
+        (true, true) => Err(true),
+        (false, false) => Err(false),
     }
+}
+
+fn touch_time_word_diagnostic_message(value: &[u8], kind: &str) -> String {
+    let (left_quote, right_quote) = locale_quote_marks();
+    touch_time_word_diagnostic_message_with_marks(value, kind, left_quote, right_quote)
+}
+
+fn touch_time_word_diagnostic_message_with_marks(
+    value: &[u8],
+    kind: &str,
+    left_quote: &str,
+    right_quote: &str,
+) -> String {
+    let quote = |value| touch_quote_argmatch_bytes_with_marks(value, left_quote, right_quote);
+    format!(
+        "{kind} argument {} for {}\nValid arguments are:\n  - {}, {}, {}\n  - {}, {}",
+        quote(value),
+        quote(b"--time"),
+        quote(b"atime"),
+        quote(b"access"),
+        quote(b"use"),
+        quote(b"mtime"),
+        quote(b"modify"),
+    )
+}
+
+fn touch_quote_argmatch_bytes_with_marks(
+    value: &[u8],
+    left_quote: &str,
+    right_quote: &str,
+) -> String {
+    let mut quoted = String::from(left_quote);
+
+    if (left_quote, right_quote) == ("‘", "’") {
+        if let Ok(value) = std::str::from_utf8(value) {
+            let right_quote_character = right_quote
+                .chars()
+                .next()
+                .expect("UTF-8 right quote must contain one character");
+            for character in value.chars() {
+                match character {
+                    '\u{7}' => quoted.push_str("\\a"),
+                    '\u{8}' => quoted.push_str("\\b"),
+                    '\t' => quoted.push_str("\\t"),
+                    '\n' => quoted.push_str("\\n"),
+                    '\u{b}' => quoted.push_str("\\v"),
+                    '\u{c}' => quoted.push_str("\\f"),
+                    '\r' => quoted.push_str("\\r"),
+                    '\\' => quoted.push_str("\\\\"),
+                    _ if character == right_quote_character => {
+                        quoted.push('\\');
+                        quoted.push(character);
+                    }
+                    _ => quoted.push(character),
+                }
+            }
+            quoted.push_str(right_quote);
+            return quoted;
+        }
+    }
+
+    for byte in value {
+        match byte {
+            b'\x07' => quoted.push_str("\\a"),
+            b'\x08' => quoted.push_str("\\b"),
+            b'\t' => quoted.push_str("\\t"),
+            b'\n' => quoted.push_str("\\n"),
+            b'\x0b' => quoted.push_str("\\v"),
+            b'\x0c' => quoted.push_str("\\f"),
+            b'\r' => quoted.push_str("\\r"),
+            b'\\' => quoted.push_str("\\\\"),
+            b'\'' if right_quote == "'" => quoted.push_str("\\'"),
+            byte if byte.is_ascii_graphic() || *byte == b' ' => quoted.push(*byte as char),
+            byte => quoted.push_str(&format!("\\{byte:03o}")),
+        }
+    }
+    quoted.push_str(right_quote);
+    quoted
 }
 
 mod touch_format {
@@ -2362,6 +2479,35 @@ mod tests {
                 assert_eq!(error.diagnostic_bytes().as_ref(), expected);
                 assert!(error.usage());
             }
+        }
+
+        #[test]
+        fn test_touch_prepare_args_uses_gnu_time_word_diagnostics() {
+            let cases = [
+                (vec!["--time=x"], b"x".as_slice(), "invalid"),
+                (vec!["--time="], b"".as_slice(), "ambiguous"),
+                (vec!["--ti", "x"], b"x".as_slice(), "invalid"),
+            ];
+
+            for (arguments, value, kind) in cases {
+                let arguments = std::iter::once(OsString::from("touch"))
+                    .chain(arguments.into_iter().map(OsString::from));
+                let error = touch_prepare_args_with_mode(arguments, false)
+                    .expect_err("GNU --time value error must be detected before clap");
+                assert_eq!(
+                    error.diagnostic_bytes().as_ref(),
+                    touch_time_word_diagnostic_message(value, kind).as_bytes()
+                );
+                assert!(error.usage());
+            }
+        }
+
+        #[test]
+        fn test_touch_time_word_diagnostic_quotes_non_utf8_bytes() {
+            assert_eq!(
+                touch_time_word_diagnostic_message_with_marks(b"\xff", "invalid", "'", "'"),
+                "invalid argument '\\377' for '--time'\nValid arguments are:\n  - 'atime', 'access', 'use'\n  - 'mtime', 'modify'"
+            );
         }
 
         #[test]

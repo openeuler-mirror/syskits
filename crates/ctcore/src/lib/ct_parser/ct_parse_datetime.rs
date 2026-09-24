@@ -186,6 +186,15 @@ fn parse_datetime_gnu_compat_impl(
 ) -> Result<DateTime<Local>, ParseDateTimeError> {
     let input_without_comments = strip_gnu_parenthesized_comments(input);
     let input_trim = input_without_comments.trim();
+
+    if let Some(normalized) = normalize_gnu_dotted_words(input_trim, reference_time) {
+        return parse_datetime_gnu_compat_impl(
+            &normalized,
+            reference_time,
+            normalized_extended_year,
+        );
+    }
+
     let input_lower = input_trim.to_lowercase();
 
     // GNU parse-datetime treats a standalone `--` as an empty date
@@ -819,6 +828,72 @@ fn parse_datetime_gnu_compat_impl(
             message: format!("Unable to parse date: {input}"),
         }),
     }
+}
+
+/// Normalize the two dotted-word forms accepted by GNU `parse-datetime`.
+///
+/// GNU's lexer treats a trailing period as part of a three-letter month or
+/// weekday abbreviation.  For timezone words, it retries lookup after
+/// removing periods, allowing inputs such as `P.S.T.`.  It does not remove
+/// periods from arbitrary words, so retain every other token unchanged.
+fn normalize_gnu_dotted_words(input: &str, reference_time: DateTime<Local>) -> Option<String> {
+    const DATE_ABBREVIATIONS: &[&str] = &[
+        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "sun",
+        "mon", "tue", "wed", "thu", "fri", "sat",
+    ];
+
+    let bytes = input.as_bytes();
+    let mut normalized = String::with_capacity(input.len());
+    let mut copied_until = 0;
+    let mut index = 0;
+    let mut changed = false;
+
+    while index < bytes.len() {
+        if !bytes[index].is_ascii_alphabetic() {
+            index += 1;
+            continue;
+        }
+
+        let start = index;
+        index += 1;
+        while index < bytes.len() && (bytes[index].is_ascii_alphabetic() || bytes[index] == b'.') {
+            index += 1;
+        }
+        let word = &input[start..index];
+
+        if word.len() == 4
+            && word.ends_with('.')
+            && DATE_ABBREVIATIONS
+                .iter()
+                .any(|abbreviation| word[..3].eq_ignore_ascii_case(abbreviation))
+        {
+            normalized.push_str(&input[copied_until..start]);
+            normalized.push_str(&word[..3]);
+            copied_until = index;
+            changed = true;
+        } else if word.contains('.') {
+            let without_periods = word.replace('.', "");
+            if is_gnu_known_timezone(&without_periods, reference_time) {
+                normalized.push_str(&input[copied_until..start]);
+                normalized.push_str(&without_periods);
+                copied_until = index;
+                changed = true;
+            }
+        }
+    }
+
+    changed.then(|| {
+        normalized.push_str(&input[copied_until..]);
+        normalized
+    })
+}
+
+fn is_gnu_known_timezone(input: &str, reference_time: DateTime<Local>) -> bool {
+    GNU_NAMED_TIMEZONES
+        .iter()
+        .any(|(name, _)| input.eq_ignore_ascii_case(name))
+        || local_timezone_info(reference_time.timestamp())
+            .is_some_and(|(name, _)| input.eq_ignore_ascii_case(&name))
 }
 
 /// GNU date syntax ignores parenthesized comments.  Nested and unterminated
@@ -2305,6 +2380,33 @@ mod tests {
         let negative = parse_datetime_gnu_compat("-1.1234567891 seconds", ref_time).unwrap();
         assert_eq!(negative.timestamp(), ref_time.timestamp() - 2);
         assert_eq!(negative.timestamp_subsec_nanos(), 876_543_210);
+    }
+
+    #[test]
+    fn test_parse_gnu_dotted_date_and_timezone_words() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        let month = parse_datetime_gnu_compat("Feb. 29 2024", ref_time).unwrap();
+        assert_eq!(
+            month.date_naive(),
+            NaiveDate::from_ymd_opt(2024, 2, 29).unwrap()
+        );
+
+        let weekday = parse_datetime_gnu_compat("Mon. 2024-01-01", ref_time).unwrap();
+        assert_eq!(
+            weekday.date_naive(),
+            NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()
+        );
+
+        let timezone = parse_datetime_gnu_compat("2024-01-01 00:00 P.S.T.", ref_time).unwrap();
+        assert_eq!(timezone.with_timezone(&Utc).timestamp(), 1_704_096_000);
+
+        for input in ["Sept. 1 2024", "1 day ago.", "2024-01-01 00:00 A."] {
+            assert!(
+                parse_datetime_gnu_compat(input, ref_time).is_err(),
+                "input {input} must be rejected"
+            );
+        }
     }
 
     #[test]

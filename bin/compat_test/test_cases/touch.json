@@ -2698,6 +2698,37 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date必须接受GNU三字母月缩写后的点号；Feb. 29 2024必须设置target为闰日零点。",
+            "args": ["--date=Feb. 29 2024", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %.9Y target",
+                        "expected_exit": 0,
+                        "expected_stdout": "1709164800.000000000"
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "TZ=America/New_York、_POSIX2_VERSION=199209和POSIXLY_CORRECT=1下，旧式1031013099位于DST回拨重叠时刻，必须按GNU识别为时间戳、选择较早实例且不得创建同名文件。",
             "args": ["1031013099", "target"],
             "expectation": {

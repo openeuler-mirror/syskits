@@ -3814,6 +3814,40 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下显式词月日期后的星期词元必须按GNU忽略；29 Feb 2024 Thu 12:34:56 UTC必须保留2024年份并设置对应时间。",
+            "args": [
+                "--date=29 Feb 2024 Thu 12:34:56 UTC",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %Y target)\" = 1709210096",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C、TZ=UTC0下无逗号月名日期后的短数字必须按GNU解析为时刻；Sep 24 7 UTC使用reference年份并设置07:00。",
             "setup_commands": [
                 "/usr/bin/touch -d '2025-01-01 UTC' reference"

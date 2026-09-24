@@ -2376,6 +2376,50 @@
                 "run_as_user": "nobody"
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C下缺少长选项值时，--da必须按GNU显示规范选项名--date并报告requires an argument。",
+            "args": ["--da"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: option '--date' requires an argument\nTry 'touch --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C下缺少短选项值时，-t必须按GNU报告option requires an argument -- 't'。",
+            "args": ["-t"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: option requires an argument -- 't'\nTry 'touch --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

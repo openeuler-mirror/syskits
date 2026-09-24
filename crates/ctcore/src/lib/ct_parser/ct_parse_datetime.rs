@@ -265,6 +265,15 @@ fn parse_datetime_gnu_compat_impl(
     let input_without_comments = strip_gnu_parenthesized_comments(input);
     let input_trim = input_without_comments.trim();
 
+    // GNU consumes a leading TZ="..." before parsing the remaining items.
+    // It establishes the default local timezone only; a timezone item inside
+    // the remaining date string still takes precedence.
+    if input_trim.starts_with("TZ=\"") {
+        return parse_embedded_timezone(input_trim).ok_or_else(|| ParseDateTimeError {
+            message: format!("Unable to parse date: {input}"),
+        });
+    }
+
     if let Some(normalized) = normalize_gnu_dotted_words(input_trim, reference_time) {
         return parse_datetime_gnu_compat_impl(
             &normalized,
@@ -2143,12 +2152,54 @@ fn parse_gnu_named_timezone(
 }
 
 fn parse_embedded_timezone(input: &str) -> Option<DateTime<Local>> {
-    let rest = input.strip_prefix("TZ=\"")?;
-    let quote_idx = rest.find('"')?;
-    let timezone_name = &rest[..quote_idx];
-    let date_str = rest[quote_idx + 1..].trim();
-    let naive = parse_embedded_timezone_datetime(date_str)?;
+    let (timezone_name, date_input) = parse_embedded_timezone_prefix(input)?;
+    let (naive, explicit_timezone) = parse_embedded_timezone_datetime(date_input)?;
 
+    if let Some(timezone) = explicit_timezone {
+        return match timezone {
+            EmbeddedTimezone::FixedOffset(offset_seconds) => FixedOffset::east_opt(offset_seconds)?
+                .from_local_datetime(&naive)
+                .earliest()
+                .map(|dt| dt.with_timezone(&Local)),
+            EmbeddedTimezone::Local => parse_embedded_timezone_local(&timezone_name, naive),
+        };
+    }
+
+    parse_embedded_timezone_local(&timezone_name, naive)
+}
+
+fn parse_embedded_timezone_prefix(input: &str) -> Option<(String, &str)> {
+    let rest = input.strip_prefix("TZ=\"")?;
+    let bytes = rest.as_bytes();
+    let mut timezone_name = String::new();
+    let mut index = 0;
+
+    while index < bytes.len() {
+        match bytes[index] {
+            b'"' => return Some((timezone_name, rest[index + 1..].trim())),
+            b'\\' => {
+                let escaped = *bytes.get(index + 1)?;
+                if !matches!(escaped, b'\\' | b'"') {
+                    return None;
+                }
+                timezone_name.push(escaped as char);
+                index += 2;
+            }
+            byte if byte.is_ascii() => {
+                timezone_name.push(byte as char);
+                index += 1;
+            }
+            _ => return None,
+        }
+    }
+
+    None
+}
+
+fn parse_embedded_timezone_local(
+    timezone_name: &str,
+    naive: NaiveDateTime,
+) -> Option<DateTime<Local>> {
     if let Ok(timezone) = timezone_name.parse::<Tz>() {
         return timezone
             .from_local_datetime(&naive)
@@ -2171,7 +2222,17 @@ fn parse_embedded_timezone(input: &str) -> Option<DateTime<Local>> {
         .map(|dt| dt.with_timezone(&Local))
 }
 
-fn parse_embedded_timezone_datetime(input: &str) -> Option<NaiveDateTime> {
+#[derive(Clone, Copy)]
+enum EmbeddedTimezone {
+    FixedOffset(i32),
+    Local,
+}
+
+fn parse_embedded_timezone_datetime(
+    input: &str,
+) -> Option<(NaiveDateTime, Option<EmbeddedTimezone>)> {
+    let (datetime_input, explicit_timezone) = split_embedded_timezone_item(input)?;
+
     for format in [
         "%Y-%m-%d %H:%M:%S%.f",
         "%Y-%m-%d %H:%M:%S",
@@ -2180,14 +2241,114 @@ fn parse_embedded_timezone_datetime(input: &str) -> Option<NaiveDateTime> {
         "%Y-%m-%dT%H:%M:%S",
         "%Y-%m-%dT%H:%M",
     ] {
-        if let Ok(date) = NaiveDateTime::parse_from_str(input, format) {
-            return Some(date);
+        if let Ok((date, remainder)) = NaiveDateTime::parse_and_remainder(&datetime_input, format)
+            && remainder.is_empty()
+        {
+            return Some((date, explicit_timezone));
         }
     }
 
-    NaiveDate::parse_from_str(input, "%Y-%m-%d")
-        .ok()?
-        .and_hms_opt(0, 0, 0)
+    let (date, remainder) = NaiveDate::parse_and_remainder(&datetime_input, "%Y-%m-%d").ok()?;
+    if !remainder.is_empty() {
+        return None;
+    }
+    Some((date.and_hms_opt(0, 0, 0)?, explicit_timezone))
+}
+
+fn split_embedded_timezone_item(input: &str) -> Option<(String, Option<EmbeddedTimezone>)> {
+    let mut fields = input
+        .split_ascii_whitespace()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if fields.is_empty() {
+        return None;
+    }
+
+    let mut timezone = None;
+    let mut set_timezone = |candidate| {
+        if timezone.replace(candidate).is_some() {
+            None
+        } else {
+            Some(())
+        }
+    };
+
+    let mut index = 0;
+    while index < fields.len() {
+        let field = &fields[index];
+        let named = GNU_NAMED_TIMEZONES
+            .iter()
+            .find(|(name, _)| field.eq_ignore_ascii_case(name))
+            .map(|(_, offset)| EmbeddedTimezone::FixedOffset(*offset));
+        let military = {
+            let mut characters = field.chars();
+            let character = characters.next()?;
+            if characters.next().is_some() {
+                None
+            } else {
+                military_timezone_offset_hours(character).map(|offset| match offset {
+                    Some(hours) => EmbeddedTimezone::FixedOffset(hours * 3600),
+                    None => EmbeddedTimezone::Local,
+                })
+            }
+        };
+        let numeric = parse_gnu_numeric_timezone_offset(field).map(EmbeddedTimezone::FixedOffset);
+        let candidate = named.or(military).or(numeric);
+
+        if let Some(candidate) = candidate {
+            set_timezone(candidate)?;
+            fields.remove(index);
+        } else {
+            index += 1;
+        }
+    }
+
+    let last = fields.last_mut()?;
+    if let Some(stripped) = last.strip_suffix(['Z', 'z'])
+        && stripped.as_bytes().last().is_some_and(u8::is_ascii_digit)
+    {
+        set_timezone(EmbeddedTimezone::FixedOffset(0))?;
+        *last = stripped.to_owned();
+    } else if let Some(sign_index) = last.rfind(['+', '-'])
+        && gnu_numeric_timezone_follows_clock(last, sign_index)
+        && let Some(offset_seconds) = parse_gnu_numeric_timezone_offset(&last[sign_index..])
+    {
+        set_timezone(EmbeddedTimezone::FixedOffset(offset_seconds))?;
+        last.truncate(sign_index);
+    }
+
+    Some((fields.join(" "), timezone))
+}
+
+fn parse_gnu_numeric_timezone_offset(input: &str) -> Option<i32> {
+    if !is_gnu_numeric_timezone_offset(input) {
+        return None;
+    }
+
+    let negative = input.starts_with('-');
+    let offset = &input[1..];
+    let minutes = if let Some((hours, minutes)) = offset.split_once(':') {
+        hours
+            .parse::<i32>()
+            .ok()?
+            .checked_mul(60)?
+            .checked_add(minutes.parse::<i32>().ok()?)?
+    } else {
+        let value = offset.parse::<i32>().ok()?;
+        if offset.len() <= 2 {
+            value.checked_mul(60)?
+        } else {
+            (value / 100).checked_mul(60)?.checked_add(value % 100)?
+        }
+    };
+    let minutes = if negative {
+        minutes.checked_neg()?
+    } else {
+        minutes
+    };
+    (-24 * 60..=24 * 60)
+        .contains(&minutes)
+        .then_some(minutes * 60)
 }
 
 fn parse_rfc5322_datetime(input: &str) -> Option<DateTime<Local>> {
@@ -3062,6 +3223,26 @@ mod tests {
             (
                 "TZ=\"America/Los_Angeles\" 2024-11-03 01:30",
                 Utc.with_ymd_and_hms(2024, 11, 3, 8, 30, 0).unwrap(),
+            ),
+            (
+                "TZ=\"America/New_York\" 2024-01-01 12:00 UTC",
+                Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap(),
+            ),
+            (
+                "TZ=\"America/New_York\" 2024-01-01 12:00 +0100",
+                Utc.with_ymd_and_hms(2024, 1, 1, 11, 0, 0).unwrap(),
+            ),
+            (
+                "TZ=\"America/New_York\" 2024-01-01 12:00Z",
+                Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap(),
+            ),
+            (
+                "TZ=\"UTC0\" 2024-01-01 12:00 PST",
+                Utc.with_ymd_and_hms(2024, 1, 1, 20, 0, 0).unwrap(),
+            ),
+            (
+                "TZ=\"America/New_York\" 2024-01-01 12:00 J",
+                Utc.with_ymd_and_hms(2024, 1, 1, 17, 0, 0).unwrap(),
             ),
         ] {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();

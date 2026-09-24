@@ -1842,6 +1842,58 @@
             "cleanup_commands": [
                 "rm -f reference target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C下--time=x必须按GNU argmatch诊断报告invalid argument，并分组列出access和modify时间同义词。",
+            "args": ["--time=x", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: invalid argument 'x' for '--time'\nValid arguments are:\n  - 'atime', 'access', 'use'\n  - 'mtime', 'modify'\nTry 'touch --help' for more information.\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "byteMode": true,
+            "tstdin": "",
+            "command": "touch",
+            "description": "原始字节--time参数用例：LC_ALL=C；参数十六进制为2d2d74696d653dff（--time=后接单字节0xff）和746172676574（target）；预期RC=1、stdout为空、stderr完整十六进制使用GNU的\\377转义并列出两组有效时间词。",
+            "args": [
+                "2d2d74696d653dff",
+                "746172676574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "746f7563683a20696e76616c696420617267756d656e7420275c3337372720666f7220272d2d74696d65270a56616c696420617267756d656e7473206172653a0a20202d20276174696d65272c2027616363657373272c2027757365270a20202d20276d74696d65272c20276d6f64696679270a5472792027746f756368202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
         }
     ]
 }

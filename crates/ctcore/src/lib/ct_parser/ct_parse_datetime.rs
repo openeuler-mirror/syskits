@@ -307,6 +307,14 @@ fn parse_datetime_gnu_compat_impl(
         }
     }
 
+    if let Some(normalized) = normalize_gnu_two_digit_hyphen_year(input_trim) {
+        return parse_datetime_gnu_compat_impl(
+            &normalized,
+            reference_time,
+            normalized_extended_year,
+        );
+    }
+
     // GNU ignores a weekday when an explicit date is also present.
     if let Some(input_without_weekday) = strip_weekday_from_explicit_iso_date(input_trim) {
         return parse_datetime_gnu_compat_impl(
@@ -1020,6 +1028,60 @@ fn expand_year_for_format<T: Datelike>(value: T, format: &str) -> Option<T> {
         two_digit_year + 1900
     };
     value.with_year(expanded)
+}
+
+/// Expand GNU's two-digit year mapping for a hyphenated ISO date item.
+///
+/// `chrono` accepts a short year for `%Y` literally.  GNU's parser instead
+/// applies its XPG4 two-digit year mapping before validating the date.
+fn normalize_gnu_two_digit_hyphen_year(input: &str) -> Option<String> {
+    let bytes = input.as_bytes();
+
+    for start in 0..bytes.len().saturating_sub(4) {
+        if !bytes[start].is_ascii_digit()
+            || !bytes[start + 1].is_ascii_digit()
+            || bytes[start + 2] != b'-'
+            || start > 0 && (bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_')
+        {
+            continue;
+        }
+
+        let mut month_end = start + 3;
+        while month_end < bytes.len()
+            && bytes[month_end].is_ascii_digit()
+            && month_end - (start + 3) < 2
+        {
+            month_end += 1;
+        }
+        if month_end == start + 3 || bytes.get(month_end) != Some(&b'-') {
+            continue;
+        }
+
+        let mut day_end = month_end + 1;
+        while day_end < bytes.len()
+            && bytes[day_end].is_ascii_digit()
+            && day_end - (month_end + 1) < 2
+        {
+            day_end += 1;
+        }
+        let invalid_trailer = bytes.get(day_end).is_some_and(|byte| {
+            (byte.is_ascii_alphanumeric() && !matches!(*byte, b'T' | b't')) || *byte == b'_'
+        });
+        if day_end == month_end + 1 || invalid_trailer {
+            continue;
+        }
+
+        let year = input[start..start + 2].parse::<u32>().ok()?;
+        let expanded = if year < 69 { year + 2000 } else { year + 1900 };
+        return Some(format!(
+            "{}{}{}",
+            &input[..start],
+            expanded,
+            &input[start + 2..]
+        ));
+    }
+
+    None
 }
 
 /// Parse GNU month/day forms whose omitted year defaults to the reference year.
@@ -2975,6 +3037,30 @@ mod tests {
             parsed.with_timezone(&Utc).time(),
             NaiveTime::from_hms_opt(7, 0, 0).unwrap()
         );
+    }
+
+    #[test]
+    fn test_parse_gnu_hyphen_date_expands_two_digit_year() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, expected) in [
+            ("24-2-29", NaiveDate::from_ymd_opt(2024, 2, 29).unwrap()),
+            ("68-1-2", NaiveDate::from_ymd_opt(2068, 1, 2).unwrap()),
+            ("69-1-2", NaiveDate::from_ymd_opt(1969, 1, 2).unwrap()),
+            (
+                "24-2-29T12:34",
+                NaiveDate::from_ymd_opt(2024, 2, 29).unwrap(),
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.date_naive(), expected, "input {input}");
+            let expected_time = if input.contains('T') {
+                NaiveTime::from_hms_opt(12, 34, 0).unwrap()
+            } else {
+                NaiveTime::MIN
+            };
+            assert_eq!(parsed.time(), expected_time, "input {input}");
+        }
     }
 
     #[test]

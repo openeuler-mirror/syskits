@@ -19,7 +19,7 @@ extern crate rust_i18n;
 use rust_i18n::t;
 use std::borrow::Cow;
 use std::error::Error;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::{Display, Formatter};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use chrono::{
@@ -35,7 +35,7 @@ use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
 use ctcore::ct_display::{Quotable, locale_quote_marks};
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, strip_errno};
 use ctcore::ct_parse_datetime;
 use ctcore::ct_posix::{
     GnuGetoptCommandExt, MODERN, TRADITIONAL, ct_posix_version, posixly_correct,
@@ -529,6 +529,12 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
         };
 
         let path = path_buf.as_path();
+        let open_result = (!touch_option_is_set(&arg_matches, touch_flags::TOUCH_NO_CREATE)
+            && !touch_option_is_set(&arg_matches, touch_flags::TOUCH_NO_DEREF))
+        .then(|| touch_open_for_creation(path));
+        let open_error = open_result
+            .as_ref()
+            .and_then(|result| result.as_ref().err());
 
         let md_result = if touch_option_is_set(&arg_matches, touch_flags::TOUCH_NO_DEREF) {
             path.symlink_metadata()
@@ -538,8 +544,17 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
 
         if let Err(e) = md_result {
             if e.kind() != std::io::ErrorKind::NotFound {
-                let err_message = format!("setting times of {}", filename.quote());
-                ct_show!(e.map_err_context(|| err_message));
+                if let Some(open_error) =
+                    open_error.filter(|error| !touch_open_error_is_directory(path, error))
+                {
+                    ct_show!(CtSimpleError::new(
+                        1,
+                        touch_open_error_message(filename.as_os_str(), open_error),
+                    ));
+                } else {
+                    let err_message = format!("setting times of {}", filename.quote());
+                    ct_show!(e.map_err_context(|| err_message));
+                }
                 continue;
             }
 
@@ -556,14 +571,16 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
                 continue;
             }
 
-            if let Err(error) = touch_open_for_creation(path) {
-                if error.raw_os_error() == Some(ctcore::libc::EISDIR) {
+            if let Some(Err(error)) = open_result.as_ref() {
+                if touch_open_error_is_directory(path, error) {
                     if let Err(error) = touch_update_times(&arg_matches, path, times, filename) {
                         ct_show!(error);
                     }
                 } else {
-                    let err_message = format!("cannot touch {}", path.quote());
-                    ct_show!(error.map_err_context(|| err_message));
+                    ct_show!(CtSimpleError::new(
+                        1,
+                        touch_open_error_message(path.as_os_str(), error),
+                    ));
                 }
                 continue;
             }
@@ -575,7 +592,16 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
         }
 
         if let Err(error) = touch_update_times(&arg_matches, path, times, filename) {
-            ct_show!(error);
+            if let Some(open_error) =
+                open_error.filter(|error| !touch_open_error_is_directory(path, error))
+            {
+                ct_show!(CtSimpleError::new(
+                    1,
+                    touch_open_error_message(filename.as_os_str(), open_error),
+                ));
+            } else {
+                ct_show!(error);
+            }
         }
     }
     Ok(())
@@ -595,6 +621,15 @@ fn touch_open_for_creation(path: &Path) -> io::Result<File> {
         options.custom_flags(ctcore::libc::O_NONBLOCK | ctcore::libc::O_NOCTTY);
     }
     options.open(path)
+}
+
+fn touch_open_error_is_directory(path: &Path, error: &io::Error) -> bool {
+    error.raw_os_error() == Some(ctcore::libc::EISDIR)
+        || (error.raw_os_error() == Some(ctcore::libc::EINVAL) && path.is_dir())
+}
+
+fn touch_open_error_message(path: &OsStr, error: &io::Error) -> String {
+    format!("cannot touch {}: {}", path.quote(), strip_errno(error))
 }
 
 pub fn ct_app() -> Command {
@@ -1279,7 +1314,7 @@ impl Tool for Touch {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ffi::OsString;
+    use std::ffi::{OsStr, OsString};
 
     #[cfg(test)]
     mod determine_times_tests {
@@ -2200,6 +2235,31 @@ mod tests {
             let _opened = touch_open_for_creation(&file).unwrap();
 
             assert_eq!(std::fs::read(file).unwrap(), b"preserve me");
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_touch_open_error_distinguishes_directory_from_symlink_loop() {
+            use std::os::unix::fs::symlink;
+
+            let dir = tempdir().unwrap();
+            let directory_error = touch_open_for_creation(dir.path()).unwrap_err();
+            assert!(touch_open_error_is_directory(dir.path(), &directory_error));
+
+            let loop_path = dir.path().join("loop");
+            symlink("loop", &loop_path).unwrap();
+            let loop_error = touch_open_for_creation(&loop_path).unwrap_err();
+            assert!(!touch_open_error_is_directory(&loop_path, &loop_error));
+        }
+
+        #[test]
+        fn test_touch_open_error_message_omits_rust_errno_suffix() {
+            let error = io::Error::from_raw_os_error(ctcore::libc::ELOOP);
+
+            assert_eq!(
+                touch_open_error_message(OsStr::new("loop"), &error),
+                "cannot touch 'loop': Too many levels of symbolic links"
+            );
         }
 
         #[test]

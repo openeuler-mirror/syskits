@@ -1922,6 +1922,37 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C下重复-f必须按GNU作为幂等的被忽略选项处理，成功创建target且不得输出诊断。",
+            "args": ["-ff", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -f target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C、TZ=UTC0下--date不得把纯日期后的数值时区伪造为午夜时刻，必须按GNU拒绝2024-02-29 +0530且不创建目标。",
             "args": ["--date=2024-02-29 +0530", "target"],
             "expectation": {

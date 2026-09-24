@@ -447,6 +447,10 @@ impl TouchTimes {
     }
 }
 
+fn touch_option_is_set(matches: &ArgMatches, option: &str) -> bool {
+    matches.get_count(option) > 0
+}
+
 pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -514,7 +518,7 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
 
         let path = path_buf.as_path();
 
-        let md_result = if arg_matches.get_flag(touch_flags::TOUCH_NO_DEREF) {
+        let md_result = if touch_option_is_set(&arg_matches, touch_flags::TOUCH_NO_DEREF) {
             path.symlink_metadata()
         } else {
             path.metadata()
@@ -527,11 +531,11 @@ pub fn touch_main(args: impl ctcore::Args) -> CTResult<()> {
                 continue;
             }
 
-            if arg_matches.get_flag(touch_flags::TOUCH_NO_CREATE) {
+            if touch_option_is_set(&arg_matches, touch_flags::TOUCH_NO_CREATE) {
                 continue;
             }
 
-            if arg_matches.get_flag(touch_flags::TOUCH_NO_DEREF) {
+            if touch_option_is_set(&arg_matches, touch_flags::TOUCH_NO_DEREF) {
                 let err_message = format!(
                     "setting times of {}: No such file or directory",
                     filename.quote()
@@ -594,7 +598,7 @@ pub fn ct_app() -> Command {
         Arg::new(touch_flags::TOUCH_ACCESS)
             .short('a')
             .help(t!("touch.clap.touch_access"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(touch_flags::sources::TOUCH_TIMESTAMP)
             .short('t')
             .help(t!("touch.clap.touch_timestamp"))
@@ -611,12 +615,12 @@ pub fn ct_app() -> Command {
         Arg::new(touch_flags::TOUCH_MODIFICATION)
             .short('m')
             .help(t!("touch.clap.touch_modification"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(touch_flags::TOUCH_NO_CREATE)
             .short('c')
             .long(touch_flags::TOUCH_NO_CREATE)
             .help(t!("touch.clap.touch_no_create"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(touch_flags::TOUCH_NO_DEREF)
             .short('h')
             .long(touch_flags::TOUCH_NO_DEREF)
@@ -624,11 +628,11 @@ pub fn ct_app() -> Command {
                 "affect each symbolic link instead of any referenced file \
                      (only for systems that can change the timestamps of a symlink)",
             )
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(touch_flags::TOUCH_FORCE)
             .short('f')
             .help("(ignored)")
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(touch_flags::sources::TOUCH_REFERENCE)
             .short('r')
             .long(touch_flags::sources::TOUCH_REFERENCE)
@@ -688,7 +692,7 @@ fn touch_determine_times(matches: &ArgMatches, obs_time: Option<FileTime>) -> CT
         (Some(reference), Some(date)) => {
             let (a_time, m_time) = touch_stat(
                 Path::new(&reference),
-                !matches.get_flag(touch_flags::TOUCH_NO_DEREF),
+                !touch_option_is_set(matches, touch_flags::TOUCH_NO_DEREF),
             )?;
             let atime = touch_filetime_to_datetime(&a_time).ok_or_else(|| {
                 CtSimpleError::new(1, "Could not process the reference access time")
@@ -704,7 +708,7 @@ fn touch_determine_times(matches: &ArgMatches, obs_time: Option<FileTime>) -> CT
         (Some(reference), None) => {
             let (a_time, m_time) = touch_stat(
                 Path::new(&reference),
-                !matches.get_flag(touch_flags::TOUCH_NO_DEREF),
+                !touch_option_is_set(matches, touch_flags::TOUCH_NO_DEREF),
             )?;
             Ok(TouchTimes::timestamps(a_time, m_time))
         }
@@ -877,7 +881,7 @@ fn touch_set_times(
         } else {
             touch_set_times_on_fd(ctcore::libc::STDOUT_FILENO, times)
         };
-        if arg_matches.get_flag(touch_flags::TOUCH_NO_CREATE)
+        if touch_option_is_set(arg_matches, touch_flags::TOUCH_NO_CREATE)
             && result
                 .as_ref()
                 .is_err_and(|error| error.raw_os_error() == Some(ctcore::libc::EBADF))
@@ -887,7 +891,8 @@ fn touch_set_times(
         return result.map_err_context(|| format!("setting times of {}", file_name.quote()));
     }
 
-    let no_follow = file_name != "-" && arg_matches.get_flag(touch_flags::TOUCH_NO_DEREF);
+    let no_follow =
+        file_name != "-" && touch_option_is_set(arg_matches, touch_flags::TOUCH_NO_DEREF);
     let result = if let Some((a_time, m_time)) = times.as_timestamps() {
         if file_name == "-" {
             filetime::set_file_times(path, a_time, m_time)
@@ -926,8 +931,8 @@ fn touch_update_times(
 ) -> CTResult<()> {
     // 如果仅更改atime或mtime，则获取另一个的现有值。
     // 请注意，"-a"和"-m"可以一起传递；这不是xor。
-    if arg_matches.get_flag(touch_flags::TOUCH_ACCESS)
-        || arg_matches.get_flag(touch_flags::TOUCH_MODIFICATION)
+    if touch_option_is_set(arg_matches, touch_flags::TOUCH_ACCESS)
+        || touch_option_is_set(arg_matches, touch_flags::TOUCH_MODIFICATION)
         || arg_matches.contains_id(touch_flags::TOUCH_TIME)
     {
         let time_words = arg_matches
@@ -937,11 +942,13 @@ fn touch_update_times(
             .map(String::as_str)
             .collect::<Vec<_>>();
 
-        if !(arg_matches.get_flag(touch_flags::TOUCH_ACCESS) || time_words.contains(&"access")) {
+        if !(touch_option_is_set(arg_matches, touch_flags::TOUCH_ACCESS)
+            || time_words.contains(&"access"))
+        {
             times.access = TouchTime::Omit;
         }
 
-        if !(arg_matches.get_flag(touch_flags::TOUCH_MODIFICATION)
+        if !(touch_option_is_set(arg_matches, touch_flags::TOUCH_MODIFICATION)
             || time_words.contains(&"modify"))
         {
             times.modification = TouchTime::Omit;
@@ -2588,7 +2595,7 @@ mod tests {
             }
 
             let matches = result.unwrap();
-            assert!(!matches.get_flag(touch_flags::TOUCH_ACCESS));
+            assert!(!touch_option_is_set(&matches, touch_flags::TOUCH_ACCESS));
             assert_eq!(
                 matches
                     .get_many::<OsString>(TOUCH_ARG_FILES)
@@ -2642,6 +2649,21 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-a", file_name];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_accepts_repeated_boolean_options() {
+            for arguments in [
+                ["-aa", "file"],
+                ["-mm", "file"],
+                ["-cc", "file"],
+                ["-hh", "file"],
+                ["-ff", "file"],
+            ] {
+                ct_app()
+                    .try_get_matches_from([ctcore::ct_util_name(), arguments[0], arguments[1]])
+                    .expect("GNU-compatible repeated flag must be accepted");
+            }
         }
 
         #[test]

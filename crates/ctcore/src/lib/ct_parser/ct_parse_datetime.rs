@@ -1805,10 +1805,7 @@ fn gnu_has_multiple_timezones(input: &str) -> bool {
         })
         .count();
 
-    let numeric_count = input
-        .split_ascii_whitespace()
-        .filter(|field| is_gnu_numeric_timezone_offset(field))
-        .count();
+    let numeric_count = gnu_numeric_timezone_item_count(input);
     let attached_utc_count = input
         .as_bytes()
         .windows(2)
@@ -1816,6 +1813,109 @@ fn gnu_has_multiple_timezones(input: &str) -> bool {
         .count();
 
     named_count + military_count + numeric_count + attached_utc_count > 1
+}
+
+/// Count GNU numeric timezone items without confusing signed relative values
+/// such as `-5 days` for timezone offsets.  A numeric offset can either be a
+/// separate field or be directly attached to a clock, and the latter form can
+/// contain more than one offset in an invalid date string.
+fn gnu_numeric_timezone_item_count(input: &str) -> usize {
+    let fields = input.split_ascii_whitespace().collect::<Vec<_>>();
+
+    fields
+        .iter()
+        .enumerate()
+        .map(|(index, field)| {
+            let standalone = is_gnu_numeric_timezone_offset(field)
+                && !fields
+                    .get(index + 1)
+                    .is_some_and(|next| is_gnu_relative_time_unit(next));
+            usize::from(standalone) + gnu_attached_numeric_timezone_count(field)
+        })
+        .sum()
+}
+
+fn is_gnu_relative_time_unit(input: &str) -> bool {
+    matches!(
+        input.to_ascii_lowercase().as_str(),
+        "year"
+            | "years"
+            | "month"
+            | "months"
+            | "fortnight"
+            | "fortnights"
+            | "week"
+            | "weeks"
+            | "day"
+            | "days"
+            | "hour"
+            | "hours"
+            | "minute"
+            | "minutes"
+            | "min"
+            | "mins"
+            | "second"
+            | "seconds"
+            | "sec"
+            | "secs"
+    )
+}
+
+fn gnu_attached_numeric_timezone_count(field: &str) -> usize {
+    let bytes = field.as_bytes();
+    let mut count = 0;
+    let mut index = 0;
+
+    while index < bytes.len() {
+        if matches!(bytes[index], b'+' | b'-')
+            && gnu_numeric_timezone_follows_clock(field, index)
+            && let Some(end) = gnu_numeric_timezone_offset_end(bytes, index)
+        {
+            count += 1;
+            index = end;
+        } else {
+            index += 1;
+        }
+    }
+
+    count
+}
+
+fn gnu_numeric_timezone_follows_clock(field: &str, sign_index: usize) -> bool {
+    let prefix = &field[..sign_index];
+    if prefix.contains(':') {
+        return true;
+    }
+
+    let clock = if let Some((_, time)) = prefix.rsplit_once(['T', 't']) {
+        time.split(['+', '-']).next().unwrap_or_default()
+    } else {
+        let first_sign = prefix.find(['+', '-']).unwrap_or(sign_index);
+        &field[..first_sign]
+    };
+    (1..=2).contains(&clock.len()) && clock.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn gnu_numeric_timezone_offset_end(bytes: &[u8], sign_index: usize) -> Option<usize> {
+    let digits_start = sign_index.checked_add(1)?;
+    let digits_end = bytes[digits_start..]
+        .iter()
+        .position(|byte| !byte.is_ascii_digit())
+        .map_or(bytes.len(), |offset| digits_start + offset);
+    let hours_len = digits_end.checked_sub(digits_start)?;
+    if hours_len == 0 {
+        return None;
+    }
+
+    if bytes.get(digits_end) == Some(&b':') {
+        let minutes_end = digits_end.checked_add(3)?;
+        return ((1..=2).contains(&hours_len)
+            && bytes.get(digits_end + 1).is_some_and(u8::is_ascii_digit)
+            && bytes.get(digits_end + 2).is_some_and(u8::is_ascii_digit))
+        .then_some(minutes_end);
+    }
+
+    (1..=4).contains(&hours_len).then_some(digits_end)
 }
 
 fn is_gnu_numeric_timezone_offset(input: &str) -> bool {
@@ -3125,12 +3225,25 @@ mod tests {
             "A UTC",
             "12Z UTC",
             "2024-01-01 12:00 +0000 +0100",
+            "2024-01-01 12:00+0000 +0100",
+            "2024-01-01 12:00+0100 UTC",
         ] {
             assert!(
                 parse_datetime_gnu_compat(input, ref_time).is_err(),
                 "input {input} must be rejected"
             );
         }
+    }
+
+    #[test]
+    fn test_named_timezone_with_signed_relative_day_is_not_a_second_timezone() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("2024-01-01 12:00 UTC -5 days", ref_time)
+            .expect("GNU accepts a signed relative day after a named timezone");
+        assert_eq!(
+            parsed.with_timezone(&Utc),
+            Utc.with_ymd_and_hms(2023, 12, 27, 12, 0, 0).unwrap()
+        );
     }
 
     #[test]

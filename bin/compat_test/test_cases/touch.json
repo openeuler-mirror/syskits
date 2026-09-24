@@ -2309,6 +2309,33 @@
             "cleanup_commands": [
                 "rm -f target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C下默认跟随的循环符号链接必须保留GNU先open失败的诊断优先级，报告cannot touch而不是setting times of。",
+            "setup_commands": [
+                "ln -s loop loop"
+            ],
+            "args": ["loop"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: cannot touch 'loop': Too many levels of symbolic links\n"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f loop"
+            ]
         }
     ]
 }

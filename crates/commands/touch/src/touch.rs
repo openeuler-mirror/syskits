@@ -452,6 +452,12 @@ fn touch_parse_full_naive_date(input: &str, format: &str) -> Option<NaiveDate> {
     remainder.is_empty().then_some(date)
 }
 
+fn touch_parse_posix_locale_datetime<T: TimeZone>(input: &str, timezone: T) -> Option<FileTime> {
+    let parsed = touch_parse_full_naive_datetime(input, touch_format::POSIX_LOCALE)?;
+    touch_select_local_datetime(timezone, parsed)
+        .map(|datetime| touch_datetime_to_filetime(&datetime))
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TouchTime {
     Now,
@@ -1088,8 +1094,8 @@ fn touch_parse_date(ref_time: DateTime<Local>, s: &str) -> CTResult<FileTime> {
     // 周二12月3日...
     // ("%c", POSIX_LOCALE_FORMAT),
     //
-    if let Some(parsed) = touch_parse_full_naive_datetime(s, touch_format::POSIX_LOCALE) {
-        return Ok(touch_datetime_to_filetime(&parsed.and_utc()));
+    if let Some(parsed) = touch_parse_posix_locale_datetime(s, Local) {
+        return Ok(parsed);
     }
 
     // 使用GNU coreutils兼容的日期解析器
@@ -3225,7 +3231,19 @@ mod tests {
     #[cfg(test)]
     mod date_parsing_tests {
         use super::*;
-        use chrono::{Datelike, Local, TimeZone, Weekday};
+        use chrono::{Datelike, FixedOffset, Local, TimeZone, Weekday};
+
+        #[test]
+        fn test_parse_posix_locale_datetime_uses_local_wall_time() {
+            let new_york_standard_time = FixedOffset::west_opt(5 * 60 * 60).unwrap();
+            let parsed = touch_parse_posix_locale_datetime(
+                "Mon Jan  1 12:00:00 2024",
+                new_york_standard_time,
+            )
+            .unwrap();
+
+            assert_eq!(parsed, FileTime::from_unix_time(1_704_128_400, 0));
+        }
 
         #[test]
         fn test_parse_weekday_next_friday() {

@@ -3182,9 +3182,10 @@ fn strip_weekday_from_explicit_date(input: &str) -> Option<String> {
     Some(remaining.join(" "))
 }
 
-/// A number after a word-month day is the explicit year, not the ordinal of
-/// the following weekday.  GNU parses date and day items independently, then
-/// ignores the day item when an explicit date is present.
+/// GNU recognizes a word-month year without a comma only in DAY MONTH YEAR order.
+/// In MONTH DAY NUMBER WEEKDAY, the date item is only MONTH DAY and the number
+/// belongs to the weekday item.  A comma after DAY makes MONTH DAY, YEAR an
+/// explicit date.
 fn gnu_word_month_year_precedes_weekday(parts: &[&str], weekday_index: usize) -> bool {
     let Some(year) = weekday_index
         .checked_sub(1)
@@ -3207,7 +3208,7 @@ fn gnu_word_month_year_precedes_weekday(parts: &[&str], weekday_index: usize) ->
 
     is_gnu_date_number(year)
         && ((is_gnu_date_number(day) && is_gnu_month_name(month))
-            || (is_gnu_month_name(day) && is_gnu_date_number(month)))
+            || (is_gnu_month_name(day) && month.ends_with(',') && is_gnu_date_number(month)))
 }
 
 /// 解析包含星期几名称的表达式
@@ -3941,8 +3942,27 @@ mod tests {
                 Utc.with_ymd_and_hms(2024, 2, 29, 12, 34, 56).unwrap(),
             ),
             (
-                "Feb 29 2024 Thu 12:34:56 UTC",
+                "Feb 29, 2024 Thu 12:34:56 UTC",
                 Utc.with_ymd_and_hms(2024, 2, 29, 12, 34, 56).unwrap(),
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_parse_gnu_uncomma_month_day_number_as_weekday_ordinal() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, expected) in [
+            (
+                "Jan 2 2024 Thu UTC",
+                Utc.with_ymd_and_hms(2025, 1, 2, 0, 0, 0).unwrap(),
+            ),
+            (
+                "Sep 24 7 Thu UTC",
+                Utc.with_ymd_and_hms(2025, 9, 24, 0, 0, 0).unwrap(),
             ),
         ] {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();

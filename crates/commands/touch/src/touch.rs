@@ -245,21 +245,17 @@ fn touch_prepare_args_with_mode(
         }
 
         let short_options = &bytes[1..];
-        if let Some(unknown) = short_options
-            .iter()
-            .find(|option| !TOUCH_SHORT_OPTIONS.contains(option))
-        {
-            let mut message = b"invalid option -- '".to_vec();
-            message.push(*unknown);
-            message.push(b'\'');
-            return Err(TouchUsageError::boxed(message));
-        }
-
-        if let Some(value_index) = short_options
-            .iter()
-            .position(|option| matches!(option, b'd' | b'r' | b't'))
-        {
-            expects_value = value_index + 1 == short_options.len();
+        for (index, option) in short_options.iter().enumerate() {
+            if matches!(option, b'd' | b'r' | b't') {
+                expects_value = index + 1 == short_options.len();
+                break;
+            }
+            if !TOUCH_SHORT_OPTIONS.contains(option) {
+                let mut message = b"invalid option -- '".to_vec();
+                message.push(*option);
+                message.push(b'\'');
+                return Err(TouchUsageError::boxed(message));
+            }
         }
     }
 
@@ -2593,6 +2589,17 @@ mod tests {
                 touch_prepare_args_with_mode(posix_args.clone().into_iter(), true).unwrap(),
                 posix_args
             );
+        }
+
+        #[test]
+        fn test_touch_prepare_args_preserves_attached_short_option_values() {
+            for argument in ["-d2024-02-29", "-t202402290000", "-r--"] {
+                let args = [OsString::from("touch"), OsString::from(argument)];
+                assert_eq!(
+                    touch_prepare_args_with_mode(args.clone().into_iter(), false).unwrap(),
+                    args
+                );
+            }
         }
 
         #[test]

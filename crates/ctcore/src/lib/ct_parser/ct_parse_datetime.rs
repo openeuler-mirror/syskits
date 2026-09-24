@@ -321,6 +321,14 @@ fn parse_datetime_gnu_compat_impl(
         );
     }
 
+    if let Some(normalized) = normalize_gnu_lowercase_iso_separator(input_trim) {
+        return parse_datetime_gnu_compat_impl(
+            &normalized,
+            reference_time,
+            normalized_extended_year,
+        );
+    }
+
     // GNU ignores a weekday when an explicit date is also present.
     if let Some(input_without_weekday) = strip_weekday_from_explicit_date(input_trim) {
         return parse_datetime_gnu_compat_impl(
@@ -967,6 +975,17 @@ fn gnu_rejects_space_separated_numeric_date(input: &str) -> bool {
     [first, second, third]
         .iter()
         .all(|field| field.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
+/// GNU's lexer treats a lowercase `t` immediately after an ISO date as the
+/// ISO 8601 date-time separator. Restrict normalization to that position so
+/// an unrelated `t` token keeps its GNU grammar meaning.
+fn normalize_gnu_lowercase_iso_separator(input: &str) -> Option<String> {
+    let separator = input.bytes().position(|byte| byte == b't')?;
+    let date = &input[..separator];
+    NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()?;
+
+    Some(format!("{date}T{}", &input[separator + 1..]))
 }
 
 /// Normalize the two dotted-word forms accepted by GNU `parse-datetime`.
@@ -3158,6 +3177,18 @@ mod tests {
             parsed.with_timezone(&Utc).time(),
             NaiveTime::from_hms_opt(7, 0, 0).unwrap()
         );
+    }
+
+    #[test]
+    fn test_parse_gnu_iso_datetime_with_lowercase_t_separator() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("2024-02-29t12:34:56", ref_time).unwrap();
+
+        assert_eq!(
+            parsed.date_naive(),
+            NaiveDate::from_ymd_opt(2024, 2, 29).unwrap()
+        );
+        assert_eq!(parsed.time(), NaiveTime::from_hms_opt(12, 34, 56).unwrap());
     }
 
     #[test]

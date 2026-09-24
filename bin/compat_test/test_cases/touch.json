@@ -2939,6 +2939,40 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下ISO 8601日期时间的小写t分隔符必须按GNU等同大写T；2024-02-29t12:34:56必须设置对应UTC时刻。",
+            "args": [
+                "--date=2024-02-29t12:34:56",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %.9Y target",
+                        "expected_exit": 0,
+                        "expected_stdout": "1709210096.000000000"
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C、TZ=UTC0下显式词月日期前的星期项必须按GNU忽略；Thu, 29 Feb 2024 12:34:56 UTC必须设置target为对应UTC时刻。",
             "args": [
                 "--date=Thu, 29 Feb 2024 12:34:56 UTC",

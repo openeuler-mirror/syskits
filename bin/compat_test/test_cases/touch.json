@@ -2478,6 +2478,37 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date必须接受GNU完整英文月名日期January 1 1970，并把target设为epoch零点。",
+            "args": ["--date=January 1 1970", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c %.9Y target",
+                        "expected_exit": 0,
+                        "expected_stdout": "0.000000000"
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "TZ=America/New_York、_POSIX2_VERSION=199209和POSIXLY_CORRECT=1下，旧式1031013099位于DST回拨重叠时刻，必须按GNU识别为时间戳、选择较早实例且不得创建同名文件。",
             "args": ["1031013099", "target"],
             "expectation": {

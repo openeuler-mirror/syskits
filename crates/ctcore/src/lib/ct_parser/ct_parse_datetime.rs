@@ -630,7 +630,6 @@ fn parse_datetime_gnu_compat_impl(
                 } else {
                     &amount_part
                 };
-
                 if amount_abs.contains(['.', ','])
                     && !matches!(suffix, " second" | " seconds" | " sec" | " secs")
                 {
@@ -1650,7 +1649,11 @@ fn gnu_rejects_iso_date_followed_by_standalone_t_timezone(input: &str) -> bool {
         return false;
     }
 
-    let mut date_fields = date.split('-');
+    gnu_hyphenated_numeric_date(date)
+}
+
+fn gnu_hyphenated_numeric_date(input: &str) -> bool {
+    let mut date_fields = input.split('-');
     let Some(year) = date_fields.next() else {
         return false;
     };
@@ -1697,30 +1700,48 @@ fn parse_military_timezone_only(
     }
 }
 
-/// Parse a GNU military timezone used as a standalone item after a date/time.
+/// Parse a GNU military timezone used as a standalone date-time item.
 ///
-/// GNU's grammar accepts a zone token independently, for example
-/// `2024-01-01 12:34 A`.  `J` denotes local time; all other military letters
-/// represent fixed UTC offsets.
+/// GNU's grammar accepts a zone token before or after other items, for example
+/// `A day ago` and `2024-01-01 12:34 A`. `J` denotes local time; all other
+/// military letters represent fixed UTC offsets.
 fn parse_gnu_military_timezone(
     input: &str,
     reference_time: DateTime<Local>,
     normalized_extended_year: bool,
 ) -> Option<DateTime<Local>> {
-    let zone = input.split_ascii_whitespace().next_back()?;
-    let mut chars = zone.chars();
-    let zone_char = chars.next()?;
-    if chars.next().is_some() {
+    let fields = input.split_ascii_whitespace().collect::<Vec<_>>();
+    if fields.len() < 2 {
         return None;
     }
 
-    let offset_hours = military_timezone_offset_hours(zone_char)?;
-    let wall_time_input = input[..input.len().checked_sub(zone.len())?].trim_end();
-    if wall_time_input.is_empty() {
+    let (zone_index, zone_char, offset_hours) =
+        fields.iter().enumerate().find_map(|(index, field)| {
+            let mut chars = field.chars();
+            let zone_char = chars.next()?;
+            chars.next().is_none().then(|| {
+                military_timezone_offset_hours(zone_char)
+                    .map(|offset_hours| (index, zone_char, offset_hours))
+            })?
+        })?;
+
+    // A standalone T/t immediately after a hyphenated date starts GNU's ISO
+    // date-time production, which requires an explicit time field.
+    if zone_char.eq_ignore_ascii_case(&'t')
+        && zone_index > 0
+        && gnu_hyphenated_numeric_date(fields[zone_index - 1])
+    {
         return None;
     }
+
+    let wall_time_input = fields
+        .iter()
+        .enumerate()
+        .filter_map(|(index, field)| (index != zone_index).then_some(*field))
+        .collect::<Vec<_>>()
+        .join(" ");
     let wall_time =
-        parse_datetime_gnu_compat_impl(wall_time_input, reference_time, normalized_extended_year)
+        parse_datetime_gnu_compat_impl(&wall_time_input, reference_time, normalized_extended_year)
             .ok()?;
 
     let Some(offset_hours) = offset_hours else {
@@ -3370,6 +3391,20 @@ mod tests {
             assert_eq!(
                 parsed.timestamp(),
                 base.timestamp() + offset_seconds,
+                "input {input}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_parse_gnu_military_timezone_with_relative_date() {
+        let ref_time = Local.timestamp_opt(1_000_000, 0).unwrap();
+
+        for input in ["a day ago", "day ago a"] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(
+                parsed.timestamp(),
+                ref_time.timestamp() - 90_000,
                 "input {input}"
             );
         }

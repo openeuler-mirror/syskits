@@ -2273,6 +2273,42 @@
             "cleanup_commands": [
                 "rm -f reference target"
             ]
+        },
+        {
+            "byteMode": true,
+            "tstdin": "",
+            "command": "touch",
+            "description": "原始字节时间戳用例：LC_ALL=C；-t后的输入十六进制为3230323430323239313233342ec3a9（202402291234.后接UTF-8字节c3a9），必须按GNU拒绝并在stderr将该字节转义为\\303\\251，且不得创建target。",
+            "args": [
+                "2d74",
+                "3230323430323239313233342ec3a9",
+                "746172676574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "746f7563683a20696e76616c6964206461746520666f726d617420273230323430323239313233342e5c3330335c323531270a"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
         }
     ]
 }

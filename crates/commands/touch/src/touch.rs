@@ -1063,13 +1063,13 @@ fn parse_timestamp(s: &str) -> CTResult<FileTime> {
     };
 
     let local = NaiveDateTime::parse_from_str(&ts, format)
-        .map_err(|_| CtSimpleError::new(1, format!("invalid date ts format {}", ts.quote())))?;
+        .map_err(|_| CtSimpleError::new(1, format!("invalid date format {}", s.quote())))?;
     let mut local = match chrono::Local.from_local_datetime(&local) {
         LocalResult::Single(dt) => dt,
         _ => {
             return Err(CtSimpleError::new(
                 1,
-                format!("invalid date ts format {}", ts.quote()),
+                format!("invalid date format {}", s.quote()),
             ));
         }
     };
@@ -1545,7 +1545,10 @@ mod tests {
             // 测试无效的时间部分
             let timestamp_str = "202406150860"; // 无效的时间
             let result = parse_timestamp(timestamp_str);
-            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "invalid date format '202406150860'"
+            );
 
             // 测试无效的日期部分
             let timestamp_str = "202413150830"; // 无效的月份

@@ -1939,10 +1939,23 @@ mod tests {
         fn parse_date_rejects_numeric_timezone_after_meridian() {
             let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
 
-            assert!(
-                touch_parse_date(reference, "2024-02-29 7:30pm +0200").is_err(),
-                "GNU rejects a numeric timezone after a meridian clock"
-            );
+            for input in ["2024-02-29 7:30pm +0200", "2024-02-29 7:30pm + 2"] {
+                assert!(
+                    touch_parse_date(reference, input).is_err(),
+                    "GNU rejects a numeric timezone after a meridian clock: {input}"
+                );
+            }
+        }
+
+        #[test]
+        fn parse_date_accepts_whitespace_after_numeric_timezone_sign() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            let parsed = touch_parse_date(reference, "2024-02-29 12:34:56 + 2:30").unwrap();
+            let expected = Utc.with_ymd_and_hms(2024, 2, 29, 10, 4, 56).unwrap();
+
+            assert_eq!(parsed.unix_seconds(), expected.timestamp());
+            assert_eq!(parsed.nanoseconds(), 0);
         }
 
         #[test]

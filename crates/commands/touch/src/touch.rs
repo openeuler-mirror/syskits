@@ -1087,6 +1087,15 @@ fn touch_parse_date(ref_time: DateTime<Local>, s: &str) -> CTResult<FileTime> {
         }
     }
 
+    // Chrono represents a `:60` leap second with a one-billion-nanosecond
+    // value. GNU parse-datetime rejects it before any target is created.
+    if ct_parse_datetime::contains_leap_second(s) {
+        return Err(CtSimpleError::new(
+            1,
+            touch_invalid_date_format(s.as_bytes()),
+        ));
+    }
+
     // "当前语言环境的首选日期和时间表示。"
     // "(在POSIX语言环境中这相当于%a %b %e %H:%M:%S %Y。)"
     // time 0.1.43将其解析为'a b e T Y'
@@ -3470,6 +3479,18 @@ mod tests {
                 assert!(
                     result.is_err(),
                     "Expected '{case}' to fail parsing, but it succeeded"
+                );
+            }
+        }
+
+        #[test]
+        fn test_parse_date_rejects_leap_second() {
+            let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            for input in ["2024-01-01 12:34:60", "Mon Jan  1 12:34:60 2024"] {
+                assert!(
+                    touch_parse_date(ref_time, input).is_err(),
+                    "input {input} should be rejected"
                 );
             }
         }

@@ -1567,6 +1567,8 @@ fn parse_gnu_month_day_time(
 
     let time = if short_hour {
         NaiveTime::from_hms_opt(clock.parse().ok()?, 0, 0)
+    } else if let Some((clock, meridian)) = split_gnu_meridian_suffix(clock) {
+        parse_gnu_meridian_clock(clock, meridian)
     } else {
         parse_gnu_24_hour_clock(clock)
     };
@@ -4278,6 +4280,22 @@ mod tests {
             parsed.with_timezone(&Utc),
             Utc.with_ymd_and_hms(2025, 9, 24, 0, 0, 0).unwrap()
         );
+    }
+
+    #[test]
+    fn test_parse_gnu_month_day_time_accepts_attached_meridian() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, hour, minute) in [("Sep 24 7pm UTC", 19, 0), ("Sep 24 7:30pm UTC", 19, 30)] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            let parsed = parsed.with_timezone(&Utc);
+
+            assert_eq!(parsed.year(), 2025, "input {input}");
+            assert_eq!(parsed.month(), 9, "input {input}");
+            assert_eq!(parsed.day(), 24, "input {input}");
+            assert_eq!(parsed.hour(), hour, "input {input}");
+            assert_eq!(parsed.minute(), minute, "input {input}");
+        }
     }
 
     #[test]

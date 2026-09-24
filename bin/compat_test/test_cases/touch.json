@@ -3741,6 +3741,45 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下月名日期后的时钟可紧邻pm；Sep 24 7:30pm UTC必须使用reference年份并设置为19:30 UTC。",
+            "setup_commands": [
+                "/usr/bin/touch -d '2025-01-01 UTC' reference"
+            ],
+            "args": [
+                "-r",
+                "reference",
+                "--date=Sep 24 7:30pm UTC",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '1758742200.000000000'",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f reference target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C、TZ=UTC0下无逗号月名日期后的短数字必须按GNU解析为时刻；Sep 24 7 UTC使用reference年份并设置07:00。",
             "setup_commands": [
                 "/usr/bin/touch -d '2025-01-01 UTC' reference"

@@ -1925,6 +1925,17 @@ mod tests {
         }
 
         #[test]
+        fn parse_date_accepts_attached_meridian_after_month_day() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            let parsed = touch_parse_date(reference, "Sep 24 7:30pm UTC").unwrap();
+            let expected = Utc.with_ymd_and_hms(2025, 9, 24, 19, 30, 0).unwrap();
+
+            assert_eq!(parsed.unix_seconds(), expected.timestamp());
+            assert_eq!(parsed.nanoseconds(), 0);
+        }
+
+        #[test]
         fn parse_date_treats_short_number_after_month_day_as_time() {
             let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
 

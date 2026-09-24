@@ -2905,6 +2905,40 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下三个空格分隔的纯数字字段不是GNU日期语法；2024 02 29必须报invalid date format且不得创建target。",
+            "args": [
+                "--date=2024 02 29",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: invalid date format '2024 02 29'\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C、TZ=UTC0下显式词月日期前的星期项必须按GNU忽略；Thu, 29 Feb 2024 12:34:56 UTC必须设置target为对应UTC时刻。",
             "args": [
                 "--date=Thu, 29 Feb 2024 12:34:56 UTC",

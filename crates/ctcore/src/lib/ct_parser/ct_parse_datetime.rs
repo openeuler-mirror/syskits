@@ -3126,7 +3126,9 @@ fn strip_weekday_from_explicit_date(input: &str) -> Option<String> {
         .position(|part| parse_weekday_name(part).is_some())?;
     let weekday_start = if weekday_index > 0 {
         let modifier = parts[weekday_index - 1];
-        if parse_weekday_ordinal(modifier).is_some() {
+        if parse_weekday_ordinal(modifier).is_some()
+            && !gnu_word_month_year_precedes_weekday(&parts, weekday_index)
+        {
             weekday_index - 1
         } else {
             weekday_index
@@ -3161,6 +3163,34 @@ fn strip_weekday_from_explicit_date(input: &str) -> Option<String> {
     }
 
     Some(remaining.join(" "))
+}
+
+/// A number after a word-month day is the explicit year, not the ordinal of
+/// the following weekday.  GNU parses date and day items independently, then
+/// ignores the day item when an explicit date is present.
+fn gnu_word_month_year_precedes_weekday(parts: &[&str], weekday_index: usize) -> bool {
+    let Some(year) = weekday_index
+        .checked_sub(1)
+        .and_then(|index| parts.get(index))
+    else {
+        return false;
+    };
+    let Some(month) = weekday_index
+        .checked_sub(2)
+        .and_then(|index| parts.get(index))
+    else {
+        return false;
+    };
+    let Some(day) = weekday_index
+        .checked_sub(3)
+        .and_then(|index| parts.get(index))
+    else {
+        return false;
+    };
+
+    is_gnu_date_number(year)
+        && ((is_gnu_date_number(day) && is_gnu_month_name(month))
+            || (is_gnu_month_name(day) && is_gnu_date_number(month)))
 }
 
 /// 解析包含星期几名称的表达式
@@ -3887,6 +3917,14 @@ mod tests {
             ),
             (
                 "Thu, 29 Feb 2024 12:34:56 UTC",
+                Utc.with_ymd_and_hms(2024, 2, 29, 12, 34, 56).unwrap(),
+            ),
+            (
+                "29 Feb 2024 Thu 12:34:56 UTC",
+                Utc.with_ymd_and_hms(2024, 2, 29, 12, 34, 56).unwrap(),
+            ),
+            (
+                "Feb 29 2024 Thu 12:34:56 UTC",
                 Utc.with_ymd_and_hms(2024, 2, 29, 12, 34, 56).unwrap(),
             ),
         ] {

@@ -2420,6 +2420,29 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "byteMode": true,
+            "tstdin": "",
+            "command": "touch",
+            "description": "原始字节路径用例：LC_ALL=C；参数十六进制ff2f6d697373696e67（0xff/missing）无法创建时，stderr必须使用GNU quoteaf的''$'\\377''/missing分段八进制转义。",
+            "args": ["ff2f6d697373696e67"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "746f7563683a2063616e6e6f7420746f75636820272724275c33373727272f6d697373696e67273a204e6f20737563682066696c65206f72206469726563746f72790a"
+                }
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

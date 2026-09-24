@@ -84,6 +84,27 @@ enum TouchLongOptionMatch {
     Ambiguous(Vec<&'static str>),
 }
 
+#[derive(Clone, Copy)]
+enum TouchPendingValue {
+    Long(&'static str),
+    Short(u8),
+}
+
+impl TouchPendingValue {
+    fn requires_time_word_validation(self) -> bool {
+        matches!(self, Self::Long("time"))
+    }
+
+    fn missing_value_diagnostic(self) -> Vec<u8> {
+        match self {
+            Self::Long(option) => format!("option '--{option}' requires an argument").into_bytes(),
+            Self::Short(option) => {
+                format!("option requires an argument -- '{}'", option as char).into_bytes()
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 struct TouchUsageError {
     message: Vec<u8>,
@@ -156,14 +177,11 @@ fn touch_prepare_args_with_mode(
 ) -> CTResult<Vec<OsString>> {
     let args = args.collect::<Vec<_>>();
     let mut parse_options = true;
-    let mut expects_value = false;
-    let mut expects_time_word = false;
+    let mut pending_value: Option<TouchPendingValue> = None;
 
     for argument in args.iter().skip(1) {
-        if expects_value {
-            expects_value = false;
-            if expects_time_word {
-                expects_time_word = false;
+        if let Some(option) = pending_value.take() {
+            if option.requires_time_word_validation() {
                 touch_validate_time_word(argument.as_encoded_bytes())?;
             }
             continue;
@@ -229,8 +247,7 @@ fn touch_prepare_args_with_mode(
                     canonical,
                     takes_value: true,
                 } if separator.is_none() => {
-                    expects_value = true;
-                    expects_time_word = canonical == "time";
+                    pending_value = Some(TouchPendingValue::Long(canonical));
                 }
                 TouchLongOptionMatch::Recognized {
                     canonical: "time",
@@ -247,7 +264,9 @@ fn touch_prepare_args_with_mode(
         let short_options = &bytes[1..];
         for (index, option) in short_options.iter().enumerate() {
             if matches!(option, b'd' | b'r' | b't') {
-                expects_value = index + 1 == short_options.len();
+                if index + 1 == short_options.len() {
+                    pending_value = Some(TouchPendingValue::Short(*option));
+                }
                 break;
             }
             if !TOUCH_SHORT_OPTIONS.contains(option) {
@@ -257,6 +276,10 @@ fn touch_prepare_args_with_mode(
                 return Err(TouchUsageError::boxed(message));
             }
         }
+    }
+
+    if let Some(option) = pending_value {
+        return Err(TouchUsageError::boxed(option.missing_value_diagnostic()));
     }
 
     Ok(args)
@@ -2638,6 +2661,32 @@ mod tests {
                     false,
                 )
                 .expect_err("GNU option error must be detected before clap");
+                assert_eq!(error.diagnostic_bytes().as_ref(), expected);
+                assert!(error.usage());
+            }
+        }
+
+        #[test]
+        fn test_touch_prepare_args_uses_gnu_missing_option_value_diagnostics() {
+            let cases = [
+                ("--date", b"option '--date' requires an argument".as_slice()),
+                ("--da", b"option '--date' requires an argument".as_slice()),
+                (
+                    "--reference",
+                    b"option '--reference' requires an argument".as_slice(),
+                ),
+                ("--time", b"option '--time' requires an argument".as_slice()),
+                ("-d", b"option requires an argument -- 'd'".as_slice()),
+                ("-r", b"option requires an argument -- 'r'".as_slice()),
+                ("-t", b"option requires an argument -- 't'".as_slice()),
+            ];
+
+            for (argument, expected) in cases {
+                let error = touch_prepare_args_with_mode(
+                    [OsString::from("touch"), OsString::from(argument)].into_iter(),
+                    false,
+                )
+                .expect_err("GNU missing option value must be detected before clap");
                 assert_eq!(error.diagnostic_bytes().as_ref(), expected);
                 assert!(error.usage());
             }

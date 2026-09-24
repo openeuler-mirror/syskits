@@ -487,6 +487,12 @@ fn parse_datetime_gnu_compat_impl(
         return Ok(dt);
     }
 
+    if let Some(datetime) = parse_gnu_month_day_short_number_as_time(input_trim, reference_time) {
+        return datetime.ok_or_else(|| ParseDateTimeError {
+            message: format!("Unable to parse date: {input}"),
+        });
+    }
+
     if let Some(dt) = parse_gnu_named_timezone(input_trim, reference_time, normalized_extended_year)
     {
         return Ok(dt);
@@ -1299,6 +1305,52 @@ fn parse_gnu_date_without_year(
         chrono::LocalResult::Single(dt) | chrono::LocalResult::Ambiguous(dt, _) => Some(dt),
         chrono::LocalResult::None => None,
     }
+}
+
+/// Parse GNU's unseparated `MONTH DAY HOUR` form.
+///
+/// After `tMONTH tUNUMBER` has formed a date, GNU's grammar sends a one- or
+/// two-digit following number through its time parser.  Only a number with at
+/// least three digits is interpreted as a year in this position.
+fn parse_gnu_month_day_short_number_as_time(
+    input: &str,
+    reference_time: DateTime<Local>,
+) -> Option<Option<DateTime<Local>>> {
+    let mut fields = input.split_ascii_whitespace().collect::<Vec<_>>();
+    let mut offset_seconds = None;
+
+    if let Some(index) = fields.iter().position(|field| {
+        GNU_NAMED_TIMEZONES
+            .iter()
+            .any(|(name, _)| field.eq_ignore_ascii_case(name))
+    }) {
+        let (_, offset) = GNU_NAMED_TIMEZONES
+            .iter()
+            .find(|(name, _)| fields[index].eq_ignore_ascii_case(name))?;
+        offset_seconds = Some(*offset);
+        fields.remove(index);
+    }
+
+    let [month, day, hour] = fields.as_slice() else {
+        return None;
+    };
+    let month = gnu_month_number(month)?;
+    let day = day.parse::<u32>().ok()?;
+    if !(1..=2).contains(&hour.len()) || !hour.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let hour = hour.parse::<u32>().ok()?;
+    let datetime = NaiveDate::from_ymd_opt(reference_time.year(), month, day)
+        .and_then(|date| date.and_hms_opt(hour, 0, 0));
+
+    Some(datetime.and_then(|datetime| {
+        match offset_seconds {
+            Some(offset_seconds) => FixedOffset::east_opt(offset_seconds)
+                .and_then(|offset| offset.from_local_datetime(&datetime).earliest())
+                .map(|datetime| datetime.with_timezone(&Local)),
+            None => resolve_local_datetime_gnu_compat(datetime),
+        }
+    }))
 }
 
 fn parse_gnu_iso_hour(input: &str) -> Option<NaiveDateTime> {
@@ -3864,6 +3916,27 @@ mod tests {
             );
             assert_eq!(parsed.with_timezone(&Utc).month(), 9, "input {input}");
             assert_eq!(parsed.with_timezone(&Utc).day(), 24, "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_parse_gnu_month_day_short_number_as_time() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, hour) in [("Sep 24 7 UTC", 7), ("Sep 24 12 UTC", 12)] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            let parsed = parsed.with_timezone(&Utc);
+            assert_eq!(parsed.year(), 2025, "input {input}");
+            assert_eq!(parsed.month(), 9, "input {input}");
+            assert_eq!(parsed.day(), 24, "input {input}");
+            assert_eq!(parsed.hour(), hour, "input {input}");
+        }
+
+        for input in ["Sep 24 24 UTC", "Sep 24 69 UTC"] {
+            assert!(
+                parse_datetime_gnu_compat(input, ref_time).is_err(),
+                "input {input}"
+            );
         }
     }
 

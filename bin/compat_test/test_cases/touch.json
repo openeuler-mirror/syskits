@@ -3814,6 +3814,40 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下24小时制时钟后的数值时区允许符号后空白；2024-02-29 12:34:56 + 2:30必须按GNU设置为10:04:56 UTC。",
+            "args": [
+                "--date=2024-02-29 12:34:56 + 2:30",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '1709201096.000000000'",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C、TZ=UTC0下12小时制时钟后的数值时区不是GNU允许的组合；2024-02-29 7:30pm +0200必须报非法日期且不得创建target。",
             "args": [
                 "--date=2024-02-29 7:30pm +0200",

@@ -1984,7 +1984,7 @@ fn parse_gnu_numeric_timezone(
     normalized_extended_year: bool,
 ) -> Option<DateTime<Local>> {
     let sign_index = input.rfind(['+', '-'])?;
-    let zone = &input[sign_index + 1..];
+    let zone = input[sign_index + 1..].trim_start();
 
     let wall_time_input = input[..sign_index].trim_end();
     let last_word = wall_time_input.split_ascii_whitespace().next_back()?;
@@ -2084,7 +2084,15 @@ fn gnu_rejects_meridian_time_with_numeric_timezone(input: &str) -> bool {
             && !fields
                 .get(index + 1)
                 .is_some_and(|next| is_gnu_relative_time_unit(next));
-        standalone || gnu_attached_numeric_timezone_count(field) > 0
+        let separated_sign = matches!(*field, "+" | "-")
+            && fields.get(index + 1).is_some_and(|offset| {
+                let numeric_offset = format!("{field}{offset}");
+                is_gnu_numeric_timezone_offset(&numeric_offset)
+                    && !fields
+                        .get(index + 2)
+                        .is_some_and(|next| is_gnu_relative_time_unit(next))
+            });
+        standalone || separated_sign || gnu_attached_numeric_timezone_count(field) > 0
     });
 
     let meridian_fields = fields
@@ -4079,6 +4087,9 @@ mod tests {
         for (input, expected_utc) in [
             ("2024-01-01 12:00 +530", (2024, 1, 1, 6, 30, 0)),
             ("2024-01-01 12:00 -530", (2024, 1, 1, 17, 30, 0)),
+            ("2024-01-01 12:00 + 2", (2024, 1, 1, 10, 0, 0)),
+            ("2024-01-01 12:00 + 2:30", (2024, 1, 1, 9, 30, 0)),
+            ("2024-01-01 12:00 - 2", (2024, 1, 1, 14, 0, 0)),
             ("2024-01-01 12:00 +1260", (2023, 12, 31, 23, 0, 0)),
             ("2024-01-01 12:00 +2400", (2023, 12, 31, 12, 0, 0)),
         ] {

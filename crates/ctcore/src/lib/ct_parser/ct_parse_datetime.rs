@@ -533,7 +533,7 @@ fn parse_datetime_gnu_compat_impl(
         }
     }
 
-    if let Some(dt) = parse_gnu_iso_utc_without_minutes(&normalized_input) {
+    if let Some(dt) = parse_gnu_utc_date(&normalized_input) {
         return Ok(dt);
     }
 
@@ -1526,22 +1526,13 @@ fn parse_compact_time_of_day(
     }
 }
 
-/// Parse ISO UTC forms whose omitted minute field cannot be represented by
-/// chrono's `DateTime::parse_from_str` formats.
-fn parse_gnu_iso_utc_without_minutes(input: &str) -> Option<DateTime<Local>> {
-    let date_or_hour = input.strip_suffix("+0000")?;
-    let naive = if let Ok(date) = NaiveDate::parse_from_str(date_or_hour, "%Y-%m-%d") {
-        date.and_hms_opt(0, 0, 0)?
-    } else {
-        let (date, hour) = date_or_hour
-            .split_once('T')
-            .or_else(|| date_or_hour.split_once(' '))?;
-        if hour.contains(':') {
-            return None;
-        }
-        let date = NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()?;
-        date.and_hms_opt(hour.parse().ok()?, 0, 0)?
-    };
+/// Parse a GNU date-only UTC form after its `Z`, `UTC`, or `GMT` suffix has
+/// been normalized to `+0000`.
+fn parse_gnu_utc_date(input: &str) -> Option<DateTime<Local>> {
+    let date = input.strip_suffix("+0000")?;
+    let naive = NaiveDate::parse_from_str(date, "%Y-%m-%d")
+        .ok()?
+        .and_hms_opt(0, 0, 0)?;
 
     Some(DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc).with_timezone(&Local))
 }
@@ -2282,7 +2273,6 @@ mod tests {
 
         for (input, expected_hour, expected_minute) in [
             ("2024-02-29Z", 0, 0),
-            ("2024-02-29T12Z", 12, 0),
             ("2024-02-29T12:34Z", 12, 34),
             ("2024-02-29 12:34z", 12, 34),
         ] {
@@ -2295,6 +2285,18 @@ mod tests {
             assert_eq!(parsed.hour(), expected_hour, "input {input}");
             assert_eq!(parsed.minute(), expected_minute, "input {input}");
             assert_eq!(parsed.offset().local_minus_utc(), 0, "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_rejects_iso_hour_followed_by_utc_designator() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for input in ["2024-02-29T00Z", "2024-02-29T12Z"] {
+            assert!(
+                parse_datetime_gnu_compat(input, ref_time).is_err(),
+                "input {input} should fail"
+            );
         }
     }
 

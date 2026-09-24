@@ -1922,6 +1922,37 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下--date不得把缺少分钟的ISO小时加Z伪造为有效时刻，必须按GNU拒绝2024-02-29T12Z且不创建目标。",
+            "args": ["--date=2024-02-29T12Z", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: invalid date format '2024-02-29T12Z'\\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C下重复-f必须按GNU作为幂等的被忽略选项处理，成功创建target且不得输出诊断。",
             "args": ["-ff", "target"],
             "expectation": {

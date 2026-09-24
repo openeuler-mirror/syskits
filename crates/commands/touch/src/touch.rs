@@ -376,6 +376,22 @@ fn touch_quote_argmatch_bytes_with_marks(
     quoted
 }
 
+fn touch_invalid_date_format(value: &[u8]) -> String {
+    let (left_quote, right_quote) = locale_quote_marks();
+    touch_invalid_date_format_with_marks(value, left_quote, right_quote)
+}
+
+fn touch_invalid_date_format_with_marks(
+    value: &[u8],
+    left_quote: &str,
+    right_quote: &str,
+) -> String {
+    format!(
+        "invalid date format {}",
+        touch_quote_argmatch_bytes_with_marks(value, left_quote, right_quote)
+    )
+}
+
 mod touch_format {
     pub(crate) const POSIX_LOCALE: &str = "%a %b %e %H:%M:%S %Y";
     pub(crate) const ISO_8601: &str = "%Y-%m-%d";
@@ -678,15 +694,9 @@ pub fn ct_app() -> Command {
 }
 
 fn touch_date_source_value(value: &OsString) -> CTResult<&str> {
-    value.to_str().ok_or_else(|| {
-        let (left_quote, right_quote) = locale_quote_marks();
-        let quoted = touch_quote_argmatch_bytes_with_marks(
-            value.as_encoded_bytes(),
-            left_quote,
-            right_quote,
-        );
-        CtSimpleError::new(1, format!("invalid date format {quoted}"))
-    })
+    value
+        .to_str()
+        .ok_or_else(|| CtSimpleError::new(1, touch_invalid_date_format(value.as_encoded_bytes())))
 }
 
 // 确定访问和修改时间
@@ -1024,7 +1034,7 @@ fn touch_parse_date(ref_time: DateTime<Local>, s: &str) -> CTResult<FileTime> {
 
     Err(CtSimpleError::new(
         1,
-        format!("invalid date format {}", s.quote()),
+        touch_invalid_date_format(s.as_bytes()),
     ))
 }
 
@@ -1069,19 +1079,19 @@ fn parse_timestamp(s: &str) -> CTResult<FileTime> {
         _ => {
             return Err(CtSimpleError::new(
                 1,
-                format!("invalid date format {}", s.quote()),
+                touch_invalid_date_format(s.as_bytes()),
             ));
         }
     };
 
     let local = NaiveDateTime::parse_from_str(&ts, format)
-        .map_err(|_| CtSimpleError::new(1, format!("invalid date format {}", s.quote())))?;
+        .map_err(|_| CtSimpleError::new(1, touch_invalid_date_format(s.as_bytes())))?;
     let mut local = match chrono::Local.from_local_datetime(&local) {
         LocalResult::Single(dt) => dt,
         _ => {
             return Err(CtSimpleError::new(
                 1,
-                format!("invalid date format {}", s.quote()),
+                touch_invalid_date_format(s.as_bytes()),
             ));
         }
     };
@@ -1102,7 +1112,7 @@ fn parse_timestamp(s: &str) -> CTResult<FileTime> {
     if local.hour() != local2.hour() {
         return Err(CtSimpleError::new(
             1,
-            format!("invalid date format {}", s.quote()),
+            touch_invalid_date_format(s.as_bytes()),
         ));
     }
 
@@ -1559,7 +1569,7 @@ mod tests {
             let result = parse_timestamp(timestamp_str);
             assert_eq!(
                 result.unwrap_err().to_string(),
-                "invalid date format '202406150860'"
+                touch_invalid_date_format(timestamp_str.as_bytes())
             );
 
             // 测试无效的日期部分
@@ -1598,7 +1608,7 @@ mod tests {
             assert!(filetime.is_err());
             assert_eq!(
                 filetime.unwrap_err().to_string(),
-                "invalid date format '202406150830.123456789'".to_string()
+                touch_invalid_date_format(timestamp_str.as_bytes())
             );
 
             // 测试带有无效的纳秒部分的时间戳
@@ -1709,7 +1719,7 @@ mod tests {
             let result = touch_parse_date(ref_time, date_str);
             assert_eq!(
                 result.unwrap_err().to_string(),
-                "invalid date format 'invalid date string'"
+                touch_invalid_date_format(date_str.as_bytes())
             );
 
             let date_str = "2022-13-15"; // 无效的月份
@@ -2575,6 +2585,14 @@ mod tests {
             assert_eq!(
                 touch_time_word_diagnostic_message_with_marks(b"\xff", "invalid", "'", "'"),
                 "invalid argument '\\377' for '--time'\nValid arguments are:\n  - 'atime', 'access', 'use'\n  - 'mtime', 'modify'"
+            );
+        }
+
+        #[test]
+        fn test_touch_invalid_date_format_quotes_multibyte_bytes_in_c_locale() {
+            assert_eq!(
+                touch_invalid_date_format_with_marks(b"202402291234.\xc3\xa9", "'", "'"),
+                "invalid date format '202402291234.\\303\\251'"
             );
         }
 

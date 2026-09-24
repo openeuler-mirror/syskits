@@ -133,6 +133,52 @@ fn normalize_gnu_ordinal_relative_units(input: &str) -> Option<String> {
     })
 }
 
+/// Parse a GNU relative-time number with an optional decimal second fraction.
+fn parse_gnu_relative_number(input: &str, is_negative: bool) -> Option<(i64, i64)> {
+    let Some(separator) = input.bytes().position(|byte| matches!(byte, b'.' | b',')) else {
+        return Some((input.parse().ok()?, 0));
+    };
+
+    let integer = &input[..separator];
+    let fraction = &input[separator + 1..];
+    if integer.is_empty()
+        || fraction.is_empty()
+        || !integer.bytes().all(|byte| byte.is_ascii_digit())
+        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return None;
+    }
+
+    let mut seconds = integer.parse::<i64>().ok()?;
+    let mut nanoseconds = 0;
+    let mut fractional_digits = 0;
+    let mut negative_tail = false;
+
+    for byte in fraction.bytes() {
+        if fractional_digits < 9 {
+            nanoseconds = nanoseconds * 10 + i64::from(byte - b'0');
+            fractional_digits += 1;
+        } else if is_negative && byte != b'0' {
+            negative_tail = true;
+        }
+    }
+    for _ in fractional_digits..9 {
+        nanoseconds *= 10;
+    }
+
+    // GNU truncates positive fractions and rounds a negative excess tail
+    // toward negative infinity before normalizing the timespec.
+    if negative_tail {
+        nanoseconds += 1;
+        if nanoseconds == 1_000_000_000 {
+            seconds = seconds.checked_add(1)?;
+            nanoseconds = 0;
+        }
+    }
+
+    Some((seconds, nanoseconds))
+}
+
 fn parse_datetime_gnu_compat_impl(
     input: &str,
     reference_time: DateTime<Local>,
@@ -431,12 +477,14 @@ fn parse_datetime_gnu_compat_impl(
             }
 
             let mut start = end;
-            while start > 0 && (bytes[start - 1].is_ascii_digit() || bytes[start - 1] == b'.') {
+            while start > 0
+                && (bytes[start - 1].is_ascii_digit() || matches!(bytes[start - 1], b'.' | b','))
+            {
                 start -= 1;
             }
 
             let mut sign_start = start;
-            while sign_start > 0 && bytes[sign_start - 1] == b' ' {
+            while sign_start > 0 && bytes[sign_start - 1].is_ascii_whitespace() {
                 sign_start -= 1;
             }
 
@@ -446,7 +494,10 @@ fn parse_datetime_gnu_compat_impl(
 
             if start < end {
                 let date_part = stripped[..start].trim();
-                let amount_part = stripped[start..end].replace(" ", "");
+                let amount_part = stripped[start..end]
+                    .chars()
+                    .filter(|character| !character.is_ascii_whitespace())
+                    .collect::<String>();
 
                 let is_neg = amount_part.starts_with('-');
                 let amount_abs = if is_neg || amount_part.starts_with('+') {
@@ -455,7 +506,7 @@ fn parse_datetime_gnu_compat_impl(
                     &amount_part
                 };
 
-                if amount_abs.contains('.')
+                if amount_abs.contains(['.', ','])
                     && !matches!(suffix, " second" | " seconds" | " sec" | " secs")
                 {
                     return Err(ParseDateTimeError {
@@ -463,18 +514,15 @@ fn parse_datetime_gnu_compat_impl(
                     });
                 }
 
-                let (mut secs, mut nanos) = if let Some(dot_idx) = amount_abs.find('.') {
-                    let secs = amount_abs[..dot_idx].parse().unwrap_or(0);
-                    let frac = &amount_abs[dot_idx + 1..];
-                    let frac_padded = format!("{frac:0<9}");
-                    let nanos = frac_padded[..9].parse().unwrap_or(0);
-                    (secs, nanos)
-                } else {
-                    (amount_abs.parse().unwrap_or(0), 0)
-                };
+                let (mut secs, mut nanos) = parse_gnu_relative_number(amount_abs, is_neg)
+                    .ok_or_else(|| ParseDateTimeError {
+                        message: format!("Unable to parse date: {input}"),
+                    })?;
 
                 if is_neg {
-                    secs = -secs;
+                    secs = secs.checked_neg().ok_or_else(|| ParseDateTimeError {
+                        message: format!("Unable to parse date: {input}"),
+                    })?;
                     nanos = -nanos;
                 }
                 if is_ago {
@@ -2225,6 +2273,38 @@ mod tests {
                 "input {input}"
             );
         }
+    }
+
+    #[test]
+    fn test_parse_gnu_fractional_second_lexemes() {
+        let ref_time = Local.timestamp_opt(1_000_000, 0).unwrap();
+
+        for input in [
+            "1.2.3 seconds",
+            "1..5 seconds",
+            ".5 seconds",
+            "1. seconds",
+            "+.5 sec",
+            "-.5 sec",
+            "999999999999999999999 sec",
+        ] {
+            assert!(
+                parse_datetime_gnu_compat(input, ref_time).is_err(),
+                "input {input} must be rejected"
+            );
+        }
+
+        let comma = parse_datetime_gnu_compat("1,5 seconds", ref_time).unwrap();
+        assert_eq!(comma.timestamp(), ref_time.timestamp() + 1);
+        assert_eq!(comma.timestamp_subsec_nanos(), 500_000_000);
+
+        let positive = parse_datetime_gnu_compat("1.1234567891 seconds", ref_time).unwrap();
+        assert_eq!(positive.timestamp(), ref_time.timestamp() + 1);
+        assert_eq!(positive.timestamp_subsec_nanos(), 123_456_789);
+
+        let negative = parse_datetime_gnu_compat("-1.1234567891 seconds", ref_time).unwrap();
+        assert_eq!(negative.timestamp(), ref_time.timestamp() - 2);
+        assert_eq!(negative.timestamp_subsec_nanos(), 876_543_210);
     }
 
     #[test]

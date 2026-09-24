@@ -2729,6 +2729,37 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下数字时区总偏移量不得超过24小时；2024-02-29 12:00 +24:01必须按GNU拒绝且不得创建target。",
+            "args": ["--date=2024-02-29 12:00 +24:01", "target"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: invalid date format '2024-02-29 12:00 +24:01'\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "TZ=America/New_York、_POSIX2_VERSION=199209和POSIXLY_CORRECT=1下，旧式1031013099位于DST回拨重叠时刻，必须按GNU识别为时间戳、选择较早实例且不得创建同名文件。",
             "args": ["1031013099", "target"],
             "expectation": {

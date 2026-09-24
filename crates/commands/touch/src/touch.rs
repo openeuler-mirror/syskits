@@ -430,9 +430,6 @@ mod touch_format {
     pub(crate) const YYYY_MM_DD_HH_MM: &str = "%Y-%m-%d %H:%M";
     // "%Y%m%d%H%M" 12字符
     pub(crate) const YYYYMMDDHHMM: &str = "%Y%m%d%H%M";
-    // "%Y-%m-%d %H:%M +offset"
-    // 用于tests/touch/relative.sh中的示例
-    pub(crate) const YYYYMMDDHHMM_OFFSET: &str = "%Y-%m-%d %H:%M %z";
 }
 
 /// 将具有TZ偏移量的DateTime转换为FileTime
@@ -443,6 +440,16 @@ fn touch_datetime_to_filetime<T: TimeZone>(dt: &DateTime<T>) -> FileTime {
 
 fn touch_filetime_to_datetime(ft: &FileTime) -> Option<DateTime<Local>> {
     Some(DateTime::from_timestamp(ft.unix_seconds(), ft.nanoseconds())?.into())
+}
+
+fn touch_parse_full_naive_datetime(input: &str, format: &str) -> Option<NaiveDateTime> {
+    let (datetime, remainder) = NaiveDateTime::parse_and_remainder(input, format).ok()?;
+    remainder.is_empty().then_some(datetime)
+}
+
+fn touch_parse_full_naive_date(input: &str, format: &str) -> Option<NaiveDate> {
+    let (date, remainder) = NaiveDate::parse_and_remainder(input, format).ok()?;
+    remainder.is_empty().then_some(date)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1081,7 +1088,7 @@ fn touch_parse_date(ref_time: DateTime<Local>, s: &str) -> CTResult<FileTime> {
     // 周二12月3日...
     // ("%c", POSIX_LOCALE_FORMAT),
     //
-    if let Ok(parsed) = NaiveDateTime::parse_from_str(s, touch_format::POSIX_LOCALE) {
+    if let Some(parsed) = touch_parse_full_naive_datetime(s, touch_format::POSIX_LOCALE) {
         return Ok(touch_datetime_to_filetime(&parsed.and_utc()));
     }
 
@@ -1101,16 +1108,15 @@ fn touch_parse_date(ref_time: DateTime<Local>, s: &str) -> CTResult<FileTime> {
         touch_format::YYYYMMDDHHMMS,
         touch_format::YYYYMMDDHHMMSS,
         touch_format::YYYY_MM_DD_HH_MM,
-        touch_format::YYYYMMDDHHMM_OFFSET,
     ] {
-        if let Ok(parsed) = NaiveDateTime::parse_from_str(s, fmt) {
+        if let Some(parsed) = touch_parse_full_naive_datetime(s, fmt) {
             return Ok(touch_datetime_to_filetime(&parsed.and_utc()));
         }
     }
 
     // "相当于%Y-%m-%d (ISO 8601日期格式)。 (C99)"
     // ("%F", ISO_8601_FORMAT),
-    if let Ok(parsed_date) = NaiveDate::parse_from_str(s, touch_format::ISO_8601) {
+    if let Some(parsed_date) = touch_parse_full_naive_date(s, touch_format::ISO_8601) {
         let parsed = Local
             .from_local_datetime(&parsed_date.and_time(NaiveTime::MIN))
             .unwrap();
@@ -1814,6 +1820,22 @@ mod tests {
         use chrono::{Local, TimeZone, Utc};
 
         use super::*;
+
+        #[test]
+        fn parse_date_rejects_out_of_range_numeric_timezone() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            for input in [
+                "2024-02-29 12:00 +24:01",
+                "2024-02-29 12:00 +2401",
+                "2024-02-29 12:00 +25:00",
+            ] {
+                assert!(
+                    touch_parse_date(reference, input).is_err(),
+                    "input {input} must be rejected"
+                );
+            }
+        }
 
         #[test]
         fn test_parse_date_valid() {

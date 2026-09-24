@@ -2640,6 +2640,17 @@ mod tests {
                 .unwrap();
             assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
         }
+
+        for input in [
+            "2024-02-29 12:00 +24:01",
+            "2024-02-29 12:00 +2401",
+            "2024-02-29 12:00 +25:00",
+        ] {
+            assert!(
+                parse_datetime_gnu_compat(input, ref_time).is_err(),
+                "input {input} must be rejected"
+            );
+        }
     }
 
     #[test]

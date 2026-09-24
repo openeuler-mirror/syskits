@@ -18,8 +18,8 @@
 
 use crate::ct_error::{CTResult, CtSimpleError};
 use chrono::{
-    DateTime, Datelike, Duration, FixedOffset, Local, NaiveDate, NaiveDateTime, NaiveTime,
-    TimeZone, Utc, Weekday,
+    DateTime, Datelike, Duration, FixedOffset, Local, LocalResult, NaiveDate, NaiveDateTime,
+    NaiveTime, TimeZone, Utc, Weekday,
 };
 use chrono_tz::Tz;
 #[cfg(target_os = "linux")]
@@ -80,6 +80,18 @@ fn parse_datetime_gnu_compat_impl(
     let input_without_comments = strip_gnu_parenthesized_comments(input);
     let input_trim = input_without_comments.trim();
     let input_lower = input_trim.to_lowercase();
+
+    // GNU parse-datetime treats a standalone `--` as an empty date
+    // specification, retaining the reference date and resetting the clock.
+    if input_trim == "--" {
+        let midnight = reference_time.date_naive().and_time(NaiveTime::MIN);
+        return match Local.from_local_datetime(&midnight) {
+            LocalResult::Single(datetime) | LocalResult::Ambiguous(datetime, _) => Ok(datetime),
+            LocalResult::None => Err(ParseDateTimeError {
+                message: format!("Unable to parse date: {input}"),
+            }),
+        };
+    }
 
     if contains_leap_second(input_trim) {
         return Err(ParseDateTimeError {
@@ -2591,6 +2603,16 @@ mod tests {
 
         let result = parse_datetime_gnu_compat("", ref_time);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_double_dash_as_reference_date_midnight() {
+        let reference = Local.with_ymd_and_hms(2024, 2, 29, 12, 34, 56).unwrap();
+
+        let parsed = parse_datetime_gnu_compat("--", reference).unwrap();
+
+        assert_eq!(parsed.date_naive(), reference.date_naive());
+        assert_eq!(parsed.time(), NaiveTime::MIN);
     }
 
     #[test]

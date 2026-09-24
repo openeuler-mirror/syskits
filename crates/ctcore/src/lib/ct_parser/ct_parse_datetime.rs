@@ -909,44 +909,87 @@ fn parse_datetime_gnu_compat_impl(
         "%Y%m%d %H:%M",
         "%Y%m%d",
         // 包含英文月份名称的格式 (完美解决 "Nov 10 1996" 和 "May-23-2003" 测试)
+        "%b %d %y %H:%M:%S",
+        "%b %d %y %H:%M",
         "%b %d %Y %H:%M:%S",
         "%b %d %Y %H:%M",
+        "%b %d %H:%M:%S %y",
+        "%b %d %H:%M %y",
         "%b %d %H:%M:%S %Y",
         "%b %d %H:%M %Y",
+        "%B %d %y %H:%M:%S",
+        "%B %d %y %H:%M",
         "%B %d %Y %H:%M:%S",
         "%B %d %Y %H:%M",
+        "%B %d %H:%M:%S %y",
+        "%B %d %H:%M %y",
         "%B %d %H:%M:%S %Y",
         "%B %d %H:%M %Y",
+        "%H:%M:%S %b %d %y",
+        "%H:%M %b %d %y",
         "%H:%M:%S %b %d %Y",
         "%H:%M %b %d %Y",
+        "%H:%M:%S %B %d %y",
+        "%H:%M %B %d %y",
         "%H:%M:%S %B %d %Y",
         "%H:%M %B %d %Y",
+        "%H:%M:%S %d %b %y",
+        "%H:%M %d %b %y",
+        "%H:%M:%S %d %B %y",
+        "%H:%M %d %B %y",
         "%b %d %Y",
         "%B %d %Y",
+        "%b-%d-%y %H:%M:%S",
+        "%b-%d-%y %H:%M",
+        "%b-%d-%y",
         "%b-%d-%Y %H:%M:%S",
         "%b-%d-%Y %H:%M",
         "%b-%d-%Y",
+        "%B-%d-%y %H:%M:%S",
+        "%B-%d-%y %H:%M",
+        "%B-%d-%y",
         "%B-%d-%Y %H:%M:%S",
         "%B-%d-%Y %H:%M",
         "%B-%d-%Y",
+        "%d-%b-%y %H:%M:%S",
+        "%d-%b-%y %H:%M",
+        "%d-%b-%y",
         "%d-%b-%Y %H:%M:%S",
         "%d-%b-%Y %H:%M",
         "%d-%b-%Y",
+        "%d-%B-%y %H:%M:%S",
+        "%d-%B-%y %H:%M",
+        "%d-%B-%y",
         "%d-%B-%Y %H:%M:%S",
         "%d-%B-%Y %H:%M",
         "%d-%B-%Y",
+        "%d %b %y %H:%M:%S",
+        "%d %b %y %H:%M",
+        "%d %b %y",
         "%d %b %Y %H:%M:%S",
         "%d %b %Y %H:%M",
         "%d %b %Y",
+        "%d %B %y %H:%M:%S",
+        "%d %B %y %H:%M",
+        "%d %B %y",
         "%d %B %Y %H:%M:%S",
         "%d %B %Y %H:%M",
         "%d %B %Y",
+        "%b %d, %y %H:%M:%S",
+        "%b %d, %y %H:%M",
+        "%b %d, %y",
         "%b %d, %Y %H:%M:%S",
         "%b %d, %Y %H:%M",
         "%b %d, %Y",
+        "%B %d, %y %H:%M:%S",
+        "%B %d, %y %H:%M",
+        "%B %d, %y",
         "%B %d, %Y %H:%M:%S",
         "%B %d, %Y %H:%M",
         "%B %d, %Y",
+        "%d%b%y %H:%M:%S",
+        "%d%b%y %H:%M",
+        "%d%b%y",
         // 6位纯数字紧凑格式
         "%y%m%d",
     ];
@@ -1976,6 +2019,11 @@ fn gnu_numeric_timezone_follows_clock(field: &str, sign_index: usize) -> bool {
     let clock = if let Some((_, time)) = prefix.rsplit_once(['T', 't']) {
         time.split(['+', '-']).next().unwrap_or_default()
     } else {
+        // A signed year in a word-month date such as `24-Sep-72` is
+        // a calendar field, not an offset attached to the preceding `24`.
+        if prefix.bytes().any(|byte| byte.is_ascii_alphabetic()) {
+            return false;
+        }
         let first_sign = prefix.find(['+', '-']).unwrap_or(sign_index);
         &field[..first_sign]
     };
@@ -3792,6 +3840,31 @@ mod tests {
             NaiveDate::from_ymd_opt(2024, 1, 2).unwrap()
         );
         assert_eq!(parsed.time(), NaiveTime::MIN);
+    }
+
+    #[test]
+    fn test_parse_gnu_month_name_dates_expand_two_digit_years() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, expected_year) in [
+            ("24 Sep 68 UTC", 2068),
+            ("24 Sep 69 UTC", 1969),
+            ("September 24, 72 UTC", 1972),
+            ("Sep-24-72 UTC", 1972),
+            ("24-Sep-72 UTC", 1972),
+            ("24sep72 UTC", 1972),
+            ("Sep 24 12:34 72 UTC", 1972),
+            ("12:34 24 Sep 72 UTC", 1972),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(
+                parsed.with_timezone(&Utc).year(),
+                expected_year,
+                "input {input}"
+            );
+            assert_eq!(parsed.with_timezone(&Utc).month(), 9, "input {input}");
+            assert_eq!(parsed.with_timezone(&Utc).day(), 24, "input {input}");
+        }
     }
 
     #[test]

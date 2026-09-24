@@ -3848,6 +3848,40 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下命名时区、12小时制时钟和ISO日期可按GNU任意顺序组合；UTC 7pm 2024-02-29必须设置为19:00 UTC。",
+            "args": [
+                "--date=UTC 7pm 2024-02-29",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %Y target)\" = 1709233200",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C、TZ=UTC0下无逗号月名日期后的短数字必须按GNU解析为时刻；Sep 24 7 UTC使用reference年份并设置07:00。",
             "setup_commands": [
                 "/usr/bin/touch -d '2025-01-01 UTC' reference"

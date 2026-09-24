@@ -334,8 +334,12 @@ fn parse_datetime_gnu_compat_impl(
         (" hours", 3600),
         (" minute", 60),
         (" minutes", 60),
-        (" sec", 1),
+        (" min", 60),
+        (" mins", 60),
+        (" second", 1),
         (" seconds", 1),
+        (" sec", 1),
+        (" secs", 1),
     ];
     for (suffix, _multiplier) in suffixes {
         if processed_lower.ends_with(suffix) {
@@ -2535,6 +2539,26 @@ mod tests {
             NaiveDate::from_ymd_opt(2024, 3, 2).unwrap()
         );
         assert_eq!(parsed.time(), NaiveTime::from_hms_opt(12, 0, 0).unwrap());
+    }
+
+    #[test]
+    fn test_parse_gnu_relative_minute_and_second_aliases() {
+        let ref_time = Local.timestamp_opt(1_000_000, 0).unwrap();
+        let base = parse_datetime_gnu_compat("1970-01-01", ref_time).unwrap();
+
+        for (input, offset_seconds) in [
+            ("1970-01-01 1 min", 60),
+            ("1970-01-01 1 mins", 60),
+            ("1970-01-01 1 second", 1),
+            ("1970-01-01 1 secs", 1),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(
+                parsed.timestamp(),
+                base.timestamp() + offset_seconds,
+                "input {input}"
+            );
+        }
     }
 
     #[test]

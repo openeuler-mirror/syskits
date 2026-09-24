@@ -1903,6 +1903,17 @@ mod tests {
         }
 
         #[test]
+        fn parse_date_preserves_single_digit_year_in_month_name_date() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            let parsed = touch_parse_date(reference, "024 Sep 7 GMT+3").unwrap();
+            let expected = Utc.with_ymd_and_hms(7, 9, 23, 21, 0, 0).unwrap();
+
+            assert_eq!(parsed.unix_seconds(), expected.timestamp());
+            assert_eq!(parsed.nanoseconds(), 0);
+        }
+
+        #[test]
         fn parse_date_treats_short_number_after_month_day_as_time() {
             let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
 

@@ -179,6 +179,79 @@ fn parse_gnu_relative_number(input: &str, is_negative: bool) -> Option<(i64, i64
     Some((seconds, nanoseconds))
 }
 
+#[derive(Default)]
+struct GnuCalendarRelativeOffset {
+    years: i64,
+    months: i64,
+    days: i64,
+    terms: usize,
+}
+
+/// Collect a trailing chain of GNU calendar relative items.
+///
+/// GNU's parser accumulates every relative year, month, and day in one
+/// `relative_time` value before normalizing the resulting calendar date.
+/// Applying terms recursively changes results around short months.
+fn collect_gnu_calendar_relative_offsets(
+    input: &str,
+    is_ago: bool,
+) -> Option<(String, GnuCalendarRelativeOffset)> {
+    let tokens = input.split_ascii_whitespace().collect::<Vec<_>>();
+    let mut offset = GnuCalendarRelativeOffset::default();
+    let mut index = tokens.len();
+
+    while index >= 2 {
+        let amount = tokens[index - 2].parse::<i64>().ok()?;
+        let amount = if is_ago && offset.terms == 0 {
+            amount.checked_neg()?
+        } else {
+            amount
+        };
+        let unit = tokens[index - 1].to_ascii_lowercase();
+
+        match unit.as_str() {
+            "year" | "years" => offset.years = offset.years.checked_add(amount)?,
+            "month" | "months" => offset.months = offset.months.checked_add(amount)?,
+            "fortnight" | "fortnights" => {
+                offset.days = offset.days.checked_add(amount.checked_mul(14)?)?
+            }
+            "week" | "weeks" => offset.days = offset.days.checked_add(amount.checked_mul(7)?)?,
+            "day" | "days" => offset.days = offset.days.checked_add(amount)?,
+            _ => break,
+        }
+
+        offset.terms += 1;
+        index -= 2;
+    }
+
+    (offset.terms >= 2).then(|| (tokens[..index].join(" "), offset))
+}
+
+fn apply_gnu_calendar_relative_offsets(
+    dt: DateTime<Local>,
+    offset: &GnuCalendarRelativeOffset,
+) -> Option<DateTime<Local>> {
+    let month = i64::from(dt.month0()).checked_add(offset.months)?;
+    let year = i64::from(dt.year())
+        .checked_add(offset.years)?
+        .checked_add(month.div_euclid(12))?;
+    let year = i32::try_from(year).ok()?;
+    let month = u32::try_from(month.rem_euclid(12)).ok()? + 1;
+    let day_index = i64::from(dt.day())
+        .checked_add(offset.days)?
+        .checked_sub(1)?;
+    let target_date = NaiveDate::from_ymd_opt(year, month, 1)?
+        .checked_add_signed(Duration::try_days(day_index)?)?;
+    let target = target_date.and_time(dt.time());
+
+    match Local.from_local_datetime(&target) {
+        LocalResult::Single(dt) | LocalResult::Ambiguous(dt, _) => Some(dt),
+        LocalResult::None => Local
+            .from_local_datetime(&(target + Duration::hours(1)))
+            .earliest(),
+    }
+}
+
 fn parse_datetime_gnu_compat_impl(
     input: &str,
     reference_time: DateTime<Local>,
@@ -450,6 +523,21 @@ fn parse_datetime_gnu_compat_impl(
     {
         processed_lower = replacement.to_string();
         processed_trim = replacement.to_string();
+    }
+
+    if let Some((date_part, offset)) =
+        collect_gnu_calendar_relative_offsets(&processed_trim, is_ago)
+    {
+        let base = if date_part.is_empty() {
+            Ok(reference_time)
+        } else {
+            parse_datetime_gnu_compat_impl(&date_part, reference_time, normalized_extended_year)
+        };
+        if let Ok(base) = base {
+            if let Some(adjusted) = apply_gnu_calendar_relative_offsets(base, &offset) {
+                return Ok(adjusted);
+            }
+        }
     }
 
     // 强大的混合相对时间解析 (避免 f64 精度丢失，支持无符号隐式正数，支持闰年滚动计算)
@@ -2480,6 +2568,26 @@ mod tests {
             NaiveDate::from_ymd_opt(2023, 12, 4).unwrap()
         );
         assert_eq!(parsed.hour(), 0);
+    }
+
+    #[test]
+    fn test_parse_multiple_calendar_relative_units_together() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        let parsed = parse_datetime_gnu_compat("2024-02-29 1 day 1 month", ref_time).unwrap();
+
+        assert_eq!(
+            parsed.date_naive(),
+            NaiveDate::from_ymd_opt(2024, 3, 30).unwrap()
+        );
+        assert_eq!(parsed.time(), NaiveTime::MIN);
+
+        let parsed = parse_datetime_gnu_compat("2024-03-31 1 month 1 day ago", ref_time).unwrap();
+        assert_eq!(
+            parsed.date_naive(),
+            NaiveDate::from_ymd_opt(2024, 4, 30).unwrap()
+        );
+        assert_eq!(parsed.time(), NaiveTime::MIN);
     }
 
     #[test]

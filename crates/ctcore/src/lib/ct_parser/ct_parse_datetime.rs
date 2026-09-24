@@ -2645,11 +2645,15 @@ fn parse_gnu_named_timezone(
 fn parse_gnu_named_timezone_correction(input: &str) -> Option<(i32, usize)> {
     let whitespace_len = input.len() - input.trim_start().len();
     let correction = &input[whitespace_len..];
-    if !correction.starts_with(['+', '-']) {
+    let sign = *correction.as_bytes().first()?;
+    if !matches!(sign, b'+' | b'-') {
         return None;
     }
-    let correction_end = gnu_numeric_timezone_offset_end(correction.as_bytes(), 0)?;
-    let numeric_offset = &correction[..correction_end];
+    let digits = correction[1..].trim_start();
+    let whitespace_after_sign = correction.len() - 1 - digits.len();
+    let numeric_offset = format!("{}{}", sign as char, digits);
+    let numeric_end = gnu_numeric_timezone_offset_end(numeric_offset.as_bytes(), 0)?;
+    let correction_end = numeric_end + whitespace_after_sign;
 
     let remainder = correction[correction_end..].trim_start();
     if remainder
@@ -2661,7 +2665,7 @@ fn parse_gnu_named_timezone_correction(input: &str) -> Option<(i32, usize)> {
     }
 
     Some((
-        parse_gnu_numeric_timezone_offset(numeric_offset)?,
+        parse_gnu_numeric_timezone_offset(&numeric_offset[..numeric_end])?,
         whitespace_len + correction_end,
     ))
 }
@@ -4018,6 +4022,10 @@ mod tests {
             ),
             (
                 "2024-02-29 12:34:56 UTC +2:30",
+                Utc.with_ymd_and_hms(2024, 2, 29, 10, 4, 56).unwrap(),
+            ),
+            (
+                "2024-02-29 12:34:56 UTC + 2:30",
                 Utc.with_ymd_and_hms(2024, 2, 29, 10, 4, 56).unwrap(),
             ),
             (

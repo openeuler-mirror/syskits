@@ -1968,6 +1968,17 @@ mod tests {
         }
 
         #[test]
+        fn parse_date_accepts_whitespace_after_named_timezone_correction_sign() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            let parsed = touch_parse_date(reference, "2024-02-29 12:34:56 UTC + 2:30").unwrap();
+            let expected = Utc.with_ymd_and_hms(2024, 2, 29, 10, 4, 56).unwrap();
+
+            assert_eq!(parsed.unix_seconds(), expected.timestamp());
+            assert_eq!(parsed.nanoseconds(), 0);
+        }
+
+        #[test]
         fn parse_date_treats_uncomma_month_day_number_as_weekday_ordinal() {
             let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
 

@@ -472,6 +472,36 @@
                 ]
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "符号链接解析模式按最后出现的 -L 选项生效",
+            "setup_commands": [
+                "mkdir target",
+                "ln -s target link"
+            ],
+            "args": [
+                "-s",
+                "-L",
+                "link"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '/target$'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f link",
+                "rmdir target"
+            ]
         }
     ]
 }

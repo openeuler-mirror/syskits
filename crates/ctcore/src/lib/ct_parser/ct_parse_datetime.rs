@@ -490,9 +490,9 @@ fn parse_datetime_gnu_compat_impl(
 
     let input_lower = input_trim.to_lowercase();
 
-    // GNU parse-datetime treats a standalone `--` as an empty date
-    // specification, retaining the reference date and resetting the clock.
-    if input_trim == "--" {
+    // GNU parses an empty specification (and a standalone `--`) as a date
+    // item with the reference date and a midnight clock.
+    if input_trim.is_empty() || input_trim == "--" {
         let midnight = reference_time.date_naive().and_time(NaiveTime::MIN);
         return match Local.from_local_datetime(&midnight) {
             LocalResult::Single(datetime) | LocalResult::Ambiguous(datetime, _) => Ok(datetime),
@@ -5388,12 +5388,19 @@ mod tests {
     fn test_invalid_input() {
         let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
 
-        // Test invalid inputs
+        // Test invalid input.
         let result = parse_datetime_gnu_compat("invalid_day", ref_time);
         assert!(result.is_err());
+    }
 
-        let result = parse_datetime_gnu_compat("", ref_time);
-        assert!(result.is_err());
+    #[test]
+    fn test_parse_gnu_empty_input_uses_reference_date_midnight() {
+        let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 34, 56).unwrap();
+
+        let parsed = parse_datetime_gnu_compat("", reference).unwrap();
+
+        assert_eq!(parsed.date_naive(), reference.date_naive());
+        assert_eq!(parsed.time(), NaiveTime::MIN);
     }
 
     #[test]

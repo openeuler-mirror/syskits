@@ -2209,6 +2209,17 @@ mod tests {
         }
 
         #[test]
+        fn test_parse_date_empty_input_uses_reference_date_midnight() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 34, 56).unwrap();
+
+            let parsed = touch_parse_date(reference, "").unwrap();
+            let expected = Local.with_ymd_and_hms(2025, 7, 24, 0, 0, 0).unwrap();
+
+            assert_eq!(parsed.unix_seconds(), expected.timestamp());
+            assert_eq!(parsed.nanoseconds(), 0);
+        }
+
+        #[test]
         fn test_parse_date_invalid() {
             let ref_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
 
@@ -3811,7 +3822,7 @@ mod tests {
             let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
 
             // 测试无效输入
-            let invalid_cases = vec!["invalid_weekday", "next invalid", "", "random text"];
+            let invalid_cases = vec!["invalid_weekday", "next invalid", "random text"];
 
             for case in invalid_cases {
                 let result = touch_parse_date(ref_time, case);

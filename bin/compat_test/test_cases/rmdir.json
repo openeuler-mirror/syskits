@@ -434,6 +434,37 @@
                 ]
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "递归删除父目录时保留路径中的点号组件",
+            "setup_commands": [
+                "mkdir -p a/b"
+            ],
+            "args": ["-p", "a/./b"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "rmdir: failed to remove directory 'a/.': Invalid argument\\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e a/b && test -d a && echo 'dot parent retained'",
+                        "expected_exit": 0,
+                        "expected_stdout": "dot parent retained"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rmdir a"
+            ]
         }
     ]
 }

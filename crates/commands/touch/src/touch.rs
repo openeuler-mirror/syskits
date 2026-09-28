@@ -2316,6 +2316,17 @@ mod tests {
         }
 
         #[test]
+        fn test_parse_date_accepts_colon_prefixed_embedded_iana_timezone() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+            let parsed =
+                touch_parse_date(reference, "TZ=\":America/New_York\" 2024-01-01 12:00").unwrap();
+            let expected = Utc.with_ymd_and_hms(2024, 1, 1, 17, 0, 0).unwrap();
+
+            assert_eq!(parsed.unix_seconds(), expected.timestamp());
+            assert_eq!(parsed.nanoseconds(), 0);
+        }
+
+        #[test]
         fn test_parse_date_invalid() {
             let ref_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
 

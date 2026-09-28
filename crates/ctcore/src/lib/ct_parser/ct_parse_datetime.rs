@@ -2964,11 +2964,8 @@ fn parse_gnu_named_timezone(
             .ok()?
             .naive_local()
     };
-    let offset = FixedOffset::east_opt(offset_seconds)?;
-    offset
-        .from_local_datetime(&naive)
-        .earliest()
-        .map(|date| date.with_timezone(&Local))
+    let utc_naive = naive.checked_sub_signed(Duration::seconds(i64::from(offset_seconds)))?;
+    Some(DateTime::<Utc>::from_naive_utc_and_offset(utc_naive, Utc).with_timezone(&Local))
 }
 
 /// Parse a signed numeric correction following a named GNU timezone item.
@@ -4393,6 +4390,14 @@ mod tests {
             (
                 "2024-02-29 12:34:56 PST -2",
                 Utc.with_ymd_and_hms(2024, 2, 29, 22, 34, 56).unwrap(),
+            ),
+            (
+                "2024-01-01 UTC+24",
+                Utc.with_ymd_and_hms(2023, 12, 31, 0, 0, 0).unwrap(),
+            ),
+            (
+                "2024-01-01 UTC-24:00",
+                Utc.with_ymd_and_hms(2024, 1, 2, 0, 0, 0).unwrap(),
             ),
         ] {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();

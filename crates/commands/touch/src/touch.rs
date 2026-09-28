@@ -2236,6 +2236,31 @@ mod tests {
             assert_eq!(parsed.unix_seconds(), expected.timestamp());
             assert_eq!(parsed.nanoseconds(), 0);
         }
+
+        #[test]
+        fn test_parse_date_accepts_named_timezone_24_hour_correction() {
+            let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            for (date_str, expected) in [
+                (
+                    "2024-01-01 UTC+24",
+                    Utc.with_ymd_and_hms(2023, 12, 31, 0, 0, 0).unwrap(),
+                ),
+                (
+                    "2024-01-01 UTC-24:00",
+                    Utc.with_ymd_and_hms(2024, 1, 2, 0, 0, 0).unwrap(),
+                ),
+            ] {
+                let parsed = touch_parse_date(ref_time, date_str).unwrap();
+
+                assert_eq!(
+                    parsed.unix_seconds(),
+                    expected.timestamp(),
+                    "input {date_str}"
+                );
+                assert_eq!(parsed.nanoseconds(), 0, "input {date_str}");
+            }
+        }
     }
 
     #[cfg(test)]

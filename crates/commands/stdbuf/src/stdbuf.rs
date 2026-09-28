@@ -25,7 +25,7 @@ use std::io::Write;
 #[cfg(target_os = "linux")]
 use std::os::fd::{AsRawFd, FromRawFd};
 #[cfg(target_os = "linux")]
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 #[cfg(target_os = "linux")]
 use std::os::unix::process::CommandExt;
 use std::process;
@@ -451,6 +451,32 @@ fn missing_mode_option_diagnostic(args: &[OsString]) -> Option<String> {
     None
 }
 
+fn normalize_short_mode_equals(args: Vec<OsString>) -> Vec<OsString> {
+    let mut args = args.into_iter();
+    let Some(program_name) = args.next() else {
+        return Vec::new();
+    };
+
+    let mut normalized = vec![program_name];
+    let mut parsing_options = true;
+    for argument in args {
+        let bytes = argument.as_os_str().as_bytes();
+        if parsing_options {
+            if bytes == b"--" || bytes == b"-" || !bytes.starts_with(b"-") {
+                parsing_options = false;
+            } else if bytes.len() >= 3 && matches!(bytes[1], b'i' | b'o' | b'e') && bytes[2] == b'='
+            {
+                normalized.push(OsString::from_vec(bytes[..2].to_vec()));
+                normalized.push(OsString::from_vec(bytes[2..].to_vec()));
+                continue;
+            }
+        }
+        normalized.push(argument);
+    }
+
+    normalized
+}
+
 /// stdbuf 主执行函数
 ///
 /// # 参数
@@ -462,7 +488,7 @@ pub fn stdbuf_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
-    let args: Vec<OsString> = args.collect();
+    let args = normalize_short_mode_equals(args.collect());
     if let Some(diagnostic) = missing_mode_option_diagnostic(&args) {
         return Err(CTsageError::new(125, diagnostic));
     }
@@ -632,6 +658,38 @@ mod tests {
         assert_eq!(error.code(), 125);
         assert_eq!(error.to_string(), invalid_mode_message(b"-1"));
         assert!(!error.usage());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_normalize_short_mode_equals_preserves_mode_and_command_boundaries() {
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+        let args = vec![
+            OsString::from("stdbuf"),
+            OsString::from("-o=0"),
+            OsString::from("/usr/bin/printf"),
+            OsString::from("-i=L"),
+            OsString::from_vec(vec![0xff]),
+        ];
+
+        let normalized = normalize_short_mode_equals(args);
+        let bytes = normalized
+            .iter()
+            .map(|argument| argument.as_os_str().as_bytes())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            bytes,
+            [
+                b"stdbuf".as_slice(),
+                b"-o",
+                b"=0",
+                b"/usr/bin/printf",
+                b"-i=L",
+                &[0xff],
+            ]
+        );
     }
 
     #[test]

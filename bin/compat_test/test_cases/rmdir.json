@@ -228,6 +228,74 @@
                 ]
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "重复 -p 仍递归删除父目录",
+            "setup_commands": [
+                "mkdir -p a/b"
+            ],
+            "args": ["-p", "-p", "a/b"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e a && echo 'parents removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "parents removed"
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "重复详细输出开关只输出一次操作诊断",
+            "setup_commands": [
+                "mkdir verbose_dir"
+            ],
+            "args": ["-v", "--verbose", "verbose_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "rmdir: removing directory, 'verbose_dir'\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "重复非空失败忽略开关保持成功",
+            "setup_commands": [
+                "mkdir nonempty_dir",
+                "touch nonempty_dir/file"
+            ],
+            "args": ["--ignore-fail-on-non-empty", "--ignore-fail-on-non-empty", "nonempty_dir"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test -d nonempty_dir && echo 'directory retained'",
+                        "expected_exit": 0,
+                        "expected_stdout": "directory retained"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf nonempty_dir"
+            ]
         }
     ]
 }

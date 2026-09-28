@@ -206,6 +206,7 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .args_override_self(true)
         .args(args)
 }
 
@@ -921,6 +922,22 @@ mod tests {
             let matches = command.try_get_matches_from(args).unwrap();
 
             assert!(matches.get_flag(rmdir_flags::RMDIR_PARENTS));
+        }
+
+        #[test]
+        fn test_ct_app_allows_repeated_switches() {
+            for args in [
+                vec![ctcore::ct_util_name(), "-p", "-p", "directory"],
+                vec![ctcore::ct_util_name(), "-v", "--verbose", "directory"],
+                vec![
+                    ctcore::ct_util_name(),
+                    "--ignore-fail-on-non-empty",
+                    "--ignore-fail-on-non-empty",
+                    "directory",
+                ],
+            ] {
+                assert!(ct_app().try_get_matches_from(args).is_ok());
+            }
         }
 
         #[test]

@@ -17,7 +17,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::locale_quote_marks;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo, UClapError};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, UClapError};
 use ctcore::ct_parse_size::parse_size_u64;
 use std::ffi::OsString;
 use std::fs::File;
@@ -54,6 +54,7 @@ pub mod stdbuf_flags {
 }
 
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
+const LINE_BUFFERING_STDIN: &str = "line buffering stdin is meaningless";
 
 #[cfg(target_os = "linux")]
 struct PreloadLibrary {
@@ -194,6 +195,14 @@ fn quote_mode_bytes_with_marks(value: &[u8], left_quote: &str, right_quote: &str
     quoted
 }
 
+fn buffering_mode_error(message: String) -> Box<dyn CTError> {
+    if message == LINE_BUFFERING_STDIN {
+        CTsageError::new(125, message)
+    } else {
+        CtSimpleError::new(125, message)
+    }
+}
+
 impl StdbufFlags {
     /// 从命令行参数创建 StdbufFlags 实例
     ///
@@ -205,15 +214,15 @@ impl StdbufFlags {
     fn new(matches: ArgMatches) -> CTResult<Self> {
         // 解析标准输入的缓冲模式
         let stdin = Self::parse_buffer_option(&matches, stdbuf_flags::INPUT)
-            .map_err(|e| CTsageError::new(125, e))?;
+            .map_err(buffering_mode_error)?;
 
         // 解析标准输出的缓冲模式
         let stdout = Self::parse_buffer_option(&matches, stdbuf_flags::OUTPUT)
-            .map_err(|e| CTsageError::new(125, e))?;
+            .map_err(buffering_mode_error)?;
 
         // 解析标准错误的缓冲模式
         let stderr = Self::parse_buffer_option(&matches, stdbuf_flags::ERROR)
-            .map_err(|e| CTsageError::new(125, e))?;
+            .map_err(buffering_mode_error)?;
 
         // 提取命令和参数
         let command_args = matches
@@ -259,7 +268,7 @@ impl StdbufFlags {
         {
             let value = trim_c_whitespace_start(value.as_os_str().as_bytes());
             if option_name == stdbuf_flags::INPUT && value.starts_with(b"L") {
-                return Err("line buffering stdin is meaningless".to_string());
+                return Err(LINE_BUFFERING_STDIN.to_string());
             }
             let value = std::str::from_utf8(value)
                 .map_err(|_| format!("invalid mode {}", quote_mode_bytes(value)))?;
@@ -489,6 +498,26 @@ mod tests {
         let err = stdbuf_main(args.iter().map(OsString::from)).unwrap_err();
 
         assert_eq!(err.code(), 125);
+    }
+
+    #[test]
+    fn test_stdbuf_main_invalid_mode_does_not_request_usage() {
+        let args = [ctcore::ct_util_name(), "-o", "invalid", "/usr/bin/true"];
+        let err = stdbuf_main(args.iter().map(OsString::from)).unwrap_err();
+
+        assert_eq!(err.code(), 125);
+        assert_eq!(err.to_string(), "invalid mode 'invalid'");
+        assert!(!err.usage());
+    }
+
+    #[test]
+    fn test_stdbuf_main_stdin_line_mode_requests_usage() {
+        let args = [ctcore::ct_util_name(), "-i", "Lsuffix", "/usr/bin/true"];
+        let err = stdbuf_main(args.iter().map(OsString::from)).unwrap_err();
+
+        assert_eq!(err.code(), 125);
+        assert_eq!(err.to_string(), LINE_BUFFERING_STDIN);
+        assert!(err.usage());
     }
 
     #[test]

@@ -115,6 +115,12 @@ impl Default for StdbufFlags {
     }
 }
 
+fn trim_c_whitespace_start(value: &str) -> &str {
+    value.trim_start_matches(|character| {
+        matches!(character, ' ' | '\t' | '\n' | '\x0b' | '\x0c' | '\r')
+    })
+}
+
 impl StdbufFlags {
     /// 从命令行参数创建 StdbufFlags 实例
     ///
@@ -178,7 +184,7 @@ impl StdbufFlags {
             .into_iter()
             .flatten()
         {
-            let value = value.trim_start_matches(|character: char| character.is_ascii_whitespace());
+            let value = trim_c_whitespace_start(value);
             if option_name == stdbuf_flags::INPUT && value.starts_with('L') {
                 return Err("line buffering stdin is meaningless".to_string());
             }
@@ -515,6 +521,15 @@ mod tests {
     #[test]
     fn test_parse_buffer_option_rejects_stdin_mode_starting_with_l() {
         let matches = create_arg_matches(Some("Lsuffix"), None, None, None);
+
+        let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::INPUT);
+
+        assert_eq!(result.unwrap_err(), "line buffering stdin is meaningless");
+    }
+
+    #[test]
+    fn test_parse_buffer_option_treats_vertical_tab_as_leading_whitespace() {
+        let matches = create_arg_matches(Some("\x0bLtail"), None, None, None);
 
         let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::INPUT);
 

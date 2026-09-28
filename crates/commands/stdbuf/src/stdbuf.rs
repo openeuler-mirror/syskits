@@ -18,7 +18,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::locale_quote_marks;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, UClapError};
-use ctcore::ct_parse_size::parse_size_u64;
+use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::Write;
@@ -130,6 +130,10 @@ fn trim_c_whitespace_start(value: &[u8]) -> &[u8] {
 fn quote_mode_bytes(value: &[u8]) -> String {
     let (left_quote, right_quote) = locale_quote_marks();
     quote_mode_bytes_with_marks(value, left_quote, right_quote)
+}
+
+fn invalid_mode_message(value: &[u8]) -> String {
+    format!("invalid mode {}", quote_mode_bytes(value))
 }
 
 fn quote_mode_bytes_with_marks(value: &[u8], left_quote: &str, right_quote: &str) -> String {
@@ -270,8 +274,9 @@ impl StdbufFlags {
             if option_name == stdbuf_flags::INPUT && value.starts_with(b"L") {
                 return Err(LINE_BUFFERING_STDIN.to_string());
             }
-            let value = std::str::from_utf8(value)
-                .map_err(|_| format!("invalid mode {}", quote_mode_bytes(value)))?;
+            let raw_value = value;
+            let value =
+                std::str::from_utf8(raw_value).map_err(|_| invalid_mode_message(raw_value))?;
             let parsed_value = value
                 .strip_prefix('+')
                 .filter(|remainder| remainder.as_bytes().first().is_some_and(u8::is_ascii_digit))
@@ -280,10 +285,20 @@ impl StdbufFlags {
                 "L" => BufferType::Line,
                 x => BufferType::Size(
                     parse_size_u64(x)
-                        .map_err(|e| format!("invalid mode {e}"))?
+                        .map_err(|error| {
+                            let message = invalid_mode_message(raw_value);
+                            if matches!(&error, ParseSizeError::SizeTooBig(_)) {
+                                format!("{message}: Value too large for defined data type")
+                            } else {
+                                message
+                            }
+                        })?
                         .try_into()
                         .map_err(|_| {
-                            format!("invalid mode '{x}': Value too large for defined data type")
+                            format!(
+                                "{}: Value too large for defined data type",
+                                invalid_mode_message(raw_value)
+                            )
                         })?,
                 ),
             };
@@ -509,7 +524,7 @@ mod tests {
         let err = stdbuf_main(args.iter().map(OsString::from)).unwrap_err();
 
         assert_eq!(err.code(), 125);
-        assert_eq!(err.to_string(), "invalid mode 'invalid'");
+        assert_eq!(err.to_string(), invalid_mode_message(b"invalid"));
         assert!(!err.usage());
     }
 
@@ -534,7 +549,7 @@ mod tests {
         };
 
         assert_eq!(error.code(), 125);
-        assert_eq!(error.to_string(), "invalid mode '-1'");
+        assert_eq!(error.to_string(), invalid_mode_message(b"-1"));
         assert!(!error.usage());
     }
 
@@ -704,6 +719,23 @@ mod tests {
         let matches = create_arg_matches(None, Some("+1K"), None, None);
         let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT).unwrap();
         assert!(matches!(result, BufferType::Size(1024)));
+    }
+
+    #[test]
+    fn test_parse_buffer_option_preserves_plus_sign_in_invalid_mode_diagnostic() {
+        let matches = create_arg_matches(None, Some("+1invalid"), None, None);
+
+        let error = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT)
+            .expect_err("invalid MODE must be rejected");
+
+        assert_eq!(
+            quote_mode_bytes_with_marks(b"+1invalid", "'", "'"),
+            "'+1invalid'"
+        );
+        assert_eq!(
+            error,
+            format!("invalid mode {}", quote_mode_bytes(b"+1invalid"))
+        );
     }
 
     #[cfg(target_os = "linux")]

@@ -2038,6 +2038,18 @@ mod tests {
         }
 
         #[test]
+        fn parse_date_accepts_compact_time_with_relative_weekday() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+            let expected = Utc.with_ymd_and_hms(2025, 7, 25, 7, 0, 0).unwrap();
+
+            for input in ["next Friday 7", "7 next Friday"] {
+                let parsed = touch_parse_date(reference, input).unwrap();
+                assert_eq!(parsed.unix_seconds(), expected.timestamp(), "input {input}");
+                assert_eq!(parsed.nanoseconds(), 0, "input {input}");
+            }
+        }
+
+        #[test]
         fn test_parse_date_valid() {
             // 测试POSIX_LOCALE格式的日期
             let ref_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();

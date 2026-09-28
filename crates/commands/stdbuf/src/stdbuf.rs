@@ -142,7 +142,17 @@ impl StdbufFlags {
             .map_or_else(Vec::new, |v| v.cloned().collect());
 
         if command_args.is_empty() {
-            return Err(CtSimpleError::new(125, "command is required"));
+            return Err(CtSimpleError::new(125, "missing operand"));
+        }
+
+        if matches!(&stdin, BufferType::Default)
+            && matches!(&stdout, BufferType::Default)
+            && matches!(&stderr, BufferType::Default)
+        {
+            return Err(CtSimpleError::new(
+                125,
+                "you must specify a buffering mode option",
+            ));
         }
 
         Ok(Self {
@@ -308,27 +318,23 @@ pub fn ct_app() -> Command {
             .short(stdbuf_flags::INPUT_SHORT)
             .help(t!("stdbuf.clap.input"))
             .value_name("MODE")
-            .action(ArgAction::Append)
-            .required_unless_present_any([stdbuf_flags::OUTPUT, stdbuf_flags::ERROR]),
+            .action(ArgAction::Append),
         Arg::new(stdbuf_flags::OUTPUT)
             .long(stdbuf_flags::OUTPUT)
             .short(stdbuf_flags::OUTPUT_SHORT)
             .help(t!("stdbuf.clap.output"))
             .value_name("MODE")
-            .action(ArgAction::Append)
-            .required_unless_present_any([stdbuf_flags::INPUT, stdbuf_flags::ERROR]),
+            .action(ArgAction::Append),
         Arg::new(stdbuf_flags::ERROR)
             .long(stdbuf_flags::ERROR)
             .short(stdbuf_flags::ERROR_SHORT)
             .help(t!("stdbuf.clap.error"))
             .value_name("MODE")
-            .action(ArgAction::Append)
-            .required_unless_present_any([stdbuf_flags::INPUT, stdbuf_flags::OUTPUT]),
+            .action(ArgAction::Append),
         Arg::new(stdbuf_flags::COMMAND)
             .action(ArgAction::Append)
             .value_parser(clap::builder::ValueParser::os_string())
             .hide(true)
-            .required(true)
             .value_hint(clap::ValueHint::CommandName),
     ];
 
@@ -402,6 +408,24 @@ mod tests {
         let err = stdbuf_main(args.iter().map(OsString::from)).unwrap_err();
 
         assert_eq!(err.code(), 125);
+    }
+
+    #[test]
+    fn test_stdbuf_main_reports_missing_operand_after_mode_parsing() {
+        let args = [ctcore::ct_util_name(), "-o0"];
+        let err = stdbuf_main(args.iter().map(OsString::from)).unwrap_err();
+
+        assert_eq!(err.code(), 125);
+        assert_eq!(err.to_string(), "missing operand");
+    }
+
+    #[test]
+    fn test_stdbuf_main_reports_missing_mode_after_command_parsing() {
+        let args = [ctcore::ct_util_name(), "/usr/bin/true"];
+        let err = stdbuf_main(args.iter().map(OsString::from)).unwrap_err();
+
+        assert_eq!(err.code(), 125);
+        assert_eq!(err.to_string(), "you must specify a buffering mode option");
     }
 
     // Helper function to create ArgMatches with specific values for testing
@@ -753,20 +777,31 @@ mod tests {
             }
         }
 
-        // 测试无效参数 - 缺少命令
+        // 缺少命令在 StdbufFlags 中按 GNU 语义处理。
         {
             let args = vec![&stdbuf_arg, &o_arg, &l_arg];
             let app = ct_app();
-            let result = app.try_get_matches_from(args);
-            assert!(result.is_err());
+            let matches = app.try_get_matches_from(args).unwrap();
+            let error = match StdbufFlags::new(matches) {
+                Err(error) => error,
+                Ok(_) => panic!("missing command must be rejected"),
+            };
+            assert_eq!(error.to_string(), "missing operand");
         }
 
-        // 测试无效参数 - 缺少必需的缓冲选项
+        // 缺少缓冲模式在 StdbufFlags 中按 GNU 语义处理。
         {
             let args = vec![&stdbuf_arg, &echo_arg, &test_arg];
             let app = ct_app();
-            let result = app.try_get_matches_from(args);
-            assert!(result.is_err());
+            let matches = app.try_get_matches_from(args).unwrap();
+            let error = match StdbufFlags::new(matches) {
+                Err(error) => error,
+                Ok(_) => panic!("missing buffering mode must be rejected"),
+            };
+            assert_eq!(
+                error.to_string(),
+                "you must specify a buffering mode option"
+            );
         }
     }
 

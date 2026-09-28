@@ -127,3 +127,26 @@ fn verbose_removes_directory_before_reporting_closed_stdout() {
     assert_eq!(output.stderr, b"rmdir: write error: Bad file descriptor\n");
     assert!(!tempdir.path().join("directory").exists());
 }
+
+#[test]
+fn parents_preserve_dot_component_in_parent_path() {
+    let tempdir = TempDir::new().unwrap();
+    fs::create_dir_all(tempdir.path().join("a/b")).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_rmdir"))
+        .arg0("rmdir")
+        .args(["-p", "a/./b"])
+        .current_dir(tempdir.path())
+        .env("LC_ALL", "C")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"rmdir: failed to remove directory 'a/.': Invalid argument\n"
+    );
+    assert!(!tempdir.path().join("a/b").exists());
+    assert!(tempdir.path().join("a").exists());
+}

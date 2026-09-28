@@ -24,7 +24,12 @@ use ctcore::{ct_show_error, ct_util_name};
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir};
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use std::{
+    ffi::OsStr,
+    os::unix::ffi::{OsStrExt, OsStringExt},
+};
 use sys_locale::get_locale;
 
 pub mod rmdir_flags {
@@ -64,7 +69,7 @@ pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
                 is_parent,
             } = error;
 
-            if configs.is_ignore && rmdir_dir_not_empty(&error, path) {
+            if configs.is_ignore && rmdir_dir_not_empty(&error, &path) {
                 continue;
             }
 
@@ -80,9 +85,6 @@ pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
             // - 它指向一个目录或是悬挂的
             #[cfg(unix)]
             {
-                use std::ffi::OsStr;
-                use std::os::unix::ffi::OsStrExt;
-
                 fn points_to_directory(path: &Path) -> io::Result<bool> {
                     Ok(path.metadata()?.file_type().is_dir())
                 }
@@ -99,7 +101,7 @@ pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
                         if no_slash.is_symlink() && points_to_directory(no_slash).unwrap_or(true) {
                             ct_show_error!(
                                 "failed to remove {}: Symbolic link not followed",
-                                rmdir_quote_path(path)
+                                rmdir_quote_path(&path)
                             );
                             continue;
                         }
@@ -110,13 +112,13 @@ pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
             if is_parent && error.raw_os_error() != Some(libc::ENOTDIR) {
                 ct_show_error!(
                     "failed to remove directory {}: {}",
-                    rmdir_quote_path(path),
+                    rmdir_quote_path(&path),
                     strip_errno(&error)
                 );
             } else {
                 ct_show_error!(
                     "failed to remove {}: {}",
-                    rmdir_quote_path(path),
+                    rmdir_quote_path(&path),
                     strip_errno(&error)
                 );
             }
@@ -128,37 +130,89 @@ pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
     Ok(())
 }
 
-struct RmdirError<'a> {
+struct RmdirError {
     error: io::Error,
-    path: &'a Path,
+    path: PathBuf,
     is_parent: bool,
 }
 
-fn rmdir_remove_with_output<'a>(
-    mut path: &'a Path,
+fn rmdir_remove_with_output(
+    path: &Path,
     configs: RmdirConfigs,
     verbose_output: &mut Vec<u8>,
-) -> Result<(), RmdirError<'a>> {
+) -> Result<(), RmdirError> {
     rmdir_remove_single_with_output(path, configs, verbose_output).map_err(|error| RmdirError {
         error,
-        path,
+        path: path.to_path_buf(),
         is_parent: false,
     })?;
     if configs.is_parents {
-        while let Some(new) = path.parent() {
-            path = new;
-            if path.as_os_str().is_empty() {
-                break;
-            }
-            rmdir_remove_single_with_output(path, configs, verbose_output).map_err(|error| {
-                RmdirError {
-                    error,
-                    path,
-                    is_parent: true,
-                }
-            })?;
-        }
+        rmdir_remove_parents(path, configs, verbose_output)?;
     }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn rmdir_remove_parents(
+    path: &Path,
+    configs: RmdirConfigs,
+    verbose_output: &mut Vec<u8>,
+) -> Result<(), RmdirError> {
+    let mut path_bytes = path.as_os_str().as_bytes().to_vec();
+    strip_trailing_slashes(&mut path_bytes);
+
+    while let Some(mut slash) = path_bytes.iter().rposition(|byte| *byte == b'/') {
+        while slash > 0 && path_bytes[slash] == b'/' {
+            slash -= 1;
+        }
+        path_bytes.truncate(slash + 1);
+
+        let parent = PathBuf::from(OsString::from_vec(path_bytes.clone()));
+        rmdir_remove_single_with_output(&parent, configs, verbose_output).map_err(|error| {
+            RmdirError {
+                error,
+                path: parent,
+                is_parent: true,
+            }
+        })?;
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn strip_trailing_slashes(path: &mut Vec<u8>) {
+    let end = path
+        .iter()
+        .rposition(|byte| *byte != b'/')
+        .map_or(0, |index| index + 1);
+    if end == 0 && !path.is_empty() {
+        path.truncate(1);
+    } else {
+        path.truncate(end);
+    }
+}
+
+#[cfg(not(unix))]
+fn rmdir_remove_parents(
+    mut path: &Path,
+    configs: RmdirConfigs,
+    verbose_output: &mut Vec<u8>,
+) -> Result<(), RmdirError> {
+    while let Some(parent) = path.parent() {
+        path = parent;
+        if path.as_os_str().is_empty() {
+            break;
+        }
+        rmdir_remove_single_with_output(path, configs, verbose_output).map_err(|error| {
+            RmdirError {
+                error,
+                path: path.to_path_buf(),
+                is_parent: true,
+            }
+        })?;
+    }
+
     Ok(())
 }
 
@@ -220,7 +274,7 @@ fn rmdir_redirect_stdout_to_dev_null() {
 fn rmdir_redirect_stdout_to_dev_null() {}
 
 #[cfg(test)]
-fn rmdir_remove(path: &Path, configs: RmdirConfigs) -> Result<(), RmdirError<'_>> {
+fn rmdir_remove(path: &Path, configs: RmdirConfigs) -> Result<(), RmdirError> {
     rmdir_remove_with_output(path, configs, &mut Vec::new())
 }
 

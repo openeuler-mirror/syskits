@@ -462,6 +462,14 @@ fn parse_datetime_gnu_compat_impl(
         });
     }
 
+    if let Some(normalized) = normalize_gnu_word_month_date_compact_time(input_trim) {
+        return parse_datetime_gnu_compat_impl(
+            &normalized,
+            reference_time,
+            normalized_extended_year,
+        );
+    }
+
     if let Some(dt) =
         parse_gnu_numeric_timezone(input_trim, reference_time, normalized_extended_year)
     {
@@ -1589,6 +1597,118 @@ fn parse_gnu_month_day_time(
             None => resolve_local_datetime_gnu_compat(datetime),
         }
     }))
+}
+
+/// Normalize a compact clock that follows a complete word-month date.
+///
+/// GNU's `digits_to_date_time` parses a one- or two-digit item as `HH`, and
+/// a three- or four-digit item as `HHMM`, after a date item has been seen.
+/// The general format parser below already handles the equivalent colon clock,
+/// including the date's timezone and two-digit year rules.
+fn normalize_gnu_word_month_date_compact_time(input: &str) -> Option<String> {
+    let fields = input.split_ascii_whitespace().collect::<Vec<_>>();
+    let date_fields = fields
+        .iter()
+        .enumerate()
+        .filter_map(|(index, field)| {
+            (!gnu_standalone_timezone_field(field)).then_some((index, *field))
+        })
+        .collect::<Vec<_>>();
+
+    if date_fields.len() != 4 {
+        return None;
+    }
+
+    let (_, first) = date_fields[0];
+    let (_, second) = date_fields[1];
+    let (third_index, third) = date_fields[2];
+    let (fourth_index, fourth) = date_fields[3];
+    let compact_time_index = if gnu_month_number(first).is_some()
+        && gnu_date_day_field(second)
+        && gnu_compact_clock_field(third)
+        && third.len() <= 2
+        && gnu_date_year_field(fourth)
+    {
+        // `MONTH DAY HOUR YEAR`: the first short number is a clock because
+        // the date item has not yet received a year.
+        third_index
+    } else if gnu_month_number(first).is_some()
+        && gnu_date_day_field_with_comma(second)
+        && gnu_date_year_field(third)
+        && gnu_compact_clock_field(fourth)
+    {
+        // A comma makes the preceding word-month date an explicit date.
+        fourth_index
+    } else if gnu_month_number(first).is_some()
+        && gnu_date_day_field(second)
+        && third.len() >= 3
+        && gnu_date_year_field(third)
+        && gnu_compact_clock_field(fourth)
+    {
+        fourth_index
+    } else if gnu_date_day_field(first)
+        && gnu_month_number(second).is_some()
+        && gnu_date_year_field(third)
+        && gnu_compact_clock_field(fourth)
+    {
+        // `DAY MONTH YEAR TIME` has an explicit date even for a short year.
+        fourth_index
+    } else {
+        return None;
+    };
+
+    let compact_time = gnu_compact_clock_to_colon(fields[compact_time_index])?;
+    Some(
+        fields
+            .iter()
+            .enumerate()
+            .map(|(index, field)| {
+                if index == compact_time_index {
+                    compact_time.as_str()
+                } else {
+                    field
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
+}
+
+fn gnu_standalone_timezone_field(field: &str) -> bool {
+    GNU_NAMED_TIMEZONES
+        .iter()
+        .any(|(name, _)| field.eq_ignore_ascii_case(name))
+        || parse_gnu_numeric_timezone_offset(field).is_some()
+        || field.chars().count() == 1
+            && field
+                .chars()
+                .next()
+                .is_some_and(|character| military_timezone_offset_hours(character).is_some())
+}
+
+fn gnu_date_day_field_with_comma(field: &str) -> bool {
+    gnu_date_day_field(field) || field.strip_suffix(',').is_some_and(gnu_date_day_field)
+}
+
+fn gnu_date_year_field(field: &str) -> bool {
+    !field.is_empty() && field.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn gnu_compact_clock_field(field: &str) -> bool {
+    (1..=4).contains(&field.len()) && field.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn gnu_compact_clock_to_colon(input: &str) -> Option<String> {
+    if !gnu_compact_clock_field(input) {
+        return None;
+    }
+
+    match input.len() {
+        1 | 2 => Some(format!("{input}:00")),
+        3 => Some(format!("{}:{}", &input[..1], &input[1..])),
+        4 => Some(format!("{}:{}", &input[..2], &input[2..])),
+        _ => None,
+    }
 }
 
 fn split_gnu_clock_timezone(clock: &str) -> Option<(&str, i32)> {
@@ -4480,6 +4600,37 @@ mod tests {
         assert_eq!(parsed.day(), 24);
         assert_eq!(parsed.hour(), 5);
         assert_eq!(parsed.minute(), 30);
+    }
+
+    #[test]
+    fn test_parse_gnu_word_month_date_with_compact_time() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, expected) in [
+            (
+                "Feb 29 2024 7 UTC",
+                Utc.with_ymd_and_hms(2024, 2, 29, 7, 0, 0).unwrap(),
+            ),
+            (
+                "29 Feb 2024 UTC 7",
+                Utc.with_ymd_and_hms(2024, 2, 29, 7, 0, 0).unwrap(),
+            ),
+            (
+                "Feb 29, 2024 007 UTC",
+                Utc.with_ymd_and_hms(2024, 2, 29, 0, 7, 0).unwrap(),
+            ),
+            (
+                "Feb-29-2024 1234 UTC",
+                Utc.with_ymd_and_hms(2024, 2, 29, 12, 34, 0).unwrap(),
+            ),
+            (
+                "Feb 29 7 24 UTC",
+                Utc.with_ymd_and_hms(2024, 2, 29, 7, 0, 0).unwrap(),
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.with_timezone(&Utc), expected, "input {input}");
+        }
     }
 
     #[test]

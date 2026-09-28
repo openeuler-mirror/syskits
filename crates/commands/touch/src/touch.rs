@@ -2027,6 +2027,17 @@ mod tests {
         }
 
         #[test]
+        fn parse_date_accepts_compact_time_after_explicit_word_month_date() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            let parsed = touch_parse_date(reference, "Feb 29 2024 7 UTC").unwrap();
+            let expected = Utc.with_ymd_and_hms(2024, 2, 29, 7, 0, 0).unwrap();
+
+            assert_eq!(parsed.unix_seconds(), expected.timestamp());
+            assert_eq!(parsed.nanoseconds(), 0);
+        }
+
+        #[test]
         fn test_parse_date_valid() {
             // 测试POSIX_LOCALE格式的日期
             let ref_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();

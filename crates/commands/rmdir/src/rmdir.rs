@@ -56,7 +56,11 @@ pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
 
     for path in paths {
         if let Err(error) = rmdir_remove(path, configs) {
-            let RmdirError { error, path } = error;
+            let RmdirError {
+                error,
+                path,
+                is_parent,
+            } = error;
 
             if configs.is_ignore && rmdir_dir_not_empty(&error, path) {
                 continue;
@@ -95,7 +99,15 @@ pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
                 }
             }
 
-            ct_show_error!("failed to remove {}: {}", path.quote(), strip_errno(&error));
+            if is_parent && error.raw_os_error() != Some(libc::ENOTDIR) {
+                ct_show_error!(
+                    "failed to remove directory {}: {}",
+                    path.quote(),
+                    strip_errno(&error)
+                );
+            } else {
+                ct_show_error!("failed to remove {}: {}", path.quote(), strip_errno(&error));
+            }
         }
     }
 
@@ -105,27 +117,36 @@ pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
 struct RmdirError<'a> {
     error: io::Error,
     path: &'a Path,
+    is_parent: bool,
 }
 
 fn rmdir_remove(mut path: &Path, configs: RmdirConfigs) -> Result<(), RmdirError<'_>> {
-    rmdir_remove_single(path, configs)?;
+    rmdir_remove_single(path, configs).map_err(|error| RmdirError {
+        error,
+        path,
+        is_parent: false,
+    })?;
     if configs.is_parents {
         while let Some(new) = path.parent() {
             path = new;
             if path.as_os_str().is_empty() {
                 break;
             }
-            rmdir_remove_single(path, configs)?;
+            rmdir_remove_single(path, configs).map_err(|error| RmdirError {
+                error,
+                path,
+                is_parent: true,
+            })?;
         }
     }
     Ok(())
 }
 
-fn rmdir_remove_single(path: &Path, configs: RmdirConfigs) -> Result<(), RmdirError<'_>> {
+fn rmdir_remove_single(path: &Path, configs: RmdirConfigs) -> io::Result<()> {
     if configs.is_verbose {
         println!("{}: removing directory, {}", ct_util_name(), path.quote());
     }
-    remove_dir(path).map_err(|error| RmdirError { error, path })
+    remove_dir(path)
 }
 
 // POSIX: https://pubs.opengroup.org/onlinepubs/009696799/functions/rmdir.html

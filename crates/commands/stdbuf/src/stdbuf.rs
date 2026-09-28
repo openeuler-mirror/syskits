@@ -141,7 +141,8 @@ impl StdbufFlags {
             .into_iter()
             .flatten()
         {
-            buffer_type = match value.as_str() {
+            let value = value.trim_start_matches(|character: char| character.is_ascii_whitespace());
+            buffer_type = match value {
                 "L" => {
                     if option_name == stdbuf_flags::INPUT {
                         return Err("line buffering stdin is meaningless".to_string());
@@ -528,6 +529,21 @@ mod tests {
         let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("invalid mode"));
+    }
+
+    #[test]
+    fn test_parse_buffer_option_ignores_leading_ascii_whitespace() {
+        for (mode, expected) in [(" \tL", BufferType::Line), ("\n1K", BufferType::Size(1024))] {
+            let matches = create_arg_matches(None, Some(mode), None, None);
+            let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT);
+            match (result.unwrap(), expected) {
+                (BufferType::Line, BufferType::Line) => {}
+                (BufferType::Size(actual), BufferType::Size(expected)) => {
+                    assert_eq!(actual, expected)
+                }
+                _ => panic!("unexpected buffer mode for {mode:?}"),
+            }
+        }
     }
 
     #[test]

@@ -377,6 +377,34 @@
             "cleanup_commands": [
                 "name=$(printf 'bad\\377'); rm -f -- \"$name\""
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "目录符号链接带多个尾随斜杠时不跟随链接",
+            "setup_commands": [
+                "mkdir target",
+                "ln -s target link"
+            ],
+            "args": ["link//"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "rmdir: failed to remove 'link//': Symbolic link not followed\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test -L link && test -d target && echo 'link retained'",
+                        "expected_exit": 0,
+                        "expected_stdout": "link retained"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f link",
+                "rmdir target"
+            ]
         }
     ]
 }

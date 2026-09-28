@@ -1,6 +1,7 @@
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::os::unix::ffi::OsStringExt;
+use std::os::unix::fs::symlink;
 use std::os::unix::process::CommandExt;
 use std::process::Command;
 
@@ -73,4 +74,28 @@ fn non_utf8_directory_error_uses_gnu_shell_quoting() {
         output.stderr,
         b"rmdir: failed to remove 'bad'$'\\377': Not a directory\n"
     );
+}
+
+#[test]
+fn directory_symlink_with_multiple_trailing_slashes_is_not_followed() {
+    let tempdir = TempDir::new().unwrap();
+    fs::create_dir(tempdir.path().join("target")).unwrap();
+    symlink("target", tempdir.path().join("link")).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_rmdir"))
+        .arg0("rmdir")
+        .arg("link//")
+        .current_dir(tempdir.path())
+        .env("LC_ALL", "C")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"rmdir: failed to remove 'link//': Symbolic link not followed\n"
+    );
+    assert!(tempdir.path().join("link").is_symlink());
+    assert!(tempdir.path().join("target").is_dir());
 }

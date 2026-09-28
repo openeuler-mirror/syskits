@@ -88,14 +88,20 @@ pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
 
                 let bytes = path.as_os_str().as_bytes();
                 if error.raw_os_error() == Some(libc::ENOTDIR) && bytes.ends_with(b"/") {
-                    // 去除尾部斜杠，否则 .symlink_metadata() 会跟随符号链接
-                    let no_slash: &Path = OsStr::from_bytes(&bytes[..bytes.len() - 1]).as_ref();
-                    if no_slash.is_symlink() && points_to_directory(no_slash).unwrap_or(true) {
-                        ct_show_error!(
-                            "failed to remove {}: Symbolic link not followed",
-                            rmdir_quote_path(path)
-                        );
-                        continue;
+                    // 去除全部尾部斜杠，否则 .symlink_metadata() 会跟随符号链接。
+                    let path_end = bytes
+                        .iter()
+                        .rposition(|byte| *byte != b'/')
+                        .map_or(0, |index| index + 1);
+                    if path_end != 0 {
+                        let no_slash: &Path = OsStr::from_bytes(&bytes[..path_end]).as_ref();
+                        if no_slash.is_symlink() && points_to_directory(no_slash).unwrap_or(true) {
+                            ct_show_error!(
+                                "failed to remove {}: Symbolic link not followed",
+                                rmdir_quote_path(path)
+                            );
+                            continue;
+                        }
                     }
                 }
             }

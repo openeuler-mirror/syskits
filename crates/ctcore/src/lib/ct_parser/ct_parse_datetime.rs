@@ -133,6 +133,50 @@ fn normalize_gnu_ordinal_relative_units(input: &str) -> Option<String> {
     })
 }
 
+/// Normalize bare GNU relative-unit items so the relative-time parser can
+/// combine them with an explicit date item in any order.
+fn normalize_gnu_bare_relative_units(input: &str) -> Option<String> {
+    let tokens = input.split_ascii_whitespace().collect::<Vec<_>>();
+    let mut date_tokens = Vec::with_capacity(tokens.len());
+    let mut relative_tokens = Vec::new();
+    let mut changed = false;
+
+    for (index, token) in tokens.iter().enumerate() {
+        let previous = index.checked_sub(1).and_then(|index| tokens.get(index));
+        if is_gnu_relative_unit(token)
+            && !previous.is_some_and(|previous| {
+                previous.parse::<f64>().is_ok()
+                    || previous.replace(',', ".").parse::<f64>().is_ok()
+                    || matches!(
+                        *previous,
+                        "first"
+                            | "third"
+                            | "fourth"
+                            | "fifth"
+                            | "sixth"
+                            | "seventh"
+                            | "eighth"
+                            | "ninth"
+                            | "tenth"
+                            | "eleventh"
+                            | "twelfth"
+                    )
+            })
+        {
+            relative_tokens.push("+1".to_string());
+            relative_tokens.push(token.to_string());
+            changed = true;
+        } else {
+            date_tokens.push((*token).to_string());
+        }
+    }
+
+    changed.then(|| {
+        date_tokens.extend(relative_tokens);
+        date_tokens.join(" ")
+    })
+}
+
 /// Parse a GNU relative-time number with an optional decimal second fraction.
 fn parse_gnu_relative_number(input: &str, is_negative: bool) -> Option<(i64, i64)> {
     let Some(separator) = input.bytes().position(|byte| matches!(byte, b'.' | b',')) else {
@@ -631,6 +675,11 @@ fn parse_datetime_gnu_compat_impl(
                 break;
             }
         }
+    }
+
+    if let Some(normalized) = normalize_gnu_bare_relative_units(&processed_lower) {
+        processed_lower = normalized.clone();
+        processed_trim = normalized;
     }
 
     if let Some((_, replacement)) = [
@@ -4913,6 +4962,22 @@ mod tests {
             ("1970-01-01 1 secs", 1),
         ] {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(
+                parsed.timestamp(),
+                base.timestamp() + offset_seconds,
+                "input {input}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_parse_gnu_bare_relative_unit_after_explicit_date() {
+        let ref_time = Local.timestamp_opt(1_000_000, 0).unwrap();
+        let base = parse_datetime_gnu_compat("2024-01-01", ref_time).unwrap();
+
+        for (unit, offset_seconds) in [("second", 1), ("minute", 60), ("hour", 3_600)] {
+            let input = format!("2024-01-01 {unit}");
+            let parsed = parse_datetime_gnu_compat(&input, ref_time).unwrap();
             assert_eq!(
                 parsed.timestamp(),
                 base.timestamp() + offset_seconds,

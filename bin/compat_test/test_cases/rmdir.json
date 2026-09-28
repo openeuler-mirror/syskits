@@ -296,6 +296,33 @@
             "cleanup_commands": [
                 "rm -rf nonempty_dir"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "父目录非空时使用 GNU 阶段化错误诊断",
+            "setup_commands": [
+                "mkdir -p a/b",
+                "touch a/keep"
+            ],
+            "args": ["-p", "a/b"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "rmdir: failed to remove directory 'a': Directory not empty\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e a/b && test -d a && echo 'child removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "child removed"
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf a"
+            ]
         }
     ]
 }

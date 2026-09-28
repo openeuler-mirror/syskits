@@ -402,6 +402,55 @@ impl StdbufFlags {
     }
 }
 
+fn missing_mode_option_diagnostic(args: &[OsString]) -> Option<String> {
+    let mut index = 1;
+    while index < args.len() {
+        let argument = args[index].as_os_str().as_bytes();
+        if argument == b"--" || argument == b"-" || !argument.starts_with(b"-") {
+            break;
+        }
+
+        if let Some(option) = argument
+            .strip_prefix(b"-")
+            .filter(|option| option.len() == 1)
+        {
+            if matches!(option[0], b'i' | b'o' | b'e') {
+                if index + 1 == args.len() {
+                    return Some(format!(
+                        "option requires an argument -- '{}'",
+                        option[0] as char
+                    ));
+                }
+                index += 2;
+                continue;
+            }
+        }
+
+        if let Some(option) = argument.strip_prefix(b"--") {
+            let option = option.splitn(2, |byte| *byte == b'=').next().unwrap();
+            let mode_options = [b"input".as_slice(), b"output", b"error"];
+            let matching_options = mode_options
+                .iter()
+                .filter(|mode_option| mode_option.starts_with(option))
+                .collect::<Vec<_>>();
+            if let [mode_option] = matching_options.as_slice() {
+                if index + 1 == args.len() && !argument.contains(&b'=') {
+                    return Some(format!(
+                        "option '--{}' requires an argument",
+                        String::from_utf8_lossy(mode_option)
+                    ));
+                }
+                index += 2;
+                continue;
+            }
+        }
+
+        index += 1;
+    }
+
+    None
+}
+
 /// stdbuf 主执行函数
 ///
 /// # 参数
@@ -412,6 +461,11 @@ impl StdbufFlags {
 pub fn stdbuf_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+
+    let args: Vec<OsString> = args.collect();
+    if let Some(diagnostic) = missing_mode_option_diagnostic(&args) {
+        return Err(CTsageError::new(125, diagnostic));
+    }
 
     let matches = ct_app().try_get_matches_from(args).with_exit_code(125)?;
 
@@ -533,6 +587,16 @@ mod tests {
         let err = stdbuf_main(args.iter().map(OsString::from)).unwrap_err();
 
         assert_eq!(err.code(), 125);
+    }
+
+    #[test]
+    fn test_stdbuf_main_reports_gnu_short_option_missing_mode() {
+        let args = [ctcore::ct_util_name(), "-o"];
+        let err = stdbuf_main(args.iter().map(OsString::from)).unwrap_err();
+
+        assert_eq!(err.code(), 125);
+        assert_eq!(err.to_string(), "option requires an argument -- 'o'");
+        assert!(err.usage());
     }
 
     #[test]

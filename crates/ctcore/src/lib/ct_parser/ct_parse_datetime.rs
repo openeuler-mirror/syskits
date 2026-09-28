@@ -3217,6 +3217,7 @@ fn parse_embedded_timezone_local(
     timezone_name: &str,
     naive: NaiveDateTime,
 ) -> Option<DateTime<Local>> {
+    let timezone_name = embedded_timezone_name(timezone_name);
     if timezone_name.is_empty() {
         return Some(Utc.from_utc_datetime(&naive).with_timezone(&Local));
     }
@@ -3234,6 +3235,12 @@ fn parse_embedded_timezone_local(
         .from_local_datetime(&naive)
         .single()
         .map(|dt| dt.with_timezone(&Local))
+}
+
+/// On glibc, a leading colon in TZ is an implementation marker rather than
+/// part of the timezone name. GNU passes it straight to tzalloc.
+fn embedded_timezone_name(timezone_name: &str) -> &str {
+    timezone_name.strip_prefix(':').unwrap_or(timezone_name)
 }
 
 fn embedded_iana_timezone_local_datetime(
@@ -3271,6 +3278,7 @@ fn parse_embedded_timezone_reference_midnight(
     timezone_name: &str,
     reference_time: DateTime<Local>,
 ) -> Option<DateTime<Local>> {
+    let timezone_name = embedded_timezone_name(timezone_name);
     if let Ok(timezone) = timezone_name.parse::<Tz>() {
         let date = reference_time.with_timezone(&timezone).date_naive();
         return timezone
@@ -4719,6 +4727,10 @@ mod tests {
                 "TZ=\"America/New_York\"",
                 Utc.with_ymd_and_hms(2025, 7, 23, 4, 0, 0).unwrap(),
             ),
+            (
+                "TZ=\":America/New_York\"",
+                Utc.with_ymd_and_hms(2025, 7, 23, 4, 0, 0).unwrap(),
+            ),
         ] {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
             assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
@@ -4882,6 +4894,10 @@ mod tests {
             (
                 "TZ=\"America/New_York\" 2024-01-01 12:00 UTC",
                 Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap(),
+            ),
+            (
+                "TZ=\":America/New_York\" 2024-01-01 12:00",
+                Utc.with_ymd_and_hms(2024, 1, 1, 17, 0, 0).unwrap(),
             ),
             (
                 "TZ=\"America/New_York\" 2024-01-01 12:00 +0100",

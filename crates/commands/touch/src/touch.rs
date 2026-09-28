@@ -2255,6 +2255,16 @@ mod tests {
         }
 
         #[test]
+        fn test_parse_date_accepts_attached_military_timezone() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+            let parsed = touch_parse_date(reference, "2011-05-01 11:55:18A").unwrap();
+            let expected = Utc.with_ymd_and_hms(2011, 5, 1, 10, 55, 18).unwrap();
+
+            assert_eq!(parsed.unix_seconds(), expected.timestamp());
+            assert_eq!(parsed.nanoseconds(), 0);
+        }
+
+        #[test]
         fn test_parse_date_invalid() {
             let ref_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
 

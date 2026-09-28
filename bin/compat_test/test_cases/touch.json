@@ -4596,6 +4596,40 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下军用时区字母可紧随时钟；2011-05-01 11:55:18A必须按UTC+01设置target为10:55:18 UTC。",
+            "args": [
+                "--date=2011-05-01 11:55:18A",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %Y target)\" = 1304247318",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C、TZ=UTC0下圆括号注释必须保留GNU词法边界；U(ignored)TC不得拼接为UTC，必须报非法日期且不得创建target。",
             "args": [
                 "--date=2024-01-01 U(ignored)TC",

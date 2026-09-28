@@ -471,6 +471,14 @@ fn parse_datetime_gnu_compat_impl(
     let input_without_comments = strip_gnu_parenthesized_comments(input);
     let input_trim = input_without_comments.trim();
 
+    if let Some(normalized) = normalize_gnu_attached_military_timezone(input_trim) {
+        return parse_datetime_gnu_compat_impl(
+            &normalized,
+            reference_time,
+            normalized_extended_year,
+        );
+    }
+
     // GNU consumes a leading TZ="..." before parsing the remaining items.
     // It establishes the default local timezone only; a timezone item inside
     // the remaining date string still takes precedence.
@@ -1373,6 +1381,33 @@ fn normalize_gnu_lowercase_iso_separator(input: &str) -> Option<String> {
     NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()?;
 
     Some(format!("{date}T{}", &input[separator + 1..]))
+}
+
+/// GNU's lexer ends a numeric clock before a following military timezone
+/// letter.  Split that letter into its own item so the normal military-zone
+/// parser can apply its fixed offset (or local-time `J`) semantics.
+fn normalize_gnu_attached_military_timezone(input: &str) -> Option<String> {
+    let token_start = input
+        .bytes()
+        .rposition(|byte| byte.is_ascii_whitespace())
+        .map_or(0, |index| index + 1);
+    let token = &input[token_start..];
+    let zone = token.chars().next_back()?;
+    military_timezone_offset_hours(zone)?;
+
+    let clock = token.strip_suffix(zone)?;
+    let clock = clock
+        .rsplit_once(['T', 't'])
+        .map_or(clock, |(_, clock)| clock);
+    if parse_gnu_24_hour_clock(clock).is_none() && parse_gnu_compact_clock(clock).is_none() {
+        return None;
+    }
+
+    Some(format!(
+        "{} {}",
+        &input[..input.len() - zone.len_utf8()],
+        zone
+    ))
 }
 
 /// Normalize the two dotted-word forms accepted by GNU `parse-datetime`.
@@ -4194,6 +4229,15 @@ mod tests {
                 "input {input}"
             );
         }
+    }
+
+    #[test]
+    fn test_parse_attached_military_timezone_after_datetime() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 8, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("2011-05-01 11:55:18A", ref_time).unwrap();
+        let expected = Utc.with_ymd_and_hms(2011, 5, 1, 10, 55, 18).unwrap();
+
+        assert_eq!(parsed.timestamp(), expected.timestamp());
     }
 
     #[test]

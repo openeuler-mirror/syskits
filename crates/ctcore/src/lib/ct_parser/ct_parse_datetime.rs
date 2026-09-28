@@ -177,6 +177,36 @@ fn normalize_gnu_bare_relative_units(input: &str) -> Option<String> {
     })
 }
 
+/// Split GNU relative-time quantities from directly attached unit words, such
+/// as `-1month` or `1,5seconds`.
+fn normalize_gnu_attached_relative_unit_amounts(input: &str) -> Option<String> {
+    let mut normalized = Vec::new();
+    let mut changed = false;
+
+    for token in input.split_ascii_whitespace() {
+        let bytes = token.as_bytes();
+        let mut unit_start = usize::from(matches!(bytes.first(), Some(b'+' | b'-')));
+        let amount_start = unit_start;
+
+        while bytes
+            .get(unit_start)
+            .is_some_and(|byte| byte.is_ascii_digit() || matches!(byte, b'.' | b','))
+        {
+            unit_start += 1;
+        }
+
+        if unit_start > amount_start && is_gnu_relative_unit(&token[unit_start..]) {
+            normalized.push(token[..unit_start].to_string());
+            normalized.push(token[unit_start..].to_string());
+            changed = true;
+        } else {
+            normalized.push(token.to_string());
+        }
+    }
+
+    changed.then(|| normalized.join(" "))
+}
+
 /// Parse a GNU relative-time number with an optional decimal second fraction.
 fn parse_gnu_relative_number(input: &str, is_negative: bool) -> Option<(i64, i64)> {
     let Some(separator) = input.bytes().position(|byte| matches!(byte, b'.' | b',')) else {
@@ -612,6 +642,11 @@ fn parse_datetime_gnu_compat_impl(
         processed_lower = processed_lower.trim().to_string();
         processed_trim.truncate(processed_trim.len() - 6);
         processed_trim = processed_trim.trim().to_string();
+    }
+
+    if let Some(normalized) = normalize_gnu_attached_relative_unit_amounts(&processed_lower) {
+        processed_lower = normalized.clone();
+        processed_trim = normalized;
     }
 
     if let Some(normalized) = normalize_gnu_ordinal_relative_units(&processed_lower) {
@@ -4983,6 +5018,26 @@ mod tests {
                 base.timestamp() + offset_seconds,
                 "input {input}"
             );
+        }
+    }
+
+    #[test]
+    fn test_parse_gnu_signed_relative_unit_without_whitespace() {
+        let ref_time = Local.timestamp_opt(1_000_000, 0).unwrap();
+
+        for (input, expected) in [
+            (
+                "2024-01-01 -1month",
+                NaiveDate::from_ymd_opt(2023, 12, 1).unwrap(),
+            ),
+            (
+                "2024-01-01 +1month",
+                NaiveDate::from_ymd_opt(2024, 2, 1).unwrap(),
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.date_naive(), expected, "input {input}");
+            assert_eq!(parsed.time(), NaiveTime::MIN, "input {input}");
         }
     }
 

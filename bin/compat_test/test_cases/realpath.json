@@ -502,6 +502,52 @@
                 "rm -f link",
                 "rmdir target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "relative-to 重复时使用最后一个目录",
+            "setup_commands": [
+                "mkdir -p a b/child"
+            ],
+            "args": [
+                "--relative-to=a",
+                "--relative-to=b",
+                "b/child"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "child\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf a b"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "relative-base 重复时使用最后一个目录",
+            "setup_commands": [
+                "mkdir -p a b/child"
+            ],
+            "args": [
+                "--relative-base=a",
+                "--relative-base=b",
+                "b/child"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "child\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf a b"
+            ]
         }
     ]
 }

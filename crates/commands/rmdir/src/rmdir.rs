@@ -23,7 +23,9 @@ use ctcore::ct_quoting_style::gnu_quote_shell;
 use ctcore::{ct_show_error, ct_util_name};
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir};
-use std::io::{self, Write};
+use std::io;
+#[cfg(not(unix))]
+use std::io::Write;
 use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::{
@@ -60,7 +62,7 @@ pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
         return Err(CTsageError::new(1, "missing operand"));
     }
 
-    let mut verbose_output = Vec::new();
+    let mut verbose_output = RmdirVerboseOutput::new();
     for path in paths {
         if let Err(error) = rmdir_remove_with_output(path, configs, &mut verbose_output) {
             let RmdirError {
@@ -125,7 +127,7 @@ pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
         }
     }
 
-    rmdir_flush_verbose_output(&verbose_output)?;
+    rmdir_flush_verbose_output(&mut verbose_output)?;
 
     Ok(())
 }
@@ -139,7 +141,7 @@ struct RmdirError {
 fn rmdir_remove_with_output(
     path: &Path,
     configs: RmdirConfigs,
-    verbose_output: &mut Vec<u8>,
+    verbose_output: &mut RmdirVerboseOutput,
 ) -> Result<(), RmdirError> {
     rmdir_remove_single_with_output(path, configs, verbose_output).map_err(|error| RmdirError {
         error,
@@ -156,7 +158,7 @@ fn rmdir_remove_with_output(
 fn rmdir_remove_parents(
     path: &Path,
     configs: RmdirConfigs,
-    verbose_output: &mut Vec<u8>,
+    verbose_output: &mut RmdirVerboseOutput,
 ) -> Result<(), RmdirError> {
     let mut path_bytes = path.as_os_str().as_bytes().to_vec();
     strip_trailing_slashes(&mut path_bytes);
@@ -197,7 +199,7 @@ fn strip_trailing_slashes(path: &mut Vec<u8>) {
 fn rmdir_remove_parents(
     mut path: &Path,
     configs: RmdirConfigs,
-    verbose_output: &mut Vec<u8>,
+    verbose_output: &mut RmdirVerboseOutput,
 ) -> Result<(), RmdirError> {
     while let Some(parent) = path.parent() {
         path = parent;
@@ -219,33 +221,88 @@ fn rmdir_remove_parents(
 fn rmdir_remove_single_with_output(
     path: &Path,
     configs: RmdirConfigs,
-    verbose_output: &mut Vec<u8>,
+    verbose_output: &mut RmdirVerboseOutput,
 ) -> io::Result<()> {
     if configs.is_verbose {
-        verbose_output.extend_from_slice(ct_util_name().as_bytes());
-        verbose_output.extend_from_slice(b": removing directory, ");
-        verbose_output.extend_from_slice(rmdir_quote_path(path).as_bytes());
-        verbose_output.push(b'\n');
+        verbose_output.push(ct_util_name().as_bytes());
+        verbose_output.push(b": removing directory, ");
+        verbose_output.push(rmdir_quote_path(path).as_bytes());
+        verbose_output.push(b"\n");
     }
     remove_dir(path)
 }
 
-fn rmdir_flush_verbose_output(verbose_output: &[u8]) -> CTResult<()> {
-    if verbose_output.is_empty() {
+const RMDIR_DEFAULT_STDOUT_BUFFER_SIZE: usize = 4096;
+
+struct RmdirVerboseOutput {
+    buffer: Vec<u8>,
+    buffer_capacity: usize,
+    line_buffered: bool,
+    output_error: Option<io::Error>,
+    stdout_was_closed: bool,
+    has_output: bool,
+}
+
+impl RmdirVerboseOutput {
+    fn new() -> Self {
+        let line_buffered = rmdir_stdout_is_tty();
+        Self {
+            buffer: Vec::with_capacity(RMDIR_DEFAULT_STDOUT_BUFFER_SIZE),
+            buffer_capacity: rmdir_stdout_buffer_capacity(line_buffered),
+            line_buffered,
+            output_error: None,
+            stdout_was_closed: ctcore::ct_stdout_was_closed(),
+            has_output: false,
+        }
+    }
+
+    fn push(&mut self, bytes: &[u8]) {
+        self.has_output = true;
+        if self.stdout_was_closed || self.output_error.is_some() {
+            return;
+        }
+
+        self.buffer.extend_from_slice(bytes);
+        if self.line_buffered {
+            self.flush();
+        } else {
+            while self.buffer.len() >= self.buffer_capacity && self.output_error.is_none() {
+                self.flush_prefix(self.buffer_capacity);
+            }
+        }
+    }
+
+    fn flush(&mut self) {
+        self.flush_prefix(self.buffer.len());
+    }
+
+    fn flush_prefix(&mut self, length: usize) {
+        if length == 0 || self.output_error.is_some() {
+            return;
+        }
+
+        rmdir_restore_default_sigpipe();
+        if let Err(error) = rmdir_write_stdout(&self.buffer[..length]) {
+            self.output_error = Some(error);
+            self.buffer.clear();
+        } else {
+            self.buffer.drain(..length);
+        }
+    }
+}
+
+fn rmdir_flush_verbose_output(verbose_output: &mut RmdirVerboseOutput) -> CTResult<()> {
+    if !verbose_output.has_output {
         return Ok(());
     }
 
-    let output_error = if ctcore::ct_stdout_was_closed() {
-        Err(io::Error::from_raw_os_error(libc::EBADF))
+    if verbose_output.stdout_was_closed {
+        verbose_output.output_error = Some(io::Error::from_raw_os_error(libc::EBADF));
     } else {
-        rmdir_restore_default_sigpipe();
-        let mut stdout = io::stdout().lock();
-        stdout
-            .write_all(verbose_output)
-            .and_then(|_| stdout.flush())
-    };
+        verbose_output.flush();
+    }
 
-    if let Err(error) = output_error {
+    if let Some(error) = verbose_output.output_error.take() {
         rmdir_redirect_stdout_to_dev_null();
         return Err(CtSimpleError::new(
             1,
@@ -254,6 +311,68 @@ fn rmdir_flush_verbose_output(verbose_output: &[u8]) -> CTResult<()> {
     }
 
     Ok(())
+}
+
+#[cfg(unix)]
+fn rmdir_stdout_is_tty() -> bool {
+    (unsafe { libc::isatty(libc::STDOUT_FILENO) }) == 1
+}
+
+#[cfg(not(unix))]
+fn rmdir_stdout_is_tty() -> bool {
+    false
+}
+
+#[cfg(unix)]
+fn rmdir_stdout_buffer_capacity(line_buffered: bool) -> usize {
+    if line_buffered {
+        return 1;
+    }
+
+    let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+    if unsafe { libc::fstat(libc::STDOUT_FILENO, &mut stat) } == 0 && stat.st_blksize > 0 {
+        return stat.st_blksize as usize;
+    }
+
+    RMDIR_DEFAULT_STDOUT_BUFFER_SIZE
+}
+
+#[cfg(not(unix))]
+fn rmdir_stdout_buffer_capacity(_line_buffered: bool) -> usize {
+    RMDIR_DEFAULT_STDOUT_BUFFER_SIZE
+}
+
+#[cfg(unix)]
+fn rmdir_write_stdout(mut bytes: &[u8]) -> io::Result<()> {
+    while !bytes.is_empty() {
+        let written = unsafe {
+            libc::write(
+                libc::STDOUT_FILENO,
+                bytes.as_ptr().cast(),
+                bytes.len().min(isize::MAX as usize),
+            )
+        };
+        if written > 0 {
+            bytes = &bytes[written as usize..];
+        } else if written == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::WriteZero,
+                "failed to write stdout",
+            ));
+        } else {
+            let error = io::Error::last_os_error();
+            if error.kind() != io::ErrorKind::Interrupted {
+                return Err(error);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn rmdir_write_stdout(bytes: &[u8]) -> io::Result<()> {
+    let mut stdout = io::stdout().lock();
+    stdout.write_all(bytes).and_then(|_| stdout.flush())
 }
 
 #[cfg(unix)]
@@ -290,12 +409,12 @@ fn rmdir_redirect_stdout_to_dev_null() {}
 
 #[cfg(test)]
 fn rmdir_remove(path: &Path, configs: RmdirConfigs) -> Result<(), RmdirError> {
-    rmdir_remove_with_output(path, configs, &mut Vec::new())
+    rmdir_remove_with_output(path, configs, &mut RmdirVerboseOutput::new())
 }
 
 #[cfg(test)]
 fn rmdir_remove_single(path: &Path, configs: RmdirConfigs) -> io::Result<()> {
-    rmdir_remove_single_with_output(path, configs, &mut Vec::new())
+    rmdir_remove_single_with_output(path, configs, &mut RmdirVerboseOutput::new())
 }
 
 fn rmdir_quote_path(path: &Path) -> String {

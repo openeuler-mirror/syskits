@@ -1409,21 +1409,48 @@ fn is_gnu_known_timezone(input: &str, reference_time: DateTime<Local>) -> bool {
 /// comments are accepted; an unmatched closing parenthesis remains input.
 fn strip_gnu_parenthesized_comments(input: &str) -> String {
     let mut result = String::with_capacity(input.len());
-    let mut depth = 0usize;
+    let mut characters = input.chars().peekable();
 
-    for character in input.chars() {
-        match character {
-            '(' if depth == 0 => {
-                depth = 1;
+    while let Some(character) = characters.next() {
+        if character != '(' {
+            result.push(character);
+            continue;
+        }
+
+        let left = result.chars().next_back();
+        let mut depth = 1usize;
+        for comment_character in characters.by_ref() {
+            match comment_character {
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                _ => {}
             }
-            '(' => depth += 1,
-            ')' if depth > 0 => depth -= 1,
-            _ if depth == 0 => result.push(character),
-            _ => {}
+        }
+
+        if depth == 0
+            && gnu_parenthesized_comment_needs_token_boundary(left, characters.peek().copied())
+        {
+            result.push(' ');
         }
     }
 
     result
+}
+
+/// GNU's lexer treats a parenthesized comment as a delimiter.  Preserve that
+/// delimiter only where removing the comment would merge two lexical tokens.
+fn gnu_parenthesized_comment_needs_token_boundary(left: Option<char>, right: Option<char>) -> bool {
+    let is_token_character =
+        |character: char| character.is_ascii_alphanumeric() || character == '.';
+
+    matches!((left, right), (Some(left), Some(right))
+        if (is_token_character(left) && is_token_character(right))
+            || (matches!(left, '+' | '-') && (right.is_ascii_digit() || right == '.')))
 }
 
 fn expand_year_for_format<T: Datelike>(value: T, format: &str) -> Option<T> {
@@ -4621,6 +4648,17 @@ mod tests {
         let parsed = parse_datetime_gnu_compat("2024(ignored)-01-01 UTC", ref_time).unwrap();
 
         assert_eq!(parsed.timestamp(), 1_704_067_200);
+    }
+
+    #[test]
+    fn test_gnu_parenthesized_comments_preserve_lexical_boundaries() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        assert_eq!(
+            strip_gnu_parenthesized_comments("2024(ignored)0101 UTC"),
+            "2024 0101 UTC"
+        );
+        assert!(parse_datetime_gnu_compat("2024-01-01 U(ignored)TC", ref_time).is_err());
     }
 
     #[test]

@@ -142,6 +142,10 @@ impl StdbufFlags {
             .flatten()
         {
             let value = value.trim_start_matches(|character: char| character.is_ascii_whitespace());
+            let value = value
+                .strip_prefix('+')
+                .filter(|remainder| remainder.as_bytes().first().is_some_and(u8::is_ascii_digit))
+                .unwrap_or(value);
             buffer_type = match value {
                 "L" => {
                     if option_name == stdbuf_flags::INPUT {
@@ -552,6 +556,13 @@ mod tests {
                 _ => panic!("unexpected buffer mode for {mode:?}"),
             }
         }
+    }
+
+    #[test]
+    fn test_parse_buffer_option_accepts_leading_plus_sign() {
+        let matches = create_arg_matches(None, Some("+1K"), None, None);
+        let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT).unwrap();
+        assert!(matches!(result, BufferType::Size(1024)));
     }
 
     #[cfg(target_os = "linux")]

@@ -3228,6 +3228,10 @@ fn parse_embedded_timezone_local(
             .map(|dt| dt.with_timezone(&Local));
     }
 
+    if let Some(timezone) = parse_posix_timezone_rule(timezone_name) {
+        return posix_timezone_local_datetime(timezone, naive);
+    }
+
     embedded_timezone_fixed_offset(timezone_name)?
         .from_local_datetime(&naive)
         .single()
@@ -3246,6 +3250,10 @@ fn parse_embedded_timezone_reference_midnight(
             .from_local_datetime(&date.and_time(NaiveTime::MIN))
             .earliest()
             .map(|datetime| datetime.with_timezone(&Local));
+    }
+
+    if let Some(timezone) = parse_posix_timezone_rule(timezone_name) {
+        return posix_timezone_reference_midnight(timezone, reference_time);
     }
 
     let timezone = if timezone_name.is_empty() {
@@ -3271,6 +3279,395 @@ fn embedded_timezone_fixed_offset(timezone_name: &str) -> Option<FixedOffset> {
         return None;
     };
     FixedOffset::east_opt(offset_hours * 3600)
+}
+
+#[derive(Clone, Copy)]
+struct PosixTimezoneRule {
+    standard_offset: i32,
+    daylight_offset: Option<i32>,
+    daylight_start: Option<PosixTransitionRule>,
+    daylight_end: Option<PosixTransitionRule>,
+}
+
+#[derive(Clone, Copy)]
+struct PosixTransitionRule {
+    day: PosixTransitionDay,
+    seconds: i32,
+    time_basis: PosixTransitionTimeBasis,
+}
+
+#[derive(Clone, Copy)]
+enum PosixTransitionDay {
+    JulianNoLeap(u16),
+    Julian(u16),
+    MonthWeekday { month: u32, week: u32, weekday: u32 },
+}
+
+#[derive(Clone, Copy)]
+enum PosixTransitionTimeBasis {
+    Wall,
+    Standard,
+    Utc,
+}
+
+/// Parse the POSIX TZ rule syntax accepted by GNU's embedded `TZ="..."`
+/// date item. The result stores UTC offsets east of Greenwich.
+fn parse_posix_timezone_rule(input: &str) -> Option<PosixTimezoneRule> {
+    let bytes = input.as_bytes();
+    let mut index = 0;
+    parse_posix_timezone_name(bytes, &mut index)?;
+    let standard_offset = parse_posix_timezone_offset(bytes, &mut index)?.checked_neg()?;
+
+    if index == bytes.len() {
+        return Some(PosixTimezoneRule {
+            standard_offset,
+            daylight_offset: None,
+            daylight_start: None,
+            daylight_end: None,
+        });
+    }
+
+    parse_posix_timezone_name(bytes, &mut index)?;
+    let daylight_offset = match bytes.get(index) {
+        None | Some(b',') => standard_offset.checked_add(3_600)?,
+        Some(_) => parse_posix_timezone_offset(bytes, &mut index)?.checked_neg()?,
+    };
+
+    let (daylight_start, daylight_end) = if index == bytes.len() {
+        // glibc, which GNU uses on Linux, applies the current US rules when
+        // a daylight abbreviation has no explicit transition specification.
+        (posix_default_daylight_start(), posix_default_daylight_end())
+    } else {
+        (bytes.get(index) == Some(&b',')).then_some(())?;
+        index += 1;
+        let start = parse_posix_transition_rule(bytes, &mut index)?;
+        (bytes.get(index) == Some(&b',')).then_some(())?;
+        index += 1;
+        let end = parse_posix_transition_rule(bytes, &mut index)?;
+        (index == bytes.len()).then_some((start, end))?
+    };
+
+    Some(PosixTimezoneRule {
+        standard_offset,
+        daylight_offset: Some(daylight_offset),
+        daylight_start: Some(daylight_start),
+        daylight_end: Some(daylight_end),
+    })
+}
+
+fn parse_posix_timezone_name(bytes: &[u8], index: &mut usize) -> Option<()> {
+    if bytes.get(*index) == Some(&b'<') {
+        let end = bytes[*index + 1..].iter().position(|byte| *byte == b'>')?;
+        (end > 0).then_some(())?;
+        *index += end + 2;
+        return Some(());
+    }
+
+    let start = *index;
+    while bytes
+        .get(*index)
+        .is_some_and(|byte| byte.is_ascii_alphabetic())
+    {
+        *index += 1;
+    }
+    (*index - start >= 3).then_some(())
+}
+
+/// Parse a POSIX offset, whose sign is opposite from the UTC offset stored
+/// by chrono. For example, `EST5` is five hours west of Greenwich.
+fn parse_posix_timezone_offset(bytes: &[u8], index: &mut usize) -> Option<i32> {
+    let sign = match bytes.get(*index) {
+        Some(b'+') => {
+            *index += 1;
+            1_i32
+        }
+        Some(b'-') => {
+            *index += 1;
+            -1_i32
+        }
+        _ => 1_i32,
+    };
+    let hours = parse_posix_number(bytes, index, 1, 3)?;
+    let minutes = if bytes.get(*index) == Some(&b':') {
+        *index += 1;
+        parse_posix_number(bytes, index, 2, 2)?
+    } else {
+        0
+    };
+    let seconds = if bytes.get(*index) == Some(&b':') {
+        *index += 1;
+        parse_posix_number(bytes, index, 2, 2)?
+    } else {
+        0
+    };
+    (minutes < 60 && seconds < 60).then_some(())?;
+    hours
+        .checked_mul(3_600)?
+        .checked_add(minutes.checked_mul(60)?)?
+        .checked_add(seconds)?
+        .checked_mul(sign)
+}
+
+fn parse_posix_transition_rule(bytes: &[u8], index: &mut usize) -> Option<PosixTransitionRule> {
+    let day = match bytes.get(*index)? {
+        b'J' => {
+            *index += 1;
+            let day = parse_posix_number(bytes, index, 1, 3)?;
+            (1..=365)
+                .contains(&day)
+                .then_some(PosixTransitionDay::JulianNoLeap(day as u16))?
+        }
+        b'M' => {
+            *index += 1;
+            let month = parse_posix_number(bytes, index, 1, 2)?;
+            (bytes.get(*index) == Some(&b'.')).then_some(())?;
+            *index += 1;
+            let week = parse_posix_number(bytes, index, 1, 1)?;
+            (bytes.get(*index) == Some(&b'.')).then_some(())?;
+            *index += 1;
+            let weekday = parse_posix_number(bytes, index, 1, 1)?;
+            ((1..=12).contains(&month) && (1..=5).contains(&week) && weekday <= 6).then_some(
+                PosixTransitionDay::MonthWeekday {
+                    month: month as u32,
+                    week: week as u32,
+                    weekday: weekday as u32,
+                },
+            )?
+        }
+        byte if byte.is_ascii_digit() => {
+            let day = parse_posix_number(bytes, index, 1, 3)?;
+            (day <= 365).then_some(PosixTransitionDay::Julian(day as u16))?
+        }
+        _ => return None,
+    };
+
+    let (seconds, time_basis) = if bytes.get(*index) == Some(&b'/') {
+        *index += 1;
+        let seconds = parse_posix_transition_seconds(bytes, index)?;
+        let time_basis = match bytes
+            .get(*index)
+            .copied()
+            .map(|byte| byte.to_ascii_lowercase())
+        {
+            Some(b's') => {
+                *index += 1;
+                PosixTransitionTimeBasis::Standard
+            }
+            Some(b'u' | b'g' | b'z') => {
+                *index += 1;
+                PosixTransitionTimeBasis::Utc
+            }
+            Some(b'w') => {
+                *index += 1;
+                PosixTransitionTimeBasis::Wall
+            }
+            _ => PosixTransitionTimeBasis::Wall,
+        };
+        (seconds, time_basis)
+    } else {
+        (7_200, PosixTransitionTimeBasis::Wall)
+    };
+
+    Some(PosixTransitionRule {
+        day,
+        seconds,
+        time_basis,
+    })
+}
+
+fn parse_posix_transition_seconds(bytes: &[u8], index: &mut usize) -> Option<i32> {
+    let sign = match bytes.get(*index) {
+        Some(b'+') => {
+            *index += 1;
+            1_i32
+        }
+        Some(b'-') => {
+            *index += 1;
+            -1_i32
+        }
+        _ => 1_i32,
+    };
+    let hours = parse_posix_number(bytes, index, 1, 3)?;
+    let minutes = if bytes.get(*index) == Some(&b':') {
+        *index += 1;
+        parse_posix_number(bytes, index, 2, 2)?
+    } else {
+        0
+    };
+    let seconds = if bytes.get(*index) == Some(&b':') {
+        *index += 1;
+        parse_posix_number(bytes, index, 2, 2)?
+    } else {
+        0
+    };
+    (minutes < 60 && seconds < 60).then_some(())?;
+    hours
+        .checked_mul(3_600)?
+        .checked_add(minutes.checked_mul(60)?)?
+        .checked_add(seconds)?
+        .checked_mul(sign)
+}
+
+fn parse_posix_number(bytes: &[u8], index: &mut usize, min: usize, max: usize) -> Option<i32> {
+    let start = *index;
+    while bytes
+        .get(*index)
+        .is_some_and(|byte| byte.is_ascii_digit() && *index - start < max)
+    {
+        *index += 1;
+    }
+    let digits = *index - start;
+    (digits >= min).then_some(())?;
+    bytes[start..*index].iter().try_fold(0_i32, |value, byte| {
+        value.checked_mul(10)?.checked_add(i32::from(*byte - b'0'))
+    })
+}
+
+fn posix_default_daylight_start() -> PosixTransitionRule {
+    PosixTransitionRule {
+        day: PosixTransitionDay::MonthWeekday {
+            month: 3,
+            week: 2,
+            weekday: 0,
+        },
+        seconds: 7_200,
+        time_basis: PosixTransitionTimeBasis::Wall,
+    }
+}
+
+fn posix_default_daylight_end() -> PosixTransitionRule {
+    PosixTransitionRule {
+        day: PosixTransitionDay::MonthWeekday {
+            month: 11,
+            week: 1,
+            weekday: 0,
+        },
+        seconds: 7_200,
+        time_basis: PosixTransitionTimeBasis::Wall,
+    }
+}
+
+fn posix_timezone_local_datetime(
+    timezone: PosixTimezoneRule,
+    naive: NaiveDateTime,
+) -> Option<DateTime<Local>> {
+    let base_seconds = DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc).timestamp();
+    let mut candidates = [
+        timezone.standard_offset,
+        timezone.daylight_offset.unwrap_or(0),
+    ];
+    if timezone.daylight_offset.is_none() {
+        candidates[1] = timezone.standard_offset;
+    }
+
+    candidates
+        .into_iter()
+        .filter_map(|offset| {
+            let timestamp = base_seconds.checked_sub(i64::from(offset))?;
+            (posix_timezone_offset_at(timezone, timestamp) == offset).then_some((offset, timestamp))
+        })
+        // GNU delegates an unspecified DST fold to glibc mktime. On Linux,
+        // that resolves to the candidate whose UTC offset is closer to zero.
+        .min_by_key(|(offset, timestamp)| (i64::from(*offset).abs(), *timestamp))
+        .and_then(|(_, timestamp)| DateTime::from_timestamp(timestamp, naive.nanosecond()))
+        .map(|datetime: DateTime<Utc>| datetime.with_timezone(&Local))
+}
+
+fn posix_timezone_reference_midnight(
+    timezone: PosixTimezoneRule,
+    reference_time: DateTime<Local>,
+) -> Option<DateTime<Local>> {
+    let reference_timestamp = reference_time.timestamp();
+    let offset = posix_timezone_offset_at(timezone, reference_timestamp);
+    let local_timestamp = reference_timestamp.checked_add(i64::from(offset))?;
+    let local_date = DateTime::<Utc>::from_timestamp(local_timestamp, 0)?.date_naive();
+    posix_timezone_local_datetime(timezone, local_date.and_time(NaiveTime::MIN))
+}
+
+fn posix_timezone_offset_at(timezone: PosixTimezoneRule, timestamp: i64) -> i32 {
+    let Some(daylight_offset) = timezone.daylight_offset else {
+        return timezone.standard_offset;
+    };
+    let (Some(start), Some(end)) = (timezone.daylight_start, timezone.daylight_end) else {
+        return timezone.standard_offset;
+    };
+    let Some(year) = DateTime::<Utc>::from_timestamp(timestamp, 0).map(|datetime| datetime.year())
+    else {
+        return timezone.standard_offset;
+    };
+    let Some(start) = posix_transition_timestamp(
+        year,
+        start,
+        timezone.standard_offset,
+        timezone.standard_offset,
+    ) else {
+        return timezone.standard_offset;
+    };
+    let Some(end) =
+        posix_transition_timestamp(year, end, daylight_offset, timezone.standard_offset)
+    else {
+        return timezone.standard_offset;
+    };
+
+    let daylight_active = if start <= end {
+        (start..end).contains(&timestamp)
+    } else {
+        timestamp >= start || timestamp < end
+    };
+    if daylight_active {
+        daylight_offset
+    } else {
+        timezone.standard_offset
+    }
+}
+
+fn posix_transition_timestamp(
+    year: i32,
+    rule: PosixTransitionRule,
+    wall_offset: i32,
+    standard_offset: i32,
+) -> Option<i64> {
+    let local = posix_transition_datetime(year, rule)?;
+    let offset = match rule.time_basis {
+        PosixTransitionTimeBasis::Wall => wall_offset,
+        PosixTransitionTimeBasis::Standard => standard_offset,
+        PosixTransitionTimeBasis::Utc => 0,
+    };
+    DateTime::<Utc>::from_naive_utc_and_offset(local, Utc)
+        .timestamp()
+        .checked_sub(i64::from(offset))
+}
+
+fn posix_transition_datetime(year: i32, rule: PosixTransitionRule) -> Option<NaiveDateTime> {
+    let january_first = NaiveDate::from_ymd_opt(year, 1, 1)?;
+    let date = match rule.day {
+        PosixTransitionDay::JulianNoLeap(day) => {
+            let leap_adjustment =
+                i64::from(january_first.with_year(year)?.leap_year() && day >= 60);
+            january_first
+                .checked_add_signed(Duration::days(i64::from(day) - 1 + leap_adjustment))?
+        }
+        PosixTransitionDay::Julian(day) => {
+            january_first.checked_add_signed(Duration::days(i64::from(day)))?
+        }
+        PosixTransitionDay::MonthWeekday {
+            month,
+            week,
+            weekday,
+        } => {
+            let first = NaiveDate::from_ymd_opt(year, month, 1)?;
+            let offset = (i64::from(weekday) - i64::from(first.weekday().num_days_from_sunday()))
+                .rem_euclid(7);
+            let mut date =
+                first.checked_add_signed(Duration::days(offset + 7 * i64::from(week - 1)))?;
+            if date.month() != month {
+                date = date.checked_sub_signed(Duration::days(7))?;
+            }
+            date
+        }
+    };
+    date.and_time(NaiveTime::MIN)
+        .checked_add_signed(Duration::seconds(i64::from(rule.seconds)))
 }
 
 #[derive(Clone, Copy)]
@@ -4299,6 +4696,45 @@ mod tests {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
             assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
         }
+    }
+
+    #[test]
+    fn test_parse_gnu_embedded_posix_timezone_rule() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for (input, expected) in [
+            (
+                "TZ=\"<+0530>-5:30\" 2024-01-01 12:34:56",
+                Utc.with_ymd_and_hms(2024, 1, 1, 7, 4, 56).unwrap(),
+            ),
+            (
+                "TZ=\"EST5EDT,M3.2.0,M11.1.0\" 2024-07-01 12:00:00",
+                Utc.with_ymd_and_hms(2024, 7, 1, 16, 0, 0).unwrap(),
+            ),
+            (
+                "TZ=\"EST5EDT,M3.2.0,M11.1.0\" 2024-11-03 01:30:00",
+                Utc.with_ymd_and_hms(2024, 11, 3, 5, 30, 0).unwrap(),
+            ),
+            (
+                "TZ=\"CET-1CEST,M3.5.0,M10.5.0/3\" 2024-10-27 02:30:00",
+                Utc.with_ymd_and_hms(2024, 10, 27, 1, 30, 0).unwrap(),
+            ),
+            (
+                "TZ=\"AEST-10AEDT-11,M10.1.0,M4.1.0/3\" 2024-04-07 02:30:00",
+                Utc.with_ymd_and_hms(2024, 4, 6, 16, 30, 0).unwrap(),
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
+        }
+
+        assert!(
+            parse_datetime_gnu_compat(
+                "TZ=\"EST5EDT,M3.2.0,M11.1.0\" 2024-03-10 02:30:00",
+                ref_time,
+            )
+            .is_err()
+        );
     }
 
     #[test]

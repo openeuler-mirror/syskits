@@ -4668,6 +4668,40 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下内嵌POSIX时区规则必须按GNU解析；TZ=\"<+0530>-5:30\"将2024-01-01 12:34:56解释为UTC 07:04:56。",
+            "args": [
+                "--date=TZ=\"<+0530>-5:30\" 2024-01-01 12:34:56",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(stat -c %Y target)\" = 1704092696",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C、TZ=UTC0下圆括号注释必须保留GNU词法边界；U(ignored)TC不得拼接为UTC，必须报非法日期且不得创建target。",
             "args": [
                 "--date=2024-01-01 U(ignored)TC",

@@ -179,18 +179,15 @@ impl StdbufFlags {
             .flatten()
         {
             let value = value.trim_start_matches(|character: char| character.is_ascii_whitespace());
+            if option_name == stdbuf_flags::INPUT && value.starts_with('L') {
+                return Err("line buffering stdin is meaningless".to_string());
+            }
             let value = value
                 .strip_prefix('+')
                 .filter(|remainder| remainder.as_bytes().first().is_some_and(u8::is_ascii_digit))
                 .unwrap_or(value);
             buffer_type = match value {
-                "L" => {
-                    if option_name == stdbuf_flags::INPUT {
-                        return Err("line buffering stdin is meaningless".to_string());
-                    } else {
-                        BufferType::Line
-                    }
-                }
+                "L" => BufferType::Line,
                 x => BufferType::Size(
                     parse_size_u64(x)
                         .map_err(|e| format!("invalid mode {e}"))?
@@ -512,6 +509,15 @@ mod tests {
         let matches = create_arg_matches(Some("L"), None, None, None);
         let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::INPUT);
         assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "line buffering stdin is meaningless");
+    }
+
+    #[test]
+    fn test_parse_buffer_option_rejects_stdin_mode_starting_with_l() {
+        let matches = create_arg_matches(Some("Lsuffix"), None, None, None);
+
+        let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::INPUT);
+
         assert_eq!(result.unwrap_err(), "line buffering stdin is meaningless");
     }
 

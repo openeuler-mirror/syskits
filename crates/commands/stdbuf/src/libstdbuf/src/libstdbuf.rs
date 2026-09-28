@@ -12,6 +12,8 @@
 use cpp::cpp;
 use libc::{_IOFBF, _IOLBF, _IONBF, FILE, c_char, c_int, fileno, size_t};
 use std::env;
+use std::io::Write;
+use std::os::unix::ffi::OsStrExt;
 use std::ptr;
 
 // 使用 CPP 宏定义 C++ 代码块，与 C 标准库进行交互
@@ -48,22 +50,29 @@ fn allocate_full_buffer(size: size_t) -> *mut c_char {
     unsafe { libc::malloc(size).cast() }
 }
 
-fn parse_buffer_mode(value: &str) -> Result<(c_int, size_t), ()> {
-    match value.as_bytes().first() {
+fn parse_buffer_mode(value: &[u8]) -> Result<(c_int, size_t), ()> {
+    match value.first() {
         Some(b'0') => Ok((_IONBF, 0)),
         Some(b'L') => Ok((_IOLBF, 0)),
         _ => {
-            let value = value.trim_start_matches(|character: char| character.is_ascii_whitespace());
-            let (negative, digits) = match value.as_bytes().first() {
+            let whitespace_len = value
+                .iter()
+                .take_while(|character| character.is_ascii_whitespace())
+                .count();
+            let value = &value[whitespace_len..];
+            let (negative, digits) = match value.first() {
                 Some(b'+') => (false, &value[1..]),
                 Some(b'-') => (true, &value[1..]),
                 _ => (false, value),
             };
-            if digits.is_empty() || !digits.as_bytes().iter().all(u8::is_ascii_digit) {
+            if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
                 return Err(());
             }
 
-            let magnitude = digits.parse::<u64>().unwrap_or(u64::MAX);
+            let magnitude = std::str::from_utf8(digits)
+                .unwrap()
+                .parse::<u64>()
+                .unwrap_or(u64::MAX);
             let size = if negative {
                 0_u64.wrapping_sub(magnitude)
             } else {
@@ -88,20 +97,30 @@ fn stream_name(stream: *mut FILE) -> &'static str {
     }
 }
 
+fn invalid_mode_diagnostic(value: &[u8], stream: &str) -> Vec<u8> {
+    let mut diagnostic = b"invalid buffering mode ".to_vec();
+    diagnostic.extend_from_slice(value);
+    diagnostic.extend_from_slice(b" for ");
+    diagnostic.extend_from_slice(stream.as_bytes());
+    diagnostic.push(b'\n');
+    diagnostic
+}
+
 /// 设置流缓冲区模式和大小
 ///
 /// # 参数
 /// * `stream` - 要设置缓冲的文件流指针
-/// * `value` - 缓冲模式字符串，可以是：
+/// * `value` - 缓冲模式字节串，可以是：
 ///   - "0": 无缓冲
 ///   - "L": 行缓冲
 ///   - 数字字符串: 完全缓冲，指定大小（字节）
-fn set_buffer(stream: *mut FILE, value: &str) {
+fn set_buffer(stream: *mut FILE, value: &[u8]) {
     // 根据输入值确定缓冲模式和大小
     let (mode, size) = match parse_buffer_mode(value) {
         Ok(mode) => mode,
         Err(()) => {
-            eprintln!("invalid buffering mode {value} for {}", stream_name(stream));
+            let _ =
+                std::io::stderr().write_all(&invalid_mode_diagnostic(value, stream_name(stream)));
             return;
         }
     };
@@ -150,21 +169,21 @@ fn set_buffer(stream: *mut FILE, value: &str) {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __stdbuf() {
     // 设置标准错误流的缓冲
-    if let Ok(val) = env::var("_STDBUF_E") {
+    if let Some(val) = env::var_os("_STDBUF_E") {
         unsafe {
-            set_buffer(__stdbuf_get_stderr(), &val);
+            set_buffer(__stdbuf_get_stderr(), val.as_os_str().as_bytes());
         }
     }
     // 设置标准输入流的缓冲
-    if let Ok(val) = env::var("_STDBUF_I") {
+    if let Some(val) = env::var_os("_STDBUF_I") {
         unsafe {
-            set_buffer(__stdbuf_get_stdin(), &val);
+            set_buffer(__stdbuf_get_stdin(), val.as_os_str().as_bytes());
         }
     }
     // 设置标准输出流的缓冲
-    if let Ok(val) = env::var("_STDBUF_O") {
+    if let Some(val) = env::var_os("_STDBUF_O") {
         unsafe {
-            set_buffer(__stdbuf_get_stdout(), &val);
+            set_buffer(__stdbuf_get_stdout(), val.as_os_str().as_bytes());
         }
     }
 }
@@ -175,12 +194,20 @@ mod tests {
 
     #[test]
     fn test_parse_buffer_mode_uses_gnu_mode_prefixes() {
-        assert_eq!(parse_buffer_mode("0suffix"), Ok((_IONBF, 0)));
-        assert_eq!(parse_buffer_mode("Lsuffix"), Ok((_IOLBF, 0)));
-        assert_eq!(parse_buffer_mode(" \t1024"), Ok((_IOFBF, 1024)));
-        assert_eq!(parse_buffer_mode("+1024"), Ok((_IOFBF, 1024)));
-        assert_eq!(parse_buffer_mode("invalid"), Err(()));
-        assert_eq!(parse_buffer_mode("+0"), Err(()));
+        assert_eq!(parse_buffer_mode(b"0suffix"), Ok((_IONBF, 0)));
+        assert_eq!(parse_buffer_mode(b"Lsuffix"), Ok((_IOLBF, 0)));
+        assert_eq!(parse_buffer_mode(b" \t1024"), Ok((_IOFBF, 1024)));
+        assert_eq!(parse_buffer_mode(b"+1024"), Ok((_IOFBF, 1024)));
+        assert_eq!(parse_buffer_mode(b"invalid"), Err(()));
+        assert_eq!(parse_buffer_mode(b"+0"), Err(()));
+    }
+
+    #[test]
+    fn test_invalid_mode_diagnostic_preserves_non_utf8_bytes() {
+        assert_eq!(
+            invalid_mode_diagnostic(&[0xff], "stdout"),
+            b"invalid buffering mode \xff for stdout\n"
+        );
     }
 
     #[test]

@@ -258,7 +258,7 @@ impl StdbufFlags {
             && matches!(&stdout, BufferType::Default)
             && matches!(&stderr, BufferType::Default)
         {
-            return Err(CtSimpleError::new(
+            return Err(CTsageError::new(
                 125,
                 "you must specify a buffering mode option",
             ));
@@ -651,6 +651,7 @@ mod tests {
 
         assert_eq!(err.code(), 125);
         assert_eq!(err.to_string(), "you must specify a buffering mode option");
+        assert!(err.usage());
     }
 
     // Helper function to create ArgMatches with specific values for testing

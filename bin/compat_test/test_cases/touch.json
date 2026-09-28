@@ -3950,6 +3950,45 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下相对星期项与裸数字时刻可按GNU任意顺序组合；以2025-07-24为参考的next Friday 7必须设置为2025-07-25 07:00 UTC。",
+            "args": [
+                "-r",
+                "reference",
+                "--date=next Friday 7",
+                "target"
+            ],
+            "pre_check": {
+                "command": "touch -d '2025-07-24 12:00:00 UTC' reference"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '1753426800.000000000'",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f reference target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C、TZ=UTC0下显式词月日期后的星期词元必须按GNU忽略；29 Feb 2024 Thu 12:34:56 UTC必须保留2024年份并设置对应时间。",
             "args": [
                 "--date=29 Feb 2024 Thu 12:34:56 UTC",

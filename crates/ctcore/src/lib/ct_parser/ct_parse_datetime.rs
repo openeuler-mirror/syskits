@@ -3411,18 +3411,45 @@ fn parse_relative_day_with_explicit_time(
     input: &str,
     reference_time: DateTime<Local>,
 ) -> Option<DateTime<Local>> {
+    let tokens = input.split_ascii_whitespace().collect::<Vec<_>>();
+    for (time_index, token) in tokens.iter().enumerate() {
+        // In `5 Monday`, GNU reads the leading number as the weekday ordinal,
+        // not as a compact clock.  A trailing number is a clock item instead.
+        if tokens.len() == 2 && time_index == 0 && parse_weekday_name(tokens[1]).is_some() {
+            continue;
+        }
+        let Some(time) = parse_gnu_24_hour_clock(token).or_else(|| parse_gnu_compact_clock(token))
+        else {
+            continue;
+        };
+        let weekday_input = tokens
+            .iter()
+            .enumerate()
+            .filter_map(|(index, token)| (index != time_index).then_some(*token))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let Some(weekday) = parse_weekday_expression(&weekday_input, reference_time) else {
+            continue;
+        };
+        let naive = weekday.date_naive().and_time(time);
+        return match weekday.timezone().from_local_datetime(&naive) {
+            chrono::LocalResult::Single(datetime) | chrono::LocalResult::Ambiguous(datetime, _) => {
+                Some(datetime)
+            }
+            chrono::LocalResult::None => None,
+        };
+    }
+
     let mut day_offset = None;
     let mut time = None;
 
-    for token in input.split_ascii_whitespace() {
+    for token in tokens {
         match token.to_ascii_lowercase().as_str() {
             "tomorrow" if day_offset.is_none() => day_offset = Some(1),
             "yesterday" if day_offset.is_none() => day_offset = Some(-1),
             "today" | "now" if day_offset.is_none() => day_offset = Some(0),
             _ if time.is_none() => {
-                time = ["%H:%M:%S%.f", "%H:%M:%S", "%H:%M"]
-                    .into_iter()
-                    .find_map(|format| NaiveTime::parse_from_str(token, format).ok());
+                time = parse_gnu_24_hour_clock(token).or_else(|| parse_gnu_compact_clock(token));
                 time?;
             }
             _ => return None,
@@ -3795,6 +3822,8 @@ mod tests {
             ("tomorrow 12:34:56", 25, 12, 34, 56),
             ("yesterday 01:02:03", 23, 1, 2, 3),
             ("today 23:45:00", 24, 23, 45, 0),
+            ("next Friday 7", 25, 7, 0, 0),
+            ("7 next Friday", 25, 7, 0, 0),
         ] {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
             assert_eq!(parsed.day(), expected_day, "input {input}");

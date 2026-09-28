@@ -48,6 +48,14 @@ fn allocate_full_buffer(size: size_t) -> *mut c_char {
     unsafe { libc::malloc(size).cast() }
 }
 
+fn parse_buffer_mode(value: &str) -> Result<(c_int, size_t), ()> {
+    match value.as_bytes().first() {
+        Some(b'0') => Ok((_IONBF, 0)),
+        Some(b'L') => Ok((_IOLBF, 0)),
+        _ => value.parse().map(|size| (_IOFBF, size)).map_err(|_| ()),
+    }
+}
+
 /// 设置流缓冲区模式和大小
 ///
 /// # 参数
@@ -58,28 +66,22 @@ fn allocate_full_buffer(size: size_t) -> *mut c_char {
 ///   - 数字字符串: 完全缓冲，指定大小（字节）
 fn set_buffer(stream: *mut FILE, value: &str) {
     // 根据输入值确定缓冲模式和大小
-    let (mode, size, buffer): (c_int, size_t, *mut c_char) = match value {
-        // 无缓冲模式
-        "0" => (_IONBF, 0_usize, ptr::null_mut()),
-        // 行缓冲模式
-        "L" => (_IOLBF, 0_usize, ptr::null_mut()),
-        // 完全缓冲模式，使用指定大小
-        input => {
-            let buff_size: usize = match input.parse() {
-                Ok(num) => num,
-                Err(_) => {
-                    // 解析缓冲区大小失败时输出错误并退出
-                    eprintln!("failed to allocate a {value} byte stdio buffer");
-                    std::process::exit(1);
-                }
-            };
-            let buffer = allocate_full_buffer(buff_size);
-            if buffer.is_null() {
-                eprintln!("failed to allocate a {buff_size} byte stdio buffer");
-                return;
-            }
-            (_IOFBF, buff_size, buffer)
+    let (mode, size) = match parse_buffer_mode(value) {
+        Ok(mode) => mode,
+        Err(()) => {
+            eprintln!("failed to allocate a {value} byte stdio buffer");
+            std::process::exit(1);
         }
+    };
+    let buffer = if mode == _IOFBF {
+        let buffer = allocate_full_buffer(size);
+        if buffer.is_null() {
+            eprintln!("failed to allocate a {size} byte stdio buffer");
+            return;
+        }
+        buffer
+    } else {
+        ptr::null_mut()
     };
     let res: c_int;
     unsafe {
@@ -138,6 +140,12 @@ pub unsafe extern "C" fn __stdbuf() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_buffer_mode_uses_gnu_mode_prefixes() {
+        assert_eq!(parse_buffer_mode("0suffix"), Ok((_IONBF, 0)));
+        assert_eq!(parse_buffer_mode("Lsuffix"), Ok((_IOLBF, 0)));
+    }
 
     #[test]
     fn test_allocate_full_buffer_returns_owned_memory() {

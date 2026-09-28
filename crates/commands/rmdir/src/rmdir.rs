@@ -18,8 +18,8 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, set_ct_exit_code, strip_errno};
+use ctcore::ct_quoting_style::gnu_quote_shell;
 use ctcore::{ct_show_error, ct_util_name};
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir};
@@ -93,7 +93,7 @@ pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
                     if no_slash.is_symlink() && points_to_directory(no_slash).unwrap_or(true) {
                         ct_show_error!(
                             "failed to remove {}: Symbolic link not followed",
-                            path.quote()
+                            rmdir_quote_path(path)
                         );
                         continue;
                     }
@@ -103,11 +103,15 @@ pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
             if is_parent && error.raw_os_error() != Some(libc::ENOTDIR) {
                 ct_show_error!(
                     "failed to remove directory {}: {}",
-                    path.quote(),
+                    rmdir_quote_path(path),
                     strip_errno(&error)
                 );
             } else {
-                ct_show_error!("failed to remove {}: {}", path.quote(), strip_errno(&error));
+                ct_show_error!(
+                    "failed to remove {}: {}",
+                    rmdir_quote_path(path),
+                    strip_errno(&error)
+                );
             }
         }
     }
@@ -145,9 +149,17 @@ fn rmdir_remove(mut path: &Path, configs: RmdirConfigs) -> Result<(), RmdirError
 
 fn rmdir_remove_single(path: &Path, configs: RmdirConfigs) -> io::Result<()> {
     if configs.is_verbose {
-        println!("{}: removing directory, {}", ct_util_name(), path.quote());
+        println!(
+            "{}: removing directory, {}",
+            ct_util_name(),
+            rmdir_quote_path(path)
+        );
     }
     remove_dir(path)
+}
+
+fn rmdir_quote_path(path: &Path) -> String {
+    gnu_quote_shell(path.as_os_str(), true)
 }
 
 // POSIX: https://pubs.opengroup.org/onlinepubs/009696799/functions/rmdir.html

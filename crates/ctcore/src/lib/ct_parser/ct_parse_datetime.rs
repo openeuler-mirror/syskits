@@ -177,6 +177,44 @@ fn normalize_gnu_bare_relative_units(input: &str) -> Option<String> {
     })
 }
 
+/// Move GNU's named relative-unit items after date items so that `next day
+/// 2024-01-01` follows the same parsing path as `2024-01-01 next day`.
+fn normalize_gnu_named_relative_units(input: &str) -> Option<String> {
+    let tokens = input.split_ascii_whitespace().collect::<Vec<_>>();
+    let mut date_tokens = Vec::with_capacity(tokens.len());
+    let mut relative_tokens = Vec::new();
+    let mut changed = false;
+    let mut index = 0;
+
+    while index < tokens.len() {
+        let Some(unit) = tokens.get(index + 1) else {
+            date_tokens.push(tokens[index].to_string());
+            break;
+        };
+        let amount = match tokens[index] {
+            "next" => Some("+1"),
+            "last" => Some("-1"),
+            "this" => Some("+0"),
+            _ => None,
+        };
+
+        if let Some(amount) = amount.filter(|_| is_gnu_relative_unit(unit)) {
+            relative_tokens.push(amount.to_string());
+            relative_tokens.push((*unit).to_string());
+            changed = true;
+            index += 2;
+        } else {
+            date_tokens.push(tokens[index].to_string());
+            index += 1;
+        }
+    }
+
+    changed.then(|| {
+        date_tokens.extend(relative_tokens);
+        date_tokens.join(" ")
+    })
+}
+
 /// Move GNU numeric relative-time items after date items, as GNU's grammar
 /// accepts items in either order and permits an immediate ago/hence modifier.
 fn normalize_gnu_numeric_relative_units(input: &str) -> Option<String> {
@@ -702,6 +740,11 @@ fn parse_datetime_gnu_compat_impl(
     }
 
     if let Some(normalized) = normalize_gnu_ordinal_relative_units(&processed_lower) {
+        processed_lower = normalized.clone();
+        processed_trim = normalized;
+    }
+
+    if let Some(normalized) = normalize_gnu_named_relative_units(&processed_lower) {
         processed_lower = normalized.clone();
         processed_trim = normalized;
     }
@@ -2078,9 +2121,11 @@ fn is_gnu_relative_unit(input: &str) -> bool {
             | "minute"
             | "minutes"
             | "min"
+            | "mins"
             | "second"
             | "seconds"
             | "sec"
+            | "secs"
     )
 }
 
@@ -5151,6 +5196,38 @@ mod tests {
                 "-1 day 2024-01-01",
                 NaiveDate::from_ymd_opt(2023, 12, 31).unwrap(),
                 NaiveTime::MIN,
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.date_naive(), expected_date, "input {input}");
+            assert_eq!(parsed.time(), expected_time, "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_parse_gnu_named_relative_unit_before_explicit_date() {
+        let ref_time = Local.timestamp_opt(1_000_000, 0).unwrap();
+
+        for (input, expected_date, expected_time) in [
+            (
+                "next day 2024-01-01",
+                NaiveDate::from_ymd_opt(2024, 1, 2).unwrap(),
+                NaiveTime::MIN,
+            ),
+            (
+                "last month 2024-01-31",
+                NaiveDate::from_ymd_opt(2023, 12, 31).unwrap(),
+                NaiveTime::MIN,
+            ),
+            (
+                "this mins 2024-01-01",
+                NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                NaiveTime::MIN,
+            ),
+            (
+                "next secs 2024-01-01",
+                NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                NaiveTime::from_hms_opt(0, 0, 1).unwrap(),
             ),
         ] {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();

@@ -362,6 +362,10 @@ pub fn ct_app() -> Command {
         Arg::new(realpath_flags::REALPATH_STRIP)
             .short('s')
             .long(realpath_flags::REALPATH_STRIP)
+            .overrides_with_all([
+                realpath_flags::REALPATH_PHYSICAL,
+                realpath_flags::REALPATH_LOGICAL,
+            ])
             .visible_alias("no-symlinks")
             .help(t!("realpath.clap.realpath_strip"))
             .action(ArgAction::SetTrue),
@@ -373,6 +377,10 @@ pub fn ct_app() -> Command {
         Arg::new(realpath_flags::REALPATH_LOGICAL)
             .short('L')
             .long(realpath_flags::REALPATH_LOGICAL)
+            .overrides_with_all([
+                realpath_flags::REALPATH_PHYSICAL,
+                realpath_flags::REALPATH_STRIP,
+            ])
             .help(t!("realpath.clap.realpath_logical"))
             .action(ArgAction::SetTrue),
         Arg::new(realpath_flags::REALPATH_PHYSICAL)
@@ -656,6 +664,27 @@ mod tests {
             let matches = create_test_matches(&[ctcore::ct_util_name(), "--physical", "test.txt"]);
             let flags = RealpathFlags::new(matches).unwrap();
             assert_eq!(flags.resolve_mode, ResolveMode::Physical);
+        }
+
+        #[test]
+        fn test_last_resolution_mode_option_wins() {
+            let logical_last = create_test_matches(&[ctcore::ct_util_name(), "-s", "-L", "path"]);
+            assert_eq!(
+                RealpathFlags::new(logical_last).unwrap().resolve_mode,
+                ResolveMode::Logical
+            );
+
+            let strip_last = create_test_matches(&[ctcore::ct_util_name(), "-L", "-s", "path"]);
+            assert_eq!(
+                RealpathFlags::new(strip_last).unwrap().resolve_mode,
+                ResolveMode::None
+            );
+
+            let physical_last = create_test_matches(&[ctcore::ct_util_name(), "-L", "-P", "path"]);
+            assert_eq!(
+                RealpathFlags::new(physical_last).unwrap().resolve_mode,
+                ResolveMode::Physical
+            );
         }
 
         #[test]

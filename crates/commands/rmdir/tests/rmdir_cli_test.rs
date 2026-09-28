@@ -27,3 +27,26 @@ fn parents_failure_names_directory_in_error() {
     assert!(!tempdir.path().join("a/b").exists());
     assert!(tempdir.path().join("a").exists());
 }
+
+#[test]
+fn posixly_correct_stops_option_parsing_at_first_directory() {
+    let tempdir = TempDir::new().unwrap();
+    fs::create_dir(tempdir.path().join("a")).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_rmdir"))
+        .arg0("rmdir")
+        .args(["a", "-v"])
+        .current_dir(tempdir.path())
+        .env("LC_ALL", "C")
+        .env("POSIXLY_CORRECT", "1")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"rmdir: failed to remove '-v': No such file or directory\n"
+    );
+    assert!(!tempdir.path().join("a").exists());
+}

@@ -13,6 +13,7 @@
 
 extern crate rust_i18n;
 use clap::builder::ValueParser;
+use ctcore::ct_posix::GnuGetoptCommandExt;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
@@ -229,6 +230,7 @@ pub fn ct_app() -> Command {
         .infer_long_args(true)
         .args_override_self(true)
         .args(args)
+        .gnu_getopt()
 }
 
 #[derive(Default)]

@@ -323,6 +323,35 @@
             "cleanup_commands": [
                 "rm -rf a"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "POSIXLY_CORRECT 在首个目录后停止解析选项",
+            "setup_commands": [
+                "mkdir a"
+            ],
+            "args": ["a", "-v"],
+            "environment": {
+                "env_vars": {
+                    "POSIXLY_CORRECT": "1"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "rmdir: failed to remove '-v': No such file or directory\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e a && echo 'first operand removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "first operand removed"
+                    }
+                ]
+            },
+            "cleanup_commands": []
         }
     ]
 }

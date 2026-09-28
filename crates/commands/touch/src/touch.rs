@@ -2061,6 +2061,17 @@ mod tests {
         }
 
         #[test]
+        fn parse_date_combines_relative_weekday_unit_with_compact_time() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            let parsed = touch_parse_date(reference, "second Friday 7 UTC").unwrap();
+            let expected = Utc.with_ymd_and_hms(2025, 7, 25, 7, 0, 1).unwrap();
+
+            assert_eq!(parsed.unix_seconds(), expected.timestamp());
+            assert_eq!(parsed.nanoseconds(), 0);
+        }
+
+        #[test]
         fn test_parse_date_valid() {
             // 测试POSIX_LOCALE格式的日期
             let ref_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();

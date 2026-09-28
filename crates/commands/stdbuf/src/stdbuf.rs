@@ -52,6 +52,10 @@ pub mod stdbuf_flags {
 
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
 
+fn signal_exit_code(signal: i32) -> i32 {
+    128 + signal
+}
+
 /// 缓冲区类型的枚举
 #[derive(Debug, Clone)]
 enum BufferType {
@@ -253,10 +257,16 @@ impl StdbufFlags {
                 }
             }
             None => {
-                let signal = status.signal().unwrap();
+                let signal = status.signal().unwrap_or_default();
+                if signal > 0 {
+                    // GNU stdbuf execs COMMAND in place. Re-raise the signal
+                    // so callers observe the same termination status.
+                    unsafe { ctcore::libc::raise(signal) };
+                    process::exit(signal_exit_code(signal));
+                }
                 Err(CtSimpleError::new(
                     1,
-                    format!("process killed by signal {signal}"),
+                    "command terminated without an exit status",
                 ))
             }
         }
@@ -563,6 +573,11 @@ mod tests {
         let matches = create_arg_matches(None, Some("+1K"), None, None);
         let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT).unwrap();
         assert!(matches!(result, BufferType::Size(1024)));
+    }
+
+    #[test]
+    fn test_signal_exit_code_matches_shell_convention() {
+        assert_eq!(signal_exit_code(ctcore::libc::SIGTERM), 143);
     }
 
     #[cfg(target_os = "linux")]

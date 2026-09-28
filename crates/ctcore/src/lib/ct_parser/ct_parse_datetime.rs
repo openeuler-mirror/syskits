@@ -483,8 +483,10 @@ fn parse_datetime_gnu_compat_impl(
     // It establishes the default local timezone only; a timezone item inside
     // the remaining date string still takes precedence.
     if input_trim.starts_with("TZ=\"") {
-        return parse_embedded_timezone(input_trim).ok_or_else(|| ParseDateTimeError {
-            message: format!("Unable to parse date: {input}"),
+        return parse_embedded_timezone(input_trim, reference_time).ok_or_else(|| {
+            ParseDateTimeError {
+                message: format!("Unable to parse date: {input}"),
+            }
         });
     }
 
@@ -706,7 +708,7 @@ fn parse_datetime_gnu_compat_impl(
         return Ok(dt);
     }
 
-    if let Some(dt) = parse_embedded_timezone(input_trim) {
+    if let Some(dt) = parse_embedded_timezone(input_trim, reference_time) {
         return Ok(dt);
     }
 
@@ -3160,8 +3162,14 @@ fn parse_gnu_named_timezone_correction(input: &str) -> Option<(i32, usize)> {
     ))
 }
 
-fn parse_embedded_timezone(input: &str) -> Option<DateTime<Local>> {
+fn parse_embedded_timezone(
+    input: &str,
+    reference_time: DateTime<Local>,
+) -> Option<DateTime<Local>> {
     let (timezone_name, date_input) = parse_embedded_timezone_prefix(input)?;
+    if date_input.is_empty() {
+        return parse_embedded_timezone_reference_midnight(&timezone_name, reference_time);
+    }
     let (naive, explicit_timezone) = parse_embedded_timezone_datetime(date_input)?;
 
     if let Some(timezone) = explicit_timezone {
@@ -3209,6 +3217,10 @@ fn parse_embedded_timezone_local(
     timezone_name: &str,
     naive: NaiveDateTime,
 ) -> Option<DateTime<Local>> {
+    if timezone_name.is_empty() {
+        return Some(Utc.from_utc_datetime(&naive).with_timezone(&Local));
+    }
+
     if let Ok(timezone) = timezone_name.parse::<Tz>() {
         return timezone
             .from_local_datetime(&naive)
@@ -3216,6 +3228,39 @@ fn parse_embedded_timezone_local(
             .map(|dt| dt.with_timezone(&Local));
     }
 
+    embedded_timezone_fixed_offset(timezone_name)?
+        .from_local_datetime(&naive)
+        .single()
+        .map(|dt| dt.with_timezone(&Local))
+}
+
+/// Parse a leading `TZ="..."` item without a following date specification.
+/// GNU uses midnight of the reference instant's date in that timezone.
+fn parse_embedded_timezone_reference_midnight(
+    timezone_name: &str,
+    reference_time: DateTime<Local>,
+) -> Option<DateTime<Local>> {
+    if let Ok(timezone) = timezone_name.parse::<Tz>() {
+        let date = reference_time.with_timezone(&timezone).date_naive();
+        return timezone
+            .from_local_datetime(&date.and_time(NaiveTime::MIN))
+            .earliest()
+            .map(|datetime| datetime.with_timezone(&Local));
+    }
+
+    let timezone = if timezone_name.is_empty() {
+        FixedOffset::east_opt(0)?
+    } else {
+        embedded_timezone_fixed_offset(timezone_name)?
+    };
+    let date = reference_time.with_timezone(&timezone).date_naive();
+    timezone
+        .from_local_datetime(&date.and_time(NaiveTime::MIN))
+        .single()
+        .map(|datetime| datetime.with_timezone(&Local))
+}
+
+fn embedded_timezone_fixed_offset(timezone_name: &str) -> Option<FixedOffset> {
     let offset_hours = if timezone_name.starts_with("EST") {
         -5
     } else if timezone_name.starts_with("PST") {
@@ -3225,10 +3270,7 @@ fn parse_embedded_timezone_local(
     } else {
         return None;
     };
-    FixedOffset::east_opt(offset_hours * 3600)?
-        .from_local_datetime(&naive)
-        .single()
-        .map(|dt| dt.with_timezone(&Local))
+    FixedOffset::east_opt(offset_hours * 3600)
 }
 
 #[derive(Clone, Copy)]
@@ -4238,6 +4280,25 @@ mod tests {
         let expected = Utc.with_ymd_and_hms(2011, 5, 1, 10, 55, 18).unwrap();
 
         assert_eq!(parsed.timestamp(), expected.timestamp());
+    }
+
+    #[test]
+    fn test_parse_gnu_embedded_timezone_without_date_uses_its_reference_date() {
+        let ref_time = Local.timestamp_opt(1_753_322_400, 0).unwrap();
+
+        for (input, expected) in [
+            (
+                "TZ=\"\"",
+                Utc.with_ymd_and_hms(2025, 7, 24, 0, 0, 0).unwrap(),
+            ),
+            (
+                "TZ=\"America/New_York\"",
+                Utc.with_ymd_and_hms(2025, 7, 23, 4, 0, 0).unwrap(),
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
+        }
     }
 
     #[test]

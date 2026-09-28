@@ -2265,6 +2265,26 @@ mod tests {
         }
 
         #[test]
+        fn test_parse_date_accepts_embedded_timezone_without_date() {
+            let reference = Local.timestamp_opt(1_753_322_400, 0).unwrap();
+
+            for (input, expected) in [
+                (
+                    "TZ=\"\"",
+                    Utc.with_ymd_and_hms(2025, 7, 24, 0, 0, 0).unwrap(),
+                ),
+                (
+                    "TZ=\"America/New_York\"",
+                    Utc.with_ymd_and_hms(2025, 7, 23, 4, 0, 0).unwrap(),
+                ),
+            ] {
+                let parsed = touch_parse_date(reference, input).unwrap();
+                assert_eq!(parsed.unix_seconds(), expected.timestamp(), "input {input}");
+                assert_eq!(parsed.nanoseconds(), 0, "input {input}");
+            }
+        }
+
+        #[test]
         fn test_parse_date_invalid() {
             let ref_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
 

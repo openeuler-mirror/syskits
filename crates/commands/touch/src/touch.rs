@@ -2072,6 +2072,17 @@ mod tests {
         }
 
         #[test]
+        fn parse_date_accepts_bare_relative_unit_after_explicit_date() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            let parsed = touch_parse_date(reference, "2024-01-01 second UTC").unwrap();
+            let expected = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 1).unwrap();
+
+            assert_eq!(parsed.unix_seconds(), expected.timestamp());
+            assert_eq!(parsed.nanoseconds(), 0);
+        }
+
+        #[test]
         fn test_parse_date_valid() {
             // 测试POSIX_LOCALE格式的日期
             let ref_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();

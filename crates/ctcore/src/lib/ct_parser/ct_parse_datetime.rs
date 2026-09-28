@@ -1414,9 +1414,6 @@ fn strip_gnu_parenthesized_comments(input: &str) -> String {
     for character in input.chars() {
         match character {
             '(' if depth == 0 => {
-                if !result.ends_with(char::is_whitespace) {
-                    result.push(' ');
-                }
                 depth = 1;
             }
             '(' => depth += 1,
@@ -4615,6 +4612,15 @@ mod tests {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
             assert_eq!(parsed.timestamp(), 1_704_112_440, "input {input}");
         }
+    }
+
+    #[test]
+    fn test_ignores_gnu_inline_parenthesized_comment_without_space() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        let parsed = parse_datetime_gnu_compat("2024(ignored)-01-01 UTC", ref_time).unwrap();
+
+        assert_eq!(parsed.timestamp(), 1_704_067_200);
     }
 
     #[test]

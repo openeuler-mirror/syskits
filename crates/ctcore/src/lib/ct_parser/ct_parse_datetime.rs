@@ -1623,7 +1623,7 @@ fn normalize_gnu_word_month_date_compact_time(input: &str) -> Option<String> {
     let (_, second) = date_fields[1];
     let (third_index, third) = date_fields[2];
     let (fourth_index, fourth) = date_fields[3];
-    let compact_time_index = if gnu_month_number(first).is_some()
+    let (compact_time_index, literal_year_index) = if gnu_month_number(first).is_some()
         && gnu_date_day_field(second)
         && gnu_compact_clock_field(third)
         && third.len() <= 2
@@ -1631,33 +1631,34 @@ fn normalize_gnu_word_month_date_compact_time(input: &str) -> Option<String> {
     {
         // `MONTH DAY HOUR YEAR`: the first short number is a clock because
         // the date item has not yet received a year.
-        third_index
+        (third_index, (fourth.len() == 1).then_some(fourth_index))
     } else if gnu_month_number(first).is_some()
         && gnu_date_day_field_with_comma(second)
         && gnu_date_year_field(third)
         && gnu_compact_clock_field(fourth)
     {
         // A comma makes the preceding word-month date an explicit date.
-        fourth_index
+        (fourth_index, None)
     } else if gnu_month_number(first).is_some()
         && gnu_date_day_field(second)
         && third.len() >= 3
         && gnu_date_year_field(third)
         && gnu_compact_clock_field(fourth)
     {
-        fourth_index
+        (fourth_index, None)
     } else if gnu_date_day_field(first)
         && gnu_month_number(second).is_some()
         && gnu_date_year_field(third)
         && gnu_compact_clock_field(fourth)
     {
         // `DAY MONTH YEAR TIME` has an explicit date even for a short year.
-        fourth_index
+        (fourth_index, None)
     } else {
         return None;
     };
 
     let compact_time = gnu_compact_clock_to_colon(fields[compact_time_index])?;
+    let literal_year = literal_year_index.map(|index| format!("000{}", fields[index]));
     Some(
         fields
             .iter()
@@ -1665,6 +1666,10 @@ fn normalize_gnu_word_month_date_compact_time(input: &str) -> Option<String> {
             .map(|(index, field)| {
                 if index == compact_time_index {
                     compact_time.as_str()
+                } else if Some(index) == literal_year_index {
+                    literal_year
+                        .as_deref()
+                        .expect("single-digit year must have a normalized value")
                 } else {
                     field
                 }
@@ -4655,6 +4660,10 @@ mod tests {
             (
                 "Feb 29 7 24 UTC",
                 Utc.with_ymd_and_hms(2024, 2, 29, 7, 0, 0).unwrap(),
+            ),
+            (
+                "Sep 24 7 4 UTC",
+                Utc.with_ymd_and_hms(4, 9, 24, 7, 0, 0).unwrap(),
             ),
         ] {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();

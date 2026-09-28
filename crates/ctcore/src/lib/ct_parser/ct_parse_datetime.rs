@@ -3235,7 +3235,10 @@ fn parse_embedded_timezone_local(
         return posix_timezone_local_datetime(timezone, naive);
     }
 
-    embedded_timezone_fixed_offset(timezone_name)?
+    embedded_timezone_fixed_offset(timezone_name)
+        // Linux glibc's tzalloc falls back to UTC when an embedded TZ value
+        // is neither a loadable TZif file nor a valid POSIX rule.
+        .or_else(|| FixedOffset::east_opt(0))?
         .from_local_datetime(&naive)
         .single()
         .map(|dt| dt.with_timezone(&Local))
@@ -3492,11 +3495,8 @@ fn parse_embedded_timezone_reference_midnight(
         return posix_timezone_reference_midnight(timezone, reference_time);
     }
 
-    let timezone = if timezone_name.is_empty() {
-        FixedOffset::east_opt(0)?
-    } else {
-        embedded_timezone_fixed_offset(timezone_name)?
-    };
+    let timezone =
+        embedded_timezone_fixed_offset(timezone_name).or_else(|| FixedOffset::east_opt(0))?;
     let date = reference_time.with_timezone(&timezone).date_naive();
     timezone
         .from_local_datetime(&date.and_time(NaiveTime::MIN))
@@ -5170,6 +5170,19 @@ mod tests {
         let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 34, 56).unwrap();
         let parsed = parse_datetime_gnu_compat(&input, reference).unwrap();
         assert_eq!(parsed.timestamp(), 1_704_128_400);
+    }
+
+    #[test]
+    fn test_parse_embedded_invalid_timezone_uses_utc() {
+        let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 34, 56).unwrap();
+
+        for input in [
+            "TZ=\"INVALID\" 2024-01-01 12:00",
+            "TZ=\":/no/such/timezone\" 2024-01-01 12:00",
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, reference).unwrap();
+            assert_eq!(parsed.timestamp(), 1_704_110_400, "input {input}");
+        }
     }
 
     #[test]

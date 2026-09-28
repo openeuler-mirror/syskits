@@ -406,6 +406,7 @@ pub fn ct_app() -> Command {
             .help(t!("stdbuf.clap.input"))
             .value_name("MODE")
             .value_parser(clap::builder::ValueParser::os_string())
+            .allow_hyphen_values(true)
             .action(ArgAction::Append),
         Arg::new(stdbuf_flags::OUTPUT)
             .long(stdbuf_flags::OUTPUT)
@@ -413,6 +414,7 @@ pub fn ct_app() -> Command {
             .help(t!("stdbuf.clap.output"))
             .value_name("MODE")
             .value_parser(clap::builder::ValueParser::os_string())
+            .allow_hyphen_values(true)
             .action(ArgAction::Append),
         Arg::new(stdbuf_flags::ERROR)
             .long(stdbuf_flags::ERROR)
@@ -420,6 +422,7 @@ pub fn ct_app() -> Command {
             .help(t!("stdbuf.clap.error"))
             .value_name("MODE")
             .value_parser(clap::builder::ValueParser::os_string())
+            .allow_hyphen_values(true)
             .action(ArgAction::Append),
         Arg::new(stdbuf_flags::COMMAND)
             .action(ArgAction::Append)
@@ -518,6 +521,21 @@ mod tests {
         assert_eq!(err.code(), 125);
         assert_eq!(err.to_string(), LINE_BUFFERING_STDIN);
         assert!(err.usage());
+    }
+
+    #[test]
+    fn test_stdbuf_mode_argument_can_begin_with_a_hyphen() {
+        let matches = ct_app()
+            .try_get_matches_from(["stdbuf", "-o", "-1", "/usr/bin/true"])
+            .expect("-1 should be parsed as the MODE argument");
+        let error = match StdbufFlags::new(matches) {
+            Err(error) => error,
+            Ok(_) => panic!("negative MODE must be invalid"),
+        };
+
+        assert_eq!(error.code(), 125);
+        assert_eq!(error.to_string(), "invalid mode '-1'");
+        assert!(!error.usage());
     }
 
     #[test]

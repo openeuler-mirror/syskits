@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-// spell-checker:ignore (ToDO) tempdir dyld dylib dragonflybsd optgrps libstdbuf
+// spell-checker:ignore (ToDO) dyld dylib dragonflybsd optgrps libstdbuf memfd
 
 extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
@@ -21,12 +21,12 @@ use ctcore::ct_parse_size::parse_size_u64;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::Write;
-use std::os::unix::process::ExitStatusExt;
-use std::path::PathBuf;
+#[cfg(target_os = "linux")]
+use std::os::fd::{AsRawFd, FromRawFd};
+#[cfg(target_os = "linux")]
+use std::os::unix::process::CommandExt;
 use std::process;
 use sys_locale::get_locale;
-use tempfile::TempDir;
-use tempfile::tempdir;
 
 // stdbuf 命令
 //
@@ -52,8 +52,31 @@ pub mod stdbuf_flags {
 
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
 
-fn signal_exit_code(signal: i32) -> i32 {
-    128 + signal
+#[cfg(target_os = "linux")]
+struct PreloadLibrary {
+    env_name: &'static str,
+    path: OsString,
+    // Keep the descriptor open without FD_CLOEXEC so the dynamic linker can reopen it after exec.
+    _fd: File,
+}
+
+#[cfg(target_os = "linux")]
+fn create_preload_library() -> CTResult<PreloadLibrary> {
+    let raw_fd = unsafe { ctcore::libc::memfd_create(c"libstdbuf".as_ptr(), 0) };
+    if raw_fd < 0 {
+        return Err(std::io::Error::last_os_error()
+            .map_err_context(|| "failed to create anonymous libstdbuf file".to_string()));
+    }
+
+    let mut file = unsafe { File::from_raw_fd(raw_fd) };
+    file.write_all(STDBUF_INJECT)
+        .map_err_context(|| "failed to write anonymous libstdbuf file".to_string())?;
+
+    Ok(PreloadLibrary {
+        env_name: "LD_PRELOAD",
+        path: format!("/proc/self/fd/{}", file.as_raw_fd()).into(),
+        _fd: file,
+    })
 }
 
 /// 缓冲区类型的枚举
@@ -198,6 +221,7 @@ impl StdbufFlags {
     ///
     /// # 返回值
     /// * `CTResult<()>` - 执行结果
+    #[cfg(target_os = "linux")]
     fn execute_command(&self) -> CTResult<()> {
         // 获取命令和参数
         let command_name = &self.command_args[0];
@@ -207,13 +231,11 @@ impl StdbufFlags {
         let mut command = process::Command::new(command_name);
         command.args(command_params);
 
-        // 创建临时目录并准备预加载库
-        let tmp_dir =
-            tempdir().map_err_context(|| "failed to create temporary directory".to_string())?;
-        let (preload_env, libstdbuf) = self.get_preload_env(&tmp_dir)?;
+        // 将预加载库保存在会跨 exec 继承的匿名文件描述符中。
+        let preload = create_preload_library()?;
 
-        let mut preload_val = libstdbuf.into_os_string();
-        if let Some(existing) = std::env::var_os(&preload_env) {
+        let mut preload_val = preload.path.clone();
+        if let Some(existing) = std::env::var_os(preload.env_name) {
             let mut new_val = existing;
             new_val.push(":");
             new_val.push(preload_val);
@@ -221,96 +243,34 @@ impl StdbufFlags {
         }
 
         // 设置环境变量
-        command.env(preload_env, preload_val);
+        command.env(preload.env_name, preload_val);
         self.set_command_env(&mut command, "_STDBUF_I", &self.stdin);
         self.set_command_env(&mut command, "_STDBUF_O", &self.stdout);
         self.set_command_env(&mut command, "_STDBUF_E", &self.stderr);
 
-        // 执行命令并等待完成
-        let mut process = command.spawn().map_err(|e| {
-            // Handle command not found with exit code 127
-            let exit_code = if e.kind() == std::io::ErrorKind::NotFound {
-                127
-            } else {
-                126
-            };
-            CtSimpleError::new(
-                exit_code,
-                format!(
-                    "failed to run command '{}': {e}",
-                    command_name.to_string_lossy()
-                ),
-            )
-        })?;
-
-        let status = process
-            .wait()
-            .map_err_context(|| "failed to wait for process".to_string())?;
-
-        // 处理退出状态
-        match status.code() {
-            Some(i) => {
-                if i == 0 {
-                    Ok(())
-                } else {
-                    Err(i.into())
-                }
-            }
-            None => {
-                let signal = status.signal().unwrap_or_default();
-                if signal > 0 {
-                    // GNU stdbuf execs COMMAND in place. Re-raise the signal
-                    // so callers observe the same termination status.
-                    unsafe { ctcore::libc::raise(signal) };
-                    process::exit(signal_exit_code(signal));
-                }
-                Err(CtSimpleError::new(
-                    1,
-                    "command terminated without an exit status",
-                ))
-            }
-        }
+        // GNU stdbuf uses execvp, so COMMAND must replace this process.
+        let error = command.exec();
+        let exit_code = if error.kind() == std::io::ErrorKind::NotFound {
+            127
+        } else {
+            126
+        };
+        Err(CtSimpleError::new(
+            exit_code,
+            format!(
+                "failed to run command '{}': {error}",
+                command_name.to_string_lossy()
+            ),
+        ))
     }
 
-    /// 获取预加载环境变量和库路径
-    ///
-    /// # 参数
-    /// * `tmp_dir` - 临时目录
-    ///
-    /// # 返回值
-    /// * `CTResult<(String, PathBuf)>` - 环境变量名和库路径
-    fn get_preload_env(&self, tmp_dir: &TempDir) -> CTResult<(String, PathBuf)> {
-        let (preload, extension) = preload_strings()?;
-        let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
-
-        let mut file = File::create(&inject_path)
-            .map_err_context(|| "failed to create libstdbuf file".to_string())?;
-        file.write_all(STDBUF_INJECT)
-            .map_err_context(|| "failed to write to libstdbuf file".to_string())?;
-
-        Ok((preload.to_owned(), inject_path))
+    #[cfg(not(target_os = "linux"))]
+    fn execute_command(&self) -> CTResult<()> {
+        Err(CtSimpleError::new(
+            1,
+            "Command not supported for this operating system!",
+        ))
     }
-}
-
-/// 获取平台特定的预加载环境变量名和扩展名
-///
-/// # 返回值
-/// * `CTResult<(&'static str, &'static str)>` - 环境变量名和扩展名
-#[cfg(target_os = "linux")]
-fn preload_strings() -> CTResult<(&'static str, &'static str)> {
-    Ok(("LD_PRELOAD", "so"))
-}
-
-/// 获取平台特定的预加载环境变量名和扩展名
-///
-/// # 返回值
-/// * `CTResult<(&'static str, &'static str)>` - 环境变量名和扩展名或不支持错误
-#[cfg(not(target_os = "linux"))]
-fn preload_strings() -> CTResult<(&'static str, &'static str)> {
-    Err(CtSimpleError::new(
-        1,
-        "Command not supported for this operating system!",
-    ))
 }
 
 /// stdbuf 主执行函数
@@ -402,8 +362,6 @@ impl Tool for Stdbuf {
 mod tests {
     use super::*;
     use clap::{ArgAction, builder::Command as ClapCommand};
-    use std::path::Path;
-    use tempfile::TempDir;
 
     #[test]
     fn test_tool_implementation() {
@@ -575,9 +533,21 @@ mod tests {
         assert!(matches!(result, BufferType::Size(1024)));
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
-    fn test_signal_exit_code_matches_shell_convention() {
-        assert_eq!(signal_exit_code(ctcore::libc::SIGTERM), 143);
+    fn test_preload_library_is_available_via_inherited_proc_fd() {
+        let preload = create_preload_library().unwrap();
+
+        assert_eq!(preload.env_name, "LD_PRELOAD");
+        assert!(preload.path.to_string_lossy().starts_with("/proc/self/fd/"));
+        assert_eq!(std::fs::read(&preload.path).unwrap(), STDBUF_INJECT);
+        let flags = unsafe {
+            ctcore::libc::fcntl(
+                std::os::fd::AsRawFd::as_raw_fd(&preload._fd),
+                ctcore::libc::F_GETFD,
+            )
+        };
+        assert_eq!(flags & ctcore::libc::FD_CLOEXEC, 0);
     }
 
     #[cfg(target_os = "linux")]
@@ -677,66 +647,6 @@ mod tests {
         // 由于Command的env方法将环境变量添加到内部结构中，
         // 我们无法直接测试，但可以验证代码逻辑是否正确执行
         // 这种情况下，我们只是确认函数不会崩溃
-    }
-
-    // 测试 get_preload_env 函数
-    // 注意：这个测试依赖于 OUT_DIR 环境变量，在编译时设置
-    // 在单元测试环境中可能不可用，所以我们需要模拟一个替代实现
-    #[test]
-    fn test_get_preload_env_mock() {
-        // 创建一个特殊版本的 StdbufFlags，跳过实际的 STDBUF_INJECT 使用
-        struct TestStdbufFlags {}
-
-        impl TestStdbufFlags {
-            fn get_preload_env_test(&self, tmp_dir: &TempDir) -> CTResult<(String, PathBuf)> {
-                let (preload, extension) = preload_strings()?;
-                let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
-
-                // 创建一个空文件代替实际的库文件
-                let mut file = File::create(&inject_path)
-                    .map_err_context(|| "failed to create libstdbuf file".to_string())?;
-                // 写入一些测试数据而不是实际的库内容
-                file.write_all(b"test data")
-                    .map_err_context(|| "failed to write to libstdbuf file".to_string())?;
-
-                Ok((preload.to_owned(), inject_path))
-            }
-        }
-
-        // 只在Linux平台上运行此测试
-        #[cfg(target_os = "linux")]
-        {
-            let flags = TestStdbufFlags {};
-            let tmp_dir = TempDir::new().unwrap();
-
-            let result = flags.get_preload_env_test(&tmp_dir);
-            assert!(result.is_ok());
-
-            let (env_var, path) = result.unwrap();
-            assert_eq!(env_var, "LD_PRELOAD");
-            assert!(path.extension().unwrap() == "so");
-            assert!(Path::new(&path).exists());
-        }
-    }
-
-    // 测试 preload_strings 函数
-    #[test]
-    fn test_preload_strings() {
-        #[cfg(target_os = "linux")]
-        {
-            let result = preload_strings();
-            assert!(result.is_ok());
-
-            let (preload, extension) = result.unwrap();
-            assert_eq!(preload, "LD_PRELOAD");
-            assert_eq!(extension, "so");
-        }
-
-        #[cfg(not(target_os = "linux"))]
-        {
-            let result = preload_strings();
-            assert!(result.is_err());
-        }
     }
 
     // 测试 ct_app 函数
@@ -1031,29 +941,6 @@ mod tests {
         }
 
         assert!(flags.command_args.is_empty());
-    }
-
-    // 新增测试：测试在多种语言环境和平台下的行为
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn test_platform_specific_behavior() {
-        // 测试当前平台的预加载环境变量和库扩展名
-        let (preload, extension) = preload_strings().unwrap();
-
-        // 在Linux上应该是LD_PRELOAD和so
-        assert_eq!(preload, "LD_PRELOAD");
-        assert_eq!(extension, "so");
-
-        // 测试在临时目录中创建预加载库文件的功能
-        let tmp_dir = TempDir::new().unwrap();
-
-        // 创建一个mock库文件
-        let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
-        let result = File::create(&inject_path);
-        assert!(result.is_ok());
-
-        // 验证文件成功创建
-        assert!(Path::new(&inject_path).exists());
     }
 
     // 新增测试：测试整个工作流程

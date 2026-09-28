@@ -1,5 +1,6 @@
 use std::ffi::OsString;
 use std::fs::{self, File};
+use std::io;
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::symlink;
 use std::os::unix::process::CommandExt;
@@ -98,4 +99,31 @@ fn directory_symlink_with_multiple_trailing_slashes_is_not_followed() {
     );
     assert!(tempdir.path().join("link").is_symlink());
     assert!(tempdir.path().join("target").is_dir());
+}
+
+#[test]
+fn verbose_removes_directory_before_reporting_closed_stdout() {
+    let tempdir = TempDir::new().unwrap();
+    fs::create_dir(tempdir.path().join("directory")).unwrap();
+
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rmdir"));
+    command
+        .arg0("rmdir")
+        .args(["-v", "directory"])
+        .current_dir(tempdir.path())
+        .env("LC_ALL", "C");
+    unsafe {
+        command.pre_exec(|| {
+            if libc::close(libc::STDOUT_FILENO) == -1 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let output = command.output().unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(output.stderr, b"rmdir: write error: Bad file descriptor\n");
+    assert!(!tempdir.path().join("directory").exists());
 }

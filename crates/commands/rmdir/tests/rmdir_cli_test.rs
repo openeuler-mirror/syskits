@@ -170,6 +170,52 @@ fn verbose_uses_default_sigpipe_for_closed_pipe() {
 }
 
 #[test]
+fn verbose_stops_at_the_stdio_buffer_when_sigpipe_is_default() {
+    let tempdir = TempDir::new().unwrap();
+    let directories: Vec<_> = (1..=1000).map(|index| format!("d{index:04}")).collect();
+    for directory in &directories {
+        fs::create_dir(tempdir.path().join(directory)).unwrap();
+    }
+
+    let mut pipe_fds = [0; 2];
+    assert_eq!(unsafe { libc::pipe(pipe_fds.as_mut_ptr()) }, 0);
+    let read_end = pipe_fds[0];
+    let write_end = pipe_fds[1];
+    assert_eq!(unsafe { libc::close(read_end) }, 0);
+
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rmdir"));
+    command
+        .arg0("rmdir")
+        .arg("-v")
+        .args(&directories)
+        .current_dir(tempdir.path())
+        .env("LC_ALL", "C")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    unsafe {
+        command.pre_exec(move || {
+            if libc::dup2(write_end, libc::STDOUT_FILENO) == -1 {
+                return Err(io::Error::last_os_error());
+            }
+            if write_end != libc::STDOUT_FILENO {
+                libc::close(write_end);
+            }
+            Ok(())
+        });
+    }
+
+    let child = command.spawn().unwrap();
+    assert_eq!(unsafe { libc::close(write_end) }, 0);
+    let output = child.wait_with_output().unwrap();
+
+    assert_eq!(output.status.signal(), Some(libc::SIGPIPE));
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+    let remaining = fs::read_dir(tempdir.path()).unwrap().count();
+    assert_eq!(remaining, 883);
+}
+
+#[test]
 fn parents_preserve_dot_component_in_parent_path() {
     let tempdir = TempDir::new().unwrap();
     fs::create_dir_all(tempdir.path().join("a/b")).unwrap();

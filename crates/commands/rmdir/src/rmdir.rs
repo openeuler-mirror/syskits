@@ -18,12 +18,12 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, CTsageError, set_ct_exit_code, strip_errno};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, set_ct_exit_code, strip_errno};
 use ctcore::ct_quoting_style::gnu_quote_shell;
 use ctcore::{ct_show_error, ct_util_name};
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_dir};
-use std::io;
+use std::io::{self, Write};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -55,8 +55,9 @@ pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
         return Err(CTsageError::new(1, "missing operand"));
     }
 
+    let mut verbose_output = Vec::new();
     for path in paths {
-        if let Err(error) = rmdir_remove(path, configs) {
+        if let Err(error) = rmdir_remove_with_output(path, configs, &mut verbose_output) {
             let RmdirError {
                 error,
                 path,
@@ -122,6 +123,8 @@ pub fn rmdir_main(args: impl ctcore::Args) -> CTResult<()> {
         }
     }
 
+    rmdir_flush_verbose_output(&verbose_output)?;
+
     Ok(())
 }
 
@@ -131,8 +134,12 @@ struct RmdirError<'a> {
     is_parent: bool,
 }
 
-fn rmdir_remove(mut path: &Path, configs: RmdirConfigs) -> Result<(), RmdirError<'_>> {
-    rmdir_remove_single(path, configs).map_err(|error| RmdirError {
+fn rmdir_remove_with_output<'a>(
+    mut path: &'a Path,
+    configs: RmdirConfigs,
+    verbose_output: &mut Vec<u8>,
+) -> Result<(), RmdirError<'a>> {
+    rmdir_remove_single_with_output(path, configs, verbose_output).map_err(|error| RmdirError {
         error,
         path,
         is_parent: false,
@@ -143,25 +150,83 @@ fn rmdir_remove(mut path: &Path, configs: RmdirConfigs) -> Result<(), RmdirError
             if path.as_os_str().is_empty() {
                 break;
             }
-            rmdir_remove_single(path, configs).map_err(|error| RmdirError {
-                error,
-                path,
-                is_parent: true,
+            rmdir_remove_single_with_output(path, configs, verbose_output).map_err(|error| {
+                RmdirError {
+                    error,
+                    path,
+                    is_parent: true,
+                }
             })?;
         }
     }
     Ok(())
 }
 
-fn rmdir_remove_single(path: &Path, configs: RmdirConfigs) -> io::Result<()> {
+fn rmdir_remove_single_with_output(
+    path: &Path,
+    configs: RmdirConfigs,
+    verbose_output: &mut Vec<u8>,
+) -> io::Result<()> {
     if configs.is_verbose {
-        println!(
-            "{}: removing directory, {}",
-            ct_util_name(),
-            rmdir_quote_path(path)
-        );
+        verbose_output.extend_from_slice(ct_util_name().as_bytes());
+        verbose_output.extend_from_slice(b": removing directory, ");
+        verbose_output.extend_from_slice(rmdir_quote_path(path).as_bytes());
+        verbose_output.push(b'\n');
     }
     remove_dir(path)
+}
+
+fn rmdir_flush_verbose_output(verbose_output: &[u8]) -> CTResult<()> {
+    if verbose_output.is_empty() {
+        return Ok(());
+    }
+
+    let output_error = if ctcore::ct_stdout_was_closed() {
+        Err(io::Error::from_raw_os_error(libc::EBADF))
+    } else {
+        let mut stdout = io::stdout().lock();
+        stdout
+            .write_all(verbose_output)
+            .and_then(|_| stdout.flush())
+    };
+
+    if let Err(error) = output_error {
+        rmdir_redirect_stdout_to_dev_null();
+        return Err(CtSimpleError::new(
+            1,
+            format!("write error: {}", strip_errno(&error)),
+        ));
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn rmdir_redirect_stdout_to_dev_null() {
+    const DEV_NULL: &[u8] = b"/dev/null\0";
+
+    // The binary wrapper flushes stdout after reporting this error.  Replace a
+    // failing descriptor so that flush cannot add a second, non-GNU diagnostic.
+    unsafe {
+        let fd = libc::open(DEV_NULL.as_ptr().cast(), libc::O_WRONLY);
+        if fd >= 0 {
+            libc::dup2(fd, libc::STDOUT_FILENO);
+            libc::close(fd);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn rmdir_redirect_stdout_to_dev_null() {}
+
+#[cfg(test)]
+fn rmdir_remove(path: &Path, configs: RmdirConfigs) -> Result<(), RmdirError<'_>> {
+    rmdir_remove_with_output(path, configs, &mut Vec::new())
+}
+
+#[cfg(test)]
+fn rmdir_remove_single(path: &Path, configs: RmdirConfigs) -> io::Result<()> {
+    rmdir_remove_single_with_output(path, configs, &mut Vec::new())
 }
 
 fn rmdir_quote_path(path: &Path) -> String {

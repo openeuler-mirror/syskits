@@ -405,6 +405,35 @@
                 "rm -f link",
                 "rmdir target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "详细输出写入已关闭 stdout 后完成删除并报告写错误",
+            "setup_commands": [
+                "mkdir directory"
+            ],
+            "args": ["-v", "directory"],
+            "environment": {
+                "standardStreams": {
+                    "stdout": "closed"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "rmdir: write error: Bad file descriptor\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e directory && echo 'directory removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "directory removed"
+                    }
+                ]
+            },
+            "cleanup_commands": []
         }
     ]
 }

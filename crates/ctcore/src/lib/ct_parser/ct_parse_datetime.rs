@@ -3227,6 +3227,10 @@ fn parse_embedded_timezone_local(
             .map(|datetime| datetime.with_timezone(&Local));
     }
 
+    if let Some(timezone) = parse_tzif_timezone(timezone_name) {
+        return tzif_timezone_local_datetime(&timezone, naive);
+    }
+
     if let Some(timezone) = parse_posix_timezone_rule(timezone_name) {
         return posix_timezone_local_datetime(timezone, naive);
     }
@@ -3272,6 +3276,196 @@ fn embedded_iana_timezone_local_datetime(
     }
 }
 
+/// A TZif timezone parsed from an absolute path in an embedded GNU `TZ` item.
+/// Transitions hold the UTC timestamp and the offset that takes effect there.
+struct TzifTimezone {
+    initial_offset: i32,
+    transitions: Vec<(i64, i32)>,
+    offsets: Vec<i32>,
+    footer_rule: Option<PosixTimezoneRule>,
+}
+
+/// Parse the absolute TZif paths accepted by glibc's `tzalloc`.  Keep this
+/// local to date parsing: it must not mutate the process-wide `TZ` state.
+fn parse_tzif_timezone(timezone_name: &str) -> Option<TzifTimezone> {
+    if !timezone_name.starts_with('/') {
+        return None;
+    }
+
+    let bytes = std::fs::read(timezone_name).ok()?;
+    let (version, first_counts) = parse_tzif_header(&bytes, 0)?;
+    let (first, first_end) = parse_tzif_data_block(&bytes, 0, first_counts, 4)?;
+    let (data, footer_start) = match version {
+        b'\0' => (first, first_end),
+        b'2' | b'3' => {
+            let (_, second_counts) = parse_tzif_header(&bytes, first_end)?;
+            parse_tzif_data_block(&bytes, first_end, second_counts, 8)?
+        }
+        _ => return None,
+    };
+
+    let footer_rule = bytes
+        .get(footer_start..)
+        .and_then(|footer| std::str::from_utf8(footer).ok())
+        .and_then(|footer| footer.strip_prefix('\n'))
+        .and_then(|footer| footer.strip_suffix('\n'))
+        .and_then(parse_posix_timezone_rule);
+
+    let initial_offset = *data.offsets.first()?;
+    let mut offsets = data.offsets;
+    offsets.sort_unstable();
+    offsets.dedup();
+    if let Some(rule) = footer_rule {
+        offsets.push(rule.standard_offset);
+        if let Some(daylight_offset) = rule.daylight_offset {
+            offsets.push(daylight_offset);
+        }
+        offsets.sort_unstable();
+        offsets.dedup();
+    }
+
+    Some(TzifTimezone {
+        initial_offset,
+        transitions: data.transitions,
+        offsets,
+        footer_rule,
+    })
+}
+
+struct TzifDataBlock {
+    offsets: Vec<i32>,
+    transitions: Vec<(i64, i32)>,
+}
+
+#[derive(Clone, Copy)]
+struct TzifCounts {
+    standard_wall_count: usize,
+    utc_local_count: usize,
+    leap_count: usize,
+    transition_count: usize,
+    type_count: usize,
+    abbreviation_count: usize,
+}
+
+fn parse_tzif_header(bytes: &[u8], start: usize) -> Option<(u8, TzifCounts)> {
+    let header = bytes.get(start..start.checked_add(44)?)?;
+    (header.get(..4)? == b"TZif").then_some(())?;
+    let count = |offset| {
+        let raw: [u8; 4] = header.get(offset..offset + 4)?.try_into().ok()?;
+        usize::try_from(u32::from_be_bytes(raw)).ok()
+    };
+    Some((
+        header[4],
+        TzifCounts {
+            utc_local_count: count(20)?,
+            standard_wall_count: count(24)?,
+            leap_count: count(28)?,
+            transition_count: count(32)?,
+            type_count: count(36)?,
+            abbreviation_count: count(40)?,
+        },
+    ))
+}
+
+fn parse_tzif_data_block(
+    bytes: &[u8],
+    header_start: usize,
+    counts: TzifCounts,
+    time_size: usize,
+) -> Option<(TzifDataBlock, usize)> {
+    if counts.type_count == 0 {
+        return None;
+    }
+    let data_start = header_start.checked_add(44)?;
+    let transition_time_size = counts.transition_count.checked_mul(time_size)?;
+    let type_info_size = counts.type_count.checked_mul(6)?;
+    let leap_size = counts.leap_count.checked_mul(time_size.checked_add(4)?)?;
+    let data_size = transition_time_size
+        .checked_add(counts.transition_count)?
+        .checked_add(type_info_size)?
+        .checked_add(counts.abbreviation_count)?
+        .checked_add(leap_size)?
+        .checked_add(counts.standard_wall_count)?
+        .checked_add(counts.utc_local_count)?;
+    let end = data_start.checked_add(data_size)?;
+    bytes.get(data_start..end)?;
+
+    let transition_types_start = data_start.checked_add(transition_time_size)?;
+    let type_info_start = transition_types_start.checked_add(counts.transition_count)?;
+    let mut offsets = Vec::with_capacity(counts.type_count);
+    for type_index in 0..counts.type_count {
+        let offset_start = type_info_start.checked_add(type_index.checked_mul(6)?)?;
+        let raw: [u8; 4] = bytes.get(offset_start..offset_start + 4)?.try_into().ok()?;
+        offsets.push(i32::from_be_bytes(raw));
+    }
+
+    let mut transitions = Vec::with_capacity(counts.transition_count);
+    for transition_index in 0..counts.transition_count {
+        let time_start = data_start.checked_add(transition_index.checked_mul(time_size)?)?;
+        let timestamp = match time_size {
+            4 => {
+                let raw: [u8; 4] = bytes.get(time_start..time_start + 4)?.try_into().ok()?;
+                i64::from(i32::from_be_bytes(raw))
+            }
+            8 => {
+                let raw: [u8; 8] = bytes.get(time_start..time_start + 8)?.try_into().ok()?;
+                i64::from_be_bytes(raw)
+            }
+            _ => return None,
+        };
+        let type_index = usize::from(*bytes.get(transition_types_start + transition_index)?);
+        transitions.push((timestamp, *offsets.get(type_index)?));
+    }
+
+    Some((
+        TzifDataBlock {
+            offsets,
+            transitions,
+        },
+        end,
+    ))
+}
+
+fn tzif_timezone_offset_at(timezone: &TzifTimezone, timestamp: i64) -> i32 {
+    if let (Some((last_transition, _)), Some(rule)) =
+        (timezone.transitions.last(), timezone.footer_rule)
+    {
+        if timestamp >= *last_transition {
+            return posix_timezone_offset_at(rule, timestamp);
+        }
+    }
+
+    let index = match timezone
+        .transitions
+        .binary_search_by_key(&timestamp, |(transition, _)| *transition)
+    {
+        Ok(index) => index + 1,
+        Err(index) => index,
+    };
+    index
+        .checked_sub(1)
+        .and_then(|index| timezone.transitions.get(index))
+        .map_or(timezone.initial_offset, |(_, offset)| *offset)
+}
+
+fn tzif_timezone_local_datetime(
+    timezone: &TzifTimezone,
+    naive: NaiveDateTime,
+) -> Option<DateTime<Local>> {
+    let local_timestamp = DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc).timestamp();
+    timezone
+        .offsets
+        .iter()
+        .filter_map(|offset| {
+            let timestamp = local_timestamp.checked_sub(i64::from(*offset))?;
+            (tzif_timezone_offset_at(timezone, timestamp) == *offset)
+                .then_some((*offset, timestamp))
+        })
+        .min_by_key(|(offset, timestamp)| (i64::from(*offset).abs(), *timestamp))
+        .and_then(|(_, timestamp)| DateTime::from_timestamp(timestamp, naive.nanosecond()))
+        .map(|datetime: DateTime<Utc>| datetime.with_timezone(&Local))
+}
+
 /// Parse a leading `TZ="..."` item without a following date specification.
 /// GNU uses midnight of the reference instant's date in that timezone.
 fn parse_embedded_timezone_reference_midnight(
@@ -3285,6 +3479,13 @@ fn parse_embedded_timezone_reference_midnight(
             .from_local_datetime(&date.and_time(NaiveTime::MIN))
             .earliest()
             .map(|datetime| datetime.with_timezone(&Local));
+    }
+
+    if let Some(timezone) = parse_tzif_timezone(timezone_name) {
+        let offset = tzif_timezone_offset_at(&timezone, reference_time.timestamp());
+        let local_timestamp = reference_time.timestamp().checked_add(i64::from(offset))?;
+        let date = DateTime::<Utc>::from_timestamp(local_timestamp, 0)?.date_naive();
+        return tzif_timezone_local_datetime(&timezone, date.and_time(NaiveTime::MIN));
     }
 
     if let Some(timezone) = parse_posix_timezone_rule(timezone_name) {
@@ -4928,6 +5129,25 @@ mod tests {
             parse_datetime_gnu_compat("TZ=\"America/Los_Angeles\" 2024-03-10 02:30", ref_time)
                 .is_err()
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_parse_embedded_timezone_tzif_file_path() {
+        let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 34, 56).unwrap();
+
+        for input in [
+            "TZ=\":/usr/share/zoneinfo/America/New_York\" 2024-01-01 12:00",
+            "TZ=\"/usr/share/zoneinfo/America/New_York\" 2024-01-01 12:00",
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, reference).unwrap();
+            assert_eq!(parsed.timestamp(), 1_704_128_400, "input {input}");
+        }
+
+        let parsed =
+            parse_datetime_gnu_compat("TZ=\":/usr/share/zoneinfo/America/New_York\"", reference)
+                .unwrap();
+        assert_eq!(parsed.timestamp(), 1_753_329_600);
     }
 
     #[test]

@@ -44,6 +44,10 @@ unsafe extern "C" {
     fn __stdbuf_get_stderr() -> *mut FILE;
 }
 
+fn allocate_full_buffer(size: size_t) -> *mut c_char {
+    unsafe { libc::malloc(size).cast() }
+}
+
 /// 设置流缓冲区模式和大小
 ///
 /// # 参数
@@ -54,11 +58,11 @@ unsafe extern "C" {
 ///   - 数字字符串: 完全缓冲，指定大小（字节）
 fn set_buffer(stream: *mut FILE, value: &str) {
     // 根据输入值确定缓冲模式和大小
-    let (mode, size): (c_int, size_t) = match value {
+    let (mode, size, buffer): (c_int, size_t, *mut c_char) = match value {
         // 无缓冲模式
-        "0" => (_IONBF, 0_usize),
+        "0" => (_IONBF, 0_usize, ptr::null_mut()),
         // 行缓冲模式
-        "L" => (_IOLBF, 0_usize),
+        "L" => (_IOLBF, 0_usize, ptr::null_mut()),
         // 完全缓冲模式，使用指定大小
         input => {
             let buff_size: usize = match input.parse() {
@@ -69,15 +73,17 @@ fn set_buffer(stream: *mut FILE, value: &str) {
                     std::process::exit(1);
                 }
             };
-            (_IOFBF, buff_size as size_t)
+            let buffer = allocate_full_buffer(buff_size);
+            if buffer.is_null() {
+                eprintln!("failed to allocate a {buff_size} byte stdio buffer");
+                return;
+            }
+            (_IOFBF, buff_size, buffer)
         }
     };
     let res: c_int;
     unsafe {
-        // 使用空指针作为缓冲区，让系统自动分配
-        let buffer: *mut c_char = ptr::null_mut();
-        assert!(buffer.is_null());
-        // 调用 C 函数设置缓冲区
+        // 将所有权转交给 stdio；若调用失败则在下方释放。
         res = libc::setvbuf(stream, buffer, mode, size);
     }
     // 检查设置是否成功
@@ -87,6 +93,9 @@ fn set_buffer(stream: *mut FILE, value: &str) {
             unsafe { fileno(stream) },
             mode
         );
+        if !buffer.is_null() {
+            unsafe { libc::free(buffer.cast()) };
+        }
     }
 }
 
@@ -129,6 +138,13 @@ pub unsafe extern "C" fn __stdbuf() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_allocate_full_buffer_returns_owned_memory() {
+        let buffer = allocate_full_buffer(1024);
+        assert!(!buffer.is_null());
+        unsafe { libc::free(buffer.cast()) };
+    }
 
     // 由于FFI和C代码的复杂性，我们主要测试可以测试的部分函数逻辑
     // 完整的集成测试将在更高级别进行（通过命令行运行stdbuf）

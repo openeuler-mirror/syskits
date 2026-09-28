@@ -3957,9 +3957,9 @@
                 "--date=next Friday 7",
                 "target"
             ],
-            "pre_check": {
-                "command": "touch -d '2025-07-24 12:00:00 UTC' reference"
-            },
+            "setup_commands": [
+                "touch -d '2025-07-24 12:00:00 UTC' reference"
+            ],
             "expectation": {
                 "execution": {
                     "exit_code": 0,
@@ -4018,6 +4018,45 @@
             },
             "cleanup_commands": [
                 "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下相对单位加星期项后的裸数字必须按GNU作为独立时刻；以2025-07-24为参考的second Friday 7 UTC必须设置为2025-07-25 07:00:01 UTC。",
+            "args": [
+                "-r",
+                "reference",
+                "--date=second Friday 7 UTC",
+                "target"
+            ],
+            "setup_commands": [
+                "touch -d '2025-07-24 12:00:00 UTC' reference"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '1753426801.000000000'",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f reference target"
             ]
         },
         {

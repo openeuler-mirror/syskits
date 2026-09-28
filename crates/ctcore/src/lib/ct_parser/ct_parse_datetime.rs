@@ -1846,6 +1846,38 @@ fn parse_gnu_relative_unit_with_weekday(
     normalized_extended_year: bool,
 ) -> Option<DateTime<Local>> {
     let tokens = input.split_ascii_whitespace().collect::<Vec<_>>();
+
+    if let Some((time_input, tokens_without_time)) = tokens.split_last()
+        && let Some(time) =
+            parse_gnu_24_hour_clock(time_input).or_else(|| parse_gnu_compact_clock(time_input))
+    {
+        let weekday_indexes = tokens_without_time
+            .iter()
+            .enumerate()
+            .filter_map(|(index, token)| parse_weekday_name(token).map(|_| index))
+            .collect::<Vec<_>>();
+        if let [weekday_index] = weekday_indexes.as_slice() {
+            let relative_tokens = tokens_without_time
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| *index != *weekday_index)
+                .map(|(_, token)| *token)
+                .collect::<Vec<_>>();
+            if is_gnu_relative_unit_expression(&relative_tokens) {
+                let weekday =
+                    parse_weekday_expression(tokens_without_time[*weekday_index], reference_time)?;
+                let weekday_with_time =
+                    resolve_local_datetime_gnu_compat(weekday.date_naive().and_time(time))?;
+                return parse_datetime_gnu_compat_impl(
+                    &relative_tokens.join(" "),
+                    weekday_with_time,
+                    normalized_extended_year,
+                )
+                .ok();
+            }
+        }
+    }
+
     let weekday_indexes = tokens
         .iter()
         .enumerate()
@@ -4922,6 +4954,11 @@ mod tests {
                 "monday 1 second",
                 NaiveDate::from_ymd_opt(2025, 7, 28).unwrap(),
                 NaiveTime::from_hms_opt(0, 0, 1).unwrap(),
+            ),
+            (
+                "second monday 7",
+                NaiveDate::from_ymd_opt(2025, 7, 28).unwrap(),
+                NaiveTime::from_hms_opt(7, 0, 1).unwrap(),
             ),
         ] {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();

@@ -251,7 +251,7 @@ impl StdbufFlags {
             .map_or_else(Vec::new, |v| v.cloned().collect());
 
         if command_args.is_empty() {
-            return Err(CtSimpleError::new(125, "missing operand"));
+            return Err(CTsageError::new(125, "missing operand"));
         }
 
         if matches!(&stdin, BufferType::Default)
@@ -641,6 +641,7 @@ mod tests {
 
         assert_eq!(err.code(), 125);
         assert_eq!(err.to_string(), "missing operand");
+        assert!(err.usage());
     }
 
     #[test]

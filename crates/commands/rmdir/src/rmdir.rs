@@ -238,6 +238,7 @@ fn rmdir_flush_verbose_output(verbose_output: &[u8]) -> CTResult<()> {
     let output_error = if ctcore::ct_stdout_was_closed() {
         Err(io::Error::from_raw_os_error(libc::EBADF))
     } else {
+        rmdir_restore_default_sigpipe();
         let mut stdout = io::stdout().lock();
         stdout
             .write_all(verbose_output)
@@ -254,6 +255,20 @@ fn rmdir_flush_verbose_output(verbose_output: &[u8]) -> CTResult<()> {
 
     Ok(())
 }
+
+#[cfg(unix)]
+fn rmdir_restore_default_sigpipe() {
+    if ctcore::ct_sigpipe_was_default() {
+        // Coreutils inherits the default disposition and is terminated when
+        // verbose output reaches a pipe without readers.
+        unsafe {
+            libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn rmdir_restore_default_sigpipe() {}
 
 #[cfg(unix)]
 fn rmdir_redirect_stdout_to_dev_null() {

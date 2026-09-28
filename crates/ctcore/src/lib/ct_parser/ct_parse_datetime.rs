@@ -177,6 +177,46 @@ fn normalize_gnu_bare_relative_units(input: &str) -> Option<String> {
     })
 }
 
+/// Move GNU numeric relative-time items after date items, as GNU's grammar
+/// accepts items in either order.
+fn normalize_gnu_numeric_relative_units(input: &str) -> Option<String> {
+    let tokens = input.split_ascii_whitespace().collect::<Vec<_>>();
+    let mut date_tokens = Vec::with_capacity(tokens.len());
+    let mut relative_tokens = Vec::new();
+    let mut changed = false;
+    let mut index = 0;
+
+    while index < tokens.len() {
+        let Some(unit) = tokens.get(index + 1) else {
+            date_tokens.push(tokens[index].to_string());
+            break;
+        };
+        let amount = tokens[index];
+        let absolute_amount = amount.strip_prefix(['+', '-']).unwrap_or(amount);
+        let has_ago_or_hence = tokens
+            .get(index + 2)
+            .is_some_and(|token| matches!(*token, "ago" | "hence"));
+
+        if is_gnu_relative_unit(unit)
+            && !has_ago_or_hence
+            && parse_gnu_relative_number(absolute_amount, amount.starts_with('-')).is_some()
+        {
+            relative_tokens.push(amount.to_string());
+            relative_tokens.push((*unit).to_string());
+            changed = true;
+            index += 2;
+        } else {
+            date_tokens.push(amount.to_string());
+            index += 1;
+        }
+    }
+
+    changed.then(|| {
+        date_tokens.extend(relative_tokens);
+        date_tokens.join(" ")
+    })
+}
+
 /// Split GNU relative-time quantities from directly attached unit words, such
 /// as `-1month` or `1,5seconds`.
 fn normalize_gnu_attached_relative_unit_amounts(input: &str) -> Option<String> {
@@ -713,6 +753,11 @@ fn parse_datetime_gnu_compat_impl(
     }
 
     if let Some(normalized) = normalize_gnu_bare_relative_units(&processed_lower) {
+        processed_lower = normalized.clone();
+        processed_trim = normalized;
+    }
+
+    if let Some(normalized) = normalize_gnu_numeric_relative_units(&processed_lower) {
         processed_lower = normalized.clone();
         processed_trim = normalized;
     }
@@ -5038,6 +5083,28 @@ mod tests {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
             assert_eq!(parsed.date_naive(), expected, "input {input}");
             assert_eq!(parsed.time(), NaiveTime::MIN, "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_parse_gnu_numeric_relative_unit_before_explicit_date() {
+        let ref_time = Local.timestamp_opt(1_000_000, 0).unwrap();
+
+        for (input, expected_date, expected_time) in [
+            (
+                "1 second 2024-01-01",
+                NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                NaiveTime::from_hms_opt(0, 0, 1).unwrap(),
+            ),
+            (
+                "-1 day 2024-01-01",
+                NaiveDate::from_ymd_opt(2023, 12, 31).unwrap(),
+                NaiveTime::MIN,
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.date_naive(), expected_date, "input {input}");
+            assert_eq!(parsed.time(), expected_time, "input {input}");
         }
     }
 

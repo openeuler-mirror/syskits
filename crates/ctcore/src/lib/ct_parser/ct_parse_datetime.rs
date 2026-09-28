@@ -178,7 +178,7 @@ fn normalize_gnu_bare_relative_units(input: &str) -> Option<String> {
 }
 
 /// Move GNU numeric relative-time items after date items, as GNU's grammar
-/// accepts items in either order.
+/// accepts items in either order and permits an immediate ago/hence modifier.
 fn normalize_gnu_numeric_relative_units(input: &str) -> Option<String> {
     let tokens = input.split_ascii_whitespace().collect::<Vec<_>>();
     let mut date_tokens = Vec::with_capacity(tokens.len());
@@ -193,18 +193,29 @@ fn normalize_gnu_numeric_relative_units(input: &str) -> Option<String> {
         };
         let amount = tokens[index];
         let absolute_amount = amount.strip_prefix(['+', '-']).unwrap_or(amount);
-        let has_ago_or_hence = tokens
+        let modifier = tokens
             .get(index + 2)
-            .is_some_and(|token| matches!(*token, "ago" | "hence"));
+            .copied()
+            .filter(|token| matches!(*token, "ago" | "hence"));
 
         if is_gnu_relative_unit(unit)
-            && !has_ago_or_hence
             && parse_gnu_relative_number(absolute_amount, amount.starts_with('-')).is_some()
         {
-            relative_tokens.push(amount.to_string());
+            let amount = if modifier == Some("ago") {
+                if let Some(amount) = amount.strip_prefix('-') {
+                    format!("+{amount}")
+                } else if let Some(amount) = amount.strip_prefix('+') {
+                    format!("-{amount}")
+                } else {
+                    format!("-{amount}")
+                }
+            } else {
+                amount.to_string()
+            };
+            relative_tokens.push(amount);
             relative_tokens.push((*unit).to_string());
             changed = true;
-            index += 2;
+            index += if modifier.is_some() { 3 } else { 2 };
         } else {
             date_tokens.push(amount.to_string());
             index += 1;
@@ -5105,6 +5116,30 @@ mod tests {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
             assert_eq!(parsed.date_naive(), expected_date, "input {input}");
             assert_eq!(parsed.time(), expected_time, "input {input}");
+        }
+    }
+
+    #[test]
+    fn test_parse_gnu_ago_and_hence_before_explicit_date() {
+        let ref_time = Local.timestamp_opt(1_000_000, 0).unwrap();
+
+        for (input, expected) in [
+            (
+                "1 day ago 2024-01-01",
+                NaiveDate::from_ymd_opt(2023, 12, 31).unwrap(),
+            ),
+            (
+                "1 day 1 month ago 2024-01-01",
+                NaiveDate::from_ymd_opt(2023, 12, 2).unwrap(),
+            ),
+            (
+                "1 day hence 1 month 2024-01-01",
+                NaiveDate::from_ymd_opt(2024, 2, 2).unwrap(),
+            ),
+        ] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(parsed.date_naive(), expected, "input {input}");
+            assert_eq!(parsed.time(), NaiveTime::MIN, "input {input}");
         }
     }
 

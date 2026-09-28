@@ -16,6 +16,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
+use ctcore::ct_display::locale_quote_marks;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo, UClapError};
 use ctcore::ct_parse_size::parse_size_u64;
 use std::ffi::OsString;
@@ -23,6 +24,8 @@ use std::fs::File;
 use std::io::Write;
 #[cfg(target_os = "linux")]
 use std::os::fd::{AsRawFd, FromRawFd};
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStrExt;
 #[cfg(target_os = "linux")]
 use std::os::unix::process::CommandExt;
 use std::process;
@@ -115,10 +118,80 @@ impl Default for StdbufFlags {
     }
 }
 
-fn trim_c_whitespace_start(value: &str) -> &str {
-    value.trim_start_matches(|character| {
-        matches!(character, ' ' | '\t' | '\n' | '\x0b' | '\x0c' | '\r')
-    })
+fn trim_c_whitespace_start(value: &[u8]) -> &[u8] {
+    let prefix_len = value
+        .iter()
+        .take_while(|byte| matches!(byte, b' ' | b'\t' | b'\n' | b'\x0b' | b'\x0c' | b'\r'))
+        .count();
+    &value[prefix_len..]
+}
+
+fn quote_mode_bytes(value: &[u8]) -> String {
+    let (left_quote, right_quote) = locale_quote_marks();
+    quote_mode_bytes_with_marks(value, left_quote, right_quote)
+}
+
+fn quote_mode_bytes_with_marks(value: &[u8], left_quote: &str, right_quote: &str) -> String {
+    let mut quoted = String::from(left_quote);
+    let mut remaining = value;
+    let is_utf8_locale = (left_quote, right_quote) == ("‘", "’");
+
+    while let Some((&byte, tail)) = remaining.split_first() {
+        if remaining.starts_with(right_quote.as_bytes()) {
+            quoted.push('\\');
+            quoted.push_str(right_quote);
+            remaining = &remaining[right_quote.len()..];
+            continue;
+        }
+
+        if byte.is_ascii() {
+            match byte {
+                b'\x07' => quoted.push_str("\\a"),
+                b'\x08' => quoted.push_str("\\b"),
+                b'\t' => quoted.push_str("\\t"),
+                b'\n' => quoted.push_str("\\n"),
+                b'\x0b' => quoted.push_str("\\v"),
+                b'\x0c' => quoted.push_str("\\f"),
+                b'\r' => quoted.push_str("\\r"),
+                b'\\' => quoted.push_str("\\\\"),
+                b'\'' if right_quote == "'" => quoted.push_str("\\'"),
+                b' '..=b'~' => quoted.push(char::from(byte)),
+                _ => quoted.push_str(&format!("\\{byte:03o}")),
+            }
+            remaining = tail;
+            continue;
+        }
+
+        if is_utf8_locale {
+            match std::str::from_utf8(remaining) {
+                Ok(valid) => {
+                    quoted.push_str(valid);
+                    break;
+                }
+                Err(error) if error.valid_up_to() > 0 => {
+                    let valid = std::str::from_utf8(&remaining[..error.valid_up_to()])
+                        .expect("valid_up_to must identify valid UTF-8");
+                    quoted.push_str(valid);
+                    remaining = &remaining[error.valid_up_to()..];
+                    continue;
+                }
+                Err(error) => {
+                    let invalid_len = error.error_len().unwrap_or(remaining.len());
+                    for byte in &remaining[..invalid_len] {
+                        quoted.push_str(&format!("\\{byte:03o}"));
+                    }
+                    remaining = &remaining[invalid_len..];
+                    continue;
+                }
+            }
+        }
+
+        quoted.push_str(&format!("\\{byte:03o}"));
+        remaining = tail;
+    }
+
+    quoted.push_str(right_quote);
+    quoted
 }
 
 impl StdbufFlags {
@@ -180,19 +253,21 @@ impl StdbufFlags {
     fn parse_buffer_option(matches: &ArgMatches, option_name: &str) -> Result<BufferType, String> {
         let mut buffer_type = BufferType::Default;
         for value in matches
-            .get_many::<String>(option_name)
+            .get_many::<OsString>(option_name)
             .into_iter()
             .flatten()
         {
-            let value = trim_c_whitespace_start(value);
-            if option_name == stdbuf_flags::INPUT && value.starts_with('L') {
+            let value = trim_c_whitespace_start(value.as_os_str().as_bytes());
+            if option_name == stdbuf_flags::INPUT && value.starts_with(b"L") {
                 return Err("line buffering stdin is meaningless".to_string());
             }
-            let value = value
+            let value = std::str::from_utf8(value)
+                .map_err(|_| format!("invalid mode {}", quote_mode_bytes(value)))?;
+            let parsed_value = value
                 .strip_prefix('+')
                 .filter(|remainder| remainder.as_bytes().first().is_some_and(u8::is_ascii_digit))
                 .unwrap_or(value);
-            buffer_type = match value {
+            buffer_type = match parsed_value {
                 "L" => BufferType::Line,
                 x => BufferType::Size(
                     parse_size_u64(x)
@@ -321,18 +396,21 @@ pub fn ct_app() -> Command {
             .short(stdbuf_flags::INPUT_SHORT)
             .help(t!("stdbuf.clap.input"))
             .value_name("MODE")
+            .value_parser(clap::builder::ValueParser::os_string())
             .action(ArgAction::Append),
         Arg::new(stdbuf_flags::OUTPUT)
             .long(stdbuf_flags::OUTPUT)
             .short(stdbuf_flags::OUTPUT_SHORT)
             .help(t!("stdbuf.clap.output"))
             .value_name("MODE")
+            .value_parser(clap::builder::ValueParser::os_string())
             .action(ArgAction::Append),
         Arg::new(stdbuf_flags::ERROR)
             .long(stdbuf_flags::ERROR)
             .short(stdbuf_flags::ERROR_SHORT)
             .help(t!("stdbuf.clap.error"))
             .value_name("MODE")
+            .value_parser(clap::builder::ValueParser::os_string())
             .action(ArgAction::Append),
         Arg::new(stdbuf_flags::COMMAND)
             .action(ArgAction::Append)
@@ -446,19 +524,22 @@ mod tests {
                 Arg::new(stdbuf_flags::INPUT)
                     .long(stdbuf_flags::INPUT)
                     .short(stdbuf_flags::INPUT_SHORT)
-                    .value_name("MODE"),
+                    .value_name("MODE")
+                    .value_parser(clap::builder::ValueParser::os_string()),
             )
             .arg(
                 Arg::new(stdbuf_flags::OUTPUT)
                     .long(stdbuf_flags::OUTPUT)
                     .short(stdbuf_flags::OUTPUT_SHORT)
-                    .value_name("MODE"),
+                    .value_name("MODE")
+                    .value_parser(clap::builder::ValueParser::os_string()),
             )
             .arg(
                 Arg::new(stdbuf_flags::ERROR)
                     .long(stdbuf_flags::ERROR)
                     .short(stdbuf_flags::ERROR_SHORT)
-                    .value_name("MODE"),
+                    .value_name("MODE")
+                    .value_parser(clap::builder::ValueParser::os_string()),
             )
             .arg(
                 Arg::new(stdbuf_flags::COMMAND)
@@ -609,6 +690,32 @@ mod tests {
             non_utf8.clone(),
         ]);
         assert!(matches.is_ok());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_mode_arguments_preserve_non_utf8_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let matches = ct_app().try_get_matches_from([
+            OsString::from("stdbuf"),
+            OsString::from("-o"),
+            OsString::from_vec(vec![0xff]),
+            OsString::from("/usr/bin/true"),
+        ]);
+
+        let matches = matches.expect("MODE should be retained as an OsString");
+        let error = match StdbufFlags::new(matches) {
+            Err(error) => error,
+            Ok(_) => panic!("non-UTF-8 MODE should be invalid"),
+        };
+
+        assert_eq!(error.code(), 125);
+        assert_eq!(quote_mode_bytes_with_marks(&[0xff], "'", "'"), "'\\377'");
+        assert_eq!(
+            error.to_string(),
+            format!("invalid mode {}", quote_mode_bytes(&[0xff]))
+        );
     }
 
     #[test]
@@ -792,8 +899,8 @@ mod tests {
 
             if let Ok(matches) = result {
                 assert_eq!(
-                    matches.get_one::<String>(stdbuf_flags::OUTPUT).unwrap(),
-                    "L"
+                    matches.get_one::<OsString>(stdbuf_flags::OUTPUT).unwrap(),
+                    &OsString::from("L")
                 );
             }
         }
@@ -840,11 +947,11 @@ mod tests {
 
         assert_eq!(
             matches
-                .get_many::<String>(stdbuf_flags::OUTPUT)
+                .get_many::<OsString>(stdbuf_flags::OUTPUT)
                 .unwrap()
                 .next_back()
-                .map(String::as_str),
-            Some("L")
+                .map(OsString::as_os_str),
+            Some(std::ffi::OsStr::new("L"))
         );
         assert_eq!(
             matches
@@ -863,11 +970,11 @@ mod tests {
             .unwrap();
         assert_eq!(
             matches
-                .get_many::<String>(stdbuf_flags::OUTPUT)
+                .get_many::<OsString>(stdbuf_flags::OUTPUT)
                 .unwrap()
                 .next_back()
-                .map(String::as_str),
-            Some("0")
+                .map(OsString::as_os_str),
+            Some(std::ffi::OsStr::new("0"))
         );
 
         let matches = ct_app()
@@ -1056,8 +1163,8 @@ mod tests {
 
             if let Ok(matches) = result {
                 assert_eq!(
-                    matches.get_one::<String>(stdbuf_flags::OUTPUT).unwrap(),
-                    "L"
+                    matches.get_one::<OsString>(stdbuf_flags::OUTPUT).unwrap(),
+                    &OsString::from("L")
                 );
             }
         }
@@ -1070,7 +1177,10 @@ mod tests {
             assert!(result.is_ok());
 
             if let Ok(matches) = result {
-                assert_eq!(matches.get_one::<String>(stdbuf_flags::INPUT).unwrap(), "0");
+                assert_eq!(
+                    matches.get_one::<OsString>(stdbuf_flags::INPUT).unwrap(),
+                    &OsString::from("0")
+                );
             }
         }
 
@@ -1083,8 +1193,8 @@ mod tests {
 
             if let Ok(matches) = result {
                 assert_eq!(
-                    matches.get_one::<String>(stdbuf_flags::ERROR).unwrap(),
-                    "4096"
+                    matches.get_one::<OsString>(stdbuf_flags::ERROR).unwrap(),
+                    &OsString::from("4096")
                 );
             }
         }
@@ -1107,14 +1217,17 @@ mod tests {
             assert!(result.is_ok());
 
             if let Ok(matches) = result {
-                assert_eq!(matches.get_one::<String>(stdbuf_flags::INPUT).unwrap(), "0");
                 assert_eq!(
-                    matches.get_one::<String>(stdbuf_flags::OUTPUT).unwrap(),
-                    "L"
+                    matches.get_one::<OsString>(stdbuf_flags::INPUT).unwrap(),
+                    &OsString::from("0")
                 );
                 assert_eq!(
-                    matches.get_one::<String>(stdbuf_flags::ERROR).unwrap(),
-                    "4096"
+                    matches.get_one::<OsString>(stdbuf_flags::OUTPUT).unwrap(),
+                    &OsString::from("L")
+                );
+                assert_eq!(
+                    matches.get_one::<OsString>(stdbuf_flags::ERROR).unwrap(),
+                    &OsString::from("4096")
                 );
             }
         }

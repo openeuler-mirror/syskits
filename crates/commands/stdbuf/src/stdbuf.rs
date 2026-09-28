@@ -136,6 +136,23 @@ fn invalid_mode_message(value: &[u8]) -> String {
     format!("invalid mode {}", quote_mode_bytes(value))
 }
 
+fn parse_stdbuf_size(value: &str) -> Result<u64, ParseSizeError> {
+    let numeric_len = value.bytes().take_while(u8::is_ascii_digit).count();
+    let (digits, suffix) = value.split_at(numeric_len);
+
+    if digits.len() > 1
+        && digits.starts_with('0')
+        && !value.starts_with("0x")
+        && !suffix.starts_with('x')
+    {
+        let digits = digits.trim_start_matches('0');
+        let digits = if digits.is_empty() { "0" } else { digits };
+        return parse_size_u64(&format!("{digits}{suffix}"));
+    }
+
+    parse_size_u64(value)
+}
+
 fn quote_mode_bytes_with_marks(value: &[u8], left_quote: &str, right_quote: &str) -> String {
     let mut quoted = String::from(left_quote);
     let mut remaining = value;
@@ -284,7 +301,7 @@ impl StdbufFlags {
             buffer_type = match parsed_value {
                 "L" => BufferType::Line,
                 x => BufferType::Size(
-                    parse_size_u64(x)
+                    parse_stdbuf_size(x)
                         .map_err(|error| {
                             let message = invalid_mode_message(raw_value);
                             if matches!(&error, ParseSizeError::SizeTooBig(_)) {
@@ -697,6 +714,15 @@ mod tests {
         let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("invalid mode"));
+    }
+
+    #[test]
+    fn test_parse_buffer_option_treats_leading_zero_sizes_as_decimal() {
+        let matches = create_arg_matches(None, Some("0010K"), None, None);
+
+        let result = StdbufFlags::parse_buffer_option(&matches, stdbuf_flags::OUTPUT).unwrap();
+
+        assert!(matches!(result, BufferType::Size(size) if size == 10 * 1024));
     }
 
     #[test]

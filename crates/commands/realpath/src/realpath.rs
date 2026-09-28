@@ -387,6 +387,7 @@ pub fn ct_app() -> Command {
         Arg::new(realpath_flags::REALPATH_CANONICALIZE_EXISTING)
             .short('e')
             .long(realpath_flags::REALPATH_CANONICALIZE_EXISTING)
+            .overrides_with(realpath_flags::REALPATH_CANONICALIZE_MISSING)
             .help(
                 "canonicalize by following every symlink in every component of the \
                      given name recursively, all components must exist",
@@ -395,6 +396,7 @@ pub fn ct_app() -> Command {
         Arg::new(realpath_flags::REALPATH_CANONICALIZE_MISSING)
             .short('m')
             .long(realpath_flags::REALPATH_CANONICALIZE_MISSING)
+            .overrides_with(realpath_flags::REALPATH_CANONICALIZE_EXISTING)
             .help(
                 "canonicalize by following every symlink in every component of the \
                      given name recursively, without requirements on components existence",
@@ -574,6 +576,23 @@ mod tests {
             ]);
             let flags = RealpathFlags::new(matches).unwrap();
             assert_eq!(flags.can_mode, MissingHandling::Existing);
+        }
+
+        #[test]
+        fn test_last_canonicalize_option_wins() {
+            let missing_last =
+                create_test_matches(&[ctcore::ct_util_name(), "-e", "-m", "missing"]);
+            assert_eq!(
+                RealpathFlags::new(missing_last).unwrap().can_mode,
+                MissingHandling::Missing
+            );
+
+            let existing_last =
+                create_test_matches(&[ctcore::ct_util_name(), "-m", "-e", "missing"]);
+            assert_eq!(
+                RealpathFlags::new(existing_last).unwrap().can_mode,
+                MissingHandling::Existing
+            );
         }
 
         #[test]

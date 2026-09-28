@@ -449,6 +449,29 @@
                     }
                 ]
             }
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "canonicalize 模式按最后出现的 -m 选项生效",
+            "args": [
+                "-e",
+                "-m",
+                "missing/child"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDOUT\" | grep -q '/missing/child$'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": []
         }
     ]
 }

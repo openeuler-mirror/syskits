@@ -2057,6 +2057,17 @@ mod tests {
         }
 
         #[test]
+        fn parse_date_accepts_colon_time_before_weekday() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            let parsed = touch_parse_date(reference, "12:34 Monday UTC").unwrap();
+            let expected = Utc.with_ymd_and_hms(2025, 7, 28, 12, 34, 0).unwrap();
+
+            assert_eq!(parsed.unix_seconds(), expected.timestamp());
+            assert_eq!(parsed.nanoseconds(), 0);
+        }
+
+        #[test]
         fn parse_date_preserves_single_digit_year_after_compact_time() {
             let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
 

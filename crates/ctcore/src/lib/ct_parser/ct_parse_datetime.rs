@@ -3648,9 +3648,14 @@ fn parse_relative_day_with_explicit_time(
 ) -> Option<DateTime<Local>> {
     let tokens = input.split_ascii_whitespace().collect::<Vec<_>>();
     for (time_index, token) in tokens.iter().enumerate() {
-        // In `5 Monday`, GNU reads the leading number as the weekday ordinal,
-        // not as a compact clock.  A trailing number is a clock item instead.
-        if tokens.len() == 2 && time_index == 0 && parse_weekday_name(tokens[1]).is_some() {
+        // In `5 Monday`, GNU reads the leading compact number as the weekday
+        // ordinal, not as a clock.  A colon-delimited time is an independent
+        // time item and can precede the weekday.
+        if tokens.len() == 2
+            && time_index == 0
+            && !token.contains(':')
+            && parse_weekday_name(tokens[1]).is_some()
+        {
             continue;
         }
         let Some(time) = parse_gnu_24_hour_clock(token).or_else(|| parse_gnu_compact_clock(token))
@@ -5304,6 +5309,19 @@ mod tests {
             assert_eq!(parsed.date_naive(), expected_date, "input {input}");
             assert_eq!(parsed.time(), expected_time, "input {input}");
         }
+    }
+
+    #[test]
+    fn test_parse_gnu_colon_time_before_weekday() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap(); // Thursday
+
+        let parsed = parse_datetime_gnu_compat("12:34 Monday", ref_time).unwrap();
+
+        assert_eq!(
+            parsed.date_naive(),
+            NaiveDate::from_ymd_opt(2025, 7, 28).unwrap()
+        );
+        assert_eq!(parsed.time(), NaiveTime::from_hms_opt(12, 34, 0).unwrap());
     }
 
     #[test]

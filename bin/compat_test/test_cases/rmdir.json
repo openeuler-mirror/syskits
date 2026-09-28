@@ -352,6 +352,31 @@
                 ]
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "rmdir",
+            "description": "原始字节错误用例：LC_ALL=C 下对普通文件路径 bad\\377 执行 rmdir；参数完整十六进制=626164ff，GNU quoteaf 应将有效文本和 0xff 分段为 'bad'$'\\377'，预期 RC=1、stdout为空、stderr完整十六进制保留八进制转义。",
+            "setup_commands": [
+                "name=$(printf 'bad\\377'); printf x > \"$name\""
+            ],
+            "args": ["626164ff"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "726d6469723a206661696c656420746f2072656d6f766520276261642724275c333737273a204e6f742061206469726563746f72790a"
+                }
+            },
+            "cleanup_commands": [
+                "name=$(printf 'bad\\377'); rm -f -- \"$name\""
+            ]
         }
     ]
 }

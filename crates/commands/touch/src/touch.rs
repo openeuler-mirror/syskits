@@ -1103,6 +1103,13 @@ fn touch_parse_date(ref_time: DateTime<Local>, s: &str) -> CTResult<FileTime> {
         ));
     }
 
+    if ct_parse_datetime::gnu_rejects_signed_iso_year(s) {
+        return Err(CtSimpleError::new(
+            1,
+            touch_invalid_date_format(s.as_bytes()),
+        ));
+    }
+
     // "当前语言环境的首选日期和时间表示。"
     // "(在POSIX语言环境中这相当于%a %b %e %H:%M:%S %Y。)"
     // time 0.1.43将其解析为'a b e T Y'
@@ -2206,6 +2213,28 @@ mod tests {
             let date_str = "@invalidtimestamp"; // 无效的Unix时间戳
             let result = touch_parse_date(ref_time, date_str);
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_parse_date_rejects_signed_iso_years() {
+            let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            for date_str in ["+0001-01-01", "-0001-01-01", "+12345-01-01", "-12345-01-01"] {
+                assert!(
+                    touch_parse_date(ref_time, date_str).is_err(),
+                    "GNU rejects signed ISO year {date_str}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_parse_date_accepts_unsigned_extended_iso_year() {
+            let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+            let parsed = touch_parse_date(ref_time, "00001-01-01").unwrap();
+            let expected = Utc.with_ymd_and_hms(1, 1, 1, 0, 0, 0).unwrap();
+
+            assert_eq!(parsed.unix_seconds(), expected.timestamp());
+            assert_eq!(parsed.nanoseconds(), 0);
         }
     }
 

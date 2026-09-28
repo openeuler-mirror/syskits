@@ -484,12 +484,13 @@ fn parse_datetime_gnu_compat_impl(
         );
     }
 
+    if !normalized_extended_year && gnu_rejects_signed_iso_year(input_trim) {
+        return Err(ParseDateTimeError {
+            message: format!("Unable to parse date: {input}"),
+        });
+    }
+
     if !normalized_extended_year {
-        if has_explicit_plus_extended_year(input_trim) {
-            return Err(ParseDateTimeError {
-                message: format!("Unable to parse date: {input}"),
-            });
-        }
         if let Some(normalized) = normalize_gnu_extended_year(input_trim) {
             return parse_datetime_gnu_compat_impl(&normalized, reference_time, true);
         }
@@ -2253,12 +2254,27 @@ fn is_fractional_seconds_comma(bytes: &[u8], comma: usize) -> bool {
     hour_end > 0 && bytes[hour_end - 1].is_ascii_digit()
 }
 
-fn has_explicit_plus_extended_year(input: &str) -> bool {
-    let Some(rest) = input.strip_prefix('+') else {
+/// GNU's ISO date production requires an unsigned year token.  Chrono accepts
+/// a leading sign, so callers that use a Chrono fallback must apply this guard.
+pub fn gnu_rejects_signed_iso_year(input: &str) -> bool {
+    let Some(rest) = input.strip_prefix(['+', '-']) else {
         return false;
     };
     let year_digits = rest.bytes().take_while(u8::is_ascii_digit).count();
-    year_digits >= 5 && matches!(rest.as_bytes().get(year_digits), Some(b'-' | b'/'))
+    if year_digits == 0 || rest.as_bytes().get(year_digits) != Some(&b'-') {
+        return false;
+    }
+
+    let month = &rest[year_digits + 1..];
+    let month_digits = month.bytes().take_while(u8::is_ascii_digit).count();
+    if month_digits == 0 || month.as_bytes().get(month_digits) != Some(&b'-') {
+        return false;
+    }
+
+    month[month_digits + 1..]
+        .bytes()
+        .next()
+        .is_some_and(|byte| byte.is_ascii_digit())
 }
 
 fn normalize_gnu_extended_year(input: &str) -> Option<String> {
@@ -4501,7 +4517,26 @@ mod tests {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
             assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
         }
+
+        let parsed = parse_datetime_gnu_compat("00001-01-01", ref_time).unwrap();
+        assert_eq!(
+            parsed.with_timezone(&Utc).date_naive(),
+            NaiveDate::from_ymd_opt(1, 1, 1).unwrap()
+        );
+
         assert!(parse_datetime_gnu_compat("+12345-01-01 UTC", ref_time).is_err());
+    }
+
+    #[test]
+    fn test_rejects_gnu_signed_iso_years() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for input in ["+0001-01-01", "-0001-01-01", "+12345-01-01", "-12345-01-01"] {
+            assert!(
+                parse_datetime_gnu_compat(input, ref_time).is_err(),
+                "GNU rejects signed ISO year {input}"
+            );
+        }
     }
 
     #[test]

@@ -4379,6 +4379,40 @@
             "cleanup_commands": [
                 "rm -f reference target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下GNU ISO日期年份不能带显式正负号；+0001-01-01必须报非法日期且不得创建target。",
+            "args": [
+                "--date=+0001-01-01",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: invalid date format '+0001-01-01'\\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
         }
     ]
 }

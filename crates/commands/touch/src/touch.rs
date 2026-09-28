@@ -2296,6 +2296,26 @@ mod tests {
         }
 
         #[test]
+        fn test_parse_date_uses_gnu_iana_timezone_dst_fold_selection() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            for (input, expected) in [
+                (
+                    "TZ=\"Europe/Berlin\" 2024-10-27 02:30:00",
+                    Utc.with_ymd_and_hms(2024, 10, 27, 1, 30, 0).unwrap(),
+                ),
+                (
+                    "TZ=\"Australia/Sydney\" 2024-04-07 02:30:00",
+                    Utc.with_ymd_and_hms(2024, 4, 6, 16, 30, 0).unwrap(),
+                ),
+            ] {
+                let parsed = touch_parse_date(reference, input).unwrap();
+                assert_eq!(parsed.unix_seconds(), expected.timestamp(), "input {input}");
+                assert_eq!(parsed.nanoseconds(), 0, "input {input}");
+            }
+        }
+
+        #[test]
         fn test_parse_date_invalid() {
             let ref_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
 

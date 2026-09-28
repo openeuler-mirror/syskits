@@ -19,7 +19,7 @@
 use crate::ct_error::{CTResult, CtSimpleError};
 use chrono::{
     DateTime, Datelike, Duration, FixedOffset, Local, LocalResult, NaiveDate, NaiveDateTime,
-    NaiveTime, TimeZone, Timelike, Utc, Weekday,
+    NaiveTime, Offset, TimeZone, Timelike, Utc, Weekday,
 };
 use chrono_tz::Tz;
 #[cfg(target_os = "linux")]
@@ -3222,10 +3222,8 @@ fn parse_embedded_timezone_local(
     }
 
     if let Ok(timezone) = timezone_name.parse::<Tz>() {
-        return timezone
-            .from_local_datetime(&naive)
-            .earliest()
-            .map(|dt| dt.with_timezone(&Local));
+        return embedded_iana_timezone_local_datetime(timezone, naive)
+            .map(|datetime| datetime.with_timezone(&Local));
     }
 
     if let Some(timezone) = parse_posix_timezone_rule(timezone_name) {
@@ -3236,6 +3234,35 @@ fn parse_embedded_timezone_local(
         .from_local_datetime(&naive)
         .single()
         .map(|dt| dt.with_timezone(&Local))
+}
+
+fn embedded_iana_timezone_local_datetime(
+    timezone: Tz,
+    naive: NaiveDateTime,
+) -> Option<DateTime<Tz>> {
+    match timezone.from_local_datetime(&naive) {
+        LocalResult::Single(datetime) => Some(datetime),
+        LocalResult::Ambiguous(first, second) => {
+            // GNU delegates a wall time without an explicit DST marker to
+            // Linux mktime.  For a DST fold, glibc selects the offset closer
+            // to UTC; resolve ties by timestamp to preserve the west-of-UTC
+            // choice.
+            let first_key = (
+                i64::from(first.offset().fix().local_minus_utc()).abs(),
+                first.timestamp(),
+            );
+            let second_key = (
+                i64::from(second.offset().fix().local_minus_utc()).abs(),
+                second.timestamp(),
+            );
+            Some(if first_key <= second_key {
+                first
+            } else {
+                second
+            })
+        }
+        LocalResult::None => None,
+    }
 }
 
 /// Parse a leading `TZ="..."` item without a following date specification.
@@ -4843,6 +4870,14 @@ mod tests {
             (
                 "TZ=\"America/Los_Angeles\" 2024-11-03 01:30",
                 Utc.with_ymd_and_hms(2024, 11, 3, 8, 30, 0).unwrap(),
+            ),
+            (
+                "TZ=\"Europe/Berlin\" 2024-10-27 02:30",
+                Utc.with_ymd_and_hms(2024, 10, 27, 1, 30, 0).unwrap(),
+            ),
+            (
+                "TZ=\"Australia/Sydney\" 2024-04-07 02:30",
+                Utc.with_ymd_and_hms(2024, 4, 6, 16, 30, 0).unwrap(),
             ),
             (
                 "TZ=\"America/New_York\" 2024-01-01 12:00 UTC",

@@ -4907,6 +4907,44 @@
             "cleanup_commands": [
                 "rm -f target"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下内嵌TZif v4绝对路径必须按GNU读取；将纽约时区文件转换为v4后，当地2024-01-01 12:00仍应将target设为1704128400秒。",
+            "args": [
+                "--date=TZ=\":/tmp/syskits-tzif-v4-97310\" 2024-01-01 12:00",
+                "target"
+            ],
+            "setup_commands": [
+                "/usr/bin/cp /usr/share/zoneinfo/America/New_York /tmp/syskits-tzif-v4-97310",
+                "/usr/bin/perl -pi -e 's/TZif[23]/TZif4/g' /tmp/syskits-tzif-v4-97310"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '1704128400.000000000'",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f /tmp/syskits-tzif-v4-97310 target"
+            ]
         }
     ]
 }

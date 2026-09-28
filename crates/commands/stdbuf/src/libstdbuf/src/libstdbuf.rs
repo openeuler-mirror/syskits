@@ -69,14 +69,10 @@ fn parse_buffer_mode(value: &[u8]) -> Result<(c_int, size_t), ()> {
                 return Err(());
             }
 
-            let magnitude = std::str::from_utf8(digits)
-                .unwrap()
-                .parse::<u64>()
-                .unwrap_or(u64::MAX);
-            let size = if negative {
-                0_u64.wrapping_sub(magnitude)
-            } else {
-                magnitude
+            let size = match std::str::from_utf8(digits).unwrap().parse::<u64>() {
+                Ok(magnitude) if negative => 0_u64.wrapping_sub(magnitude),
+                Ok(magnitude) => magnitude,
+                Err(_) => u64::MAX,
             };
             let size = size_t::try_from(size).map_err(|_| ())?;
             if size == 0 {
@@ -200,6 +196,14 @@ mod tests {
         assert_eq!(parse_buffer_mode(b"+1024"), Ok((_IOFBF, 1024)));
         assert_eq!(parse_buffer_mode(b"invalid"), Err(()));
         assert_eq!(parse_buffer_mode(b"+0"), Err(()));
+    }
+
+    #[test]
+    fn test_parse_buffer_mode_negative_overflow_matches_strtoumax() {
+        assert_eq!(
+            parse_buffer_mode(b"-18446744073709551616"),
+            Ok((_IOFBF, size_t::MAX))
+        );
     }
 
     #[test]

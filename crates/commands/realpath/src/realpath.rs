@@ -160,12 +160,14 @@ impl RealpathFlags {
 
         // 提取相对路径基准的参数
         let relative_to = matches
-            .get_one::<String>(realpath_flags::REALPATH_RELATIVE_TO)
+            .get_many::<String>(realpath_flags::REALPATH_RELATIVE_TO)
+            .and_then(|mut values| values.next_back())
             .cloned()
             .map(PathBuf::from);
         // 提取相对路径基础的参数
         let relative_base = matches
-            .get_one::<String>(realpath_flags::REALPATH_RELATIVE_BASE)
+            .get_many::<String>(realpath_flags::REALPATH_RELATIVE_BASE)
+            .and_then(|mut values| values.next_back())
             .cloned()
             .map(PathBuf::from);
         // 根据相对路径参数和处理模式，准备相对路径选项
@@ -414,12 +416,14 @@ pub fn ct_app() -> Command {
             .long(realpath_flags::REALPATH_RELATIVE_TO)
             .value_name("DIR")
             .value_parser(NonEmptyStringValueParser::new())
-            .help("print the resolved path relative to DIR"),
+            .help("print the resolved path relative to DIR")
+            .action(ArgAction::Append),
         Arg::new(realpath_flags::REALPATH_RELATIVE_BASE)
             .long(realpath_flags::REALPATH_RELATIVE_BASE)
             .value_name("DIR")
             .value_parser(NonEmptyStringValueParser::new())
-            .help("print absolute paths unless paths below DIR"),
+            .help("print absolute paths unless paths below DIR")
+            .action(ArgAction::Append),
         Arg::new(realpath_flags::REALPATH_ARG_FILES)
             .action(ArgAction::Append)
             .required(true)
@@ -643,6 +647,35 @@ mod tests {
                     base_dir.canonicalize().unwrap()
                 );
             }
+        }
+
+        #[test]
+        fn test_last_relative_options_win() {
+            let relative_to = ct_app()
+                .try_get_matches_from([
+                    ctcore::ct_util_name(),
+                    "--relative-to=/",
+                    "--relative-to=/tmp",
+                    "path",
+                ])
+                .unwrap();
+            assert_eq!(
+                RealpathFlags::new(relative_to).unwrap().relative_to,
+                Some(PathBuf::from("/tmp"))
+            );
+
+            let relative_base = ct_app()
+                .try_get_matches_from([
+                    ctcore::ct_util_name(),
+                    "--relative-base=/",
+                    "--relative-base=/tmp",
+                    "path",
+                ])
+                .unwrap();
+            assert_eq!(
+                RealpathFlags::new(relative_base).unwrap().relative_base,
+                Some(PathBuf::from("/tmp"))
+            );
         }
 
         #[test]

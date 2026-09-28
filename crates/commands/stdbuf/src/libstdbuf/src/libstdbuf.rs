@@ -52,7 +52,39 @@ fn parse_buffer_mode(value: &str) -> Result<(c_int, size_t), ()> {
     match value.as_bytes().first() {
         Some(b'0') => Ok((_IONBF, 0)),
         Some(b'L') => Ok((_IOLBF, 0)),
-        _ => value.parse().map(|size| (_IOFBF, size)).map_err(|_| ()),
+        _ => {
+            let value = value.trim_start_matches(|character: char| character.is_ascii_whitespace());
+            let (negative, digits) = match value.as_bytes().first() {
+                Some(b'+') => (false, &value[1..]),
+                Some(b'-') => (true, &value[1..]),
+                _ => (false, value),
+            };
+            if digits.is_empty() || !digits.as_bytes().iter().all(u8::is_ascii_digit) {
+                return Err(());
+            }
+
+            let magnitude = digits.parse::<u64>().unwrap_or(u64::MAX);
+            let size = if negative {
+                0_u64.wrapping_sub(magnitude)
+            } else {
+                magnitude
+            };
+            let size = size_t::try_from(size).map_err(|_| ())?;
+            if size == 0 {
+                Err(())
+            } else {
+                Ok((_IOFBF, size))
+            }
+        }
+    }
+}
+
+fn stream_name(stream: *mut FILE) -> &'static str {
+    match unsafe { fileno(stream) } {
+        0 => "stdin",
+        1 => "stdout",
+        2 => "stderr",
+        _ => "unknown",
     }
 }
 
@@ -69,8 +101,8 @@ fn set_buffer(stream: *mut FILE, value: &str) {
     let (mode, size) = match parse_buffer_mode(value) {
         Ok(mode) => mode,
         Err(()) => {
-            eprintln!("failed to allocate a {value} byte stdio buffer");
-            std::process::exit(1);
+            eprintln!("invalid buffering mode {value} for {}", stream_name(stream));
+            return;
         }
     };
     let buffer = if mode == _IOFBF {
@@ -145,6 +177,10 @@ mod tests {
     fn test_parse_buffer_mode_uses_gnu_mode_prefixes() {
         assert_eq!(parse_buffer_mode("0suffix"), Ok((_IONBF, 0)));
         assert_eq!(parse_buffer_mode("Lsuffix"), Ok((_IOLBF, 0)));
+        assert_eq!(parse_buffer_mode(" \t1024"), Ok((_IOFBF, 1024)));
+        assert_eq!(parse_buffer_mode("+1024"), Ok((_IOFBF, 1024)));
+        assert_eq!(parse_buffer_mode("invalid"), Err(()));
+        assert_eq!(parse_buffer_mode("+0"), Err(()));
     }
 
     #[test]

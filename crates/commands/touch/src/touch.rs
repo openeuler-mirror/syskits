@@ -2112,6 +2112,17 @@ mod tests {
         }
 
         #[test]
+        fn parse_date_accepts_named_relative_unit_before_explicit_date() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            let parsed = touch_parse_date(reference, "next day 2024-01-01 UTC").unwrap();
+            let expected = Utc.with_ymd_and_hms(2024, 1, 2, 0, 0, 0).unwrap();
+
+            assert_eq!(parsed.unix_seconds(), expected.timestamp());
+            assert_eq!(parsed.nanoseconds(), 0);
+        }
+
+        #[test]
         fn parse_date_accepts_ago_before_explicit_date() {
             let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
 

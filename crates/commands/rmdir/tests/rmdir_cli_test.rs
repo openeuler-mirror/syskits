@@ -3,8 +3,8 @@ use std::fs::{self, File};
 use std::io;
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::symlink;
-use std::os::unix::process::CommandExt;
-use std::process::Command;
+use std::os::unix::process::{CommandExt, ExitStatusExt};
+use std::process::{Command, Stdio};
 
 use tempfile::TempDir;
 
@@ -125,6 +125,47 @@ fn verbose_removes_directory_before_reporting_closed_stdout() {
     assert_eq!(output.status.code(), Some(1));
     assert!(output.stdout.is_empty());
     assert_eq!(output.stderr, b"rmdir: write error: Bad file descriptor\n");
+    assert!(!tempdir.path().join("directory").exists());
+}
+
+#[test]
+fn verbose_uses_default_sigpipe_for_closed_pipe() {
+    let tempdir = TempDir::new().unwrap();
+    fs::create_dir(tempdir.path().join("directory")).unwrap();
+
+    let mut pipe_fds = [0; 2];
+    assert_eq!(unsafe { libc::pipe(pipe_fds.as_mut_ptr()) }, 0);
+    let read_end = pipe_fds[0];
+    let write_end = pipe_fds[1];
+    assert_eq!(unsafe { libc::close(read_end) }, 0);
+
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rmdir"));
+    command
+        .arg0("rmdir")
+        .args(["-v", "directory"])
+        .current_dir(tempdir.path())
+        .env("LC_ALL", "C")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    unsafe {
+        command.pre_exec(move || {
+            if libc::dup2(write_end, libc::STDOUT_FILENO) == -1 {
+                return Err(io::Error::last_os_error());
+            }
+            if write_end != libc::STDOUT_FILENO {
+                libc::close(write_end);
+            }
+            Ok(())
+        });
+    }
+
+    let child = command.spawn().unwrap();
+    assert_eq!(unsafe { libc::close(write_end) }, 0);
+    let output = child.wait_with_output().unwrap();
+
+    assert_eq!(output.status.signal(), Some(libc::SIGPIPE));
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
     assert!(!tempdir.path().join("directory").exists());
 }
 

@@ -465,6 +465,40 @@
             "cleanup_commands": [
                 "rmdir a"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "详细输出写入无读取端管道时遵循默认 SIGPIPE 语义",
+            "setup_commands": [
+                "mkdir directory"
+            ],
+            "args": ["-v", "directory"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "default",
+                    "useBash": true
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e directory && echo 'directory removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "directory removed"
+                    }
+                ]
+            },
+            "cleanup_commands": []
         }
     ]
 }

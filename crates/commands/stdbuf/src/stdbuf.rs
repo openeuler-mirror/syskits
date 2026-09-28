@@ -74,7 +74,7 @@ struct StdbufFlags {
     /// 标准错误的缓冲设置
     stderr: BufferType,
     /// 要执行的命令及其参数
-    command_args: Vec<String>,
+    command_args: Vec<OsString>,
 }
 
 impl Default for StdbufFlags {
@@ -111,7 +111,7 @@ impl StdbufFlags {
 
         // 提取命令和参数
         let command_args = matches
-            .get_many::<String>(stdbuf_flags::COMMAND)
+            .get_many::<OsString>(stdbuf_flags::COMMAND)
             .map_or_else(Vec::new, |v| v.cloned().collect());
 
         if command_args.is_empty() {
@@ -228,7 +228,10 @@ impl StdbufFlags {
             };
             CtSimpleError::new(
                 exit_code,
-                format!("failed to run command '{command_name}': {e}"),
+                format!(
+                    "failed to run command '{}': {e}",
+                    command_name.to_string_lossy()
+                ),
             )
         })?;
 
@@ -349,6 +352,7 @@ pub fn ct_app() -> Command {
             .required_unless_present_any([stdbuf_flags::INPUT, stdbuf_flags::OUTPUT]),
         Arg::new(stdbuf_flags::COMMAND)
             .action(ArgAction::Append)
+            .value_parser(clap::builder::ValueParser::os_string())
             .hide(true)
             .required(true)
             .value_hint(clap::ValueHint::CommandName),
@@ -457,7 +461,11 @@ mod tests {
                     .short(stdbuf_flags::ERROR_SHORT)
                     .value_name("MODE"),
             )
-            .arg(Arg::new(stdbuf_flags::COMMAND).action(ArgAction::Append));
+            .arg(
+                Arg::new(stdbuf_flags::COMMAND)
+                    .action(ArgAction::Append)
+                    .value_parser(clap::builder::ValueParser::os_string()),
+            );
 
         // Build argument vector using owned strings
         let mut arg_strings = Vec::new();
@@ -546,6 +554,22 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_command_arguments_preserve_non_utf8_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let non_utf8 = OsString::from_vec(vec![0xff]);
+        let matches = ct_app().try_get_matches_from([
+            OsString::from("stdbuf"),
+            OsString::from("-o0"),
+            OsString::from("/usr/bin/printf"),
+            OsString::from("%s"),
+            non_utf8.clone(),
+        ]);
+        assert!(matches.is_ok());
+    }
+
     #[test]
     fn test_parse_buffer_option_none() {
         // 创建一个没有选项的参数匹配
@@ -573,7 +597,7 @@ mod tests {
         let flags = result.unwrap();
         assert_eq!(
             flags.command_args,
-            vec!["echo".to_string(), "test".to_string()]
+            vec![OsString::from("echo"), OsString::from("test")]
         );
         match flags.stdout {
             BufferType::Line => {}
@@ -832,11 +856,14 @@ mod tests {
         );
         assert_eq!(
             matches
-                .get_many::<String>(stdbuf_flags::COMMAND)
+                .get_many::<OsString>(stdbuf_flags::COMMAND)
                 .unwrap()
-                .map(String::as_str)
+                .map(OsString::as_os_str)
                 .collect::<Vec<_>>(),
-            ["/usr/bin/printenv", "_STDBUF_O"]
+            [
+                std::ffi::OsStr::new("/usr/bin/printenv"),
+                std::ffi::OsStr::new("_STDBUF_O"),
+            ]
         );
 
         let matches = ct_app()
@@ -1030,7 +1057,7 @@ mod tests {
         // 步骤4：验证命令参数
         assert_eq!(
             flags.command_args,
-            vec!["echo".to_string(), "test".to_string()]
+            vec![OsString::from("echo"), OsString::from("test")]
         );
 
         // 我们不能直接测试execute_command，因为它会尝试实际执行命令

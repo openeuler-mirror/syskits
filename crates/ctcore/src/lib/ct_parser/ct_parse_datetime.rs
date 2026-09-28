@@ -3297,7 +3297,7 @@ fn parse_tzif_timezone(timezone_name: &str) -> Option<TzifTimezone> {
     let (first, first_end) = parse_tzif_data_block(&bytes, 0, first_counts, 4)?;
     let (data, footer_start) = match version {
         b'\0' => (first, first_end),
-        b'2' | b'3' => {
+        b'2' | b'3' | b'4' => {
             let (_, second_counts) = parse_tzif_header(&bytes, first_end)?;
             parse_tzif_data_block(&bytes, first_end, second_counts, 8)?
         }
@@ -5148,6 +5148,28 @@ mod tests {
             parse_datetime_gnu_compat("TZ=\":/usr/share/zoneinfo/America/New_York\"", reference)
                 .unwrap();
         assert_eq!(parsed.timestamp(), 1_753_329_600);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_parse_embedded_timezone_tzif_v4_file_path() {
+        let temporary = tempfile::tempdir().unwrap();
+        let path = temporary.path().join("new-york-v4");
+        let mut tzif = std::fs::read("/usr/share/zoneinfo/America/New_York").unwrap();
+        for index in 0..tzif.len().saturating_sub(4) {
+            if tzif.get(index..index + 5) == Some(b"TZif2") {
+                tzif[index + 4] = b'4';
+            }
+        }
+        std::fs::write(&path, tzif).unwrap();
+
+        let input = format!(
+            "TZ=\":{}\" 2024-01-01 12:00",
+            path.to_str().expect("temporary path must be UTF-8")
+        );
+        let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 34, 56).unwrap();
+        let parsed = parse_datetime_gnu_compat(&input, reference).unwrap();
+        assert_eq!(parsed.timestamp(), 1_704_128_400);
     }
 
     #[test]

@@ -2407,6 +2407,21 @@ fn parse_gnu_numeric_timezone(
     normalized_extended_year: bool,
 ) -> Option<DateTime<Local>> {
     let sign_index = input.rfind(['+', '-'])?;
+    let sign_is_separated = sign_index > 0
+        && input
+            .as_bytes()
+            .get(sign_index - 1)
+            .is_some_and(u8::is_ascii_whitespace);
+    let clock_start = input[..sign_index]
+        .bytes()
+        .rposition(|byte| byte.is_ascii_whitespace())
+        .map_or(0, |index| index + 1);
+    let sign_follows_clock =
+        gnu_numeric_timezone_follows_clock(&input[clock_start..], sign_index - clock_start);
+    if !sign_is_separated && !sign_follows_clock {
+        return None;
+    }
+
     let zone = input[sign_index + 1..].trim_start();
 
     let wall_time_input = input[..sign_index].trim_end();
@@ -5205,6 +5220,15 @@ mod tests {
             let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
             assert_eq!(parsed.timestamp(), expected.timestamp(), "input {input}");
         }
+    }
+
+    #[test]
+    fn test_parse_gnu_explicit_time_before_iso_date_with_timezone() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("12:34 2024-01-01 UTC", ref_time).unwrap();
+        let expected = Utc.with_ymd_and_hms(2024, 1, 1, 12, 34, 0).unwrap();
+
+        assert_eq!(parsed.timestamp(), expected.timestamp());
     }
 
     #[test]

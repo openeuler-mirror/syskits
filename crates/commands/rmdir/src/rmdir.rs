@@ -183,6 +183,7 @@ pub fn ct_app() -> Command {
         Arg::new(rmdir_flags::RMDIR_PARENTS)
             .short('p')
             .long(rmdir_flags::RMDIR_PARENTS)
+            .alias("path")
             .help(
                 "remove DIRECTORY and its ancestors; e.g.,
                   'rmdir -p a/b/c' is similar to rmdir a/b/c a/b a",
@@ -911,6 +912,15 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--parents", file_name];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_supports_deprecated_path_alias() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "--path", "directory"];
+            let matches = command.try_get_matches_from(args).unwrap();
+
+            assert!(matches.get_flag(rmdir_flags::RMDIR_PARENTS));
         }
 
         #[test]

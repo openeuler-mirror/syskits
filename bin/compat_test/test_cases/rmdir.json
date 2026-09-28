@@ -204,6 +204,30 @@
             "cleanup_commands": [
                 "rm -rf a"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "rmdir",
+            "description": "兼容已弃用的 --path 父目录删除别名",
+            "setup_commands": [
+                "mkdir -p a/b"
+            ],
+            "args": ["--path", "a/b"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e a && echo 'parents removed'",
+                        "expected_exit": 0,
+                        "expected_stdout": "parents removed"
+                    }
+                ]
+            },
+            "cleanup_commands": []
         }
     ]
-} 
+}

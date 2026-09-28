@@ -2237,6 +2237,14 @@ mod tests {
         }
 
         #[test]
+        fn test_parse_date_rejects_repeated_short_numeric_time_items() {
+            let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+            assert!(touch_parse_date(reference, "2024 0101 UTC").is_err());
+            assert!(touch_parse_date(reference, "20240229 1 UTC").is_ok());
+        }
+
+        #[test]
         fn test_parse_date_invalid() {
             let ref_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
 

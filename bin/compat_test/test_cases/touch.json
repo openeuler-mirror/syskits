@@ -4524,6 +4524,40 @@
         {
             "tstdin": "",
             "command": "touch",
+            "description": "LC_ALL=C、TZ=UTC0下两个短数字会构成重复时间项；2024 0101 UTC必须按GNU报非法日期且不得创建target。",
+            "args": [
+                "--date=2024 0101 UTC",
+                "target"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "touch: invalid date format '2024 0101 UTC'\n"
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e target",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f target"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "touch",
             "description": "LC_ALL=C、TZ=UTC0下圆括号注释必须保留GNU词法边界；U(ignored)TC不得拼接为UTC，必须报非法日期且不得创建target。",
             "args": [
                 "--date=2024-01-01 U(ignored)TC",

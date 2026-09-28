@@ -508,7 +508,7 @@ fn parse_datetime_gnu_compat_impl(
         });
     }
 
-    if gnu_rejects_space_separated_numeric_date(input_trim) {
+    if gnu_rejects_space_separated_numeric_date(input_trim, reference_time) {
         return Err(ParseDateTimeError {
             message: format!("Unable to parse date: {input}"),
         });
@@ -1311,16 +1311,57 @@ fn gnu_slash_date_has_two_digit_year(input: &str) -> bool {
 /// GNU's grammar requires date fields to use an ISO, slash, or word-month
 /// separator. Chrono accepts whitespace before adjacent numeric directives,
 /// causing our compact `%Y%m%d` format to accept this non-GNU form.
-fn gnu_rejects_space_separated_numeric_date(input: &str) -> bool {
-    let mut fields = input.split_ascii_whitespace();
-    let (Some(first), Some(second), Some(third)) = (fields.next(), fields.next(), fields.next())
+fn gnu_rejects_space_separated_numeric_date(input: &str, reference_time: DateTime<Local>) -> bool {
+    let fields = input.split_ascii_whitespace().collect::<Vec<_>>();
+    let is_numeric = |field: &str| field.bytes().all(|byte| byte.is_ascii_digit());
+
+    if fields.len() >= 3 && fields[..3].iter().all(|field| is_numeric(field)) {
+        return true;
+    }
+
+    let Some([first, second, tail @ ..]) = fields.as_slice().get(..2).map(|_| fields.as_slice())
     else {
         return false;
     };
+    if !is_numeric(first) || !is_numeric(second) || gnu_compact_numeric_date_is_valid(first) {
+        return false;
+    }
 
-    [first, second, third]
-        .iter()
-        .all(|field| field.bytes().all(|byte| byte.is_ascii_digit()))
+    match tail {
+        [] => true,
+        [timezone] => is_gnu_standalone_timezone(timezone, reference_time),
+        _ => false,
+    }
+}
+
+/// GNU treats a numeric item longer than four digits as a compact date.
+fn gnu_compact_numeric_date_is_valid(input: &str) -> bool {
+    if input.len() <= 4 || !input.bytes().all(|byte| byte.is_ascii_digit()) {
+        return false;
+    }
+
+    let year_digits = input.len() - 4;
+    let Some(mut year) = input[..year_digits].parse::<i32>().ok() else {
+        return false;
+    };
+    if year_digits == 2 {
+        year += if year < 69 { 2000 } else { 1900 };
+    }
+
+    let month = input[year_digits..year_digits + 2].parse::<u32>().ok();
+    let day = input[year_digits + 2..].parse::<u32>().ok();
+    matches!(
+        (month, day),
+        (Some(month), Some(day)) if NaiveDate::from_ymd_opt(year, month, day).is_some()
+    )
+}
+
+fn is_gnu_standalone_timezone(input: &str, reference_time: DateTime<Local>) -> bool {
+    is_gnu_known_timezone(input, reference_time)
+        || is_gnu_numeric_timezone_offset(input)
+        || (input.len() == 1
+            && military_timezone_offset_hours((input.as_bytes()[0] as char).to_ascii_uppercase())
+                .is_some())
 }
 
 /// GNU's lexer treats a lowercase `t` immediately after an ISO date as the
@@ -4659,6 +4700,21 @@ mod tests {
             "2024 0101 UTC"
         );
         assert!(parse_datetime_gnu_compat("2024-01-01 U(ignored)TC", ref_time).is_err());
+    }
+
+    #[test]
+    fn test_rejects_gnu_repeated_short_numeric_time_items() {
+        let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
+
+        for input in ["2024 0101", "2024 0101 UTC", "2024(ignored)0101 UTC"] {
+            assert!(
+                parse_datetime_gnu_compat(input, ref_time).is_err(),
+                "GNU rejects repeated short numeric time items in {input}"
+            );
+        }
+
+        assert!(parse_datetime_gnu_compat("20240229 1 UTC", ref_time).is_ok());
+        assert!(parse_datetime_gnu_compat("2024 1 day", ref_time).is_ok());
     }
 
     #[test]

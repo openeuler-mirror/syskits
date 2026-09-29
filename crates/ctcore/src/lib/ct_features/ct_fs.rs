@@ -242,6 +242,7 @@ fn resolve_symlink<P: AsRef<Path>>(path: P) -> IOResult<Option<PathBuf>> {
     Ok(result)
 }
 
+#[derive(Clone)]
 enum OwningComponent {
     Prefix(OsString),
     RootDir,
@@ -347,6 +348,7 @@ pub fn canonicalize<P: AsRef<Path>>(
         }
         match resolve_symlink(&result) {
             Ok(Some(link_path)) => {
+                let remaining_parts = parts.clone();
                 for link_part in link_path.components().rev() {
                     parts.push_front(link_part.into());
                 }
@@ -360,6 +362,14 @@ pub fn canonicalize<P: AsRef<Path>>(
                         path_to_follow.push(part.as_os_str());
                     }
                     if !visited_files.insert((file_info, path_to_follow)) {
+                        if miss_mode == MissingHandling::Missing {
+                            // Match GNU canonicalize's CAN_MISSING behavior:
+                            // retain the current spelling and its original
+                            // suffix once following a symlink would repeat a
+                            // known traversal.
+                            parts = remaining_parts;
+                            continue;
+                        }
                         return Err(Error::new(
                             ErrorKind::InvalidInput,
                             "Too many levels of symbolic links",
@@ -856,6 +866,21 @@ mod tests {
                 normalized.to_str().expect("Path is not valid utf-8!")
             );
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_canonicalize_missing_stops_at_symlink_loop() {
+        let temp_dir = tempdir().unwrap();
+        let first = temp_dir.path().join("first");
+        let second = temp_dir.path().join("second");
+        unix::fs::symlink("second", &first).unwrap();
+        unix::fs::symlink("first", &second).unwrap();
+
+        let canonical = canonicalize(&first, MissingHandling::Missing, ResolveMode::Physical)
+            .expect("CAN_MISSING must preserve a detected symlink loop");
+
+        assert_eq!(canonical, first);
     }
 
     #[cfg(unix)]

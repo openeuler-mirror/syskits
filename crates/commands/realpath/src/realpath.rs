@@ -1187,6 +1187,55 @@ mod tests {
 
         #[cfg(unix)]
         #[test]
+        fn test_resolve_missing_keeps_symlink_loop_literal() {
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let first = temp_dir.path().join("first");
+            let second = temp_dir.path().join("second");
+            symlink("second", &first).unwrap();
+            symlink("first", &second).unwrap();
+            let flags = RealpathFlags {
+                is_quiet: false,
+                relative_to: None,
+                relative_base: None,
+                files: vec![first.clone()],
+                can_mode: MissingHandling::Missing,
+                resolve_mode: ResolveMode::Physical,
+                line_ending: CtLineEnding::Newline,
+            };
+            let mut output = Vec::new();
+
+            realpath_resolve_path(&mut output, &first, &flags).unwrap();
+
+            assert_eq!(output, format!("{}\n", first.display()).as_bytes());
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_resolve_missing_keeps_suffix_after_symlink_loop() {
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let first = temp_dir.path().join("first");
+            let second = temp_dir.path().join("second");
+            symlink("second", &first).unwrap();
+            symlink("first", &second).unwrap();
+            let input = first.join("child");
+            let flags = RealpathFlags {
+                is_quiet: false,
+                relative_to: None,
+                relative_base: None,
+                files: vec![input.clone()],
+                can_mode: MissingHandling::Missing,
+                resolve_mode: ResolveMode::Physical,
+                line_ending: CtLineEnding::Newline,
+            };
+            let mut output = Vec::new();
+
+            realpath_resolve_path(&mut output, &input, &flags).unwrap();
+
+            assert_eq!(output, format!("{}\n", input.display()).as_bytes());
+        }
+
+        #[cfg(unix)]
+        #[test]
         fn test_resolve_strip_normal_keeps_broken_intermediate_link_literal() {
             let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
             let directory = temp_dir.path().join("directory");

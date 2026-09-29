@@ -13,9 +13,7 @@
 //!除最后一部分外，文件名的所有组成部分必须存在
 
 extern crate rust_i18n;
-use clap::{
-    Arg, ArgAction, ArgMatches, Command, builder::NonEmptyStringValueParser, crate_version,
-};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::OsStringValueParser, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_fs::make_path_relative_to;
@@ -28,7 +26,7 @@ use ctcore::{
     ct_show_if_err,
 };
 use std::{
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     io::Write,
     path::{Path, PathBuf},
 };
@@ -114,7 +112,7 @@ impl RealpathFlags {
     fn new(matches: ArgMatches) -> CTResult<Self> {
         // 提取文件路径参数并转换为 PathBuf 类型的向量
         let files: Vec<PathBuf> = matches
-            .get_many::<String>(realpath_flags::REALPATH_ARG_FILES)
+            .get_many::<OsString>(realpath_flags::REALPATH_ARG_FILES)
             .unwrap()
             .map(PathBuf::from)
             .collect();
@@ -160,13 +158,13 @@ impl RealpathFlags {
 
         // 提取相对路径基准的参数
         let relative_to = matches
-            .get_many::<String>(realpath_flags::REALPATH_RELATIVE_TO)
+            .get_many::<OsString>(realpath_flags::REALPATH_RELATIVE_TO)
             .and_then(|mut values| values.next_back())
             .cloned()
             .map(PathBuf::from);
         // 提取相对路径基础的参数
         let relative_base = matches
-            .get_many::<String>(realpath_flags::REALPATH_RELATIVE_BASE)
+            .get_many::<OsString>(realpath_flags::REALPATH_RELATIVE_BASE)
             .and_then(|mut values| values.next_back())
             .cloned()
             .map(PathBuf::from);
@@ -415,19 +413,19 @@ pub fn ct_app() -> Command {
         Arg::new(realpath_flags::REALPATH_RELATIVE_TO)
             .long(realpath_flags::REALPATH_RELATIVE_TO)
             .value_name("DIR")
-            .value_parser(NonEmptyStringValueParser::new())
+            .value_parser(OsStringValueParser::new())
             .help("print the resolved path relative to DIR")
             .action(ArgAction::Append),
         Arg::new(realpath_flags::REALPATH_RELATIVE_BASE)
             .long(realpath_flags::REALPATH_RELATIVE_BASE)
             .value_name("DIR")
-            .value_parser(NonEmptyStringValueParser::new())
+            .value_parser(OsStringValueParser::new())
             .help("print absolute paths unless paths below DIR")
             .action(ArgAction::Append),
         Arg::new(realpath_flags::REALPATH_ARG_FILES)
             .action(ArgAction::Append)
             .required(true)
-            .value_parser(NonEmptyStringValueParser::new())
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::AnyPath),
     ];
 
@@ -470,10 +468,22 @@ fn realpath_resolve_path<W: Write>(
     );
 
     // 打印处理后的路径。
-    writer.write_all(abs.as_path().to_string_lossy().as_bytes())?;
+    write_path_bytes(writer, abs.as_os_str())?;
     // 根据给定的标志打印行结束字符。
     writer.write_all(&[flags.line_ending.into()])?;
     Ok(())
+}
+
+fn write_path_bytes<W: Write>(writer: &mut W, path: &OsStr) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        writer.write_all(path.as_bytes())
+    }
+    #[cfg(not(unix))]
+    {
+        writer.write_all(path.to_string_lossy().as_bytes())
+    }
 }
 
 /// 根据以下规则有条件地将绝对路径转换为相对路径：
@@ -546,6 +556,8 @@ mod tests {
 
     mod realpath_flags_tests {
         use super::*;
+        #[cfg(unix)]
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
         fn create_test_matches(args: &[&str]) -> ArgMatches {
             ct_app().try_get_matches_from(args).unwrap()
@@ -676,6 +688,61 @@ mod tests {
                 RealpathFlags::new(relative_base).unwrap().relative_base,
                 Some(PathBuf::from("/tmp"))
             );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_flags_preserve_non_utf8_path_bytes() {
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let base = temp_dir
+                .path()
+                .join(OsString::from_vec(b"base-\xff".to_vec()));
+            std::fs::create_dir(&base).unwrap();
+            let input = base.join(OsString::from_vec(b"child-\xff".to_vec()));
+            File::create(&input).unwrap();
+
+            let mut relative_to = b"--relative-to=".to_vec();
+            relative_to.extend_from_slice(base.as_os_str().as_bytes());
+            let matches = ct_app()
+                .try_get_matches_from([
+                    OsString::from(ctcore::ct_util_name()),
+                    OsString::from_vec(relative_to),
+                    input.as_os_str().to_os_string(),
+                ])
+                .unwrap();
+            let flags = RealpathFlags::new(matches).unwrap();
+
+            assert_eq!(flags.files, vec![input]);
+            assert_eq!(
+                flags.relative_to.unwrap().as_os_str().as_bytes(),
+                base.as_os_str().as_bytes()
+            );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_resolve_path_preserves_non_utf8_output_bytes() {
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let base = temp_dir
+                .path()
+                .join(OsString::from_vec(b"base-\xff".to_vec()));
+            std::fs::create_dir(&base).unwrap();
+            let input = base.join(OsString::from_vec(b"child-\xff".to_vec()));
+            File::create(&input).unwrap();
+            let flags = RealpathFlags {
+                is_quiet: false,
+                relative_to: Some(base),
+                relative_base: None,
+                files: vec![input.clone()],
+                can_mode: MissingHandling::Normal,
+                resolve_mode: ResolveMode::Physical,
+                line_ending: CtLineEnding::Newline,
+            };
+            let mut output = Vec::new();
+
+            realpath_resolve_path(&mut output, &input, &flags).unwrap();
+
+            assert_eq!(output, b"child-\xff\n");
         }
 
         #[test]

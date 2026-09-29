@@ -21,10 +21,10 @@ use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::{
     Tool,
     ct_display::Quotable,
-    ct_error::{CTResult, FromIo, UClapError},
+    ct_error::{CTResult, FromIo, UClapError, set_ct_exit_code},
     ct_fs::{MissingHandling, ResolveMode, canonicalize},
     ct_line_ending::CtLineEnding,
-    ct_show_if_err,
+    ct_show,
 };
 use std::{
     ffi::{OsStr, OsString},
@@ -340,9 +340,12 @@ fn realpath_exec<W: Write>(writer: &mut W, flags: &RealpathFlags) -> CTResult<()
         // 将 stdout 作为 writer 传入
         let result = realpath_resolve_path(writer, path, flags);
 
-        // 如果未设置quiet标志，则显示解析过程中的错误信息
-        if !flags.is_quiet {
-            ct_show_if_err!(result.map_err_context(|| path.maybe_quote().to_string()));
+        if let Err(error) = result.map_err_context(|| path.maybe_quote().to_string()) {
+            if flags.is_quiet {
+                set_ct_exit_code(error.code());
+            } else {
+                ct_show!(error);
+            }
         }
     }
     // 所有路径解析操作完成，返回Ok
@@ -535,12 +538,14 @@ impl Tool for Realpath {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
     use std::ffi::OsString;
     use std::fs::File;
     use std::sync::Mutex;
     use tempfile::Builder;
 
     static POSIXLY_CORRECT_LOCK: Mutex<()> = Mutex::new(());
+    static EXIT_CODE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_tool_implementation() {
@@ -962,6 +967,26 @@ mod tests {
             };
 
             assert!(realpath_exec(&mut output, &flags).is_ok());
+        }
+
+        #[test]
+        fn test_exec_quiet_mode_sets_failure_exit_code() {
+            let _guard = EXIT_CODE_TEST_LOCK.lock().unwrap();
+            set_ct_exit_code(0);
+            let mut output = Vec::new();
+            let flags = RealpathFlags {
+                is_quiet: true,
+                relative_to: None,
+                relative_base: None,
+                files: vec![PathBuf::from("/definitely-not-a-realpath-test-file")],
+                can_mode: MissingHandling::Existing,
+                resolve_mode: ResolveMode::Physical,
+                line_ending: CtLineEnding::Newline,
+            };
+
+            assert!(realpath_exec(&mut output, &flags).is_ok());
+            assert_eq!(get_ct_exit_code(), 1);
+            set_ct_exit_code(0);
         }
 
         #[test]

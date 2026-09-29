@@ -1196,6 +1196,62 @@
         {
             "tstdin": "",
             "command": "realpath",
+            "description": "LC_ALL=C下执行realpath -m missing并将stdout连接到无读端管道；调用方保留默认SIGPIPE处置，GNU在写入已解析绝对路径时由SIGPIPE终止，预期RC=141，stdout和stderr均为空。",
+            "args": [
+                "-m",
+                "missing"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "default",
+                    "useBash": true
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "LC_ALL=C下执行realpath -m missing并将stdout连接到无读端管道；调用方显式忽略SIGPIPE，GNU保留忽略处置并将写入失败报告为EPIPE，预期RC=1、stdout为空、stderr为write error: Broken pipe。",
+            "args": [
+                "-m",
+                "missing"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "ignore",
+                    "useBash": true
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "realpath: write error: Broken pipe\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
             "description": "quiet模式执行realpath -q -e missing；所有组件必须存在时missing解析失败，GNU抑制诊断但仍返回RC=1，预期stdout和stderr均为空。",
             "args": [
                 "-q",

@@ -301,6 +301,7 @@ impl RealpathFlags {
 /// 该函数是实时路径解析功能的入口点它接受命令行参数，解析这些参数，并根据参数执行相应的路径解析操作
 /// 函数首先尝试从提供的参数中获取匹配信息，然后根据这些匹配信息创建 RealpathFlags 对象，最后调用 realpath_exec 函数执行实际的路径解析操作
 pub fn realpath_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
+    let _sigpipe_guard = SigpipeGuard::for_cli();
     initialize_realpath_locale();
     // 尝试从提供的参数中获取匹配信息，如果失败，则以退出码 1 终止程序
     let args = normalize_gnu_options(args.collect())?;
@@ -312,6 +313,66 @@ pub fn realpath_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTRes
     // 执行实时路径解析操作
     realpath_exec(writer, &flags)?;
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+struct SigpipeGuard {
+    previous: ctcore::libc::sighandler_t,
+}
+
+#[cfg(target_os = "linux")]
+impl SigpipeGuard {
+    fn for_cli() -> Option<Self> {
+        // Rust ignores SIGPIPE before main.  GNU realpath keeps the caller's
+        // default disposition, except when the caller explicitly ignored it.
+        if parent_ignores_sigpipe() {
+            return None;
+        }
+
+        let previous =
+            unsafe { ctcore::libc::signal(ctcore::libc::SIGPIPE, ctcore::libc::SIG_DFL) };
+        (previous != ctcore::libc::SIG_ERR).then_some(Self { previous })
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+struct SigpipeGuard;
+
+#[cfg(not(target_os = "linux"))]
+impl SigpipeGuard {
+    fn for_cli() -> Option<Self> {
+        None
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for SigpipeGuard {
+    fn drop(&mut self) {
+        unsafe {
+            ctcore::libc::signal(ctcore::libc::SIGPIPE, self.previous);
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn parent_ignores_sigpipe() -> bool {
+    let parent = unsafe { ctcore::libc::getppid() };
+    let Ok(status) = std::fs::read_to_string(format!("/proc/{parent}/status")) else {
+        return false;
+    };
+    sigpipe_is_ignored_in_status(&status)
+}
+
+#[cfg(target_os = "linux")]
+fn sigpipe_is_ignored_in_status(status: &str) -> bool {
+    let Some(mask) = status
+        .lines()
+        .find_map(|line| line.strip_prefix("SigIgn:\t"))
+        .and_then(|mask| u64::from_str_radix(mask, 16).ok())
+    else {
+        return false;
+    };
+    mask & (1_u64 << (ctcore::libc::SIGPIPE - 1)) != 0
 }
 
 pub fn realpath_native_semantic(args: impl ctcore::Args) -> CTResult<RealpathSemantic> {
@@ -1892,6 +1953,18 @@ mod tests {
 
         #[cfg(unix)]
         use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn sigpipe_ignore_mask_is_parsed_from_proc_status() {
+            assert!(sigpipe_is_ignored_in_status(
+                "Name:\tbash\nSigIgn:\t0000000000001000\n"
+            ));
+            assert!(!sigpipe_is_ignored_in_status(
+                "Name:\tbash\nSigIgn:\t0000000000000000\n"
+            ));
+            assert!(!sigpipe_is_ignored_in_status("SigIgn:\tnot-hex\n"));
+        }
 
         #[cfg(unix)]
         #[test]

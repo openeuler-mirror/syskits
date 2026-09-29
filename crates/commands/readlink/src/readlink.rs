@@ -141,7 +141,7 @@ impl ReadlinkOptions {
 
         let resolve_mode = match mode {
             ReadlinkMode::Readlink => ResolveMode::None,
-            _ => ResolveMode::Logical,
+            _ => ResolveMode::Physical,
         };
 
         let missing_handling = match mode {
@@ -604,6 +604,18 @@ mod tests {
                 let options = ReadlinkOptions::from_matches(&matches).unwrap();
 
                 assert_eq!(options.mode, expected_mode);
+            }
+        }
+
+        #[test]
+        fn canonicalize_modes_use_physical_resolution() {
+            for option in ["-f", "-e", "-m"] {
+                let matches = ct_app()
+                    .try_get_matches_from([ctcore::ct_util_name(), option, "path"])
+                    .unwrap();
+                let options = ReadlinkOptions::from_matches(&matches).unwrap();
+
+                assert_eq!(options.resolve_mode, ResolveMode::Physical);
             }
         }
     }

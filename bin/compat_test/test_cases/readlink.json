@@ -247,6 +247,28 @@
             "cleanup_commands": [
                 "rm -f broken_link"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "规范化模式选项按最后出现项生效：-e -m必须选择canonicalize-missing，缺失末级路径应成功解析。",
+            "setup_commands": [
+                "mkdir -p d"
+            ],
+            "args": ["-e", "-m", "d/missing"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf d"
+            ]
         }
     ]
 }

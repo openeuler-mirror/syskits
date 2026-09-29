@@ -67,6 +67,168 @@
         {
             "tstdin": "",
             "command": "realpath",
+            "description": "GNU getopt将--relative-to后的--作为选项参数而非全局选项截止符；相对于词法--目录解析当前目录应输出..。",
+            "args": [
+                "--relative-to",
+                "--",
+                "."
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "..\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "GNU getopt允许--relative-to的参数以短横线开头；-h应作为目录值而非帮助选项，相对当前目录输出..。",
+            "args": [
+                "--relative-to",
+                "-h",
+                "."
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "..\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "未知短选项必须采用GNU invalid option诊断。",
+            "args": [
+                "-x",
+                "."
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "realpath: invalid option -- 'x'\nTry 'realpath --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "未知长选项必须采用GNU unrecognized option诊断。",
+            "args": [
+                "--unknown",
+                "."
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "realpath: unrecognized option '--unknown'\nTry 'realpath --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "--can同时匹配两个canonicalize长选项，必须报告GNU歧义选项诊断。",
+            "args": [
+                "--can",
+                "."
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "realpath: option '--can' is ambiguous; possibilities: '--canonicalize-existing' '--canonicalize-missing'\nTry 'realpath --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "--relative-to缺少参数时必须采用GNU requires an argument诊断。",
+            "args": [
+                "--relative-to"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "realpath: option '--relative-to' requires an argument\nTry 'realpath --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "无参数选项--quiet携带=value时必须采用GNU doesn't allow an argument诊断。",
+            "args": [
+                "--quiet=value",
+                "."
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "realpath: option '--quiet' doesn't allow an argument\nTry 'realpath --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
             "description": "-s -e必须按未展开符号链接的词法路径校验最终分量；linkdir/../b中的词法b不存在时应失败，不能因linkdir物理指向d/a而接受d/b。",
             "setup_commands": [
                 "mkdir -p d/a d/b",

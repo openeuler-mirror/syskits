@@ -528,7 +528,7 @@ fn normalize_gnu_options(args: Vec<OsString>) -> CTResult<Vec<OsString>> {
                             1,
                             format!(
                                 "option '--{}' is ambiguous; possibilities: {possibilities}",
-                                String::from_utf8_lossy(name)
+                                String::from_utf8_lossy(long_option)
                             ),
                         ));
                     }
@@ -1151,6 +1151,21 @@ mod tests {
 
                 assert_eq!(error.diagnostic_bytes().as_ref(), expected_diagnostic);
             }
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_normalize_gnu_options_keeps_attached_value_in_ambiguous_diagnostic() {
+            let error = normalize_gnu_options(vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--rel=."),
+            ])
+            .expect_err("an ambiguous long option must fail");
+
+            assert_eq!(
+                error.diagnostic_bytes().as_ref(),
+                b"option '--rel=.' is ambiguous; possibilities: '--relative-to' '--relative-base'"
+            );
         }
 
         #[test]

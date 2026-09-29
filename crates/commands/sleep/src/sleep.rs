@@ -24,7 +24,7 @@ use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
 use ctcore::ct_format::num_parser::{ParseError, ParsedNumber};
 use std::borrow::Cow;
 use std::error::Error;
-use std::ffi::{OsStr, OsString};
+use std::ffi::{CStr, OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use sys_locale::get_locale;
 
@@ -113,6 +113,7 @@ impl Tool for Sleep {
 }
 
 pub fn sleep_main(args: impl ctcore::Args) -> CTResult<()> {
+    initialize_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
@@ -141,20 +142,130 @@ fn sleep_parse_numbers(matches: &clap::ArgMatches, allow_empty: bool) -> CTResul
     Ok(numbers)
 }
 
-fn parse_duration(input: &str) -> Option<f64> {
-    let (seconds, suffix) = match ParsedNumber::parse_f64(input) {
-        Ok(seconds) => (seconds, None),
-        Err(ParseError::CtPartialMatch(seconds, suffix)) => (seconds, Some(suffix)),
-        Err(ParseError::CtNotNumeric | ParseError::CtOverflow) => return None,
+fn initialize_locale() {
+    // SAFETY: setlocale reads the process environment and receives a static
+    // NUL-terminated string. GNU sleep initializes the C locale before parsing.
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
+}
+
+fn current_numeric_decimal_point() -> String {
+    // SAFETY: localeconv returns process-owned locale storage. The decimal
+    // separator is copied before the next locale operation can invalidate it.
+    unsafe {
+        let locale = ctcore::libc::localeconv();
+        if locale.is_null() || (*locale).decimal_point.is_null() {
+            return ".".to_string();
+        }
+        CStr::from_ptr((*locale).decimal_point)
+            .to_str()
+            .ok()
+            .filter(|point| !point.is_empty())
+            .unwrap_or(".")
+            .to_string()
+    }
+}
+
+#[derive(Clone, Copy)]
+enum FloatParseAttempt {
+    Complete(f64),
+    Partial(f64, usize),
+    Invalid,
+}
+
+fn normalize_decimal_point(
+    input: &str,
+    decimal_point: &str,
+    reject_c_decimal_point: bool,
+) -> (String, Vec<usize>) {
+    let mut normalized = String::with_capacity(input.len());
+    let mut offsets = Vec::with_capacity(input.len() + 1);
+    let mut index = 0;
+    offsets.push(index);
+
+    while index < input.len() {
+        if !decimal_point.is_empty() && input[index..].starts_with(decimal_point) {
+            normalized.push('.');
+            index += decimal_point.len();
+            offsets.push(index);
+        } else if reject_c_decimal_point && decimal_point != "." && input.as_bytes()[index] == b'.'
+        {
+            normalized.push('\u{1}');
+            index += 1;
+            offsets.push(index);
+        } else {
+            let character = input[index..]
+                .chars()
+                .next()
+                .expect("index is before the end of a UTF-8 string");
+            normalized.push(character);
+            for byte in 1..=character.len_utf8() {
+                offsets.push(index + byte);
+            }
+            index += character.len_utf8();
+        }
+    }
+
+    (normalized, offsets)
+}
+
+fn parse_float_attempt(
+    input: &str,
+    decimal_point: &str,
+    reject_c_decimal_point: bool,
+) -> FloatParseAttempt {
+    let (normalized, offsets) =
+        normalize_decimal_point(input, decimal_point, reject_c_decimal_point);
+    match ParsedNumber::parse_f64(&normalized) {
+        Ok(value) => FloatParseAttempt::Complete(value),
+        Err(ParseError::CtPartialMatch(value, rest)) => {
+            let consumed = normalized.len() - rest.len();
+            FloatParseAttempt::Partial(value, offsets[consumed])
+        }
+        Err(ParseError::CtNotNumeric | ParseError::CtOverflow) => FloatParseAttempt::Invalid,
+    }
+}
+
+fn parse_duration_with_decimal_point(input: &str, decimal_point: &str) -> Option<f64> {
+    let locale = parse_float_attempt(input, decimal_point, true);
+    let c_locale = parse_float_attempt(input, ".", false);
+
+    let (seconds, consumed) = match (locale, c_locale) {
+        (FloatParseAttempt::Complete(seconds), _) => (seconds, input.len()),
+        (_, FloatParseAttempt::Complete(seconds)) => (seconds, input.len()),
+        (
+            FloatParseAttempt::Partial(seconds, consumed),
+            FloatParseAttempt::Partial(c_seconds, c_consumed),
+        ) => {
+            if c_consumed > consumed {
+                (c_seconds, c_consumed)
+            } else {
+                (seconds, consumed)
+            }
+        }
+        (FloatParseAttempt::Partial(seconds, consumed), FloatParseAttempt::Invalid) => {
+            (seconds, consumed)
+        }
+        (FloatParseAttempt::Invalid, FloatParseAttempt::Partial(seconds, consumed)) => {
+            (seconds, consumed)
+        }
+        (FloatParseAttempt::Invalid, FloatParseAttempt::Invalid) => return None,
     };
 
+    let suffix = &input[consumed..];
+
     match suffix {
-        None | Some("s") => Some(seconds),
-        Some("m") => Some(seconds * 60.0),
-        Some("h") => Some(seconds * 60.0 * 60.0),
-        Some("d") => Some(seconds * 60.0 * 60.0 * 24.0),
-        Some(_) => None,
+        "" | "s" => Some(seconds),
+        "m" => Some(seconds * 60.0),
+        "h" => Some(seconds * 60.0 * 60.0),
+        "d" => Some(seconds * 60.0 * 60.0 * 24.0),
+        _ => None,
     }
+}
+
+fn parse_duration(input: &str) -> Option<f64> {
+    parse_duration_with_decimal_point(input, &current_numeric_decimal_point())
 }
 
 fn sleep_handle_second<T: AsRef<OsStr>>(args: &[T]) -> CTResult<Duration> {
@@ -368,6 +479,13 @@ mod tests {
         #[test]
         fn test_sleep_handle_second_accepts_leading_whitespace() {
             assert_eq!(sleep_handle_second(&[" 0"]).unwrap(), Duration::ZERO);
+        }
+
+        #[test]
+        fn test_parse_duration_prefers_locale_decimal_point_and_falls_back_to_c_locale() {
+            assert_eq!(parse_duration_with_decimal_point("0,0", ","), Some(0.0));
+            assert_eq!(parse_duration_with_decimal_point("0.0", ","), Some(0.0));
+            assert_eq!(parse_duration_with_decimal_point("0,0.0", ","), None);
         }
 
         #[cfg(unix)]

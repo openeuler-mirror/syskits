@@ -650,6 +650,31 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "verbose模式读取普通文件时必须保留Linux EINVAL的GNU诊断措辞。",
+            "setup_commands": [
+                "touch regular"
+            ],
+            "args": ["-v", "regular"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: regular: Invalid argument\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f regular"
+            ]
         }
     ]
 }

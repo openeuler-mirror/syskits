@@ -680,6 +680,89 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "执行realpath -s -e missing；-s只禁止展开链接，不取消-e的存在性要求，预期RC=1、stdout为空、stderr报告missing不存在。",
+            "args": [
+                "-s",
+                "-e",
+                "missing"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "realpath: missing: No such file or directory\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "执行realpath -s a/loop1；即使不展开输出中的链接，GNU仍拒绝符号链接循环，预期RC=1、stdout为空、stderr报告Too many levels of symbolic links。",
+            "setup_commands": [
+                "mkdir a",
+                "ln -s loop2 a/loop1",
+                "ln -s loop1 a/loop2"
+            ],
+            "args": [
+                "-s",
+                "a/loop1"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "realpath: a/loop1: Too many levels of symbolic links\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf a"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "执行realpath -s a/file/；默认模式仍要求尾随斜杠对象为目录，普通文件file不满足要求，预期RC=1、stdout为空、stderr报告Not a directory。",
+            "setup_commands": [
+                "mkdir a",
+                ": > a/file"
+            ],
+            "args": [
+                "-s",
+                "a/file/"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "realpath: a/file/: Not a directory\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf a"
+            ]
         }
     ]
 }

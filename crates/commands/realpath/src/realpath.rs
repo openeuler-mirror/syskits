@@ -258,8 +258,7 @@ pub fn realpath_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTRes
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     // 尝试从提供的参数中获取匹配信息，如果失败，则以退出码 1 终止程序
-    let args = args.collect::<Vec<_>>();
-    validate_gnu_short_options(&args)?;
+    let args = normalize_gnu_options(args.collect())?;
     let matches = ct_app().try_get_matches_from(args).with_exit_code(1)?;
 
     // 根据匹配信息创建 RealpathFlags 对象，用于指导后续的路径解析操作
@@ -273,8 +272,7 @@ pub fn realpath_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTRes
 pub fn realpath_native_semantic(args: impl ctcore::Args) -> CTResult<RealpathSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = args.collect::<Vec<_>>();
-    validate_gnu_short_options(&args)?;
+    let args = normalize_gnu_options(args.collect())?;
     let matches = ct_app().try_get_matches_from(args).with_exit_code(1)?;
     let flags = RealpathFlags::new(matches)?;
 
@@ -325,22 +323,127 @@ fn semantic_missing_handling(mode: MissingHandling) -> RealpathMissingHandling {
     }
 }
 
-fn validate_gnu_short_options(args: &[OsString]) -> CTResult<()> {
+fn normalize_gnu_options(args: Vec<OsString>) -> CTResult<Vec<OsString>> {
     #[cfg(unix)]
     {
-        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
-        for argument in args.iter().skip(1) {
+        const LONG_OPTIONS: &[(&[u8], bool)] = &[
+            (b"canonicalize-existing", false),
+            (b"canonicalize-missing", false),
+            (b"relative-to", true),
+            (b"relative-base", true),
+            (b"quiet", false),
+            (b"strip", false),
+            (b"no-symlinks", false),
+            (b"zero", false),
+            (b"logical", false),
+            (b"physical", false),
+            (b"help", false),
+            (b"version", false),
+        ];
+
+        let mut normalized = Vec::with_capacity(args.len());
+        let posixly_correct = ctcore::ct_posix::posixly_correct();
+        let mut index = 0;
+
+        while index < args.len() {
+            let argument = &args[index];
             let bytes = argument.as_os_str().as_bytes();
+
+            if index == 0 {
+                normalized.push(argument.clone());
+                index += 1;
+                continue;
+            }
+
             if bytes == b"--" {
+                normalized.extend(args[index..].iter().cloned());
                 break;
             }
-            if bytes == b"-" || !bytes.starts_with(b"-") || bytes.starts_with(b"--") {
-                if ctcore::ct_posix::posixly_correct()
-                    && (bytes == b"-" || !bytes.starts_with(b"-"))
-                {
+
+            if bytes == b"-" || !bytes.starts_with(b"-") {
+                if posixly_correct {
+                    normalized.extend(args[index..].iter().cloned());
                     break;
                 }
+                normalized.push(argument.clone());
+                index += 1;
+                continue;
+            }
+
+            if let Some(long_option) = bytes.strip_prefix(b"--") {
+                let (name, has_argument) = long_option
+                    .iter()
+                    .position(|byte| *byte == b'=')
+                    .map_or((long_option, false), |equals| {
+                        (&long_option[..equals], true)
+                    });
+                let exact_match = LONG_OPTIONS
+                    .iter()
+                    .copied()
+                    .find(|(candidate, _)| *candidate == name);
+                let candidates = LONG_OPTIONS
+                    .iter()
+                    .copied()
+                    .filter(|(candidate, _)| candidate.starts_with(name))
+                    .collect::<Vec<_>>();
+                let (canonical, needs_argument) = match exact_match {
+                    Some(option) => option,
+                    None if candidates.is_empty() => {
+                        return Err(CTsageError::new(
+                            1,
+                            format!("unrecognized option '{}'", String::from_utf8_lossy(bytes)),
+                        ));
+                    }
+                    None if candidates.len() == 1 => candidates[0],
+                    None => {
+                        let possibilities = candidates
+                            .iter()
+                            .map(|(candidate, _)| {
+                                format!("'--{}'", String::from_utf8_lossy(candidate))
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        return Err(CTsageError::new(
+                            1,
+                            format!(
+                                "option '--{}' is ambiguous; possibilities: {possibilities}",
+                                String::from_utf8_lossy(name)
+                            ),
+                        ));
+                    }
+                };
+
+                let canonical = String::from_utf8_lossy(canonical);
+                if has_argument && !needs_argument {
+                    return Err(CTsageError::new(
+                        1,
+                        format!("option '--{canonical}' doesn't allow an argument"),
+                    ));
+                }
+                if needs_argument && !has_argument {
+                    let Some(value) = args.get(index + 1) else {
+                        return Err(CTsageError::new(
+                            1,
+                            format!("option '--{canonical}' requires an argument"),
+                        ));
+                    };
+
+                    if value.as_os_str().as_bytes().starts_with(b"-") {
+                        let mut rewritten = format!("--{canonical}=").into_bytes();
+                        rewritten.extend_from_slice(value.as_os_str().as_bytes());
+                        normalized.push(OsString::from_vec(rewritten));
+                    } else {
+                        normalized.push(argument.clone());
+                        normalized.push(value.clone());
+                    }
+                    index += 2;
+                    continue;
+                }
+
+                normalized.push(argument.clone());
+                index += 1;
                 continue;
             }
 
@@ -348,17 +451,21 @@ fn validate_gnu_short_options(args: &[OsString]) -> CTResult<()> {
                 if matches!(option, b'e' | b'L' | b'm' | b'P' | b'q' | b's' | b'z') {
                     continue;
                 }
-                if matches!(option, b'h' | b'V') {
-                    return Err(CTsageError::new(
-                        1,
-                        format!("invalid option -- '{}'", char::from(*option)),
-                    ));
-                }
-                break;
+                return Err(CTsageError::new(
+                    1,
+                    format!("invalid option -- '{}'", char::from(*option)),
+                ));
             }
+
+            normalized.push(argument.clone());
+            index += 1;
         }
+
+        Ok(normalized)
     }
-    Ok(())
+
+    #[cfg(not(unix))]
+    Ok(args)
 }
 
 fn realpath_canonicalize(
@@ -780,6 +887,33 @@ mod tests {
         assert_eq!(error.code(), 1);
         assert_eq!(error.to_string(), "missing operand");
         assert!(output.is_empty());
+    }
+
+    #[test]
+    fn test_realpath_main_accepts_option_like_relative_option_values() {
+        let _guard = CURRENT_DIRECTORY_LOCK.lock().unwrap();
+        let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+        let previous_directory = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        for value in ["--", "-h"] {
+            let mut output = Vec::new();
+            let result = realpath_main(
+                &mut output,
+                [
+                    OsString::from(ctcore::ct_util_name()),
+                    OsString::from("--relative-to"),
+                    OsString::from(value),
+                    OsString::from("."),
+                ]
+                .into_iter(),
+            );
+
+            result.unwrap();
+            assert_eq!(output, b"..\n");
+        }
+
+        std::env::set_current_dir(previous_directory).unwrap();
     }
 
     #[cfg(unix)]

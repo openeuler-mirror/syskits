@@ -322,6 +322,34 @@
             "cleanup_commands": [
                 "rm -f link-one link-two"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "POSIXLY_CORRECT下首个FILE后的-m必须作为操作数，不得继续解析为规范化选项。",
+            "setup_commands": [
+                "ln -s target link",
+                "ln -s mode ./-m",
+                "ln -s absent missing"
+            ],
+            "args": ["link", "-m", "missing"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "POSIXLY_CORRECT": "1"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "target\nmode\nabsent\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f link ./-m missing"
+            ]
         }
     ]
 }

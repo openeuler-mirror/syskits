@@ -20,6 +20,7 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
 use ctcore::ct_line_ending::CtLineEnding;
+use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::ct_show_error;
 use std::ffi::OsString;
 use std::fs;
@@ -284,6 +285,10 @@ pub fn readlink_native_semantic(args: impl ctcore::Args) -> CTResult<ReadlinkSem
 }
 
 pub fn ct_app() -> Command {
+    ct_app_with_getopt_mode(ctcore::ct_posix::posixly_correct())
+}
+
+fn ct_app_with_getopt_mode(posixly_correct: bool) -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
     let application_info = t!("readlink.about");
@@ -349,6 +354,7 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .args(args)
+        .gnu_getopt_with_mode(posixly_correct)
 }
 
 fn readlink_show_with_writer(
@@ -466,6 +472,16 @@ mod tests {
     }
     mod options_tests {
         use super::*;
+
+        #[test]
+        fn posixly_correct_stops_option_parsing_at_the_first_file() {
+            let matches = ct_app_with_getopt_mode(true)
+                .try_get_matches_from([ctcore::ct_util_name(), "link", "-m", "missing"])
+                .unwrap();
+            let options = ReadlinkOptions::from_matches(&matches).unwrap();
+            assert_eq!(options.mode, ReadlinkMode::Readlink);
+            assert_eq!(options.files, ["link", "-m", "missing"]);
+        }
 
         #[test]
         fn verbose_uses_the_last_silence_or_verbose_option() {

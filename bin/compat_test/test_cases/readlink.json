@@ -608,6 +608,28 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "readlink",
+            "description": "原始字节选项用例：LC_ALL=C、LANG=C下参数2dff为短选项连字符加非UTF-8字节ff；stdin为空；预期RC=1、stdout为空，stderr完整十六进制为726561646c696e6b3a20696e76616c6964206f7074696f6e202d2d2027ff270a5472792027726561646c696e6b202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a，必须逐字节输出无效选项，不能转换为UTF-8编码的Unicode字符。",
+            "args": ["2dff"],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "726561646c696e6b3a20696e76616c6964206f7074696f6e202d2d2027ff270a5472792027726561646c696e6b202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

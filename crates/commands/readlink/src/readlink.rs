@@ -549,10 +549,10 @@ fn validate_readlink_short_options(args: &[OsString]) -> CTResult<()> {
                         option,
                         b'e' | b'f' | b'm' | b'n' | b'q' | b's' | b'v' | b'z'
                     ) {
-                        return Err(CTsageError::new(
-                            1,
-                            format!("invalid option -- '{}'", char::from(*option)),
-                        ));
+                        let mut message = b"invalid option -- '".to_vec();
+                        message.push(*option);
+                        message.push(b'\'');
+                        return Err(ReadlinkUsageError::boxed(message));
                     }
                 }
             } else if posixly_correct {
@@ -837,6 +837,26 @@ mod tests {
             .unwrap();
 
             assert_eq!(normalized, [ctcore::ct_util_name(), "--quiet", "file"]);
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn invalid_non_utf8_short_option_preserves_raw_diagnostic_bytes() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let error = parse_readlink_args(
+                [
+                    OsString::from(ctcore::ct_util_name()),
+                    OsString::from_vec(b"-\xff".to_vec()),
+                ]
+                .into_iter(),
+            )
+            .expect_err("a non-UTF-8 short option must fail");
+
+            assert_eq!(
+                error.diagnostic_bytes().as_ref(),
+                b"invalid option -- '\xff'"
+            );
         }
 
         #[test]

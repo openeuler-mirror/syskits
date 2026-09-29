@@ -16,13 +16,13 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::OsStringValueParser, cr
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_posix::GnuGetoptCommandExt;
+use ctcore::ct_quoting_style::gnu_quote_shell;
 use ctcore::ct_show_error;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::{Write, stdout};
 #[cfg(unix)]
@@ -298,7 +298,7 @@ fn readlink_main_with_writer(args: impl ctcore::Args, writer: &mut dyn Write) ->
             Err(err) => {
                 failed = true;
                 if options.verbose {
-                    let error = err.map_err_context(|| input.maybe_quote().to_string());
+                    let error = err.map_err_context(|| readlink_quote_path(input));
                     ctcore::ct_error::write_error_diagnostic(error.as_ref())
                         .map_err_context(String::new)?;
                 }
@@ -346,7 +346,7 @@ pub fn readlink_native_semantic(args: impl ctcore::Args) -> CTResult<ReadlinkSem
                 if options.verbose {
                     return Err(CtSimpleError::new(
                         1,
-                        err.map_err_context(move || input.maybe_quote().to_string())
+                        err.map_err_context(move || readlink_quote_path(input))
                             .to_string(),
                     ));
                 }
@@ -499,6 +499,10 @@ fn readlink_show_with_writer(
     writer.flush()
 }
 
+fn readlink_quote_path(path: &OsStr) -> String {
+    gnu_quote_shell(path, false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -510,6 +514,28 @@ mod tests {
     fn inherited_sigpipe_handler_distinguishes_ignore_from_default() {
         assert!(sigpipe_handler_is_ignored(ctcore::libc::SIG_IGN));
         assert!(!sigpipe_handler_is_ignored(ctcore::libc::SIG_DFL));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn native_semantic_quotes_non_utf8_path_errors_like_gnu() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let missing = OsString::from_vec(b"missing-\xff".to_vec());
+        let error = readlink_native_semantic(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-v"),
+                missing,
+            ]
+            .into_iter(),
+        )
+        .expect_err("a missing path must fail in verbose mode");
+
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            b"'missing-'$'\\377': No such file or directory"
+        );
     }
 
     #[test]

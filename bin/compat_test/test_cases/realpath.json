@@ -548,6 +548,31 @@
             "cleanup_commands": [
                 "rm -rf a b"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "原始字节路径用例：LC_ALL=C、LANG=C；执行 realpath --relative-to=base-\\xff base-\\xff/child-\\xff；参数完整十六进制为2d2d72656c61746976652d746f3d626173652dff和626173652dff2f6368696c642dff；stdin为0字节；创建两个含0xff的路径组件后，预期RC=0、stderr为0字节、stdout完整十六进制为6368696c642dff0a，即相对路径child-\\xff后接换行。",
+            "args": [
+                "2d2d72656c61746976652d746f3d626173652dff",
+                "626173652dff2f6368696c642dff"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "base=$(printf 'base-\\377'); mkdir -p -- \"$base\"; : > \"$base/child-$(printf '\\377')\""
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "6368696c642dff0a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -rf -- \"$(printf 'base-\\377')\""
+            ],
+            "byteMode": true
         }
     ]
 }

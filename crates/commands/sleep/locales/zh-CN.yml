@@ -5,6 +5,10 @@ sleep:
     sleep 数字[后缀]...
     sleep 选项
   about: '暂停指定的秒数。'
+  errors:
+    invalid_time_interval: 无效的时间间隔
+    missing_operand: 缺少操作对象
+    try_help: '请尝试执行 "%{utility_name} --help" 来获取更多信息。'
   after_help: |-
     暂停指定的秒数。后缀可以是's'表示秒（默认），
     'm'表示分钟，'h'表示小时，或'd'表示天。与大多数要求

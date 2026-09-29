@@ -439,6 +439,33 @@
             "cleanup_commands": [
                 "rm -rf base"
             ]
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "readlink",
+            "description": "原始字节用例：LC_ALL=C、LANG=C下读取名称字节为6c696e6bff（link\\xff）的符号链接，其目标字节为746172676574ff（target\\xff）；stdin为空；预期RC=0、stdout完整十六进制为746172676574ff0a（target\\xff换行）、stderr为空，不能拒绝非UTF-8操作数或替换链接目标字节。",
+            "setup_commands": [
+                "/usr/bin/ln -s \"$(/usr/bin/printf 'target\\377')\" \"$(/usr/bin/printf 'link\\377')\""
+            ],
+            "args": ["6c696e6bff"],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "746172676574ff0a",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "/usr/bin/rm -f \"$(/usr/bin/printf 'link\\377')\""
+            ]
         }
     ]
 }

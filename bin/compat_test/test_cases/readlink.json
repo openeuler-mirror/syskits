@@ -675,6 +675,36 @@
             "cleanup_commands": [
                 "rm -f regular"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "调用方忽略SIGPIPE且stdout无读端时，readlink必须继续处理后续-v操作数，再按GNU close-stdout语义报告write error。",
+            "setup_commands": [
+                "ln -s target good"
+            ],
+            "args": ["-v", "good", "missing"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "ignore",
+                    "useBash": true
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: missing: No such file or directory\nreadlink: write error\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f good"
+            ]
         }
     ]
 }

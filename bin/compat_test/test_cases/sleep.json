@@ -449,6 +449,27 @@
                     "stderr": "sleep: 缺少操作对象\n请尝试执行 \"sleep --help\" 来获取更多信息。\n"
                 }
             }
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "sleep",
+            "description": "原始字节用例：LC_ALL=zh_CN.gbk、LANG=zh_CN.gbk下执行sleep invalid；参数完整十六进制=696e76616c6964（invalid），stdin为0字节、完整十六进制=空；预期GNU将中文诊断和usage hint转换为GBK，RC=1、stdout为空、stderr完整十六进制=736c6565703a20ceded0a7b5c4cab1bce4bce4b8f42022696e76616c6964220ac7ebb3a2cad4d6b4d0d02022736c656570202d2d68656c702220c0b4bbf1c8a1b8fcb6e0d0c5cfa2a1a30a。",
+            "args": [
+                "696e76616c6964"
+            ],
+            "setup_commands": [
+                "export LC_ALL='zh_CN.gbk'",
+                "export LANG='zh_CN.gbk'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "736c6565703a20ceded0a7b5c4cab1bce4bce4b8f42022696e76616c6964220ac7ebb3a2cad4d6b4d0d02022736c656570202d2d68656c702220c0b4bbf1c8a1b8fcb6e0d0c5cfa2a1a30a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

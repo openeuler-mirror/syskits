@@ -18,9 +18,9 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_fs::make_path_relative_to;
 use ctcore::ct_posix::GnuGetoptCommandExt;
+use ctcore::ct_quoting_style::gnu_quote_shell;
 use ctcore::{
     Tool,
-    ct_display::Quotable,
     ct_error::{CTError, CTResult, CTsageError, FromIo, UClapError, set_ct_exit_code},
     ct_fs::{MissingHandling, ResolveMode, canonicalize},
     ct_line_ending::CtLineEnding,
@@ -262,12 +262,11 @@ impl RealpathFlags {
                     Some(p) => {
                         // 将路径转换为绝对路径，并捕获可能的错误信息。
                         let abs = realpath_canonicalize(p, can_mode, resolve_mode)
-                            .map_err_context(|| p.maybe_quote().to_string())?;
+                            .map_err_context(|| realpath_quote_path(p))?;
 
                         // 如果 `can_mode` 是 `Existing`，则确保路径是一个目录。
                         if can_mode == MissingHandling::Existing && !abs.is_dir() {
-                            abs.read_dir()
-                                .map_err_context(|| p.maybe_quote().to_string())?;
+                            abs.read_dir().map_err_context(|| realpath_quote_path(p))?;
                         }
                         Some(abs)
                     }
@@ -302,9 +301,7 @@ impl RealpathFlags {
 /// 该函数是实时路径解析功能的入口点它接受命令行参数，解析这些参数，并根据参数执行相应的路径解析操作
 /// 函数首先尝试从提供的参数中获取匹配信息，然后根据这些匹配信息创建 RealpathFlags 对象，最后调用 realpath_exec 函数执行实际的路径解析操作
 pub fn realpath_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
-    // 设置语言
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    initialize_realpath_locale();
     // 尝试从提供的参数中获取匹配信息，如果失败，则以退出码 1 终止程序
     let args = normalize_gnu_options(args.collect())?;
     let matches = ct_app().try_get_matches_from(args).with_exit_code(1)?;
@@ -318,8 +315,7 @@ pub fn realpath_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTRes
 }
 
 pub fn realpath_native_semantic(args: impl ctcore::Args) -> CTResult<RealpathSemantic> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    initialize_realpath_locale();
     let args = normalize_gnu_options(args.collect())?;
     let matches = ct_app().try_get_matches_from(args).with_exit_code(1)?;
     let flags = RealpathFlags::new(matches)?;
@@ -329,7 +325,7 @@ pub fn realpath_native_semantic(args: impl ctcore::Args) -> CTResult<RealpathSem
 
     for path in &flags.files {
         let resolved = realpath_canonicalize(path, flags.can_mode, flags.resolve_mode)
-            .map_err_context(|| path.maybe_quote().to_string())?;
+            .map_err_context(|| realpath_quote_path(path))?;
         let output = realpath_process_relative(
             resolved.clone(),
             flags.relative_base.as_deref(),
@@ -355,6 +351,16 @@ pub fn realpath_native_semantic(args: impl ctcore::Args) -> CTResult<RealpathSem
     })
 }
 
+fn initialize_realpath_locale() {
+    #[cfg(unix)]
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
+
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+}
+
 fn semantic_resolution_mode(mode: ResolveMode) -> RealpathResolutionMode {
     match mode {
         ResolveMode::None => RealpathResolutionMode::None,
@@ -369,6 +375,10 @@ fn semantic_missing_handling(mode: MissingHandling) -> RealpathMissingHandling {
         MissingHandling::Existing => RealpathMissingHandling::Existing,
         MissingHandling::Missing => RealpathMissingHandling::Missing,
     }
+}
+
+fn realpath_quote_path(path: &Path) -> String {
+    gnu_quote_shell(path.as_os_str(), false)
 }
 
 fn normalize_gnu_options(args: Vec<OsString>) -> CTResult<Vec<OsString>> {
@@ -673,7 +683,7 @@ fn realpath_exec<W: Write>(writer: &mut W, flags: &RealpathFlags) -> CTResult<()
                     .map_err_context(|| String::from("write error"))?;
             }
             Err(error) => {
-                let error = error.map_err_context(|| path.maybe_quote().to_string());
+                let error = error.map_err_context(|| realpath_quote_path(path));
                 if flags.is_quiet {
                     set_ct_exit_code(error.code());
                 } else {
@@ -891,6 +901,8 @@ mod tests {
     static POSIXLY_CORRECT_LOCK: Mutex<()> = Mutex::new(());
     static EXIT_CODE_TEST_LOCK: Mutex<()> = Mutex::new(());
     static CURRENT_DIRECTORY_LOCK: Mutex<()> = Mutex::new(());
+    #[cfg(unix)]
+    static LIBC_LOCALE_LOCK: Mutex<()> = Mutex::new(());
 
     #[cfg(unix)]
     struct FullWriter;
@@ -1820,6 +1832,66 @@ mod tests {
 
     mod realpath_main_tests {
         use super::*;
+
+        #[cfg(unix)]
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+        #[cfg(unix)]
+        #[test]
+        fn test_native_semantic_quotes_non_utf8_path_errors_like_gnu() {
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let missing = temp_dir
+                .path()
+                .join(OsString::from_vec(b"missing-\xff".to_vec()));
+            let error = realpath_native_semantic(
+                [
+                    OsString::from(ctcore::ct_util_name()),
+                    OsString::from("-e"),
+                    missing.as_os_str().to_os_string(),
+                ]
+                .into_iter(),
+            )
+            .expect_err("a missing path must fail in existing mode");
+
+            let mut expected = b"'".to_vec();
+            expected.extend_from_slice(temp_dir.path().as_os_str().as_bytes());
+            expected.extend_from_slice(b"/missing-'$'\\377': No such file or directory");
+            assert_eq!(error.diagnostic_bytes().as_ref(), expected);
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_native_semantic_initializes_utf8_locale_for_path_diagnostics() {
+            let _guard = LIBC_LOCALE_LOCK.lock().unwrap();
+            let previous_lc_all = std::env::var_os("LC_ALL");
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let missing = temp_dir.path().join("中");
+
+            unsafe {
+                std::env::set_var("LC_ALL", "C.UTF-8");
+                ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"C".as_ptr());
+            }
+            let result = realpath_native_semantic(
+                [
+                    OsString::from(ctcore::ct_util_name()),
+                    OsString::from("-e"),
+                    missing.as_os_str().to_os_string(),
+                ]
+                .into_iter(),
+            );
+            unsafe {
+                match previous_lc_all {
+                    Some(value) => std::env::set_var("LC_ALL", value),
+                    None => std::env::remove_var("LC_ALL"),
+                }
+                ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+            }
+
+            let error = result.expect_err("a missing path must fail in existing mode");
+            let mut expected = temp_dir.path().as_os_str().as_bytes().to_vec();
+            expected.extend_from_slice(b"/\xe4\xb8\xad: No such file or directory");
+            assert_eq!(error.diagnostic_bytes().as_ref(), expected);
+        }
 
         #[cfg(unix)]
         #[test]

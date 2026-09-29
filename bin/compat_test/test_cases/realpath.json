@@ -1104,6 +1104,28 @@
         {
             "tstdin": "",
             "command": "realpath",
+            "description": "原始字节路径错误诊断：LC_ALL=C、LANG=C；执行realpath -e后传入完整十六进制路径6d697373696e672dff（即不存在的missing-后接0xff）；stdin为0字节；预期RC=1、stdout为0字节、stderr完整十六进制为7265616c706174683a20276d697373696e672d2724275c333737273a204e6f20737563682066696c65206f72206469726563746f72790a，即GNU quoteaf格式'missing-'$'\\377'，而非将整个路径包进$'...'并使用\\xFF。",
+            "args": [
+                "2d65",
+                "6d697373696e672dff"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7265616c706174683a20276d697373696e672d2724275c333737273a204e6f20737563682066696c65206f72206469726563746f72790a"
+                }
+            },
+            "cleanup_commands": [],
+            "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
             "description": "POSIXLY_CORRECT=1时执行realpath a -m missing；GNU getopt在首个路径a后停止解析，-m和missing均为路径；创建a后预期RC=0、stderr为空，stdout依次为a、-m、missing的三个绝对路径。",
             "setup_commands": [
                 "touch a"

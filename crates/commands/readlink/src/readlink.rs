@@ -330,6 +330,8 @@ fn readlink_main_with_writer(args: impl ctcore::Args, writer: &mut dyn Write) ->
     let arg_matches = parse_readlink_args(args)?;
     let options = ReadlinkOptions::from_matches(&arg_matches)?;
     let mut failed = false;
+    let mut write_error = None;
+    let mut verbose_diagnostic_after_write_error = false;
 
     for input in &options.files {
         let path_buf = PathBuf::from(input);
@@ -340,18 +342,35 @@ fn readlink_main_with_writer(args: impl ctcore::Args, writer: &mut dyn Write) ->
 
         match path_result {
             Ok(path) => {
-                readlink_show_with_writer(&path, options.line_ending, writer)
-                    .map_err_context(|| "write error".to_owned())?;
+                if let Err(error) = readlink_show_with_writer(&path, options.line_ending, writer) {
+                    write_error.get_or_insert(error);
+                }
             }
             Err(err) => {
                 failed = true;
                 if options.verbose {
+                    verbose_diagnostic_after_write_error |= write_error.is_some();
                     let error = err.map_err_context(|| readlink_quote_path(input));
                     ctcore::ct_error::write_error_diagnostic(error.as_ref())
                         .map_err_context(String::new)?;
                 }
             }
         }
+    }
+
+    if write_error.is_none() {
+        if let Err(error) = writer.flush() {
+            write_error = Some(error);
+        }
+    } else {
+        let _ = writer.flush();
+    }
+
+    if let Some(error) = write_error {
+        if verbose_diagnostic_after_write_error {
+            return Err(CtSimpleError::new(1, "write error"));
+        }
+        return Err(error.map_err_context(|| "write error".to_owned()));
     }
 
     if failed { Err(1.into()) } else { Ok(()) }
@@ -684,7 +703,7 @@ fn readlink_show_with_writer(
     if let Some(line_ending) = line_ending {
         write!(writer, "{line_ending}")?;
     }
-    writer.flush()
+    Ok(())
 }
 
 fn readlink_quote_path(path: &OsStr) -> String {
@@ -988,6 +1007,18 @@ mod tests {
         use std::os::unix::ffi::OsStringExt;
         use std::os::unix::fs::symlink;
         use tempfile::tempdir;
+
+        struct BrokenPipeWriter;
+
+        impl Write for BrokenPipeWriter {
+            fn write(&mut self, _buffer: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::from_raw_os_error(ctcore::libc::EPIPE))
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
         #[test]
         fn test_readlink_main_execution_version() {
             let args = [ctcore::ct_util_name(), "--version"];
@@ -1124,6 +1155,25 @@ mod tests {
 
             assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
             assert_eq!(error.to_string(), "Invalid argument");
+        }
+
+        #[test]
+        fn write_error_is_deferred_until_after_later_verbose_diagnostics() {
+            let dir = tempdir().unwrap();
+            let link = dir.path().join("good");
+            symlink("target", &link).unwrap();
+            let missing = dir.path().join("missing");
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-v"),
+                link.into_os_string(),
+                missing.into_os_string(),
+            ];
+
+            let error = readlink_main_with_writer(args.into_iter(), &mut BrokenPipeWriter)
+                .expect_err("a closed stdout must be reported after later operands");
+
+            assert_eq!(error.to_string(), "write error");
         }
 
         #[test]

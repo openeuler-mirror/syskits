@@ -21,7 +21,7 @@ use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::{
     Tool,
     ct_display::Quotable,
-    ct_error::{CTError, CTResult, FromIo, UClapError, set_ct_exit_code},
+    ct_error::{CTError, CTResult, CTsageError, FromIo, UClapError, set_ct_exit_code},
     ct_fs::{MissingHandling, ResolveMode, canonicalize},
     ct_line_ending::CtLineEnding,
     ct_show,
@@ -114,9 +114,12 @@ impl RealpathFlags {
         // 提取文件路径参数并转换为 PathBuf 类型的向量
         let files: Vec<PathBuf> = matches
             .get_many::<OsString>(realpath_flags::REALPATH_ARG_FILES)
-            .unwrap()
+            .unwrap_or_default()
             .map(PathBuf::from)
             .collect();
+        if files.is_empty() {
+            return Err(CTsageError::new(1, "missing operand"));
+        }
 
         // 提取是否使用零字符结尾的标志，并据此确定行尾符类型
         let is_zero = matches.get_count(realpath_flags::REALPATH_ZERO) > 0;
@@ -552,7 +555,6 @@ pub fn ct_app() -> Command {
             .action(ArgAction::Append),
         Arg::new(realpath_flags::REALPATH_ARG_FILES)
             .action(ArgAction::Append)
-            .required(true)
             .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::AnyPath),
     ];
@@ -707,6 +709,20 @@ mod tests {
         let args = vec![OsString::from("realpath"), OsString::from("--help")];
         let result = tool.execute(&args);
         assert!(result.is_err()); // realpath命令需要参数，所以不带参数应该返回错误
+    }
+
+    #[test]
+    fn test_realpath_main_reports_missing_operand() {
+        let mut output = Vec::new();
+        let error = realpath_main(
+            &mut output,
+            std::iter::once(OsString::from(ctcore::ct_util_name())),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code(), 1);
+        assert_eq!(error.to_string(), "missing operand");
+        assert!(output.is_empty());
     }
 
     mod realpath_flags_tests {
@@ -1583,14 +1599,16 @@ mod tests {
         }
 
         #[test]
-        fn test_app_missing_required_args() {
+        fn test_app_defers_missing_operand_diagnostic_to_flags() {
             let args = vec![ctcore::ct_util_name()];
-            let result = ct_app().try_get_matches_from(args);
-            assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().kind(),
-                clap::error::ErrorKind::MissingRequiredArgument
-            );
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let error = match RealpathFlags::new(matches) {
+                Ok(_) => panic!("missing operands must be rejected by RealpathFlags"),
+                Err(error) => error,
+            };
+
+            assert_eq!(error.code(), 1);
+            assert_eq!(error.to_string(), "missing operand");
         }
 
         #[test]

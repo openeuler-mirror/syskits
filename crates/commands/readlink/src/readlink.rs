@@ -157,8 +157,8 @@ impl ReadlinkOptions {
 
     fn from_matches_with_posix(arg_matches: &ArgMatches, _posixly_correct: bool) -> CTResult<Self> {
         let mut is_no_trailing_delimiter =
-            arg_matches.get_flag(readlink_flags::READLINK_NO_NEWLINE);
-        let is_use_zero = arg_matches.get_flag(readlink_flags::READLINK_ZERO);
+            arg_matches.get_count(readlink_flags::READLINK_NO_NEWLINE) > 0;
+        let is_use_zero = arg_matches.get_count(readlink_flags::READLINK_ZERO) > 0;
         let is_silent = arg_matches.get_count(readlink_flags::READLINK_SILENT) > 0
             || arg_matches.get_count(readlink_flags::READLINK_QUIET) > 0;
 
@@ -657,7 +657,7 @@ fn ct_app_with_getopt_mode(posixly_correct: bool) -> Command {
             .short('n')
             .long(readlink_flags::READLINK_NO_NEWLINE)
             .help(t!("readlink.clap.readlink_no_newline"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(readlink_flags::READLINK_QUIET)
             .short('q')
             .long(readlink_flags::READLINK_QUIET)
@@ -677,7 +677,7 @@ fn ct_app_with_getopt_mode(posixly_correct: bool) -> Command {
             .short('z')
             .long(readlink_flags::READLINK_ZERO)
             .help(t!("readlink.clap.readlink_zero"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(readlink_flags::READLINK_ARG_FILES)
             .action(ArgAction::Append)
             .value_parser(OsStringValueParser::new())
@@ -1036,6 +1036,23 @@ mod tests {
 
                 assert_eq!(options.verbose, expected_verbose);
             }
+        }
+
+        #[test]
+        fn repeated_delimiter_options_are_accepted() {
+            let no_newline = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "-n", "-n", "link"])
+                .expect("GNU accepts repeated --no-newline");
+            let options = ReadlinkOptions::from_matches(&no_newline).unwrap();
+            assert!(options.no_newline);
+            assert_eq!(options.line_ending, None);
+
+            let zero = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "-z", "-z", "link"])
+                .expect("GNU accepts repeated --zero");
+            let options = ReadlinkOptions::from_matches(&zero).unwrap();
+            assert!(options.zero);
+            assert_eq!(options.line_ending, Some(CtLineEnding::Nul));
         }
 
         #[test]

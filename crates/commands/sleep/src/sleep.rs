@@ -96,6 +96,35 @@ impl CTError for InvalidTimeIntervalError {
     }
 }
 
+#[derive(Debug)]
+struct SleepUsageError {
+    message: Vec<u8>,
+}
+
+impl SleepUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl Display for SleepUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl Error for SleepUsageError {}
+
+impl CTError for SleepUsageError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
 #[derive(Default)]
 pub struct Sleep;
 impl Tool for Sleep {
@@ -116,7 +145,7 @@ pub fn sleep_main(args: impl ctcore::Args) -> CTResult<()> {
     initialize_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = args.collect::<Vec<_>>();
+    let args = prepare_sleep_args(args)?;
     let ends_with_option_delimiter = args.last().is_some_and(|arg| arg == "--");
     let matches = ct_app().try_get_matches_from(args)?;
 
@@ -140,6 +169,68 @@ fn sleep_parse_numbers(matches: &clap::ArgMatches, allow_empty: bool) -> CTResul
         })?;
 
     Ok(numbers)
+}
+
+fn standard_long_option(name: &[u8]) -> Option<&'static str> {
+    if let Some(option) = ["help", "version"]
+        .into_iter()
+        .find(|option| option.as_bytes() == name)
+    {
+        return Some(option);
+    }
+    if name.is_empty() {
+        return None;
+    }
+
+    let mut matches = ["help", "version"]
+        .into_iter()
+        .filter(|option| option.as_bytes().starts_with(name));
+    let option = matches.next()?;
+    matches.next().is_none().then_some(option)
+}
+
+fn prepare_sleep_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
+    let args = args.collect::<Vec<_>>();
+
+    for argument in args.iter().skip(1) {
+        let bytes = argument.as_encoded_bytes();
+        if bytes == b"--" {
+            break;
+        }
+        if bytes.len() <= 1 || bytes[0] != b'-' {
+            continue;
+        }
+
+        if let Some(long) = bytes.strip_prefix(b"--") {
+            let separator = long.iter().position(|byte| *byte == b'=');
+            let name = &long[..separator.unwrap_or(long.len())];
+            let Some(option) = standard_long_option(name) else {
+                let mut message = b"unrecognized option '".to_vec();
+                message.extend_from_slice(bytes);
+                message.push(b'\'');
+                return Err(SleepUsageError::boxed(message));
+            };
+            if separator.is_some() {
+                return Err(SleepUsageError::boxed(
+                    format!("option '--{option}' doesn't allow an argument").into_bytes(),
+                ));
+            }
+
+            let mut terminal_args = Vec::with_capacity(2);
+            if let Some(program) = args.first() {
+                terminal_args.push(program.clone());
+            }
+            terminal_args.push(argument.clone());
+            return Ok(terminal_args);
+        }
+
+        let mut message = b"invalid option -- '".to_vec();
+        message.push(bytes[1]);
+        message.push(b'\'');
+        return Err(SleepUsageError::boxed(message));
+    }
+
+    Ok(args)
 }
 
 fn initialize_locale() {
@@ -507,6 +598,29 @@ mod tests {
             assert_eq!(parse_duration_with_decimal_point("0,0", ","), Some(0.0));
             assert_eq!(parse_duration_with_decimal_point("0.0", ","), Some(0.0));
             assert_eq!(parse_duration_with_decimal_point("0,0.0", ","), None);
+        }
+
+        #[test]
+        fn test_prepare_sleep_args_uses_gnu_standard_option_diagnostics() {
+            let cases = [
+                (
+                    vec![OsString::from("sleep"), OsString::from("-h")],
+                    b"invalid option -- 'h'".as_slice(),
+                ),
+                (
+                    vec![OsString::from("sleep"), OsString::from("--unknown")],
+                    b"unrecognized option '--unknown'".as_slice(),
+                ),
+                (
+                    vec![OsString::from("sleep"), OsString::from("--hel=value")],
+                    b"option '--help' doesn't allow an argument".as_slice(),
+                ),
+            ];
+
+            for (args, diagnostic) in cases {
+                let error = prepare_sleep_args(args.into_iter()).unwrap_err();
+                assert_eq!(error.diagnostic_bytes().as_ref(), diagnostic);
+            }
         }
 
         #[cfg(unix)]

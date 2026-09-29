@@ -215,7 +215,8 @@ impl RealpathFlags {
 
                         // 如果 `can_mode` 是 `Existing`，则确保路径是一个目录。
                         if can_mode == MissingHandling::Existing && !abs.is_dir() {
-                            abs.read_dir()?; // 如果路径不是目录，则抛出错误。
+                            abs.read_dir()
+                                .map_err_context(|| p.maybe_quote().to_string())?;
                         }
                         Some(abs)
                     }
@@ -752,6 +753,31 @@ mod tests {
             ]);
             let flags = RealpathFlags::new(matches).unwrap();
             assert_eq!(flags.can_mode, MissingHandling::Existing);
+        }
+
+        #[test]
+        fn test_existing_relative_to_file_reports_option_value() {
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let file = temp_dir.path().join("file");
+            File::create(&file).unwrap();
+            let args = [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-e"),
+                OsString::from("--relative-to"),
+                file.clone().into_os_string(),
+                OsString::from("."),
+            ];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+
+            let error = match RealpathFlags::new(matches) {
+                Ok(_) => panic!("an existing relative-to value must be a directory"),
+                Err(error) => error,
+            };
+
+            assert_eq!(
+                error.to_string(),
+                format!("{}: Not a directory", file.display())
+            );
         }
 
         #[test]

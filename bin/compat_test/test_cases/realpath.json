@@ -3,6 +3,36 @@
         {
             "tstdin": "",
             "command": "realpath",
+            "description": "执行realpath -e --relative-to file .；canonicalize-existing要求relative-to为目录，预期RC=1且诊断保留file操作数上下文。",
+            "setup_commands": [
+                ": > file"
+            ],
+            "args": [
+                "-e",
+                "--relative-to",
+                "file",
+                "."
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "realpath: file: Not a directory\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
             "description": "执行realpath -m a/loop1；canonicalize-missing允许符号链接循环作为缺失路径处理，预期输出字面规范化路径并返回0。",
             "setup_commands": [
                 "mkdir a",

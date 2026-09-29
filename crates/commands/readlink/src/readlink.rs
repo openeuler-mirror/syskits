@@ -25,6 +25,8 @@ use ctcore::ct_show_error;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{Write, stdout};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
@@ -205,7 +207,7 @@ pub fn readlink_main(args: impl ctcore::Args) -> CTResult<()> {
 fn readlink_main_with_writer(args: impl ctcore::Args, writer: &mut dyn Write) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let arg_matches = ct_app().try_get_matches_from(args)?;
+    let arg_matches = parse_readlink_args(args)?;
     let options = ReadlinkOptions::from_matches(&arg_matches)?;
     let mut failed = false;
 
@@ -238,7 +240,7 @@ fn readlink_main_with_writer(args: impl ctcore::Args, writer: &mut dyn Write) ->
 pub fn readlink_native_semantic(args: impl ctcore::Args) -> CTResult<ReadlinkSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let arg_matches = ct_app().try_get_matches_from(args)?;
+    let arg_matches = parse_readlink_args(args)?;
     let options = ReadlinkOptions::from_matches(&arg_matches)?;
 
     let mut rows = Vec::with_capacity(options.files.len());
@@ -282,6 +284,51 @@ pub fn readlink_native_semantic(args: impl ctcore::Args) -> CTResult<ReadlinkSem
     }
 
     Ok(ReadlinkSemantic { rows, classic_text })
+}
+
+fn parse_readlink_args(args: impl ctcore::Args) -> CTResult<ArgMatches> {
+    let args = args.collect::<Vec<_>>();
+    validate_readlink_short_options(&args)?;
+    Ok(ct_app().try_get_matches_from(args)?)
+}
+
+fn validate_readlink_short_options(args: &[OsString]) -> CTResult<()> {
+    #[cfg(unix)]
+    {
+        let mut options_allowed = true;
+        let posixly_correct = ctcore::ct_posix::posixly_correct();
+
+        for arg in args.iter().skip(1) {
+            let bytes = arg.as_os_str().as_bytes();
+            if !options_allowed {
+                continue;
+            }
+            if bytes == b"--" {
+                options_allowed = false;
+                continue;
+            }
+            if bytes.starts_with(b"--") {
+                continue;
+            }
+            if bytes.starts_with(b"-") && bytes.len() > 1 {
+                for option in &bytes[1..] {
+                    if !matches!(
+                        option,
+                        b'e' | b'f' | b'm' | b'n' | b'q' | b's' | b'v' | b'z'
+                    ) {
+                        return Err(CTsageError::new(
+                            1,
+                            format!("invalid option -- '{}'", char::from(*option)),
+                        ));
+                    }
+                }
+            } else if posixly_correct {
+                options_allowed = false;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 pub fn ct_app() -> Command {
@@ -346,6 +393,10 @@ fn ct_app_with_getopt_mode(posixly_correct: bool) -> Command {
         Arg::new(readlink_flags::READLINK_ARG_FILES)
             .action(ArgAction::Append)
             .value_hint(clap::ValueHint::AnyPath),
+        Arg::new("help").long("help").action(ArgAction::Help),
+        Arg::new("version")
+            .long("version")
+            .action(ArgAction::Version),
     ];
 
     Command::new(utility_name)
@@ -353,6 +404,8 @@ fn ct_app_with_getopt_mode(posixly_correct: bool) -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(args)
         .gnu_getopt_with_mode(posixly_correct)
 }
@@ -472,6 +525,26 @@ mod tests {
     }
     mod options_tests {
         use super::*;
+        use clap::error::ErrorKind;
+
+        #[test]
+        fn short_help_and_version_options_are_invalid() {
+            for option in ["-h", "-V"] {
+                let error = ct_app().try_get_matches_from([ctcore::ct_util_name(), option]);
+                assert_eq!(error.unwrap_err().kind(), ErrorKind::UnknownArgument);
+
+                let error = parse_readlink_args(
+                    [ctcore::ct_util_name(), option]
+                        .into_iter()
+                        .map(OsString::from),
+                )
+                .unwrap_err();
+                assert_eq!(
+                    error.to_string(),
+                    format!("invalid option -- '{}'", &option[1..])
+                );
+            }
+        }
 
         #[test]
         fn posixly_correct_stops_option_parsing_at_the_first_file() {
@@ -1026,9 +1099,6 @@ mod tests {
         //   -s, --silent                 suppress most error messages
         //   -v, --verbose                report error message
         //   -z, --zero                   separate output with NUL rather than newline
-        //   -h, --help                   Print help
-        //   -V, --version                Print version
-
         #[test]
         fn test_ct_app_execution_version() {
             let command = ct_app();
@@ -1040,14 +1110,14 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_app_execution_other_version() {
+        fn test_ct_app_rejects_short_version() {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), "-V"];
 
             let executable = command.try_get_matches_from(args);
 
             assert!(executable.is_err());
-            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
 
         #[test]
@@ -1061,13 +1131,13 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_app_execution_help_short() {
+        fn test_ct_app_rejects_short_help() {
             let command = ct_app();
 
             let help_args = vec![ctcore::ct_util_name(), "-h"];
             let result = command.try_get_matches_from(help_args);
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
 
         #[test]

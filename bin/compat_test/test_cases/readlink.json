@@ -548,6 +548,66 @@
             "cleanup_commands": [
                 "/usr/bin/rm -f \"$(/usr/bin/printf 'link\\377')\""
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "GNU getopt_long的歧义长选项必须列出canonicalize三个候选项。",
+            "args": ["--can"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: option '--can' is ambiguous; possibilities: '--canonicalize' '--canonicalize-existing' '--canonicalize-missing'\nTry 'readlink --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "无参长选项附带等号值时必须按GNU格式报告不允许参数。",
+            "args": ["--canonicalize=value"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: option '--canonicalize' doesn't allow an argument\nTry 'readlink --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "未知长选项必须使用GNU unrecognized option诊断。",
+            "args": ["--unknown"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: unrecognized option '--unknown'\nTry 'readlink --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

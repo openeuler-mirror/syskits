@@ -22,7 +22,9 @@ use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::ct_quoting_style::gnu_quote_shell;
 use ctcore::ct_show_error;
+use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
+use std::fmt::{Display, Formatter};
 use std::fs;
 use std::io::{Write, stdout};
 #[cfg(unix)]
@@ -100,6 +102,52 @@ struct ReadlinkOptions {
     line_ending: Option<CtLineEnding>,
     no_newline: bool,
     zero: bool,
+}
+
+#[derive(Debug)]
+struct ReadlinkUsageError {
+    message: Vec<u8>,
+    usage_hint: Vec<u8>,
+}
+
+impl ReadlinkUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn ctcore::ct_error::CTError> {
+        let usage_hint = format!(
+            "Try '{} --help' for more information.",
+            ctcore::ct_help_utility_name()
+        )
+        .into_bytes();
+        Box::new(Self {
+            message,
+            usage_hint,
+        })
+    }
+}
+
+impl std::error::Error for ReadlinkUsageError {}
+
+impl Display for ReadlinkUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl ctcore::ct_error::CTError for ReadlinkUsageError {
+    fn code(&self) -> i32 {
+        1
+    }
+
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
+        Some(Cow::Borrowed(&self.usage_hint))
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
 }
 
 impl ReadlinkOptions {
@@ -359,9 +407,122 @@ pub fn readlink_native_semantic(args: impl ctcore::Args) -> CTResult<ReadlinkSem
 }
 
 fn parse_readlink_args(args: impl ctcore::Args) -> CTResult<ArgMatches> {
-    let args = args.collect::<Vec<_>>();
+    let args = normalize_gnu_options(args.collect())?;
     validate_readlink_short_options(&args)?;
     Ok(ct_app().try_get_matches_from(args)?)
+}
+
+fn normalize_gnu_options(args: Vec<OsString>) -> CTResult<Vec<OsString>> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+        const LONG_OPTIONS: &[&[u8]] = &[
+            b"canonicalize",
+            b"canonicalize-existing",
+            b"canonicalize-missing",
+            b"no-newline",
+            b"quiet",
+            b"silent",
+            b"verbose",
+            b"zero",
+            b"help",
+            b"version",
+        ];
+
+        let mut normalized = Vec::with_capacity(args.len());
+        let posixly_correct = ctcore::ct_posix::posixly_correct();
+        let mut index = 0;
+
+        while index < args.len() {
+            let argument = &args[index];
+            let bytes = argument.as_os_str().as_bytes();
+
+            if index == 0 {
+                normalized.push(argument.clone());
+                index += 1;
+                continue;
+            }
+
+            if bytes == b"--" {
+                normalized.extend(args[index..].iter().cloned());
+                break;
+            }
+
+            if bytes == b"-" || !bytes.starts_with(b"-") {
+                if posixly_correct {
+                    normalized.extend(args[index..].iter().cloned());
+                    break;
+                }
+                normalized.push(argument.clone());
+                index += 1;
+                continue;
+            }
+
+            let Some(long_option) = bytes.strip_prefix(b"--") else {
+                normalized.push(argument.clone());
+                index += 1;
+                continue;
+            };
+
+            let (name, has_argument) = long_option
+                .iter()
+                .position(|byte| *byte == b'=')
+                .map_or((long_option, false), |equals| {
+                    (&long_option[..equals], true)
+                });
+            let exact_match = LONG_OPTIONS
+                .iter()
+                .copied()
+                .find(|candidate| *candidate == name);
+            let candidates = LONG_OPTIONS
+                .iter()
+                .copied()
+                .filter(|candidate| candidate.starts_with(name))
+                .collect::<Vec<_>>();
+            let canonical = match exact_match {
+                Some(option) => option,
+                None if candidates.is_empty() => {
+                    let mut message = b"unrecognized option '".to_vec();
+                    message.extend_from_slice(bytes);
+                    message.push(b'\'');
+                    return Err(ReadlinkUsageError::boxed(message));
+                }
+                None if candidates.len() == 1 => candidates[0],
+                None => {
+                    let mut message = b"option '--".to_vec();
+                    message.extend_from_slice(long_option);
+                    message.extend_from_slice(b"' is ambiguous; possibilities:");
+                    for candidate in candidates {
+                        message.extend_from_slice(b" '--");
+                        message.extend_from_slice(candidate);
+                        message.push(b'\'');
+                    }
+                    return Err(ReadlinkUsageError::boxed(message));
+                }
+            };
+
+            if has_argument {
+                return Err(ReadlinkUsageError::boxed(
+                    format!(
+                        "option '--{}' doesn't allow an argument",
+                        String::from_utf8_lossy(canonical)
+                    )
+                    .into_bytes(),
+                ));
+            }
+
+            let mut rewritten = b"--".to_vec();
+            rewritten.extend_from_slice(canonical);
+            normalized.push(OsString::from_vec(rewritten));
+            index += 1;
+        }
+
+        Ok(normalized)
+    }
+
+    #[cfg(not(unix))]
+    Ok(args)
 }
 
 fn validate_readlink_short_options(args: &[OsString]) -> CTResult<()> {
@@ -634,6 +795,49 @@ mod tests {
     mod options_tests {
         use super::*;
         use clap::error::ErrorKind;
+
+        #[cfg(unix)]
+        #[test]
+        fn gnu_long_option_errors_preserve_gnu_diagnostics() {
+            let cases = [
+                (
+                    "--can",
+                    b"option '--can' is ambiguous; possibilities: '--canonicalize' '--canonicalize-existing' '--canonicalize-missing'"
+                        .as_slice(),
+                ),
+                (
+                    "--ver",
+                    b"option '--ver' is ambiguous; possibilities: '--verbose' '--version'".as_slice(),
+                ),
+                (
+                    "--canonicalize=x",
+                    b"option '--canonicalize' doesn't allow an argument".as_slice(),
+                ),
+                ("--unknown", b"unrecognized option '--unknown'".as_slice()),
+            ];
+
+            for (option, expected) in cases {
+                let error = normalize_gnu_options(vec![
+                    OsString::from(ctcore::ct_util_name()),
+                    OsString::from(option),
+                ])
+                .expect_err("invalid GNU long options must fail during normalization");
+                assert_eq!(error.diagnostic_bytes().as_ref(), expected);
+            }
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn gnu_long_option_abbreviation_is_rewritten_to_its_canonical_name() {
+            let normalized = normalize_gnu_options(vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--qui"),
+                OsString::from("file"),
+            ])
+            .unwrap();
+
+            assert_eq!(normalized, [ctcore::ct_util_name(), "--quiet", "file"]);
+        }
 
         #[test]
         fn short_help_and_version_options_are_invalid() {

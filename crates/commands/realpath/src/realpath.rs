@@ -28,7 +28,7 @@ use ctcore::{
 };
 use std::{
     ffi::{OsStr, OsString},
-    io::Write,
+    io::{self, Write},
     path::{Path, PathBuf},
 };
 use sys_locale::get_locale;
@@ -218,7 +218,7 @@ impl RealpathFlags {
                     None => None,
                     Some(p) => {
                         // 将路径转换为绝对路径，并捕获可能的错误信息。
-                        let abs = canonicalize(p, can_mode, resolve_mode)
+                        let abs = realpath_canonicalize(p, can_mode, resolve_mode)
                             .map_err_context(|| p.maybe_quote().to_string())?;
 
                         // 如果 `can_mode` 是 `Existing`，则确保路径是一个目录。
@@ -282,7 +282,7 @@ pub fn realpath_native_semantic(args: impl ctcore::Args) -> CTResult<RealpathSem
     let mut classic_text = Vec::new();
 
     for path in &flags.files {
-        let resolved = canonicalize(path, flags.can_mode, flags.resolve_mode)
+        let resolved = realpath_canonicalize(path, flags.can_mode, flags.resolve_mode)
             .map_err_context(|| path.maybe_quote().to_string())?;
         let output = realpath_process_relative(
             resolved.clone(),
@@ -323,6 +323,20 @@ fn semantic_missing_handling(mode: MissingHandling) -> RealpathMissingHandling {
         MissingHandling::Existing => RealpathMissingHandling::Existing,
         MissingHandling::Missing => RealpathMissingHandling::Missing,
     }
+}
+
+fn realpath_canonicalize(
+    path: &Path,
+    missing_handling: MissingHandling,
+    resolve_mode: ResolveMode,
+) -> io::Result<PathBuf> {
+    if path.as_os_str().is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "No such file or directory",
+        ));
+    }
+    canonicalize(path, missing_handling, resolve_mode)
 }
 
 /// 根据RealpathFlags中的配置解析文件路径
@@ -463,7 +477,7 @@ fn realpath_resolve_path<W: Write>(
     flags: &RealpathFlags,
 ) -> std::io::Result<()> {
     // 将给定路径转换为绝对路径，并解析任何符号链接。
-    let abs = canonicalize(p, flags.can_mode, flags.resolve_mode)?;
+    let abs = realpath_canonicalize(p, flags.can_mode, flags.resolve_mode)?;
 
     // 根据给定的相对选项处理绝对路径。
     let abs = realpath_process_relative(
@@ -883,6 +897,17 @@ mod tests {
         }
 
         #[test]
+        fn test_prepare_relative_options_rejects_empty_dir() {
+            let result = RealpathFlags::realpath_prepare_relative_options(
+                &Some(PathBuf::new()),
+                &None,
+                MissingHandling::Normal,
+                ResolveMode::Physical,
+            );
+            assert!(result.is_err());
+        }
+
+        #[test]
         fn test_prepare_relative_options_with_invalid_dir() {
             let result = RealpathFlags::realpath_prepare_relative_options(
                 &Some(PathBuf::from("/nonexistent")),
@@ -987,6 +1012,24 @@ mod tests {
             assert!(realpath_exec(&mut output, &flags).is_ok());
             assert_eq!(get_ct_exit_code(), 1);
             set_ct_exit_code(0);
+        }
+
+        #[test]
+        fn test_resolve_empty_path_returns_not_found() {
+            let mut output = Vec::new();
+            let flags = RealpathFlags {
+                is_quiet: false,
+                relative_to: None,
+                relative_base: None,
+                files: vec![PathBuf::new()],
+                can_mode: MissingHandling::Normal,
+                resolve_mode: ResolveMode::Physical,
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let error = realpath_resolve_path(&mut output, Path::new(""), &flags).unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+            assert!(output.is_empty());
         }
 
         #[test]

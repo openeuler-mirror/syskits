@@ -82,10 +82,27 @@ impl ReadlinkOptions {
         let mut is_no_trailing_delimiter =
             arg_matches.get_flag(readlink_flags::READLINK_NO_NEWLINE);
         let is_use_zero = arg_matches.get_flag(readlink_flags::READLINK_ZERO);
-        let is_silent = arg_matches.get_flag(readlink_flags::READLINK_SILENT)
-            || arg_matches.get_flag(readlink_flags::READLINK_QUIET);
+        let is_silent = arg_matches.get_count(readlink_flags::READLINK_SILENT) > 0
+            || arg_matches.get_count(readlink_flags::READLINK_QUIET) > 0;
 
-        let mut is_verbose = arg_matches.get_flag(readlink_flags::READLINK_VERBOSE);
+        let mut is_verbose = [
+            (readlink_flags::READLINK_QUIET, false),
+            (readlink_flags::READLINK_SILENT, false),
+            (readlink_flags::READLINK_VERBOSE, true),
+        ]
+        .into_iter()
+        .filter_map(|(name, verbose)| {
+            (arg_matches.get_count(name) > 0)
+                .then(|| {
+                    arg_matches
+                        .indices_of(name)
+                        .and_then(|mut indices| indices.next_back())
+                })
+                .flatten()
+                .map(|index| (index, verbose))
+        })
+        .max_by_key(|(index, _)| *index)
+        .is_some_and(|(_, verbose)| verbose);
 
         let mode = [
             (
@@ -122,9 +139,6 @@ impl ReadlinkOptions {
 
         if std::env::var_os("POSIXLY_CORRECT").is_some() && resolve_mode == ResolveMode::None {
             is_verbose = true;
-        }
-        if is_silent {
-            is_verbose = false;
         }
 
         let missing_handling = match mode {
@@ -301,17 +315,17 @@ pub fn ct_app() -> Command {
             .short('q')
             .long(readlink_flags::READLINK_QUIET)
             .help(t!("readlink.clap.readlink_quiet"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(readlink_flags::READLINK_SILENT)
             .short('s')
             .long(readlink_flags::READLINK_SILENT)
             .help(t!("readlink.clap.readlink_silent"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(readlink_flags::READLINK_VERBOSE)
             .short('v')
             .long(readlink_flags::READLINK_VERBOSE)
             .help(t!("readlink.clap.readlink_verbose"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(readlink_flags::READLINK_ZERO)
             .short('z')
             .long(readlink_flags::READLINK_ZERO)
@@ -441,6 +455,22 @@ mod tests {
     }
     mod options_tests {
         use super::*;
+
+        #[test]
+        fn verbose_uses_the_last_silence_or_verbose_option() {
+            let cases = [
+                (vec![ctcore::ct_util_name(), "-s", "-v", "missing"], true),
+                (vec![ctcore::ct_util_name(), "-v", "-q", "missing"], false),
+                (vec![ctcore::ct_util_name(), "-q", "-s", "missing"], false),
+            ];
+
+            for (args, expected_verbose) in cases {
+                let matches = ct_app().try_get_matches_from(args).unwrap();
+                let options = ReadlinkOptions::from_matches(&matches).unwrap();
+
+                assert_eq!(options.verbose, expected_verbose);
+            }
+        }
 
         #[test]
         fn canonicalize_mode_uses_the_last_mode_option() {

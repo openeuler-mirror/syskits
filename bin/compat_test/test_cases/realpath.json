@@ -617,6 +617,24 @@
             "cleanup_commands": [
                 "rm -f -- a -m missing"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "quiet模式执行realpath -q -e missing；所有组件必须存在时missing解析失败，GNU抑制诊断但仍返回RC=1，预期stdout和stderr均为空。",
+            "args": [
+                "-q",
+                "-e",
+                "missing"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

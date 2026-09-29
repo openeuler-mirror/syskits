@@ -880,6 +880,25 @@
             "cleanup_commands": [
                 "rm -f regular"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "-f规范化缺失末级时允许缺失名称本身，但末尾/.要求该名称已存在且为目录，必须返回ENOENT。",
+            "args": ["-f", "-v", "missing/."],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: missing/.: No such file or directory\\n"
+                }
+            }
         }
     ]
 }

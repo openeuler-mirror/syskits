@@ -320,9 +320,15 @@ pub fn canonicalize<P: AsRef<Path>>(
 ) -> IOResult<PathBuf> {
     const SYMLINKS_TO_LOOK_FOR_LOOPS: i32 = 20;
     let original = original.as_ref();
+    let path_str = original.to_string_lossy();
+    // CAN_ALL_BUT_LAST allows a missing final component, including a
+    // trailing separator.  A final `.` is different: the preceding
+    // component must be an existing directory.
+    let requires_directory_for_trailing_dot = path_str
+        .trim_end_matches([MAIN_SEPARATOR, '/'])
+        .ends_with("/.");
     let has_to_be_directory =
         (miss_mode == MissingHandling::Normal || miss_mode == MissingHandling::Existing) && {
-            let path_str = original.to_string_lossy();
             path_str.ends_with(MAIN_SEPARATOR)
                 || path_str.ends_with('/')
                 // Path::components folds an interior or trailing `.` away,
@@ -410,7 +416,9 @@ pub fn canonicalize<P: AsRef<Path>>(
             Err(e) => {
                 if miss_mode == MissingHandling::Existing
                     || (miss_mode == MissingHandling::Normal
-                        && (!parts.is_empty() || e.kind() != ErrorKind::NotFound))
+                        && (!parts.is_empty()
+                            || e.kind() != ErrorKind::NotFound
+                            || requires_directory_for_trailing_dot))
                 {
                     return Err(e);
                 }
@@ -961,6 +969,18 @@ mod tests {
                 assert_eq!(error.raw_os_error(), Some(libc::ENOTDIR));
             }
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_canonicalize_normal_requires_a_trailing_dot_directory_to_exist() {
+        let temp_dir = tempdir().unwrap();
+        let operand = PathBuf::from(format!("{}/missing/.", temp_dir.path().display()));
+
+        let error = canonicalize(&operand, MissingHandling::Normal, ResolveMode::Physical)
+            .expect_err("a trailing dot component requires the directory to exist");
+
+        assert_eq!(error.raw_os_error(), Some(libc::ENOENT));
     }
 
     #[cfg(unix)]

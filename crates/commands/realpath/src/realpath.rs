@@ -121,8 +121,6 @@ impl RealpathFlags {
         // 提取是否使用零字符结尾的标志，并据此确定行尾符类型
         let is_zero = matches.get_flag(realpath_flags::REALPATH_ZERO);
         let line_ending = CtLineEnding::from_zero_flag(is_zero);
-        let mut can_mode_flag = true;
-
         // 提取是否进行现有路径规范化的标志
         let is_canonicalize_existing =
             matches.get_flag(realpath_flags::REALPATH_CANONICALIZE_EXISTING);
@@ -130,12 +128,11 @@ impl RealpathFlags {
         let is_canonicalize_missing =
             matches.get_flag(realpath_flags::REALPATH_CANONICALIZE_MISSING);
         // 根据上述标志确定路径处理模式
-        let mut can_mode = if is_canonicalize_existing {
+        let can_mode = if is_canonicalize_existing {
             MissingHandling::Existing
         } else if is_canonicalize_missing {
             MissingHandling::Missing
         } else {
-            can_mode_flag = false;
             MissingHandling::Normal
         };
 
@@ -145,11 +142,6 @@ impl RealpathFlags {
         let is_logical = matches.get_flag(realpath_flags::REALPATH_LOGICAL);
         // 根据上述标志确定路径解析模式
         let resolve_mode = if is_strip {
-            //当指定-s参数时，不展开符号链接（直接输出原始路径），除非显示指定-e
-            //否则忽略MissingHandling参数
-            if !can_mode_flag {
-                can_mode = MissingHandling::Missing;
-            }
             ResolveMode::None
         } else if is_logical {
             ResolveMode::Logical
@@ -336,7 +328,121 @@ fn realpath_canonicalize(
             "No such file or directory",
         ));
     }
+    if resolve_mode == ResolveMode::None {
+        // GNU's CAN_NOLINKS mode normalizes the spelling without resolving a
+        // symlink, then checks only the components whose suffix requires a
+        // directory lookup.  The generic canonicalizer cannot provide that
+        // distinction because its Normal mode probes the literal parent.
+        let canonical = canonicalize(path, MissingHandling::Missing, resolve_mode)?;
+        validate_strip_path(path, missing_handling)?;
+        return Ok(canonical);
+    }
+
     canonicalize(path, missing_handling, resolve_mode)
+}
+
+#[cfg(unix)]
+fn validate_strip_path(path: &Path, missing_handling: MissingHandling) -> io::Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+
+    if missing_handling == MissingHandling::Missing {
+        return Ok(());
+    }
+
+    if missing_handling == MissingHandling::Existing {
+        return std::fs::metadata(path).map(|_| ());
+    }
+
+    let bytes = path.as_os_str().as_bytes();
+    let mut prefix = if bytes.starts_with(b"/") {
+        PathBuf::from("/")
+    } else {
+        PathBuf::new()
+    };
+    let mut component_start = 0;
+
+    while component_start < bytes.len() {
+        while component_start < bytes.len() && bytes[component_start] == b'/' {
+            component_start += 1;
+        }
+        if component_start == bytes.len() {
+            break;
+        }
+
+        let component_end = bytes[component_start..]
+            .iter()
+            .position(|byte| *byte == b'/')
+            .map_or(bytes.len(), |offset| component_start + offset);
+        let component = &bytes[component_start..component_end];
+        let suffix = &bytes[component_end..];
+
+        match component {
+            b"." => {}
+            b".." => {
+                prefix.pop();
+            }
+            _ => {
+                prefix.push(OsStr::from_bytes(component));
+                if strip_suffix_requires_directory(suffix) {
+                    match std::fs::metadata(prefix.join(".")) {
+                        Ok(_) => {}
+                        Err(error)
+                            if error.kind() == io::ErrorKind::NotFound
+                                && suffix.iter().all(|byte| *byte == b'/') => {}
+                        Err(error) => return Err(error),
+                    }
+                } else if suffix.is_empty() {
+                    if let Err(error) = std::fs::metadata(&prefix) {
+                        if error.kind() != io::ErrorKind::NotFound {
+                            return Err(error);
+                        }
+                    }
+                }
+            }
+        }
+        component_start = component_end;
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn strip_suffix_requires_directory(suffix: &[u8]) -> bool {
+    let mut index = 0;
+    while index < suffix.len() && suffix[index] == b'/' {
+        while index < suffix.len() && suffix[index] == b'/' {
+            index += 1;
+        }
+        if index == suffix.len() {
+            return true;
+        }
+        if suffix[index] != b'.' {
+            return false;
+        }
+        index += 1;
+        if index == suffix.len()
+            || (suffix[index] == b'.' && (index + 1 == suffix.len() || suffix[index + 1] == b'/'))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(not(unix))]
+fn validate_strip_path(path: &Path, missing_handling: MissingHandling) -> io::Result<()> {
+    match missing_handling {
+        MissingHandling::Existing => std::fs::metadata(path).map(|_| ()),
+        MissingHandling::Normal => match std::fs::metadata(path) {
+            Ok(_)
+            | Err(io::Error {
+                kind: io::ErrorKind::NotFound,
+                ..
+            }) => Ok(()),
+            Err(error) => Err(error),
+        },
+        MissingHandling::Missing => Ok(()),
+    }
 }
 
 /// 根据RealpathFlags中的配置解析文件路径
@@ -799,6 +905,7 @@ mod tests {
             let matches = create_test_matches(&[ctcore::ct_util_name(), "--strip", "test.txt"]);
             let flags = RealpathFlags::new(matches).unwrap();
             assert_eq!(flags.resolve_mode, ResolveMode::None);
+            assert_eq!(flags.can_mode, MissingHandling::Normal);
         }
 
         #[test]
@@ -953,6 +1060,10 @@ mod tests {
 
     mod realpath_exec_tests {
         use super::*;
+        #[cfg(unix)]
+        use ctcore::libc;
+        #[cfg(unix)]
+        use std::os::unix::fs::symlink;
 
         fn setup_test_file() -> (tempfile::TempDir, PathBuf) {
             let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
@@ -1030,6 +1141,93 @@ mod tests {
             let error = realpath_resolve_path(&mut output, Path::new(""), &flags).unwrap_err();
             assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
             assert!(output.is_empty());
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_resolve_strip_existing_rejects_dangling_symlink() {
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let dangling = temp_dir.path().join("dangling");
+            symlink("missing", &dangling).unwrap();
+            let flags = RealpathFlags {
+                is_quiet: false,
+                relative_to: None,
+                relative_base: None,
+                files: vec![dangling.clone()],
+                can_mode: MissingHandling::Existing,
+                resolve_mode: ResolveMode::None,
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let error = realpath_resolve_path(&mut Vec::new(), &dangling, &flags).unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_resolve_strip_normal_rejects_symlink_loop() {
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let first = temp_dir.path().join("first");
+            let second = temp_dir.path().join("second");
+            symlink("second", &first).unwrap();
+            symlink("first", &second).unwrap();
+            let flags = RealpathFlags {
+                is_quiet: false,
+                relative_to: None,
+                relative_base: None,
+                files: vec![first.clone()],
+                can_mode: MissingHandling::Normal,
+                resolve_mode: ResolveMode::None,
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let error = realpath_resolve_path(&mut Vec::new(), &first, &flags).unwrap_err();
+            assert_eq!(error.raw_os_error(), Some(libc::ELOOP));
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_resolve_strip_normal_keeps_broken_intermediate_link_literal() {
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let directory = temp_dir.path().join("directory");
+            std::fs::create_dir(&directory).unwrap();
+            let link = directory.join("link");
+            symlink("missing", &link).unwrap();
+            let input = link.join("file");
+            let flags = RealpathFlags {
+                is_quiet: false,
+                relative_to: None,
+                relative_base: None,
+                files: vec![input.clone()],
+                can_mode: MissingHandling::Normal,
+                resolve_mode: ResolveMode::None,
+                line_ending: CtLineEnding::Newline,
+            };
+            let mut output = Vec::new();
+
+            realpath_resolve_path(&mut output, &input, &flags).unwrap();
+
+            assert_eq!(output, format!("{}\n", input.display()).as_bytes());
+        }
+
+        #[test]
+        fn test_resolve_strip_normal_checks_parent_before_dotdot() {
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let file = temp_dir.path().join("file");
+            File::create(&file).unwrap();
+            let input = file.join("..").join("missing");
+            let flags = RealpathFlags {
+                is_quiet: false,
+                relative_to: None,
+                relative_base: None,
+                files: vec![input.clone()],
+                can_mode: MissingHandling::Normal,
+                resolve_mode: ResolveMode::None,
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let error = realpath_resolve_path(&mut Vec::new(), &input, &flags).unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::NotADirectory);
         }
 
         #[test]

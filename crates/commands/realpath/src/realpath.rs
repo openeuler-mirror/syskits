@@ -27,7 +27,9 @@ use ctcore::{
     ct_show,
 };
 use std::{
+    borrow::Cow,
     ffi::{OsStr, OsString},
+    fmt::{Display, Formatter},
     io::{self, Write},
     path::{Path, PathBuf},
 };
@@ -91,6 +93,52 @@ pub struct RealpathSemanticRow {
 pub struct RealpathSemantic {
     pub rows: Vec<RealpathSemanticRow>,
     pub classic_text: String,
+}
+
+#[derive(Debug)]
+struct RealpathUsageError {
+    message: Vec<u8>,
+    usage_hint: Vec<u8>,
+}
+
+impl RealpathUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        let usage_hint = format!(
+            "Try '{} --help' for more information.",
+            ctcore::ct_help_utility_name()
+        )
+        .into_bytes();
+        Box::new(Self {
+            message,
+            usage_hint,
+        })
+    }
+}
+
+impl std::error::Error for RealpathUsageError {}
+
+impl Display for RealpathUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl CTError for RealpathUsageError {
+    fn code(&self) -> i32 {
+        1
+    }
+
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
+        Some(Cow::Borrowed(&self.usage_hint))
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
 }
 
 struct RealpathFlags {
@@ -391,10 +439,10 @@ fn normalize_gnu_options(args: Vec<OsString>) -> CTResult<Vec<OsString>> {
                 let (canonical, needs_argument) = match exact_match {
                     Some(option) => option,
                     None if candidates.is_empty() => {
-                        return Err(CTsageError::new(
-                            1,
-                            format!("unrecognized option '{}'", String::from_utf8_lossy(bytes)),
-                        ));
+                        let mut message = b"unrecognized option '".to_vec();
+                        message.extend_from_slice(bytes);
+                        message.push(b'\'');
+                        return Err(RealpathUsageError::boxed(message));
                     }
                     None if candidates.len() == 1 => candidates[0],
                     None => {
@@ -451,10 +499,10 @@ fn normalize_gnu_options(args: Vec<OsString>) -> CTResult<Vec<OsString>> {
                 if matches!(option, b'e' | b'L' | b'm' | b'P' | b'q' | b's' | b'z') {
                     continue;
                 }
-                return Err(CTsageError::new(
-                    1,
-                    format!("invalid option -- '{}'", char::from(*option)),
-                ));
+                let mut message = b"invalid option -- '".to_vec();
+                message.push(*option);
+                message.push(b'\'');
+                return Err(RealpathUsageError::boxed(message));
             }
 
             normalized.push(argument.clone());
@@ -950,6 +998,29 @@ mod tests {
 
         fn create_test_matches(args: &[&str]) -> ArgMatches {
             ct_app().try_get_matches_from(args).unwrap()
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_normalize_gnu_options_preserves_raw_bytes_in_invalid_option_diagnostics() {
+            let cases = [
+                (
+                    OsString::from_vec(b"--\xff".to_vec()),
+                    b"unrecognized option '--\xff'".as_slice(),
+                ),
+                (
+                    OsString::from_vec(b"-\xff".to_vec()),
+                    b"invalid option -- '\xff'".as_slice(),
+                ),
+            ];
+
+            for (option, expected_diagnostic) in cases {
+                let error =
+                    normalize_gnu_options(vec![OsString::from(ctcore::ct_util_name()), option])
+                        .expect_err("an unrecognized option must fail");
+
+                assert_eq!(error.diagnostic_bytes().as_ref(), expected_diagnostic);
+            }
         }
 
         #[test]

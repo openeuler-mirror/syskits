@@ -22,7 +22,6 @@ use std::collections::VecDeque;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::fs::read_dir;
 use std::hash::Hash;
 use std::io::{Error, ErrorKind, Result as IOResult};
 #[cfg(unix)]
@@ -391,19 +390,20 @@ pub fn canonicalize<P: AsRef<Path>>(
     // raise Not a directory if required
     match miss_mode {
         MissingHandling::Existing => {
+            fs::metadata(&result)?;
             if has_to_be_directory {
-                read_dir(&result)?;
+                fs::metadata(result.join("."))?;
             }
         }
-        MissingHandling::Normal => {
-            if result.exists() {
+        MissingHandling::Normal => match fs::metadata(&result) {
+            Ok(_) => {
                 if has_to_be_directory {
-                    read_dir(&result)?;
+                    fs::metadata(result.join("."))?;
                 }
-            } else if let Some(parent) = result.parent() {
-                read_dir(parent)?;
             }
-        }
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        },
         MissingHandling::Missing => {}
     }
     Ok(result)
@@ -782,6 +782,8 @@ mod tests {
     use std::io::Write;
     #[cfg(unix)]
     use std::os::unix;
+    #[cfg(all(unix, target_os = "linux"))]
+    use std::os::unix::fs::PermissionsExt;
     #[cfg(unix)]
     use tempfile::{NamedTempFile, tempdir};
 
@@ -881,6 +883,33 @@ mod tests {
             .expect("CAN_MISSING must preserve a detected symlink loop");
 
         assert_eq!(canonical, first);
+    }
+
+    #[cfg(all(unix, target_os = "linux"))]
+    #[test]
+    fn test_canonicalize_normal_allows_missing_child_of_searchable_directory() {
+        // This permission distinction requires a non-root filesystem UID.
+        if unsafe { libc::geteuid() } != 0 {
+            return;
+        }
+
+        let temp_dir = tempdir().unwrap();
+        let directory = temp_dir.path().join("directory");
+        fs::set_permissions(temp_dir.path(), fs::Permissions::from_mode(0o755)).unwrap();
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o111)).unwrap();
+        let missing = directory.join("missing");
+
+        // SAFETY: Linux keeps fsuid per thread; the original value is restored
+        // before the test exits.
+        let previous_fsuid = unsafe { libc::setfsuid(65534) };
+        let previous_fsuid = libc::uid_t::try_from(previous_fsuid)
+            .expect("setfsuid must return a valid previous filesystem UID");
+        let result = canonicalize(&missing, MissingHandling::Normal, ResolveMode::Physical);
+        // SAFETY: Restore the fsuid captured above on the same test thread.
+        unsafe { libc::setfsuid(previous_fsuid) };
+
+        assert_eq!(result.unwrap(), missing);
     }
 
     #[cfg(unix)]

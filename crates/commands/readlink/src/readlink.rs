@@ -196,10 +196,17 @@ impl Tool for Readlink {
 }
 
 pub fn readlink_main(args: impl ctcore::Args) -> CTResult<()> {
+    let stdout = stdout();
+    let mut writer = stdout.lock();
+    readlink_main_with_writer(args, &mut writer)
+}
+
+fn readlink_main_with_writer(args: impl ctcore::Args, writer: &mut dyn Write) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let arg_matches = ct_app().try_get_matches_from(args)?;
     let options = ReadlinkOptions::from_matches(&arg_matches)?;
+    let mut failed = false;
 
     for input in &options.files {
         let path_buf = PathBuf::from(input);
@@ -210,21 +217,21 @@ pub fn readlink_main(args: impl ctcore::Args) -> CTResult<()> {
 
         match path_result {
             Ok(path) => {
-                readlink_show(&path, options.line_ending).map_err_context(String::new)?;
+                readlink_show_with_writer(&path, options.line_ending, writer)
+                    .map_err_context(String::new)?;
             }
             Err(err) => {
+                failed = true;
                 if options.verbose {
-                    return Err(CtSimpleError::new(
-                        1,
-                        err.map_err_context(move || input.maybe_quote().to_string())
-                            .to_string(),
-                    ));
+                    let error = err.map_err_context(|| input.maybe_quote().to_string());
+                    ctcore::ct_error::write_error_diagnostic(error.as_ref())
+                        .map_err_context(String::new)?;
                 }
-                return Err(1.into());
             }
         }
     }
-    Ok(())
+
+    if failed { Err(1.into()) } else { Ok(()) }
 }
 
 pub fn readlink_native_semantic(args: impl ctcore::Args) -> CTResult<ReadlinkSemantic> {
@@ -344,14 +351,18 @@ pub fn ct_app() -> Command {
         .args(args)
 }
 
-fn readlink_show(path: &Path, line_ending: Option<CtLineEnding>) -> std::io::Result<()> {
+fn readlink_show_with_writer(
+    path: &Path,
+    line_ending: Option<CtLineEnding>,
+    writer: &mut dyn Write,
+) -> std::io::Result<()> {
     let path = path.to_str().unwrap();
-    print!("{path}");
+    write!(writer, "{path}")?;
 
     if let Some(line_ending) = line_ending {
-        print!("{line_ending}");
+        write!(writer, "{line_ending}")?;
     }
-    stdout().flush()
+    writer.flush()
 }
 
 #[cfg(test)]
@@ -555,6 +566,27 @@ mod tests {
             let args = [ctcore::ct_util_name()];
             let result = readlink_main(args.iter().map(OsString::from));
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn readlink_main_processes_operands_after_an_error() {
+            let dir = tempdir().unwrap();
+            let link_one = dir.path().join("link-one");
+            let missing = dir.path().join("missing");
+            let link_two = dir.path().join("link-two");
+            symlink("first", &link_one).unwrap();
+            symlink("second", &link_two).unwrap();
+
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                link_one.into_os_string(),
+                missing.into_os_string(),
+                link_two.into_os_string(),
+            ];
+            let mut output = Vec::new();
+
+            assert!(readlink_main_with_writer(args.into_iter(), &mut output).is_err());
+            assert_eq!(output, b"first\nsecond\n");
         }
 
         #[test]

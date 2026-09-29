@@ -87,15 +87,33 @@ impl ReadlinkOptions {
 
         let mut is_verbose = arg_matches.get_flag(readlink_flags::READLINK_VERBOSE);
 
-        let mode = if arg_matches.get_flag(readlink_flags::READLINK_CANONICALIZE_EXISTING) {
-            ReadlinkMode::CanonicalizeExisting
-        } else if arg_matches.get_flag(readlink_flags::READLINK_CANONICALIZE_MISSING) {
-            ReadlinkMode::CanonicalizeMissing
-        } else if arg_matches.get_flag(readlink_flags::READLINK_CANONICALIZE) {
-            ReadlinkMode::Canonicalize
-        } else {
-            ReadlinkMode::Readlink
-        };
+        let mode = [
+            (
+                readlink_flags::READLINK_CANONICALIZE,
+                ReadlinkMode::Canonicalize,
+            ),
+            (
+                readlink_flags::READLINK_CANONICALIZE_EXISTING,
+                ReadlinkMode::CanonicalizeExisting,
+            ),
+            (
+                readlink_flags::READLINK_CANONICALIZE_MISSING,
+                ReadlinkMode::CanonicalizeMissing,
+            ),
+        ]
+        .into_iter()
+        .filter_map(|(name, mode)| {
+            (arg_matches.get_count(name) > 0)
+                .then(|| {
+                    arg_matches
+                        .indices_of(name)
+                        .and_then(|mut indices| indices.next_back())
+                })
+                .flatten()
+                .map(|index| (index, mode))
+        })
+        .max_by_key(|(index, _)| *index)
+        .map_or(ReadlinkMode::Readlink, |(_, mode)| mode);
 
         let resolve_mode = match mode {
             ReadlinkMode::Readlink => ResolveMode::None,
@@ -257,7 +275,7 @@ pub fn ct_app() -> Command {
                 "canonicalize by following every symlink in every component of the \
                      given name recursively; all but the last component must exist",
             )
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(readlink_flags::READLINK_CANONICALIZE_EXISTING)
             .short('e')
             .long("canonicalize-existing")
@@ -265,7 +283,7 @@ pub fn ct_app() -> Command {
                 "canonicalize by following every symlink in every component of the \
                      given name recursively, all components must exist",
             )
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(readlink_flags::READLINK_CANONICALIZE_MISSING)
             .short('m')
             .long(readlink_flags::READLINK_CANONICALIZE_MISSING)
@@ -273,7 +291,7 @@ pub fn ct_app() -> Command {
                 "canonicalize by following every symlink in every component of the \
                      given name recursively, without requirements on components existence",
             )
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(readlink_flags::READLINK_NO_NEWLINE)
             .short('n')
             .long(readlink_flags::READLINK_NO_NEWLINE)
@@ -421,6 +439,35 @@ mod tests {
             writer.flush()
         }
     }
+    mod options_tests {
+        use super::*;
+
+        #[test]
+        fn canonicalize_mode_uses_the_last_mode_option() {
+            let cases = [
+                (
+                    vec![ctcore::ct_util_name(), "-e", "-m", "missing"],
+                    ReadlinkMode::CanonicalizeMissing,
+                ),
+                (
+                    vec![ctcore::ct_util_name(), "-m", "-f", "missing"],
+                    ReadlinkMode::Canonicalize,
+                ),
+                (
+                    vec![ctcore::ct_util_name(), "-f", "-e", "missing"],
+                    ReadlinkMode::CanonicalizeExisting,
+                ),
+            ];
+
+            for (args, expected_mode) in cases {
+                let matches = ct_app().try_get_matches_from(args).unwrap();
+                let options = ReadlinkOptions::from_matches(&matches).unwrap();
+
+                assert_eq!(options.mode, expected_mode);
+            }
+        }
+    }
+
     #[cfg(test)]
     mod ct_main_tests {
         use super::*;

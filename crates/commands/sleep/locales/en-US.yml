@@ -5,6 +5,10 @@ sleep:
     sleep NUMBER[SUFFIX]...
     sleep OPTION
   about: Pause for NUMBER seconds.
+  errors:
+    invalid_time_interval: invalid time interval
+    missing_operand: missing operand
+    try_help: "Try '%{utility_name} --help' for more information."
   after_help: |-
     Pause for NUMBER seconds.  SUFFIX may be 's' for seconds (the default),
     'm' for minutes, 'h' for hours or 'd' for days.  Unlike most implementations

@@ -20,7 +20,7 @@ use std::time::Duration;
 use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 
 use ctcore::Tool;
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
+use ctcore::ct_error::{CTError, CTResult};
 use ctcore::ct_format::num_parser::{ParseError, ParsedNumber};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use std::borrow::Cow;
@@ -40,14 +40,22 @@ struct InvalidTimeIntervalError {
 
 impl Display for InvalidTimeIntervalError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str("invalid time interval")
+        formatter.write_str(&localized_invalid_time_interval(&rust_i18n::locale()))
     }
 }
 
 impl Error for InvalidTimeIntervalError {}
 
-fn quote_duration_operand(operand: &OsStr) -> Vec<u8> {
+fn quote_duration_operand_for_locale(operand: &OsStr, locale: &str) -> Vec<u8> {
+    if locale == "zh-CN" {
+        return quote_duration_operand_with_quote_marks(operand, true, b"\"", b"\"", false);
+    }
+
     quote_duration_operand_with_style(operand, locale_uses_utf8_quotes())
+}
+
+fn localized_invalid_time_interval(locale: &str) -> String {
+    t!("sleep.errors.invalid_time_interval", locale = locale).to_string()
 }
 
 fn locale_uses_utf8_quotes() -> bool {
@@ -66,13 +74,29 @@ fn locale_uses_utf8_quotes() -> bool {
 }
 
 fn quote_duration_operand_with_style(operand: &OsStr, utf8_locale: bool) -> Vec<u8> {
-    let bytes = operand.as_encoded_bytes();
-    let valid_utf8 = utf8_locale && std::str::from_utf8(bytes).is_ok();
     let (opening_quote, closing_quote) = if utf8_locale {
         ("‘".as_bytes(), "’".as_bytes())
     } else {
         (b"'".as_slice(), b"'".as_slice())
     };
+    quote_duration_operand_with_quote_marks(
+        operand,
+        utf8_locale,
+        opening_quote,
+        closing_quote,
+        !utf8_locale,
+    )
+}
+
+fn quote_duration_operand_with_quote_marks(
+    operand: &OsStr,
+    utf8_locale: bool,
+    opening_quote: &[u8],
+    closing_quote: &[u8],
+    escape_apostrophe: bool,
+) -> Vec<u8> {
+    let bytes = operand.as_encoded_bytes();
+    let valid_utf8 = utf8_locale && std::str::from_utf8(bytes).is_ok();
 
     let mut quoted = Vec::with_capacity(bytes.len() + opening_quote.len() + closing_quote.len());
     quoted.extend_from_slice(opening_quote);
@@ -86,7 +110,7 @@ fn quote_duration_operand_with_style(operand: &OsStr, utf8_locale: bool) -> Vec<
             b'\x0c' => quoted.extend_from_slice(b"\\f"),
             b'\r' => quoted.extend_from_slice(b"\\r"),
             b'\\' => quoted.extend_from_slice(b"\\\\"),
-            b'\'' if !utf8_locale => quoted.extend_from_slice(b"\\'"),
+            b'\'' if escape_apostrophe => quoted.extend_from_slice(b"\\'"),
             b' '..=b'~' => quoted.push(*byte),
             _ if valid_utf8 => quoted.push(*byte),
             _ => {
@@ -108,16 +132,23 @@ impl CTError for InvalidTimeIntervalError {
 
     fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
         let mut diagnostic = Vec::new();
+        let locale = rust_i18n::locale();
+        let message = localized_invalid_time_interval(&locale);
         for (index, operand) in self.operands.iter().enumerate() {
             if index > 0 {
                 diagnostic.extend_from_slice(b"\n");
                 diagnostic.extend_from_slice(ctcore::ct_util_name().as_bytes());
                 diagnostic.extend_from_slice(b": ");
             }
-            diagnostic.extend_from_slice(b"invalid time interval ");
-            diagnostic.extend_from_slice(&quote_duration_operand(operand));
+            diagnostic.extend_from_slice(message.as_bytes());
+            diagnostic.push(b' ');
+            diagnostic.extend_from_slice(&quote_duration_operand_for_locale(operand, &locale));
         }
         Cow::Owned(diagnostic)
+    }
+
+    fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
+        Some(Cow::Owned(sleep_usage_hint()))
     }
 
     fn usage(&self) -> bool {
@@ -147,6 +178,10 @@ impl Error for SleepUsageError {}
 impl CTError for SleepUsageError {
     fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Borrowed(&self.message)
+    }
+
+    fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
+        Some(Cow::Owned(sleep_usage_hint()))
     }
 
     fn usage(&self) -> bool {
@@ -190,14 +225,24 @@ fn sleep_parse_numbers(matches: &clap::ArgMatches, allow_empty: bool) -> CTResul
         .map(|numbers| numbers.map(OsString::as_os_str).collect::<Vec<_>>())
         .or_else(|| allow_empty.then(Vec::new))
         .ok_or_else(|| {
-            let err_message = format!(
-                "missing operand\nTry '{} --help' for more information.",
-                ctcore::ct_help_utility_name()
-            );
-            CtSimpleError::new(1, err_message)
+            SleepUsageError::boxed(t!("sleep.errors.missing_operand").to_string().into_bytes())
         })?;
 
     Ok(numbers)
+}
+
+fn sleep_usage_hint() -> Vec<u8> {
+    sleep_usage_hint_for_locale(ctcore::ct_help_utility_name(), &rust_i18n::locale())
+}
+
+fn sleep_usage_hint_for_locale(utility_name: &str, locale: &str) -> Vec<u8> {
+    t!(
+        "sleep.errors.try_help",
+        locale = locale,
+        utility_name = utility_name
+    )
+    .to_string()
+    .into_bytes()
 }
 
 fn standard_long_option(name: &[u8]) -> Option<&'static str> {
@@ -722,6 +767,35 @@ mod tests {
                 b"'\\377'"
             );
         }
+
+        #[test]
+        fn test_invalid_time_interval_uses_simplified_chinese_diagnostic() {
+            assert_eq!(localized_invalid_time_interval("zh-CN"), "无效的时间间隔");
+            assert_eq!(
+                t!("sleep.errors.missing_operand", locale = "zh-CN"),
+                "缺少操作对象"
+            );
+            assert_eq!(
+                quote_duration_operand_for_locale(OsStr::new("invalid"), "zh-CN"),
+                b"\"invalid\""
+            );
+            assert_eq!(
+                sleep_usage_hint_for_locale("sleep", "zh-CN"),
+                "请尝试执行 \"sleep --help\" 来获取更多信息。".as_bytes()
+            );
+        }
+
+        #[test]
+        fn test_invalid_time_interval_uses_default_locale_diagnostic() {
+            assert_eq!(
+                localized_invalid_time_interval("en-US"),
+                "invalid time interval"
+            );
+            assert_eq!(
+                sleep_usage_hint_for_locale("sleep", "en-US"),
+                b"Try 'sleep --help' for more information."
+            );
+        }
     }
     #[cfg(test)]
     mod sleep_parse_numbers_tests {
@@ -733,12 +807,9 @@ mod tests {
             let result = sleep_parse_numbers(&matches, false);
 
             assert!(result.is_err());
-            let error = result.unwrap_err().to_string();
-            assert!(error.contains("missing operand"));
-            assert!(error.contains(&format!(
-                "Try '{} --help' for more information.",
-                ctcore::ct_help_utility_name()
-            )));
+            let error = result.unwrap_err();
+            assert_eq!(error.to_string(), "missing operand");
+            assert!(error.usage());
         }
 
         #[test]

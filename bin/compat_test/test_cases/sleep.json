@@ -413,6 +413,42 @@
             "cleanup_commands": [],
             "tstdin": "",
             "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 简体中文 locale 下本地化无效时长诊断和 usage hint",
+            "args": [
+                "invalid"
+            ],
+            "setup_commands": [
+                "export LC_ALL='zh_CN.utf8'",
+                "export LANG='zh_CN.utf8'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "sleep: 无效的时间间隔 \"invalid\"\n请尝试执行 \"sleep --help\" 来获取更多信息。\n"
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 简体中文 locale 下本地化缺少操作数诊断和 usage hint",
+            "args": [],
+            "setup_commands": [
+                "export LC_ALL='zh_CN.utf8'",
+                "export LANG='zh_CN.utf8'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "sleep: 缺少操作对象\n请尝试执行 \"sleep --help\" 来获取更多信息。\n"
+                }
+            }
         }
     ]
 }

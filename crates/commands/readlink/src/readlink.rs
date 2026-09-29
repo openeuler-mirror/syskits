@@ -20,7 +20,7 @@ use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_posix::GnuGetoptCommandExt;
-use ctcore::ct_quoting_style::gnu_quote_shell;
+use ctcore::ct_quoting_style::gnu_quote_shell_bytes;
 use ctcore::ct_show_error;
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
@@ -147,6 +147,38 @@ impl ctcore::ct_error::CTError for ReadlinkUsageError {
 
     fn usage(&self) -> bool {
         true
+    }
+}
+
+#[derive(Debug)]
+struct ReadlinkPathError {
+    message: Vec<u8>,
+}
+
+impl ReadlinkPathError {
+    fn from_io(path: &OsStr, error: std::io::Error) -> Self {
+        let mut message = readlink_quote_path(path);
+        message.extend_from_slice(b": ");
+        message.extend_from_slice(ctcore::ct_error::strip_errno(&error).as_bytes());
+        Self { message }
+    }
+}
+
+impl std::error::Error for ReadlinkPathError {}
+
+impl Display for ReadlinkPathError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl ctcore::ct_error::CTError for ReadlinkPathError {
+    fn code(&self) -> i32 {
+        1
+    }
+
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
     }
 }
 
@@ -349,8 +381,8 @@ fn readlink_main_with_writer(args: impl ctcore::Args, writer: &mut dyn Write) ->
                 failed = true;
                 if options.verbose {
                     verbose_diagnostic_after_write_error |= write_error.is_some();
-                    let error = err.map_err_context(|| readlink_quote_path(input));
-                    ctcore::ct_error::write_error_diagnostic(error.as_ref())
+                    let error = ReadlinkPathError::from_io(input, err);
+                    ctcore::ct_error::write_error_diagnostic(&error)
                         .map_err_context(String::new)?;
                 }
             }
@@ -410,11 +442,7 @@ pub fn readlink_native_semantic(args: impl ctcore::Args) -> CTResult<ReadlinkSem
             }
             Err(err) => {
                 if options.verbose {
-                    return Err(CtSimpleError::new(
-                        1,
-                        err.map_err_context(move || readlink_quote_path(input))
-                            .to_string(),
-                    ));
+                    return Err(Box::new(ReadlinkPathError::from_io(input, err)));
                 }
                 return Err(1.into());
             }
@@ -720,8 +748,8 @@ fn readlink_show_with_writer(
     Ok(())
 }
 
-fn readlink_quote_path(path: &OsStr) -> String {
-    gnu_quote_shell(path, false)
+fn readlink_quote_path(path: &OsStr) -> Vec<u8> {
+    gnu_quote_shell_bytes(path, false)
 }
 
 #[cfg(test)]
@@ -747,7 +775,13 @@ mod tests {
     fn native_semantic_quotes_non_utf8_path_errors_like_gnu() {
         use std::os::unix::ffi::OsStringExt;
 
+        let _guard = LIBC_LOCALE_LOCK.lock().unwrap();
+        let previous_lc_all = std::env::var_os("LC_ALL");
         let missing = OsString::from_vec(b"missing-\xff".to_vec());
+        unsafe {
+            std::env::set_var("LC_ALL", "C");
+            ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+        }
         let error = readlink_native_semantic(
             [
                 OsString::from(ctcore::ct_util_name()),
@@ -757,6 +791,13 @@ mod tests {
             .into_iter(),
         )
         .expect_err("a missing path must fail in verbose mode");
+        unsafe {
+            match previous_lc_all {
+                Some(value) => std::env::set_var("LC_ALL", value),
+                None => std::env::remove_var("LC_ALL"),
+            }
+            ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+        }
 
         assert_eq!(
             error.diagnostic_bytes().as_ref(),
@@ -794,6 +835,41 @@ mod tests {
         assert_eq!(
             error.diagnostic_bytes().as_ref(),
             "missingé: No such file or directory".as_bytes()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn native_semantic_preserves_printable_non_utf8_locale_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let _guard = LIBC_LOCALE_LOCK.lock().unwrap();
+        let previous_lc_all = std::env::var_os("LC_ALL");
+
+        unsafe {
+            std::env::set_var("LC_ALL", "en_US.iso88591");
+            ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"C".as_ptr());
+        }
+        let result = readlink_native_semantic(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-v"),
+                OsString::from_vec(b"missing-\xe9".to_vec()),
+            ]
+            .into_iter(),
+        );
+        unsafe {
+            match previous_lc_all {
+                Some(value) => std::env::set_var("LC_ALL", value),
+                None => std::env::remove_var("LC_ALL"),
+            }
+            ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+        }
+
+        let error = result.expect_err("a missing path must fail in verbose mode");
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            b"missing-\xe9: No such file or directory"
         );
     }
 

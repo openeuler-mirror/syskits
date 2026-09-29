@@ -512,14 +512,8 @@ where
     }
 }
 
-/// Quote a diagnostic operand with GNU coreutils shell-quoting semantics.
-///
-/// This matches GNU's `quoteaf` behavior on Linux: printable locale sequences
-/// remain literal, while control and invalid bytes are split into `$'...'`
-/// segments with GNU escape spellings. `always_quote` requests the outer
-/// single quotes used by `quoteaf` when the operand otherwise needs no escape.
 #[cfg(target_os = "linux")]
-pub fn gnu_quote_shell(name: &OsStr, always_quote: bool) -> String {
+fn gnu_quote_shell_locale_bytes(name: &OsStr, always_quote: bool, require_utf8: bool) -> Vec<u8> {
     let bytes = name.as_bytes();
     let mut quoted = escape_shell_bytes_with_classifier(bytes, |remaining| unsafe {
         let mut state: crate::libc::mbstate_t = std::mem::zeroed();
@@ -538,10 +532,10 @@ pub fn gnu_quote_shell(name: &OsStr, always_quote: bool) -> String {
         }
 
         let length = if length == 0 { 1 } else { length };
-        let is_utf8 = std::str::from_utf8(&remaining[..length]).is_ok();
         (
             length,
-            is_utf8 && iswprint(wide as crate::libc::c_uint) != 0,
+            (!require_utf8 || std::str::from_utf8(&remaining[..length]).is_ok())
+                && iswprint(wide as crate::libc::c_uint) != 0,
         )
     });
 
@@ -550,7 +544,34 @@ pub fn gnu_quote_shell(name: &OsStr, always_quote: bool) -> String {
         quoted.push(b'\'');
     }
 
-    String::from_utf8(quoted).expect("GNU shell-escaped file names are valid UTF-8")
+    quoted
+}
+
+/// Quote a diagnostic operand with GNU coreutils shell-quoting semantics.
+///
+/// This matches GNU's `quoteaf` behavior on Linux: printable locale sequences
+/// remain literal, while control and invalid bytes are split into `$'...'`
+/// segments with GNU escape spellings. The returned bytes preserve printable
+/// non-UTF-8 locale characters. `always_quote` requests the outer single
+/// quotes used by `quoteaf` when the operand otherwise needs no escape.
+#[cfg(target_os = "linux")]
+pub fn gnu_quote_shell_bytes(name: &OsStr, always_quote: bool) -> Vec<u8> {
+    gnu_quote_shell_locale_bytes(name, always_quote, false)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn gnu_quote_shell_bytes(name: &OsStr, always_quote: bool) -> Vec<u8> {
+    gnu_quote_shell(name, always_quote).into_bytes()
+}
+
+/// Quote a diagnostic operand whose result must be representable as UTF-8.
+///
+/// Call [`gnu_quote_shell_bytes`] when the diagnostic output channel preserves
+/// raw Unix bytes.
+#[cfg(target_os = "linux")]
+pub fn gnu_quote_shell(name: &OsStr, always_quote: bool) -> String {
+    String::from_utf8(gnu_quote_shell_locale_bytes(name, always_quote, true))
+        .expect("UTF-8-safe GNU shell-quoted file names are valid UTF-8")
 }
 
 #[cfg(not(target_os = "linux"))]

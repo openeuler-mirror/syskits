@@ -50,7 +50,7 @@ impl Error for InvalidTimeIntervalError {}
 
 fn quote_duration_operand_for_locale(operand: &OsStr, locale: &str) -> Vec<u8> {
     if locale == "zh-CN" {
-        return quote_duration_operand_with_quote_marks(operand, true, b"\"", b"\"", false);
+        return quote_duration_operand_with_quote_marks(operand, true, b"\"", b"\"", Some(b'"'));
     }
 
     quote_duration_operand_with_style(operand, locale_uses_utf8_quotes())
@@ -86,7 +86,7 @@ fn quote_duration_operand_with_style(operand: &OsStr, utf8_locale: bool) -> Vec<
         utf8_locale,
         opening_quote,
         closing_quote,
-        !utf8_locale,
+        (!utf8_locale).then_some(b'\''),
     )
 }
 
@@ -95,7 +95,7 @@ fn quote_duration_operand_with_quote_marks(
     utf8_locale: bool,
     opening_quote: &[u8],
     closing_quote: &[u8],
-    escape_apostrophe: bool,
+    quote_to_escape: Option<u8>,
 ) -> Vec<u8> {
     let bytes = operand.as_encoded_bytes();
 
@@ -113,7 +113,10 @@ fn quote_duration_operand_with_quote_marks(
             b'\x0c' => quoted.extend_from_slice(b"\\f"),
             b'\r' => quoted.extend_from_slice(b"\\r"),
             b'\\' => quoted.extend_from_slice(b"\\\\"),
-            b'\'' if escape_apostrophe => quoted.extend_from_slice(b"\\'"),
+            escaped if quote_to_escape == Some(escaped) => {
+                quoted.push(b'\\');
+                quoted.push(escaped);
+            }
             b' '..=b'~' => quoted.push(byte),
             _ if utf8_locale => match std::str::from_utf8(&bytes[index..]) {
                 Ok(_) => {
@@ -265,14 +268,16 @@ fn sleep_usage_hint() -> Vec<u8> {
 }
 
 fn sleep_usage_hint_for_locale(utility_name: &str, locale: &str) -> Vec<u8> {
-    sleep_encode_locale_text(
-        &t!(
-            "sleep.errors.try_help",
-            locale = locale,
-            utility_name = utility_name
-        )
-        .to_string(),
+    sleep_encode_locale_text(&sleep_usage_hint_text_for_locale(utility_name, locale))
+}
+
+fn sleep_usage_hint_text_for_locale(utility_name: &str, locale: &str) -> String {
+    t!(
+        "sleep.errors.try_help",
+        locale = locale,
+        utility_name = utility_name
     )
+    .to_string()
 }
 
 fn sleep_encode_locale_text(text: &str) -> Vec<u8> {
@@ -879,8 +884,12 @@ mod tests {
                 b"\"invalid\""
             );
             assert_eq!(
-                sleep_usage_hint_for_locale("sleep", "zh-CN"),
-                "请尝试执行 \"sleep --help\" 来获取更多信息。".as_bytes()
+                quote_duration_operand_for_locale(OsStr::new("a\"b"), "zh-CN"),
+                b"\"a\\\"b\""
+            );
+            assert_eq!(
+                sleep_usage_hint_text_for_locale("sleep", "zh-CN"),
+                "请尝试执行 \"sleep --help\" 来获取更多信息。"
             );
         }
 

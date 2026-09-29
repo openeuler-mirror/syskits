@@ -470,6 +470,27 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "sleep",
+            "description": "原始字节用例：LC_ALL=C.utf8、LANG=C.utf8下执行sleep并传入混合参数；参数完整十六进制=e4b8adff（有效UTF-8字符中，后接无效字节ff），stdin为0字节、完整十六进制=空；预期GNU保留有效UTF-8字符并仅将ff引用为\\377，RC=1、stdout为空、stderr完整十六进制=736c6565703a20696e76616c69642074696d6520696e74657276616c20e28098e4b8ad5c333737e280990a5472792027736c656570202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a。",
+            "args": [
+                "e4b8adff"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C.utf8'",
+                "export LANG='C.utf8'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "736c6565703a20696e76616c69642074696d6520696e74657276616c20e28098e4b8ad5c333737e280990a5472792027736c656570202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

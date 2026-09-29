@@ -98,11 +98,12 @@ fn quote_duration_operand_with_quote_marks(
     escape_apostrophe: bool,
 ) -> Vec<u8> {
     let bytes = operand.as_encoded_bytes();
-    let valid_utf8 = utf8_locale && std::str::from_utf8(bytes).is_ok();
 
     let mut quoted = Vec::with_capacity(bytes.len() + opening_quote.len() + closing_quote.len());
     quoted.extend_from_slice(opening_quote);
-    for byte in operand.as_encoded_bytes() {
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
         match byte {
             b'\x07' => quoted.extend_from_slice(b"\\a"),
             b'\x08' => quoted.extend_from_slice(b"\\b"),
@@ -113,18 +114,42 @@ fn quote_duration_operand_with_quote_marks(
             b'\r' => quoted.extend_from_slice(b"\\r"),
             b'\\' => quoted.extend_from_slice(b"\\\\"),
             b'\'' if escape_apostrophe => quoted.extend_from_slice(b"\\'"),
-            b' '..=b'~' => quoted.push(*byte),
-            _ if valid_utf8 => quoted.push(*byte),
+            b' '..=b'~' => quoted.push(byte),
+            _ if utf8_locale => match std::str::from_utf8(&bytes[index..]) {
+                Ok(_) => {
+                    quoted.extend_from_slice(&bytes[index..]);
+                    break;
+                }
+                Err(error) if error.valid_up_to() > 0 => {
+                    let end = index + error.valid_up_to();
+                    quoted.extend_from_slice(&bytes[index..end]);
+                    index = end;
+                    continue;
+                }
+                Err(error) => {
+                    let invalid_length = error.error_len().unwrap_or(bytes.len() - index);
+                    for invalid_byte in &bytes[index..index + invalid_length] {
+                        push_duration_operand_octal_escape(&mut quoted, *invalid_byte);
+                    }
+                    index += invalid_length;
+                    continue;
+                }
+            },
             _ => {
-                quoted.push(b'\\');
-                quoted.push(b'0' + (byte >> 6));
-                quoted.push(b'0' + ((byte >> 3) & 0o7));
-                quoted.push(b'0' + (byte & 0o7));
+                push_duration_operand_octal_escape(&mut quoted, byte);
             }
         }
+        index += 1;
     }
     quoted.extend_from_slice(closing_quote);
     quoted
+}
+
+fn push_duration_operand_octal_escape(output: &mut Vec<u8>, byte: u8) {
+    output.push(b'\\');
+    output.push(b'0' + (byte >> 6));
+    output.push(b'0' + ((byte >> 3) & 0o7));
+    output.push(b'0' + (byte & 0o7));
 }
 
 impl CTError for InvalidTimeIntervalError {
@@ -817,6 +842,17 @@ mod tests {
             assert_eq!(
                 quote_duration_operand_with_style(input.as_os_str(), true),
                 "‘\\377’".as_bytes()
+            );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_quote_duration_operand_preserves_valid_utf8_before_invalid_bytes() {
+            let input = OsString::from_vec(vec![0xe4, 0xb8, 0xad, 0xff]);
+
+            assert_eq!(
+                quote_duration_operand_with_style(input.as_os_str(), true),
+                "‘中\\377’".as_bytes()
             );
         }
 

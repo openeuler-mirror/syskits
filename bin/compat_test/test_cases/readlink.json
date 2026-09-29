@@ -442,6 +442,66 @@
         },
         {
             "tstdin": "",
+            "command": "readlink",
+            "description": "LC_ALL=C下默认SIGPIPE且stdout为无读端管道时，GNU readlink在写入链接目标时应由SIGPIPE终止，预期RC=141、stdout和stderr均为空。",
+            "setup_commands": [
+                "/usr/bin/ln -s target link"
+            ],
+            "args": ["link"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "default",
+                    "useBash": true
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "/usr/bin/rm -f link"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "LC_ALL=C下调用方显式忽略SIGPIPE且stdout为无读端管道时，GNU readlink必须保留忽略处置，预期RC=1并报告write error: Broken pipe。",
+            "setup_commands": [
+                "/usr/bin/ln -s target link"
+            ],
+            "args": ["link"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "ignore",
+                    "useBash": true
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: write error: Broken pipe\n"
+                }
+            },
+            "cleanup_commands": [
+                "/usr/bin/rm -f link"
+            ]
+        },
+        {
+            "tstdin": "",
             "byteMode": true,
             "command": "readlink",
             "description": "原始字节用例：LC_ALL=C、LANG=C下读取名称字节为6c696e6bff（link\\xff）的符号链接，其目标字节为746172676574ff（target\\xff）；stdin为空；预期RC=0、stdout完整十六进制为746172676574ff0a（target\\xff换行）、stderr为空，不能拒绝非UTF-8操作数或替换链接目标字节。",

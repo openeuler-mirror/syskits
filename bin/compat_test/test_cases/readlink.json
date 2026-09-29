@@ -830,6 +830,56 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "-f物理规范化时，普通文件后的..必须按Linux路径解析返回ENOTDIR，不能直接弹出普通文件并输出父目录。",
+            "setup_commands": [
+                "printf data > regular"
+            ],
+            "args": ["-f", "-v", "regular/.."],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: regular/..: Not a directory\\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f regular"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "-e物理规范化时，普通文件后的..必须按Linux路径解析返回ENOTDIR，不能直接弹出普通文件并输出父目录。",
+            "setup_commands": [
+                "printf data > regular"
+            ],
+            "args": ["-e", "-v", "regular/.."],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: regular/..: Not a directory\\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f regular"
+            ]
         }
     ]
 }

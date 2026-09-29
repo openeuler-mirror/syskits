@@ -241,6 +241,18 @@ fn resolve_symlink<P: AsRef<Path>>(path: P) -> IOResult<Option<PathBuf>> {
     Ok(result)
 }
 
+fn not_a_directory_error() -> Error {
+    #[cfg(unix)]
+    {
+        Error::from_raw_os_error(libc::ENOTDIR)
+    }
+
+    #[cfg(not(unix))]
+    {
+        Error::new(ErrorKind::Other, "Not a directory")
+    }
+}
+
 #[derive(Clone)]
 enum OwningComponent {
     Prefix(OsString),
@@ -311,7 +323,12 @@ pub fn canonicalize<P: AsRef<Path>>(
     let has_to_be_directory =
         (miss_mode == MissingHandling::Normal || miss_mode == MissingHandling::Existing) && {
             let path_str = original.to_string_lossy();
-            path_str.ends_with(MAIN_SEPARATOR) || path_str.ends_with('/')
+            path_str.ends_with(MAIN_SEPARATOR)
+                || path_str.ends_with('/')
+                // Path::components folds an interior or trailing `.` away,
+                // but POSIX still requires the preceding component to be a
+                // directory when the operand ends in `/.`.
+                || path_str.ends_with("/.")
         };
     let original = if original.is_absolute() {
         original.to_path_buf()
@@ -337,8 +354,21 @@ pub fn canonicalize<P: AsRef<Path>>(
             OwningComponent::RootDir | OwningComponent::Normal(..) => {
                 result.push(part.as_os_str());
             }
-            OwningComponent::CurDir => {}
+            OwningComponent::CurDir => {
+                if miss_mode != MissingHandling::Missing && res_mode != ResolveMode::None {
+                    let metadata = fs::metadata(&result)?;
+                    if !metadata.is_dir() {
+                        return Err(not_a_directory_error());
+                    }
+                }
+            }
             OwningComponent::ParentDir => {
+                if miss_mode != MissingHandling::Missing && res_mode != ResolveMode::None {
+                    let metadata = fs::metadata(&result)?;
+                    if !metadata.is_dir() {
+                        return Err(not_a_directory_error());
+                    }
+                }
                 result.pop();
             }
         }
@@ -379,7 +409,8 @@ pub fn canonicalize<P: AsRef<Path>>(
             }
             Err(e) => {
                 if miss_mode == MissingHandling::Existing
-                    || (miss_mode == MissingHandling::Normal && !parts.is_empty())
+                    || (miss_mode == MissingHandling::Normal
+                        && (!parts.is_empty() || e.kind() != ErrorKind::NotFound))
                 {
                     return Err(e);
                 }
@@ -910,6 +941,26 @@ mod tests {
         unsafe { libc::setfsuid(previous_fsuid) };
 
         assert_eq!(result.unwrap(), missing);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_canonicalize_physical_rejects_parent_after_regular_file() {
+        let temp_dir = tempdir().unwrap();
+        let regular = temp_dir.path().join("regular");
+        fs::write(&regular, b"data").unwrap();
+        for missing_handling in [MissingHandling::Normal, MissingHandling::Existing] {
+            for suffix in ["..", ".", "child"] {
+                let error = canonicalize(
+                    regular.join(suffix),
+                    missing_handling,
+                    ResolveMode::Physical,
+                )
+                .expect_err("a regular file cannot be traversed as a directory");
+
+                assert_eq!(error.raw_os_error(), Some(libc::ENOTDIR));
+            }
+        }
     }
 
     #[cfg(unix)]

@@ -278,6 +278,32 @@
                     "exit_code": 1
                 }
             }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 不接受 GNU 未定义的短帮助选项",
+            "args": [
+                "-h"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 不接受 GNU 未定义的短版本选项",
+            "args": [
+                "-V"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
         }
     ]
 }

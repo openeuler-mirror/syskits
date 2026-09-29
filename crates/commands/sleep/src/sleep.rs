@@ -131,6 +131,10 @@ pub fn ct_app() -> Command {
             .help(t!("sleep.clap.sleep_number"))
             .value_name(sleep_flags::SLEEP_NUMBER)
             .action(ArgAction::Append),
+        Arg::new("help").long("help").action(ArgAction::Help),
+        Arg::new("version")
+            .long("version")
+            .action(ArgAction::Version),
     ];
 
     Command::new(utility_name)
@@ -139,6 +143,8 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .after_help(t!("sleep.after_help"))
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(args)
 }
 
@@ -376,7 +382,7 @@ mod tests {
         }
 
         #[test]
-        fn test_sleep_main_execution_other_version() {
+        fn test_sleep_main_rejects_short_version_option() {
             let args = [ctcore::ct_util_name(), "-V"];
 
             let result = sleep_main(args.iter().map(OsString::from));
@@ -392,7 +398,7 @@ mod tests {
         }
 
         #[test]
-        fn test_sleep_main_execution_help_short() {
+        fn test_sleep_main_rejects_short_help_option() {
             let args = [ctcore::ct_util_name(), "-h"];
             let result = sleep_main(args.iter().map(OsString::from));
             assert!(result.is_err());
@@ -489,8 +495,8 @@ mod tests {
         //   [NUMBER]...  pause for NUMBER seconds
         //
         // Options:
-        //   -h, --help     Print help
-        //   -V, --version  Print version
+        //   --help         Print help
+        //   --version      Print version
 
         #[test]
         fn test_ct_app_execution_version() {
@@ -503,14 +509,14 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_app_execution_other_version() {
+        fn test_ct_app_rejects_short_version_option() {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), "-V"];
 
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
 
         #[test]
@@ -524,13 +530,13 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_app_execution_help_short() {
+        fn test_ct_app_rejects_short_help_option() {
             let command = ct_app();
 
             let help_args = vec![ctcore::ct_util_name(), "-h"];
             let result = command.try_get_matches_from(help_args);
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
 
         #[test]

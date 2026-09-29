@@ -47,8 +47,35 @@ impl Display for InvalidTimeIntervalError {
 impl Error for InvalidTimeIntervalError {}
 
 fn quote_duration_operand(operand: &OsStr) -> Vec<u8> {
-    let mut quoted = Vec::with_capacity(operand.len() + 2);
-    quoted.push(b'\'');
+    quote_duration_operand_with_style(operand, locale_uses_utf8_quotes())
+}
+
+fn locale_uses_utf8_quotes() -> bool {
+    // SAFETY: setlocale with a null locale argument only returns the current
+    // process-owned locale name, which is copied before it can be changed.
+    unsafe {
+        let locale = ctcore::libc::setlocale(ctcore::libc::LC_CTYPE, std::ptr::null());
+        (!locale.is_null())
+            .then(|| {
+                CStr::from_ptr(locale)
+                    .to_string_lossy()
+                    .to_ascii_uppercase()
+            })
+            .is_some_and(|locale| locale.contains("UTF-8") || locale.contains("UTF8"))
+    }
+}
+
+fn quote_duration_operand_with_style(operand: &OsStr, utf8_locale: bool) -> Vec<u8> {
+    let bytes = operand.as_encoded_bytes();
+    let valid_utf8 = utf8_locale && std::str::from_utf8(bytes).is_ok();
+    let (opening_quote, closing_quote) = if utf8_locale {
+        ("‘".as_bytes(), "’".as_bytes())
+    } else {
+        (b"'".as_slice(), b"'".as_slice())
+    };
+
+    let mut quoted = Vec::with_capacity(bytes.len() + opening_quote.len() + closing_quote.len());
+    quoted.extend_from_slice(opening_quote);
     for byte in operand.as_encoded_bytes() {
         match byte {
             b'\x07' => quoted.extend_from_slice(b"\\a"),
@@ -59,8 +86,9 @@ fn quote_duration_operand(operand: &OsStr) -> Vec<u8> {
             b'\x0c' => quoted.extend_from_slice(b"\\f"),
             b'\r' => quoted.extend_from_slice(b"\\r"),
             b'\\' => quoted.extend_from_slice(b"\\\\"),
-            b'\'' => quoted.extend_from_slice(b"\\'"),
+            b'\'' if !utf8_locale => quoted.extend_from_slice(b"\\'"),
             b' '..=b'~' => quoted.push(*byte),
+            _ if valid_utf8 => quoted.push(*byte),
             _ => {
                 quoted.push(b'\\');
                 quoted.push(b'0' + (byte >> 6));
@@ -69,7 +97,7 @@ fn quote_duration_operand(operand: &OsStr) -> Vec<u8> {
             }
         }
     }
-    quoted.push(b'\'');
+    quoted.extend_from_slice(closing_quote);
     quoted
 }
 
@@ -661,14 +689,37 @@ mod tests {
             assert_eq!(durations, [&OsString::from("0"), &OsString::from("--help")]);
         }
 
+        #[test]
+        fn test_quote_duration_operand_uses_utf8_locale_quotes() {
+            assert_eq!(
+                quote_duration_operand_with_style(OsStr::new("a'b"), true),
+                "‘a'b’".as_bytes()
+            );
+            assert_eq!(
+                quote_duration_operand_with_style(OsStr::new("\u{4e2d}"), true),
+                "‘\u{4e2d}’".as_bytes()
+            );
+        }
+
         #[cfg(unix)]
         #[test]
-        fn test_sleep_handle_second_preserves_non_utf8_diagnostic_bytes() {
-            let result = sleep_handle_second(&[OsString::from_vec(vec![0xff])]).unwrap_err();
+        fn test_quote_duration_operand_escapes_invalid_utf8_in_utf8_locale() {
+            let input = OsString::from_vec(vec![0xff]);
 
             assert_eq!(
-                result.diagnostic_bytes().as_ref(),
-                b"invalid time interval '\\377'"
+                quote_duration_operand_with_style(input.as_os_str(), true),
+                "‘\\377’".as_bytes()
+            );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_quote_duration_operand_preserves_non_utf8_c_locale_bytes() {
+            let input = OsString::from_vec(vec![0xff]);
+
+            assert_eq!(
+                quote_duration_operand_with_style(input.as_os_str(), false),
+                b"'\\377'"
             );
         }
     }

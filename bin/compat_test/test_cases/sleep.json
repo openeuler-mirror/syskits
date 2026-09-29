@@ -375,6 +375,25 @@
             }
         },
         {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: UTF-8 locale 使用 GNU 诊断引号",
+            "args": [
+                "invalid"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C.utf8'",
+                "export LANG='C.utf8'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "sleep: invalid time interval ‘invalid’\nTry 'sleep --help' for more information.\n"
+                }
+            }
+        },
+        {
             "command": "sleep",
             "description": "原始字节用例：export LC_ALL='C'，export LANG='C'；执行 sleep <0xff>；参数完整十六进制=ff；stdin为0字节、完整十六进制=空；输入fixture：无文件fixture；预期RC=1，stdout为0字节、完整十六进制=空，stderr为86字节、完整十六进制=736c6565703a20696e76616c69642074696d6520696e74657276616c20275c333737270a5472792027736c656570202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a。",
             "args": [

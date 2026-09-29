@@ -302,6 +302,26 @@
             "cleanup_commands": [
                 "rm -f link-one link-two"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "多个操作数时 -n 即使与 -s 同用也必须报告已忽略 no-newline。",
+            "setup_commands": [
+                "ln -s first link-one",
+                "ln -s second link-two"
+            ],
+            "args": ["-n", "-s", "link-one", "link-two"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "first\nsecond\n",
+                    "stderr": "readlink: ignoring --no-newline with multiple arguments\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f link-one link-two"
+            ]
         }
     ]
 }

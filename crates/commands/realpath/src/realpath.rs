@@ -334,7 +334,7 @@ fn realpath_canonicalize(
     }
     // GNU first processes the input in CAN_NOLINKS mode.  This validates the
     // directory components before a later /./ or /.. can discard them.
-    validate_path_components(path, missing_handling)?;
+    validate_path_components(path, missing_handling, resolve_mode == ResolveMode::None)?;
 
     match resolve_mode {
         ResolveMode::None => canonicalize(path, MissingHandling::Missing, ResolveMode::None),
@@ -347,14 +347,18 @@ fn realpath_canonicalize(
 }
 
 #[cfg(unix)]
-fn validate_path_components(path: &Path, missing_handling: MissingHandling) -> io::Result<()> {
+fn validate_path_components(
+    path: &Path,
+    missing_handling: MissingHandling,
+    validate_lexical_final_component: bool,
+) -> io::Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
     if missing_handling == MissingHandling::Missing {
         return Ok(());
     }
 
-    if missing_handling == MissingHandling::Existing {
+    if missing_handling == MissingHandling::Existing && !validate_lexical_final_component {
         return std::fs::metadata(path).map(|_| ());
     }
 
@@ -393,14 +397,17 @@ fn validate_path_components(path: &Path, missing_handling: MissingHandling) -> i
                         Ok(_) => {}
                         Err(error)
                             if error.kind() == io::ErrorKind::NotFound
+                                && missing_handling == MissingHandling::Normal
                                 && suffix.iter().all(|byte| *byte == b'/') => {}
                         Err(error) => return Err(error),
                     }
                 } else if suffix.is_empty() {
-                    if let Err(error) = std::fs::metadata(&prefix) {
-                        if error.kind() != io::ErrorKind::NotFound {
-                            return Err(error);
-                        }
+                    match std::fs::metadata(&prefix) {
+                        Ok(_) => {}
+                        Err(error)
+                            if missing_handling == MissingHandling::Normal
+                                && error.kind() == io::ErrorKind::NotFound => {}
+                        Err(error) => return Err(error),
                     }
                 }
             }
@@ -435,7 +442,11 @@ fn strip_suffix_requires_directory(suffix: &[u8]) -> bool {
 }
 
 #[cfg(not(unix))]
-fn validate_path_components(path: &Path, missing_handling: MissingHandling) -> io::Result<()> {
+fn validate_path_components(
+    path: &Path,
+    missing_handling: MissingHandling,
+    _validate_lexical_final_component: bool,
+) -> io::Result<()> {
     match missing_handling {
         MissingHandling::Existing => std::fs::metadata(path).map(|_| ()),
         MissingHandling::Normal => match std::fs::metadata(path) {
@@ -723,6 +734,33 @@ mod tests {
         assert_eq!(error.code(), 1);
         assert_eq!(error.to_string(), "missing operand");
         assert!(output.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_strip_existing_validates_lexical_final_component() {
+        let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+        std::fs::create_dir_all(temp_dir.path().join("d/a")).unwrap();
+        std::fs::create_dir(temp_dir.path().join("d/b")).unwrap();
+        std::os::unix::fs::symlink("d/a", temp_dir.path().join("linkdir")).unwrap();
+        let input = temp_dir.path().join("linkdir/../b");
+
+        let error = realpath_canonicalize(&input, MissingHandling::Existing, ResolveMode::None)
+            .unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn test_strip_existing_rejects_missing_trailing_directory() {
+        let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+        std::fs::create_dir(temp_dir.path().join("d")).unwrap();
+        let input = temp_dir.path().join("d/missing/");
+
+        let error = realpath_canonicalize(&input, MissingHandling::Existing, ResolveMode::None)
+            .unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
     }
 
     mod realpath_flags_tests {

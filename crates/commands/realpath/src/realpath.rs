@@ -17,6 +17,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::OsStringValueParser, cr
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_fs::make_path_relative_to;
+use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::{
     Tool,
     ct_display::Quotable,
@@ -435,6 +436,7 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .args(args)
+        .gnu_getopt()
 }
 
 /// 将路径解析为绝对形式并打印。
@@ -535,7 +537,10 @@ mod tests {
     use super::*;
     use std::ffi::OsString;
     use std::fs::File;
+    use std::sync::Mutex;
     use tempfile::Builder;
+
+    static POSIXLY_CORRECT_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_tool_implementation() {
@@ -687,6 +692,31 @@ mod tests {
             assert_eq!(
                 RealpathFlags::new(relative_base).unwrap().relative_base,
                 Some(PathBuf::from("/tmp"))
+            );
+        }
+
+        #[test]
+        fn test_posixly_correct_stops_option_parsing_at_first_file() {
+            let _guard = POSIXLY_CORRECT_LOCK.lock().unwrap();
+            let previous = std::env::var_os("POSIXLY_CORRECT");
+            unsafe { std::env::set_var("POSIXLY_CORRECT", "1") };
+            let matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "a", "-m", "missing"])
+                .unwrap();
+            match previous {
+                Some(value) => unsafe { std::env::set_var("POSIXLY_CORRECT", value) },
+                None => unsafe { std::env::remove_var("POSIXLY_CORRECT") },
+            }
+
+            let flags = RealpathFlags::new(matches).unwrap();
+            assert_eq!(flags.can_mode, MissingHandling::Normal);
+            assert_eq!(
+                flags.files,
+                [
+                    PathBuf::from("a"),
+                    PathBuf::from("-m"),
+                    PathBuf::from("missing")
+                ]
             );
         }
 

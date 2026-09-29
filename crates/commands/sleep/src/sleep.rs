@@ -17,17 +17,83 @@ use std::thread;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::time::Duration;
 
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
 use ctcore::ct_format::num_parser::{ParseError, ParsedNumber};
-use ctcore::ct_show_error;
-use std::ffi::OsString;
+use std::borrow::Cow;
+use std::error::Error;
+use std::ffi::{OsStr, OsString};
+use std::fmt::{Display, Formatter};
 use sys_locale::get_locale;
 
 mod sleep_flags {
     pub const SLEEP_NUMBER: &str = "NUMBER";
+}
+
+#[derive(Debug)]
+struct InvalidTimeIntervalError {
+    operands: Vec<OsString>,
+}
+
+impl Display for InvalidTimeIntervalError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("invalid time interval")
+    }
+}
+
+impl Error for InvalidTimeIntervalError {}
+
+fn quote_duration_operand(operand: &OsStr) -> Vec<u8> {
+    let mut quoted = Vec::with_capacity(operand.len() + 2);
+    quoted.push(b'\'');
+    for byte in operand.as_encoded_bytes() {
+        match byte {
+            b'\x07' => quoted.extend_from_slice(b"\\a"),
+            b'\x08' => quoted.extend_from_slice(b"\\b"),
+            b'\t' => quoted.extend_from_slice(b"\\t"),
+            b'\n' => quoted.extend_from_slice(b"\\n"),
+            b'\x0b' => quoted.extend_from_slice(b"\\v"),
+            b'\x0c' => quoted.extend_from_slice(b"\\f"),
+            b'\r' => quoted.extend_from_slice(b"\\r"),
+            b'\\' => quoted.extend_from_slice(b"\\\\"),
+            b'\'' => quoted.extend_from_slice(b"\\'"),
+            b' '..=b'~' => quoted.push(*byte),
+            _ => {
+                quoted.push(b'\\');
+                quoted.push(b'0' + (byte >> 6));
+                quoted.push(b'0' + ((byte >> 3) & 0o7));
+                quoted.push(b'0' + (byte & 0o7));
+            }
+        }
+    }
+    quoted.push(b'\'');
+    quoted
+}
+
+impl CTError for InvalidTimeIntervalError {
+    fn code(&self) -> i32 {
+        1
+    }
+
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        let mut diagnostic = Vec::new();
+        for (index, operand) in self.operands.iter().enumerate() {
+            if index > 0 {
+                diagnostic.extend_from_slice(b"\n");
+                diagnostic.extend_from_slice(ctcore::ct_util_name().as_bytes());
+                diagnostic.extend_from_slice(b": ");
+            }
+            diagnostic.extend_from_slice(b"invalid time interval ");
+            diagnostic.extend_from_slice(&quote_duration_operand(operand));
+        }
+        Cow::Owned(diagnostic)
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
 }
 
 #[derive(Default)]
@@ -59,10 +125,10 @@ pub fn sleep_main(args: impl ctcore::Args) -> CTResult<()> {
     sleep(sleep_dur)
 }
 
-fn sleep_parse_numbers(matches: &clap::ArgMatches, allow_empty: bool) -> CTResult<Vec<&str>> {
+fn sleep_parse_numbers(matches: &clap::ArgMatches, allow_empty: bool) -> CTResult<Vec<&OsStr>> {
     let numbers = matches
-        .get_many::<String>(sleep_flags::SLEEP_NUMBER)
-        .map(|numbers| numbers.map(String::as_str).collect::<Vec<_>>())
+        .get_many::<OsString>(sleep_flags::SLEEP_NUMBER)
+        .map(|numbers| numbers.map(OsString::as_os_str).collect::<Vec<_>>())
         .or_else(|| allow_empty.then(Vec::new))
         .ok_or_else(|| {
             let err_message = format!(
@@ -91,28 +157,32 @@ fn parse_duration(input: &str) -> Option<f64> {
     }
 }
 
-fn sleep_handle_second(args: &[&str]) -> CTResult<Duration> {
-    let mut arg_error = false;
+fn sleep_handle_second<T: AsRef<OsStr>>(args: &[T]) -> CTResult<Duration> {
+    let mut invalid_operands = Vec::new();
 
     let sleep_dur = args
         .iter()
-        .filter_map(|input| match parse_duration(input) {
-            Some(seconds) if seconds >= 0.0 => {
-                let secs = seconds.trunc() as u64;
-                let nanos = ((seconds - seconds.trunc()) * 1_000_000_000.0) as u32;
-                Some(Duration::new(secs, nanos))
-            }
-            _ => {
-                arg_error = true;
-                ct_show_error!("invalid time interval '{}'", input);
-                None
-            }
-        })
+        .filter_map(
+            |input| match input.as_ref().to_str().and_then(parse_duration) {
+                Some(seconds) if seconds >= 0.0 => {
+                    let secs = seconds.trunc() as u64;
+                    let nanos = ((seconds - seconds.trunc()) * 1_000_000_000.0) as u32;
+                    Some(Duration::new(secs, nanos))
+                }
+                _ => {
+                    invalid_operands.push(input.as_ref().to_os_string());
+                    None
+                }
+            },
+        )
         .fold(Duration::ZERO, |acc, n| acc.saturating_add(n));
 
-    if arg_error {
-        return Err(CTsageError::new(1, ""));
-    };
+    if !invalid_operands.is_empty() {
+        return Err(InvalidTimeIntervalError {
+            operands: invalid_operands,
+        }
+        .into());
+    }
 
     Ok(sleep_dur)
 }
@@ -132,7 +202,8 @@ pub fn ct_app() -> Command {
         Arg::new(sleep_flags::SLEEP_NUMBER)
             .help(t!("sleep.clap.sleep_number"))
             .value_name(sleep_flags::SLEEP_NUMBER)
-            .action(ArgAction::Append),
+            .action(ArgAction::Append)
+            .value_parser(OsStringValueParser::new()),
         Arg::new("help").long("help").action(ArgAction::Help),
         Arg::new("version")
             .long("version")
@@ -154,6 +225,8 @@ pub fn ct_app() -> Command {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStringExt;
 
     #[test]
     fn test_tool_implementation() {
@@ -179,8 +252,11 @@ mod tests {
 
         #[test]
         fn test_sleep_parse_numbers() {
-            let cmd = Command::new("test")
-                .arg(Arg::new(sleep_flags::SLEEP_NUMBER).action(ArgAction::Append));
+            let cmd = Command::new("test").arg(
+                Arg::new(sleep_flags::SLEEP_NUMBER)
+                    .action(ArgAction::Append)
+                    .value_parser(OsStringValueParser::new()),
+            );
 
             let matches = cmd.try_get_matches_from(vec!["test", "5", "10"]).unwrap();
             let numbers = sleep_parse_numbers(&matches, false).unwrap();
@@ -292,6 +368,17 @@ mod tests {
         #[test]
         fn test_sleep_handle_second_accepts_leading_whitespace() {
             assert_eq!(sleep_handle_second(&[" 0"]).unwrap(), Duration::ZERO);
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_sleep_handle_second_preserves_non_utf8_diagnostic_bytes() {
+            let result = sleep_handle_second(&[OsString::from_vec(vec![0xff])]).unwrap_err();
+
+            assert_eq!(
+                result.diagnostic_bytes().as_ref(),
+                b"invalid time interval '\\377'"
+            );
         }
     }
     #[cfg(test)]
@@ -497,6 +584,8 @@ mod tests {
         use clap::error::ErrorKind;
 
         use super::*;
+        #[cfg(unix)]
+        use std::os::unix::ffi::OsStringExt;
 
         // sleep 接口: sleep NUMBER[SUFFIX]...
         //             sleep OPTION
@@ -576,6 +665,18 @@ mod tests {
             let args = vec![ctcore::ct_util_name()];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_ct_app_accepts_non_utf8_duration_operand() {
+            let command = ct_app();
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from_vec(vec![0xff]),
+            ];
+
+            assert!(command.try_get_matches_from(args).is_ok());
         }
 
         #[test]

@@ -265,6 +265,19 @@
                     "exit_code": 1
                 }
             }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 允许前导空白但拒绝数值后的空白",
+            "args": [
+                "0 "
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
         }
     ]
 }

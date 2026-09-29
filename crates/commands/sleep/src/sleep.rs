@@ -133,7 +133,7 @@ fn sleep_parse_numbers(matches: &clap::ArgMatches, allow_empty: bool) -> CTResul
         .ok_or_else(|| {
             let err_message = format!(
                 "missing operand\nTry '{} --help' for more information.",
-                ctcore::ct_execute_phrase()
+                ctcore::ct_help_utility_name()
             );
             CtSimpleError::new(1, err_message)
         })?;
@@ -391,7 +391,12 @@ mod tests {
             let result = sleep_parse_numbers(&matches, false);
 
             assert!(result.is_err());
-            assert!(result.unwrap_err().to_string().contains("missing operand"));
+            let error = result.unwrap_err().to_string();
+            assert!(error.contains("missing operand"));
+            assert!(error.contains(&format!(
+                "Try '{} --help' for more information.",
+                ctcore::ct_help_utility_name()
+            )));
         }
 
         #[test]

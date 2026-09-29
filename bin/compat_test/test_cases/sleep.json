@@ -195,7 +195,9 @@
             "args": [],
             "expectation": {
                 "execution": {
-                    "exit_code": 1
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "sleep: missing operand\nTry 'sleep --help' for more information.\n"
                 }
             }
         },

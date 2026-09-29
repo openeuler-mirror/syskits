@@ -371,6 +371,46 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "GNU未定义-h短帮助选项，必须报告invalid option并以状态1退出。",
+            "args": ["-h"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: invalid option -- 'h'\nTry 'readlink --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "GNU未定义-V短版本选项，必须报告invalid option并以状态1退出。",
+            "args": ["-V"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: invalid option -- 'V'\nTry 'readlink --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

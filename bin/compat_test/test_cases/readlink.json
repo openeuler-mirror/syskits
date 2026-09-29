@@ -630,6 +630,26 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "canonicalize-missing模式的空操作数不能被解释为当前目录，必须静默失败。",
+            "args": ["-m", ""],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

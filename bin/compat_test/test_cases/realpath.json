@@ -3,6 +3,26 @@
         {
             "tstdin": "",
             "command": "realpath",
+            "description": "不传FILE操作数时，realpath应按GNU报告missing operand并返回1，而不是输出clap的必填参数诊断。",
+            "args": [],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "realpath: missing operand\nTry 'realpath --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
             "description": "nobody执行realpath directory/missing；directory仅有搜索权限0111时，最终缺失分量仍应按GNU成功解析，不能要求目录可读。",
             "args": [
                 "directory/missing"

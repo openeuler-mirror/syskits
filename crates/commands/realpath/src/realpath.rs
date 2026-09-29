@@ -258,6 +258,8 @@ pub fn realpath_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTRes
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     // 尝试从提供的参数中获取匹配信息，如果失败，则以退出码 1 终止程序
+    let args = args.collect::<Vec<_>>();
+    validate_gnu_short_options(&args)?;
     let matches = ct_app().try_get_matches_from(args).with_exit_code(1)?;
 
     // 根据匹配信息创建 RealpathFlags 对象，用于指导后续的路径解析操作
@@ -271,6 +273,8 @@ pub fn realpath_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTRes
 pub fn realpath_native_semantic(args: impl ctcore::Args) -> CTResult<RealpathSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = args.collect::<Vec<_>>();
+    validate_gnu_short_options(&args)?;
     let matches = ct_app().try_get_matches_from(args).with_exit_code(1)?;
     let flags = RealpathFlags::new(matches)?;
 
@@ -319,6 +323,42 @@ fn semantic_missing_handling(mode: MissingHandling) -> RealpathMissingHandling {
         MissingHandling::Existing => RealpathMissingHandling::Existing,
         MissingHandling::Missing => RealpathMissingHandling::Missing,
     }
+}
+
+fn validate_gnu_short_options(args: &[OsString]) -> CTResult<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+
+        for argument in args.iter().skip(1) {
+            let bytes = argument.as_os_str().as_bytes();
+            if bytes == b"--" {
+                break;
+            }
+            if bytes == b"-" || !bytes.starts_with(b"-") || bytes.starts_with(b"--") {
+                if ctcore::ct_posix::posixly_correct()
+                    && (bytes == b"-" || !bytes.starts_with(b"-"))
+                {
+                    break;
+                }
+                continue;
+            }
+
+            for option in &bytes[1..] {
+                if matches!(option, b'e' | b'L' | b'm' | b'P' | b'q' | b's' | b'z') {
+                    continue;
+                }
+                if matches!(option, b'h' | b'V') {
+                    return Err(CTsageError::new(
+                        1,
+                        format!("invalid option -- '{}'", char::from(*option)),
+                    ));
+                }
+                break;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn realpath_canonicalize(
@@ -568,6 +608,10 @@ pub fn ct_app() -> Command {
             .action(ArgAction::Append)
             .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::AnyPath),
+        Arg::new("help").long("help").action(ArgAction::Help),
+        Arg::new("version")
+            .long("version")
+            .action(ArgAction::Version),
     ];
 
     Command::new(utility_name)
@@ -575,6 +619,8 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(args)
         .gnu_getopt()
 }
@@ -1634,6 +1680,18 @@ mod tests {
                 result.unwrap_err().kind(),
                 clap::error::ErrorKind::DisplayHelp
             );
+        }
+
+        #[test]
+        fn test_app_rejects_gnu_absent_short_help_and_version_options() {
+            for option in ["-h", "-V"] {
+                let result = ct_app().try_get_matches_from([ctcore::ct_util_name(), option]);
+
+                assert_eq!(
+                    result.unwrap_err().kind(),
+                    clap::error::ErrorKind::UnknownArgument
+                );
+            }
         }
 
         #[test]

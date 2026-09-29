@@ -184,6 +184,29 @@
         {
             "tstdin": "",
             "command": "realpath",
+            "description": "带=值的歧义长选项--rel=.必须保留完整选项文本；GNU诊断引用--rel=.，不能在歧义诊断中丢失=.。",
+            "args": [
+                "--rel=.",
+                "."
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "realpath: option '--rel=.' is ambiguous; possibilities: '--relative-to' '--relative-base'\nTry 'realpath --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
             "description": "--relative-to缺少参数时必须采用GNU requires an argument诊断。",
             "args": [
                 "--relative-to"

@@ -517,20 +517,15 @@ fn normalize_gnu_options(args: Vec<OsString>) -> CTResult<Vec<OsString>> {
                     }
                     None if candidates.len() == 1 => candidates[0],
                     None => {
-                        let possibilities = candidates
-                            .iter()
-                            .map(|(candidate, _)| {
-                                format!("'--{}'", String::from_utf8_lossy(candidate))
-                            })
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        return Err(CTsageError::new(
-                            1,
-                            format!(
-                                "option '--{}' is ambiguous; possibilities: {possibilities}",
-                                String::from_utf8_lossy(long_option)
-                            ),
-                        ));
+                        let mut message = b"option '--".to_vec();
+                        message.extend_from_slice(long_option);
+                        message.extend_from_slice(b"' is ambiguous; possibilities:");
+                        for (candidate, _) in candidates {
+                            message.extend_from_slice(b" '--");
+                            message.extend_from_slice(candidate);
+                            message.push(b'\'');
+                        }
+                        return Err(RealpathUsageError::boxed(message));
                     }
                 };
 
@@ -1165,6 +1160,21 @@ mod tests {
             assert_eq!(
                 error.diagnostic_bytes().as_ref(),
                 b"option '--rel=.' is ambiguous; possibilities: '--relative-to' '--relative-base'"
+            );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_normalize_gnu_options_preserves_raw_bytes_in_ambiguous_diagnostic() {
+            let error = normalize_gnu_options(vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from_vec(b"--rel=\xff".to_vec()),
+            ])
+            .expect_err("an ambiguous long option must fail");
+
+            assert_eq!(
+                error.diagnostic_bytes().as_ref(),
+                b"option '--rel=\xff' is ambiguous; possibilities: '--relative-to' '--relative-base'"
             );
         }
 

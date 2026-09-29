@@ -155,7 +155,7 @@ impl ReadlinkOptions {
             return Err(CTsageError::new(1, "missing operand"));
         }
 
-        if is_no_trailing_delimiter && files.len() > 1 && !is_silent {
+        if is_no_trailing_delimiter && files.len() > 1 {
             ct_show_error!("ignoring --no-newline with multiple arguments");
             is_no_trailing_delimiter = false;
         }
@@ -586,6 +586,27 @@ mod tests {
             let mut output = Vec::new();
 
             assert!(readlink_main_with_writer(args.into_iter(), &mut output).is_err());
+            assert_eq!(output, b"first\nsecond\n");
+        }
+
+        #[test]
+        fn readlink_main_ignores_no_newline_for_multiple_operands_even_when_silent() {
+            let dir = tempdir().unwrap();
+            let link_one = dir.path().join("link-one");
+            let link_two = dir.path().join("link-two");
+            symlink("first", &link_one).unwrap();
+            symlink("second", &link_two).unwrap();
+
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-n"),
+                OsString::from("-s"),
+                link_one.into_os_string(),
+                link_two.into_os_string(),
+            ];
+            let mut output = Vec::new();
+
+            assert!(readlink_main_with_writer(args.into_iter(), &mut output).is_ok());
             assert_eq!(output, b"first\nsecond\n");
         }
 

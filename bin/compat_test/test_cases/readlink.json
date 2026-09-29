@@ -756,6 +756,58 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "重复-n/--no-newline必须按GNU幂等处理；读取链接link到target后RC=0、stdout为6字节target且不附加换行。",
+            "setup_commands": [
+                "/usr/bin/ln -s target link"
+            ],
+            "args": ["-n", "-n", "link"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "target",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "/usr/bin/rm -f link"
+            ]
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "readlink",
+            "description": "重复-z/--zero必须按GNU幂等处理；参数2d7a、2d7a、6c696e6b对应-z、-z、link，链接目标target输出完整字节74617267657400（target加NUL），RC=0且stderr为空。",
+            "setup_commands": [
+                "/usr/bin/ln -s target link"
+            ],
+            "args": ["2d7a", "2d7a", "6c696e6b"],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "74617267657400",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "/usr/bin/rm -f link"
+            ]
         }
     ]
 }

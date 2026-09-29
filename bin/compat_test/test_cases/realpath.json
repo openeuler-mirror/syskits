@@ -573,6 +573,50 @@
                 "rm -rf -- \"$(printf 'base-\\377')\""
             ],
             "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
+            "description": "POSIXLY_CORRECT=1时执行realpath a -m missing；GNU getopt在首个路径a后停止解析，-m和missing均为路径；创建a后预期RC=0、stderr为空，stdout依次为a、-m、missing的三个绝对路径。",
+            "setup_commands": [
+                "touch a"
+            ],
+            "args": [
+                "a",
+                "-m",
+                "missing"
+            ],
+            "environment": {
+                "env_vars": {
+                    "POSIXLY_CORRECT": "1"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$(printf '%s\\n' \"$CMD_STDOUT\" | sed -n '1p')\" = \"$PWD/a\"",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    },
+                    {
+                        "command": "test \"$(printf '%s\\n' \"$CMD_STDOUT\" | sed -n '2p')\" = \"$PWD/-m\"",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    },
+                    {
+                        "command": "test \"$(printf '%s\\n' \"$CMD_STDOUT\" | sed -n '3p')\" = \"$PWD/missing\"",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f -- a -m missing"
+            ]
         }
     ]
 }

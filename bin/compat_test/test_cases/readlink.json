@@ -411,6 +411,34 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "-f必须物理展开目录符号链接后再处理..，不能按逻辑路径提前消除父目录。",
+            "setup_commands": [
+                "mkdir -p base/dir base/real",
+                "ln -s ../real base/dir/link"
+            ],
+            "args": ["-f", "base/dir/link/.."],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | sed 's|.*/||'",
+                        "expected_exit": 0,
+                        "expected_stdout": "base\n",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -rf base"
+            ]
         }
     ]
 }

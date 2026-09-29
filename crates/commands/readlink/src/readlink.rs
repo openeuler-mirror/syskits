@@ -80,13 +80,17 @@ struct ReadlinkOptions {
 
 impl ReadlinkOptions {
     fn from_matches(arg_matches: &ArgMatches) -> CTResult<Self> {
+        Self::from_matches_with_posix(arg_matches, ctcore::ct_posix::posixly_correct())
+    }
+
+    fn from_matches_with_posix(arg_matches: &ArgMatches, _posixly_correct: bool) -> CTResult<Self> {
         let mut is_no_trailing_delimiter =
             arg_matches.get_flag(readlink_flags::READLINK_NO_NEWLINE);
         let is_use_zero = arg_matches.get_flag(readlink_flags::READLINK_ZERO);
         let is_silent = arg_matches.get_count(readlink_flags::READLINK_SILENT) > 0
             || arg_matches.get_count(readlink_flags::READLINK_QUIET) > 0;
 
-        let mut is_verbose = [
+        let is_verbose = [
             (readlink_flags::READLINK_QUIET, false),
             (readlink_flags::READLINK_SILENT, false),
             (readlink_flags::READLINK_VERBOSE, true),
@@ -137,10 +141,6 @@ impl ReadlinkOptions {
             ReadlinkMode::Readlink => ResolveMode::None,
             _ => ResolveMode::Logical,
         };
-
-        if std::env::var_os("POSIXLY_CORRECT").is_some() && resolve_mode == ResolveMode::None {
-            is_verbose = true;
-        }
 
         let missing_handling = match mode {
             ReadlinkMode::CanonicalizeExisting => MissingHandling::Existing,
@@ -481,6 +481,16 @@ mod tests {
             let options = ReadlinkOptions::from_matches(&matches).unwrap();
             assert_eq!(options.mode, ReadlinkMode::Readlink);
             assert_eq!(options.files, ["link", "-m", "missing"]);
+        }
+
+        #[test]
+        fn posixly_correct_does_not_implicitly_enable_verbose() {
+            let matches = ct_app_with_getopt_mode(true)
+                .try_get_matches_from([ctcore::ct_util_name(), "missing"])
+                .unwrap();
+            let options = ReadlinkOptions::from_matches_with_posix(&matches, true).unwrap();
+
+            assert!(!options.verbose);
         }
 
         #[test]

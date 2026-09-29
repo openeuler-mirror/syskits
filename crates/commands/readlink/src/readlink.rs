@@ -334,7 +334,7 @@ fn readlink_main_with_writer(args: impl ctcore::Args, writer: &mut dyn Write) ->
     for input in &options.files {
         let path_buf = PathBuf::from(input);
         let path_result = match options.resolve_mode {
-            ResolveMode::None => fs::read_link(&path_buf),
+            ResolveMode::None => readlink_value(&path_buf),
             _ => readlink_canonicalize(&path_buf, options.missing_handling, options.resolve_mode),
         };
 
@@ -369,7 +369,7 @@ pub fn readlink_native_semantic(args: impl ctcore::Args) -> CTResult<ReadlinkSem
     for input in &options.files {
         let path_buf = PathBuf::from(input);
         let path_result = match options.resolve_mode {
-            ResolveMode::None => fs::read_link(&path_buf),
+            ResolveMode::None => readlink_value(&path_buf),
             _ => readlink_canonicalize(&path_buf, options.missing_handling, options.resolve_mode),
         };
 
@@ -418,6 +418,19 @@ fn readlink_canonicalize(
     }
 
     canonicalize(path, missing_handling, resolve_mode)
+}
+
+fn readlink_value(path: &Path) -> std::io::Result<PathBuf> {
+    fs::read_link(path).map_err(|error| {
+        // On Linux, readlink(2) reports a non-symlink with EINVAL.  Rust
+        // translates that to ErrorKind::InvalidInput and changes its display
+        // text, while GNU readlink prints strerror(EINVAL).
+        if error.kind() == std::io::ErrorKind::InvalidInput {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid argument")
+        } else {
+            error
+        }
+    })
 }
 
 fn parse_readlink_args(args: impl ctcore::Args) -> CTResult<ArgMatches> {
@@ -1099,6 +1112,18 @@ mod tests {
                 assert_eq!(error.code(), 1);
                 assert!(output.is_empty());
             }
+        }
+
+        #[test]
+        fn regular_file_readlink_error_uses_gnu_einval_text() {
+            let dir = tempdir().unwrap();
+            let file = dir.path().join("regular");
+            File::create(&file).unwrap();
+
+            let error = readlink_value(&file).expect_err("a regular file is not a symbolic link");
+
+            assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+            assert_eq!(error.to_string(), "Invalid argument");
         }
 
         #[test]

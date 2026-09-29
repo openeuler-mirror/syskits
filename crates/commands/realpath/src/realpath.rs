@@ -359,7 +359,7 @@ fn validate_path_components(path: &Path, missing_handling: MissingHandling) -> i
     let mut prefix = if bytes.starts_with(b"/") {
         PathBuf::from("/")
     } else {
-        PathBuf::new()
+        std::env::current_dir()?
     };
     let mut component_start = 0;
 
@@ -676,6 +676,7 @@ mod tests {
 
     static POSIXLY_CORRECT_LOCK: Mutex<()> = Mutex::new(());
     static EXIT_CODE_TEST_LOCK: Mutex<()> = Mutex::new(());
+    static CURRENT_DIRECTORY_LOCK: Mutex<()> = Mutex::new(());
 
     #[cfg(unix)]
     struct FullWriter;
@@ -1353,6 +1354,34 @@ mod tests {
                     assert_eq!(error.kind(), std::io::ErrorKind::NotADirectory);
                 }
             }
+        }
+
+        #[test]
+        fn test_resolve_checks_leading_parent_directory_component() {
+            let _guard = CURRENT_DIRECTORY_LOCK.lock().unwrap();
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let child = temp_dir.path().join("child");
+            let parent_file = temp_dir.path().join("file");
+            std::fs::create_dir(&child).unwrap();
+            std::fs::create_dir(child.join("file")).unwrap();
+            File::create(&parent_file).unwrap();
+            let original_directory = std::env::current_dir().unwrap();
+            std::env::set_current_dir(&child).unwrap();
+            let flags = RealpathFlags {
+                is_quiet: false,
+                relative_to: None,
+                relative_base: None,
+                files: vec![PathBuf::from("../file/..")],
+                can_mode: MissingHandling::Normal,
+                resolve_mode: ResolveMode::Physical,
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let result = realpath_resolve_path(&mut Vec::new(), Path::new("../file/.."), &flags);
+            std::env::set_current_dir(original_directory).unwrap();
+            let error = result.expect_err("the parent file cannot be traversed as a directory");
+
+            assert_eq!(error.kind(), std::io::ErrorKind::NotADirectory);
         }
 
         #[test]

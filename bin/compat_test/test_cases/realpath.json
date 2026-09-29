@@ -3,6 +3,64 @@
         {
             "tstdin": "",
             "command": "realpath",
+            "description": "在child目录执行realpath ../file/..；路径起始..必须使用父目录校验，父目录file为普通文件时预期返回Not a directory。",
+            "args": [
+                "../file/.."
+            ],
+            "environment": {
+                "files": [
+                    {
+                        "path": "child",
+                        "content": null,
+                        "permissions": null,
+                        "owner": null,
+                        "group": null,
+                        "file_type": "Directory",
+                        "symlink_target": null,
+                        "size": null,
+                        "timestamp": null
+                    },
+                    {
+                        "path": "child/file",
+                        "content": null,
+                        "permissions": null,
+                        "owner": null,
+                        "group": null,
+                        "file_type": "Directory",
+                        "symlink_target": null,
+                        "size": null,
+                        "timestamp": null
+                    },
+                    {
+                        "path": "file",
+                        "content": "",
+                        "permissions": null,
+                        "owner": null,
+                        "group": null,
+                        "file_type": "Regular",
+                        "symlink_target": null,
+                        "size": null,
+                        "timestamp": null
+                    }
+                ],
+                "working_dir": "child",
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "realpath: ../file/..: Not a directory\n"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
             "description": "执行realpath -L file/..；逻辑模式不能在目录校验前折叠..，普通文件file后接/..必须返回Not a directory。",
             "setup_commands": [
                 ": > file"

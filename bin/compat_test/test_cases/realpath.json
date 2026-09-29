@@ -1083,6 +1083,27 @@
         {
             "tstdin": "",
             "command": "realpath",
+            "description": "原始字节选项诊断：LC_ALL=C、LANG=C；执行realpath后传入完整十六进制参数2d2dff（即--后接单个0xff字节）；stdin为0字节；预期RC=1、stdout为0字节、stderr完整十六进制为7265616c706174683a20756e7265636f676e697a6564206f7074696f6e20272d2dff270a54727920277265616c70617468202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a，必须保留原始0xff字节，不能替换为UTF-8 replacement character。",
+            "args": [
+                "2d2dff"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7265616c706174683a20756e7265636f676e697a6564206f7074696f6e20272d2dff270a54727920277265616c70617468202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": [],
+            "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
             "description": "POSIXLY_CORRECT=1时执行realpath a -m missing；GNU getopt在首个路径a后停止解析，-m和missing均为路径；创建a后预期RC=0、stderr为空，stdout依次为a、-m、missing的三个绝对路径。",
             "setup_commands": [
                 "touch a"

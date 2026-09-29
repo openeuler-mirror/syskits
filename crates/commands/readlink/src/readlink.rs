@@ -28,7 +28,29 @@ use std::io::{Write, stdout};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicUsize, Ordering};
 use sys_locale::get_locale;
+
+#[cfg(target_os = "linux")]
+static INHERITED_SIGPIPE_HANDLER: AtomicUsize = AtomicUsize::new(ctcore::libc::SIG_ERR);
+
+#[cfg(target_os = "linux")]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static CAPTURE_INHERITED_SIGPIPE: unsafe extern "C" fn() = capture_inherited_sigpipe;
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" fn capture_inherited_sigpipe() {
+    let mut action = std::mem::MaybeUninit::<ctcore::libc::sigaction>::uninit();
+    if unsafe {
+        ctcore::libc::sigaction(ctcore::libc::SIGPIPE, std::ptr::null(), action.as_mut_ptr())
+    } == 0
+    {
+        let action = unsafe { action.assume_init() };
+        INHERITED_SIGPIPE_HANDLER.store(action.sa_sigaction, Ordering::Relaxed);
+    }
+}
 
 mod readlink_flags {
     pub const READLINK_CANONICALIZE: &str = "canonicalize";
@@ -199,9 +221,59 @@ impl Tool for Readlink {
 }
 
 pub fn readlink_main(args: impl ctcore::Args) -> CTResult<()> {
+    let _sigpipe_guard = SigpipeGuard::for_cli();
     let stdout = stdout();
     let mut writer = stdout.lock();
     readlink_main_with_writer(args, &mut writer)
+}
+
+#[cfg(target_os = "linux")]
+struct SigpipeGuard {
+    previous: ctcore::libc::sighandler_t,
+}
+
+#[cfg(target_os = "linux")]
+impl SigpipeGuard {
+    fn for_cli() -> Option<Self> {
+        // Rust ignores SIGPIPE before main. GNU readlink keeps the caller's
+        // default disposition, except when the caller explicitly ignored it.
+        if inherited_sigpipe_is_ignored() {
+            return None;
+        }
+
+        let previous =
+            unsafe { ctcore::libc::signal(ctcore::libc::SIGPIPE, ctcore::libc::SIG_DFL) };
+        (previous != ctcore::libc::SIG_ERR).then_some(Self { previous })
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+struct SigpipeGuard;
+
+#[cfg(not(target_os = "linux"))]
+impl SigpipeGuard {
+    fn for_cli() -> Option<Self> {
+        None
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for SigpipeGuard {
+    fn drop(&mut self) {
+        unsafe {
+            ctcore::libc::signal(ctcore::libc::SIGPIPE, self.previous);
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn inherited_sigpipe_is_ignored() -> bool {
+    sigpipe_handler_is_ignored(INHERITED_SIGPIPE_HANDLER.load(Ordering::Relaxed))
+}
+
+#[cfg(target_os = "linux")]
+fn sigpipe_handler_is_ignored(handler: usize) -> bool {
+    handler == ctcore::libc::SIG_IGN
 }
 
 fn readlink_main_with_writer(args: impl ctcore::Args, writer: &mut dyn Write) -> CTResult<()> {
@@ -221,7 +293,7 @@ fn readlink_main_with_writer(args: impl ctcore::Args, writer: &mut dyn Write) ->
         match path_result {
             Ok(path) => {
                 readlink_show_with_writer(&path, options.line_ending, writer)
-                    .map_err_context(String::new)?;
+                    .map_err_context(|| "write error".to_owned())?;
             }
             Err(err) => {
                 failed = true;
@@ -432,6 +504,13 @@ mod tests {
     use super::*;
     use ctcore::Tool;
     use std::ffi::OsString;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn inherited_sigpipe_handler_distinguishes_ignore_from_default() {
+        assert!(sigpipe_handler_is_ignored(ctcore::libc::SIG_IGN));
+        assert!(!sigpipe_handler_is_ignored(ctcore::libc::SIG_DFL));
+    }
 
     #[test]
     fn test_tool_implementation() {

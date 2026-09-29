@@ -21,7 +21,7 @@ use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::{
     Tool,
     ct_display::Quotable,
-    ct_error::{CTResult, FromIo, UClapError, set_ct_exit_code},
+    ct_error::{CTError, CTResult, FromIo, UClapError, set_ct_exit_code},
     ct_fs::{MissingHandling, ResolveMode, canonicalize},
     ct_line_ending::CtLineEnding,
     ct_show,
@@ -455,20 +455,22 @@ fn validate_strip_path(path: &Path, missing_handling: MissingHandling) -> io::Re
 /// # Returns
 /// - `CTResult<()>` - 表示操作结果的类型，如果所有路径都成功解析或根据配置不显示错误信息，则返回Ok(())
 fn realpath_exec<W: Write>(writer: &mut W, flags: &RealpathFlags) -> CTResult<()> {
-    // 遍历需要解析的文件路径列表
     for path in &flags.files {
-        // 将 stdout 作为 writer 传入
-        let result = realpath_resolve_path(writer, path, flags);
-
-        if let Err(error) = result.map_err_context(|| path.maybe_quote().to_string()) {
-            if flags.is_quiet {
-                set_ct_exit_code(error.code());
-            } else {
-                ct_show!(error);
+        match realpath_resolve_output_path(path, flags) {
+            Ok(output_path) => {
+                write_resolved_path(writer, &output_path, flags.line_ending)
+                    .map_err_context(|| String::from("write error"))?;
+            }
+            Err(error) => {
+                let error = error.map_err_context(|| path.maybe_quote().to_string());
+                if flags.is_quiet {
+                    set_ct_exit_code(error.code());
+                } else {
+                    ct_show!(error);
+                }
             }
         }
     }
-    // 所有路径解析操作完成，返回Ok
     Ok(())
 }
 
@@ -577,26 +579,32 @@ pub fn ct_app() -> Command {
 ///
 /// # 返回值
 /// 返回一个 `Result`，如果路径成功解析并打印，则返回 `Ok`；如果发生错误，则返回 `Err`。
+#[cfg(test)]
 fn realpath_resolve_path<W: Write>(
     writer: &mut W,
     p: &Path,
     flags: &RealpathFlags,
 ) -> std::io::Result<()> {
-    // 将给定路径转换为绝对路径，并解析任何符号链接。
-    let abs = realpath_canonicalize(p, flags.can_mode, flags.resolve_mode)?;
+    let output_path = realpath_resolve_output_path(p, flags)?;
+    write_resolved_path(writer, &output_path, flags.line_ending)
+}
 
-    // 根据给定的相对选项处理绝对路径。
-    let abs = realpath_process_relative(
-        abs,
+fn realpath_resolve_output_path(p: &Path, flags: &RealpathFlags) -> std::io::Result<PathBuf> {
+    let absolute_path = realpath_canonicalize(p, flags.can_mode, flags.resolve_mode)?;
+    Ok(realpath_process_relative(
+        absolute_path,
         flags.relative_base.as_deref(),
         flags.relative_to.as_deref(),
-    );
+    ))
+}
 
-    // 打印处理后的路径。
-    write_path_bytes(writer, abs.as_os_str())?;
-    // 根据给定的标志打印行结束字符。
-    writer.write_all(&[flags.line_ending.into()])?;
-    Ok(())
+fn write_resolved_path<W: Write>(
+    writer: &mut W,
+    path: &Path,
+    line_ending: CtLineEnding,
+) -> std::io::Result<()> {
+    write_path_bytes(writer, path.as_os_str())?;
+    writer.write_all(&[line_ending.into()])
 }
 
 fn write_path_bytes<W: Write>(writer: &mut W, path: &OsStr) -> std::io::Result<()> {
@@ -666,6 +674,20 @@ mod tests {
 
     static POSIXLY_CORRECT_LOCK: Mutex<()> = Mutex::new(());
     static EXIT_CODE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[cfg(unix)]
+    struct FullWriter;
+
+    #[cfg(unix)]
+    impl Write for FullWriter {
+        fn write(&mut self, _buffer: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::from_raw_os_error(ctcore::libc::ENOSPC))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
 
     #[test]
     fn test_tool_implementation() {
@@ -1355,6 +1377,17 @@ mod tests {
 
     mod realpath_main_tests {
         use super::*;
+
+        #[cfg(unix)]
+        #[test]
+        fn test_main_reports_write_error_without_path_context() {
+            let mut writer = FullWriter;
+            let args = [OsString::from(ctcore::ct_util_name()), OsString::from("/")];
+
+            let error = realpath_main(&mut writer, args.into_iter()).unwrap_err();
+
+            assert_eq!(error.to_string(), "write error: No space left on device");
+        }
 
         #[test]
         fn test_main_basic() {

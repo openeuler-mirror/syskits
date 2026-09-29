@@ -3,6 +3,35 @@
         {
             "tstdin": "",
             "command": "realpath",
+            "description": "执行realpath -s -s .；GNU接受重复无参数选项，预期正常解析并输出当前目录。",
+            "args": [
+                "-s",
+                "-s",
+                "."
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$CMD_STDOUT\" = \"$(pwd)\"",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
             "description": "在child目录执行realpath ../file/..；路径起始..必须使用父目录校验，父目录file为普通文件时预期返回Not a directory。",
             "args": [
                 "../file/.."

@@ -119,14 +119,14 @@ impl RealpathFlags {
             .collect();
 
         // 提取是否使用零字符结尾的标志，并据此确定行尾符类型
-        let is_zero = matches.get_flag(realpath_flags::REALPATH_ZERO);
+        let is_zero = matches.get_count(realpath_flags::REALPATH_ZERO) > 0;
         let line_ending = CtLineEnding::from_zero_flag(is_zero);
         // 提取是否进行现有路径规范化的标志
         let is_canonicalize_existing =
-            matches.get_flag(realpath_flags::REALPATH_CANONICALIZE_EXISTING);
+            matches.get_count(realpath_flags::REALPATH_CANONICALIZE_EXISTING) > 0;
         // 提取是否进行缺失路径规范化的标志
         let is_canonicalize_missing =
-            matches.get_flag(realpath_flags::REALPATH_CANONICALIZE_MISSING);
+            matches.get_count(realpath_flags::REALPATH_CANONICALIZE_MISSING) > 0;
         // 根据上述标志确定路径处理模式
         let can_mode = if is_canonicalize_existing {
             MissingHandling::Existing
@@ -137,9 +137,9 @@ impl RealpathFlags {
         };
 
         // 提取是否进行符号链接剥离的标志
-        let is_strip = matches.get_flag(realpath_flags::REALPATH_STRIP);
+        let is_strip = matches.get_count(realpath_flags::REALPATH_STRIP) > 0;
         // 提取是否进行逻辑解析的标志
-        let is_logical = matches.get_flag(realpath_flags::REALPATH_LOGICAL);
+        let is_logical = matches.get_count(realpath_flags::REALPATH_LOGICAL) > 0;
         // 根据上述标志确定路径解析模式
         let resolve_mode = if is_strip {
             ResolveMode::None
@@ -170,7 +170,7 @@ impl RealpathFlags {
         )?;
 
         // 提取是否安静模式的标志
-        let is_quiet = matches.get_flag(realpath_flags::REALPATH_QUIET);
+        let is_quiet = matches.get_count(realpath_flags::REALPATH_QUIET) > 0;
         // 构造并返回 RealpathFlags 实例
         Ok(RealpathFlags {
             is_quiet,
@@ -486,7 +486,7 @@ pub fn ct_app() -> Command {
             .short('q')
             .long(realpath_flags::REALPATH_QUIET)
             .help(t!("realpath.clap.realpath_quiet"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(realpath_flags::REALPATH_STRIP)
             .short('s')
             .long(realpath_flags::REALPATH_STRIP)
@@ -496,12 +496,12 @@ pub fn ct_app() -> Command {
             ])
             .visible_alias("no-symlinks")
             .help(t!("realpath.clap.realpath_strip"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(realpath_flags::REALPATH_ZERO)
             .short('z')
             .long(realpath_flags::REALPATH_ZERO)
             .help(t!("realpath.clap.realpath_zero"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(realpath_flags::REALPATH_LOGICAL)
             .short('L')
             .long(realpath_flags::REALPATH_LOGICAL)
@@ -510,7 +510,7 @@ pub fn ct_app() -> Command {
                 realpath_flags::REALPATH_STRIP,
             ])
             .help(t!("realpath.clap.realpath_logical"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(realpath_flags::REALPATH_PHYSICAL)
             .short('P')
             .long(realpath_flags::REALPATH_PHYSICAL)
@@ -519,7 +519,7 @@ pub fn ct_app() -> Command {
                 realpath_flags::REALPATH_LOGICAL,
             ])
             .help(t!("realpath.clap.realpath_physical"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(realpath_flags::REALPATH_CANONICALIZE_EXISTING)
             .short('e')
             .long(realpath_flags::REALPATH_CANONICALIZE_EXISTING)
@@ -528,7 +528,7 @@ pub fn ct_app() -> Command {
                 "canonicalize by following every symlink in every component of the \
                      given name recursively, all components must exist",
             )
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(realpath_flags::REALPATH_CANONICALIZE_MISSING)
             .short('m')
             .long(realpath_flags::REALPATH_CANONICALIZE_MISSING)
@@ -537,7 +537,7 @@ pub fn ct_app() -> Command {
                 "canonicalize by following every symlink in every component of the \
                      given name recursively, without requirements on components existence",
             )
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(realpath_flags::REALPATH_RELATIVE_TO)
             .long(realpath_flags::REALPATH_RELATIVE_TO)
             .value_name("DIR")
@@ -744,6 +744,61 @@ mod tests {
             let matches = create_test_matches(&[ctcore::ct_util_name(), "-q", "test.txt"]);
             let flags = RealpathFlags::new(matches).unwrap();
             assert!(flags.is_quiet);
+        }
+
+        #[test]
+        fn test_repeated_boolean_options_are_accepted() {
+            let cases = [
+                (
+                    vec!["-e", "-e", "."],
+                    MissingHandling::Existing,
+                    ResolveMode::Physical,
+                ),
+                (
+                    vec!["-m", "-m", "."],
+                    MissingHandling::Missing,
+                    ResolveMode::Physical,
+                ),
+                (
+                    vec!["-L", "-L", "."],
+                    MissingHandling::Normal,
+                    ResolveMode::Logical,
+                ),
+                (
+                    vec!["-P", "-P", "."],
+                    MissingHandling::Normal,
+                    ResolveMode::Physical,
+                ),
+                (
+                    vec!["-s", "-s", "."],
+                    MissingHandling::Normal,
+                    ResolveMode::None,
+                ),
+                (
+                    vec!["--no-symlinks", "-s", "."],
+                    MissingHandling::Normal,
+                    ResolveMode::None,
+                ),
+            ];
+
+            for (options, expected_can_mode, expected_resolve_mode) in cases {
+                let mut args = vec![ctcore::ct_util_name()];
+                args.extend(options);
+                let matches = create_test_matches(&args);
+                let flags = RealpathFlags::new(matches).unwrap();
+
+                assert_eq!(flags.can_mode, expected_can_mode);
+                assert_eq!(flags.resolve_mode, expected_resolve_mode);
+            }
+
+            let quiet_matches = create_test_matches(&[ctcore::ct_util_name(), "-q", "-q", "."]);
+            assert!(RealpathFlags::new(quiet_matches).unwrap().is_quiet);
+
+            let zero_matches = create_test_matches(&[ctcore::ct_util_name(), "-z", "-z", "."]);
+            assert_eq!(
+                RealpathFlags::new(zero_matches).unwrap().line_ending,
+                CtLineEnding::Nul
+            );
         }
 
         #[test]

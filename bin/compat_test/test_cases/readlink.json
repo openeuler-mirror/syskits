@@ -808,6 +808,28 @@
             "cleanup_commands": [
                 "/usr/bin/rm -f link"
             ]
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "readlink",
+            "description": "en_US.iso88591下参数2d76、6d697373696e672de9对应-v、missing加单字节e9；e9在该locale中可打印，GNU诊断必须原样输出字节e9，不能转义为$'\\351'。预期RC=1、stdout为空、stderr完整字节为726561646c696e6b3a206d697373696e672de93a204e6f20737563682066696c65206f72206469726563746f72790a。",
+            "args": ["2d76", "6d697373696e672de9"],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "en_US.iso88591",
+                    "LANG": "en_US.iso88591"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "726561646c696e6b3a206d697373696e672de93a204e6f20737563682066696c65206f72206469726563746f72790a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

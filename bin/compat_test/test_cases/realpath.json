@@ -3,6 +3,34 @@
         {
             "tstdin": "",
             "command": "realpath",
+            "description": "执行realpath -L file/..；逻辑模式不能在目录校验前折叠..，普通文件file后接/..必须返回Not a directory。",
+            "setup_commands": [
+                ": > file"
+            ],
+            "args": [
+                "-L",
+                "file/.."
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "realpath: file/..: Not a directory\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f file"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
             "description": "执行realpath -e --relative-to file .；canonicalize-existing要求relative-to为目录，预期RC=1且诊断保留file操作数上下文。",
             "setup_commands": [
                 ": > file"

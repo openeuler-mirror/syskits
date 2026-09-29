@@ -329,21 +329,22 @@ fn realpath_canonicalize(
             "No such file or directory",
         ));
     }
-    if resolve_mode == ResolveMode::None {
-        // GNU's CAN_NOLINKS mode normalizes the spelling without resolving a
-        // symlink, then checks only the components whose suffix requires a
-        // directory lookup.  The generic canonicalizer cannot provide that
-        // distinction because its Normal mode probes the literal parent.
-        let canonical = canonicalize(path, MissingHandling::Missing, resolve_mode)?;
-        validate_strip_path(path, missing_handling)?;
-        return Ok(canonical);
-    }
+    // GNU first processes the input in CAN_NOLINKS mode.  This validates the
+    // directory components before a later /./ or /.. can discard them.
+    validate_path_components(path, missing_handling)?;
 
-    canonicalize(path, missing_handling, resolve_mode)
+    match resolve_mode {
+        ResolveMode::None => canonicalize(path, MissingHandling::Missing, ResolveMode::None),
+        ResolveMode::Physical => canonicalize(path, missing_handling, ResolveMode::Physical),
+        ResolveMode::Logical => {
+            let lexical_path = canonicalize(path, MissingHandling::Missing, ResolveMode::None)?;
+            canonicalize(lexical_path, missing_handling, ResolveMode::Physical)
+        }
+    }
 }
 
 #[cfg(unix)]
-fn validate_strip_path(path: &Path, missing_handling: MissingHandling) -> io::Result<()> {
+fn validate_path_components(path: &Path, missing_handling: MissingHandling) -> io::Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
     if missing_handling == MissingHandling::Missing {
@@ -431,7 +432,7 @@ fn strip_suffix_requires_directory(suffix: &[u8]) -> bool {
 }
 
 #[cfg(not(unix))]
-fn validate_strip_path(path: &Path, missing_handling: MissingHandling) -> io::Result<()> {
+fn validate_path_components(path: &Path, missing_handling: MissingHandling) -> io::Result<()> {
     match missing_handling {
         MissingHandling::Existing => std::fs::metadata(path).map(|_| ()),
         MissingHandling::Normal => match std::fs::metadata(path) {
@@ -1325,6 +1326,33 @@ mod tests {
 
             let error = realpath_resolve_path(&mut Vec::new(), &input, &flags).unwrap_err();
             assert_eq!(error.kind(), std::io::ErrorKind::NotADirectory);
+        }
+
+        #[test]
+        fn test_resolve_checks_directory_before_dotdot() {
+            let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+            let file = temp_dir.path().join("file");
+            File::create(&file).unwrap();
+            let input = file.join("..");
+
+            for resolve_mode in [ResolveMode::Physical, ResolveMode::Logical] {
+                for can_mode in [MissingHandling::Normal, MissingHandling::Existing] {
+                    let flags = RealpathFlags {
+                        is_quiet: false,
+                        relative_to: None,
+                        relative_base: None,
+                        files: vec![input.clone()],
+                        can_mode,
+                        resolve_mode,
+                        line_ending: CtLineEnding::Newline,
+                    };
+
+                    let error = realpath_resolve_path(&mut Vec::new(), &input, &flags)
+                        .expect_err("a non-directory cannot be followed by /..");
+
+                    assert_eq!(error.kind(), std::io::ErrorKind::NotADirectory);
+                }
+            }
         }
 
         #[test]

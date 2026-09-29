@@ -12,7 +12,7 @@
 //! readlink命令是Linux中用于读取符号链接（symlink）并显示其指向的文件或目录的命令。
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::OsStringValueParser, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
@@ -69,7 +69,7 @@ pub struct ReadlinkSemantic {
 }
 
 struct ReadlinkOptions {
-    files: Vec<String>,
+    files: Vec<OsString>,
     mode: ReadlinkMode,
     resolve_mode: ResolveMode,
     missing_handling: MissingHandling,
@@ -150,9 +150,9 @@ impl ReadlinkOptions {
             _ => MissingHandling::Normal,
         };
 
-        let files: Vec<String> = arg_matches
-            .get_many::<String>(readlink_flags::READLINK_ARG_FILES)
-            .map(|value| value.map(ToString::to_string).collect())
+        let files: Vec<OsString> = arg_matches
+            .get_many::<OsString>(readlink_flags::READLINK_ARG_FILES)
+            .map(|value| value.cloned().collect())
             .unwrap_or_default();
         if files.is_empty() {
             return Err(CTsageError::new(1, "missing operand"));
@@ -261,7 +261,7 @@ pub fn readlink_native_semantic(args: impl ctcore::Args) -> CTResult<ReadlinkSem
                     classic_text.push_str(&line_ending.to_string());
                 }
                 rows.push(ReadlinkSemanticRow {
-                    input: input.clone(),
+                    input: input.to_string_lossy().into_owned(),
                     resolved_path,
                     mode: options.mode,
                     no_newline: options.no_newline,
@@ -392,6 +392,7 @@ fn ct_app_with_getopt_mode(posixly_correct: bool) -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(readlink_flags::READLINK_ARG_FILES)
             .action(ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::AnyPath),
         Arg::new("help").long("help").action(ArgAction::Help),
         Arg::new("version")
@@ -415,8 +416,10 @@ fn readlink_show_with_writer(
     line_ending: Option<CtLineEnding>,
     writer: &mut dyn Write,
 ) -> std::io::Result<()> {
-    let path = path.to_str().unwrap();
-    write!(writer, "{path}")?;
+    #[cfg(unix)]
+    writer.write_all(path.as_os_str().as_bytes())?;
+    #[cfg(not(unix))]
+    write!(writer, "{}", path.display())?;
 
     if let Some(line_ending) = line_ending {
         write!(writer, "{line_ending}")?;
@@ -625,6 +628,8 @@ mod tests {
         use super::*;
         use std::ffi::OsString;
         use std::fs::File;
+        #[cfg(unix)]
+        use std::os::unix::ffi::OsStringExt;
         use std::os::unix::fs::symlink;
         use tempfile::tempdir;
         #[test]
@@ -698,6 +703,24 @@ mod tests {
 
             assert!(readlink_main_with_writer(args.into_iter(), &mut output).is_err());
             assert_eq!(output, b"first\nsecond\n");
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn readlink_main_preserves_non_utf8_link_targets() {
+            let dir = tempdir().unwrap();
+            let link = dir.path().join(OsString::from_vec(b"link\xff".to_vec()));
+            let target = PathBuf::from(OsString::from_vec(b"target\xff".to_vec()));
+            symlink(&target, &link).unwrap();
+
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                link.into_os_string(),
+            ];
+            let mut output = Vec::new();
+
+            assert!(readlink_main_with_writer(args.into_iter(), &mut output).is_ok());
+            assert_eq!(output, b"target\xff\n");
         }
 
         #[test]

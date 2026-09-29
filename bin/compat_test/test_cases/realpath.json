@@ -206,6 +206,27 @@
         },
         {
             "tstdin": "",
+            "byteMode": true,
+            "command": "realpath",
+            "description": "原始字节歧义长选项诊断：LC_ALL=C、LANG=C；传入完整十六进制参数2d2d72656c3dff（--rel=后接单字节0xff）；GNU歧义诊断必须逐字节保留该附加值，预期RC=1、stdout为空、stderr完整十六进制包含原始ff，不能编码为UTF-8 replacement character。",
+            "args": [
+                "2d2d72656c3dff"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "7265616c706174683a206f7074696f6e20272d2d72656c3dff2720697320616d626967756f75733b20706f73736962696c69746965733a20272d2d72656c61746976652d746f2720272d2d72656c61746976652d62617365270a54727920277265616c70617468202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
             "command": "realpath",
             "description": "--relative-to缺少参数时必须采用GNU requires an argument诊断。",
             "args": [

@@ -1126,6 +1126,32 @@
         {
             "tstdin": "",
             "command": "realpath",
+            "description": "物理模式长符号链接链：创建target及link1到link80共80层无环相对符号链接，执行realpath link1；stdin为0字节；预期RC=0、stderr为空、stdout为当前沙箱内target的绝对路径后接换行。GNU物理解析逐分量readlink，不能因Linux单次metadata跟随约40层链接的ELOOP上限而失败。",
+            "setup_commands": [
+                ": > target",
+                "i=80; while [ \"$i\" -gt 0 ]; do if [ \"$i\" -eq 80 ]; then ln -s target \"link$i\"; else next=$((i + 1)); ln -s \"link$next\" \"link$i\"; fi; i=$((i - 1)); done"
+            ],
+            "args": [
+                "link1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$CMD_STDOUT\" = \"$PWD/target\"",
+                        "expected_exit": 0,
+                        "expected_stdout": ""
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
             "description": "POSIXLY_CORRECT=1时执行realpath a -m missing；GNU getopt在首个路径a后停止解析，-m和missing均为路径；创建a后预期RC=0、stderr为空，stdout依次为a、-m、missing的三个绝对路径。",
             "setup_commands": [
                 "touch a"

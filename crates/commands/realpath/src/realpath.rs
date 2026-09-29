@@ -537,9 +537,10 @@ fn realpath_canonicalize(
             "No such file or directory",
         ));
     }
-    // GNU first processes the input in CAN_NOLINKS mode.  This validates the
-    // directory components before a later /./ or /.. can discard them.
-    validate_path_components(path, missing_handling, resolve_mode == ResolveMode::None)?;
+    // Validate original components before a later /./ or /.. can discard
+    // them. Physical mode resolves each checked component itself, avoiding the
+    // kernel's single-call ELOOP limit for long acyclic link chains.
+    validate_path_components(path, missing_handling, resolve_mode)?;
 
     match resolve_mode {
         ResolveMode::None => canonicalize(path, MissingHandling::Missing, ResolveMode::None),
@@ -555,7 +556,7 @@ fn realpath_canonicalize(
 fn validate_path_components(
     path: &Path,
     missing_handling: MissingHandling,
-    validate_lexical_final_component: bool,
+    resolve_mode: ResolveMode,
 ) -> io::Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
@@ -563,7 +564,7 @@ fn validate_path_components(
         return Ok(());
     }
 
-    if missing_handling == MissingHandling::Existing && !validate_lexical_final_component {
+    if missing_handling == MissingHandling::Existing && resolve_mode == ResolveMode::Logical {
         return std::fs::metadata(path).map(|_| ());
     }
 
@@ -598,7 +599,26 @@ fn validate_path_components(
             _ => {
                 prefix.push(OsStr::from_bytes(component));
                 if strip_suffix_requires_directory(suffix) {
-                    match std::fs::metadata(prefix.join(".")) {
+                    let directory_to_check = if resolve_mode == ResolveMode::Physical {
+                        match canonicalize(
+                            &prefix,
+                            MissingHandling::Existing,
+                            ResolveMode::Physical,
+                        ) {
+                            Ok(resolved) => resolved,
+                            Err(error)
+                                if error.kind() == io::ErrorKind::NotFound
+                                    && missing_handling == MissingHandling::Normal
+                                    && suffix.iter().all(|byte| *byte == b'/') =>
+                            {
+                                prefix.clone()
+                            }
+                            Err(error) => return Err(error),
+                        }
+                    } else {
+                        prefix.clone()
+                    };
+                    match std::fs::metadata(directory_to_check.join(".")) {
                         Ok(_) => {}
                         Err(error)
                             if error.kind() == io::ErrorKind::NotFound
@@ -606,7 +626,7 @@ fn validate_path_components(
                                 && suffix.iter().all(|byte| *byte == b'/') => {}
                         Err(error) => return Err(error),
                     }
-                } else if suffix.is_empty() {
+                } else if suffix.is_empty() && resolve_mode != ResolveMode::Physical {
                     match std::fs::metadata(&prefix) {
                         Ok(_) => {}
                         Err(error)
@@ -650,7 +670,7 @@ fn strip_suffix_requires_directory(suffix: &[u8]) -> bool {
 fn validate_path_components(
     path: &Path,
     missing_handling: MissingHandling,
-    _validate_lexical_final_component: bool,
+    _resolve_mode: ResolveMode,
 ) -> io::Result<()> {
     match missing_handling {
         MissingHandling::Existing => std::fs::metadata(path).map(|_| ()),
@@ -1001,6 +1021,43 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(error.kind(), io::ErrorKind::NotFound);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_physical_mode_resolves_long_acyclic_symlink_chain() {
+        let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+        let target = temp_dir.path().join("target");
+        File::create(&target).unwrap();
+
+        for index in (1..=80).rev() {
+            let link = temp_dir.path().join(format!("link{index}"));
+            let destination = if index == 80 {
+                PathBuf::from("target")
+            } else {
+                PathBuf::from(format!("link{}", index + 1))
+            };
+            std::os::unix::fs::symlink(destination, link).unwrap();
+        }
+
+        let input = temp_dir.path().join("link1");
+        for missing_handling in [MissingHandling::Normal, MissingHandling::Existing] {
+            assert_eq!(
+                realpath_canonicalize(&input, missing_handling, ResolveMode::Physical).unwrap(),
+                target
+            );
+        }
+    }
+
+    #[test]
+    fn test_physical_normal_allows_missing_final_component_with_trailing_slash() {
+        let temp_dir = Builder::new().prefix("realpath_test").tempdir().unwrap();
+        let input = temp_dir.path().join("missing/");
+
+        assert_eq!(
+            realpath_canonicalize(&input, MissingHandling::Normal, ResolveMode::Physical).unwrap(),
+            temp_dir.path().join("missing")
+        );
     }
 
     mod realpath_flags_tests {

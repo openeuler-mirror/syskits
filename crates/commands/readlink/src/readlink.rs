@@ -335,7 +335,7 @@ fn readlink_main_with_writer(args: impl ctcore::Args, writer: &mut dyn Write) ->
         let path_buf = PathBuf::from(input);
         let path_result = match options.resolve_mode {
             ResolveMode::None => fs::read_link(&path_buf),
-            _ => canonicalize(&path_buf, options.missing_handling, options.resolve_mode),
+            _ => readlink_canonicalize(&path_buf, options.missing_handling, options.resolve_mode),
         };
 
         match path_result {
@@ -370,7 +370,7 @@ pub fn readlink_native_semantic(args: impl ctcore::Args) -> CTResult<ReadlinkSem
         let path_buf = PathBuf::from(input);
         let path_result = match options.resolve_mode {
             ResolveMode::None => fs::read_link(&path_buf),
-            _ => canonicalize(&path_buf, options.missing_handling, options.resolve_mode),
+            _ => readlink_canonicalize(&path_buf, options.missing_handling, options.resolve_mode),
         };
 
         match path_result {
@@ -404,6 +404,20 @@ pub fn readlink_native_semantic(args: impl ctcore::Args) -> CTResult<ReadlinkSem
     }
 
     Ok(ReadlinkSemantic { rows, classic_text })
+}
+
+fn readlink_canonicalize(
+    path: &Path,
+    missing_handling: MissingHandling,
+    resolve_mode: ResolveMode,
+) -> std::io::Result<PathBuf> {
+    // GNU canonicalize_filename_mode rejects an empty operand instead of
+    // resolving it relative to the current working directory.
+    if path.as_os_str().is_empty() {
+        return Err(std::io::Error::from_raw_os_error(ctcore::libc::ENOENT));
+    }
+
+    canonicalize(path, missing_handling, resolve_mode)
 }
 
 fn parse_readlink_args(args: impl ctcore::Args) -> CTResult<ArgMatches> {
@@ -1071,6 +1085,20 @@ mod tests {
 
             assert!(readlink_main_with_writer(args.into_iter(), &mut output).is_ok());
             assert_eq!(output, b"first\nsecond\n");
+        }
+
+        #[test]
+        fn canonicalize_modes_reject_an_empty_operand() {
+            for option in ["-f", "-e", "-m"] {
+                let args = [ctcore::ct_util_name(), option, ""];
+                let mut output = Vec::new();
+
+                let error =
+                    readlink_main_with_writer(args.into_iter().map(OsString::from), &mut output)
+                        .expect_err("GNU canonicalize modes reject an empty operand");
+                assert_eq!(error.code(), 1);
+                assert!(output.is_empty());
+            }
         }
 
         #[test]

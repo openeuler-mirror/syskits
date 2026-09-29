@@ -25,6 +25,8 @@ use ctcore::ct_format::num_parser::{ParseError, ParsedNumber};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use std::borrow::Cow;
 use std::error::Error;
+#[cfg(target_os = "linux")]
+use std::ffi::CString;
 use std::ffi::{CStr, OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use sys_locale::get_locale;
@@ -140,7 +142,7 @@ impl CTError for InvalidTimeIntervalError {
                 diagnostic.extend_from_slice(ctcore::ct_util_name().as_bytes());
                 diagnostic.extend_from_slice(b": ");
             }
-            diagnostic.extend_from_slice(message.as_bytes());
+            diagnostic.extend_from_slice(&sleep_encode_locale_text(&message));
             diagnostic.push(b' ');
             diagnostic.extend_from_slice(&quote_duration_operand_for_locale(operand, &locale));
         }
@@ -225,7 +227,9 @@ fn sleep_parse_numbers(matches: &clap::ArgMatches, allow_empty: bool) -> CTResul
         .map(|numbers| numbers.map(OsString::as_os_str).collect::<Vec<_>>())
         .or_else(|| allow_empty.then(Vec::new))
         .ok_or_else(|| {
-            SleepUsageError::boxed(t!("sleep.errors.missing_operand").to_string().into_bytes())
+            SleepUsageError::boxed(sleep_encode_locale_text(
+                &t!("sleep.errors.missing_operand").to_string(),
+            ))
         })?;
 
     Ok(numbers)
@@ -236,13 +240,72 @@ fn sleep_usage_hint() -> Vec<u8> {
 }
 
 fn sleep_usage_hint_for_locale(utility_name: &str, locale: &str) -> Vec<u8> {
-    t!(
-        "sleep.errors.try_help",
-        locale = locale,
-        utility_name = utility_name
+    sleep_encode_locale_text(
+        &t!(
+            "sleep.errors.try_help",
+            locale = locale,
+            utility_name = utility_name
+        )
+        .to_string(),
     )
-    .to_string()
-    .into_bytes()
+}
+
+fn sleep_encode_locale_text(text: &str) -> Vec<u8> {
+    #[cfg(target_os = "linux")]
+    if let Some(codeset) = sleep_output_codeset()
+        && let Some(encoded) = sleep_encode_locale_text_for_codeset(text, &codeset)
+    {
+        return encoded;
+    }
+
+    text.as_bytes().to_vec()
+}
+
+#[cfg(target_os = "linux")]
+fn sleep_output_codeset() -> Option<String> {
+    // SAFETY: nl_langinfo returns storage owned by the active C locale. It is
+    // copied before any later locale call can replace it.
+    unsafe {
+        let codeset = ctcore::libc::nl_langinfo(ctcore::libc::CODESET);
+        if codeset.is_null() {
+            return None;
+        }
+        let codeset = CStr::from_ptr(codeset).to_str().ok()?.to_owned();
+        (!codeset.eq_ignore_ascii_case("UTF-8") && !codeset.eq_ignore_ascii_case("UTF8"))
+            .then_some(codeset)
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn sleep_encode_locale_text_for_codeset(text: &str, codeset: &str) -> Option<Vec<u8>> {
+    let target = CString::new(format!("{codeset}//TRANSLIT")).ok()?;
+    let source = CString::new("UTF-8").expect("UTF-8 has no NUL byte");
+    let converter = unsafe { ctcore::libc::iconv_open(target.as_ptr(), source.as_ptr()) };
+    if converter == (-1_isize) as ctcore::libc::iconv_t {
+        return None;
+    }
+
+    let mut input = text.as_ptr().cast_mut().cast::<ctcore::libc::c_char>();
+    let mut input_left = text.len();
+    let mut output = vec![0_u8; text.len().saturating_mul(4).max(16)];
+    let mut output_ptr = output.as_mut_ptr().cast::<ctcore::libc::c_char>();
+    let mut output_left = output.len();
+    let result = unsafe {
+        ctcore::libc::iconv(
+            converter,
+            &mut input,
+            &mut input_left,
+            &mut output_ptr,
+            &mut output_left,
+        )
+    };
+    unsafe { ctcore::libc::iconv_close(converter) };
+    if result == usize::MAX || input_left != 0 {
+        return None;
+    }
+
+    output.truncate(output.len() - output_left);
+    Some(output)
 }
 
 fn standard_long_option(name: &[u8]) -> Option<&'static str> {
@@ -782,6 +845,18 @@ mod tests {
             assert_eq!(
                 sleep_usage_hint_for_locale("sleep", "zh-CN"),
                 "请尝试执行 \"sleep --help\" 来获取更多信息。".as_bytes()
+            );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_sleep_zh_cn_gbk_diagnostic_text_uses_locale_encoding() {
+            assert_eq!(
+                sleep_encode_locale_text_for_codeset("无效的时间间隔", "GBK"),
+                Some(vec![
+                    0xce, 0xde, 0xd0, 0xa7, 0xb5, 0xc4, 0xca, 0xb1, 0xbc, 0xe4, 0xbc, 0xe4, 0xb8,
+                    0xf4,
+                ])
             );
         }
 

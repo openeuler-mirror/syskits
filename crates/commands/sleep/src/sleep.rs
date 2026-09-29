@@ -18,10 +18,10 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use std::time::Duration;
 
 use clap::{Arg, ArgAction, Command, crate_version};
-use fundu::{DurationParser, SaturatingInto};
 
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
+use ctcore::ct_format::num_parser::{ParseError, ParsedNumber};
 use ctcore::ct_show_error;
 use std::ffi::OsString;
 use sys_locale::get_locale;
@@ -73,64 +73,23 @@ fn sleep_parse_numbers(matches: &clap::ArgMatches) -> CTResult<Vec<&str>> {
     Ok(numbers)
 }
 
-/// Parse a hexadecimal floating point number in C99 format (0x[HHH].[FFF]p[+-]?DDD)
-/// Returns the value in seconds as f64
-fn parse_hex_duration(input: &str) -> Option<f64> {
-    let trimmed = input.trim();
+fn parse_duration(input: &str) -> Option<f64> {
+    let (seconds, suffix) = match ParsedNumber::parse_f64(input) {
+        Ok(seconds) => (seconds, None),
+        Err(ParseError::CtPartialMatch(seconds, suffix)) => (seconds, Some(suffix)),
+        Err(ParseError::CtNotNumeric | ParseError::CtOverflow) => return None,
+    };
 
-    // Check for 0x or 0X prefix
-    if !trimmed.starts_with("0x") && !trimmed.starts_with("0X") {
-        return None;
+    match suffix {
+        None | Some("s") => Some(seconds),
+        Some("m") => Some(seconds * 60.0),
+        Some("h") => Some(seconds * 60.0 * 60.0),
+        Some("d") => Some(seconds * 60.0 * 60.0 * 24.0),
+        Some(_) => None,
     }
-
-    let rest = &trimmed[2..];
-
-    // Find the 'p' or 'P' for the exponent part
-    let (mantissa_part, exp_part) = if let Some(p_pos) = rest.find(['p', 'P']) {
-        (&rest[..p_pos], &rest[p_pos + 1..])
-    } else {
-        (rest, "0")
-    };
-
-    // Parse the exponent
-    let exp: i32 = exp_part.parse().ok()?;
-
-    // Parse the mantissa (hexadecimal)
-    let mantissa = if mantissa_part.contains('.') {
-        let parts: Vec<&str> = mantissa_part.split('.').collect();
-        if parts.len() != 2 {
-            return None;
-        }
-
-        let int_part = if parts[0].is_empty() {
-            0.0
-        } else {
-            u64::from_str_radix(parts[0], 16).ok()? as f64
-        };
-
-        let frac_part = if parts[1].is_empty() {
-            0.0
-        } else {
-            // Convert fractional part: each hex digit is 1/16 of the previous position
-            let frac_val = u64::from_str_radix(parts[1], 16).ok()? as f64;
-            let divisor = 16f64.powi(parts[1].len() as i32);
-            frac_val / divisor
-        };
-
-        int_part + frac_part
-    } else {
-        u64::from_str_radix(mantissa_part, 16).ok()? as f64
-    };
-
-    // Calculate final value: mantissa * 2^exp
-    let value = mantissa * 2f64.powi(exp);
-    Some(value)
 }
 
 fn sleep_handle_second(args: &[&str]) -> CTResult<Duration> {
-    use fundu::TimeUnit::{Day, Hour, Minute, Second};
-    let dur_parser = DurationParser::with_time_units(&[Second, Minute, Hour, Day]);
-
     let mut arg_error = false;
 
     let sleep_dur = args
@@ -138,37 +97,20 @@ fn sleep_handle_second(args: &[&str]) -> CTResult<Duration> {
         .filter_map(|input| {
             let trimmed = input.trim();
 
-            // Try hexadecimal floating point format first (C99 format like 0x.002p1)
-            if trimmed.starts_with("0x") || trimmed.starts_with("0X") {
-                if let Some(seconds) = parse_hex_duration(trimmed) {
-                    if seconds >= 0.0 {
-                        let secs = seconds.trunc() as u64;
-                        let nanos = ((seconds - seconds.trunc()) * 1_000_000_000.0) as u32;
-                        return Some(fundu::Duration::positive(secs, nanos));
-                    } else {
-                        arg_error = true;
-                        ct_show_error!("invalid time interval '{}'", input);
-                        return None;
-                    }
+            match parse_duration(trimmed) {
+                Some(seconds) if seconds >= 0.0 => {
+                    let secs = seconds.trunc() as u64;
+                    let nanos = ((seconds - seconds.trunc()) * 1_000_000_000.0) as u32;
+                    Some(Duration::new(secs, nanos))
                 }
-            }
-
-            // Fall back to fundu parser for normal formats
-            match dur_parser.parse(trimmed) {
-                Ok(duration) => Some(duration),
-                Err(_parse_error) => {
+                _ => {
                     arg_error = true;
-                    // 简化错误消息,只显示 "invalid time interval 'X'" 以匹配 coreutils
                     ct_show_error!("invalid time interval '{}'", input);
                     None
                 }
             }
         })
-        .fold(Duration::ZERO, |acc, n| {
-            // acc 是累加器，初始值为 Duration::ZERO（即零时间间隔）。
-            // 每次迭代，它将当前的 acc 与新解析出的 duration（n）相加, saturating_add 方法确保不会因溢出而导致负值。
-            acc.saturating_add(SaturatingInto::<std::time::Duration>::saturating_into(n))
-        });
+        .fold(Duration::ZERO, |acc, n| acc.saturating_add(n));
 
     if arg_error {
         return Err(CTsageError::new(1, ""));
@@ -322,6 +264,20 @@ mod tests {
             let result = sleep_handle_second(&args);
 
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sleep_handle_second_accepts_hex_duration_with_suffix() {
+            let duration = sleep_handle_second(&["0x1p0s"]).unwrap();
+
+            assert_eq!(duration, Duration::from_secs(1));
+        }
+
+        #[test]
+        fn test_sleep_handle_second_rejects_hex_duration_without_mantissa() {
+            for input in ["0x.", "0x.p0"] {
+                assert!(sleep_handle_second(&[input]).is_err(), "{input}");
+            }
         }
     }
     #[cfg(test)]

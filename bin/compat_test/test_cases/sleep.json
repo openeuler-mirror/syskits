@@ -239,6 +239,32 @@
                     "exit_code": 0
                 }
             }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 十六进制浮点数可使用秒后缀",
+            "args": [
+                "0x.002p1s"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 拒绝没有十六进制尾数的时间间隔",
+            "args": [
+                "0x.p0"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1
+                }
+            }
         }
     ]
 }

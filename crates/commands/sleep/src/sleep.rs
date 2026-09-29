@@ -22,6 +22,7 @@ use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version}
 use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError};
 use ctcore::ct_format::num_parser::{ParseError, ParsedNumber};
+use ctcore::ct_posix::GnuGetoptCommandExt;
 use std::borrow::Cow;
 use std::error::Error;
 use std::ffi::{CStr, OsStr, OsString};
@@ -190,6 +191,13 @@ fn standard_long_option(name: &[u8]) -> Option<&'static str> {
 }
 
 fn prepare_sleep_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
+    prepare_sleep_args_with_mode(args, ctcore::ct_posix::posixly_correct())
+}
+
+fn prepare_sleep_args_with_mode(
+    args: impl ctcore::Args,
+    posixly_correct: bool,
+) -> CTResult<Vec<OsString>> {
     let args = args.collect::<Vec<_>>();
 
     for argument in args.iter().skip(1) {
@@ -198,6 +206,9 @@ fn prepare_sleep_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
             break;
         }
         if bytes.len() <= 1 || bytes[0] != b'-' {
+            if posixly_correct {
+                break;
+            }
             continue;
         }
 
@@ -405,6 +416,10 @@ fn sleep(sleep_dur: Duration) -> CTResult<()> {
 }
 
 pub fn ct_app() -> Command {
+    ct_app_with_getopt_mode(ctcore::ct_posix::posixly_correct())
+}
+
+fn ct_app_with_getopt_mode(posixly_correct: bool) -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
     let application_info = t!("sleep.about");
@@ -430,6 +445,7 @@ pub fn ct_app() -> Command {
         .disable_help_flag(true)
         .disable_version_flag(true)
         .args(args)
+        .gnu_getopt_with_mode(posixly_correct)
 }
 
 #[cfg(test)]
@@ -621,6 +637,28 @@ mod tests {
                 let error = prepare_sleep_args(args.into_iter()).unwrap_err();
                 assert_eq!(error.diagnostic_bytes().as_ref(), diagnostic);
             }
+        }
+
+        #[test]
+        fn test_posix_mode_stops_option_parsing_after_the_first_duration() {
+            let args = vec![
+                OsString::from("sleep"),
+                OsString::from("0"),
+                OsString::from("--help"),
+            ];
+            assert_eq!(
+                prepare_sleep_args_with_mode(args.clone().into_iter(), true).unwrap(),
+                args
+            );
+
+            let matches = ct_app_with_getopt_mode(true)
+                .try_get_matches_from(args)
+                .unwrap();
+            let durations = matches
+                .get_many::<OsString>(sleep_flags::SLEEP_NUMBER)
+                .unwrap()
+                .collect::<Vec<_>>();
+            assert_eq!(durations, [&OsString::from("0"), &OsString::from("--help")]);
         }
 
         #[cfg(unix)]

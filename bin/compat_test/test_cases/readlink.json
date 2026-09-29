@@ -899,6 +899,32 @@
                     "stderr": "readlink: missing/.: No such file or directory\\n"
                 }
             }
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "-f必须保留符号链接目标末尾斜杠的目录约束；link指向regular/时regular不是目录，预期RC=1、stdout为空、stderr报告Not a directory。",
+            "setup_commands": [
+                "printf data > regular",
+                "ln -s regular/ link"
+            ],
+            "args": ["-f", "-v", "link"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: link: Not a directory\\n"
+                }
+            },
+            "cleanup_commands": [
+                "rm -f regular link"
+            ]
         }
     ]
 }

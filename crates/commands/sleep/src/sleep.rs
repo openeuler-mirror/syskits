@@ -268,25 +268,34 @@ fn parse_duration(input: &str) -> Option<f64> {
     parse_duration_with_decimal_point(input, &current_numeric_decimal_point())
 }
 
+fn duration_from_seconds(seconds: f64) -> Duration {
+    const NANOS_PER_SECOND: u64 = 1_000_000_000;
+    const MAX_TIME_T_SECONDS: u64 = i64::MAX as u64;
+
+    if !seconds.is_finite() || seconds >= MAX_TIME_T_SECONDS as f64 {
+        return Duration::new(MAX_TIME_T_SECONDS, NANOS_PER_SECOND as u32 - 1);
+    }
+
+    let mut whole_seconds = seconds as u64;
+    let fractional_nanos = NANOS_PER_SECOND as f64 * (seconds - whole_seconds as f64);
+    let mut nanos = fractional_nanos as u64;
+    nanos += u64::from((nanos as f64) < fractional_nanos);
+    whole_seconds += nanos / NANOS_PER_SECOND;
+    nanos %= NANOS_PER_SECOND;
+
+    Duration::new(whole_seconds, nanos as u32)
+}
+
 fn sleep_handle_second<T: AsRef<OsStr>>(args: &[T]) -> CTResult<Duration> {
     let mut invalid_operands = Vec::new();
+    let mut seconds = 0.0;
 
-    let sleep_dur = args
-        .iter()
-        .filter_map(
-            |input| match input.as_ref().to_str().and_then(parse_duration) {
-                Some(seconds) if seconds >= 0.0 => {
-                    let secs = seconds.trunc() as u64;
-                    let nanos = ((seconds - seconds.trunc()) * 1_000_000_000.0) as u32;
-                    Some(Duration::new(secs, nanos))
-                }
-                _ => {
-                    invalid_operands.push(input.as_ref().to_os_string());
-                    None
-                }
-            },
-        )
-        .fold(Duration::ZERO, |acc, n| acc.saturating_add(n));
+    for input in args {
+        match input.as_ref().to_str().and_then(parse_duration) {
+            Some(interval) if interval >= 0.0 => seconds += interval,
+            _ => invalid_operands.push(input.as_ref().to_os_string()),
+        }
+    }
 
     if !invalid_operands.is_empty() {
         return Err(InvalidTimeIntervalError {
@@ -295,7 +304,7 @@ fn sleep_handle_second<T: AsRef<OsStr>>(args: &[T]) -> CTResult<Duration> {
         .into());
     }
 
-    Ok(sleep_dur)
+    Ok(duration_from_seconds(seconds))
 }
 
 fn sleep(sleep_dur: Duration) -> CTResult<()> {
@@ -479,6 +488,18 @@ mod tests {
         #[test]
         fn test_sleep_handle_second_accepts_leading_whitespace() {
             assert_eq!(sleep_handle_second(&[" 0"]).unwrap(), Duration::ZERO);
+        }
+
+        #[test]
+        fn test_sleep_handle_second_accumulates_and_rounds_subnanosecond_intervals() {
+            assert_eq!(
+                sleep_handle_second(&["0.0000000001"]).unwrap(),
+                Duration::from_nanos(1)
+            );
+            assert_eq!(
+                sleep_handle_second(&["0.0000000006", "0.0000000006"]).unwrap(),
+                Duration::from_nanos(2)
+            );
         }
 
         #[test]

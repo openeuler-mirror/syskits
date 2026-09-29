@@ -304,6 +304,19 @@
                     "exit_code": 1
                 }
             }
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 单独的选项结束符视为零个时长",
+            "args": [
+                "--"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0
+                }
+            }
         }
     ]
 }

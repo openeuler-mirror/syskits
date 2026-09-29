@@ -49,26 +49,28 @@ impl Tool for Sleep {
 pub fn sleep_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = args.collect::<Vec<_>>();
+    let ends_with_option_delimiter = args.last().is_some_and(|arg| arg == "--");
     let matches = ct_app().try_get_matches_from(args)?;
 
-    let numbers = sleep_parse_numbers(&matches)?;
+    let numbers = sleep_parse_numbers(&matches, ends_with_option_delimiter)?;
     let sleep_dur = sleep_handle_second(&numbers)?;
 
     sleep(sleep_dur)
 }
 
-fn sleep_parse_numbers(matches: &clap::ArgMatches) -> CTResult<Vec<&str>> {
+fn sleep_parse_numbers(matches: &clap::ArgMatches, allow_empty: bool) -> CTResult<Vec<&str>> {
     let numbers = matches
         .get_many::<String>(sleep_flags::SLEEP_NUMBER)
+        .map(|numbers| numbers.map(String::as_str).collect::<Vec<_>>())
+        .or_else(|| allow_empty.then(Vec::new))
         .ok_or_else(|| {
             let err_message = format!(
                 "missing operand\nTry '{} --help' for more information.",
                 ctcore::ct_execute_phrase()
             );
             CtSimpleError::new(1, err_message)
-        })?
-        .map(|sec| sec.as_str())
-        .collect::<Vec<_>>();
+        })?;
 
     Ok(numbers)
 }
@@ -181,7 +183,7 @@ mod tests {
                 .arg(Arg::new(sleep_flags::SLEEP_NUMBER).action(ArgAction::Append));
 
             let matches = cmd.try_get_matches_from(vec!["test", "5", "10"]).unwrap();
-            let numbers = sleep_parse_numbers(&matches).unwrap();
+            let numbers = sleep_parse_numbers(&matches, false).unwrap();
 
             assert_eq!(numbers, vec!["5", "10"]);
         }
@@ -299,7 +301,7 @@ mod tests {
         fn test_sleep_parse_numbers_support_missing_argument() {
             let args = vec![ctcore::ct_util_name()];
             let matches = ct_app().try_get_matches_from(args).unwrap();
-            let result = sleep_parse_numbers(&matches);
+            let result = sleep_parse_numbers(&matches, false);
 
             assert!(result.is_err());
             assert!(result.unwrap_err().to_string().contains("missing operand"));
@@ -309,7 +311,7 @@ mod tests {
         fn test_sleep_parse_numbers_sleep_5() {
             let args = vec![ctcore::ct_util_name(), "5"];
             let matches = ct_app().try_get_matches_from(args).unwrap();
-            let result = sleep_parse_numbers(&matches).unwrap();
+            let result = sleep_parse_numbers(&matches, false).unwrap();
 
             assert_eq!(result, ["5"]);
         }
@@ -318,7 +320,7 @@ mod tests {
         fn test_sleep_parse_numbers_sleep_0() {
             let args = vec![ctcore::ct_util_name(), "0"];
             let matches = ct_app().try_get_matches_from(args).unwrap();
-            let result = sleep_parse_numbers(&matches).unwrap();
+            let result = sleep_parse_numbers(&matches, false).unwrap();
 
             assert_eq!(result, ["0"]);
         }
@@ -327,7 +329,7 @@ mod tests {
         fn test_sleep_parse_numbers_sleep_suffix_seconds_2() {
             let args = vec![ctcore::ct_util_name(), "2s"];
             let matches = ct_app().try_get_matches_from(args).unwrap();
-            let result = sleep_parse_numbers(&matches).unwrap();
+            let result = sleep_parse_numbers(&matches, false).unwrap();
 
             assert_eq!(result, ["2s"]);
         }
@@ -336,7 +338,7 @@ mod tests {
         fn test_sleep_parse_numbers_sleep_suffix_minutes_2() {
             let args = vec![ctcore::ct_util_name(), "2m"];
             let matches = ct_app().try_get_matches_from(args).unwrap();
-            let result = sleep_parse_numbers(&matches).unwrap();
+            let result = sleep_parse_numbers(&matches, false).unwrap();
 
             assert_eq!(result, ["2m"]);
         }
@@ -345,7 +347,7 @@ mod tests {
         fn test_sleep_parse_numbers_sleep_suffix_hours_2() {
             let args = vec![ctcore::ct_util_name(), "2h"];
             let matches = ct_app().try_get_matches_from(args).unwrap();
-            let result = sleep_parse_numbers(&matches).unwrap();
+            let result = sleep_parse_numbers(&matches, false).unwrap();
 
             assert_eq!(result, ["2h"]);
         }
@@ -353,7 +355,7 @@ mod tests {
         fn test_sleep_parse_numbers_sleep_suffix_days_2() {
             let args = vec![ctcore::ct_util_name(), "2d"];
             let matches = ct_app().try_get_matches_from(args).unwrap();
-            let result = sleep_parse_numbers(&matches).unwrap();
+            let result = sleep_parse_numbers(&matches, false).unwrap();
 
             assert_eq!(result, ["2d"]);
         }
@@ -362,7 +364,7 @@ mod tests {
         fn test_sleep_parse_numbers_sleep_suffix_err_2() {
             let args = vec![ctcore::ct_util_name(), "2q"];
             let matches = ct_app().try_get_matches_from(args).unwrap();
-            let result = sleep_parse_numbers(&matches).unwrap();
+            let result = sleep_parse_numbers(&matches, false).unwrap();
 
             assert_eq!(result, ["2q"]);
         }
@@ -423,6 +425,14 @@ mod tests {
             let args = [ctcore::ct_util_name()];
             let result = sleep_main(args.iter().map(OsString::from));
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_sleep_main_accepts_end_of_options_without_operands() {
+            let args = [ctcore::ct_util_name(), "--"];
+            let result = sleep_main(args.iter().map(OsString::from));
+
+            assert!(result.is_ok());
         }
 
         #[test]

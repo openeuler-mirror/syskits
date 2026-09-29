@@ -735,6 +735,27 @@
             "cleanup_commands": [
                 "rm -f good"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "LC_ALL=C.UTF-8下verbose诊断必须直接保留有效UTF-8操作数，不能按C locale转义其字节。",
+            "args": ["-v", "missingé"],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "readlink: missingé: No such file or directory\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

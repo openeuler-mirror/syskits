@@ -325,8 +325,7 @@ fn sigpipe_handler_is_ignored(handler: usize) -> bool {
 }
 
 fn readlink_main_with_writer(args: impl ctcore::Args, writer: &mut dyn Write) -> CTResult<()> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    initialize_readlink_locale();
     let arg_matches = parse_readlink_args(args)?;
     let options = ReadlinkOptions::from_matches(&arg_matches)?;
     let mut failed = false;
@@ -377,8 +376,8 @@ fn readlink_main_with_writer(args: impl ctcore::Args, writer: &mut dyn Write) ->
 }
 
 pub fn readlink_native_semantic(args: impl ctcore::Args) -> CTResult<ReadlinkSemantic> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    initialize_readlink_locale();
+
     let arg_matches = parse_readlink_args(args)?;
     let options = ReadlinkOptions::from_matches(&arg_matches)?;
 
@@ -423,6 +422,16 @@ pub fn readlink_native_semantic(args: impl ctcore::Args) -> CTResult<ReadlinkSem
     }
 
     Ok(ReadlinkSemantic { rows, classic_text })
+}
+
+fn initialize_readlink_locale() {
+    #[cfg(unix)]
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
+
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
 }
 
 fn readlink_canonicalize(
@@ -720,6 +729,11 @@ mod tests {
     use super::*;
     use ctcore::Tool;
     use std::ffi::OsString;
+    #[cfg(unix)]
+    use std::sync::Mutex;
+
+    #[cfg(unix)]
+    static LIBC_LOCALE_LOCK: Mutex<()> = Mutex::new(());
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -747,6 +761,39 @@ mod tests {
         assert_eq!(
             error.diagnostic_bytes().as_ref(),
             b"'missing-'$'\\377': No such file or directory"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn native_semantic_uses_utf8_locale_for_path_diagnostics() {
+        let _guard = LIBC_LOCALE_LOCK.lock().unwrap();
+        let previous_lc_all = std::env::var_os("LC_ALL");
+
+        unsafe {
+            std::env::set_var("LC_ALL", "C.UTF-8");
+            ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"C".as_ptr());
+        }
+        let result = readlink_native_semantic(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-v"),
+                OsString::from("missingé"),
+            ]
+            .into_iter(),
+        );
+        unsafe {
+            match previous_lc_all {
+                Some(value) => std::env::set_var("LC_ALL", value),
+                None => std::env::remove_var("LC_ALL"),
+            }
+            ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+        }
+
+        let error = result.expect_err("a missing UTF-8 path must fail in verbose mode");
+        assert_eq!(
+            error.diagnostic_bytes().as_ref(),
+            "missingé: No such file or directory".as_bytes()
         );
     }
 

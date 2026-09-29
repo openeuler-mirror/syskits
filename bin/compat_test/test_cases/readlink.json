@@ -282,6 +282,26 @@
                     "stderr": "readlink: missing: No such file or directory\n"
                 }
             }
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "多个操作数中间失败时仍处理后续符号链接，成功项按输入顺序输出。",
+            "setup_commands": [
+                "ln -s first link-one",
+                "ln -s second link-two"
+            ],
+            "args": ["link-one", "missing", "link-two"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "first\nsecond\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f link-one link-two"
+            ]
         }
     ]
 }

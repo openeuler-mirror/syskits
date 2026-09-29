@@ -94,20 +94,16 @@ fn sleep_handle_second(args: &[&str]) -> CTResult<Duration> {
 
     let sleep_dur = args
         .iter()
-        .filter_map(|input| {
-            let trimmed = input.trim();
-
-            match parse_duration(trimmed) {
-                Some(seconds) if seconds >= 0.0 => {
-                    let secs = seconds.trunc() as u64;
-                    let nanos = ((seconds - seconds.trunc()) * 1_000_000_000.0) as u32;
-                    Some(Duration::new(secs, nanos))
-                }
-                _ => {
-                    arg_error = true;
-                    ct_show_error!("invalid time interval '{}'", input);
-                    None
-                }
+        .filter_map(|input| match parse_duration(input) {
+            Some(seconds) if seconds >= 0.0 => {
+                let secs = seconds.trunc() as u64;
+                let nanos = ((seconds - seconds.trunc()) * 1_000_000_000.0) as u32;
+                Some(Duration::new(secs, nanos))
+            }
+            _ => {
+                arg_error = true;
+                ct_show_error!("invalid time interval '{}'", input);
+                None
             }
         })
         .fold(Duration::ZERO, |acc, n| acc.saturating_add(n));
@@ -278,6 +274,16 @@ mod tests {
             for input in ["0x.", "0x.p0"] {
                 assert!(sleep_handle_second(&[input]).is_err(), "{input}");
             }
+        }
+
+        #[test]
+        fn test_sleep_handle_second_rejects_trailing_whitespace() {
+            assert!(sleep_handle_second(&["0 "]).is_err());
+        }
+
+        #[test]
+        fn test_sleep_handle_second_accepts_leading_whitespace() {
+            assert_eq!(sleep_handle_second(&[" 0"]).unwrap(), Duration::ZERO);
         }
     }
     #[cfg(test)]

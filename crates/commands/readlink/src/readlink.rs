@@ -702,6 +702,11 @@ fn readlink_show_with_writer(
 
     if let Some(line_ending) = line_ending {
         write!(writer, "{line_ending}")?;
+        // Rust's stdout is line-buffered, so a NUL delimiter would otherwise
+        // remain buffered while GNU readlink attempts this write immediately.
+        if line_ending == CtLineEnding::Nul {
+            writer.flush()?;
+        }
     }
     Ok(())
 }
@@ -765,6 +770,18 @@ mod tests {
     mod show_tests {
         use super::*;
 
+        struct FlushFailWriter;
+
+        impl Write for FlushFailWriter {
+            fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+                Ok(buffer.len())
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Err(std::io::Error::from_raw_os_error(ctcore::libc::EPIPE))
+            }
+        }
+
         fn test_show_output(path: &str, line_ending: Option<CtLineEnding>, expected_output: &str) {
             let path = Path::new(path);
             let mut output = Vec::new();
@@ -780,6 +797,20 @@ mod tests {
         #[test]
         fn test_show_with_null() {
             test_show_output("test/path", Some(CtLineEnding::Nul), "test/path\0");
+        }
+
+        #[test]
+        fn test_show_with_null_flushes_the_line_writer() {
+            let mut writer = FlushFailWriter;
+
+            let error = readlink_show_with_writer(
+                Path::new("target"),
+                Some(CtLineEnding::Nul),
+                &mut writer,
+            )
+            .expect_err("a NUL delimiter must flush line-buffered stdout");
+
+            assert_eq!(error.raw_os_error(), Some(ctcore::libc::EPIPE));
         }
 
         #[test]

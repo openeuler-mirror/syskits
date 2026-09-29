@@ -705,6 +705,36 @@
             "cleanup_commands": [
                 "rm -f good"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "-z写入NUL分隔符时必须立即触发默认SIGPIPE，不能继续处理后续-v失败项。",
+            "setup_commands": [
+                "ln -s target good"
+            ],
+            "args": ["-z", "-v", "good", "missing"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "default",
+                    "useBash": true
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "rm -f good"
+            ]
         }
     ]
 }

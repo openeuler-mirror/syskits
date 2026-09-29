@@ -3,6 +3,47 @@
         {
             "tstdin": "",
             "command": "realpath",
+            "description": "nobody执行realpath directory/missing；directory仅有搜索权限0111时，最终缺失分量仍应按GNU成功解析，不能要求目录可读。",
+            "args": [
+                "directory/missing"
+            ],
+            "environment": {
+                "files": [
+                    {
+                        "path": "directory",
+                        "content": null,
+                        "permissions": "111",
+                        "owner": null,
+                        "group": null,
+                        "file_type": "Directory",
+                        "symlink_target": null,
+                        "size": null,
+                        "timestamp": null
+                    }
+                ],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "run_as_user": "nobody"
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test \"$CMD_STDOUT\" = \"$(pwd)/directory/missing\"",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "realpath",
             "description": "执行realpath -s -s .；GNU接受重复无参数选项，预期正常解析并输出当前目录。",
             "args": [
                 "-s",

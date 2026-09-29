@@ -350,6 +350,27 @@
             "cleanup_commands": [
                 "rm -f link ./-m missing"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "readlink",
+            "description": "POSIXLY_CORRECT不得隐式启用-v；普通失败路径仍应保持静默。",
+            "args": ["missing"],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "POSIXLY_CORRECT": "1"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

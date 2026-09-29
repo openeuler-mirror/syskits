@@ -253,6 +253,14 @@ fn not_a_directory_error() -> Error {
     }
 }
 
+fn final_directory_requirements(path: &Path) -> (bool, bool) {
+    let path = path.to_string_lossy();
+    let trailing_dot = path.trim_end_matches([MAIN_SEPARATOR, '/']).ends_with("/.");
+    let trailing_separator = path.ends_with(MAIN_SEPARATOR) || path.ends_with('/');
+
+    (trailing_separator || trailing_dot, trailing_dot)
+}
+
 #[derive(Clone)]
 enum OwningComponent {
     Prefix(OsString),
@@ -320,22 +328,14 @@ pub fn canonicalize<P: AsRef<Path>>(
 ) -> IOResult<PathBuf> {
     const SYMLINKS_TO_LOOK_FOR_LOOPS: i32 = 20;
     let original = original.as_ref();
-    let path_str = original.to_string_lossy();
     // CAN_ALL_BUT_LAST allows a missing final component, including a
     // trailing separator.  A final `.` is different: the preceding
     // component must be an existing directory.
-    let requires_directory_for_trailing_dot = path_str
-        .trim_end_matches([MAIN_SEPARATOR, '/'])
-        .ends_with("/.");
-    let has_to_be_directory =
-        (miss_mode == MissingHandling::Normal || miss_mode == MissingHandling::Existing) && {
-            path_str.ends_with(MAIN_SEPARATOR)
-                || path_str.ends_with('/')
-                // Path::components folds an interior or trailing `.` away,
-                // but POSIX still requires the preceding component to be a
-                // directory when the operand ends in `/.`.
-                || path_str.ends_with("/.")
-        };
+    let (requires_directory, mut requires_directory_for_trailing_dot) =
+        final_directory_requirements(original);
+    let mut has_to_be_directory = (miss_mode == MissingHandling::Normal
+        || miss_mode == MissingHandling::Existing)
+        && requires_directory;
     let original = if original.is_absolute() {
         original.to_path_buf()
     } else {
@@ -384,6 +384,14 @@ pub fn canonicalize<P: AsRef<Path>>(
         match resolve_symlink(&result) {
             Ok(Some(link_path)) => {
                 let remaining_parts = parts.clone();
+                if remaining_parts.is_empty() {
+                    let (target_requires_directory, target_requires_trailing_dot) =
+                        final_directory_requirements(&link_path);
+                    if miss_mode != MissingHandling::Missing {
+                        has_to_be_directory |= target_requires_directory;
+                    }
+                    requires_directory_for_trailing_dot |= target_requires_trailing_dot;
+                }
                 for link_part in link_path.components().rev() {
                     parts.push_front(link_part.into());
                 }
@@ -981,6 +989,44 @@ mod tests {
             .expect_err("a trailing dot component requires the directory to exist");
 
         assert_eq!(error.raw_os_error(), Some(libc::ENOENT));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_canonicalize_preserves_final_symlink_target_directory_requirements() {
+        let temp_dir = tempdir().unwrap();
+        let regular = temp_dir.path().join("regular");
+        fs::write(&regular, b"data").unwrap();
+
+        for (name, target, missing_handling, expected_errno) in [
+            (
+                "regular-slash",
+                "regular/",
+                MissingHandling::Normal,
+                libc::ENOTDIR,
+            ),
+            (
+                "missing-dot",
+                "missing/.",
+                MissingHandling::Normal,
+                libc::ENOENT,
+            ),
+            (
+                "regular-dot",
+                "regular/.",
+                MissingHandling::Existing,
+                libc::ENOTDIR,
+            ),
+        ] {
+            let link = temp_dir.path().join(name);
+            unix::fs::symlink(target, &link).unwrap();
+
+            let error = canonicalize(&link, missing_handling, ResolveMode::Physical).expect_err(
+                "a final slash or dot in a symlink target must preserve GNU directory requirements",
+            );
+
+            assert_eq!(error.raw_os_error(), Some(expected_errno));
+        }
     }
 
     #[cfg(unix)]

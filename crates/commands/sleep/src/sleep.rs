@@ -34,6 +34,12 @@ mod sleep_flags {
     pub const SLEEP_NUMBER: &str = "NUMBER";
 }
 
+#[cfg(target_os = "linux")]
+// GNU's "\xa1\ae" source literal expands \a as BEL and leaves the trailing e.
+const GNU_GB18030_FALLBACK_LEFT_QUOTE: &[u8] = b"\xa1\x07e";
+#[cfg(target_os = "linux")]
+const GNU_GB18030_FALLBACK_RIGHT_QUOTE: &[u8] = b"\xa1\xaf";
+
 #[derive(Debug)]
 struct InvalidTimeIntervalError {
     operands: Vec<OsString>,
@@ -66,6 +72,11 @@ fn quote_duration_operand_for_locale_with_codeset(
     if let Some(codeset) = codeset {
         let (opening_quote, closing_quote) = if locale == "zh-CN" {
             (b"\"".as_slice(), b"\"".as_slice())
+        } else if sleep_gb18030_codeset(codeset) {
+            (
+                GNU_GB18030_FALLBACK_LEFT_QUOTE,
+                GNU_GB18030_FALLBACK_RIGHT_QUOTE,
+            )
         } else {
             (b"'".as_slice(), b"'".as_slice())
         };
@@ -85,6 +96,11 @@ fn quote_duration_operand_for_locale_with_codeset(
     }
 
     quote_duration_operand_with_style(operand, locale_uses_utf8_quotes())
+}
+
+#[cfg(target_os = "linux")]
+fn sleep_gb18030_codeset(codeset: &str) -> bool {
+    codeset.eq_ignore_ascii_case("GB18030")
 }
 
 fn localized_invalid_time_interval(locale: &str) -> String {
@@ -1101,6 +1117,19 @@ mod tests {
                     Some("GBK")
                 ),
                 b"'\xd6\xd0\xb9\xfa'"
+            );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_english_diagnostic_uses_gnu_gb18030_fallback_quotes() {
+            assert_eq!(
+                quote_duration_operand_for_locale_with_codeset(
+                    OsStr::new("x"),
+                    "en-US",
+                    Some("GB18030")
+                ),
+                b"\xa1\x07ex\xa1\xaf"
             );
         }
 

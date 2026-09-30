@@ -609,10 +609,31 @@ impl NlSectionDelimiter {
 ///
 /// # 返回值
 /// * `CTResult<()>` - 处理结果
+#[cfg(target_os = "linux")]
+fn nl_configure_sigpipe() {
+    nl_restore_default_sigpipe_if_needed(ctcore::ct_sigpipe_was_default(), || {
+        let _ = ctcore::ct_signals::enable_pipe_errors();
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
+fn nl_configure_sigpipe() {}
+
+#[cfg(target_os = "linux")]
+fn nl_restore_default_sigpipe_if_needed(
+    inherited_sigpipe_was_default: bool,
+    restore_default: impl FnOnce(),
+) {
+    if inherited_sigpipe_was_default {
+        restore_default();
+    }
+}
+
 pub fn nl_main<W>(writer: &mut W, args: impl Args) -> CTResult<()>
 where
     W: std::io::Write,
 {
+    nl_configure_sigpipe();
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -889,6 +910,18 @@ mod tests {
         // 测试 execute 方法 - 帮助命令应该返回错误，但不会崩溃
         let args = vec![OsString::from("nl"), OsString::from("--help")];
         assert!(tool.execute(&args).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_sigpipe_default_is_only_restored_for_default_inheritance() {
+        let mut restored = false;
+        nl_restore_default_sigpipe_if_needed(true, || restored = true);
+        assert!(restored);
+
+        restored = false;
+        nl_restore_default_sigpipe_if_needed(false, || restored = true);
+        assert!(!restored);
     }
 
     /// 测试参数标准化函数

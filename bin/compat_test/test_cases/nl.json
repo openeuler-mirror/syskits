@@ -587,6 +587,31 @@
         "tags": ["input-bytes", "non-utf8-path", "file-operand"]
       },
       {
+        "tstdin": "line\n",
+        "command": "nl",
+        "description": "LC_ALL=C下stdout连接无读端管道且调用方保留默认SIGPIPE，nl首次写入编号行时由SIGPIPE终止，退出码为141且没有输出或诊断。",
+        "args": [],
+        "environment": {
+          "env_vars": {
+            "LC_ALL": "C",
+            "LANG": "C"
+          },
+          "standardStreams": {
+            "stdout": "closed_pipe",
+            "sigpipe": "default",
+            "useBash": true
+          }
+        },
+        "expectation": {
+          "execution": {
+            "exit_code": 141,
+            "stdout": "",
+            "stderr": ""
+          }
+        },
+        "tags": ["sigpipe", "stdout", "write-error"]
+      },
+      {
         "tstdin": "",
         "command": "nl",
         "description": "测试多文件处理包含不存在的文件",

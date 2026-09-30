@@ -814,6 +814,24 @@ impl ClapErrorWrapper {
     }
 }
 
+fn clap_display_output_error(
+    error: io::Error,
+    output_uses_stderr: bool,
+    stdout_was_closed: bool,
+) -> io::Error {
+    #[cfg(unix)]
+    if !output_uses_stderr && stdout_was_closed {
+        // ct_ensure_standard_fds replaces a closed stdout with /dev/full so
+        // later opens cannot reuse fd 1. Preserve the caller-visible EBADF.
+        return io::Error::from_raw_os_error(crate::libc::EBADF);
+    }
+
+    #[cfg(not(unix))]
+    let _ = (output_uses_stderr, stdout_was_closed);
+
+    error
+}
+
 // 这是对Display特性的滥用
 impl Display for ClapErrorWrapper {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
@@ -821,6 +839,11 @@ impl Display for ClapErrorWrapper {
             Ok(_) => Ok(()),
             Err(error) => {
                 self.note_output_failed();
+                let error = clap_display_output_error(
+                    error,
+                    self.error.use_stderr(),
+                    crate::ct_stdout_was_closed(),
+                );
                 write!(f, "write error: {}", strip_errno(&error))
             }
         }
@@ -953,6 +976,28 @@ mod tests {
 
         wrapper.note_output_failed();
         assert_eq!(wrapper.code(), 125);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_clap_stdout_error_restores_closed_descriptor_errno() {
+        let enospc = io::Error::from_raw_os_error(libc::ENOSPC);
+        assert_eq!(
+            clap_display_output_error(enospc, false, true).raw_os_error(),
+            Some(libc::EBADF)
+        );
+
+        let enospc = io::Error::from_raw_os_error(libc::ENOSPC);
+        assert_eq!(
+            clap_display_output_error(enospc, false, false).raw_os_error(),
+            Some(libc::ENOSPC)
+        );
+
+        let enospc = io::Error::from_raw_os_error(libc::ENOSPC);
+        assert_eq!(
+            clap_display_output_error(enospc, true, true).raw_os_error(),
+            Some(libc::ENOSPC)
+        );
     }
 
     #[test]

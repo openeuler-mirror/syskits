@@ -1,10 +1,9 @@
 use std::io;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
-use std::process::{Command, Stdio};
+use std::process::{Command, Output, Stdio};
 
 #[cfg(target_os = "linux")]
-#[test]
-fn closed_stdout_pipe_uses_default_sigpipe() {
+fn run_with_closed_stdout_pipe(sigpipe_handler: ctcore::libc::sighandler_t) -> Output {
     let mut pipe_fds = [0; 2];
     assert_eq!(unsafe { ctcore::libc::pipe(pipe_fds.as_mut_ptr()) }, 0);
     let read_end = pipe_fds[0];
@@ -19,8 +18,7 @@ fn closed_stdout_pipe_uses_default_sigpipe() {
         .stderr(Stdio::piped());
     unsafe {
         command.pre_exec(move || {
-            if ctcore::libc::signal(ctcore::libc::SIGPIPE, ctcore::libc::SIG_DFL)
-                == ctcore::libc::SIG_ERR
+            if ctcore::libc::signal(ctcore::libc::SIGPIPE, sigpipe_handler) == ctcore::libc::SIG_ERR
             {
                 return Err(io::Error::last_os_error());
             }
@@ -36,9 +34,25 @@ fn closed_stdout_pipe_uses_default_sigpipe() {
 
     let child = command.spawn().expect("spawn printenv");
     assert_eq!(unsafe { ctcore::libc::close(write_end) }, 0);
-    let output = child.wait_with_output().expect("wait for printenv");
+    child.wait_with_output().expect("wait for printenv")
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn closed_stdout_pipe_uses_default_sigpipe() {
+    let output = run_with_closed_stdout_pipe(ctcore::libc::SIG_DFL);
 
     assert_eq!(output.status.signal(), Some(ctcore::libc::SIGPIPE));
     assert!(output.stdout.is_empty());
     assert!(output.stderr.is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn closed_stdout_pipe_with_ignored_sigpipe_reports_write_error() {
+    let output = run_with_closed_stdout_pipe(ctcore::libc::SIG_IGN);
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert_eq!(output.stderr, b"printenv: write error: Broken pipe\n");
 }

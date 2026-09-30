@@ -220,6 +220,58 @@
                 "unset VAR1",
                 "unset VAR2"
             ]
+        },
+        {
+            "tstdin": "",
+            "command": "printenv",
+            "description": "LC_ALL=C、stdout 连接无读端管道且调用方保留默认 SIGPIPE 时，printenv 输出 PRINTENV_PIPE 的完整输入值 pipe-value 和换行；GNU 在该次写入中由 SIGPIPE 终止，预期 RC=141、stdout 与 stderr 均为 0 字节。",
+            "args": ["PRINTENV_PIPE"],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "PRINTENV_PIPE": "pipe-value"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "default"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printenv",
+            "description": "LC_ALL=C、stdout 连接无读端管道且调用方继承忽略 SIGPIPE 时，printenv 输出 PRINTENV_PIPE 的完整输入值 pipe-value 和换行；GNU 将 EPIPE 报告为 write error，预期 RC=2、stdout 为 0 字节、stderr 完整文本为 printenv: write error: Broken pipe 加换行。",
+            "args": ["PRINTENV_PIPE"],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "PRINTENV_PIPE": "pipe-value"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "ignore"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "printenv: write error: Broken pipe\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

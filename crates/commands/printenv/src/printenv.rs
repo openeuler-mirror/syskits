@@ -13,7 +13,10 @@ extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::OsStringValueParser, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::{Tool, ct_error::CTResult};
+use ctcore::{
+    Tool,
+    ct_error::{CTResult, CtSimpleError, strip_errno},
+};
 #[cfg(not(target_os = "linux"))]
 use std::env;
 use std::ffi::{CStr, OsString};
@@ -185,12 +188,29 @@ fn printenv_classic_from_options(options: &PrintenvOptions) -> CTResult<i32> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
 
-    Ok(write_environment_entries(
-        &mut stdout,
-        options,
-        &environment,
-    )?)
+    write_environment_entries(&mut stdout, options, &environment).map_err(printenv_write_error)
 }
+
+fn printenv_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
+    printenv_redirect_stdout_to_dev_null();
+    CtSimpleError::new(2, format!("write error: {}", strip_errno(&error)))
+}
+
+#[cfg(unix)]
+fn printenv_redirect_stdout_to_dev_null() {
+    const DEV_NULL: &[u8] = b"/dev/null\0";
+
+    unsafe {
+        let fd = ctcore::libc::open(DEV_NULL.as_ptr().cast(), ctcore::libc::O_WRONLY);
+        if fd >= 0 {
+            ctcore::libc::dup2(fd, ctcore::libc::STDOUT_FILENO);
+            ctcore::libc::close(fd);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn printenv_redirect_stdout_to_dev_null() {}
 
 fn write_environment_entries(
     stdout: &mut impl Write,

@@ -18,7 +18,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::locale_quote_marks;
-use ctcore::ct_error::{CTResult, CTsageError, set_ct_exit_code};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, set_ct_exit_code};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::ct_quoting_style::gnu_quote_shell_bytes;
 use std::ffi::{CString, OsStr, OsString};
@@ -76,6 +76,41 @@ const PATHCHK_POSIX_PATH_MAX: usize = 256;
 const PATHCHK_POSIX_NAME_MAX: usize = 14;
 const PATHCHK_PATH_MAX_MINIMUM: usize = PATHCHK_POSIX_PATH_MAX;
 const PATHCHK_NAME_MAX_MINIMUM: usize = PATHCHK_POSIX_NAME_MAX;
+const PATHCHK_SHORT_OPTIONS: &[u8] = b"pP";
+const PATHCHK_LONG_OPTIONS: &[&str] = &["portability", "help", "version"];
+
+#[derive(Debug)]
+struct PathchkUsageError {
+    message: Vec<u8>,
+}
+
+impl PathchkUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl std::fmt::Display for PathchkUsageError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl std::error::Error for PathchkUsageError {}
+
+impl CTError for PathchkUsageError {
+    fn diagnostic_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
+        std::borrow::Cow::Borrowed(&self.message)
+    }
+
+    fn code(&self) -> i32 {
+        1
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
 
 fn initialize_locale() {
     #[cfg(target_os = "linux")]
@@ -141,7 +176,7 @@ pub fn pathchk_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResu
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     // 尝试解析命令行参数
-    let matches = ct_app().try_get_matches_from(args)?;
+    let matches = parse_pathchk_args(args)?;
     // 解析参数到 PathchkFlags 结构体
     let flags = PathchkFlags::new(&matches)?;
 
@@ -152,7 +187,7 @@ pub fn pathchk_native_semantic(args: impl ctcore::Args) -> CTResult<PathchkSeman
     initialize_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let matches = ct_app().try_get_matches_from(args)?;
+    let matches = parse_pathchk_args(args)?;
     let flags = PathchkFlags::new(&matches)?;
 
     let mut rows = Vec::with_capacity(flags.paths.len());
@@ -188,6 +223,58 @@ pub fn pathchk_native_semantic(args: impl ctcore::Args) -> CTResult<PathchkSeman
         stderr_text,
         exit_code,
     })
+}
+
+fn parse_pathchk_args(args: impl ctcore::Args) -> CTResult<ArgMatches> {
+    let args = args.collect::<Vec<_>>();
+    validate_pathchk_options(&args)?;
+    Ok(ct_app().try_get_matches_from(args)?)
+}
+
+fn validate_pathchk_options(args: &[OsString]) -> CTResult<()> {
+    for argument in args.iter().skip(1) {
+        let bytes = argument.as_encoded_bytes();
+        if bytes == b"--" || bytes.len() <= 1 || bytes[0] != b'-' {
+            return Ok(());
+        }
+
+        if bytes.starts_with(b"--") {
+            let long = &bytes[2..];
+            let separator = long.iter().position(|byte| *byte == b'=');
+            let name = &long[..separator.unwrap_or(long.len())];
+            let canonical = (!name.is_empty()).then(|| {
+                PATHCHK_LONG_OPTIONS
+                    .iter()
+                    .copied()
+                    .find(|option| option.as_bytes().starts_with(name))
+            });
+            let Some(canonical) = canonical.flatten() else {
+                let mut message = b"unrecognized option '".to_vec();
+                message.extend_from_slice(bytes);
+                message.push(b'\'');
+                return Err(PathchkUsageError::boxed(message));
+            };
+
+            if separator.is_some() {
+                return Err(PathchkUsageError::boxed(
+                    format!("option '--{canonical}' doesn't allow an argument").into_bytes(),
+                ));
+            }
+            if matches!(canonical, "help" | "version") {
+                return Ok(());
+            }
+        } else if let Some(unknown) = bytes[1..]
+            .iter()
+            .find(|option| !PATHCHK_SHORT_OPTIONS.contains(option))
+        {
+            let mut message = b"invalid option -- '".to_vec();
+            message.push(*unknown);
+            message.push(b'\'');
+            return Err(PathchkUsageError::boxed(message));
+        }
+    }
+
+    Ok(())
 }
 
 fn pathchk_diagnostic_kind(message: &str) -> &'static str {
@@ -782,6 +869,74 @@ mod tests {
                 let flags = PathchkFlags::new(&matches).unwrap();
                 assert_eq!(flags.paths, vec!["file.txt"]);
             }
+        }
+
+        #[test]
+        fn test_short_option_cluster_uses_gnu_invalid_option_diagnostic() {
+            let mut output = Cursor::new(Vec::new());
+            let error = pathchk_main(
+                &mut output,
+                [ctcore::ct_util_name(), "-pz"]
+                    .map(OsString::from)
+                    .into_iter(),
+            )
+            .unwrap_err();
+
+            assert_eq!(error.diagnostic_bytes().as_ref(), b"invalid option -- 'z'");
+        }
+
+        #[test]
+        fn test_long_option_value_uses_canonical_gnu_diagnostic() {
+            let mut output = Cursor::new(Vec::new());
+            let error = pathchk_main(
+                &mut output,
+                [ctcore::ct_util_name(), "--p=value"]
+                    .map(OsString::from)
+                    .into_iter(),
+            )
+            .unwrap_err();
+
+            assert_eq!(
+                error.diagnostic_bytes().as_ref(),
+                b"option '--portability' doesn't allow an argument"
+            );
+        }
+
+        #[test]
+        fn test_empty_long_option_name_is_unrecognized() {
+            let mut output = Cursor::new(Vec::new());
+            let error = pathchk_main(
+                &mut output,
+                [ctcore::ct_util_name(), "--=value"]
+                    .map(OsString::from)
+                    .into_iter(),
+            )
+            .unwrap_err();
+
+            assert_eq!(
+                error.diagnostic_bytes().as_ref(),
+                b"unrecognized option '--=value'"
+            );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_non_utf8_short_option_preserves_original_byte() {
+            let mut output = Cursor::new(Vec::new());
+            let error = pathchk_main(
+                &mut output,
+                [
+                    OsString::from(ctcore::ct_util_name()),
+                    OsString::from_vec(vec![b'-', 0xff]),
+                ]
+                .into_iter(),
+            )
+            .unwrap_err();
+
+            assert_eq!(
+                error.diagnostic_bytes().as_ref(),
+                b"invalid option -- '\xff'"
+            );
         }
 
         #[test]

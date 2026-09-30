@@ -299,6 +299,31 @@
         "filesystem",
         "diagnostics"
       ]
+    },
+    {
+      "tstdin": "",
+      "command": "pathchk",
+      "description": "pathchk: 重复或合并的-p、-P及重复--portability均为幂等布尔选项",
+      "args": [
+        "-pp",
+        "-PP",
+        "--portability",
+        "--portability",
+        "a"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "options",
+        "repeated-options",
+        "short-option-cluster"
+      ]
     }
   ]
 }

@@ -233,15 +233,18 @@ pub fn ct_app() -> Command {
         Arg::new(pathchk_flags::PATHCHK_POSIX)
             .short('p')
             .help(t!("pathchk.clap.pathchk_posix"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(pathchk_flags::PATHCHK_POSIX),
         Arg::new(pathchk_flags::PATHCHK_POSIX_SPECIAL)
             .short('P')
             .help(r#"check for empty names and leading "-""#)
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(pathchk_flags::PATHCHK_POSIX_SPECIAL),
         Arg::new(pathchk_flags::PATHCHK_PORTABILITY)
             .long(pathchk_flags::PATHCHK_PORTABILITY)
             .help(t!("pathchk.clap.pathchk_portability"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(pathchk_flags::PATHCHK_PORTABILITY),
         Arg::new(pathchk_flags::PATHCHK_PATH)
             .hide(true)
             .action(ArgAction::Append)
@@ -705,6 +708,24 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args).unwrap();
             let flags = PathchkFlags::new(&matches).unwrap();
             assert!(matches!(flags.mode, PathchkMode::Both));
+        }
+
+        #[test]
+        fn test_flags_accept_repeated_boolean_options() {
+            for args in [
+                vec![ctcore::ct_util_name(), "-pp", "file.txt"],
+                vec![ctcore::ct_util_name(), "-PP", "file.txt"],
+                vec![
+                    ctcore::ct_util_name(),
+                    "--portability",
+                    "--portability",
+                    "file.txt",
+                ],
+            ] {
+                let matches = ct_app().try_get_matches_from(args).unwrap();
+                let flags = PathchkFlags::new(&matches).unwrap();
+                assert_eq!(flags.paths, vec!["file.txt"]);
+            }
         }
 
         #[test]

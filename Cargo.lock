@@ -2201,7 +2201,6 @@ version = "3.3.8"
 dependencies = [
  "clap",
  "ctcore",
- "regex",
  "rust-i18n",
  "sys-locale 0.2.4",
 ]

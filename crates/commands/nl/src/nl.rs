@@ -17,7 +17,9 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_gnu_regex::{GnuRegex, GnuRegexCompileOptions, GnuRegexError};
 use ctcore::{Args, ct_show_error};
+use std::cell::RefCell;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write, stdout};
@@ -295,7 +297,6 @@ impl NlStats {
 }
 
 /// 行号编号样式枚举
-#[derive(Clone, Debug)]
 enum NlNumberingStyle {
     /// 对所有行编号
     All,
@@ -304,7 +305,24 @@ enum NlNumberingStyle {
     /// 不编号
     None,
     /// 使用正则表达式匹配的行编号
-    Regex(Box<regex::Regex>),
+    Regex {
+        pattern: Vec<u8>,
+        compiled: RefCell<GnuRegex>,
+    },
+}
+
+impl std::fmt::Debug for NlNumberingStyle {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::All => formatter.write_str("All"),
+            Self::NonEmpty => formatter.write_str("NonEmpty"),
+            Self::None => formatter.write_str("None"),
+            Self::Regex { pattern, .. } => formatter
+                .debug_struct("Regex")
+                .field("pattern", &String::from_utf8_lossy(pattern))
+                .finish(),
+        }
+    }
 }
 
 impl Eq for NlNumberingStyle {}
@@ -314,7 +332,7 @@ impl PartialEq for NlNumberingStyle {
         use NlNumberingStyle::*;
         match (self, other) {
             (All, All) | (NonEmpty, NonEmpty) | (None, None) => true,
-            (Regex(re1), Regex(re2)) => re1.as_str() == re2.as_str(),
+            (Regex { pattern: left, .. }, Regex { pattern: right, .. }) => left == right,
             _ => false,
         }
     }
@@ -328,12 +346,26 @@ impl TryFrom<&str> for NlNumberingStyle {
             "a" => Ok(Self::All),
             "t" => Ok(Self::NonEmpty),
             "n" => Ok(Self::None),
-            _ if s.starts_with('p') => match regex::Regex::new(&s[1..]) {
-                Ok(re) => Ok(Self::Regex(Box::new(re))),
-                Err(_) => Err(String::from("invalid regular expression")),
-            },
+            _ if s.starts_with('p') => {
+                let pattern = s.as_bytes()[1..].to_vec();
+                let compiled =
+                    GnuRegex::compile(&pattern, GnuRegexCompileOptions::posix_basic_permissive())
+                        .map_err(nl_regex_error_message)?;
+                Ok(Self::Regex {
+                    pattern,
+                    compiled: RefCell::new(compiled),
+                })
+            }
             _ => Err(format!("invalid numbering style: '{s}'")),
         }
+    }
+}
+
+fn nl_regex_error_message(error: GnuRegexError) -> String {
+    match error {
+        GnuRegexError::Compile(message) => String::from_utf8_lossy(&message).into_owned(),
+        GnuRegexError::Search => String::from("error in regular expression search"),
+        GnuRegexError::RecordTooLarge => String::from("record too large"),
     }
 }
 
@@ -479,7 +511,16 @@ where
             }
             NlNumberingStyle::NonEmpty => !is_empty,
             NlNumberingStyle::None => false,
-            NlNumberingStyle::Regex(re) => re.is_match(&lossy_line),
+            NlNumberingStyle::Regex { compiled, .. } => compiled
+                .borrow_mut()
+                .search(
+                    &buf[..line_len],
+                    0,
+                    isize::try_from(line_len)
+                        .map_err(|_| CtSimpleError::new(1, "record too large"))?,
+                )
+                .map_err(|error| CtSimpleError::new(1, nl_regex_error_message(error)))?
+                .is_some(),
         };
 
         if is_line_numbered {
@@ -961,39 +1002,26 @@ mod tests {
         /// 测试编号样式的解析
         #[test]
         fn test_flags_numbering_styles() {
-            let test_cases = [
-                ("a", Ok(NlNumberingStyle::All)),
-                ("t", Ok(NlNumberingStyle::NonEmpty)),
-                ("n", Ok(NlNumberingStyle::None)),
-                (
-                    "p[0-9]+",
-                    Ok(NlNumberingStyle::Regex(Box::new(
-                        regex::Regex::new("[0-9]+").unwrap(),
-                    ))),
-                ),
-                (
-                    "invalid",
-                    Err("invalid numbering style: 'invalid'".to_string()),
-                ),
-            ];
-
-            for (input, expected_result) in test_cases {
-                let result = NlNumberingStyle::try_from(input);
-                match (result, expected_result) {
-                    (Ok(style), Ok(expected)) => {
-                        assert_eq!(style, expected, "Failed for input: {input}");
-                    }
-                    (Err(e), Err(expected)) => {
-                        assert_eq!(e, expected, "Failed for input: {input}");
-                    }
-                    (Ok(_), Err(_)) => {
-                        panic!("Expected error but got success for input: {input}");
-                    }
-                    (Err(_), Ok(_)) => {
-                        panic!("Expected success but got error for input: {input}");
-                    }
-                }
-            }
+            assert_eq!(
+                NlNumberingStyle::try_from("a").unwrap(),
+                NlNumberingStyle::All
+            );
+            assert_eq!(
+                NlNumberingStyle::try_from("t").unwrap(),
+                NlNumberingStyle::NonEmpty
+            );
+            assert_eq!(
+                NlNumberingStyle::try_from("n").unwrap(),
+                NlNumberingStyle::None
+            );
+            assert!(matches!(
+                NlNumberingStyle::try_from("p[0-9]+").unwrap(),
+                NlNumberingStyle::Regex { pattern, .. } if pattern == b"[0-9]+"
+            ));
+            assert_eq!(
+                NlNumberingStyle::try_from("invalid").unwrap_err(),
+                "invalid numbering style: 'invalid'"
+            );
         }
 
         /// 测试基本标志设置
@@ -1353,13 +1381,28 @@ mod tests {
             let mut output = Vec::new();
             let mut reader = BufReader::new(Cursor::new(input));
             let mut flags = NlFlags::default();
-            flags.body_numbering =
-                NlNumberingStyle::Regex(Box::new(regex::Regex::new("[0-9]+").unwrap()));
+            flags.body_numbering = NlNumberingStyle::try_from("p[0-9]\\+").unwrap();
 
             nl(&mut output, &mut reader, &mut flags).unwrap();
 
             let expected = "     1\t123\n       abc\n     2\t456\n";
             assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        #[test]
+        fn test_bre_plus_numbers_digit_runs() {
+            let input = "123\nabc\n+\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.body_numbering = NlNumberingStyle::try_from(r"p[0-9]\+").unwrap();
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            assert_eq!(
+                String::from_utf8(output).unwrap(),
+                "     1\t123\n       abc\n       +\n"
+            );
         }
 
         /// 测试全部编号样式

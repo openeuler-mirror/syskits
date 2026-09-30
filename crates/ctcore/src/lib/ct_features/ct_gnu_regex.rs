@@ -13,6 +13,12 @@ use std::sync::Mutex;
 /// GNU Emacs regular-expression syntax, used by utilities such as `tac` and `ptx`.
 pub const GNU_REGEX_SYNTAX_EMACS: libc::c_ulong = 0;
 
+/// GNU POSIX basic syntax with the two permissive flags disabled.
+///
+/// This corresponds to `RE_SYNTAX_POSIX_BASIC & ~RE_CONTEXT_INVALID_DUP &
+/// ~RE_NO_EMPTY_RANGES`, used by GNU utilities that accept historical BREs.
+pub const GNU_REGEX_SYNTAX_POSIX_BASIC_PERMISSIVE: libc::c_ulong = 0x2c6;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GnuRegexMatch {
     pub start: usize,
@@ -58,6 +64,14 @@ impl GnuRegexCompileOptions<'_> {
     pub const fn emacs() -> Self {
         Self {
             syntax: GNU_REGEX_SYNTAX_EMACS,
+            translate: None,
+            fastmap: true,
+        }
+    }
+
+    pub const fn posix_basic_permissive() -> Self {
+        Self {
+            syntax: GNU_REGEX_SYNTAX_POSIX_BASIC_PERMISSIVE,
             translate: None,
             fastmap: true,
         }
@@ -356,6 +370,18 @@ mod tests {
         assert_eq!(found, GnuRegexMatch { start: 5, end: 9 });
         let found = regex.search_backward(b"ababX").unwrap().unwrap();
         assert_eq!(found, GnuRegexMatch { start: 0, end: 4 });
+    }
+
+    #[test]
+    fn permissive_posix_basic_uses_backslashed_plus_as_a_repetition_operator() {
+        let mut regex = GnuRegex::compile(
+            b"[0-9]\\+",
+            GnuRegexCompileOptions::posix_basic_permissive(),
+        )
+        .unwrap();
+
+        assert!(regex.search(b"123", 0, 3).unwrap().is_some());
+        assert!(regex.search(b"abc", 0, 3).unwrap().is_none());
     }
 
     #[test]

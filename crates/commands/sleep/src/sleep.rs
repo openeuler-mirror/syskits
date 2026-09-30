@@ -646,22 +646,31 @@ fn sleep_encode_locale_text_for_codeset(text: &str, codeset: &str) -> Option<Vec
     Some(output)
 }
 
-fn standard_long_option(name: &[u8]) -> Option<&'static str> {
+enum StandardLongOption {
+    Unique(&'static str),
+    Ambiguous,
+    Unrecognized,
+}
+
+fn standard_long_option(name: &[u8]) -> StandardLongOption {
     if let Some(option) = ["help", "version"]
         .into_iter()
         .find(|option| option.as_bytes() == name)
     {
-        return Some(option);
-    }
-    if name.is_empty() {
-        return None;
+        return StandardLongOption::Unique(option);
     }
 
     let mut matches = ["help", "version"]
         .into_iter()
         .filter(|option| option.as_bytes().starts_with(name));
-    let option = matches.next()?;
-    matches.next().is_none().then_some(option)
+    let Some(option) = matches.next() else {
+        return StandardLongOption::Unrecognized;
+    };
+    if matches.next().is_some() {
+        StandardLongOption::Ambiguous
+    } else {
+        StandardLongOption::Unique(option)
+    }
 }
 
 fn prepare_sleep_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
@@ -689,11 +698,21 @@ fn prepare_sleep_args_with_mode(
         if let Some(long) = bytes.strip_prefix(b"--") {
             let separator = long.iter().position(|byte| *byte == b'=');
             let name = &long[..separator.unwrap_or(long.len())];
-            let Some(option) = standard_long_option(name) else {
-                let mut message = b"unrecognized option '".to_vec();
-                message.extend_from_slice(bytes);
-                message.push(b'\'');
-                return Err(SleepUsageError::boxed(message));
+            let option = match standard_long_option(name) {
+                StandardLongOption::Unique(option) => option,
+                StandardLongOption::Ambiguous => {
+                    let mut message = b"option '".to_vec();
+                    message.extend_from_slice(bytes);
+                    message
+                        .extend_from_slice(b"' is ambiguous; possibilities: '--help' '--version'");
+                    return Err(SleepUsageError::boxed(message));
+                }
+                StandardLongOption::Unrecognized => {
+                    let mut message = b"unrecognized option '".to_vec();
+                    message.extend_from_slice(bytes);
+                    message.push(b'\'');
+                    return Err(SleepUsageError::boxed(message));
+                }
             };
             if separator.is_some() {
                 return Err(SleepUsageError::boxed(
@@ -1159,6 +1178,10 @@ mod tests {
                 (
                     vec![OsString::from("sleep"), OsString::from("--hel=value")],
                     b"option '--help' doesn't allow an argument".as_slice(),
+                ),
+                (
+                    vec![OsString::from("sleep"), OsString::from("--=")],
+                    b"option '--=' is ambiguous; possibilities: '--help' '--version'".as_slice(),
                 ),
             ];
 

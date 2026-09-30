@@ -706,6 +706,29 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 空长选项前缀带等号时按GNU识别为--help和--version的歧义选项",
+            "args": [
+                "--="
+            ],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "sleep: option '--=' is ambiguous; possibilities: '--help' '--version'\nTry 'sleep --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

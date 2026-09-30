@@ -954,8 +954,8 @@ fn parse_duration_with_decimal_point(input: &str, decimal_point: &str) -> Option
     match suffix {
         "" | "s" => Some(seconds),
         "m" => Some(seconds * 60.0),
-        "h" => Some(seconds * 60.0 * 60.0),
-        "d" => Some(seconds * 60.0 * 60.0 * 24.0),
+        "h" => Some(seconds * 3_600.0),
+        "d" => Some(seconds * 86_400.0),
         _ => None,
     }
 }
@@ -1284,6 +1284,14 @@ mod tests {
             assert_eq!(
                 sleep_handle_second(&["0.0000000006", "0.0000000006"]).unwrap(),
                 Duration::from_nanos(2)
+            );
+        }
+
+        #[test]
+        fn test_sleep_handle_second_uses_gnu_single_day_multiplier() {
+            assert_eq!(
+                sleep_handle_second(&["0.0000000006d"]).unwrap(),
+                Duration::from_nanos(51_840)
             );
         }
 

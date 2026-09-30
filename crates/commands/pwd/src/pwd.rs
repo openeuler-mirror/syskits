@@ -168,13 +168,13 @@ fn default_pwd_mode(posixly_correct: Option<&OsStr>) -> PwdMode {
     }
 }
 
-fn resolve_pwd_mode(matches: &clap::ArgMatches) -> PwdMode {
+fn resolve_pwd_mode(matches: &clap::ArgMatches, posixly_correct: Option<&OsStr>) -> PwdMode {
     if matches.get_flag(pwd_flags::PWD_PHYSICAL) {
         PwdMode::Physical
     } else if matches.get_flag(pwd_flags::PWD_LOGICAL) {
         PwdMode::Logical
     } else {
-        default_pwd_mode(env::var_os("POSIXLY_CORRECT").as_deref())
+        default_pwd_mode(posixly_correct)
     }
 }
 
@@ -182,7 +182,9 @@ pub fn pwd_main(args: impl ctcore::Args) -> CTResult<()> {
     let _sigpipe_guard = SigpipeGuard::for_cli();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let matches = ct_app().try_get_matches_from(args)?;
+    let posixly_correct = env::var_os("POSIXLY_CORRECT");
+    let matches =
+        ct_app_with_posixly_correct(posixly_correct.is_some()).try_get_matches_from(args)?;
     if matches
         .get_many::<String>(pwd_flags::PWD_ARG_OTHERS)
         .is_some()
@@ -192,7 +194,7 @@ pub fn pwd_main(args: impl ctcore::Args) -> CTResult<()> {
     // 如果设置了 POSIXLY_CORRECT，我们希望进行逻辑解析。
     // 这在执行 mkdir -p a/b && ln -s a/b c && cd c && pwd 时会产生不同的输出
     // 在这种情况下，我们应该在路径末尾得到 c 而不是 a/b
-    let cwd = resolve_pwd_path(resolve_pwd_mode(&matches))
+    let cwd = resolve_pwd_path(resolve_pwd_mode(&matches, posixly_correct.as_deref()))
         .map_err_context(|| "failed to get current directory".to_owned())?;
 
     // \\?\ 是 Windows 在某些情况下给路径加的前缀，包括对它们进行规范化时。
@@ -241,10 +243,22 @@ fn pwd_redirect_stdout_to_dev_null() {
 fn pwd_redirect_stdout_to_dev_null() {}
 
 pub fn ct_app() -> Command {
+    ct_app_with_posixly_correct(false)
+}
+
+fn ct_app_with_posixly_correct(posixly_correct: bool) -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
     let application_info = t!("pwd.about");
     let usage_description = t!("pwd.usage");
+    let others = Arg::new(pwd_flags::PWD_ARG_OTHERS)
+        .action(ArgAction::Append)
+        .value_hint(clap::ValueHint::AnyPath);
+    let others = if posixly_correct {
+        others.trailing_var_arg(true).allow_hyphen_values(true)
+    } else {
+        others
+    };
     let args = vec![
         Arg::new(pwd_flags::PWD_LOGICAL)
             .short('L')
@@ -257,9 +271,7 @@ pub fn ct_app() -> Command {
             .overrides_with(pwd_flags::PWD_LOGICAL)
             .help(t!("pwd.clap.pwd_physical"))
             .action(ArgAction::SetTrue),
-        Arg::new(pwd_flags::PWD_ARG_OTHERS)
-            .action(ArgAction::Append)
-            .value_hint(clap::ValueHint::AnyPath),
+        others,
     ];
 
     Command::new(utility_name)
@@ -904,6 +916,24 @@ mod tests {
             let args = vec![ctcore::ct_util_name()];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn posixly_correct_stops_option_parsing_after_first_operand() {
+            let command = ct_app_with_posixly_correct(true);
+            let matches = command
+                .try_get_matches_from([ctcore::ct_util_name(), "operand", "-P"])
+                .expect("arguments should parse");
+
+            assert!(!matches.get_flag(pwd_flags::PWD_PHYSICAL));
+            assert_eq!(
+                matches
+                    .get_many::<String>(pwd_flags::PWD_ARG_OTHERS)
+                    .expect("non-option arguments")
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+                ["operand", "-P"]
+            );
         }
 
         #[test]

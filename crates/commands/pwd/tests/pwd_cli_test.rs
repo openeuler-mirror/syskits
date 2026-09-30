@@ -54,6 +54,64 @@ fn non_option_arguments_emit_gnu_warning() {
     assert_eq!(output.stderr, b"pwd: ignoring non-option arguments\n");
 }
 
+#[test]
+fn option_errors_use_gnu_diagnostics() {
+    let cases = [
+        (
+            vec!["-Z"],
+            b"pwd: invalid option -- 'Z'\nTry 'pwd --help' for more information.\n".as_slice(),
+        ),
+        (
+            vec!["-LPx"],
+            b"pwd: invalid option -- 'x'\nTry 'pwd --help' for more information.\n".as_slice(),
+        ),
+        (
+            vec!["--invalid"],
+            b"pwd: unrecognized option '--invalid'\nTry 'pwd --help' for more information.\n"
+                .as_slice(),
+        ),
+        (
+            vec!["--lo=x"],
+            b"pwd: option '--logical' doesn't allow an argument\nTry 'pwd --help' for more information.\n"
+                .as_slice(),
+        ),
+    ];
+
+    for (args, expected_stderr) in cases {
+        let output = Command::new(env!("CARGO_BIN_EXE_pwd"))
+            .arg0("pwd")
+            .args(args)
+            .env("LC_ALL", "C")
+            .output()
+            .expect("run pwd");
+
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        assert_eq!(output.stderr, expected_stderr);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn invalid_non_utf8_short_option_is_preserved_in_diagnostic() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let output = Command::new(env!("CARGO_BIN_EXE_pwd"))
+        .arg0("pwd")
+        .arg(OsString::from_vec(vec![b'-', 0xff]))
+        .env("LC_ALL", "C")
+        .output()
+        .expect("run pwd");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"pwd: invalid option -- '\xff'\nTry 'pwd --help' for more information.\n"
+    );
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn closed_stdout_pipe_with_default_sigpipe_terminates_process() {

@@ -66,6 +66,23 @@
       {
         "tstdin": "",
         "command": "nl",
+        "description": "重复编号样式选项采用最后一个值；-ba后接-bn时不输出行号",
+        "setup_commands": [
+          "printf 'first\\nsecond\\n' > test.txt"
+        ],
+        "args": ["-ba", "-bn", "test.txt"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "       first\n       second\n",
+            "stderr": ""
+          }
+        },
+        "tags": ["repeated-options", "last-option-wins"]
+      },
+      {
+        "tstdin": "",
+        "command": "nl",
         "description": "测试不编号样式",
         "setup_commands": [
           "mkdir -p test_dir",

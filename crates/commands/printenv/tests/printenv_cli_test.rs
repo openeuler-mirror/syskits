@@ -56,3 +56,32 @@ fn closed_stdout_pipe_with_ignored_sigpipe_reports_write_error() {
     assert!(output.stdout.is_empty());
     assert_eq!(output.stderr, b"printenv: write error: Broken pipe\n");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn closed_stdout_reports_bad_file_descriptor_after_output() {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_printenv"));
+    command
+        .arg0("printenv")
+        .arg("PRINTENV_CLOSED")
+        .env("PRINTENV_CLOSED", "value")
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    unsafe {
+        command.pre_exec(|| {
+            if ctcore::libc::close(ctcore::libc::STDOUT_FILENO) != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+
+    let output = command.output().expect("run printenv");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"printenv: write error: Bad file descriptor\n"
+    );
+}

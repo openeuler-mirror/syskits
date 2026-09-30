@@ -69,6 +69,7 @@ impl PrintenvOptions {
 /// # 返回值
 /// 返回一个 `CTResult<()>`，成功则为 `Ok(())`，失败则为 `Err(1.into())`。
 pub fn printenv_main(args: impl ctcore::Args) -> CTResult<()> {
+    let _sigpipe_guard = SigpipeGuard::for_cli();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     // 从命令行参数中获取匹配项
@@ -79,6 +80,43 @@ pub fn printenv_main(args: impl ctcore::Args) -> CTResult<()> {
         Ok(())
     } else {
         Err(exit_code.into())
+    }
+}
+
+#[cfg(target_os = "linux")]
+struct SigpipeGuard {
+    previous: ctcore::libc::sighandler_t,
+}
+
+#[cfg(target_os = "linux")]
+impl SigpipeGuard {
+    fn for_cli() -> Option<Self> {
+        if !ctcore::ct_sigpipe_was_default() {
+            return None;
+        }
+
+        let previous =
+            unsafe { ctcore::libc::signal(ctcore::libc::SIGPIPE, ctcore::libc::SIG_DFL) };
+        (previous != ctcore::libc::SIG_ERR).then_some(Self { previous })
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for SigpipeGuard {
+    fn drop(&mut self) {
+        unsafe {
+            ctcore::libc::signal(ctcore::libc::SIGPIPE, self.previous);
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+struct SigpipeGuard;
+
+#[cfg(not(target_os = "linux"))]
+impl SigpipeGuard {
+    fn for_cli() -> Option<Self> {
+        None
     }
 }
 

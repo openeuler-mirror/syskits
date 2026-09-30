@@ -193,7 +193,17 @@ fn printenv_classic_from_options(options: &PrintenvOptions) -> CTResult<i32> {
 
 fn printenv_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
     printenv_redirect_stdout_to_dev_null();
+    let error = printenv_normalize_stdout_write_error(error, ctcore::ct_stdout_was_closed());
     CtSimpleError::new(2, format!("write error: {}", strip_errno(&error)))
+}
+
+fn printenv_normalize_stdout_write_error(error: io::Error, stdout_was_closed: bool) -> io::Error {
+    #[cfg(unix)]
+    if stdout_was_closed {
+        return io::Error::from_raw_os_error(ctcore::libc::EBADF);
+    }
+
+    error
 }
 
 #[cfg(unix)]
@@ -394,6 +404,17 @@ mod tests {
 
         assert_eq!(exit_code, 0);
         assert_eq!(output, b"RAW=\xff\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn closed_stdout_write_error_uses_bad_file_descriptor() {
+        let error = printenv_normalize_stdout_write_error(
+            io::Error::from_raw_os_error(ctcore::libc::ENOSPC),
+            true,
+        );
+
+        assert_eq!(error.raw_os_error(), Some(ctcore::libc::EBADF));
     }
 
     #[cfg(unix)]

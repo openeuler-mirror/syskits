@@ -272,6 +272,31 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printenv",
+            "description": "LC_ALL=C、启动前关闭 stdout 后执行 printenv PRINTENV_CLOSED；变量值完整输入为 closed-value，GNU 在输出时遇到 EBADF，预期 RC=2、stdout 为 0 字节、stderr 完整文本为 printenv: write error: Bad file descriptor 加换行。",
+            "args": ["PRINTENV_CLOSED"],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "PRINTENV_CLOSED": "closed-value"
+                },
+                "standardStreams": {
+                    "stdout": "closed"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "printenv: write error: Bad file descriptor\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

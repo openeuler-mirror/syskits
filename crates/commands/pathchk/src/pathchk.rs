@@ -242,13 +242,25 @@ fn validate_pathchk_options(args: &[OsString]) -> CTResult<()> {
             let long = &bytes[2..];
             let separator = long.iter().position(|byte| *byte == b'=');
             let name = &long[..separator.unwrap_or(long.len())];
-            let canonical = (!name.is_empty()).then(|| {
+            if name.is_empty() {
+                let mut message = b"option '".to_vec();
+                message.extend_from_slice(bytes);
+                message.extend_from_slice(b"' is ambiguous; possibilities:");
+                for option in PATHCHK_LONG_OPTIONS {
+                    message.extend_from_slice(b" '--");
+                    message.extend_from_slice(option.as_bytes());
+                    message.push(b'\'');
+                }
+                return Err(PathchkUsageError::boxed(message));
+            }
+
+            let canonical = {
                 PATHCHK_LONG_OPTIONS
                     .iter()
                     .copied()
                     .find(|option| option.as_bytes().starts_with(name))
-            });
-            let Some(canonical) = canonical.flatten() else {
+            };
+            let Some(canonical) = canonical else {
                 let mut message = b"unrecognized option '".to_vec();
                 message.extend_from_slice(bytes);
                 message.push(b'\'');
@@ -903,7 +915,7 @@ mod tests {
         }
 
         #[test]
-        fn test_empty_long_option_name_is_unrecognized() {
+        fn test_empty_long_option_name_is_ambiguous() {
             let mut output = Cursor::new(Vec::new());
             let error = pathchk_main(
                 &mut output,
@@ -915,7 +927,7 @@ mod tests {
 
             assert_eq!(
                 error.diagnostic_bytes().as_ref(),
-                b"unrecognized option '--=value'"
+                b"option '--=value' is ambiguous; possibilities: '--portability' '--help' '--version'"
             );
         }
 

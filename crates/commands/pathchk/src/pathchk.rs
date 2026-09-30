@@ -15,15 +15,18 @@ extern crate rust_i18n;
 use clap::ArgMatches;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::locale_quote_marks;
 use ctcore::ct_error::{CTResult, CTsageError, set_ct_exit_code};
-use ctcore::ct_locale::{LcCategory, hard_locale};
 use ctcore::ct_posix::GnuGetoptCommandExt;
-use std::ffi::OsString;
+use ctcore::ct_quoting_style::gnu_quote_shell_bytes;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::io::{ErrorKind, Write};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
+use std::path::Path;
 use sys_locale::get_locale;
 
 // operating mode
@@ -61,18 +64,17 @@ pub struct PathchkSemantic {
 const PATHCHK_POSIX_PATH_MAX: usize = 256;
 const PATHCHK_POSIX_NAME_MAX: usize = 14;
 
-fn locale_quote_name(name: &str) -> String {
-    if hard_locale(LcCategory::LcMessages) {
-        format!("‘{name}’")
-    } else {
-        format!("'{name}'")
+fn initialize_locale() {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
     }
 }
 
 /// PathchkFlags 结构体用于存储和管理 pathchk 命令的运行参数
 struct PathchkFlags {
-    mode: PathchkMode,  // 检查模式
-    paths: Vec<String>, // 需要检查的路径列表
+    mode: PathchkMode,    // 检查模式
+    paths: Vec<OsString>, // 需要检查的路径列表
 }
 
 impl PathchkFlags {
@@ -86,7 +88,7 @@ impl PathchkFlags {
     fn new(matches: &ArgMatches) -> CTResult<Self> {
         // 获取路径参数
         let paths = matches
-            .get_many::<String>(pathchk_flags::PATHCHK_PATH)
+            .get_many::<OsString>(pathchk_flags::PATHCHK_PATH)
             .ok_or_else(|| CTsageError::new(1, "missing operand"))?
             .cloned()
             .collect();
@@ -122,6 +124,7 @@ impl PathchkFlags {
 /// * `CTResult<()>` - 执行结果
 pub fn pathchk_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
     // 设置语言
+    initialize_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     // 尝试解析命令行参数
@@ -133,6 +136,7 @@ pub fn pathchk_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResu
 }
 
 pub fn pathchk_native_semantic(args: impl ctcore::Args) -> CTResult<PathchkSemantic> {
+    initialize_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
@@ -143,10 +147,9 @@ pub fn pathchk_native_semantic(args: impl ctcore::Args) -> CTResult<PathchkSeman
     let mut exit_code = 0;
 
     for path in &flags.paths {
-        let path_segments: Vec<String> = path.split('/').map(String::from).collect();
         let mut diagnostic = Vec::new();
-        let ok = check_path(&mut diagnostic, &flags.mode, &path_segments)?;
-        let message_raw = String::from_utf8(diagnostic).expect("pathchk output should be utf-8");
+        let ok = check_path(&mut diagnostic, &flags.mode, path.as_os_str())?;
+        let message_raw = String::from_utf8_lossy(&diagnostic).into_owned();
         if !ok {
             exit_code = 1;
             stderr_text.push_str(&message_raw);
@@ -160,7 +163,7 @@ pub fn pathchk_native_semantic(args: impl ctcore::Args) -> CTResult<PathchkSeman
             .map(str::to_string);
 
         rows.push(PathchkRow {
-            path: path.clone(),
+            path: path.to_string_lossy().into_owned(),
             ok,
             diagnostic_kind,
             message,
@@ -206,8 +209,7 @@ fn pathchk_exec<W: Write>(writer: &mut W, flags: &PathchkFlags) -> CTResult<()> 
     set_ct_exit_code(0);
     let mut is_success = true;
     for path in &flags.paths {
-        let path_segments: Vec<String> = path.split('/').map(String::from).collect();
-        is_success &= check_path(writer, &flags.mode, &path_segments)?;
+        is_success &= check_path(writer, &flags.mode, path.as_os_str())?;
     }
 
     if !is_success {
@@ -241,6 +243,7 @@ pub fn ct_app() -> Command {
         Arg::new(pathchk_flags::PATHCHK_PATH)
             .hide(true)
             .action(ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::AnyPath),
     ];
 
@@ -264,7 +267,7 @@ pub fn ct_app() -> Command {
 ///
 /// # 返回
 /// * `CTResult<bool>` - 检查结果，true 表示通过检查
-fn check_path<W: Write>(writer: &mut W, mode: &PathchkMode, path: &[String]) -> CTResult<bool> {
+fn check_path<W: Write>(writer: &mut W, mode: &PathchkMode, path: &OsStr) -> CTResult<bool> {
     let result = match *mode {
         PathchkMode::Basic => check_basic(writer, path)?,
         PathchkMode::Extra => check_default(writer, path)? && check_extra(writer, path)?,
@@ -282,9 +285,9 @@ fn check_path<W: Write>(writer: &mut W, mode: &PathchkMode, path: &[String]) -> 
 ///
 /// # 返回
 /// * `CTResult<bool>` - 检查结果，true 表示通过检查
-fn check_basic<W: Write>(writer: &mut W, path: &[String]) -> CTResult<bool> {
-    let joined_path = path.join("/");
-    let total_len = joined_path.len();
+fn check_basic<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
+    let path_bytes = path.as_bytes();
+    let total_len = path_bytes.len();
 
     // First check empty path
     if total_len == 0 {
@@ -292,36 +295,38 @@ fn check_basic<W: Write>(writer: &mut W, path: &[String]) -> CTResult<bool> {
         return Ok(false);
     }
 
-    // Then check portable characters for each component
-    for p in path {
-        if !check_portable_chars(writer, p)? {
-            return Ok(false);
-        }
+    if !check_portable_chars(writer, path)? {
+        return Ok(false);
+    }
 
+    // Then check the portable component length limit.
+    for component in path_components(path_bytes) {
         // Only check length after character validation
-        let component_len = p.len();
+        let component_len = component.len();
         if component_len > PATHCHK_POSIX_NAME_MAX {
-            let quoted = locale_quote_name(p);
-            writeln!(
+            write!(
                 writer,
-                "pathchk: limit {PATHCHK_POSIX_NAME_MAX} exceeded by length {component_len} of file name component {quoted}"
+                "pathchk: limit {PATHCHK_POSIX_NAME_MAX} exceeded by length {component_len} of file name component "
             )?;
+            writer.write_all(&locale_quote_bytes(component))?;
+            writer.write_all(b"\n")?;
             return Ok(false);
         }
     }
 
     // Finally check total path length
     if total_len > PATHCHK_POSIX_PATH_MAX {
-        let quoted = locale_quote_name(&joined_path);
-        writeln!(
+        write!(
             writer,
-            "pathchk: limit {PATHCHK_POSIX_PATH_MAX} exceeded by length {total_len} of file name {quoted}"
+            "pathchk: limit {PATHCHK_POSIX_PATH_MAX} exceeded by length {total_len} of file name "
         )?;
+        write_shell_quoted_path(writer, path, true)?;
+        writer.write_all(b"\n")?;
         return Ok(false);
     }
 
     // permission checks
-    check_searchable(writer, &joined_path)
+    check_searchable(writer, path)
 }
 
 /// 执行额外的兼容性检查（空名称和前导连字符）
@@ -332,20 +337,18 @@ fn check_basic<W: Write>(writer: &mut W, path: &[String]) -> CTResult<bool> {
 ///
 /// # 返回
 /// * `CTResult<bool>` - 检查结果，true 表示通过检查
-fn check_extra<W: Write>(writer: &mut W, path: &[String]) -> CTResult<bool> {
+fn check_extra<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
     // components: leading hyphens
-    for p in path {
-        if p.starts_with('-') {
-            writeln!(
-                writer,
-                "pathchk: leading '-' in a component of file name {}",
-                p.quote()
-            )?;
+    for component in path_components(path.as_bytes()) {
+        if component.starts_with(b"-") {
+            writer.write_all(b"pathchk: leading '-' in a component of file name ")?;
+            write_shell_quoted_path(writer, path, true)?;
+            writer.write_all(b"\n")?;
             return Ok(false);
         }
     }
     // path length
-    if path.join("/").is_empty() {
+    if path.as_bytes().is_empty() {
         writeln!(writer, "pathchk: empty file name")?;
         return Ok(false);
     }
@@ -360,9 +363,9 @@ fn check_extra<W: Write>(writer: &mut W, path: &[String]) -> CTResult<bool> {
 ///
 /// # 返回
 /// * `CTResult<bool>` - 检查结果，true 表示通过检查
-fn check_default<W: Write>(writer: &mut W, path: &[String]) -> CTResult<bool> {
-    let joined_path = path.join("/");
-    let total_len = joined_path.len();
+fn check_default<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
+    let path_bytes = path.as_bytes();
+    let total_len = path_bytes.len();
 
     // First check empty path
     if total_len == 0 {
@@ -372,35 +375,35 @@ fn check_default<W: Write>(writer: &mut W, path: &[String]) -> CTResult<bool> {
 
     // Then check path length
     if total_len > libc::PATH_MAX as usize {
-        let quoted = locale_quote_name(&joined_path);
-        writeln!(
+        write!(
             writer,
-            "pathchk: limit {} exceeded by length {} of file name {}",
+            "pathchk: limit {} exceeded by length {} of file name ",
             libc::PATH_MAX,
-            total_len,
-            quoted
+            total_len
         )?;
+        write_shell_quoted_path(writer, path, true)?;
+        writer.write_all(b"\n")?;
         return Ok(false);
     }
 
     // Check components length
-    for p in path {
-        let component_len = p.len();
+    for component in path_components(path_bytes) {
+        let component_len = component.len();
         if component_len > libc::FILENAME_MAX as usize {
-            let quoted = locale_quote_name(p);
-            writeln!(
+            write!(
                 writer,
-                "pathchk: limit {} exceeded by length {} of file name component {}",
+                "pathchk: limit {} exceeded by length {} of file name component ",
                 libc::FILENAME_MAX,
-                component_len,
-                quoted
+                component_len
             )?;
+            writer.write_all(&locale_quote_bytes(component))?;
+            writer.write_all(b"\n")?;
             return Ok(false);
         }
     }
 
     // Finally do permission checks
-    check_searchable(writer, &joined_path)
+    check_searchable(writer, path)
 }
 
 /// 检查路径是否可搜索或是否存在其他问题
@@ -411,15 +414,17 @@ fn check_default<W: Write>(writer: &mut W, path: &[String]) -> CTResult<bool> {
 ///
 /// # 返回
 /// * `CTResult<bool>` - 检查结果，true 表示通过检查
-fn check_searchable<W: Write>(writer: &mut W, path: &str) -> CTResult<bool> {
-    match fs::symlink_metadata(path) {
+fn check_searchable<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
+    match fs::symlink_metadata(Path::new(path)) {
         Ok(_) => Ok(true),
         Err(e) => {
             if e.kind() == ErrorKind::NotFound {
                 Ok(true)
             } else if e.raw_os_error() == Some(36) {
                 // ENAMETOOLONG
-                writeln!(writer, "pathchk: {path}: File name too long")?;
+                writer.write_all(b"pathchk: ")?;
+                write_shell_quoted_path(writer, path, true)?;
+                writer.write_all(b": File name too long\n")?;
                 Ok(false)
             } else {
                 let message = e.to_string();
@@ -428,7 +433,9 @@ fn check_searchable<W: Write>(writer: &mut W, path: &str) -> CTResult<bool> {
                 } else {
                     message.as_str()
                 };
-                writeln!(writer, "pathchk: {path}: {message}")?;
+                writer.write_all(b"pathchk: ")?;
+                write_shell_quoted_path(writer, path, true)?;
+                writeln!(writer, ": {message}")?;
                 Ok(false)
             }
         }
@@ -443,20 +450,93 @@ fn check_searchable<W: Write>(writer: &mut W, path: &str) -> CTResult<bool> {
 ///
 /// # 返回
 /// * `CTResult<bool>` - 检查结果，true 表示通过检查
-fn check_portable_chars<W: Write>(writer: &mut W, path_segment: &str) -> CTResult<bool> {
+fn check_portable_chars<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
     const VALID_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-";
-    for (i, ch) in path_segment.as_bytes().iter().enumerate() {
-        if !VALID_CHARS.contains(ch) {
-            let invalid = path_segment[i..].chars().next().unwrap();
-            let quoted = locale_quote_name(path_segment);
-            writeln!(
-                writer,
-                "pathchk: non-portable character ‘{invalid}’ in file name {quoted}"
-            )?;
+    for (index, byte) in path.as_bytes().iter().enumerate() {
+        if *byte != b'/' && !VALID_CHARS.contains(byte) {
+            let invalid =
+                &path.as_bytes()[index..index + locale_character_len(&path.as_bytes()[index..])];
+            writer.write_all(b"pathchk: non-portable character ")?;
+            writer.write_all(&locale_quote_bytes(invalid))?;
+            writer.write_all(b" in file name ")?;
+            write_shell_quoted_path(writer, path, true)?;
+            writer.write_all(b"\n")?;
             return Ok(false);
         }
     }
     Ok(true)
+}
+
+fn path_components(path: &[u8]) -> impl Iterator<Item = &[u8]> {
+    path.split(|byte| *byte == b'/')
+        .filter(|component| !component.is_empty())
+}
+
+fn write_shell_quoted_path<W: Write>(
+    writer: &mut W,
+    path: &OsStr,
+    always_quote: bool,
+) -> std::io::Result<()> {
+    writer.write_all(&gnu_quote_shell_bytes(path, always_quote))
+}
+
+fn locale_quote_bytes(bytes: &[u8]) -> Vec<u8> {
+    let (left_quote, right_quote) = locale_quote_marks();
+    let mut quoted = Vec::with_capacity(bytes.len() + left_quote.len() + right_quote.len());
+    quoted.extend_from_slice(left_quote.as_bytes());
+
+    if let Ok(value) = std::str::from_utf8(bytes) {
+        if (left_quote, right_quote) == ("‘", "’") {
+            for character in value.chars() {
+                match character {
+                    '\x07' => quoted.extend_from_slice(b"\\a"),
+                    '\x08' => quoted.extend_from_slice(b"\\b"),
+                    '\t' => quoted.extend_from_slice(b"\\t"),
+                    '\n' => quoted.extend_from_slice(b"\\n"),
+                    '\x0b' => quoted.extend_from_slice(b"\\v"),
+                    '\x0c' => quoted.extend_from_slice(b"\\f"),
+                    '\r' => quoted.extend_from_slice(b"\\r"),
+                    '\\' => quoted.extend_from_slice(b"\\\\"),
+                    '’' => quoted.extend_from_slice(b"\\\xE2\x80\x99"),
+                    _ => {
+                        let mut encoded = [0; 4];
+                        quoted.extend_from_slice(character.encode_utf8(&mut encoded).as_bytes());
+                    }
+                }
+            }
+            quoted.extend_from_slice(right_quote.as_bytes());
+            return quoted;
+        }
+    }
+
+    for byte in bytes {
+        match *byte {
+            b'\x07' => quoted.extend_from_slice(b"\\a"),
+            b'\x08' => quoted.extend_from_slice(b"\\b"),
+            b'\t' => quoted.extend_from_slice(b"\\t"),
+            b'\n' => quoted.extend_from_slice(b"\\n"),
+            b'\x0b' => quoted.extend_from_slice(b"\\v"),
+            b'\x0c' => quoted.extend_from_slice(b"\\f"),
+            b'\r' => quoted.extend_from_slice(b"\\r"),
+            b'\\' => quoted.extend_from_slice(b"\\\\"),
+            b'\'' if right_quote == "'" => quoted.extend_from_slice(b"\\'"),
+            byte if byte.is_ascii_graphic() || byte == b' ' => quoted.push(byte),
+            byte => quoted.extend(format!("\\{byte:03o}").bytes()),
+        }
+    }
+    quoted.extend_from_slice(right_quote.as_bytes());
+    quoted
+}
+
+fn locale_character_len(bytes: &[u8]) -> usize {
+    if bytes.first().is_some_and(u8::is_ascii) {
+        return 1;
+    }
+
+    match std::str::from_utf8(bytes) {
+        Ok(value) => value.chars().next().map_or(1, char::len_utf8),
+        Err(error) => error.error_len().unwrap_or(1),
+    }
 }
 
 #[derive(Default)]
@@ -482,6 +562,8 @@ mod tests {
     use super::*;
     use std::ffi::OsString;
     use std::io::Cursor;
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStringExt;
 
     mod pathchk_flags_tests {
         use super::*;
@@ -561,7 +643,29 @@ mod tests {
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert!(
                 output_str
-                    .contains("pathchk: non-portable character ‘#’ in file name ‘special#file’")
+                    .contains("pathchk: non-portable character ‘#’ in file name 'special#file'")
+            );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_non_utf8_path_is_checked_as_portability_violation() {
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-p"),
+                OsString::from_vec(vec![0xff]),
+            ];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = pathchk_main(&mut output, args.into_iter());
+
+            assert!(result.is_ok(), "non-UTF-8 path was rejected: {result:?}");
+            assert!(
+                output
+                    .into_inner()
+                    .windows(b"non-portable character".len())
+                    .any(|window| window == b"non-portable character"),
+                "expected a portability diagnostic"
             );
         }
 
@@ -673,37 +777,34 @@ mod tests {
         #[test]
         fn test_check_portable_chars() {
             let mut output = Cursor::new(Vec::new());
-            assert!(check_portable_chars(&mut output, "valid-name.txt").unwrap());
-            assert!(!check_portable_chars(&mut output, "invalid#name").unwrap());
-            assert!(!check_portable_chars(&mut output, "name@domain").unwrap());
+            assert!(check_portable_chars(&mut output, OsStr::new("valid-name.txt")).unwrap());
+            assert!(!check_portable_chars(&mut output, OsStr::new("invalid#name")).unwrap());
+            assert!(!check_portable_chars(&mut output, OsStr::new("name@domain")).unwrap());
         }
 
         #[test]
         fn test_check_searchable() {
             let mut output = Cursor::new(Vec::new());
-            assert!(check_searchable(&mut output, ".").unwrap());
-            assert!(check_searchable(&mut output, "nonexistent_file").unwrap());
+            assert!(check_searchable(&mut output, OsStr::new(".")).unwrap());
+            assert!(check_searchable(&mut output, OsStr::new("nonexistent_file")).unwrap());
         }
 
         #[test]
         fn test_check_extra_with_multiple_components() {
             let mut output = Cursor::new(Vec::new());
-            let path = vec!["-bad".to_string(), "name".to_string()];
-            assert!(!check_extra(&mut output, &path).unwrap());
+            assert!(!check_extra(&mut output, OsStr::new("-bad/name")).unwrap());
         }
 
         #[test]
         fn test_check_basic_with_valid_path() {
             let mut output = Cursor::new(Vec::new());
-            let path = vec!["valid".to_string(), "path.txt".to_string()];
-            assert!(check_basic(&mut output, &path).unwrap());
+            assert!(check_basic(&mut output, OsStr::new("valid/path.txt")).unwrap());
         }
 
         #[test]
         fn test_check_default_with_valid_path() {
             let mut output = Cursor::new(Vec::new());
-            let path = vec!["valid".to_string(), "path.txt".to_string()];
-            assert!(check_default(&mut output, &path).unwrap());
+            assert!(check_default(&mut output, OsStr::new("valid/path.txt")).unwrap());
         }
     }
 

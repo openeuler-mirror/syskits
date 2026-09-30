@@ -148,6 +148,36 @@
         "options",
         "posix-option-order"
       ]
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "pathchk",
+      "description": "原始字节用例：LC_ALL=C、LANG=C下执行pathchk -p，参数完整十六进制=2d70 ff，其中ff为非UTF-8路径字节；stdin为0字节、完整十六进制=空；预期RC=1、stdout为空，stderr为pathchk: non-portable character '\\377' in file name ''$'\\377'\\n，完整十六进制=7061746863686b3a206e6f6e2d706f727461626c652063686172616374657220275c3337372720696e2066696c65206e616d6520272724275c333737270a。",
+      "args": [
+        "2d70",
+        "ff"
+      ],
+      "environment": {
+        "clearEnv": true,
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "7061746863686b3a206e6f6e2d706f727461626c652063686172616374657220275c3337372720696e2066696c65206e616d6520272724275c333737270a"
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "raw-bytes",
+        "non-utf8",
+        "diagnostics"
+      ]
     }
   ]
 }

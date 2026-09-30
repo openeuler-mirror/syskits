@@ -482,6 +482,28 @@
         "tags": ["negative-starting-number"]
       },
       {
+        "command": "nl",
+        "description": "LC_ALL=C下-i -1作为独立参数时，负增量从默认行号1递减，输入两行输出编号1和0。",
+        "setup_commands": [
+          "printf 'first\\nsecond\\n' > input"
+        ],
+        "args": ["-i", "-1", "input"],
+        "environment": {
+          "env_vars": {
+            "LC_ALL": "C",
+            "LANG": "C"
+          }
+        },
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "     1\tfirst\n     0\tsecond\n",
+            "stderr": ""
+          }
+        },
+        "tags": ["line-increment", "negative-value"]
+      },
+      {
         "tstdin": "",
         "command": "nl",
         "description": "测试多文件处理包含不存在的文件",

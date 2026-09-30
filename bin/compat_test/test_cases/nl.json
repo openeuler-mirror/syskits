@@ -132,6 +132,30 @@
       {
         "tstdin": "",
         "command": "nl",
+        "description": "LC_ALL=C.UTF-8下-bp[[:alpha:]]使用C库locale分类；输入依次为é、A和数字1，前两行编号而数字行不编号。",
+        "setup_commands": [
+          "printf '\\303\\251\\nA\\n1\\n' > input"
+        ],
+        "args": ["-bp[[:alpha:]]", "input"],
+        "environment": {
+          "clearEnv": true,
+          "env_vars": {
+            "LC_ALL": "C.UTF-8",
+            "LANG": "C.UTF-8"
+          }
+        },
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "     1\\té\\n     2\\tA\\n       1\\n",
+            "stderr": ""
+          }
+        },
+        "tags": ["locale", "gnu-regex", "character-class"]
+      },
+      {
+        "tstdin": "",
+        "command": "nl",
         "description": "测试不编号样式",
         "setup_commands": [
           "mkdir -p test_dir",

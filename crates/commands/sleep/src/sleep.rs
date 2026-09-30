@@ -865,6 +865,12 @@ fn parse_float_attempt(
     decimal_point: &str,
     reject_c_decimal_point: bool,
 ) -> FloatParseAttempt {
+    // ct_format also supports printf's leading quote character literal, while
+    // GNU sleep delegates to strtod, which rejects that syntax.
+    if input.starts_with(['\'', '"']) {
+        return FloatParseAttempt::Invalid;
+    }
+
     let (normalized, offsets) =
         normalize_decimal_point(input, decimal_point, reject_c_decimal_point);
     match ParsedNumber::parse_f64(&normalized) {
@@ -1131,6 +1137,13 @@ mod tests {
         #[test]
         fn test_sleep_handle_second_rejects_hex_duration_without_mantissa() {
             for input in ["0x.", "0x.p0"] {
+                assert!(sleep_handle_second(&[input]).is_err(), "{input}");
+            }
+        }
+
+        #[test]
+        fn test_sleep_handle_second_rejects_printf_character_literals() {
+            for input in ["'0", "\"0"] {
                 assert!(sleep_handle_second(&[input]).is_err(), "{input}");
             }
         }

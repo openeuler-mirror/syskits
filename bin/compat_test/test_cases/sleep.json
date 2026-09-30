@@ -729,6 +729,29 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "sleep",
+            "description": "sleep: 拒绝 printf 字符码语法的单引号时长参数",
+            "args": [
+                "'0"
+            ],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "sleep: invalid time interval '\\'0'\nTry 'sleep --help' for more information.\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -424,13 +424,7 @@ where
             break;
         }
 
-        let mut line_len = buf.len();
-        if line_len > 0 && buf[line_len - 1] == b'\n' {
-            line_len -= 1;
-            if line_len > 0 && buf[line_len - 1] == b'\r' {
-                line_len -= 1;
-            }
-        }
+        let line_len = buf.strip_suffix(b"\n").map_or(buf.len(), <[u8]>::len);
         let is_empty = line_len == 0;
 
         if is_empty {
@@ -1247,6 +1241,18 @@ mod tests {
 
             let expected = "     1\tLine 1\n       \n       \n     2\tLine 4\n";
             assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        #[test]
+        fn test_crlf_blank_record_is_numbered_as_text() {
+            let input = b"alpha\r\n\r\nbeta\r\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            assert_eq!(output, b"     1\talpha\r\n     2\t\r\n     3\tbeta\r\n");
         }
 
         /// 测试分节符处理

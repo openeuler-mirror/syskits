@@ -504,6 +504,28 @@
           "rm -rf test_dir"
         ],
         "tags": ["multiple-files", "error-handling", "file-not-found"]
+      },
+      {
+        "command": "nl",
+        "description": "LC_ALL=C下输入字节为alpha CR LF、CR LF、beta CR LF；GNU仅将LF视为记录终止符，因此中间仅含CR的记录属于非空正文并编号，预期完整输出保留所有CR字节。",
+        "setup_commands": [
+          "printf 'alpha\\r\\n\\r\\nbeta\\r\\n' > input"
+        ],
+        "args": ["input"],
+        "environment": {
+          "env_vars": {
+            "LC_ALL": "C",
+            "LANG": "C"
+          }
+        },
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "     1\talpha\r\n     2\t\r\n     3\tbeta\r\n",
+            "stderr": ""
+          }
+        },
+        "tags": ["input-bytes", "crlf", "numbering"]
       }
     ]
   }

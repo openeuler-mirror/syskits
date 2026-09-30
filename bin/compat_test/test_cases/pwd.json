@@ -564,8 +564,7 @@
         },
         "standardStreams": {
           "stdout": "closed_pipe",
-          "sigpipe": "default",
-          "useBash": true
+          "sigpipe": "default"
         }
       },
       "expectation": {
@@ -573,6 +572,74 @@
           "exit_code": 141,
           "stdout": "",
           "stderr": ""
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "pwd",
+      "description": "LC_ALL=C、stdout 连接无读端管道且调用方忽略 SIGPIPE 时执行 pwd；GNU 将 EPIPE 报告为 write error: Broken pipe，预期 RC=1、stdout 为空、stderr 完整匹配。",
+      "args": [],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C",
+          "PATH": "/usr/bin:/bin"
+        },
+        "standardStreams": {
+          "stdout": "closed_pipe",
+          "sigpipe": "ignore"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "pwd: write error: Broken pipe\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "pwd",
+      "description": "LC_ALL=C、stdout 连接 /dev/full 时执行 pwd；GNU 报告 write error: No space left on device，预期 RC=1、stdout 为空、stderr 完整匹配。",
+      "args": [],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        },
+        "standardStreams": {
+          "stdout": "full"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "pwd: write error: No space left on device\n"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "command": "pwd",
+      "description": "LC_ALL=C、启动前关闭 stdout 后执行 pwd；GNU 保留 EBADF 语义，预期 RC=1、stdout 为空、stderr 为 write error: Bad file descriptor。",
+      "args": [],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        },
+        "standardStreams": {
+          "stdout": "closed"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "pwd: write error: Bad file descriptor\n"
         }
       },
       "cleanup_commands": []

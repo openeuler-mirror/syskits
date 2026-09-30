@@ -188,7 +188,10 @@ fn printenv_classic_from_options(options: &PrintenvOptions) -> CTResult<i32> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
 
-    write_environment_entries(&mut stdout, options, &environment).map_err(printenv_write_error)
+    let exit_code = write_environment_entries(&mut stdout, options, &environment)
+        .map_err(printenv_write_error)?;
+    stdout.flush().map_err(printenv_write_error)?;
+    Ok(exit_code)
 }
 
 fn printenv_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {

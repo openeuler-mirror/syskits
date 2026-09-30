@@ -551,6 +551,31 @@
         "unset PWD",
         "rm -rf /tmp/test_pwd_lsym2_$$ /tmp/test_pwd_lsym1_$$ /tmp/test_pwd_lnested_$$"
       ]
+    },
+    {
+      "command": "pwd",
+      "description": "LC_ALL=C、stdout 连接无读端管道且调用方保留默认 SIGPIPE 时执行 pwd；GNU 在首次写入当前目录时被 SIGPIPE 终止，预期 RC=141、stdout 与 stderr 均为空。",
+      "args": [],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C",
+          "PATH": "/usr/bin:/bin"
+        },
+        "standardStreams": {
+          "stdout": "closed_pipe",
+          "sigpipe": "default",
+          "useBash": true
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 141,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": []
     }
   ]
 }

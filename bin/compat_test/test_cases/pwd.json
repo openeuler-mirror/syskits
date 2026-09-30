@@ -643,6 +643,34 @@
         }
       },
       "cleanup_commands": []
+    },
+    {
+      "command": "pwd",
+      "description": "LC_ALL=C、POSIXLY_CORRECT=1、PWD=/tmp/compat-pwd-posix-options-link 时，在该符号链接目录执行 pwd operand -P；GNU 在首个非选项参数处停止解析，-P 作为被忽略参数，预期 RC=0、stdout 为逻辑路径且 stderr 为 ignoring non-option arguments。",
+      "args": ["operand", "-P"],
+      "setup_commands": [
+        "mkdir -p /tmp/compat-pwd-posix-options-real",
+        "ln -s /tmp/compat-pwd-posix-options-real /tmp/compat-pwd-posix-options-link",
+        "cd /tmp/compat-pwd-posix-options-link",
+        "export PWD=/tmp/compat-pwd-posix-options-link"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C",
+          "POSIXLY_CORRECT": "1"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "/tmp/compat-pwd-posix-options-link\n",
+          "stderr": "pwd: ignoring non-option arguments\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf /tmp/compat-pwd-posix-options-link /tmp/compat-pwd-posix-options-real"
+      ]
     }
   ]
 }

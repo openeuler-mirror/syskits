@@ -18,6 +18,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code, strip_errno};
 use ctcore::ct_gnu_regex::{GnuRegex, GnuRegexCompileOptions, GnuRegexError};
+use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::{Args, ct_show_error};
 use std::cell::RefCell;
 use std::ffi::OsString;
@@ -876,6 +877,7 @@ pub fn ct_app() -> Command {
         .after_help(t!("nl.after_help"))
         .disable_help_flag(true)
         .args(&args)
+        .gnu_getopt()
 }
 
 #[derive(Default)]
@@ -1054,6 +1056,28 @@ mod tests {
                 OsString::from("-i=-1"),
                 OsString::from("test.txt"),
             ]
+        );
+    }
+
+    #[test]
+    fn test_posixly_correct_stops_option_parsing_at_first_file() {
+        let matches = ct_app()
+            .gnu_getopt_with_mode(true)
+            .try_get_matches_from([ctcore::ct_util_name(), "input", "-ba"])
+            .unwrap();
+
+        assert!(
+            matches
+                .get_one::<String>(nl_flags::NL_BODY_NUMBERING)
+                .is_none()
+        );
+        assert_eq!(
+            matches
+                .get_many::<OsString>(nl_flags::NL_FILE)
+                .unwrap()
+                .cloned()
+                .collect::<Vec<_>>(),
+            [OsString::from("input"), OsString::from("-ba")]
         );
     }
 

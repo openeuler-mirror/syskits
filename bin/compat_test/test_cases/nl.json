@@ -83,6 +83,30 @@
       {
         "tstdin": "",
         "command": "nl",
+        "description": "POSIXLY_CORRECT存在时在首个文件操作数后停止解析选项；-ba作为第二个文件处理并报不存在",
+        "setup_commands": [
+          "printf 'line\\n' > input"
+        ],
+        "args": ["input", "-ba"],
+        "environment": {
+          "clearEnv": true,
+          "env_vars": {
+            "LC_ALL": "C",
+            "POSIXLY_CORRECT": "1"
+          }
+        },
+        "expectation": {
+          "execution": {
+            "exit_code": 1,
+            "stdout": "     1\\tline\\n",
+            "stderr": "nl: -ba: No such file or directory\\n"
+          }
+        },
+        "tags": ["posixly-correct", "option-parsing"]
+      },
+      {
+        "tstdin": "",
+        "command": "nl",
         "description": "测试不编号样式",
         "setup_commands": [
           "mkdir -p test_dir",

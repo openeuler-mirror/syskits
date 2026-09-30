@@ -117,7 +117,7 @@ impl Default for NlFlags {
     }
 }
 
-// 判断是否存在"-v" 如果存在， 后需要跟一个 数字 ，这个数字是正数或者负数，如果存在将其合成一个
+// 将可接受负数的数值选项与其负数值合并，避免 Clap 将该值识别成新选项。
 fn standardize_nl_args(args: impl ctcore::Args) -> impl ctcore::Args {
     let mut vec = Vec::<OsString>::new();
     let args_vec: Vec<OsString> = args.collect();
@@ -127,8 +127,11 @@ fn standardize_nl_args(args: impl ctcore::Args) -> impl ctcore::Args {
         let arg = &args_vec[i];
         let arg_str = arg.to_string_lossy();
 
-        if arg_str == "-v" || arg_str == "--starting-line-number" {
-            // 如果"-v"后面跟一个数字，将-v 和数字合成一个参数格式为"-v=数字"
+        if matches!(
+            arg_str.as_ref(),
+            "-v" | "--starting-line-number" | "-i" | "--line-increment"
+        ) {
+            // 将选项及其负数值合并成 "OPTION=NUMBER"。
             if i + 1 < args_vec.len()
                 && args_vec[i + 1].to_string_lossy().starts_with('-')
                 && args_vec[i + 1]
@@ -988,6 +991,26 @@ mod tests {
         assert_eq!(processed[0].to_string_lossy(), "nl");
         assert_eq!(processed[1].to_string_lossy(), "-ft");
         assert_eq!(processed[2].to_string_lossy(), "test.txt");
+    }
+
+    #[test]
+    fn test_standardize_nl_args_accepts_negative_line_increment() {
+        let args = vec![
+            OsString::from("nl"),
+            OsString::from("-i"),
+            OsString::from("-1"),
+            OsString::from("test.txt"),
+        ];
+
+        let processed: Vec<OsString> = standardize_nl_args(args.into_iter()).collect();
+        assert_eq!(
+            processed,
+            vec![
+                OsString::from("nl"),
+                OsString::from("-i=-1"),
+                OsString::from("test.txt"),
+            ]
+        );
     }
 
     /// 测试NlFlags相关功能

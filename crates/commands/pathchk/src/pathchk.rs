@@ -21,7 +21,7 @@ use ctcore::ct_display::locale_quote_marks;
 use ctcore::ct_error::{CTResult, CTsageError, set_ct_exit_code};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::ct_quoting_style::gnu_quote_shell_bytes;
-use std::ffi::{OsStr, OsString};
+use std::ffi::{CString, OsStr, OsString};
 use std::fs;
 use std::io::Write;
 #[cfg(unix)]
@@ -63,6 +63,8 @@ pub struct PathchkSemantic {
 // a few global constants as used in the GNU implementation
 const PATHCHK_POSIX_PATH_MAX: usize = 256;
 const PATHCHK_POSIX_NAME_MAX: usize = 14;
+const PATHCHK_PATH_MAX_MINIMUM: usize = PATHCHK_POSIX_PATH_MAX;
+const PATHCHK_NAME_MAX_MINIMUM: usize = PATHCHK_POSIX_NAME_MAX;
 
 fn initialize_locale() {
     #[cfg(target_os = "linux")]
@@ -365,7 +367,6 @@ fn check_extra<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
 /// * `CTResult<bool>` - 检查结果，true 表示通过检查
 fn check_default<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
     let path_bytes = path.as_bytes();
-    let total_len = path_bytes.len();
 
     match fs::symlink_metadata(Path::new(path)) {
         Ok(_) => return Ok(true),
@@ -373,28 +374,88 @@ fn check_default<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
         Err(error) => return write_path_error(writer, path, &error),
     }
 
-    // Then check path length
-    if total_len > libc::PATH_MAX as usize {
-        write!(
-            writer,
-            "pathchk: limit {} exceeded by length {} of file name ",
-            libc::PATH_MAX,
-            total_len
-        )?;
-        write_shell_quoted_path(writer, path, true)?;
-        writer.write_all(b"\n")?;
-        return Ok(false);
-    }
+    check_default_limits(writer, path, &mut system_pathconf)
+}
 
-    // Check components length
-    for component in path_components(path_bytes) {
-        let component_len = component.len();
-        if component_len > libc::FILENAME_MAX as usize {
+fn check_default_limits<W: Write, F>(
+    writer: &mut W,
+    path: &OsStr,
+    pathconf: &mut F,
+) -> CTResult<bool>
+where
+    F: FnMut(&OsStr, libc::c_int) -> std::io::Result<Option<usize>>,
+{
+    let path_bytes = path.as_bytes();
+    let total_len = path_bytes.len();
+
+    if PATHCHK_PATH_MAX_MINIMUM <= total_len {
+        let directory = if path_bytes.starts_with(b"/") {
+            OsStr::new("/")
+        } else {
+            OsStr::new(".")
+        };
+        let maximum = match pathconf(directory, libc::_PC_PATH_MAX) {
+            Ok(Some(limit)) => limit,
+            Ok(None) => usize::MAX,
+            Err(error) => return write_pathconf_error(writer, directory, &error),
+        };
+
+        if maximum <= total_len {
             write!(
                 writer,
-                "pathchk: limit {} exceeded by length {} of file name component ",
-                libc::FILENAME_MAX,
-                component_len
+                "pathchk: limit {} exceeded by length {total_len} of file name ",
+                maximum.saturating_sub(1)
+            )?;
+            write_shell_quoted_path(writer, path, true)?;
+            writer.write_all(b"\n")?;
+            return Ok(false);
+        }
+    }
+
+    if !path_components(path_bytes).any(|component| component.len() > PATHCHK_NAME_MAX_MINIMUM) {
+        return Ok(true);
+    }
+
+    let mut offset = 0;
+    let mut name_max = PATHCHK_NAME_MAX_MINIMUM;
+    let mut known_name_max = None;
+    while offset < path_bytes.len() {
+        while offset < path_bytes.len() && path_bytes[offset] == b'/' {
+            offset += 1;
+        }
+        if offset == path_bytes.len() {
+            break;
+        }
+
+        let component_start = offset;
+        while offset < path_bytes.len() && path_bytes[offset] != b'/' {
+            offset += 1;
+        }
+        let component = &path_bytes[component_start..offset];
+
+        if let Some(limit) = known_name_max {
+            name_max = limit;
+        } else {
+            let directory = if component_start == 0 {
+                OsStr::new(".")
+            } else {
+                OsStr::from_bytes(&path_bytes[..component_start])
+            };
+            match pathconf(directory, libc::_PC_NAME_MAX) {
+                Ok(Some(limit)) => name_max = limit,
+                Ok(None) => name_max = usize::MAX,
+                Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {
+                    known_name_max = Some(name_max);
+                }
+                Err(error) => return write_pathconf_error(writer, directory, &error),
+            }
+        }
+
+        if name_max < component.len() {
+            write!(
+                writer,
+                "pathchk: limit {name_max} exceeded by length {} of file name component ",
+                component.len()
             )?;
             writer.write_all(&locale_quote_bytes(component))?;
             writer.write_all(b"\n")?;
@@ -403,6 +464,44 @@ fn check_default<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
     }
 
     Ok(true)
+}
+
+fn system_pathconf(path: &OsStr, variable: libc::c_int) -> std::io::Result<Option<usize>> {
+    let path = CString::new(path.as_bytes()).expect("Unix paths cannot contain NUL bytes");
+    unsafe {
+        *libc::__errno_location() = 0;
+        let limit = libc::pathconf(path.as_ptr(), variable);
+        if limit >= 0 {
+            Ok(Some(limit as usize))
+        } else {
+            let error = std::io::Error::last_os_error();
+            if error.raw_os_error() == Some(0) {
+                Ok(None)
+            } else {
+                Err(error)
+            }
+        }
+    }
+}
+
+fn write_pathconf_error<W: Write>(
+    writer: &mut W,
+    directory: &OsStr,
+    error: &std::io::Error,
+) -> CTResult<bool> {
+    let message = error.to_string();
+    let message = if let Some(pos) = message.find(" (os error ") {
+        &message[..pos]
+    } else {
+        message.as_str()
+    };
+    writer.write_all(b"pathchk: ")?;
+    write_shell_quoted_path(writer, directory, false)?;
+    writeln!(
+        writer,
+        ": unable to determine maximum file name length: {message}"
+    )?;
+    Ok(false)
 }
 
 fn write_path_error<W: Write>(
@@ -752,6 +851,50 @@ mod tests {
                 String::from_utf8(output.into_inner()).unwrap(),
                 format!("pathchk: {path}: Not a directory\n")
             );
+        }
+
+        #[test]
+        fn test_default_limits_use_pathconf_path_max() {
+            let component = "a".repeat(PATHCHK_POSIX_NAME_MAX);
+            let mut components = vec![component; 17];
+            components.push("a".to_string());
+            let path = components.join("/");
+            assert_eq!(path.len(), PATHCHK_POSIX_PATH_MAX);
+            let mut output = Cursor::new(Vec::new());
+
+            assert!(
+                !check_default_limits(&mut output, OsStr::new(&path), &mut |_, variable| {
+                    if variable == libc::_PC_PATH_MAX {
+                        Ok(Some(32))
+                    } else {
+                        Ok(Some(PATHCHK_POSIX_NAME_MAX))
+                    }
+                },)
+                .unwrap()
+            );
+
+            let output = String::from_utf8(output.into_inner()).unwrap();
+            assert!(output.contains("limit 31 exceeded by length 256 of file name"));
+        }
+
+        #[test]
+        fn test_default_limits_use_pathconf_name_max() {
+            let path = "a".repeat(PATHCHK_POSIX_NAME_MAX + 1);
+            let mut output = Cursor::new(Vec::new());
+
+            assert!(
+                !check_default_limits(&mut output, OsStr::new(&path), &mut |_, variable| {
+                    if variable == libc::_PC_NAME_MAX {
+                        Ok(Some(PATHCHK_POSIX_NAME_MAX))
+                    } else {
+                        Ok(Some(usize::MAX))
+                    }
+                },)
+                .unwrap()
+            );
+
+            let output = String::from_utf8(output.into_inner()).unwrap();
+            assert!(output.contains("limit 14 exceeded by length 15 of file name component"));
         }
 
         #[test]

@@ -558,6 +558,31 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "sleep",
+            "description": "原始字节用例：取消LC_ALL，设置LC_CTYPE=zh_CN.gbk、LC_MESSAGES=C、LANG=C；执行sleep并传入有效GBK字符，参数完整十六进制=d6d0b9fa（GBK中国），stdin为0字节、完整十六进制=空；预期GNU保持英文消息但按LC_CTYPE保留有效GBK参数字节，RC=1、stdout为空、stderr完整十六进制=736c6565703a20696e76616c69642074696d6520696e74657276616c2027d6d0b9fa270a5472792027736c656570202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a。",
+            "args": [
+                "d6d0b9fa"
+            ],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_CTYPE": "zh_CN.gbk",
+                    "LC_MESSAGES": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "736c6565703a20696e76616c69642074696d6520696e74657276616c2027d6d0b9fa270a5472792027736c656570202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

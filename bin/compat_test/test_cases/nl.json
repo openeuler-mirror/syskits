@@ -542,6 +542,28 @@
         "tags": ["join-blank-lines", "integer-range", "invalid-option"]
       },
       {
+        "command": "nl",
+        "description": "LC_ALL=C下以INT64_MIN作为起始行号并使用rz零填充格式，输入一行时正常输出-9223372036854775808而不发生绝对值溢出。",
+        "setup_commands": [
+          "printf 'line\\n' > input"
+        ],
+        "args": ["-v", "-9223372036854775808", "-n", "rz", "-w", "20", "input"],
+        "environment": {
+          "env_vars": {
+            "LC_ALL": "C",
+            "LANG": "C"
+          }
+        },
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "-9223372036854775808\tline\n",
+            "stderr": ""
+          }
+        },
+        "tags": ["starting-line-number", "integer-minimum", "right-zero-format"]
+      },
+      {
         "tstdin": "",
         "command": "nl",
         "description": "测试多文件处理包含不存在的文件",

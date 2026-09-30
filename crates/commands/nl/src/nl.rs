@@ -408,7 +408,9 @@ impl NlNumberFormat {
         match self {
             Self::Left => format!("{number:<min_width$}"),
             Self::Right => format!("{number:>min_width$}"),
-            Self::RightZero if number < 0 => format!("-{0:0>1$}", number.abs(), min_width - 1),
+            Self::RightZero if number < 0 => {
+                format!("-{0:0>1$}", number.unsigned_abs(), min_width - 1)
+            }
             Self::RightZero => format!("{number:0>min_width$}"),
         }
     }
@@ -1288,6 +1290,14 @@ mod tests {
     /// 测试nl函数的核心功能
     mod nl_function_tests {
         use super::*;
+
+        #[test]
+        fn test_right_zero_formats_i64_minimum_without_overflow() {
+            assert_eq!(
+                NlNumberFormat::RightZero.format(i64::MIN, 20),
+                "-9223372036854775808"
+            );
+        }
 
         /// 测试基本行号功能
         #[test]

@@ -5,6 +5,63 @@ use std::process::{Command, Output, Stdio};
 #[cfg(unix)]
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 
+#[cfg(target_os = "linux")]
+unsafe fn force_getcwd_failure_with_low_fd_limit() -> io::Result<()> {
+    let mut filter = [
+        ctcore::libc::sock_filter {
+            code: (ctcore::libc::BPF_LD | ctcore::libc::BPF_W | ctcore::libc::BPF_ABS) as u16,
+            jt: 0,
+            jf: 0,
+            k: 0,
+        },
+        ctcore::libc::sock_filter {
+            code: (ctcore::libc::BPF_JMP | ctcore::libc::BPF_JEQ | ctcore::libc::BPF_K) as u16,
+            jt: 0,
+            jf: 1,
+            k: ctcore::libc::SYS_getcwd as u32,
+        },
+        ctcore::libc::sock_filter {
+            code: (ctcore::libc::BPF_RET | ctcore::libc::BPF_K) as u16,
+            jt: 0,
+            jf: 0,
+            k: ctcore::libc::SECCOMP_RET_ERRNO | ctcore::libc::ENOENT as u32,
+        },
+        ctcore::libc::sock_filter {
+            code: (ctcore::libc::BPF_RET | ctcore::libc::BPF_K) as u16,
+            jt: 0,
+            jf: 0,
+            k: ctcore::libc::SECCOMP_RET_ALLOW,
+        },
+    ];
+    let filter_program = ctcore::libc::sock_fprog {
+        len: filter.len() as u16,
+        filter: filter.as_mut_ptr(),
+    };
+    let limit = ctcore::libc::rlimit {
+        rlim_cur: 4,
+        rlim_max: 4,
+    };
+
+    if unsafe { ctcore::libc::prctl(ctcore::libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if unsafe {
+        ctcore::libc::prctl(
+            ctcore::libc::PR_SET_SECCOMP,
+            ctcore::libc::SECCOMP_MODE_FILTER,
+            &filter_program,
+        )
+    } != 0
+    {
+        return Err(io::Error::last_os_error());
+    }
+    if unsafe { ctcore::libc::setrlimit(ctcore::libc::RLIMIT_NOFILE, &limit) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+
+    Ok(())
+}
+
 #[cfg(unix)]
 fn run_in_deleted_working_directory() -> Output {
     use std::ffi::CString;
@@ -219,4 +276,24 @@ fn full_stdout_reports_write_error() {
         output.stderr,
         b"pwd: write error: No space left on device\n"
     );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn getcwd_fallback_succeeds_with_four_file_descriptors() {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_pwd"));
+    command
+        .arg0("pwd")
+        .env("LC_ALL", "C")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    unsafe {
+        command.pre_exec(|| force_getcwd_failure_with_low_fd_limit());
+    }
+
+    let output = command.output().expect("run pwd");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stdout.ends_with(b"\n"));
+    assert!(output.stderr.is_empty());
 }

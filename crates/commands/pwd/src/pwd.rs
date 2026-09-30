@@ -20,7 +20,7 @@ use ctcore::Tool;
 use ctcore::ct_display::ct_println_verbatim;
 use ctcore::ct_error::{CTResult, FromIo};
 use std::env;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io;
 use std::path::PathBuf;
 use sys_locale::get_locale;
@@ -123,13 +123,21 @@ pub fn resolve_pwd_path(mode: PwdMode) -> io::Result<PathBuf> {
     }
 }
 
-fn resolve_pwd_mode(matches: &clap::ArgMatches) -> PwdMode {
-    if matches.get_flag(pwd_flags::PWD_PHYSICAL) {
-        PwdMode::Physical
-    } else if matches.get_flag(pwd_flags::PWD_LOGICAL) || env::var("POSIXLY_CORRECT").is_ok() {
+fn default_pwd_mode(posixly_correct: Option<&OsStr>) -> PwdMode {
+    if posixly_correct.is_some() {
         PwdMode::Logical
     } else {
         PwdMode::Physical
+    }
+}
+
+fn resolve_pwd_mode(matches: &clap::ArgMatches) -> PwdMode {
+    if matches.get_flag(pwd_flags::PWD_PHYSICAL) {
+        PwdMode::Physical
+    } else if matches.get_flag(pwd_flags::PWD_LOGICAL) {
+        PwdMode::Logical
+    } else {
+        default_pwd_mode(env::var_os("POSIXLY_CORRECT").as_deref())
     }
 }
 
@@ -226,6 +234,16 @@ mod tests {
             // pwd then reports an error with exit code 1.
             assert_eq!(err.code(), 1);
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_posixly_correct_selects_logical_default() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let value = OsString::from_vec(vec![0xff]);
+
+        assert_eq!(default_pwd_mode(Some(value.as_os_str())), PwdMode::Logical,);
     }
 
     #[cfg(test)]

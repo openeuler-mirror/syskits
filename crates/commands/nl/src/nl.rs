@@ -63,7 +63,7 @@ pub struct NlFlags {
     body_numbering: NlNumberingStyle,
     footer_numbering: NlNumberingStyle,
     // 分节符
-    section_delimiter: String,
+    section_delimiter: Vec<u8>,
     // 起始行号、增量、合并空行数和行号宽度
     starting_line_number: i64,
     line_increment: i64,
@@ -73,7 +73,7 @@ pub struct NlFlags {
     number_format: NlNumberFormat,
     is_renumber: bool,
     // 行号分隔符
-    number_separator: String,
+    number_separator: Vec<u8>,
     // 要处理的文件列表
     files: Vec<OsString>,
     // 状态控制
@@ -104,14 +104,14 @@ impl Default for NlFlags {
             header_numbering: NlNumberingStyle::None,
             body_numbering: NlNumberingStyle::NonEmpty,
             footer_numbering: NlNumberingStyle::None,
-            section_delimiter: String::from("\\:"),
+            section_delimiter: b"\\:".to_vec(),
             starting_line_number: 1,
             line_increment: 1,
             join_blank_lines: 1,
             number_width: 6,
             number_format: NlNumberFormat::Right,
             is_renumber: true,
-            number_separator: String::from("\t"),
+            number_separator: b"\t".to_vec(),
             files: vec![OsString::from("-")],
             stats: NlStats::new(1),
         }
@@ -177,17 +177,18 @@ impl NlFlags {
             .map_or_else(|| vec![OsString::from("-")], |v| v.cloned().collect());
 
         // 提取分隔符选项
-        if let Some(delimiter) = matches.get_one::<String>(nl_flags::NL_SECTION_DELIMITER) {
+        if let Some(delimiter) = matches.get_one::<OsString>(nl_flags::NL_SECTION_DELIMITER) {
+            let delimiter = delimiter.as_encoded_bytes();
             flags.section_delimiter = if delimiter.len() == 1 {
-                format!("{delimiter}:")
+                [delimiter, b":"].concat()
             } else {
-                delimiter.clone()
+                delimiter.to_vec()
             };
         }
 
         // 提取行号分隔符
-        if let Some(val) = matches.get_one::<String>(nl_flags::NL_NUMBER_SEPARATOR) {
-            flags.number_separator.clone_from(val);
+        if let Some(val) = matches.get_one::<OsString>(nl_flags::NL_NUMBER_SEPARATOR) {
+            flags.number_separator = val.as_encoded_bytes().to_vec();
         }
 
         // 提取行号格式化选项
@@ -198,8 +199,8 @@ impl NlFlags {
 
         // 提取各种编号样式选项
         match matches
-            .get_one::<String>(nl_flags::NL_HEADER_NUMBERING)
-            .map(String::as_str)
+            .get_one::<OsString>(nl_flags::NL_HEADER_NUMBERING)
+            .map(|style| style.as_encoded_bytes())
             .map(TryInto::try_into)
         {
             None => {}
@@ -208,8 +209,8 @@ impl NlFlags {
         }
 
         match matches
-            .get_one::<String>(nl_flags::NL_BODY_NUMBERING)
-            .map(String::as_str)
+            .get_one::<OsString>(nl_flags::NL_BODY_NUMBERING)
+            .map(|style| style.as_encoded_bytes())
             .map(TryInto::try_into)
         {
             None => {}
@@ -218,8 +219,8 @@ impl NlFlags {
         }
 
         match matches
-            .get_one::<String>(nl_flags::NL_FOOTER_NUMBERING)
-            .map(String::as_str)
+            .get_one::<OsString>(nl_flags::NL_FOOTER_NUMBERING)
+            .map(|style| style.as_encoded_bytes())
             .map(TryInto::try_into)
         {
             None => {}
@@ -342,26 +343,42 @@ impl PartialEq for NlNumberingStyle {
     }
 }
 
+impl TryFrom<&[u8]> for NlNumberingStyle {
+    type Error = String;
+
+    fn try_from(style: &[u8]) -> Result<Self, Self::Error> {
+        if style == b"a" {
+            return Ok(Self::All);
+        }
+        if style == b"t" {
+            return Ok(Self::NonEmpty);
+        }
+        if style == b"n" {
+            return Ok(Self::None);
+        }
+        if let Some(pattern) = style.strip_prefix(b"p") {
+            let pattern = pattern.to_vec();
+            let compiled =
+                GnuRegex::compile(&pattern, GnuRegexCompileOptions::posix_basic_permissive())
+                    .map_err(nl_regex_error_message)?;
+            return Ok(Self::Regex {
+                pattern,
+                compiled: RefCell::new(compiled),
+            });
+        }
+
+        Err(format!(
+            "invalid numbering style: '{}'",
+            String::from_utf8_lossy(style)
+        ))
+    }
+}
+
 impl TryFrom<&str> for NlNumberingStyle {
     type Error = String;
 
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        match s {
-            "a" => Ok(Self::All),
-            "t" => Ok(Self::NonEmpty),
-            "n" => Ok(Self::None),
-            _ if s.starts_with('p') => {
-                let pattern = s.as_bytes()[1..].to_vec();
-                let compiled =
-                    GnuRegex::compile(&pattern, GnuRegexCompileOptions::posix_basic_permissive())
-                        .map_err(nl_regex_error_message)?;
-                Ok(Self::Regex {
-                    pattern,
-                    compiled: RefCell::new(compiled),
-                })
-            }
-            _ => Err(format!("invalid numbering style: '{s}'")),
-        }
+    fn try_from(style: &str) -> Result<Self, Self::Error> {
+        Self::try_from(style.as_bytes())
     }
 }
 
@@ -478,7 +495,7 @@ where
         let lossy_line = String::from_utf8_lossy(&buf[..line_len]);
 
         let new_numbering_style =
-            match NlSectionDelimiter::parse(&lossy_line, &flags.section_delimiter) {
+            match NlSectionDelimiter::parse(&buf[..line_len], &flags.section_delimiter) {
                 Some(section) => {
                     current_section = section.as_str().to_string();
                     Some(section)
@@ -539,7 +556,9 @@ where
             };
             let rendered_number = flags.number_format.format(line_number, flags.number_width);
 
-            write!(writer, "{}{}", rendered_number, flags.number_separator)
+            write!(writer, "{rendered_number}").map_err(nl_write_error)?;
+            writer
+                .write_all(&flags.number_separator)
                 .map_err(nl_write_error)?;
             writer.write_all(&buf).map_err(nl_write_error)?;
             if buf.last() != Some(&b'\n') {
@@ -560,8 +579,8 @@ where
                 None => flags.stats.line_number = None,
             }
         } else {
-            let spaces = " ".repeat(flags.number_width + flags.number_separator.len());
-            write!(writer, "{spaces}").map_err(nl_write_error)?;
+            let spaces = vec![b' '; flags.number_width + flags.number_separator.len()];
+            writer.write_all(&spaces).map_err(nl_write_error)?;
             writer.write_all(&buf).map_err(nl_write_error)?;
             if buf.last() != Some(&b'\n') {
                 writeln!(writer).map_err(nl_write_error)?;
@@ -590,13 +609,14 @@ impl NlSectionDelimiter {
     ///
     /// # 返回值
     /// * `Option<Self>` - 分节符类型或None
-    fn parse(s: &str, pattern: &str) -> Option<Self> {
+    fn parse(s: &[u8], pattern: &[u8]) -> Option<Self> {
         if s.is_empty() || pattern.is_empty() {
             return None;
         }
 
-        let pattern_count = s.matches(pattern).count();
-        let is_length_ok = pattern_count * pattern.len() == s.len();
+        let pattern_count = s.len() / pattern.len();
+        let is_length_ok = s.len() % pattern.len() == 0
+            && s.chunks_exact(pattern.len()).all(|chunk| chunk == pattern);
 
         match (pattern_count, is_length_ok) {
             (3, true) => Some(Self::Header),
@@ -810,22 +830,26 @@ pub fn ct_app() -> Command {
             .short('b')
             .long(nl_flags::NL_BODY_NUMBERING)
             .help(t!("nl.clap.nl_body_numbering"))
-            .value_name("STYLE"),
+            .value_name("STYLE")
+            .value_parser(OsStringValueParser::new()),
         Arg::new(nl_flags::NL_SECTION_DELIMITER)
             .short('d')
             .long(nl_flags::NL_SECTION_DELIMITER)
             .help(t!("nl.clap.nl_section_delimiter"))
-            .value_name("CC"),
+            .value_name("CC")
+            .value_parser(OsStringValueParser::new()),
         Arg::new(nl_flags::NL_FOOTER_NUMBERING)
             .short('f')
             .long(nl_flags::NL_FOOTER_NUMBERING)
             .help(t!("nl.clap.nl_footer_numbering"))
-            .value_name("STYLE"),
+            .value_name("STYLE")
+            .value_parser(OsStringValueParser::new()),
         Arg::new(nl_flags::NL_HEADER_NUMBERING)
             .short('h')
             .long(nl_flags::NL_HEADER_NUMBERING)
             .help(t!("nl.clap.nl_header_numbering"))
-            .value_name("STYLE"),
+            .value_name("STYLE")
+            .value_parser(OsStringValueParser::new()),
         Arg::new(nl_flags::NL_LINE_INCREMENT)
             .short('i')
             .long(nl_flags::NL_LINE_INCREMENT)
@@ -853,7 +877,8 @@ pub fn ct_app() -> Command {
             .short('s')
             .long(nl_flags::NL_NUMBER_SEPARATOR)
             .help(t!("nl.clap.nl_number_separator"))
-            .value_name("STRING"),
+            .value_name("STRING")
+            .value_parser(OsStringValueParser::new()),
         Arg::new(nl_flags::NL_STARTING_LINE_NUMBER)
             .short('v')
             .long(nl_flags::NL_STARTING_LINE_NUMBER)
@@ -1102,6 +1127,44 @@ mod tests {
         assert_eq!(output, b"     1\tline\n");
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_accepts_non_utf8_numbering_option_values() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let mut output = Vec::new();
+        let matches = ct_app()
+            .try_get_matches_from([
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-d"),
+                OsString::from_vec(vec![0xff]),
+                OsString::from("-s"),
+                OsString::from_vec(vec![0xfe]),
+                OsString::from_vec(vec![b'-', b'h', b'p', 0xff]),
+                OsString::from_vec(vec![b'-', b'b', b'p', 0xff]),
+                OsString::from_vec(vec![b'-', b'f', b'p', 0xff]),
+            ])
+            .unwrap();
+        let mut flags = NlFlags::new(matches).unwrap();
+        assert!(matches!(
+            flags.header_numbering,
+            NlNumberingStyle::Regex { ref pattern, .. } if pattern == b"\xff"
+        ));
+        assert!(matches!(
+            flags.body_numbering,
+            NlNumberingStyle::Regex { ref pattern, .. } if pattern == b"\xff"
+        ));
+        assert!(matches!(
+            flags.footer_numbering,
+            NlNumberingStyle::Regex { ref pattern, .. } if pattern == b"\xff"
+        ));
+        let mut reader = BufReader::new(Cursor::new(b"\xff:\xff:\n\xff\n"));
+
+        nl(&mut output, &mut reader, &mut flags).unwrap();
+
+        assert_eq!(output, b"\n     1\xfe\xff\n");
+    }
+
     /// 测试NlFlags相关功能
     mod nl_flags_tests {
         use super::*;
@@ -1147,8 +1210,8 @@ mod tests {
             assert_eq!(flags.starting_line_number, 1);
             assert_eq!(flags.number_width, 6);
             assert_eq!(flags.files, vec!["test.txt"]);
-            assert_eq!(flags.section_delimiter, "\\:");
-            assert_eq!(flags.number_separator, "\t");
+            assert_eq!(flags.section_delimiter, b"\\:");
+            assert_eq!(flags.number_separator, b"\t");
             assert!(matches!(flags.number_format, NlNumberFormat::Right));
             assert!(matches!(flags.header_numbering, NlNumberingStyle::None));
             assert!(matches!(flags.body_numbering, NlNumberingStyle::NonEmpty));
@@ -1180,9 +1243,9 @@ mod tests {
         #[test]
         fn test_flags_section_delimiter() {
             let test_cases = [
-                ("\\", "\\:"),    // 单字符自动添加 :
-                ("\\\\", "\\\\"), // 多字符保持原样
-                ("%%", "%%"),
+                ("\\", b"\\:".as_slice()),    // 单字符自动添加 :
+                ("\\\\", b"\\\\".as_slice()), // 多字符保持原样
+                ("%%", b"%%".as_slice()),
             ];
 
             for (input, expected) in test_cases {
@@ -1348,12 +1411,12 @@ mod tests {
             assert!(matches!(flags.body_numbering, NlNumberingStyle::None));
             assert!(matches!(flags.header_numbering, NlNumberingStyle::None));
             assert!(matches!(flags.footer_numbering, NlNumberingStyle::None));
-            assert_eq!(flags.section_delimiter, "%:");
+            assert_eq!(flags.section_delimiter, b"%:");
             assert_eq!(flags.line_increment, 2);
             assert_eq!(flags.join_blank_lines, 2);
             assert!(matches!(flags.number_format, NlNumberFormat::RightZero));
             assert!(!flags.is_renumber);
-            assert_eq!(flags.number_separator, ":");
+            assert_eq!(flags.number_separator, b":");
             assert_eq!(flags.starting_line_number, 8);
             assert_eq!(flags.number_width, 4);
         }
@@ -1589,7 +1652,7 @@ mod tests {
             let mut output = Vec::new();
             let mut reader = BufReader::new(Cursor::new(input));
             let mut flags = NlFlags::default();
-            flags.number_separator = String::from(" | ");
+            flags.number_separator = b" | ".to_vec();
 
             nl(&mut output, &mut reader, &mut flags).unwrap();
 
@@ -1682,7 +1745,7 @@ mod tests {
             let mut flags = NlFlags::default();
             flags.starting_line_number = -10;
             flags.line_increment = 2;
-            flags.section_delimiter = " ".to_string();
+            flags.section_delimiter = b" ".to_vec();
             flags.body_numbering = NlNumberingStyle::All;
             flags.stats = NlStats::new(flags.starting_line_number);
             nl(&mut output, &mut reader, &mut flags).unwrap();

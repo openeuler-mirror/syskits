@@ -106,6 +106,31 @@
       },
       {
         "tstdin": "",
+        "byteMode": true,
+        "command": "nl",
+        "description": "原始字节用例：LC_ALL=C下-d参数ff生成分节符ff3a，-hpff、-bpff和-fpff均按GNU BRE匹配单字节ff，-s参数fe作为编号分隔符；输入ff3aff3a0aff0a的首行是正文分节符，第二行编号，预期stdout完整十六进制为0a202020202031feff0a。",
+        "setup_commands": [
+          "printf '\\377:\\377:\\n\\377\\n' > input"
+        ],
+        "args": ["2d64", "ff", "2d73", "fe", "2d6870ff", "2d6270ff", "2d6670ff", "696e707574"],
+        "environment": {
+          "clearEnv": true,
+          "env_vars": {
+            "LC_ALL": "C",
+            "LANG": "C"
+          }
+        },
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "0a202020202031feff0a",
+            "stderr": ""
+          }
+        },
+        "tags": ["raw-bytes", "non-utf8", "numbering-options"]
+      },
+      {
+        "tstdin": "",
         "command": "nl",
         "description": "测试不编号样式",
         "setup_commands": [

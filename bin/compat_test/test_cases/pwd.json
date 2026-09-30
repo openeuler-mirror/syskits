@@ -446,27 +446,74 @@
     },
     {
       "command": "pwd",
-      "description": "Test invalid option - should fail",
+      "description": "LC_ALL=C、LANG=C下执行pwd --invalid-option；GNU getopt_long 对无匹配长选项返回1，stdout为空，stderr完整输出unrecognized option诊断及Try help提示。",
       "args": ["--invalid-option"],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
       "expectation": {
         "execution": {
-          "exit_code": null,
-          "stdout": null,
-          "stderr": null
-        },
-        "verifications": [
-          {
-            "command": "test $CMD_EXIT_CODE -ne 0",
-            "expected_exit": 0,
-            "expected_stdout": null,
-            "expected_stderr": null
-          }
-        ],
-        "ignore_fields": {
-          "ignore_exit_code": true,
-          "ignore_stdout": true,
-          "ignore_stderr": true,
-          "ignore_function": false
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "pwd: unrecognized option '--invalid-option'\nTry 'pwd --help' for more information.\n"
+        }
+      }
+    },
+    {
+      "command": "pwd",
+      "description": "LC_ALL=C、LANG=C下执行pwd -LPx；GNU逐字节扫描组合短选项，在接受-L和-P后将x作为无效选项报告，预期RC=1、stdout为空、stderr为invalid option诊断。",
+      "args": ["-LPx"],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "pwd: invalid option -- 'x'\nTry 'pwd --help' for more information.\n"
+        }
+      }
+    },
+    {
+      "command": "pwd",
+      "description": "LC_ALL=C、LANG=C下执行pwd --lo=value；--lo是--logical的唯一GNU缩写，但该选项不接受参数，预期RC=1、stdout为空、stderr使用规范长选项名--logical报告doesn't allow an argument。",
+      "args": ["--lo=value"],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "pwd: option '--logical' doesn't allow an argument\nTry 'pwd --help' for more information.\n"
+        }
+      }
+    },
+    {
+      "byteMode": true,
+      "command": "pwd",
+      "description": "原始字节用例：LC_ALL=C、LANG=C下执行pwd，参数完整十六进制=2dff，表示短选项-后接非UTF-8字节ff；GNU保留ff并报告invalid option，预期RC=1、stdout为空、stderr完整十六进制=7077643a20696e76616c6964206f7074696f6e202d2d2027ff270a5472792027707764202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a。",
+      "args": ["2dff"],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "7077643a20696e76616c6964206f7074696f6e202d2d2027ff270a5472792027707764202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
         }
       }
     },

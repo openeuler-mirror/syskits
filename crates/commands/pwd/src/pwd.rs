@@ -12,13 +12,17 @@
 //! pwd命令, 在Linux和其他类Unix系统中用于显示当前工作目录的绝对路径。
 
 extern crate rust_i18n;
+use std::borrow::Cow;
+use std::error::Error;
+use std::fmt::{Display, Formatter};
+
 use clap::ArgAction;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::ct_println_verbatim;
-use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, strip_errno};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, strip_errno};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io;
@@ -178,13 +182,139 @@ fn resolve_pwd_mode(matches: &clap::ArgMatches, posixly_correct: Option<&OsStr>)
     }
 }
 
+const PWD_LONG_OPTIONS: &[&str] = &["logical", "physical", "help", "version"];
+const PWD_SHORT_EXTENSIONS: &[u8] = b"hV";
+
+#[derive(Debug, PartialEq, Eq)]
+enum PwdLongOptionMatch {
+    Recognized(&'static str),
+    Ambiguous(Vec<&'static str>),
+    None,
+}
+
+#[derive(Debug)]
+struct PwdUsageError {
+    message: Vec<u8>,
+}
+
+impl PwdUsageError {
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self { message })
+    }
+}
+
+impl Display for PwdUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl Error for PwdUsageError {}
+
+impl CTError for PwdUsageError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
+fn pwd_prepare_args(args: impl ctcore::Args, posixly_correct: bool) -> CTResult<Vec<OsString>> {
+    let args = args.collect::<Vec<_>>();
+    let mut parse_options = true;
+
+    for argument in args.iter().skip(1) {
+        if !parse_options {
+            continue;
+        }
+
+        let bytes = argument.as_encoded_bytes();
+        if bytes == b"--" {
+            parse_options = false;
+            continue;
+        }
+        if bytes.len() <= 1 || bytes[0] != b'-' {
+            if posixly_correct {
+                parse_options = false;
+            }
+            continue;
+        }
+
+        if let Some(long) = bytes.strip_prefix(b"--") {
+            let separator = long.iter().position(|byte| *byte == b'=');
+            let name = &long[..separator.unwrap_or(long.len())];
+            match pwd_match_long_option(name) {
+                PwdLongOptionMatch::Recognized(canonical) if separator.is_some() => {
+                    return Err(PwdUsageError::boxed(
+                        format!("option '--{canonical}' doesn't allow an argument").into_bytes(),
+                    ));
+                }
+                PwdLongOptionMatch::Ambiguous(candidates) => {
+                    let mut message = b"option '".to_vec();
+                    message.extend_from_slice(bytes);
+                    message.extend_from_slice(b"' is ambiguous; possibilities:");
+                    for candidate in candidates {
+                        message.extend_from_slice(b" '--");
+                        message.extend_from_slice(candidate.as_bytes());
+                        message.push(b'\'');
+                    }
+                    return Err(PwdUsageError::boxed(message));
+                }
+                PwdLongOptionMatch::None => {
+                    let mut message = b"unrecognized option '".to_vec();
+                    message.extend_from_slice(bytes);
+                    message.push(b'\'');
+                    return Err(PwdUsageError::boxed(message));
+                }
+                PwdLongOptionMatch::Recognized(_) => continue,
+            }
+        }
+
+        for option in &bytes[1..] {
+            if matches!(option, b'L' | b'P') || PWD_SHORT_EXTENSIONS.contains(option) {
+                continue;
+            }
+
+            let mut message = b"invalid option -- '".to_vec();
+            message.push(*option);
+            message.push(b'\'');
+            return Err(PwdUsageError::boxed(message));
+        }
+    }
+
+    Ok(args)
+}
+
+fn pwd_match_long_option(name: &[u8]) -> PwdLongOptionMatch {
+    if let Some(option) = PWD_LONG_OPTIONS
+        .iter()
+        .copied()
+        .find(|option| option.as_bytes() == name)
+    {
+        return PwdLongOptionMatch::Recognized(option);
+    }
+
+    let candidates = PWD_LONG_OPTIONS
+        .iter()
+        .copied()
+        .filter(|option| option.as_bytes().starts_with(name))
+        .collect::<Vec<_>>();
+    match candidates.as_slice() {
+        [] => PwdLongOptionMatch::None,
+        [candidate] => PwdLongOptionMatch::Recognized(candidate),
+        _ => PwdLongOptionMatch::Ambiguous(candidates),
+    }
+}
+
 pub fn pwd_main(args: impl ctcore::Args) -> CTResult<()> {
     let _sigpipe_guard = SigpipeGuard::for_cli();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let posixly_correct = env::var_os("POSIXLY_CORRECT");
-    let matches =
-        ct_app_with_posixly_correct(posixly_correct.is_some()).try_get_matches_from(args)?;
+    let matches = ct_app_with_posixly_correct(posixly_correct.is_some())
+        .try_get_matches_from(pwd_prepare_args(args, posixly_correct.is_some())?)?;
     if matches
         .get_many::<String>(pwd_flags::PWD_ARG_OTHERS)
         .is_some()

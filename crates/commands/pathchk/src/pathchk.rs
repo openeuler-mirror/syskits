@@ -367,12 +367,6 @@ fn check_default<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
     let path_bytes = path.as_bytes();
     let total_len = path_bytes.len();
 
-    // First check empty path
-    if total_len == 0 {
-        writeln!(writer, "pathchk: empty file name")?;
-        return Ok(false);
-    }
-
     // Then check path length
     if total_len > libc::PATH_MAX as usize {
         write!(
@@ -418,7 +412,7 @@ fn check_searchable<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
     match fs::symlink_metadata(Path::new(path)) {
         Ok(_) => Ok(true),
         Err(e) => {
-            if e.kind() == ErrorKind::NotFound {
+            if e.kind() == ErrorKind::NotFound && !path.as_bytes().is_empty() {
                 Ok(true)
             } else if e.raw_os_error() == Some(36) {
                 // ENAMETOOLONG
@@ -725,6 +719,19 @@ mod tests {
             let output_str = String::from_utf8(output.into_inner()).unwrap();
 
             assert!(output_str.contains("pathchk: empty file name"));
+        }
+
+        #[test]
+        fn test_default_mode_empty_path_reports_lstat_error() {
+            let args = [ctcore::ct_util_name(), ""];
+            let mut output = Cursor::new(Vec::new());
+
+            assert!(pathchk_main(&mut output, args.iter().map(OsString::from)).is_ok());
+
+            assert_eq!(
+                String::from_utf8(output.into_inner()).unwrap(),
+                "pathchk: '': No such file or directory\n"
+            );
         }
 
         #[test]

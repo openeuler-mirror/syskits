@@ -251,6 +251,27 @@
         "diagnostics",
         "check-order"
       ]
+    },
+    {
+      "tstdin": "",
+      "command": "pathchk",
+      "description": "pathchk: 默认模式空路径使用lstat的No such file or directory诊断，-p/-P才报告empty file name",
+      "args": [
+        ""
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "pathchk: '': No such file or directory\n"
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "default-mode",
+        "empty-path",
+        "diagnostics"
+      ]
     }
   ]
 }

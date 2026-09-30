@@ -59,6 +59,26 @@
         {
             "tstdin": "",
             "command": "printenv",
+            "description": "GNU 重复短选项：-00 等价于重复指定 -0；PRINTENV_REPEAT=known，预期 RC=0、stdout 完整十六进制=6b6e6f776e00，即 known 后单个 NUL。",
+            "args": ["2d3030", "5052494e54454e565f524550454154"],
+            "setup_commands": [
+                "export PRINTENV_REPEAT=known"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "6b6e6f776e00",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "unset PRINTENV_REPEAT"
+            ],
+            "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "printenv",
             "description": "显示多个环境变量",
             "args": ["VAR1", "VAR2"],
             "setup_commands": [

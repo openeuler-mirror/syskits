@@ -46,7 +46,7 @@ impl PrintenvOptions {
             .get_many::<String>(PRINTENV_ARG_VARIABLES)
             .map(|v| v.map(ToString::to_string).collect())
             .unwrap_or_default();
-        let null = args_match.get_flag(PRINTENV_OPT_NULL);
+        let null = args_match.get_count(PRINTENV_OPT_NULL) > 0;
         Self {
             separator: if null { "\x00" } else { "\n" },
             variables,
@@ -140,7 +140,7 @@ pub fn ct_app() -> Command {
             .short('0')
             .long(PRINTENV_OPT_NULL)
             .help(t!("printenv.clap.printenv_opt_null"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(PRINTENV_ARG_VARIABLES)
             .action(ArgAction::Append)
             .num_args(1..)
@@ -303,7 +303,7 @@ mod tests {
                 .try_get_matches_from([ctcore::ct_util_name(), "PRINTENV_TEST", "-0"])
                 .expect("arguments should parse");
 
-            assert!(!matches.get_flag(PRINTENV_OPT_NULL));
+            assert_eq!(matches.get_count(PRINTENV_OPT_NULL), 0);
             assert_eq!(
                 matches
                     .get_many::<String>(PRINTENV_ARG_VARIABLES)
@@ -312,6 +312,16 @@ mod tests {
                     .collect::<Vec<_>>(),
                 ["PRINTENV_TEST", "-0"]
             );
+        }
+
+        #[test]
+        fn accepts_repeated_null_option() {
+            let command = ct_app();
+            let matches = command
+                .try_get_matches_from([ctcore::ct_util_name(), "-00", "PRINTENV_TEST"])
+                .expect("repeated -0 should parse");
+
+            assert_eq!(matches.get_count(PRINTENV_OPT_NULL), 2);
         }
     }
 }

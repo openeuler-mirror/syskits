@@ -13,7 +13,6 @@
 
 extern crate rust_i18n;
 use rust_i18n::t;
-use std::thread;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::time::Duration;
 
@@ -29,6 +28,10 @@ use std::error::Error;
 use std::ffi::CString;
 use std::ffi::{CStr, OsStr, OsString};
 use std::fmt::{Display, Formatter};
+#[cfg(target_os = "linux")]
+use std::io;
+#[cfg(not(target_os = "linux"))]
+use std::thread;
 
 mod sleep_flags {
     pub const SLEEP_NUMBER: &str = "NUMBER";
@@ -120,6 +123,11 @@ fn sleep_gb18030_codeset(codeset: &str) -> bool {
 
 fn localized_invalid_time_interval(locale: &str) -> String {
     t!("sleep.errors.invalid_time_interval", locale = locale).to_string()
+}
+
+#[cfg(target_os = "linux")]
+fn localized_cannot_read_realtime_clock(locale: &str) -> String {
+    t!("sleep.errors.cannot_read_realtime_clock", locale = locale).to_string()
 }
 
 fn locale_uses_utf8_quotes() -> bool {
@@ -492,6 +500,38 @@ impl CTError for InvalidTimeIntervalError {
 
     fn usage(&self) -> bool {
         true
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+struct SleepClockError {
+    error: io::Error,
+}
+
+#[cfg(target_os = "linux")]
+impl Display for SleepClockError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "{}: {}",
+            localized_cannot_read_realtime_clock(&rust_i18n::locale()),
+            ctcore::ct_error::strip_errno(&self.error)
+        )
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Error for SleepClockError {}
+
+#[cfg(target_os = "linux")]
+impl CTError for SleepClockError {
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        let mut diagnostic =
+            sleep_encode_locale_text(&localized_cannot_read_realtime_clock(&rust_i18n::locale()));
+        diagnostic.extend_from_slice(b": ");
+        diagnostic.extend_from_slice(ctcore::ct_error::strip_errno(&self.error).as_bytes());
+        Cow::Owned(diagnostic)
     }
 }
 
@@ -963,10 +1003,55 @@ fn sleep_handle_second<T: AsRef<OsStr>>(args: &[T]) -> CTResult<Duration> {
     Ok(duration_from_seconds(seconds))
 }
 
-fn sleep(sleep_dur: Duration) -> CTResult<()> {
-    thread::sleep(sleep_dur);
+#[cfg(target_os = "linux")]
+fn sleep_with_nanosleep(
+    sleep_dur: Duration,
+    mut nanosleep: impl FnMut(&ctcore::libc::timespec, &mut ctcore::libc::timespec) -> io::Result<()>,
+) -> CTResult<()> {
+    let mut remaining = ctcore::libc::timespec {
+        tv_sec: sleep_dur.as_secs() as ctcore::libc::time_t,
+        tv_nsec: sleep_dur.subsec_nanos().into(),
+    };
 
-    Ok(())
+    loop {
+        let mut next = ctcore::libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
+        match nanosleep(&remaining, &mut next) {
+            Ok(()) => return Ok(()),
+            // GNU xnanosleep also retries when a resumed old Linux kernel
+            // reports failure without setting errno.
+            Err(error)
+                if error.kind() == io::ErrorKind::Interrupted
+                    || error.raw_os_error() == Some(0) =>
+            {
+                remaining = next;
+            }
+            Err(error) => return Err(Box::new(SleepClockError { error })),
+        }
+    }
+}
+
+fn sleep(sleep_dur: Duration) -> CTResult<()> {
+    #[cfg(target_os = "linux")]
+    {
+        sleep_with_nanosleep(sleep_dur, |remaining, next| {
+            // SAFETY: both pointers refer to initialized local timespec values.
+            let result = unsafe { ctcore::libc::nanosleep(remaining, next) };
+            if result == 0 {
+                Ok(())
+            } else {
+                Err(io::Error::last_os_error())
+            }
+        })
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        thread::sleep(sleep_dur);
+        Ok(())
+    }
 }
 
 pub fn ct_app() -> Command {
@@ -1146,6 +1231,38 @@ mod tests {
             for input in ["'0", "\"0"] {
                 assert!(sleep_handle_second(&[input]).is_err(), "{input}");
             }
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_sleep_reports_nanosleep_failure_as_gnu_clock_error() {
+            let error = sleep_with_nanosleep(Duration::ZERO, |_, _| {
+                Err(std::io::Error::from_raw_os_error(ctcore::libc::EPERM))
+            })
+            .unwrap_err();
+
+            assert_eq!(error.code(), 1);
+            assert_eq!(
+                error.diagnostic_bytes().as_ref(),
+                b"cannot read realtime clock: Operation not permitted"
+            );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_sleep_retries_interrupted_nanosleep() {
+            let mut calls = 0;
+            sleep_with_nanosleep(Duration::ZERO, |_, _| {
+                calls += 1;
+                if calls == 1 {
+                    Err(std::io::Error::from_raw_os_error(ctcore::libc::EINTR))
+                } else {
+                    Ok(())
+                }
+            })
+            .unwrap();
+
+            assert_eq!(calls, 2);
         }
 
         #[test]

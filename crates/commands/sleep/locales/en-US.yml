@@ -6,6 +6,7 @@ sleep:
     sleep OPTION
   about: Pause for NUMBER seconds.
   errors:
+    cannot_read_realtime_clock: cannot read realtime clock
     invalid_time_interval: invalid time interval
     missing_operand: missing operand
     try_help: "Try '%{utility_name} --help' for more information."

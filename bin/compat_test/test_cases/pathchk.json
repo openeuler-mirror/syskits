@@ -127,6 +127,27 @@
         "non-existent",
         "validation"
       ]
+    },
+    {
+      "tstdin": "",
+      "command": "pathchk",
+      "description": "pathchk: 首个路径后的-p按路径名处理",
+      "args": [
+        "name#",
+        "-p"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "options",
+        "posix-option-order"
+      ]
     }
   ]
 }

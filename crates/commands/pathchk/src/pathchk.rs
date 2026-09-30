@@ -20,6 +20,7 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, set_ct_exit_code};
 use ctcore::ct_locale::{LcCategory, hard_locale};
+use ctcore::ct_posix::GnuGetoptCommandExt;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{ErrorKind, Write};
@@ -248,6 +249,9 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        // GNU pathchk uses getopt with a leading '+' in its option string,
+        // so option parsing always stops at the first path operand.
+        .gnu_getopt_with_mode(true)
         .args(&args)
 }
 
@@ -532,6 +536,16 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args).unwrap();
             let flags = PathchkFlags::new(&matches).unwrap();
             assert!(matches!(flags.mode, PathchkMode::Both));
+        }
+
+        #[test]
+        fn test_flags_stop_parsing_options_after_first_path() {
+            let args = vec![ctcore::ct_util_name(), "name#", "-p"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = PathchkFlags::new(&matches).unwrap();
+
+            assert!(matches!(flags.mode, PathchkMode::Default));
+            assert_eq!(flags.paths, vec!["name#", "-p"]);
         }
     }
 

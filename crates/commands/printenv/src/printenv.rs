@@ -254,7 +254,6 @@ pub fn ct_app() -> Command {
         Arg::new(PRINTENV_ARG_VARIABLES)
             .action(ArgAction::Append)
             .num_args(1..)
-            .allow_hyphen_values(true)
             .trailing_var_arg(true)
             .value_parser(OsStringValueParser::new()),
     ];
@@ -486,6 +485,15 @@ mod tests {
                 .expect("repeated -0 should parse");
 
             assert_eq!(matches.get_count(PRINTENV_OPT_NULL), 2);
+        }
+
+        #[test]
+        fn rejects_unknown_short_option_before_variable() {
+            let error = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "-a"])
+                .expect_err("unknown option should not be a variable");
+
+            assert_eq!(error.kind(), ErrorKind::UnknownArgument);
         }
     }
 }

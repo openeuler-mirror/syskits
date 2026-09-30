@@ -645,6 +645,16 @@ fn nl_configure_sigpipe() {
 #[cfg(not(target_os = "linux"))]
 fn nl_configure_sigpipe() {}
 
+fn nl_initialize_locale() {
+    #[cfg(unix)]
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
+
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+}
+
 #[cfg(target_os = "linux")]
 fn nl_restore_default_sigpipe_if_needed(
     inherited_sigpipe_was_default: bool,
@@ -660,9 +670,7 @@ where
     W: std::io::Write,
 {
     nl_configure_sigpipe();
-    // 设置语言
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    nl_initialize_locale();
     // 使用标准化参数处理函数预处理参数
     let processed_args = standardize_nl_args(args);
 
@@ -720,8 +728,7 @@ where
 }
 
 pub fn nl_native_semantic(args: impl Args) -> CTResult<NlSemantic> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    nl_initialize_locale();
     let processed_args = standardize_nl_args(args);
     let matches = ct_app().try_get_matches_from(processed_args)?;
     let mut flags = NlFlags::new(matches)?;
@@ -1163,6 +1170,53 @@ mod tests {
         nl(&mut output, &mut reader, &mut flags).unwrap();
 
         assert_eq!(output, b"\n     1\xfe\xff\n");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_regex_numbering_uses_configured_c_locale() {
+        struct LocaleGuard {
+            previous_lc_all: Option<OsString>,
+        }
+
+        impl Drop for LocaleGuard {
+            fn drop(&mut self) {
+                unsafe {
+                    match self.previous_lc_all.as_ref() {
+                        Some(value) => std::env::set_var("LC_ALL", value),
+                        None => std::env::remove_var("LC_ALL"),
+                    }
+                    ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+                }
+            }
+        }
+
+        let guard = LocaleGuard {
+            previous_lc_all: std::env::var_os("LC_ALL"),
+        };
+        let filename = std::env::temp_dir().join(format!("ct_nl_locale_{}", std::process::id()));
+        std::fs::write(&filename, b"\xc3\xa9\nA\n1\n").unwrap();
+
+        unsafe {
+            std::env::set_var("LC_ALL", "C.UTF-8");
+            ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"C".as_ptr());
+        }
+
+        let mut output = Vec::new();
+        let result = nl_main(
+            &mut output,
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-bp[[:alpha:]]"),
+                filename.as_os_str().to_os_string(),
+            ]
+            .into_iter(),
+        );
+        std::fs::remove_file(&filename).unwrap();
+        drop(guard);
+
+        result.unwrap();
+        assert_eq!(output, b"     1\t\xc3\xa9\n     2\tA\n       1\n");
     }
 
     /// 测试NlFlags相关功能

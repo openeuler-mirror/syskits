@@ -50,6 +50,11 @@ impl Error for InvalidTimeIntervalError {}
 
 fn quote_duration_operand_for_locale(operand: &OsStr, locale: &str) -> Vec<u8> {
     if locale == "zh-CN" {
+        #[cfg(target_os = "linux")]
+        if let Some(codeset) = sleep_output_codeset() {
+            return quote_duration_operand_with_locale_encoding(operand, &codeset, b"\"", b"\"");
+        }
+
         return quote_duration_operand_with_quote_marks(operand, true, b"\"", b"\"", Some(b'"'));
     }
 
@@ -104,21 +109,10 @@ fn quote_duration_operand_with_quote_marks(
     let mut index = 0;
     while index < bytes.len() {
         let byte = bytes[index];
-        match byte {
-            b'\x07' => quoted.extend_from_slice(b"\\a"),
-            b'\x08' => quoted.extend_from_slice(b"\\b"),
-            b'\t' => quoted.extend_from_slice(b"\\t"),
-            b'\n' => quoted.extend_from_slice(b"\\n"),
-            b'\x0b' => quoted.extend_from_slice(b"\\v"),
-            b'\x0c' => quoted.extend_from_slice(b"\\f"),
-            b'\r' => quoted.extend_from_slice(b"\\r"),
-            b'\\' => quoted.extend_from_slice(b"\\\\"),
-            escaped if quote_to_escape == Some(escaped) => {
-                quoted.push(b'\\');
-                quoted.push(escaped);
-            }
-            b' '..=b'~' => quoted.push(byte),
-            _ if utf8_locale => match std::str::from_utf8(&bytes[index..]) {
+        if byte.is_ascii() {
+            push_duration_operand_quoted_ascii(&mut quoted, byte, quote_to_escape);
+        } else if utf8_locale {
+            match std::str::from_utf8(&bytes[index..]) {
                 Ok(_) => {
                     quoted.extend_from_slice(&bytes[index..]);
                     break;
@@ -137,15 +131,110 @@ fn quote_duration_operand_with_quote_marks(
                     index += invalid_length;
                     continue;
                 }
-            },
-            _ => {
-                push_duration_operand_octal_escape(&mut quoted, byte);
             }
+        } else {
+            push_duration_operand_octal_escape(&mut quoted, byte);
         }
         index += 1;
     }
     quoted.extend_from_slice(closing_quote);
     quoted
+}
+
+#[cfg(target_os = "linux")]
+fn quote_duration_operand_with_locale_encoding(
+    operand: &OsStr,
+    codeset: &str,
+    opening_quote: &[u8],
+    closing_quote: &[u8],
+) -> Vec<u8> {
+    let input = operand.as_encoded_bytes();
+    let mut quoted = Vec::with_capacity(input.len() + opening_quote.len() + closing_quote.len());
+    quoted.extend_from_slice(opening_quote);
+
+    let mut index = 0;
+    while index < input.len() {
+        if input[index].is_ascii() {
+            push_duration_operand_quoted_ascii(
+                &mut quoted,
+                input[index],
+                (closing_quote.len() == 1).then_some(closing_quote[0]),
+            );
+            index += 1;
+            continue;
+        }
+
+        let character_len = duration_locale_character_len(&input[index..], codeset);
+        if character_len == 0 {
+            push_duration_operand_octal_escape(&mut quoted, input[index]);
+            index += 1;
+        } else {
+            quoted.extend_from_slice(&input[index..index + character_len]);
+            index += character_len;
+        }
+    }
+
+    quoted.extend_from_slice(closing_quote);
+    quoted
+}
+
+#[cfg(target_os = "linux")]
+fn duration_locale_character_len(input: &[u8], codeset: &str) -> usize {
+    for length in 1..=input.len().min(4) {
+        if duration_locale_bytes_are_valid(&input[..length], codeset) {
+            return length;
+        }
+    }
+    0
+}
+
+#[cfg(target_os = "linux")]
+fn duration_locale_bytes_are_valid(input: &[u8], codeset: &str) -> bool {
+    let source = match CString::new(codeset) {
+        Ok(source) => source,
+        Err(_) => return false,
+    };
+    let target = CString::new("UTF-8").expect("UTF-8 has no NUL byte");
+    let converter = unsafe { ctcore::libc::iconv_open(target.as_ptr(), source.as_ptr()) };
+    if converter == (-1_isize) as ctcore::libc::iconv_t {
+        return false;
+    }
+
+    let mut input_ptr = input.as_ptr().cast_mut().cast::<ctcore::libc::c_char>();
+    let mut input_left = input.len();
+    let mut output = vec![0_u8; input.len().saturating_mul(4).max(16)];
+    let mut output_ptr = output.as_mut_ptr().cast::<ctcore::libc::c_char>();
+    let mut output_left = output.len();
+    let result = unsafe {
+        ctcore::libc::iconv(
+            converter,
+            &mut input_ptr,
+            &mut input_left,
+            &mut output_ptr,
+            &mut output_left,
+        )
+    };
+    unsafe { ctcore::libc::iconv_close(converter) };
+    result != usize::MAX && input_left == 0
+}
+
+fn push_duration_operand_quoted_ascii(output: &mut Vec<u8>, byte: u8, quote_to_escape: Option<u8>) {
+    match byte {
+        b'\x07' => output.extend_from_slice(b"\\a"),
+        b'\x08' => output.extend_from_slice(b"\\b"),
+        b'\t' => output.extend_from_slice(b"\\t"),
+        b'\n' => output.extend_from_slice(b"\\n"),
+        b'\x0b' => output.extend_from_slice(b"\\v"),
+        b'\x0c' => output.extend_from_slice(b"\\f"),
+        b'\r' => output.extend_from_slice(b"\\r"),
+        b'\\' => output.extend_from_slice(b"\\\\"),
+        escaped if quote_to_escape == Some(escaped) => {
+            output.push(b'\\');
+            output.push(escaped);
+        }
+        b' '..=b'~' => output.push(byte),
+        _ => push_duration_operand_octal_escape(output, byte),
+    }
 }
 
 fn push_duration_operand_octal_escape(output: &mut Vec<u8>, byte: u8) {
@@ -902,6 +991,19 @@ mod tests {
                     0xce, 0xde, 0xd0, 0xa7, 0xb5, 0xc4, 0xca, 0xb1, 0xbc, 0xe4, 0xbc, 0xe4, 0xb8,
                     0xf4,
                 ])
+            );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_quote_duration_operand_preserves_valid_gbk_characters() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let input = OsString::from_vec(vec![0xd6, 0xd0, 0xb9, 0xfa, b'"']);
+
+            assert_eq!(
+                quote_duration_operand_with_locale_encoding(input.as_os_str(), "GBK", b"\"", b"\""),
+                b"\"\xd6\xd0\xb9\xfa\\\"\""
             );
         }
 

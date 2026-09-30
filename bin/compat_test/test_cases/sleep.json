@@ -512,6 +512,27 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "sleep",
+            "description": "原始字节用例：LC_ALL=zh_CN.gbk、LANG=zh_CN.gbk下执行sleep并传入有效GBK字符和双引号；参数完整十六进制=d6d0b9fa22（GBK中国后接ASCII双引号），stdin为0字节、完整十六进制=空；预期GNU保留GBK多字节字符、转义内部双引号，RC=1、stdout为空、stderr完整十六进制=736c6565703a20ceded0a7b5c4cab1bce4bce4b8f42022d6d0b9fa5c22220ac7ebb3a2cad4d6b4d0d02022736c656570202d2d68656c702220c0b4bbf1c8a1b8fcb6e0d0c5cfa2a1a30a。",
+            "args": [
+                "d6d0b9fa22"
+            ],
+            "setup_commands": [
+                "export LC_ALL='zh_CN.gbk'",
+                "export LANG='zh_CN.gbk'"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "736c6565703a20ceded0a7b5c4cab1bce4bce4b8f42022d6d0b9fa5c22220ac7ebb3a2cad4d6b4d0d02022736c656570202d2d68656c702220c0b4bbf1c8a1b8fcb6e0d0c5cfa2a1a30a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

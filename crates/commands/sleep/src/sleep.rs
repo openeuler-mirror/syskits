@@ -40,6 +40,17 @@ const GNU_GB18030_FALLBACK_LEFT_QUOTE: &[u8] = b"\xa1\x07e";
 #[cfg(target_os = "linux")]
 const GNU_GB18030_FALLBACK_RIGHT_QUOTE: &[u8] = b"\xa1\xaf";
 
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn mbrtowc(
+        wide: *mut ctcore::libc::wchar_t,
+        bytes: *const ctcore::libc::c_char,
+        length: usize,
+        state: *mut ctcore::libc::mbstate_t,
+    ) -> usize;
+    fn iswprint(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
+}
+
 #[derive(Debug)]
 struct InvalidTimeIntervalError {
     operands: Vec<OsString>,
@@ -156,12 +167,12 @@ fn quote_duration_operand_with_quote_marks(
         } else if utf8_locale {
             match std::str::from_utf8(&bytes[index..]) {
                 Ok(_) => {
-                    quoted.extend_from_slice(&bytes[index..]);
+                    push_duration_operand_utf8_prefix(&mut quoted, &bytes[index..]);
                     break;
                 }
                 Err(error) if error.valid_up_to() > 0 => {
                     let end = index + error.valid_up_to();
-                    quoted.extend_from_slice(&bytes[index..end]);
+                    push_duration_operand_utf8_prefix(&mut quoted, &bytes[index..end]);
                     index = end;
                     continue;
                 }
@@ -181,6 +192,40 @@ fn quote_duration_operand_with_quote_marks(
     }
     quoted.extend_from_slice(closing_quote);
     quoted
+}
+
+fn push_duration_operand_utf8_prefix(output: &mut Vec<u8>, input: &[u8]) {
+    let text = std::str::from_utf8(input).expect("input is a valid UTF-8 prefix");
+    for (index, character) in text.char_indices() {
+        if character.is_ascii() {
+            // The existing ASCII branch owns quote escaping.  Preserve it
+            // here so a leading UTF-8 character does not change that path.
+            output.extend_from_slice(&input[index..]);
+            return;
+        }
+        let character_len = character.len_utf8();
+        if duration_utf8_character_is_printable(character) {
+            output.extend_from_slice(&input[index..index + character_len]);
+        } else {
+            for byte in &input[index..index + character_len] {
+                push_duration_operand_octal_escape(output, *byte);
+            }
+        }
+    }
+}
+
+fn duration_utf8_character_is_printable(character: char) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        // sleep initializes LC_CTYPE before it reports a diagnostic, matching
+        // GNU quotearg's iswprint classification of decoded UTF-8 scalars.
+        unsafe { iswprint(character as ctcore::libc::c_uint) != 0 }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        !character.is_control()
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -206,17 +251,25 @@ fn quote_duration_operand_with_locale_encoding(
             continue;
         }
 
-        let character_len = duration_locale_character_len(&input[index..], codeset);
-        if character_len == 0 {
-            push_duration_operand_octal_escape(&mut quoted, input[index]);
-            index += 1;
-        } else {
-            let character = &input[index..index + character_len];
-            if character == closing_quote {
-                quoted.push(b'\\');
+        match duration_locale_character(&input[index..], codeset) {
+            DurationLocaleCharacter::Printable(character_len) => {
+                let character = &input[index..index + character_len];
+                if character == closing_quote {
+                    quoted.push(b'\\');
+                }
+                quoted.extend_from_slice(character);
+                index += character_len;
             }
-            quoted.extend_from_slice(character);
-            index += character_len;
+            DurationLocaleCharacter::Nonprinting(character_len) => {
+                for byte in &input[index..index + character_len] {
+                    push_duration_operand_octal_escape(&mut quoted, *byte);
+                }
+                index += character_len;
+            }
+            DurationLocaleCharacter::Invalid => {
+                push_duration_operand_octal_escape(&mut quoted, input[index]);
+                index += 1;
+            }
         }
     }
 
@@ -225,25 +278,80 @@ fn quote_duration_operand_with_locale_encoding(
 }
 
 #[cfg(target_os = "linux")]
-fn duration_locale_character_len(input: &[u8], codeset: &str) -> usize {
-    for length in 1..=input.len().min(4) {
-        if duration_locale_bytes_are_valid(&input[..length], codeset) {
-            return length;
-        }
-    }
-    0
+enum DurationLocaleCharacter {
+    Printable(usize),
+    Nonprinting(usize),
+    Invalid,
 }
 
 #[cfg(target_os = "linux")]
-fn duration_locale_bytes_are_valid(input: &[u8], codeset: &str) -> bool {
+fn duration_locale_character(input: &[u8], codeset: &str) -> DurationLocaleCharacter {
+    if sleep_current_codeset_matches(codeset) {
+        return duration_current_locale_character(input);
+    }
+
+    for length in 1..=input.len().min(4) {
+        if let Some(decoded) = duration_locale_bytes_to_utf8(&input[..length], codeset) {
+            let printable = std::str::from_utf8(&decoded)
+                .ok()
+                .is_some_and(|text| text.chars().all(duration_decoded_character_is_printable));
+            return if printable {
+                DurationLocaleCharacter::Printable(length)
+            } else {
+                DurationLocaleCharacter::Nonprinting(length)
+            };
+        }
+    }
+    DurationLocaleCharacter::Invalid
+}
+
+#[cfg(target_os = "linux")]
+fn sleep_current_codeset_matches(codeset: &str) -> bool {
+    unsafe {
+        let current = ctcore::libc::nl_langinfo(ctcore::libc::CODESET);
+        (!current.is_null()).then(|| CStr::from_ptr(current).to_bytes() == codeset.as_bytes())
+    }
+    .unwrap_or(false)
+}
+
+#[cfg(target_os = "linux")]
+fn duration_current_locale_character(input: &[u8]) -> DurationLocaleCharacter {
+    unsafe {
+        let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
+        let mut wide = 0 as ctcore::libc::wchar_t;
+        let length = mbrtowc(&mut wide, input.as_ptr().cast(), input.len(), &mut state);
+        if length == usize::MAX || length == usize::MAX - 1 {
+            return DurationLocaleCharacter::Invalid;
+        }
+
+        let length = if length == 0 { 1 } else { length };
+        if iswprint(wide as ctcore::libc::c_uint) != 0 {
+            DurationLocaleCharacter::Printable(length)
+        } else {
+            DurationLocaleCharacter::Nonprinting(length)
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn duration_decoded_character_is_printable(character: char) -> bool {
+    let scalar = character as u32;
+    !character.is_control()
+        && !(0xfdd0..=0xfdef).contains(&scalar)
+        && scalar & 0xffff != 0xfffe
+        && scalar & 0xffff != 0xffff
+}
+
+#[cfg(target_os = "linux")]
+fn duration_locale_bytes_to_utf8(input: &[u8], codeset: &str) -> Option<Vec<u8>> {
     let source = match CString::new(codeset) {
         Ok(source) => source,
-        Err(_) => return false,
+        Err(_) => return None,
     };
     let target = CString::new("UTF-8").expect("UTF-8 has no NUL byte");
     let converter = unsafe { ctcore::libc::iconv_open(target.as_ptr(), source.as_ptr()) };
     if converter == (-1_isize) as ctcore::libc::iconv_t {
-        return false;
+        return None;
     }
 
     let mut input_ptr = input.as_ptr().cast_mut().cast::<ctcore::libc::c_char>();
@@ -261,7 +369,11 @@ fn duration_locale_bytes_are_valid(input: &[u8], codeset: &str) -> bool {
         )
     };
     unsafe { ctcore::libc::iconv_close(converter) };
-    result != usize::MAX && input_left == 0
+    if result == usize::MAX || input_left != 0 {
+        return None;
+    }
+    output.truncate(output.len() - output_left);
+    Some(output)
 }
 
 fn push_duration_operand_quoted_ascii(output: &mut Vec<u8>, byte: u8, quote_to_escape: Option<u8>) {
@@ -1050,6 +1162,14 @@ mod tests {
             );
         }
 
+        #[test]
+        fn test_quote_duration_operand_escapes_nonprinting_utf8_characters() {
+            assert_eq!(
+                quote_duration_operand_with_style(OsStr::new("\u{80}"), true),
+                "‘\\302\\200’".as_bytes()
+            );
+        }
+
         #[cfg(unix)]
         #[test]
         fn test_quote_duration_operand_preserves_non_utf8_c_locale_bytes() {
@@ -1151,6 +1271,23 @@ mod tests {
                     Some("GB18030")
                 ),
                 b"\xa1\x07e\\\xa1\xaf\xa1\xaf"
+            );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_english_gb18030_diagnostic_escapes_nonprinting_character() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let input = OsString::from_vec(vec![0x81, 0x30, 0x81, 0x30]);
+
+            assert_eq!(
+                quote_duration_operand_for_locale_with_codeset(
+                    input.as_os_str(),
+                    "en-US",
+                    Some("GB18030")
+                ),
+                b"\xa1\x07e\\201\\060\\201\\060\xa1\xaf"
             );
         }
 

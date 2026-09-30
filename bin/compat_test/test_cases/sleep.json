@@ -533,6 +533,31 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "sleep",
+            "description": "原始字节用例：取消LC_ALL，设置LC_CTYPE=C、LC_MESSAGES=zh_CN.utf8、LANG=C；执行sleep invalid，参数完整十六进制=696e76616c6964（invalid），stdin为0字节、完整十六进制=空；预期GNU按LC_MESSAGES选择中文模板、再按LC_CTYPE的ASCII代码页转写为问号，RC=1、stdout为空、stderr完整十六进制=736c6565703a203f3f3f3f3f3f3f2022696e76616c6964220a3f3f3f3f3f2022736c656570202d2d68656c7022203f3f3f3f3f3f3f3f0a。",
+            "args": [
+                "696e76616c6964"
+            ],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_CTYPE": "C",
+                    "LC_MESSAGES": "zh_CN.utf8",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "736c6565703a203f3f3f3f3f3f3f2022696e76616c6964220a3f3f3f3f3f2022736c656570202d2d68656c7022203f3f3f3f3f3f3f3f0a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -29,7 +29,6 @@ use std::error::Error;
 use std::ffi::CString;
 use std::ffi::{CStr, OsStr, OsString};
 use std::fmt::{Display, Formatter};
-use sys_locale::get_locale;
 
 mod sleep_flags {
     pub const SLEEP_NUMBER: &str = "NUMBER";
@@ -326,8 +325,7 @@ impl Tool for Sleep {
 
 pub fn sleep_main(args: impl ctcore::Args) -> CTResult<()> {
     initialize_locale();
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    rust_i18n::set_locale(sleep_i18n_locale());
     let args = prepare_sleep_args(args)?;
     let ends_with_option_delimiter = args.last().is_some_and(|arg| arg == "--");
     let matches = ct_app().try_get_matches_from(args)?;
@@ -505,6 +503,61 @@ fn initialize_locale() {
     unsafe {
         ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
     }
+}
+
+fn sleep_i18n_locale() -> &'static str {
+    let message_locale = sleep_effective_locale(["LC_ALL", "LC_MESSAGES", "LANG"]);
+    let language = std::env::var_os("LANGUAGE");
+    sleep_i18n_locale_for(message_locale.as_deref(), language.as_deref())
+}
+
+fn sleep_i18n_locale_for(message_locale: Option<&OsStr>, language: Option<&OsStr>) -> &'static str {
+    let Some(message_locale) = message_locale else {
+        return "en-US";
+    };
+    if sleep_c_locale(message_locale) {
+        return "en-US";
+    }
+
+    if let Some(language) = language.filter(|language| !language.is_empty()) {
+        for candidate in language
+            .to_string_lossy()
+            .split(':')
+            .filter(|candidate| !candidate.is_empty())
+        {
+            if sleep_c_locale(OsStr::new(candidate)) {
+                return "en-US";
+            }
+            if sleep_simplified_chinese_locale(OsStr::new(candidate)) {
+                return "zh-CN";
+            }
+        }
+    }
+
+    if sleep_simplified_chinese_locale(message_locale) {
+        "zh-CN"
+    } else {
+        "en-US"
+    }
+}
+
+fn sleep_effective_locale<const N: usize>(names: [&str; N]) -> Option<OsString> {
+    names.into_iter().find_map(|name| {
+        let value = std::env::var_os(name)?;
+        (!value.is_empty()).then_some(value)
+    })
+}
+
+fn sleep_c_locale(locale: &OsStr) -> bool {
+    matches!(
+        locale.to_string_lossy().to_ascii_uppercase().as_str(),
+        "C" | "POSIX"
+    )
+}
+
+fn sleep_simplified_chinese_locale(locale: &OsStr) -> bool {
+    let locale = locale.to_string_lossy();
+    locale == "zh_CN" || locale.starts_with("zh_CN.") || locale.starts_with("zh_CN@")
 }
 
 fn current_numeric_decimal_point() -> String {
@@ -1016,6 +1069,22 @@ mod tests {
             assert_eq!(
                 sleep_usage_hint_for_locale("sleep", "en-US"),
                 b"Try 'sleep --help' for more information."
+            );
+        }
+
+        #[test]
+        fn test_sleep_i18n_locale_uses_message_locale_and_language_override() {
+            assert_eq!(
+                sleep_i18n_locale_for(Some(OsStr::new("zh_CN.utf8")), None),
+                "zh-CN"
+            );
+            assert_eq!(
+                sleep_i18n_locale_for(Some(OsStr::new("zh_CN.utf8")), Some(OsStr::new("C"))),
+                "en-US"
+            );
+            assert_eq!(
+                sleep_i18n_locale_for(Some(OsStr::new("C")), Some(OsStr::new("zh_CN"))),
+                "en-US"
             );
         }
     }

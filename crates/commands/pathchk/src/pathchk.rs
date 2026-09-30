@@ -325,8 +325,7 @@ fn check_basic<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
         return Ok(false);
     }
 
-    // permission checks
-    check_searchable(writer, path)
+    Ok(true)
 }
 
 /// 执行额外的兼容性检查（空名称和前导连字符）
@@ -719,6 +718,25 @@ mod tests {
             let mut output = Cursor::new(Vec::new());
             let result = pathchk_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_posix_mode_does_not_check_path_searchability() {
+            let name = format!("pchk{}", std::process::id());
+            std::fs::write(&name, b"regular file").unwrap();
+            let path = format!("{name}/child");
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-p"),
+                OsString::from(&path),
+            ];
+            let mut output = Cursor::new(Vec::new());
+
+            let result = pathchk_main(&mut output, args.into_iter());
+
+            std::fs::remove_file(&name).unwrap();
+            assert!(result.is_ok());
+            assert!(output.into_inner().is_empty());
         }
 
         #[test]

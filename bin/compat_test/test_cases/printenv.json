@@ -99,6 +99,28 @@
         {
             "tstdin": "",
             "command": "printenv",
+            "description": "GNU 选项边界：首个变量前的 -a 是未知短选项，预期 RC=2、stdout 为 0 字节。stderr 由通用 clap 诊断层生成，故仅校验退出码和 stdout。",
+            "args": ["-a"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stderr": true
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "printenv",
             "description": "显示多个环境变量",
             "args": ["VAR1", "VAR2"],
             "setup_commands": [

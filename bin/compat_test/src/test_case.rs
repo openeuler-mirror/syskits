@@ -146,6 +146,9 @@ pub struct TestEnvironment {
     pub env_bytes: HashMap<String, String>,
     /// 当前工作目录（相对于测试目录）
     pub working_dir: Option<String>,
+    /// 在主命令完成 chdir 后、exec 前删除该子进程的当前工作目录。
+    #[serde(default, rename = "deletedWorkingDir", alias = "deleted_working_dir")]
+    pub deleted_working_dir: bool,
     /// 以指定用户身份运行测试（如果支持）
     pub run_as_user: Option<String>,
     /// 以指定用户组运行测试（如果支持）
@@ -924,6 +927,7 @@ mod tests {
         assert!(env.files.is_empty());
         assert!(env.env_vars.is_empty());
         assert_eq!(env.working_dir, None);
+        assert!(!env.deleted_working_dir);
         assert_eq!(env.run_as_user, None);
         assert_eq!(env.run_as_group, None);
         assert_eq!(env.umask, None);

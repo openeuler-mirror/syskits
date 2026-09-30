@@ -469,6 +469,35 @@
         "long-option",
         "diagnostics"
       ]
+    },
+    {
+      "tstdin": "",
+      "command": "pathchk",
+      "description": "pathchk: 空长选项名--=value按GNU列出全部长选项歧义候选",
+      "args": [
+        "--=value"
+      ],
+      "environment": {
+        "clearEnv": true,
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "pathchk: option '--=value' is ambiguous; possibilities: '--portability' '--help' '--version'\nTry 'pathchk --help' for more information.\n"
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "options",
+        "long-option",
+        "ambiguity",
+        "diagnostics"
+      ]
     }
   ]
 }

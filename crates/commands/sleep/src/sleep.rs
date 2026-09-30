@@ -270,6 +270,12 @@ fn quote_duration_operand_with_locale_encoding(
                 push_duration_operand_octal_escape(&mut quoted, input[index]);
                 index += 1;
             }
+            DurationLocaleCharacter::Incomplete => {
+                for byte in &input[index..] {
+                    push_duration_operand_octal_escape(&mut quoted, *byte);
+                }
+                break;
+            }
         }
     }
 
@@ -282,6 +288,13 @@ enum DurationLocaleCharacter {
     Printable(usize),
     Nonprinting(usize),
     Invalid,
+    Incomplete,
+}
+
+#[cfg(target_os = "linux")]
+enum DurationLocaleDecodeError {
+    Incomplete,
+    Invalid,
 }
 
 #[cfg(target_os = "linux")]
@@ -291,7 +304,7 @@ fn duration_locale_character(input: &[u8], codeset: &str) -> DurationLocaleChara
     }
 
     for length in 1..=input.len().min(4) {
-        if let Some(decoded) = duration_locale_bytes_to_utf8(&input[..length], codeset) {
+        if let Ok(decoded) = duration_locale_bytes_to_utf8(&input[..length], codeset) {
             let printable = std::str::from_utf8(&decoded)
                 .ok()
                 .is_some_and(|text| text.chars().all(duration_decoded_character_is_printable));
@@ -302,7 +315,10 @@ fn duration_locale_character(input: &[u8], codeset: &str) -> DurationLocaleChara
             };
         }
     }
-    DurationLocaleCharacter::Invalid
+    match duration_locale_bytes_to_utf8(input, codeset) {
+        Err(DurationLocaleDecodeError::Incomplete) => DurationLocaleCharacter::Incomplete,
+        Ok(_) | Err(DurationLocaleDecodeError::Invalid) => DurationLocaleCharacter::Invalid,
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -320,8 +336,11 @@ fn duration_current_locale_character(input: &[u8]) -> DurationLocaleCharacter {
         let mut state: ctcore::libc::mbstate_t = std::mem::zeroed();
         let mut wide = 0 as ctcore::libc::wchar_t;
         let length = mbrtowc(&mut wide, input.as_ptr().cast(), input.len(), &mut state);
-        if length == usize::MAX || length == usize::MAX - 1 {
+        if length == usize::MAX {
             return DurationLocaleCharacter::Invalid;
+        }
+        if length == usize::MAX - 1 {
+            return DurationLocaleCharacter::Incomplete;
         }
 
         let length = if length == 0 { 1 } else { length };
@@ -343,15 +362,18 @@ fn duration_decoded_character_is_printable(character: char) -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn duration_locale_bytes_to_utf8(input: &[u8], codeset: &str) -> Option<Vec<u8>> {
+fn duration_locale_bytes_to_utf8(
+    input: &[u8],
+    codeset: &str,
+) -> Result<Vec<u8>, DurationLocaleDecodeError> {
     let source = match CString::new(codeset) {
         Ok(source) => source,
-        Err(_) => return None,
+        Err(_) => return Err(DurationLocaleDecodeError::Invalid),
     };
     let target = CString::new("UTF-8").expect("UTF-8 has no NUL byte");
     let converter = unsafe { ctcore::libc::iconv_open(target.as_ptr(), source.as_ptr()) };
     if converter == (-1_isize) as ctcore::libc::iconv_t {
-        return None;
+        return Err(DurationLocaleDecodeError::Invalid);
     }
 
     let mut input_ptr = input.as_ptr().cast_mut().cast::<ctcore::libc::c_char>();
@@ -368,12 +390,18 @@ fn duration_locale_bytes_to_utf8(input: &[u8], codeset: &str) -> Option<Vec<u8>>
             &mut output_left,
         )
     };
+    let incomplete = result == usize::MAX
+        && unsafe { *ctcore::libc::__errno_location() } == ctcore::libc::EINVAL;
     unsafe { ctcore::libc::iconv_close(converter) };
     if result == usize::MAX || input_left != 0 {
-        return None;
+        return Err(if incomplete {
+            DurationLocaleDecodeError::Incomplete
+        } else {
+            DurationLocaleDecodeError::Invalid
+        });
     }
     output.truncate(output.len() - output_left);
-    Some(output)
+    Ok(output)
 }
 
 fn push_duration_operand_quoted_ascii(output: &mut Vec<u8>, byte: u8, quote_to_escape: Option<u8>) {
@@ -1288,6 +1316,23 @@ mod tests {
                     Some("GB18030")
                 ),
                 b"\xa1\x07e\\201\\060\\201\\060\xa1\xaf"
+            );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_english_gb18030_diagnostic_escapes_incomplete_character_suffix() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let input = OsString::from_vec(vec![0x81, 0x30]);
+
+            assert_eq!(
+                quote_duration_operand_for_locale_with_codeset(
+                    input.as_os_str(),
+                    "en-US",
+                    Some("GB18030")
+                ),
+                b"\xa1\x07e\\201\\060\xa1\xaf"
             );
         }
 

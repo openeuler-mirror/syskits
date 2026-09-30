@@ -143,7 +143,9 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(PRINTENV_ARG_VARIABLES)
             .action(ArgAction::Append)
-            .num_args(1..),
+            .num_args(1..)
+            .allow_hyphen_values(true)
+            .trailing_var_arg(true),
     ];
 
     Command::new(utility_name)
@@ -241,7 +243,7 @@ mod tests {
     }
 
     mod tests_printenv_app {
-        use crate::ct_app;
+        use crate::{PRINTENV_ARG_VARIABLES, PRINTENV_OPT_NULL, ct_app};
 
         use clap::error::ErrorKind;
 
@@ -292,6 +294,24 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn stops_option_parsing_after_first_variable() {
+            let command = ct_app();
+            let matches = command
+                .try_get_matches_from([ctcore::ct_util_name(), "PRINTENV_TEST", "-0"])
+                .expect("arguments should parse");
+
+            assert!(!matches.get_flag(PRINTENV_OPT_NULL));
+            assert_eq!(
+                matches
+                    .get_many::<String>(PRINTENV_ARG_VARIABLES)
+                    .expect("variables")
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+                ["PRINTENV_TEST", "-0"]
+            );
         }
     }
 }

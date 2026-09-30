@@ -39,6 +39,26 @@
         {
             "tstdin": "",
             "command": "printenv",
+            "description": "GNU 选项解析：第一个变量名后的 -0 是变量名而不是 NUL 分隔选项；PRINTENV_ORDER=known，预期输出 known 后换行，因 -0 未定义返回 1。",
+            "args": ["PRINTENV_ORDER", "-0"],
+            "setup_commands": [
+                "export PRINTENV_ORDER=known",
+                "unset -v -- -0"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "known\n",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": [
+                "unset PRINTENV_ORDER"
+            ]
+        },
+        {
+            "tstdin": "",
+            "command": "printenv",
             "description": "显示多个环境变量",
             "args": ["VAR1", "VAR2"],
             "setup_commands": [
@@ -140,4 +160,4 @@
             ]
         }
     ]
-} 
+}

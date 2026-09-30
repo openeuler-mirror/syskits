@@ -12,7 +12,7 @@
 //! nl - 向指定的各个 <文件> 添加行号，并写到标准输出。
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::OsStringValueParser, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
@@ -74,7 +74,7 @@ pub struct NlFlags {
     // 行号分隔符
     number_separator: String,
     // 要处理的文件列表
-    files: Vec<String>,
+    files: Vec<OsString>,
     // 状态控制
     stats: NlStats,
 }
@@ -111,7 +111,7 @@ impl Default for NlFlags {
             number_format: NlNumberFormat::Right,
             is_renumber: true,
             number_separator: String::from("\t"),
-            files: vec!["-".to_string()],
+            files: vec![OsString::from("-")],
             stats: NlStats::new(1),
         }
     }
@@ -172,8 +172,8 @@ impl NlFlags {
 
         // 提取文件路径参数
         flags.files = matches
-            .get_many::<String>(nl_flags::NL_FILE)
-            .map_or_else(|| vec!["-".to_string()], |v| v.cloned().collect());
+            .get_many::<OsString>(nl_flags::NL_FILE)
+            .map_or_else(|| vec![OsString::from("-")], |v| v.cloned().collect());
 
         // 提取分隔符选项
         if let Some(delimiter) = matches.get_one::<String>(nl_flags::NL_SECTION_DELIMITER) {
@@ -636,7 +636,7 @@ where
                 }
             }
         } else {
-            let path = Path::new(file.as_str());
+            let path = Path::new(file);
             if path.is_dir() {
                 ct_show_error!("{}: Is a directory", path.display());
                 had_errors = true;
@@ -654,9 +654,9 @@ where
                     }
                     Err(e) => {
                         if e.kind() == std::io::ErrorKind::NotFound {
-                            ct_show_error!("{}: No such file or directory", file);
+                            ct_show_error!("{}: No such file or directory", path.display());
                         } else {
-                            ct_show_error!("{}: {}", file, e);
+                            ct_show_error!("{}: {}", path.display(), e);
                         }
                         had_errors = true;
                     }
@@ -695,7 +695,7 @@ pub fn nl_native_semantic(args: impl Args) -> CTResult<NlSemantic> {
                 had_errors = true;
             }
         } else {
-            let path = Path::new(file.as_str());
+            let path = Path::new(file);
             if path.is_dir() {
                 stderr_text.push_str(&format!("nl: {}: Is a directory\n", path.display()));
                 had_errors = true;
@@ -714,10 +714,12 @@ pub fn nl_native_semantic(args: impl Args) -> CTResult<NlSemantic> {
                     }
                     Err(err) => {
                         if err.kind() == std::io::ErrorKind::NotFound {
-                            stderr_text
-                                .push_str(&format!("nl: {file}: No such file or directory\n"));
+                            stderr_text.push_str(&format!(
+                                "nl: {}: No such file or directory\n",
+                                path.display()
+                            ));
                         } else {
-                            stderr_text.push_str(&format!("nl: {file}: {err}\n"));
+                            stderr_text.push_str(&format!("nl: {}: {err}\n", path.display()));
                         }
                         had_errors = true;
                     }
@@ -775,6 +777,7 @@ pub fn ct_app() -> Command {
         Arg::new(nl_flags::NL_FILE)
             .hide(true)
             .action(ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(nl_flags::NL_BODY_NUMBERING)
             .short('b')
@@ -1013,6 +1016,27 @@ mod tests {
                 OsString::from("test.txt"),
             ]
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_reads_non_utf8_file_operand() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let mut filename = format!("ct_nl_non_utf8_{}", std::process::id()).into_bytes();
+        filename.push(0xff);
+        let filename = OsString::from_vec(filename);
+        std::fs::write(&filename, b"line\n").unwrap();
+
+        let mut output = Vec::new();
+        let result = nl_main(
+            &mut output,
+            [OsString::from("nl"), filename.clone()].into_iter(),
+        );
+        std::fs::remove_file(&filename).unwrap();
+
+        result.unwrap();
+        assert_eq!(output, b"     1\tline\n");
     }
 
     /// 测试NlFlags相关功能

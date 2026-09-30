@@ -612,6 +612,31 @@
         "tags": ["sigpipe", "stdout", "write-error"]
       },
       {
+        "tstdin": "line\n",
+        "command": "nl",
+        "description": "LC_ALL=C下stdout连接无读端管道且调用方显式忽略SIGPIPE，nl写入返回EPIPE，退出码为1、标准输出为空且诊断为write error: Broken pipe。",
+        "args": [],
+        "environment": {
+          "env_vars": {
+            "LC_ALL": "C",
+            "LANG": "C"
+          },
+          "standardStreams": {
+            "stdout": "closed_pipe",
+            "sigpipe": "ignore",
+            "useBash": true
+          }
+        },
+        "expectation": {
+          "execution": {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "nl: write error: Broken pipe\n"
+          }
+        },
+        "tags": ["sigpipe", "stdout", "write-error"]
+      },
+      {
         "tstdin": "",
         "command": "nl",
         "description": "测试多文件处理包含不存在的文件",

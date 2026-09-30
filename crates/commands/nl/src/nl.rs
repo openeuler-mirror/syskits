@@ -16,7 +16,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::OsStringValueParser, cr
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code, strip_errno};
 use ctcore::ct_gnu_regex::{GnuRegex, GnuRegexCompileOptions, GnuRegexError};
 use ctcore::{Args, ct_show_error};
 use std::cell::RefCell;
@@ -372,6 +372,10 @@ fn nl_regex_error_message(error: GnuRegexError) -> String {
     }
 }
 
+fn nl_write_error(error: std::io::Error) -> Box<dyn ctcore::ct_error::CTError> {
+    CtSimpleError::new(1, format!("write error: {}", strip_errno(&error)))
+}
+
 /// 行号格式枚举
 #[derive(Default, Clone, PartialEq, Eq, Debug)]
 enum NlNumberFormat {
@@ -490,7 +494,7 @@ where
             if flags.is_renumber {
                 flags.stats.line_number = Some(flags.starting_line_number);
             }
-            writeln!(writer)?;
+            writeln!(writer).map_err(nl_write_error)?;
             on_row(NlRow {
                 kind: "section_break".into(),
                 section: current_section.clone(),
@@ -534,10 +538,11 @@ where
             };
             let rendered_number = flags.number_format.format(line_number, flags.number_width);
 
-            write!(writer, "{}{}", rendered_number, flags.number_separator)?;
-            writer.write_all(&buf)?;
+            write!(writer, "{}{}", rendered_number, flags.number_separator)
+                .map_err(nl_write_error)?;
+            writer.write_all(&buf).map_err(nl_write_error)?;
             if buf.last() != Some(&b'\n') {
-                writeln!(writer)?;
+                writeln!(writer).map_err(nl_write_error)?;
             }
 
             on_row(NlRow {
@@ -555,10 +560,10 @@ where
             }
         } else {
             let spaces = " ".repeat(flags.number_width + flags.number_separator.len());
-            write!(writer, "{spaces}")?;
-            writer.write_all(&buf)?;
+            write!(writer, "{spaces}").map_err(nl_write_error)?;
+            writer.write_all(&buf).map_err(nl_write_error)?;
             if buf.last() != Some(&b'\n') {
-                writeln!(writer)?;
+                writeln!(writer).map_err(nl_write_error)?;
             }
 
             on_row(NlRow {
@@ -1347,6 +1352,29 @@ mod tests {
     /// 测试nl函数的核心功能
     mod nl_function_tests {
         use super::*;
+
+        struct BrokenPipeWriter;
+
+        impl Write for BrokenPipeWriter {
+            fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::from_raw_os_error(ctcore::libc::EPIPE))
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        #[test]
+        fn test_write_errors_use_gnu_diagnostic_prefix() {
+            let mut writer = BrokenPipeWriter;
+            let mut reader = BufReader::new(Cursor::new("line\n"));
+            let mut flags = NlFlags::default();
+
+            let error = nl(&mut writer, &mut reader, &mut flags).unwrap_err();
+
+            assert_eq!(error.to_string(), "write error: Broken pipe");
+        }
 
         #[test]
         fn test_right_zero_formats_i64_minimum_without_overflow() {

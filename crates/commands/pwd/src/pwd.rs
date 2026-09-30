@@ -18,7 +18,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::ct_println_verbatim;
-use ctcore::ct_error::{CTResult, FromIo};
+use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, strip_errno};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io;
@@ -204,10 +204,41 @@ pub fn pwd_main(args: impl ctcore::Args) -> CTResult<()> {
         .map(Into::into)
         .unwrap_or(cwd);
 
-    ct_println_verbatim(cwd).map_err_context(|| "failed to print current directory".to_owned())?;
+    ct_println_verbatim(cwd).map_err(pwd_write_error)?;
 
     Ok(())
 }
+
+fn pwd_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
+    pwd_redirect_stdout_to_dev_null();
+    let error = pwd_normalize_stdout_write_error(error, ctcore::ct_stdout_was_closed());
+    CtSimpleError::new(1, format!("write error: {}", strip_errno(&error)))
+}
+
+fn pwd_normalize_stdout_write_error(error: io::Error, stdout_was_closed: bool) -> io::Error {
+    #[cfg(unix)]
+    if stdout_was_closed {
+        return io::Error::from_raw_os_error(ctcore::libc::EBADF);
+    }
+
+    error
+}
+
+#[cfg(unix)]
+fn pwd_redirect_stdout_to_dev_null() {
+    const DEV_NULL: &[u8] = b"/dev/null\0";
+
+    unsafe {
+        let fd = ctcore::libc::open(DEV_NULL.as_ptr().cast(), ctcore::libc::O_WRONLY);
+        if fd >= 0 {
+            ctcore::libc::dup2(fd, ctcore::libc::STDOUT_FILENO);
+            ctcore::libc::close(fd);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn pwd_redirect_stdout_to_dev_null() {}
 
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();

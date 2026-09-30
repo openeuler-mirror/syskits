@@ -235,9 +235,9 @@ impl NlFlags {
             )),
         }
 
-        match matches.get_one::<u64>(nl_flags::NL_JOIN_BLANK_LINES) {
+        match matches.get_one::<i64>(nl_flags::NL_JOIN_BLANK_LINES) {
             None => {}
-            Some(num) if *num > 0 => flags.join_blank_lines = *num,
+            Some(num) if *num > 0 => flags.join_blank_lines = *num as u64,
             Some(_) => errs.push(String::from(
                 "Invalid line number of blank lines: '0': Numerical result out of range",
             )),
@@ -805,7 +805,7 @@ pub fn ct_app() -> Command {
             .long(nl_flags::NL_JOIN_BLANK_LINES)
             .help(t!("nl.clap.nl_join_blank_lines"))
             .value_name("NUMBER")
-            .value_parser(clap::value_parser!(u64)),
+            .value_parser(clap::value_parser!(i64)),
         Arg::new(nl_flags::NL_NUMBER_FORMAT)
             .short('n')
             .long(nl_flags::NL_NUMBER_FORMAT)
@@ -1153,6 +1153,20 @@ mod tests {
             assert!(
                 ct_app()
                     .try_get_matches_from([ctcore::ct_util_name(), "-w", "2147483648", "test.txt",])
+                    .is_err()
+            );
+        }
+
+        #[test]
+        fn test_flags_reject_join_blank_lines_larger_than_intmax() {
+            assert!(
+                ct_app()
+                    .try_get_matches_from([
+                        ctcore::ct_util_name(),
+                        "-l",
+                        "9223372036854775808",
+                        "test.txt",
+                    ])
                     .is_err()
             );
         }

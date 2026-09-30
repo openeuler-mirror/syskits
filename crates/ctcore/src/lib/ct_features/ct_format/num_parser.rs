@@ -488,6 +488,10 @@ fn parse_hex_float<'a>(
 }
 
 fn scale_float_by_power_of_two(mut value: f64, mut exponent: i32) -> f64 {
+    if value == 0.0 {
+        return value;
+    }
+
     while exponent > 1023 && value.is_finite() {
         value *= 2.0_f64.powi(1023);
         exponent -= 1023;
@@ -1099,6 +1103,13 @@ mod tests {
         assert_eq!(Ok(8.0), ParsedNumber::parse_f64("0x1p3"));
         assert_eq!(Ok(f64::INFINITY), ParsedNumber::parse_f64("infinity"));
         assert!(ParsedNumber::parse_f64("nan(payload)").unwrap().is_nan());
+    }
+
+    #[test]
+    fn float_parser_returns_immediately_for_zero_with_large_hex_exponent() {
+        let started = std::time::Instant::now();
+        assert_eq!(Ok(0.0), ParsedNumber::parse_f64("0x0p+999999999999999"));
+        assert!(started.elapsed() < std::time::Duration::from_millis(25));
     }
 
     #[test]

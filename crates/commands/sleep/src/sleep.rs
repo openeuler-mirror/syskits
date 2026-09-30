@@ -1227,6 +1227,16 @@ mod tests {
         }
 
         #[test]
+        fn test_parse_duration_returns_immediately_for_zero_with_large_hex_exponent() {
+            let started = std::time::Instant::now();
+            assert_eq!(
+                parse_duration_with_decimal_point("0x0p+999999999999999", "."),
+                Some(0.0)
+            );
+            assert!(started.elapsed() < Duration::from_millis(25));
+        }
+
+        #[test]
         fn test_sleep_handle_second_rejects_printf_character_literals() {
             for input in ["'0", "\"0"] {
                 assert!(sleep_handle_second(&[input]).is_err(), "{input}");

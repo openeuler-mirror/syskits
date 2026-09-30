@@ -3,7 +3,10 @@ use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{Command, Output, Stdio};
 
 #[cfg(target_os = "linux")]
-fn run_with_closed_stdout_pipe(sigpipe_handler: ctcore::libc::sighandler_t) -> Output {
+fn run_with_closed_stdout_pipe(
+    sigpipe_handler: ctcore::libc::sighandler_t,
+    args: &[&str],
+) -> Output {
     let mut pipe_fds = [0; 2];
     assert_eq!(unsafe { ctcore::libc::pipe(pipe_fds.as_mut_ptr()) }, 0);
     let read_end = pipe_fds[0];
@@ -13,7 +16,9 @@ fn run_with_closed_stdout_pipe(sigpipe_handler: ctcore::libc::sighandler_t) -> O
     let mut command = Command::new(env!("CARGO_BIN_EXE_printenv"));
     command
         .arg0("printenv")
+        .args(args)
         .env("LC_ALL", "C")
+        .env("PRINTENV_PIPE", "pipe-value")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     unsafe {
@@ -40,7 +45,7 @@ fn run_with_closed_stdout_pipe(sigpipe_handler: ctcore::libc::sighandler_t) -> O
 #[cfg(target_os = "linux")]
 #[test]
 fn closed_stdout_pipe_uses_default_sigpipe() {
-    let output = run_with_closed_stdout_pipe(ctcore::libc::SIG_DFL);
+    let output = run_with_closed_stdout_pipe(ctcore::libc::SIG_DFL, &[]);
 
     assert_eq!(output.status.signal(), Some(ctcore::libc::SIGPIPE));
     assert!(output.stdout.is_empty());
@@ -50,7 +55,27 @@ fn closed_stdout_pipe_uses_default_sigpipe() {
 #[cfg(target_os = "linux")]
 #[test]
 fn closed_stdout_pipe_with_ignored_sigpipe_reports_write_error() {
-    let output = run_with_closed_stdout_pipe(ctcore::libc::SIG_IGN);
+    let output = run_with_closed_stdout_pipe(ctcore::libc::SIG_IGN, &[]);
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert_eq!(output.stderr, b"printenv: write error: Broken pipe\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn null_output_to_closed_pipe_uses_default_sigpipe() {
+    let output = run_with_closed_stdout_pipe(ctcore::libc::SIG_DFL, &["-0", "PRINTENV_PIPE"]);
+
+    assert_eq!(output.status.signal(), Some(ctcore::libc::SIGPIPE));
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn null_output_to_closed_pipe_with_ignored_sigpipe_reports_write_error() {
+    let output = run_with_closed_stdout_pipe(ctcore::libc::SIG_IGN, &["-0", "PRINTENV_PIPE"]);
 
     assert_eq!(output.status.code(), Some(2));
     assert!(output.stdout.is_empty());

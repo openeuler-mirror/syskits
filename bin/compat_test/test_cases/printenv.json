@@ -297,6 +297,62 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printenv",
+            "description": "LC_ALL=C、stdout 连接无读端管道且调用方保留默认 SIGPIPE 时，执行 printenv -0 PRINTENV_NUL_PIPE；变量值完整输入为 nul-pipe-value，输出完整字节为 6e756c2d706970652d76616c756500。GNU 在 NUL 分隔输出的最终 flush 中由 SIGPIPE 终止，预期 RC=141、stdout 与 stderr 均为 0 字节。",
+            "args": ["-0", "PRINTENV_NUL_PIPE"],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "PATH": "/usr/bin:/bin",
+                    "PRINTENV_NUL_PIPE": "nul-pipe-value"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "default",
+                    "useBash": true
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "command": "printenv",
+            "description": "LC_ALL=C、stdout 连接无读端管道且调用方继承忽略 SIGPIPE 时，执行 printenv -0 PRINTENV_NUL_PIPE；变量值完整输入为 nul-pipe-value，输出完整字节为 6e756c2d706970652d76616c756500。GNU 在 NUL 分隔输出的最终 flush 中将 EPIPE 报告为 write error，预期 RC=2、stdout 为 0 字节、stderr 完整文本为 printenv: write error: Broken pipe 加换行。",
+            "args": ["-0", "PRINTENV_NUL_PIPE"],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "PATH": "/usr/bin:/bin",
+                    "PRINTENV_NUL_PIPE": "nul-pipe-value"
+                },
+                "standardStreams": {
+                    "stdout": "closed_pipe",
+                    "sigpipe": "ignore",
+                    "useBash": true
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 2,
+                    "stdout": "",
+                    "stderr": "printenv: write error: Broken pipe\n"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

@@ -395,16 +395,18 @@ where
             OsStr::new(".")
         };
         let maximum = match pathconf(directory, libc::_PC_PATH_MAX) {
-            Ok(Some(limit)) => limit,
-            Ok(None) => usize::MAX,
+            Ok(Some(limit)) => limit.min(isize::MAX as usize) as isize,
+            // GNU preserves pathconf's -1 return here, even when errno is
+            // zero.  Its signed comparison then reports a limit of -2.
+            Ok(None) => -1,
             Err(error) => return write_pathconf_error(writer, directory, &error),
         };
 
-        if maximum <= total_len {
+        if maximum <= total_len as isize {
             write!(
                 writer,
                 "pathchk: limit {} exceeded by length {total_len} of file name ",
-                maximum.saturating_sub(1)
+                maximum - 1
             )?;
             write_shell_quoted_path(writer, path, true)?;
             writer.write_all(b"\n")?;
@@ -875,6 +877,32 @@ mod tests {
 
             let output = String::from_utf8(output.into_inner()).unwrap();
             assert!(output.contains("limit 31 exceeded by length 256 of file name"));
+        }
+
+        #[test]
+        fn test_default_limits_preserve_unlimited_path_max_as_gnu_negative_limit() {
+            let component = "a".repeat(PATHCHK_POSIX_NAME_MAX);
+            let mut components = vec![component; 17];
+            components.push("a".to_string());
+            let path = components.join("/");
+            assert_eq!(path.len(), PATHCHK_POSIX_PATH_MAX);
+            let mut output = Cursor::new(Vec::new());
+
+            assert!(
+                !check_default_limits(&mut output, OsStr::new(&path), &mut |_, variable| {
+                    if variable == libc::_PC_PATH_MAX {
+                        Ok(None)
+                    } else {
+                        Ok(Some(PATHCHK_POSIX_NAME_MAX))
+                    }
+                },)
+                .unwrap()
+            );
+
+            assert_eq!(
+                String::from_utf8(output.into_inner()).unwrap(),
+                format!("pathchk: limit -2 exceeded by length 256 of file name '{path}'\n")
+            );
         }
 
         #[test]

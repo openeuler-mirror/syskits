@@ -355,6 +355,120 @@
         "locale",
         "diagnostics"
       ]
+    },
+    {
+      "tstdin": "",
+      "command": "pathchk",
+      "description": "pathchk: 短选项簇-pz在识别p后将z报告为GNU invalid option并退出1",
+      "args": [
+        "-pz"
+      ],
+      "environment": {
+        "clearEnv": true,
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "pathchk: invalid option -- 'z'\nTry 'pathchk --help' for more information.\n"
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "options",
+        "short-option-cluster",
+        "diagnostics"
+      ]
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "pathchk",
+      "description": "原始字节用例：LC_ALL=C、LANG=C下执行pathchk，参数完整十六进制=2dff，表示未知短选项-后接非UTF-8字节ff；stdin为0字节、完整十六进制=空；预期RC=1、stdout为空，stderr为pathchk: invalid option -- '<ff>'\\nTry 'pathchk --help' for more information.\\n，完整十六进制=7061746863686b3a20696e76616c6964206f7074696f6e202d2d2027ff270a54727920277061746863686b202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a。",
+      "args": [
+        "2dff"
+      ],
+      "environment": {
+        "clearEnv": true,
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "7061746863686b3a20696e76616c6964206f7074696f6e202d2d2027ff270a54727920277061746863686b202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "options",
+        "raw-bytes",
+        "non-utf8",
+        "diagnostics"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "pathchk",
+      "description": "pathchk: --p=value将GNU长选项缩写规范化为--portability并拒绝附加参数",
+      "args": [
+        "--p=value"
+      ],
+      "environment": {
+        "clearEnv": true,
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "pathchk: option '--portability' doesn't allow an argument\nTry 'pathchk --help' for more information.\n"
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "options",
+        "long-option",
+        "diagnostics"
+      ]
+    },
+    {
+      "tstdin": "",
+      "command": "pathchk",
+      "description": "pathchk: 未识别长选项--invalid按GNU诊断退出1",
+      "args": [
+        "--invalid"
+      ],
+      "environment": {
+        "clearEnv": true,
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "pathchk: unrecognized option '--invalid'\nTry 'pathchk --help' for more information.\n"
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "options",
+        "long-option",
+        "diagnostics"
+      ]
     }
   ]
 }

@@ -6,6 +6,7 @@ sleep:
     sleep 选项
   about: '暂停指定的秒数。'
   errors:
+    cannot_read_realtime_clock: 无法读取实时时钟
     invalid_time_interval: 无效的时间间隔
     missing_operand: 缺少操作对象
     try_help: '请尝试执行 "%{utility_name} --help" 来获取更多信息。'

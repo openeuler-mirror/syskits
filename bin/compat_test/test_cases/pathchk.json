@@ -324,6 +324,37 @@
         "repeated-options",
         "short-option-cluster"
       ]
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "pathchk",
+      "description": "原始字节用例：LC_ALL=zh_CN.gbk、LANG=zh_CN.gbk下执行pathchk -p，参数完整十六进制=2d70 d6d0，其中d6d0是一个可打印GBK字符；stdin为0字节、完整十六进制=空；预期RC=1、stdout为空，stderr为pathchk: non-portable character \"<d6d0>\" in file name '<d6d0>'\\n，完整十六进制=7061746863686b3a206e6f6e2d706f727461626c65206368617261637465722022d6d02220696e2066696c65206e616d652027d6d0270a。",
+      "args": [
+        "2d70",
+        "d6d0"
+      ],
+      "environment": {
+        "clearEnv": true,
+        "env_vars": {
+          "LC_ALL": "zh_CN.gbk",
+          "LANG": "zh_CN.gbk"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "7061746863686b3a206e6f6e2d706f727461626c65206368617261637465722022d6d02220696e2066696c65206e616d652027d6d0270a"
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "raw-bytes",
+        "gbk",
+        "locale",
+        "diagnostics"
+      ]
     }
   ]
 }

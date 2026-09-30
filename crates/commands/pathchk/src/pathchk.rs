@@ -29,6 +29,17 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use sys_locale::get_locale;
 
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn mbrtowc(
+        wide: *mut libc::wchar_t,
+        bytes: *const libc::c_char,
+        length: usize,
+        state: *mut libc::mbstate_t,
+    ) -> usize;
+    fn iswprint(wide: libc::c_uint) -> libc::c_int;
+}
+
 // operating mode
 #[derive(Clone, Copy)]
 enum PathchkMode {
@@ -571,36 +582,14 @@ fn write_shell_quoted_path<W: Write>(
 }
 
 fn locale_quote_bytes(bytes: &[u8]) -> Vec<u8> {
-    let (left_quote, right_quote) = locale_quote_marks();
+    let (left_quote, right_quote) = pathchk_locale_quote_marks();
     let mut quoted = Vec::with_capacity(bytes.len() + left_quote.len() + right_quote.len());
-    quoted.extend_from_slice(left_quote.as_bytes());
+    quoted.extend_from_slice(left_quote);
 
-    if let Ok(value) = std::str::from_utf8(bytes) {
-        if (left_quote, right_quote) == ("‘", "’") {
-            for character in value.chars() {
-                match character {
-                    '\x07' => quoted.extend_from_slice(b"\\a"),
-                    '\x08' => quoted.extend_from_slice(b"\\b"),
-                    '\t' => quoted.extend_from_slice(b"\\t"),
-                    '\n' => quoted.extend_from_slice(b"\\n"),
-                    '\x0b' => quoted.extend_from_slice(b"\\v"),
-                    '\x0c' => quoted.extend_from_slice(b"\\f"),
-                    '\r' => quoted.extend_from_slice(b"\\r"),
-                    '\\' => quoted.extend_from_slice(b"\\\\"),
-                    '’' => quoted.extend_from_slice(b"\\\xE2\x80\x99"),
-                    _ => {
-                        let mut encoded = [0; 4];
-                        quoted.extend_from_slice(character.encode_utf8(&mut encoded).as_bytes());
-                    }
-                }
-            }
-            quoted.extend_from_slice(right_quote.as_bytes());
-            return quoted;
-        }
-    }
-
-    for byte in bytes {
-        match *byte {
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        match byte {
             b'\x07' => quoted.extend_from_slice(b"\\a"),
             b'\x08' => quoted.extend_from_slice(b"\\b"),
             b'\t' => quoted.extend_from_slice(b"\\t"),
@@ -609,24 +598,91 @@ fn locale_quote_bytes(bytes: &[u8]) -> Vec<u8> {
             b'\x0c' => quoted.extend_from_slice(b"\\f"),
             b'\r' => quoted.extend_from_slice(b"\\r"),
             b'\\' => quoted.extend_from_slice(b"\\\\"),
-            b'\'' if right_quote == "'" => quoted.extend_from_slice(b"\\'"),
-            byte if byte.is_ascii_graphic() || byte == b' ' => quoted.push(byte),
-            byte => quoted.extend(format!("\\{byte:03o}").bytes()),
+            byte if byte.is_ascii() => {
+                if byte == right_quote.first().copied().unwrap_or_default()
+                    && right_quote.len() == 1
+                {
+                    quoted.push(b'\\');
+                }
+                if byte.is_ascii_graphic() || byte == b' ' {
+                    quoted.push(byte);
+                } else {
+                    quoted.extend(format!("\\{byte:03o}").bytes());
+                }
+            }
+            _ => {
+                let (length, printable) = locale_character(bytes, index);
+                let character = &bytes[index..index + length];
+                if printable {
+                    if character == right_quote {
+                        quoted.push(b'\\');
+                    }
+                    quoted.extend_from_slice(character);
+                } else {
+                    for byte in character {
+                        quoted.extend(format!("\\{byte:03o}").bytes());
+                    }
+                }
+                index += length;
+                continue;
+            }
         }
+        index += 1;
     }
-    quoted.extend_from_slice(right_quote.as_bytes());
+    quoted.extend_from_slice(right_quote);
     quoted
 }
 
 fn locale_character_len(bytes: &[u8]) -> usize {
-    if bytes.first().is_some_and(u8::is_ascii) {
-        return 1;
+    locale_character(bytes, 0).0
+}
+
+fn locale_character(bytes: &[u8], start: usize) -> (usize, bool) {
+    if bytes.get(start).is_some_and(u8::is_ascii) {
+        return (1, false);
     }
 
-    match std::str::from_utf8(bytes) {
-        Ok(value) => value.chars().next().map_or(1, char::len_utf8),
-        Err(error) => error.error_len().unwrap_or(1),
+    #[cfg(target_os = "linux")]
+    unsafe {
+        let remaining = &bytes[start..];
+        let mut state: libc::mbstate_t = std::mem::zeroed();
+        let mut wide = 0 as libc::wchar_t;
+        let length = mbrtowc(
+            &mut wide,
+            remaining.as_ptr().cast(),
+            remaining.len(),
+            &mut state,
+        );
+        if length == usize::MAX || length == usize::MAX - 1 || length == 0 {
+            return (1, false);
+        }
+        (
+            length.min(remaining.len()),
+            iswprint(wide as libc::c_uint) != 0,
+        )
     }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        (1, false)
+    }
+}
+
+fn pathchk_locale_quote_marks() -> (&'static [u8], &'static [u8]) {
+    let locale = ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .into_iter()
+        .find_map(|name| std::env::var_os(name).filter(|value| !value.is_empty()))
+        .unwrap_or_default();
+    let locale = locale
+        .to_string_lossy()
+        .replace('-', "_")
+        .to_ascii_lowercase();
+    if locale.starts_with("zh_cn") {
+        return (b"\"", b"\"");
+    }
+
+    let (left_quote, right_quote) = locale_quote_marks();
+    (left_quote.as_bytes(), right_quote.as_bytes())
 }
 
 #[derive(Default)]
@@ -1059,6 +1115,32 @@ mod tests {
 
     mod check_functions_tests {
         use super::*;
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_locale_quote_bytes_preserves_printable_gbk_character() {
+            let locale_name = CString::new("zh_CN.gbk").unwrap();
+            let locale = unsafe {
+                libc::newlocale(
+                    libc::LC_CTYPE_MASK,
+                    locale_name.as_ptr(),
+                    std::ptr::null_mut(),
+                )
+            };
+            assert!(!locale.is_null(), "zh_CN.gbk locale must be available");
+
+            let previous = unsafe { libc::uselocale(locale) };
+            let quoted = locale_quote_bytes(b"\xd6\xd0");
+            unsafe {
+                libc::uselocale(previous);
+                libc::freelocale(locale);
+            }
+
+            assert!(
+                quoted.windows(2).any(|bytes| bytes == b"\xd6\xd0"),
+                "valid GBK bytes were escaped instead of retained: {quoted:?}"
+            );
+        }
 
         #[test]
         fn test_check_portable_chars() {

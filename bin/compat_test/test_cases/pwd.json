@@ -332,6 +332,36 @@
     },
     {
       "command": "pwd",
+      "description": "LC_ALL=C、PWD=/tmp/compat-pwd-posix-raw-link 且 POSIXLY_CORRECT 原始字节值为 ff 时，在该符号链接目录执行 pwd；GNU 只判断该变量是否存在，预期 RC=0、stdout 为逻辑路径 /tmp/compat-pwd-posix-raw-link 加换行。",
+      "args": [],
+      "setup_commands": [
+        "mkdir -p /tmp/compat-pwd-posix-raw-real",
+        "ln -s /tmp/compat-pwd-posix-raw-real /tmp/compat-pwd-posix-raw-link",
+        "cd /tmp/compat-pwd-posix-raw-link",
+        "export PWD=/tmp/compat-pwd-posix-raw-link"
+      ],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        },
+        "envBytes": {
+          "POSIXLY_CORRECT": "ff"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "/tmp/compat-pwd-posix-raw-link\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -rf /tmp/compat-pwd-posix-raw-link /tmp/compat-pwd-posix-raw-real"
+      ]
+    },
+    {
+      "command": "pwd",
       "description": "Test --help option",
       "args": ["--help"],
       "expectation": {

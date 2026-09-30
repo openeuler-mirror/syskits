@@ -37,6 +37,12 @@ mod sleep_flags {
     pub const SLEEP_NUMBER: &str = "NUMBER";
 }
 
+const NANOS_PER_SECOND: u64 = 1_000_000_000;
+#[cfg(target_os = "linux")]
+const MAX_TIME_T_SECONDS: u64 = ctcore::libc::time_t::MAX as u64;
+#[cfg(not(target_os = "linux"))]
+const MAX_TIME_T_SECONDS: u64 = i64::MAX as u64;
+
 #[cfg(target_os = "linux")]
 // GNU's "\xa1\ae" source literal expands \a as BEL and leaves the trailing e.
 const GNU_GB18030_FALLBACK_LEFT_QUOTE: &[u8] = b"\xa1\x07e";
@@ -965,11 +971,13 @@ fn parse_duration(input: &str) -> Option<f64> {
 }
 
 fn duration_from_seconds(seconds: f64) -> Duration {
-    const NANOS_PER_SECOND: u64 = 1_000_000_000;
-    const MAX_TIME_T_SECONDS: u64 = i64::MAX as u64;
+    duration_from_seconds_with_time_t_max(seconds, MAX_TIME_T_SECONDS)
+}
 
-    if !seconds.is_finite() || seconds >= MAX_TIME_T_SECONDS as f64 {
-        return Duration::new(MAX_TIME_T_SECONDS, NANOS_PER_SECOND as u32 - 1);
+fn duration_from_seconds_with_time_t_max(seconds: f64, time_t_max: u64) -> Duration {
+    let saturation_limit = 1.0 + time_t_max as f64;
+    if !seconds.is_finite() || seconds >= saturation_limit {
+        return Duration::new(time_t_max, NANOS_PER_SECOND as u32 - 1);
     }
 
     let mut whole_seconds = seconds as u64;
@@ -1033,18 +1041,45 @@ fn sleep_with_nanosleep(
     }
 }
 
+#[cfg(target_os = "linux")]
+fn sleep_with_pause(
+    sleep_dur: Duration,
+    mut pause: impl FnMut() -> io::Result<()>,
+    nanosleep: impl FnMut(&ctcore::libc::timespec, &mut ctcore::libc::timespec) -> io::Result<()>,
+) -> CTResult<()> {
+    // GNU xnanosleep waits with pause for intervals that cannot be
+    // represented beyond time_t.  It retries interruptions, then uses its
+    // normal nanosleep fallback for any other pause result.
+    if sleep_dur == Duration::new(MAX_TIME_T_SECONDS, NANOS_PER_SECOND as u32 - 1) {
+        while matches!(pause(), Err(error) if error.kind() == io::ErrorKind::Interrupted) {}
+    }
+
+    sleep_with_nanosleep(sleep_dur, nanosleep)
+}
+
 fn sleep(sleep_dur: Duration) -> CTResult<()> {
     #[cfg(target_os = "linux")]
     {
-        sleep_with_nanosleep(sleep_dur, |remaining, next| {
-            // SAFETY: both pointers refer to initialized local timespec values.
-            let result = unsafe { ctcore::libc::nanosleep(remaining, next) };
-            if result == 0 {
-                Ok(())
-            } else {
-                Err(io::Error::last_os_error())
-            }
-        })
+        sleep_with_pause(
+            sleep_dur,
+            || {
+                // SAFETY: pause has no preconditions.
+                if unsafe { ctcore::libc::pause() } == -1 {
+                    Err(io::Error::last_os_error())
+                } else {
+                    Ok(())
+                }
+            },
+            |remaining, next| {
+                // SAFETY: both pointers refer to initialized local timespec values.
+                let result = unsafe { ctcore::libc::nanosleep(remaining, next) };
+                if result == 0 {
+                    Ok(())
+                } else {
+                    Err(io::Error::last_os_error())
+                }
+            },
+        )
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -1275,6 +1310,36 @@ mod tests {
             assert_eq!(calls, 2);
         }
 
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_sleep_uses_pause_before_nanosleep_at_time_t_limit() {
+            let mut pause_calls = 0;
+            let mut nanosleep_calls = 0;
+            let error = sleep_with_pause(
+                Duration::new(MAX_TIME_T_SECONDS, 999_999_999),
+                || {
+                    pause_calls += 1;
+                    Err(std::io::Error::from_raw_os_error(if pause_calls == 1 {
+                        ctcore::libc::EINTR
+                    } else {
+                        ctcore::libc::EINVAL
+                    }))
+                },
+                |_, _| {
+                    nanosleep_calls += 1;
+                    Err(std::io::Error::from_raw_os_error(ctcore::libc::EPERM))
+                },
+            )
+            .unwrap_err();
+
+            assert_eq!(pause_calls, 2);
+            assert_eq!(nanosleep_calls, 1);
+            assert_eq!(
+                error.diagnostic_bytes().as_ref(),
+                b"cannot read realtime clock: Operation not permitted"
+            );
+        }
+
         #[test]
         fn test_sleep_handle_second_rejects_trailing_whitespace() {
             assert!(sleep_handle_second(&["0 "]).is_err());
@@ -1302,6 +1367,19 @@ mod tests {
             assert_eq!(
                 sleep_handle_second(&["0.0000000006d"]).unwrap(),
                 Duration::from_nanos(51_840)
+            );
+        }
+
+        #[test]
+        fn test_duration_preserves_time_t_maximum_second_before_saturating() {
+            let time_t_max = i32::MAX as u64;
+            assert_eq!(
+                duration_from_seconds_with_time_t_max(time_t_max as f64, time_t_max),
+                Duration::from_secs(time_t_max)
+            );
+            assert_eq!(
+                duration_from_seconds_with_time_t_max(time_t_max as f64 + 1.0, time_t_max),
+                Duration::new(time_t_max, 999_999_999)
             );
         }
 

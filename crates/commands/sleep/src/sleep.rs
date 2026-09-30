@@ -49,6 +49,10 @@ unsafe extern "C" {
         state: *mut ctcore::libc::mbstate_t,
     ) -> usize;
     fn iswprint(wide: ctcore::libc::c_uint) -> ctcore::libc::c_int;
+    fn iswprint_l(
+        wide: ctcore::libc::c_uint,
+        locale: ctcore::libc::locale_t,
+    ) -> ctcore::libc::c_int;
 }
 
 #[derive(Debug)]
@@ -167,12 +171,22 @@ fn quote_duration_operand_with_quote_marks(
         } else if utf8_locale {
             match std::str::from_utf8(&bytes[index..]) {
                 Ok(_) => {
-                    push_duration_operand_utf8_prefix(&mut quoted, &bytes[index..]);
+                    push_duration_operand_utf8_prefix(
+                        &mut quoted,
+                        &bytes[index..],
+                        closing_quote,
+                        quote_to_escape,
+                    );
                     break;
                 }
                 Err(error) if error.valid_up_to() > 0 => {
                     let end = index + error.valid_up_to();
-                    push_duration_operand_utf8_prefix(&mut quoted, &bytes[index..end]);
+                    push_duration_operand_utf8_prefix(
+                        &mut quoted,
+                        &bytes[index..end],
+                        closing_quote,
+                        quote_to_escape,
+                    );
                     index = end;
                     continue;
                 }
@@ -194,20 +208,27 @@ fn quote_duration_operand_with_quote_marks(
     quoted
 }
 
-fn push_duration_operand_utf8_prefix(output: &mut Vec<u8>, input: &[u8]) {
+fn push_duration_operand_utf8_prefix(
+    output: &mut Vec<u8>,
+    input: &[u8],
+    closing_quote: &[u8],
+    quote_to_escape: Option<u8>,
+) {
     let text = std::str::from_utf8(input).expect("input is a valid UTF-8 prefix");
     for (index, character) in text.char_indices() {
         if character.is_ascii() {
-            // The existing ASCII branch owns quote escaping.  Preserve it
-            // here so a leading UTF-8 character does not change that path.
-            output.extend_from_slice(&input[index..]);
-            return;
+            push_duration_operand_quoted_ascii(output, character as u8, quote_to_escape);
+            continue;
         }
         let character_len = character.len_utf8();
+        let encoded = &input[index..index + character_len];
         if duration_utf8_character_is_printable(character) {
-            output.extend_from_slice(&input[index..index + character_len]);
+            if encoded == closing_quote {
+                output.push(b'\\');
+            }
+            output.extend_from_slice(encoded);
         } else {
-            for byte in &input[index..index + character_len] {
+            for byte in encoded {
                 push_duration_operand_octal_escape(output, *byte);
             }
         }
@@ -217,9 +238,22 @@ fn push_duration_operand_utf8_prefix(output: &mut Vec<u8>, input: &[u8]) {
 fn duration_utf8_character_is_printable(character: char) -> bool {
     #[cfg(target_os = "linux")]
     {
-        // sleep initializes LC_CTYPE before it reports a diagnostic, matching
-        // GNU quotearg's iswprint classification of decoded UTF-8 scalars.
-        unsafe { iswprint(character as ctcore::libc::c_uint) != 0 }
+        // The caller already established a UTF-8 locale.  Use a dedicated
+        // UTF-8 locale here so unit-level quoting remains independent of the
+        // process-wide locale changed by other tests.
+        unsafe {
+            let locale = ctcore::libc::newlocale(
+                ctcore::libc::LC_CTYPE_MASK,
+                c"C.UTF-8".as_ptr(),
+                std::ptr::null_mut(),
+            );
+            if locale.is_null() {
+                return duration_decoded_character_is_printable(character);
+            }
+            let printable = iswprint_l(character as ctcore::libc::c_uint, locale) != 0;
+            ctcore::libc::freelocale(locale);
+            printable
+        }
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -1195,6 +1229,24 @@ mod tests {
             assert_eq!(
                 quote_duration_operand_with_style(OsStr::new("\u{80}"), true),
                 "‘\\302\\200’".as_bytes()
+            );
+        }
+
+        #[test]
+        fn test_quote_duration_operand_escapes_special_characters_after_utf8() {
+            assert_eq!(
+                quote_duration_operand_with_quote_marks(
+                    OsStr::new("中\"\\"),
+                    true,
+                    b"\"",
+                    b"\"",
+                    Some(b'\"')
+                ),
+                b"\"\xe4\xb8\xad\\\"\\\\\""
+            );
+            assert_eq!(
+                quote_duration_operand_with_style(OsStr::new("中’"), true),
+                "‘中\\’’".as_bytes()
             );
         }
 

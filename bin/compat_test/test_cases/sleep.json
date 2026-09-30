@@ -682,6 +682,30 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "sleep",
+            "description": "原始字节用例：LC_ALL=zh_CN.utf8、LANG=zh_CN.utf8下执行sleep并传入中文字符后接双引号，参数完整十六进制=e4b8ad22（中后接ASCII双引号），stdin为0字节、完整十六进制=空；预期GNU在中文双引号诊断内将参数双引号转义为5c22，RC=1、stdout为空、stderr完整十六进制=736c6565703a20e697a0e69588e79a84e697b6e997b4e997b4e99a942022e4b8ad5c22220ae8afb7e5b09de8af95e689a7e8a18c2022736c656570202d2d68656c702220e69da5e88eb7e58f96e69bb4e5a49ae4bfa1e681afe380820a。",
+            "args": [
+                "e4b8ad22"
+            ],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "LC_ALL": "zh_CN.utf8",
+                    "LANG": "zh_CN.utf8"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "736c6565703a20e697a0e69588e79a84e697b6e997b4e997b4e99a942022e4b8ad5c22220ae8afb7e5b09de8af95e689a7e8a18c2022736c656570202d2d68656c702220e69da5e88eb7e58f96e69bb4e5a49ae4bfa1e681afe380820a"
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

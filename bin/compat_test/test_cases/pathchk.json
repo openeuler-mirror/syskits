@@ -178,6 +178,33 @@
         "non-utf8",
         "diagnostics"
       ]
+    },
+    {
+      "tstdin": "",
+      "command": "pathchk",
+      "description": "pathchk: -p只检查可移植名称，不检查普通文件后的子路径是否可搜索",
+      "args": [
+        "-p",
+        "pathchk-file/child"
+      ],
+      "setup_commands": [
+        "/usr/bin/printf data > pathchk-file"
+      ],
+      "cleanup_commands": [
+        "/usr/bin/rm -f pathchk-file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "portability",
+        "filesystem"
+      ]
     }
   ]
 }

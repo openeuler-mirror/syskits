@@ -227,9 +227,9 @@ impl NlFlags {
         }
 
         // 提取数值选项
-        match matches.get_one::<usize>(nl_flags::NL_NUMBER_WIDTH) {
+        match matches.get_one::<i32>(nl_flags::NL_NUMBER_WIDTH) {
             None => {}
-            Some(num) if *num > 0 => flags.number_width = *num,
+            Some(num) if *num > 0 => flags.number_width = *num as usize,
             Some(_) => errs.push(String::from(
                 "Invalid line number field width: '0': Numerical result out of range",
             )),
@@ -833,7 +833,7 @@ pub fn ct_app() -> Command {
             .long(nl_flags::NL_NUMBER_WIDTH)
             .help(t!("nl.clap.nl_number_width"))
             .value_name("NUMBER")
-            .value_parser(clap::value_parser!(usize)),
+            .value_parser(clap::value_parser!(i32)),
     ];
 
     Command::new(utility_name)
@@ -1146,6 +1146,15 @@ mod tests {
                 "test.txt",
             ]);
             assert!(NlFlags::new(matches).is_err());
+        }
+
+        #[test]
+        fn test_flags_reject_number_width_larger_than_c_int() {
+            assert!(
+                ct_app()
+                    .try_get_matches_from([ctcore::ct_util_name(), "-w", "2147483648", "test.txt",])
+                    .is_err()
+            );
         }
 
         /// 测试多文件处理

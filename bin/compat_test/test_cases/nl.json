@@ -504,6 +504,25 @@
         "tags": ["line-increment", "negative-value"]
       },
       {
+        "command": "nl",
+        "description": "LC_ALL=C下-w 2147483648超出GNU nl的C int行号宽度上限，命令失败且不产生标准输出。",
+        "args": ["-w", "2147483648"],
+        "environment": {
+          "env_vars": {
+            "LC_ALL": "C",
+            "LANG": "C"
+          }
+        },
+        "expectation": {
+          "execution": {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": null
+          }
+        },
+        "tags": ["number-width", "integer-range", "invalid-option"]
+      },
+      {
         "tstdin": "",
         "command": "nl",
         "description": "测试多文件处理包含不存在的文件",

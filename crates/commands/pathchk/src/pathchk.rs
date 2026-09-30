@@ -270,8 +270,8 @@ pub fn ct_app() -> Command {
 fn check_path<W: Write>(writer: &mut W, mode: &PathchkMode, path: &OsStr) -> CTResult<bool> {
     let result = match *mode {
         PathchkMode::Basic => check_basic(writer, path)?,
-        PathchkMode::Extra => check_default(writer, path)? && check_extra(writer, path)?,
-        PathchkMode::Both => check_basic(writer, path)? && check_extra(writer, path)?,
+        PathchkMode::Extra => check_extra(writer, path)? && check_default(writer, path)?,
+        PathchkMode::Both => check_extra(writer, path)? && check_basic(writer, path)?,
         _ => check_default(writer, path)?,
     };
     Ok(result)
@@ -702,6 +702,18 @@ mod tests {
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
             assert!(output_str.contains("leading '-' in a component of file name '-'"));
+        }
+
+        #[test]
+        fn test_portability_mode_checks_leading_hyphen_before_portable_characters() {
+            let args = [ctcore::ct_util_name(), "-p", "-P", "--", "-#"];
+            let mut output = Cursor::new(Vec::new());
+
+            assert!(pathchk_main(&mut output, args.iter().map(OsString::from)).is_ok());
+
+            let output = String::from_utf8(output.into_inner()).unwrap();
+            assert!(output.contains("leading '-' in a component of file name '-#'"));
+            assert!(!output.contains("non-portable character"));
         }
 
         #[test]

@@ -227,6 +227,30 @@
         "path-length",
         "boundary"
       ]
+    },
+    {
+      "tstdin": "",
+      "command": "pathchk",
+      "description": "pathchk: --portability先检查组件前导连字符，再检查非可移植字符",
+      "args": [
+        "-p",
+        "-P",
+        "--",
+        "-#"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "pathchk: leading '-' in a component of file name '-#'\n"
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "portability",
+        "diagnostics",
+        "check-order"
+      ]
     }
   ]
 }

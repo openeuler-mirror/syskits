@@ -299,6 +299,18 @@ fn check_basic<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
         return Ok(false);
     }
 
+    // POSIX permits at most PATHCHK_POSIX_PATH_MAX - 1 bytes in a path.
+    if total_len >= PATHCHK_POSIX_PATH_MAX {
+        write!(
+            writer,
+            "pathchk: limit {} exceeded by length {total_len} of file name ",
+            PATHCHK_POSIX_PATH_MAX - 1
+        )?;
+        write_shell_quoted_path(writer, path, true)?;
+        writer.write_all(b"\n")?;
+        return Ok(false);
+    }
+
     // Then check the portable component length limit.
     for component in path_components(path_bytes) {
         // Only check length after character validation
@@ -312,17 +324,6 @@ fn check_basic<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
             writer.write_all(b"\n")?;
             return Ok(false);
         }
-    }
-
-    // Finally check total path length
-    if total_len > PATHCHK_POSIX_PATH_MAX {
-        write!(
-            writer,
-            "pathchk: limit {PATHCHK_POSIX_PATH_MAX} exceeded by length {total_len} of file name "
-        )?;
-        write_shell_quoted_path(writer, path, true)?;
-        writer.write_all(b"\n")?;
-        return Ok(false);
     }
 
     Ok(true)
@@ -680,6 +681,20 @@ mod tests {
         }
 
         #[test]
+        fn test_posix_total_length_limit_precedes_component_limit() {
+            let path = "a".repeat(PATHCHK_POSIX_PATH_MAX);
+            let mut output = Cursor::new(Vec::new());
+
+            assert!(!check_basic(&mut output, OsStr::new(&path)).unwrap());
+
+            let output = String::from_utf8(output.into_inner()).unwrap();
+            assert!(
+                output.contains("limit 255 exceeded by length 256 of file name"),
+                "unexpected diagnostic: {output}"
+            );
+        }
+
+        #[test]
         fn test_leading_hyphen() {
             let args = [ctcore::ct_util_name(), "-P", "-"];
             let mut output = Cursor::new(Vec::new());
@@ -785,7 +800,7 @@ mod tests {
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
 
-            assert!(output_str.contains("exceeded by length 255 of file"));
+            assert!(output_str.contains("limit 255 exceeded by length 260 of file name"));
         }
     }
 

@@ -872,6 +872,7 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .args_override_self(true)
         .after_help(t!("nl.after_help"))
         .disable_help_flag(true)
         .args(&args)
@@ -1274,6 +1275,63 @@ mod tests {
             assert!(matches!(flags.header_numbering, NlNumberingStyle::All));
             assert!(matches!(flags.body_numbering, NlNumberingStyle::NonEmpty));
             assert!(matches!(flags.footer_numbering, NlNumberingStyle::None));
+        }
+
+        #[test]
+        fn test_flags_repeated_options_use_the_last_value() {
+            let matches = ct_app()
+                .try_get_matches_from([
+                    ctcore::ct_util_name(),
+                    "-ba",
+                    "-bn",
+                    "-ha",
+                    "-hn",
+                    "-fa",
+                    "-fn",
+                    "-d",
+                    ":",
+                    "-d",
+                    "%",
+                    "-i",
+                    "1",
+                    "-i",
+                    "2",
+                    "-l",
+                    "1",
+                    "-l",
+                    "2",
+                    "-nln",
+                    "-nrz",
+                    "-p",
+                    "-p",
+                    "-s",
+                    ",",
+                    "-s",
+                    ":",
+                    "-v",
+                    "1",
+                    "-v",
+                    "8",
+                    "-w",
+                    "3",
+                    "-w",
+                    "4",
+                    "test.txt",
+                ])
+                .unwrap();
+            let flags = NlFlags::new(matches).unwrap();
+
+            assert!(matches!(flags.body_numbering, NlNumberingStyle::None));
+            assert!(matches!(flags.header_numbering, NlNumberingStyle::None));
+            assert!(matches!(flags.footer_numbering, NlNumberingStyle::None));
+            assert_eq!(flags.section_delimiter, "%:");
+            assert_eq!(flags.line_increment, 2);
+            assert_eq!(flags.join_blank_lines, 2);
+            assert!(matches!(flags.number_format, NlNumberFormat::RightZero));
+            assert!(!flags.is_renumber);
+            assert_eq!(flags.number_separator, ":");
+            assert_eq!(flags.starting_line_number, 8);
+            assert_eq!(flags.number_width, 4);
         }
 
         /// 测试无效编号样式处理

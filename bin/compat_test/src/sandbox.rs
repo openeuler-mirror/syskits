@@ -26,10 +26,10 @@ use nix::unistd::{User, dup, setsid};
 use nix::{errno::Errno, libc};
 use rand::Rng;
 use std::collections::HashMap;
-use std::ffi::OsString;
+use std::ffi::{CString, OsString};
 use std::fs::{self, File, Permissions};
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::os::unix::ffi::OsStringExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::{AsRawFd, FromRawFd, IntoRawFd, OwnedFd};
 use std::os::unix::net::UnixStream;
@@ -394,6 +394,8 @@ pub struct IsolatedSandbox {
     debug: bool,
     /// 主命令使用的非特权用户身份。
     run_as_user: Option<RunAsUser>,
+    /// 下一个子进程在 exec 前是否删除其当前工作目录。
+    remove_current_dir_before_next_exec: bool,
 }
 
 fn split_shell_words(input: &str) -> std::result::Result<Vec<String>, &'static str> {
@@ -469,12 +471,25 @@ impl IsolatedSandbox {
             exit_code: 0,
             debug,
             run_as_user: None,
+            remove_current_dir_before_next_exec: false,
         })
     }
 
     /// 获取沙箱根路径
     pub fn path(&self) -> &Path {
         self.temp_dir.as_ref().unwrap().path()
+    }
+
+    /// Arrange for only the next spawned child to run from a deleted cwd.
+    pub fn remove_current_dir_before_next_exec(&mut self) {
+        self.remove_current_dir_before_next_exec = true;
+    }
+
+    fn take_removed_current_dir(&mut self) -> Option<CString> {
+        std::mem::take(&mut self.remove_current_dir_before_next_exec).then(|| {
+            CString::new(self.current_dir.as_os_str().as_bytes())
+                .expect("sandbox paths do not contain NUL bytes")
+        })
     }
 
     /// 设置沙箱环境
@@ -949,6 +964,7 @@ impl IsolatedSandbox {
             configured_output(streams.stdout)?;
         let (stderr, stderr_tty, _stderr_pipe_keepalive, stderr_pipe_capture) =
             configured_output(streams.stderr)?;
+        let removed_current_dir = self.take_removed_current_dir();
         let mut command = if streams.use_bash {
             let mut command = Command::new("bash");
             command
@@ -987,6 +1003,11 @@ impl IsolatedSandbox {
                     return Err(std::io::Error::last_os_error());
                 }
                 if close_stderr && libc::close(libc::STDERR_FILENO) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if let Some(path) = &removed_current_dir
+                    && libc::rmdir(path.as_ptr()) != 0
+                {
                     return Err(std::io::Error::last_os_error());
                 }
                 Ok(())

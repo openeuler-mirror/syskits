@@ -5,6 +5,35 @@ use std::process::{Command, Output, Stdio};
 #[cfg(unix)]
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 
+#[cfg(unix)]
+fn run_in_deleted_working_directory() -> Output {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    let tempdir = tempfile::tempdir().expect("create temporary directory");
+    let path = CString::new(tempdir.path().as_os_str().as_bytes()).expect("path has no NUL byte");
+
+    let mut command = Command::new(env!("CARGO_BIN_EXE_pwd"));
+    command
+        .arg0("pwd")
+        .env("LC_ALL", "C")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    unsafe {
+        command.pre_exec(move || {
+            if ctcore::libc::chdir(path.as_ptr()) != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if ctcore::libc::rmdir(path.as_ptr()) != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+
+    command.output().expect("run pwd")
+}
+
 #[cfg(target_os = "linux")]
 fn run_with_closed_stdout_pipe(sigpipe_handler: ctcore::libc::sighandler_t) -> Output {
     let mut pipe_fds = [0; 2];
@@ -109,6 +138,19 @@ fn invalid_non_utf8_short_option_is_preserved_in_diagnostic() {
     assert_eq!(
         output.stderr,
         b"pwd: invalid option -- '\xff'\nTry 'pwd --help' for more information.\n"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn deleted_working_directory_reports_gnu_inode_lookup_error() {
+    let output = run_in_deleted_working_directory();
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"pwd: couldn't find directory entry in '..' with matching i-node\n"
     );
 }
 

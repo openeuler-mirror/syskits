@@ -519,6 +519,25 @@
     },
     {
       "command": "pwd",
+      "description": "LC_ALL=C、LANG=C且在exec前删除子进程当前工作目录后执行pwd；GNU的xgetcwd失败后回退扫描父目录，因目录已被删除而报告在'..'中找不到匹配i-node，预期RC=1、stdout为空、stderr完整匹配。",
+      "args": [],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        },
+        "deletedWorkingDir": true
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "pwd: couldn't find directory entry in '..' with matching i-node\n"
+        }
+      }
+    },
+    {
+      "command": "pwd",
       "description": "Test output ends with newline",
       "args": [],
       "expectation": {

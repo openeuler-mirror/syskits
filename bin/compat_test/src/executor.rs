@@ -146,6 +146,9 @@ impl CommandExecutor {
             Some(self.config.default_timeout)
         });
         self.prepare_syskits_path(&mut sandbox)?;
+        if test_case.environment.deleted_working_dir {
+            sandbox.remove_current_dir_before_next_exec();
+        }
         let use_bytes = test_case.byte_mode;
         let actual = if use_bytes {
             let args_os = resolve_args_os(test_case)?;
@@ -237,6 +240,9 @@ impl CommandExecutor {
         } else {
             Some(self.config.default_timeout)
         });
+        if test_case.environment.deleted_working_dir {
+            coreutils_sandbox.remove_current_dir_before_next_exec();
+        }
         let use_bytes = test_case.byte_mode;
         let expected = if test_case.compare_use_bash && !use_bytes {
             if test_case.tty {

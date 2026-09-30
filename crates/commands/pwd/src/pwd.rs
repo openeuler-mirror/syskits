@@ -164,6 +164,77 @@ pub fn resolve_pwd_path(mode: PwdMode) -> io::Result<PathBuf> {
     }
 }
 
+#[cfg(unix)]
+fn pwd_robust_getcwd() -> CTResult<PathBuf> {
+    use std::fs::{metadata, read_dir, symlink_metadata};
+    use std::os::unix::fs::MetadataExt;
+
+    let root = metadata("/").map_err_context(|| "failed to get attributes of '/'".to_owned())?;
+    let mut current = metadata(".").map_err_context(|| "failed to stat '.'".to_owned())?;
+    let mut parent_path = PathBuf::from("..");
+    let mut parent_height = 1;
+    let mut components = Vec::new();
+
+    while current.dev() != root.dev() || current.ino() != root.ino() {
+        let parent_reference = pwd_parent_reference(parent_height);
+        let parent = metadata(&parent_path)
+            .map_err_context(|| format!("failed to stat '{parent_reference}'"))?;
+        let entries = read_dir(&parent_path)
+            .map_err_context(|| format!("cannot open directory '{parent_reference}'"))?;
+        let mut matching_name = None;
+
+        for entry in entries {
+            let entry =
+                entry.map_err_context(|| format!("reading directory '{parent_reference}'"))?;
+            let name = entry.file_name();
+            if name.as_encoded_bytes() == b"." || name.as_encoded_bytes() == b".." {
+                continue;
+            }
+            let Ok(entry_metadata) = symlink_metadata(entry.path()) else {
+                continue;
+            };
+            if entry_metadata.ino() == current.ino()
+                && (parent.dev() == current.dev() || entry_metadata.dev() == current.dev())
+            {
+                matching_name = Some(name);
+                break;
+            }
+        }
+
+        let Some(name) = matching_name else {
+            return Err(CtSimpleError::new(
+                1,
+                format!(
+                    "couldn't find directory entry in '{parent_reference}' with matching i-node"
+                ),
+            ));
+        };
+
+        components.push(name);
+        current = parent;
+        parent_path.push("..");
+        parent_height += 1;
+    }
+
+    let mut path = PathBuf::from("/");
+    for component in components.iter().rev() {
+        path.push(component);
+    }
+    Ok(path)
+}
+
+#[cfg(unix)]
+fn pwd_parent_reference(height: usize) -> String {
+    std::iter::repeat_n("..", height)
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+#[cfg(not(unix))]
+fn pwd_robust_getcwd() -> CTResult<PathBuf> {
+    env::current_dir().map_err_context(|| "failed to get current directory".to_owned())
+}
+
 fn default_pwd_mode(posixly_correct: Option<&OsStr>) -> PwdMode {
     if posixly_correct.is_some() {
         PwdMode::Logical
@@ -324,8 +395,10 @@ pub fn pwd_main(args: impl ctcore::Args) -> CTResult<()> {
     // 如果设置了 POSIXLY_CORRECT，我们希望进行逻辑解析。
     // 这在执行 mkdir -p a/b && ln -s a/b c && cd c && pwd 时会产生不同的输出
     // 在这种情况下，我们应该在路径末尾得到 c 而不是 a/b
-    let cwd = resolve_pwd_path(resolve_pwd_mode(&matches, posixly_correct.as_deref()))
-        .map_err_context(|| "failed to get current directory".to_owned())?;
+    let cwd = match resolve_pwd_path(resolve_pwd_mode(&matches, posixly_correct.as_deref())) {
+        Ok(path) => path,
+        Err(_) => pwd_robust_getcwd()?,
+    };
 
     // \\?\ 是 Windows 在某些情况下给路径加的前缀，包括对它们进行规范化时。
     // 有了正确的扩展特性，我们可以无损地删除它，但我们无损地打印它，所以没有理由麻烦。

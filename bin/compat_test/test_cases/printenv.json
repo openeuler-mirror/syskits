@@ -79,6 +79,26 @@
         {
             "tstdin": "",
             "command": "printenv",
+            "description": "原始字节变量名：LC_ALL=C、LANG=C；-- 后参数完整十六进制=ff5052494e54454e565f4e414d45，对应 \\xffPRINTENV_NAME。变量不存在时 GNU 仅返回 1，stdout 和 stderr 均为 0 字节。",
+            "args": ["2d2d", "ff5052494e54454e565f4e414d45"],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "printenv",
             "description": "显示多个环境变量",
             "args": ["VAR1", "VAR2"],
             "setup_commands": [

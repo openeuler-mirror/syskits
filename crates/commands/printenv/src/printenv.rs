@@ -10,13 +10,20 @@
  */
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{Arg, ArgAction, ArgMatches, Command, builder::OsStringValueParser, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::{Tool, ct_error::CTResult};
+#[cfg(not(target_os = "linux"))]
 use std::env;
-use std::ffi::OsString;
+use std::ffi::{CStr, OsString};
+use std::io::{self, Write};
 use sys_locale::get_locale;
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    static mut environ: *mut *mut std::os::raw::c_char;
+}
 
 static PRINTENV_OPT_NULL: &str = "null";
 
@@ -36,19 +43,19 @@ pub struct PrintenvSemantic {
 }
 
 struct PrintenvOptions {
-    separator: &'static str,
-    variables: Vec<String>,
+    separator: u8,
+    variables: Vec<OsString>,
 }
 
 impl PrintenvOptions {
     fn from_matches(args_match: &ArgMatches) -> Self {
-        let variables: Vec<String> = args_match
-            .get_many::<String>(PRINTENV_ARG_VARIABLES)
-            .map(|v| v.map(ToString::to_string).collect())
+        let variables = args_match
+            .get_many::<OsString>(PRINTENV_ARG_VARIABLES)
+            .map(|v| v.cloned().collect())
             .unwrap_or_default();
         let null = args_match.get_count(PRINTENV_OPT_NULL) > 0;
         Self {
-            separator: if null { "\x00" } else { "\n" },
+            separator: if null { b'\0' } else { b'\n' },
             variables,
         }
     }
@@ -67,12 +74,11 @@ pub fn printenv_main(args: impl ctcore::Args) -> CTResult<()> {
     // 从命令行参数中获取匹配项
     let args_match = ct_app().get_matches_from(args);
     let options = PrintenvOptions::from_matches(&args_match);
-    let semantic = printenv_semantic_from_options(&options);
-    print!("{}", semantic.classic_text);
-    if semantic.exit_code == 0 {
+    let exit_code = printenv_classic_from_options(&options)?;
+    if exit_code == 0 {
         Ok(())
     } else {
-        Err(semantic.exit_code.into())
+        Err(exit_code.into())
     }
 }
 
@@ -88,13 +94,13 @@ fn printenv_semantic_from_options(options: &PrintenvOptions) -> PrintenvSemantic
     let mut rows = Vec::new();
     let mut classic_text = String::new();
     let mut error_found = false;
+    let environment = environment_entries();
 
     if options.variables.is_empty() {
-        for (name, value) in env::vars() {
-            classic_text.push_str(&name);
-            classic_text.push('=');
-            classic_text.push_str(&value);
-            classic_text.push_str(options.separator);
+        for entry in environment {
+            let (name, value) = split_environment_entry(&entry);
+            classic_text.push_str(&String::from_utf8_lossy(&entry));
+            classic_text.push(options.separator.into());
             rows.push(PrintenvRow { name, value });
         }
         return PrintenvSemantic {
@@ -105,19 +111,26 @@ fn printenv_semantic_from_options(options: &PrintenvOptions) -> PrintenvSemantic
     }
 
     for variable in &options.variables {
-        if variable.contains('=') {
+        let variable_bytes = variable.as_encoded_bytes();
+        if variable_bytes.contains(&b'=') {
             error_found = true;
             continue;
         }
 
-        if let Ok(value) = env::var(variable) {
-            classic_text.push_str(&value);
-            classic_text.push_str(options.separator);
-            rows.push(PrintenvRow {
-                name: variable.clone(),
-                value,
-            });
-        } else {
+        let mut found = false;
+        for entry in &environment {
+            if let Some(value) = environment_entry_value(entry, variable_bytes) {
+                let value = String::from_utf8_lossy(value).into_owned();
+                classic_text.push_str(&value);
+                classic_text.push(options.separator.into());
+                rows.push(PrintenvRow {
+                    name: variable.to_string_lossy().into_owned(),
+                    value,
+                });
+                found = true;
+            }
+        }
+        if !found {
             error_found = true;
         }
     }
@@ -127,6 +140,103 @@ fn printenv_semantic_from_options(options: &PrintenvOptions) -> PrintenvSemantic
         classic_text,
         exit_code: if error_found { 1 } else { 0 },
     }
+}
+
+fn printenv_classic_from_options(options: &PrintenvOptions) -> CTResult<i32> {
+    let environment = environment_entries();
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
+
+    Ok(write_environment_entries(
+        &mut stdout,
+        options,
+        &environment,
+    )?)
+}
+
+fn write_environment_entries(
+    stdout: &mut impl Write,
+    options: &PrintenvOptions,
+    environment: &[Vec<u8>],
+) -> io::Result<i32> {
+    if options.variables.is_empty() {
+        for entry in environment {
+            stdout.write_all(entry)?;
+            stdout.write_all(&[options.separator])?;
+        }
+        return Ok(0);
+    }
+
+    let mut all_found = true;
+    for variable in &options.variables {
+        let variable = variable.as_encoded_bytes();
+        if variable.contains(&b'=') {
+            all_found = false;
+            continue;
+        }
+
+        let mut found = false;
+        for entry in environment {
+            if let Some(value) = environment_entry_value(entry, variable) {
+                stdout.write_all(value)?;
+                stdout.write_all(&[options.separator])?;
+                found = true;
+            }
+        }
+        all_found &= found;
+    }
+
+    Ok(i32::from(!all_found))
+}
+
+fn environment_entry_value<'a>(entry: &'a [u8], variable: &[u8]) -> Option<&'a [u8]> {
+    if variable.is_empty()
+        || !entry.starts_with(variable)
+        || entry.get(variable.len()) != Some(&b'=')
+    {
+        return None;
+    }
+    Some(&entry[variable.len() + 1..])
+}
+
+fn split_environment_entry(entry: &[u8]) -> (String, String) {
+    let Some(separator) = entry.iter().position(|byte| *byte == b'=') else {
+        return (String::from_utf8_lossy(entry).into_owned(), String::new());
+    };
+
+    (
+        String::from_utf8_lossy(&entry[..separator]).into_owned(),
+        String::from_utf8_lossy(&entry[separator + 1..]).into_owned(),
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn environment_entries() -> Vec<Vec<u8>> {
+    let mut entries = Vec::new();
+    let mut cursor = unsafe { environ };
+
+    while !cursor.is_null() {
+        let entry = unsafe { *cursor };
+        if entry.is_null() {
+            break;
+        }
+        entries.push(unsafe { CStr::from_ptr(entry) }.to_bytes().to_vec());
+        cursor = unsafe { cursor.add(1) };
+    }
+
+    entries
+}
+
+#[cfg(not(target_os = "linux"))]
+fn environment_entries() -> Vec<Vec<u8>> {
+    env::vars_os()
+        .map(|(name, value)| {
+            let mut entry = name.as_encoded_bytes().to_vec();
+            entry.push(b'=');
+            entry.extend_from_slice(value.as_encoded_bytes());
+            entry
+        })
+        .collect()
 }
 
 pub fn ct_app() -> Command {
@@ -145,7 +255,8 @@ pub fn ct_app() -> Command {
             .action(ArgAction::Append)
             .num_args(1..)
             .allow_hyphen_values(true)
-            .trailing_var_arg(true),
+            .trailing_var_arg(true)
+            .value_parser(OsStringValueParser::new()),
     ];
 
     Command::new(utility_name)
@@ -192,6 +303,59 @@ mod tests {
         // 测试 execute 方法
         let args = vec![OsString::from("printenv"), OsString::from("--version")];
         assert!(tool.execute(&args).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn accepts_non_utf8_variable_name() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let variable = OsString::from_vec(b"\xffPRINTENV_TEST".to_vec());
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name().into(), "--".into(), variable.clone()])
+            .expect("non-UTF-8 variable name should parse");
+
+        assert_eq!(
+            matches
+                .get_many::<OsString>(PRINTENV_ARG_VARIABLES)
+                .expect("variable")
+                .collect::<Vec<_>>(),
+            [&variable]
+        );
+    }
+
+    #[test]
+    fn writes_non_utf8_environment_value_verbatim() {
+        let options = PrintenvOptions {
+            separator: b'\n',
+            variables: Vec::new(),
+        };
+        let mut output = Vec::new();
+
+        let exit_code = write_environment_entries(&mut output, &options, &[b"RAW=\xff".to_vec()])
+            .expect("write output");
+
+        assert_eq!(exit_code, 0);
+        assert_eq!(output, b"RAW=\xff\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn writes_value_for_non_utf8_variable_name() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let options = PrintenvOptions {
+            separator: b'\n',
+            variables: vec![OsString::from_vec(b"\xffRAW".to_vec())],
+        };
+        let mut output = Vec::new();
+
+        let exit_code =
+            write_environment_entries(&mut output, &options, &[b"\xffRAW=value".to_vec()])
+                .expect("write output");
+
+        assert_eq!(exit_code, 0);
+        assert_eq!(output, b"value\n");
     }
 
     mod tests_printenv_main {
@@ -243,7 +407,7 @@ mod tests {
     }
 
     mod tests_printenv_app {
-        use crate::{PRINTENV_ARG_VARIABLES, PRINTENV_OPT_NULL, ct_app};
+        use crate::{OsString, PRINTENV_ARG_VARIABLES, PRINTENV_OPT_NULL, ct_app};
 
         use clap::error::ErrorKind;
 
@@ -306,9 +470,9 @@ mod tests {
             assert_eq!(matches.get_count(PRINTENV_OPT_NULL), 0);
             assert_eq!(
                 matches
-                    .get_many::<String>(PRINTENV_ARG_VARIABLES)
+                    .get_many::<OsString>(PRINTENV_ARG_VARIABLES)
                     .expect("variables")
-                    .map(String::as_str)
+                    .map(|value| value.to_string_lossy().into_owned())
                     .collect::<Vec<_>>(),
                 ["PRINTENV_TEST", "-0"]
             );

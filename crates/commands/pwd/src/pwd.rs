@@ -164,7 +164,245 @@ pub fn resolve_pwd_path(mode: PwdMode) -> io::Result<PathBuf> {
     }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
+struct PwdDirectory {
+    directory: *mut ctcore::libc::DIR,
+}
+
+#[cfg(target_os = "linux")]
+struct PwdDirectoryEntry {
+    name: Vec<u8>,
+    inode: ctcore::libc::ino_t,
+}
+
+#[cfg(target_os = "linux")]
+impl PwdDirectory {
+    fn from_file(file: &std::fs::File) -> io::Result<Self> {
+        use std::os::fd::AsRawFd;
+
+        let duplicated_fd = unsafe { ctcore::libc::dup(file.as_raw_fd()) };
+        if duplicated_fd < 0 {
+            return Err(io::Error::last_os_error());
+        }
+
+        let directory = unsafe { ctcore::libc::fdopendir(duplicated_fd) };
+        if directory.is_null() {
+            let error = io::Error::last_os_error();
+            unsafe {
+                ctcore::libc::close(duplicated_fd);
+            }
+            return Err(error);
+        }
+
+        Ok(Self { directory })
+    }
+
+    fn next_entry(&mut self) -> io::Result<Option<PwdDirectoryEntry>> {
+        use std::ffi::CStr;
+
+        unsafe {
+            *ctcore::libc::__errno_location() = 0;
+            let entry = ctcore::libc::readdir(self.directory);
+            if entry.is_null() {
+                let error = io::Error::last_os_error();
+                return if error.raw_os_error() == Some(0) {
+                    Ok(None)
+                } else {
+                    Err(error)
+                };
+            }
+
+            let entry = &*entry;
+            let name = CStr::from_ptr(entry.d_name.as_ptr()).to_bytes().to_vec();
+            Ok(Some(PwdDirectoryEntry {
+                name,
+                inode: entry.d_ino,
+            }))
+        }
+    }
+
+    fn close(mut self) -> io::Result<()> {
+        let result = unsafe { ctcore::libc::closedir(self.directory) };
+        self.directory = std::ptr::null_mut();
+        if result == 0 {
+            Ok(())
+        } else {
+            Err(io::Error::last_os_error())
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for PwdDirectory {
+    fn drop(&mut self) {
+        if !self.directory.is_null() {
+            unsafe {
+                ctcore::libc::closedir(self.directory);
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn pwd_open_current_directory() -> io::Result<std::fs::File> {
+    use std::os::fd::FromRawFd;
+
+    let fd = unsafe {
+        ctcore::libc::openat(
+            ctcore::libc::AT_FDCWD,
+            c".".as_ptr(),
+            ctcore::libc::O_PATH | ctcore::libc::O_DIRECTORY | ctcore::libc::O_CLOEXEC,
+        )
+    };
+    if fd < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(unsafe { std::fs::File::from_raw_fd(fd) })
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn pwd_open_parent_directory(parent_fd: ctcore::libc::c_int) -> io::Result<std::fs::File> {
+    use std::os::fd::FromRawFd;
+
+    let fd = unsafe {
+        ctcore::libc::openat(
+            parent_fd,
+            c"..".as_ptr(),
+            ctcore::libc::O_RDONLY
+                | ctcore::libc::O_NONBLOCK
+                | ctcore::libc::O_CLOEXEC
+                | ctcore::libc::O_DIRECTORY,
+        )
+    };
+    if fd < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(unsafe { std::fs::File::from_raw_fd(fd) })
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn pwd_entry_matches_current(
+    parent: &std::fs::File,
+    entry: &PwdDirectoryEntry,
+    parent_device: u64,
+    current_device: u64,
+    current_inode: u64,
+) -> bool {
+    use std::ffi::CString;
+    use std::os::fd::AsRawFd;
+
+    let crosses_device_boundary = parent_device != current_device;
+    if entry.inode != 0 && !crosses_device_boundary {
+        return entry.inode == current_inode;
+    }
+
+    let name = CString::new(entry.name.as_slice()).expect("directory entries do not contain NUL");
+    let mut metadata = unsafe { std::mem::zeroed::<ctcore::libc::stat>() };
+    if unsafe {
+        ctcore::libc::fstatat(
+            parent.as_raw_fd(),
+            name.as_ptr(),
+            &mut metadata,
+            ctcore::libc::AT_SYMLINK_NOFOLLOW,
+        )
+    } != 0
+    {
+        return false;
+    }
+
+    metadata.st_ino == current_inode
+        && (!crosses_device_boundary || metadata.st_dev == current_device)
+}
+
+#[cfg(target_os = "linux")]
+fn pwd_robust_getcwd() -> CTResult<PathBuf> {
+    let current =
+        pwd_open_current_directory().map_err_context(|| "failed to stat '.'".to_owned())?;
+    pwd_robust_getcwd_from_directory(current)
+}
+
+#[cfg(target_os = "linux")]
+fn pwd_robust_getcwd_from_directory(mut current_fd: std::fs::File) -> CTResult<PathBuf> {
+    use std::ffi::OsString;
+    use std::fs::metadata;
+    use std::os::fd::AsRawFd;
+    use std::os::unix::ffi::OsStringExt;
+    use std::os::unix::fs::MetadataExt;
+
+    let root = metadata("/").map_err_context(|| "failed to get attributes of '/'".to_owned())?;
+    let mut current = current_fd
+        .metadata()
+        .map_err_context(|| "failed to stat '.'".to_owned())?;
+    let mut parent_height = 1;
+    let mut components = Vec::new();
+
+    while current.dev() != root.dev() || current.ino() != root.ino() {
+        let parent_reference = pwd_parent_reference(parent_height);
+        let parent = pwd_open_parent_directory(current_fd.as_raw_fd())
+            .map_err_context(|| format!("cannot open directory '{parent_reference}'"))?;
+        let parent_metadata = parent
+            .metadata()
+            .map_err_context(|| format!("failed to stat '{parent_reference}'"))?;
+        let mut directory = PwdDirectory::from_file(&parent)
+            .map_err_context(|| format!("cannot open directory '{parent_reference}'"))?;
+        let mut matching_name = None;
+        let mut directory_error = None;
+
+        loop {
+            let entry = match directory.next_entry() {
+                Ok(Some(entry)) => entry,
+                Ok(None) => break,
+                Err(error) => {
+                    directory_error = Some(error);
+                    break;
+                }
+            };
+            if entry.name == b"." || entry.name == b".." {
+                continue;
+            }
+            if pwd_entry_matches_current(
+                &parent,
+                &entry,
+                parent_metadata.dev(),
+                current.dev(),
+                current.ino(),
+            ) {
+                matching_name = Some(OsString::from_vec(entry.name));
+                break;
+            }
+        }
+
+        let close_error = directory.close().err();
+        if let Some(error) = directory_error.or(close_error) {
+            return Err(error)
+                .map_err_context(|| format!("reading directory '{parent_reference}'"));
+        }
+
+        let Some(name) = matching_name else {
+            return Err(CtSimpleError::new(
+                1,
+                format!(
+                    "couldn't find directory entry in '{parent_reference}' with matching i-node"
+                ),
+            ));
+        };
+
+        components.push(name);
+        current = parent_metadata;
+        current_fd = parent;
+        parent_height += 1;
+    }
+
+    let mut path = PathBuf::from("/");
+    for component in components.iter().rev() {
+        path.push(component);
+    }
+    Ok(path)
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
 fn pwd_robust_getcwd() -> CTResult<PathBuf> {
     use std::fs::{metadata, read_dir, symlink_metadata};
     use std::os::unix::fs::MetadataExt;
@@ -534,6 +772,64 @@ mod tests {
         let value = OsString::from_vec(vec![0xff]);
 
         assert_eq!(default_pwd_mode(Some(value.as_os_str())), PwdMode::Logical,);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn robust_getcwd_reconstructs_paths_beyond_path_max() {
+        use std::fs::File;
+        use std::os::fd::{AsRawFd, FromRawFd};
+
+        const DEPTH: usize = 1400;
+        const COMPONENT: &str = "dir";
+
+        let temp_dir = tempfile::tempdir().expect("create temporary directory");
+        let mut expected = temp_dir.path().to_path_buf();
+        let mut current = File::open(temp_dir.path()).expect("open temporary directory");
+
+        for _ in 0..DEPTH {
+            assert_eq!(
+                unsafe { ctcore::libc::mkdirat(current.as_raw_fd(), c"dir".as_ptr(), 0o700) },
+                0
+            );
+            let child_fd = unsafe {
+                ctcore::libc::openat(
+                    current.as_raw_fd(),
+                    c"dir".as_ptr(),
+                    ctcore::libc::O_PATH | ctcore::libc::O_DIRECTORY | ctcore::libc::O_CLOEXEC,
+                )
+            };
+            assert!(child_fd >= 0, "open nested directory");
+            current = unsafe { File::from_raw_fd(child_fd) };
+            expected.push(COMPONENT);
+        }
+
+        let result = pwd_robust_getcwd_from_directory(
+            current.try_clone().expect("duplicate nested directory"),
+        );
+
+        for _ in 0..DEPTH {
+            let parent = pwd_open_parent_directory(current.as_raw_fd())
+                .expect("open parent directory for cleanup");
+            assert_eq!(
+                unsafe {
+                    ctcore::libc::unlinkat(
+                        parent.as_raw_fd(),
+                        c"dir".as_ptr(),
+                        ctcore::libc::AT_REMOVEDIR,
+                    )
+                },
+                0
+            );
+            current = parent;
+        }
+        drop(current);
+        temp_dir.close().expect("remove temporary directory");
+
+        assert_eq!(
+            result.expect("reconstruct deep working directory"),
+            expected
+        );
     }
 
     #[cfg(test)]

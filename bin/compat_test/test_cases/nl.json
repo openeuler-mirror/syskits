@@ -523,6 +523,25 @@
         "tags": ["number-width", "integer-range", "invalid-option"]
       },
       {
+        "command": "nl",
+        "description": "LC_ALL=C下-l 9223372036854775808超出GNU nl的intmax_t空行组大小上限，命令失败且不产生标准输出。",
+        "args": ["-l", "9223372036854775808"],
+        "environment": {
+          "env_vars": {
+            "LC_ALL": "C",
+            "LANG": "C"
+          }
+        },
+        "expectation": {
+          "execution": {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": null
+          }
+        },
+        "tags": ["join-blank-lines", "integer-range", "invalid-option"]
+      },
+      {
         "tstdin": "",
         "command": "nl",
         "description": "测试多文件处理包含不存在的文件",

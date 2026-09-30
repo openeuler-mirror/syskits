@@ -449,7 +449,7 @@ where
                 Err(error) if error.raw_os_error() == Some(libc::ENOENT) => {
                     known_name_max = Some(name_max);
                 }
-                Err(error) => return write_pathconf_error(writer, directory, &error),
+                Err(error) => return write_path_error(writer, directory, &error),
             }
         }
 
@@ -923,6 +923,28 @@ mod tests {
 
             let output = String::from_utf8(output.into_inner()).unwrap();
             assert!(output.contains("limit 14 exceeded by length 15 of file name component"));
+        }
+
+        #[test]
+        fn test_default_limits_name_max_pathconf_error_is_plain_directory_error() {
+            let path = "a".repeat(PATHCHK_POSIX_NAME_MAX + 1);
+            let mut output = Cursor::new(Vec::new());
+
+            assert!(
+                !check_default_limits(&mut output, OsStr::new(&path), &mut |_, variable| {
+                    if variable == libc::_PC_NAME_MAX {
+                        Err(std::io::Error::from_raw_os_error(libc::EACCES))
+                    } else {
+                        Ok(Some(4096))
+                    }
+                },)
+                .unwrap()
+            );
+
+            assert_eq!(
+                String::from_utf8(output.into_inner()).unwrap(),
+                "pathchk: .: Permission denied\n"
+            );
         }
 
         #[test]

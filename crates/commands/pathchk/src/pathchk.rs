@@ -23,7 +23,7 @@ use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::ct_quoting_style::gnu_quote_shell_bytes;
 use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::io::{ErrorKind, Write};
+use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
@@ -367,6 +367,12 @@ fn check_default<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
     let path_bytes = path.as_bytes();
     let total_len = path_bytes.len();
 
+    match fs::symlink_metadata(Path::new(path)) {
+        Ok(_) => return Ok(true),
+        Err(error) if error.raw_os_error() == Some(libc::ENOENT) && !path_bytes.is_empty() => {}
+        Err(error) => return write_path_error(writer, path, &error),
+    }
+
     // Then check path length
     if total_len > libc::PATH_MAX as usize {
         write!(
@@ -396,44 +402,30 @@ fn check_default<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
         }
     }
 
-    // Finally do permission checks
-    check_searchable(writer, path)
+    Ok(true)
 }
 
-/// 检查路径是否可搜索或是否存在其他问题
-///
-/// # 参数
-/// * `writer` - 输出写入器
-/// * `path` - 待检查的路径
-///
-/// # 返回
-/// * `CTResult<bool>` - 检查结果，true 表示通过检查
-fn check_searchable<W: Write>(writer: &mut W, path: &OsStr) -> CTResult<bool> {
-    match fs::symlink_metadata(Path::new(path)) {
-        Ok(_) => Ok(true),
-        Err(e) => {
-            if e.kind() == ErrorKind::NotFound && !path.as_bytes().is_empty() {
-                Ok(true)
-            } else if e.raw_os_error() == Some(36) {
-                // ENAMETOOLONG
-                writer.write_all(b"pathchk: ")?;
-                write_shell_quoted_path(writer, path, true)?;
-                writer.write_all(b": File name too long\n")?;
-                Ok(false)
-            } else {
-                let message = e.to_string();
-                let message = if let Some(pos) = message.find(" (os error ") {
-                    &message[..pos]
-                } else {
-                    message.as_str()
-                };
-                writer.write_all(b"pathchk: ")?;
-                write_shell_quoted_path(writer, path, true)?;
-                writeln!(writer, ": {message}")?;
-                Ok(false)
-            }
-        }
+fn write_path_error<W: Write>(
+    writer: &mut W,
+    path: &OsStr,
+    error: &std::io::Error,
+) -> CTResult<bool> {
+    if error.raw_os_error() == Some(libc::ENAMETOOLONG) {
+        writer.write_all(b"pathchk: ")?;
+        write_shell_quoted_path(writer, path, false)?;
+        writer.write_all(b": File name too long\n")?;
+    } else {
+        let message = error.to_string();
+        let message = if let Some(pos) = message.find(" (os error ") {
+            &message[..pos]
+        } else {
+            message.as_str()
+        };
+        writer.write_all(b"pathchk: ")?;
+        write_shell_quoted_path(writer, path, false)?;
+        writeln!(writer, ": {message}")?;
     }
+    Ok(false)
 }
 
 /// 检查路径段是否只包含有效（可移植）字符
@@ -735,6 +727,34 @@ mod tests {
         }
 
         #[test]
+        fn test_default_mode_reports_lstat_error_before_static_length_limit() {
+            let path = "a".repeat((libc::PATH_MAX as usize) + 1);
+            let mut output = Cursor::new(Vec::new());
+
+            assert!(!check_default(&mut output, OsStr::new(&path)).unwrap());
+
+            let output = String::from_utf8(output.into_inner()).unwrap();
+            assert!(output.ends_with(": File name too long\n"));
+            assert!(!output.contains("limit"));
+        }
+
+        #[test]
+        fn test_default_mode_lstat_error_uses_non_always_shell_quoting() {
+            let name = format!("pchk{}", std::process::id());
+            std::fs::write(&name, b"regular file").unwrap();
+            let path = format!("{name}/child");
+            let mut output = Cursor::new(Vec::new());
+
+            assert!(!check_default(&mut output, OsStr::new(&path)).unwrap());
+
+            std::fs::remove_file(&name).unwrap();
+            assert_eq!(
+                String::from_utf8(output.into_inner()).unwrap(),
+                format!("pathchk: {path}: Not a directory\n")
+            );
+        }
+
+        #[test]
         fn test_filename_too_long() {
             let long_name = "a".repeat(300);
             let args = [ctcore::ct_util_name(), "-P", &long_name];
@@ -832,13 +852,6 @@ mod tests {
             assert!(check_portable_chars(&mut output, OsStr::new("valid-name.txt")).unwrap());
             assert!(!check_portable_chars(&mut output, OsStr::new("invalid#name")).unwrap());
             assert!(!check_portable_chars(&mut output, OsStr::new("name@domain")).unwrap());
-        }
-
-        #[test]
-        fn test_check_searchable() {
-            let mut output = Cursor::new(Vec::new());
-            assert!(check_searchable(&mut output, OsStr::new(".")).unwrap());
-            assert!(check_searchable(&mut output, OsStr::new("nonexistent_file")).unwrap());
         }
 
         #[test]

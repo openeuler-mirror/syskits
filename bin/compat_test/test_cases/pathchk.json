@@ -272,6 +272,33 @@
         "empty-path",
         "diagnostics"
       ]
+    },
+    {
+      "tstdin": "",
+      "command": "pathchk",
+      "description": "pathchk: 默认模式先执行lstat，普通文件后的子路径报Not a directory且安全路径不额外加引号",
+      "args": [
+        "pathchk-file/child"
+      ],
+      "setup_commands": [
+        "/usr/bin/printf data > pathchk-file"
+      ],
+      "cleanup_commands": [
+        "/usr/bin/rm -f pathchk-file"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "pathchk: pathchk-file/child: Not a directory\n"
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "default-mode",
+        "filesystem",
+        "diagnostics"
+      ]
     }
   ]
 }

@@ -156,6 +156,23 @@
       {
         "tstdin": "",
         "command": "nl",
+        "description": "-l 2只在a编号节累计空行组；页眉a节的一个空行跨越正文n节后，与页脚a节的空行组成一组，页脚空行编号为1。",
+        "setup_commands": [
+          "printf '@:@:@:\\n\\n@:@:\\n\\n@:\\n\\n' > input"
+        ],
+        "args": ["-d", "@", "-ha", "-bn", "-fa", "-l", "2", "input"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\n       \n\n       \n\n     1\\t\n",
+            "stderr": ""
+          }
+        },
+        "tags": ["join-blank-lines", "section-state"]
+      },
+      {
+        "tstdin": "",
+        "command": "nl",
         "description": "测试不编号样式",
         "setup_commands": [
           "mkdir -p test_dir",

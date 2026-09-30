@@ -281,8 +281,8 @@ impl NlFlags {
 struct NlStats {
     // 当前行号
     line_number: Option<i64>,
-    // 连续空行计数
-    consecutive_empty_lines: u64,
+    // 当前 a 编号节中累计的空行数
+    blank_lines_in_all_section: u64,
 }
 
 impl NlStats {
@@ -296,7 +296,7 @@ impl NlStats {
     fn new(starting_line_number: i64) -> Self {
         Self {
             line_number: Some(starting_line_number),
-            consecutive_empty_lines: 0,
+            blank_lines_in_all_section: 0,
         }
     }
 }
@@ -486,12 +486,6 @@ where
         let line_len = buf.strip_suffix(b"\n").map_or(buf.len(), <[u8]>::len);
         let is_empty = line_len == 0;
 
-        if is_empty {
-            flags.stats.consecutive_empty_lines += 1;
-        } else {
-            flags.stats.consecutive_empty_lines = 0;
-        };
-
         let lossy_line = String::from_utf8_lossy(&buf[..line_len]);
 
         let new_numbering_style =
@@ -526,10 +520,17 @@ where
 
         let is_line_numbered = match current_numbering_style {
             NlNumberingStyle::All => {
-                if is_empty {
-                    if flags.join_blank_lines > 0 {
-                        flags.stats.consecutive_empty_lines % flags.join_blank_lines == 0
+                if flags.join_blank_lines > 1 {
+                    if is_empty {
+                        flags.stats.blank_lines_in_all_section += 1;
+                        if flags.stats.blank_lines_in_all_section == flags.join_blank_lines {
+                            flags.stats.blank_lines_in_all_section = 0;
+                            true
+                        } else {
+                            false
+                        }
                     } else {
+                        flags.stats.blank_lines_in_all_section = 0;
                         true
                     }
                 } else {
@@ -1667,6 +1668,23 @@ mod tests {
 
             let expected = "     1\tLine 1\n       \n     2\t\n       \n     3\tLine 5\n";
             assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        #[test]
+        fn test_join_blank_lines_ignores_non_all_numbering_sections() {
+            let input = "@:@:@:\n\n@:@:\n\n@:\n\n";
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new(input));
+            let mut flags = NlFlags::default();
+            flags.header_numbering = NlNumberingStyle::All;
+            flags.body_numbering = NlNumberingStyle::None;
+            flags.footer_numbering = NlNumberingStyle::All;
+            flags.join_blank_lines = 2;
+            flags.section_delimiter = b"@:".to_vec();
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            assert_eq!(output, b"\n       \n\n       \n\n     1\t\n");
         }
 
         /// 测试行号增量功能

@@ -205,6 +205,28 @@
         "portability",
         "filesystem"
       ]
+    },
+    {
+      "tstdin": "",
+      "command": "pathchk",
+      "description": "pathchk: -p对256字节单组件先报告总路径限制255，输入为256个ASCII字符a",
+      "args": [
+        "-p",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "timeout": 5,
+      "tags": [
+        "portability",
+        "path-length",
+        "boundary"
+      ]
     }
   ]
 }

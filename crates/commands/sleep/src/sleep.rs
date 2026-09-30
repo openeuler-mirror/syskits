@@ -48,12 +48,39 @@ impl Display for InvalidTimeIntervalError {
 impl Error for InvalidTimeIntervalError {}
 
 fn quote_duration_operand_for_locale(operand: &OsStr, locale: &str) -> Vec<u8> {
-    if locale == "zh-CN" {
-        #[cfg(target_os = "linux")]
-        if let Some(codeset) = sleep_output_codeset() {
-            return quote_duration_operand_with_locale_encoding(operand, &codeset, b"\"", b"\"");
-        }
+    #[cfg(target_os = "linux")]
+    let codeset = sleep_output_codeset();
 
+    #[cfg(not(target_os = "linux"))]
+    let codeset = None::<String>;
+
+    quote_duration_operand_for_locale_with_codeset(operand, locale, codeset.as_deref())
+}
+
+fn quote_duration_operand_for_locale_with_codeset(
+    operand: &OsStr,
+    locale: &str,
+    codeset: Option<&str>,
+) -> Vec<u8> {
+    #[cfg(target_os = "linux")]
+    if let Some(codeset) = codeset {
+        let (opening_quote, closing_quote) = if locale == "zh-CN" {
+            (b"\"".as_slice(), b"\"".as_slice())
+        } else {
+            (b"'".as_slice(), b"'".as_slice())
+        };
+        return quote_duration_operand_with_locale_encoding(
+            operand,
+            codeset,
+            opening_quote,
+            closing_quote,
+        );
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    let _ = codeset;
+
+    if locale == "zh-CN" {
         return quote_duration_operand_with_quote_marks(operand, true, b"\"", b"\"", Some(b'"'));
     }
 
@@ -1057,6 +1084,23 @@ mod tests {
             assert_eq!(
                 quote_duration_operand_with_locale_encoding(input.as_os_str(), "GBK", b"\"", b"\""),
                 b"\"\xd6\xd0\xb9\xfa\\\"\""
+            );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_english_diagnostic_preserves_valid_gbk_characters() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let input = OsString::from_vec(vec![0xd6, 0xd0, 0xb9, 0xfa]);
+
+            assert_eq!(
+                quote_duration_operand_for_locale_with_codeset(
+                    input.as_os_str(),
+                    "en-US",
+                    Some("GBK")
+                ),
+                b"'\xd6\xd0\xb9\xfa'"
             );
         }
 

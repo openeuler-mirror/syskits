@@ -211,7 +211,11 @@ fn quote_duration_operand_with_locale_encoding(
             push_duration_operand_octal_escape(&mut quoted, input[index]);
             index += 1;
         } else {
-            quoted.extend_from_slice(&input[index..index + character_len]);
+            let character = &input[index..index + character_len];
+            if character == closing_quote {
+                quoted.push(b'\\');
+            }
+            quoted.extend_from_slice(character);
             index += character_len;
         }
     }
@@ -1130,6 +1134,23 @@ mod tests {
                     Some("GB18030")
                 ),
                 b"\xa1\x07ex\xa1\xaf"
+            );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_english_gb18030_diagnostic_escapes_fallback_right_quote() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let input = OsString::from_vec(vec![0xa1, 0xaf]);
+
+            assert_eq!(
+                quote_duration_operand_for_locale_with_codeset(
+                    input.as_os_str(),
+                    "en-US",
+                    Some("GB18030")
+                ),
+                b"\xa1\x07e\\\xa1\xaf\xa1\xaf"
             );
         }
 

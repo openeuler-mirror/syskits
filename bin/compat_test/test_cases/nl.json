@@ -564,6 +564,29 @@
         "tags": ["starting-line-number", "integer-minimum", "right-zero-format"]
       },
       {
+        "byteMode": true,
+        "command": "nl",
+        "description": "原始字节用例：LC_ALL=C下创建文件名单字节ff且内容为line换行，参数ff表示该文件名；nl按原始路径打开文件并输出完整十六进制编号记录202020202031096c696e650a。",
+        "setup_commands": [
+          "/usr/bin/printf 'line\\n' > \"$(/usr/bin/printf '\\377')\""
+        ],
+        "args": ["ff"],
+        "environment": {
+          "env_vars": {
+            "LC_ALL": "C",
+            "LANG": "C"
+          }
+        },
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "202020202031096c696e650a",
+            "stderr": ""
+          }
+        },
+        "tags": ["input-bytes", "non-utf8-path", "file-operand"]
+      },
+      {
         "tstdin": "",
         "command": "nl",
         "description": "测试多文件处理包含不存在的文件",

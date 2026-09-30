@@ -414,13 +414,19 @@
     },
     {
       "command": "pwd",
-      "description": "Test with non-option arguments - should ignore them",
+      "description": "LC_ALL=C、LANG=C下执行pwd extra arguments；GNU 忽略所有非选项参数但仍成功输出当前目录，同时 stderr 完整输出 pwd: ignoring non-option arguments 加换行。",
       "args": ["extra", "arguments"],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
       "expectation": {
         "execution": {
           "exit_code": 0,
           "stdout": null,
-          "stderr": null
+          "stderr": "pwd: ignoring non-option arguments\n"
         },
         "verifications": [
           {
@@ -433,7 +439,7 @@
         "ignore_fields": {
           "ignore_exit_code": false,
           "ignore_stdout": true,
-          "ignore_stderr": true,
+          "ignore_stderr": false,
           "ignore_function": false
         }
       }

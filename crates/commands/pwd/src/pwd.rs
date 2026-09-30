@@ -145,6 +145,12 @@ pub fn pwd_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
+    if matches
+        .get_many::<String>(pwd_flags::PWD_ARG_OTHERS)
+        .is_some()
+    {
+        ctcore::ct_show_error!("ignoring non-option arguments");
+    }
     // 如果设置了 POSIXLY_CORRECT，我们希望进行逻辑解析。
     // 这在执行 mkdir -p a/b && ln -s a/b c && cd c && pwd 时会产生不同的输出
     // 在这种情况下，我们应该在路径末尾得到 c 而不是 a/b

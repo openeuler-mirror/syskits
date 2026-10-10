@@ -135,6 +135,34 @@
             ]
         },
         {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "nice",
+            "description": "原始字节传统调整值用例：LC_ALL=C下执行nice并传入传统调整值-1后接原始字节0xff；参数完整十六进制=2d31ff 2f7573722f62696e2f74727565；stdin完整十六进制=空；GNU按传统-N规则识别调整值并报告invalid adjustment '1\\377'，预期RC=125、stdout完整十六进制=空、stderr完整十六进制=6e6963653a20696e76616c69642061646a7573746d656e742027315c333737270a。",
+            "args": [
+                "2d31ff",
+                "2f7573722f62696e2f74727565"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "6e6963653a20696e76616c69642061646a7573746d656e742027315c333737270a"
+                }
+            },
+            "tags": [
+                "raw-bytes",
+                "legacy-adjustment",
+                "diagnostics"
+            ]
+        },
+        {
             "command": "nice",
             "description": "GNU xstrtol允许-n参数的前导ASCII空白，并将超出long范围的正数夹到可用的最大niceness adjustment。",
             "args": ["-n", " 9223372036854775808", "/usr/bin/true"],

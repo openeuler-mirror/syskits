@@ -1010,6 +1010,35 @@
                 "short-option",
                 "attached-value"
             ]
+        },
+        {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "nice",
+            "description": "zh_CN.gbk下执行由有效GBK双字节d6d0组成的不存在COMMAND；参数完整十六进制=d6d0，stdin完整十六进制=空；GNU quote() 必须保留该有效locale字节并使用双引号，预期RC=127、stdout完整十六进制=空、stderr完整十六进制=6e6963653a2022d6d0223a204e6f20737563682066696c65206f72206469726563746f72790a，不能输出八进制转义。",
+            "args": [
+                "d6d0"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zh_CN.gbk",
+                    "LANG": "zh_CN.gbk"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 127,
+                    "stdout": "",
+                    "stderr": "6e6963653a2022d6d0223a204e6f20737563682066696c65206f72206469726563746f72790a"
+                }
+            },
+            "tags": [
+                "locale",
+                "zh-cn",
+                "gbk",
+                "raw-bytes",
+                "quoting"
+            ]
         }
     ]
 }

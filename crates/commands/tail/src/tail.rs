@@ -506,7 +506,9 @@ fn tail_exec(options: &TailOptions) -> CTResult<()> {
         }
     }
 
-    if options.follow.is_some() {
+    if should_report_no_files_remaining_after_bad_stdin(options, paths::tail_stdin_is_bad_fd()) {
+        ct_show_error!("{}", text::TAIL_NO_FILES_REMAINING);
+    } else if options.follow.is_some() {
         /*
         POSIX specification regarding tail -f
         If the input file is a regular file or if the file operand specifies a FIFO, do not
@@ -526,6 +528,13 @@ fn tail_exec(options: &TailOptions) -> CTResult<()> {
     }
 
     Ok(())
+}
+
+fn should_report_no_files_remaining_after_bad_stdin(
+    options: &TailOptions,
+    stdin_is_bad: bool,
+) -> bool {
+    options.follow.is_some() && options.has_only_stdin() && stdin_is_bad
 }
 
 fn tail_file(
@@ -1243,6 +1252,27 @@ mod tests {
         let args: Vec<OsString> = vec![OsString::from("tail"), OsString::from("--help")];
         let result = tool.execute(&args);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn following_only_bad_stdin_reports_no_files_remaining() {
+        let mut options = TailOptions {
+            follow: Some(TailFollowMode::Descriptor),
+            inputs: vec![TailInput::default()],
+            ..TailOptions::default()
+        };
+
+        assert!(should_report_no_files_remaining_after_bad_stdin(
+            &options, true
+        ));
+        assert!(!should_report_no_files_remaining_after_bad_stdin(
+            &options, false
+        ));
+
+        options.inputs.push(TailInput::from("file"));
+        assert!(!should_report_no_files_remaining_after_bad_stdin(
+            &options, true
+        ));
     }
 
     /// 辅助函数：创建临时文件并写入内容

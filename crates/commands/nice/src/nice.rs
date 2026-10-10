@@ -25,7 +25,7 @@ use std::ptr;
 use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use ctcore::{
     Tool,
-    ct_error::{CTResult, UClapError, set_ct_exit_code, strip_errno},
+    ct_error::{CTResult, UClapError, strip_errno},
     ct_quoting_style::gnu_quote_locale,
 };
 
@@ -505,6 +505,10 @@ fn write_niceness(
     writeln!(writer, "{niceness}").map_err(|error| nice_write_error(error, stdout_was_closed))
 }
 
+fn nice_permission_diagnostic_failed(stderr_was_closed: bool, write_failed: bool) -> bool {
+    stderr_was_closed || write_failed
+}
+
 fn apply_adjustment(adjustment: c_int) -> Result<(), CTResult<()>> {
     nix::errno::Errno::clear();
     let value = unsafe { libc_nice(adjustment) };
@@ -513,9 +517,9 @@ fn apply_adjustment(adjustment: c_int) -> Result<(), CTResult<()>> {
         let errno = err.raw_os_error().unwrap_or(0);
         let message = set_niceness_error_message(&err);
         if perm_related_errno(errno) {
-            if write_nice_diagnostic(message).is_err() {
-                set_ct_exit_code(125);
-                return Err(Ok(()));
+            let write_failed = write_nice_diagnostic(message).is_err();
+            if nice_permission_diagnostic_failed(ctcore::ct_stderr_was_closed(), write_failed) {
+                return Err(Err(125.into()));
             }
             return Ok(());
         }
@@ -1103,6 +1107,13 @@ mod tests {
             set_niceness_error_message(&error),
             "cannot set niceness: Permission denied"
         );
+    }
+
+    #[test]
+    fn test_closed_stderr_makes_permission_diagnostic_fatal() {
+        assert!(nice_permission_diagnostic_failed(true, false));
+        assert!(nice_permission_diagnostic_failed(false, true));
+        assert!(!nice_permission_diagnostic_failed(false, false));
     }
 
     #[test]

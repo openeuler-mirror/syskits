@@ -390,6 +390,9 @@ impl Observer {
         let Some(tracked_path) = self.tracked_path_for_event(event) else {
             return Ok(paths);
         };
+        if self.follow_name() {
+            self.files.reset_unchanged_stats(&tracked_path);
+        }
         let display_name = self.files.get(&tracked_path).display_name.clone();
 
         if self.follow_descriptor()
@@ -798,6 +801,57 @@ impl Observer {
 
         Ok(read_some)
     }
+
+    fn recheck_unchanged_follow_name(&mut self, max_stats: u64, verbose: bool) -> CTResult<bool> {
+        if !self.follow_name() {
+            return Ok(false);
+        }
+
+        let mut read_some = false;
+        let paths = self.files.keys().cloned().collect::<Vec<_>>();
+        for path in paths {
+            if self.files.get(&path).reader.is_none()
+                || !self.files.should_recheck_unchanged_stats(&path, max_stats)
+            {
+                continue;
+            }
+
+            let Ok(metadata) = path.metadata() else {
+                continue;
+            };
+            let replaced = self
+                .files
+                .get(&path)
+                .metadata
+                .as_ref()
+                .is_some_and(|old| !old.file_id_eq(&metadata));
+            if !replaced {
+                continue;
+            }
+
+            let display_name = self.files.get(&path).display_name.clone();
+            self.files.update_metadata(&path, Some(metadata));
+            if let Err(e) = self.files.update_reader(&path) {
+                ct_show_error!(
+                    "{} has been replaced;  following new file",
+                    display_name.quote()
+                );
+                ct_show_error!(
+                    "cannot open '{}' for reading: {}",
+                    display_name,
+                    strip_errno(&e)
+                );
+            } else {
+                ct_show_error!(
+                    "{} has been replaced;  following new file",
+                    display_name.quote()
+                );
+                read_some = self.files.tail_file(&path, verbose)? || read_some;
+            }
+        }
+
+        Ok(read_some)
+    }
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -810,8 +864,6 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
     }
 
     let mut process = platform::ProcessChecker::new(observer.pid);
-
-    let mut timeout_counter = 0;
 
     // main follow loop
     loop {
@@ -861,10 +913,6 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
             .receiver
             .recv_timeout(options.sleep_sec);
 
-        if rx_result.is_ok() {
-            timeout_counter = 0;
-        }
-
         let mut paths = vec![]; // Paths worth checking for new content to print
         let mut timed_out = false;
         match rx_result {
@@ -900,10 +948,7 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
                 ));
             }
             Ok(Err(e)) => return Err(CtSimpleError::new(1, format!("NotifyError: {e}"))),
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                timeout_counter += 1;
-                timed_out = true;
-            }
+            Err(mpsc::RecvTimeoutError::Timeout) => timed_out = true,
             Err(e) => return Err(CtSimpleError::new(1, format!("RecvTimeoutError: {e}"))),
         }
 
@@ -927,13 +972,15 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
             paths = observer.files.keys().cloned().collect::<Vec<_>>();
         }
 
+        if timed_out && observer.use_polling {
+            _read_some = observer
+                .recheck_unchanged_follow_name(options.max_unchanged_stats, options.verbose)?
+                || _read_some;
+        }
+
         // main print loop
         for path in &paths {
             _read_some = observer.files.tail_file(path, options.verbose)?;
-        }
-
-        if timeout_counter == options.max_unchanged_stats {
-            // (TODO preserved)
         }
     }
     Ok(())
@@ -1098,6 +1145,44 @@ mod tests {
 
         let reader = observer.files.get_mut(&old_path).reader.as_mut().unwrap();
         assert!(reader.fill_buf().unwrap().is_empty());
+    }
+
+    #[test]
+    fn polling_follow_name_rechecks_unchanged_path_after_configured_interval() {
+        let mut options = TailOptions {
+            follow: Some(TailFollowMode::Name),
+            ..TailOptions::default()
+        };
+        options.use_polling = true;
+        let mut observer = Observer::from(&options);
+        let temp_dir = tempdir().unwrap();
+        let path = temp_dir.path().join("file");
+        let old_path = temp_dir.path().join("old-file");
+
+        fs::write(&path, b"seed\n").unwrap();
+        let old_mtime = path.metadata().unwrap().modified().unwrap();
+        let mut reader_file = File::open(&path).unwrap();
+        reader_file.seek(SeekFrom::End(0)).unwrap();
+        observer
+            .add_path(
+                &path,
+                "file",
+                Some(Box::new(BufReader::new(reader_file))),
+                false,
+            )
+            .unwrap();
+
+        fs::rename(&path, &old_path).unwrap();
+        fs::write(&path, b"seed\n").unwrap();
+        File::open(&path)
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(old_mtime))
+            .unwrap();
+
+        assert!(!observer.recheck_unchanged_follow_name(1, false).unwrap());
+        assert!(observer.recheck_unchanged_follow_name(1, false).unwrap());
+        let tracked_metadata = observer.files.get(&path).metadata.as_ref().unwrap();
+        assert!(tracked_metadata.file_id_eq(&path.metadata().unwrap()));
     }
 
     #[test]

@@ -608,8 +608,88 @@
             "expectation": {
                 "execution": {
                     "exit_code": 125,
-                    "stdout": null,
-                    "stderr": null
+                    "stdout": "",
+                    "stderr": "nice: unrecognized option '---'\nTry 'nice --help' for more information.\n"
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "GNU getopt对非法短选项-z输出invalid option诊断及简短帮助；不能输出clap的unexpected argument文本。",
+            "args": [
+                "-z"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: invalid option -- 'z'\nTry 'nice --help' for more information.\n"
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "GNU getopt对未知长选项--unknown输出unrecognized option诊断及简短帮助。",
+            "args": [
+                "--unknown"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: unrecognized option '--unknown'\nTry 'nice --help' for more information.\n"
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "GNU getopt要求--adjustment带值；唯一缩写--a缺参时也必须使用完整选项名报告requires an argument。",
+            "args": [
+                "--a"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: option '--adjustment' requires an argument\nTry 'nice --help' for more information.\n"
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "GNU getopt将带等号但无长选项名的--=value识别为歧义项，并按声明顺序列出adjustment、help和version候选。",
+            "args": [
+                "--=value"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: option '--=value' is ambiguous; possibilities: '--adjustment' '--help' '--version'\nTry 'nice --help' for more information.\n"
                 }
             }
         },

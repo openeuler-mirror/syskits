@@ -15,7 +15,9 @@ extern crate rust_i18n;
 use libc::{c_char, c_int, execvp, nice as libc_nice};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
+use std::borrow::Cow;
 use std::ffi::{CString, OsStr, OsString};
+use std::fmt::{Display, Formatter};
 use std::io::{Error, Write};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::ptr;
@@ -241,6 +243,162 @@ fn standardize_nice_args(mut args: impl ctcore::Args) -> impl ctcore::Args {
     vec.into_iter() // 返回标准化后的参数迭代器
 }
 
+const NICE_LONG_OPTIONS: &[&str] = &["adjustment", "help", "version"];
+
+enum NiceLongOptionMatch {
+    None,
+    Recognized(&'static str),
+    Ambiguous(Vec<&'static str>),
+}
+
+enum NiceOptionAction {
+    Continue,
+    ConsumeNext,
+    Stop,
+}
+
+fn match_nice_long_option(name: &[u8]) -> NiceLongOptionMatch {
+    if let Some(option) = NICE_LONG_OPTIONS
+        .iter()
+        .copied()
+        .find(|option| option.as_bytes() == name)
+    {
+        return NiceLongOptionMatch::Recognized(option);
+    }
+
+    let matches = NICE_LONG_OPTIONS
+        .iter()
+        .copied()
+        .filter(|option| option.as_bytes().starts_with(name))
+        .collect::<Vec<_>>();
+    match matches.as_slice() {
+        [] => NiceLongOptionMatch::None,
+        [option] => NiceLongOptionMatch::Recognized(option),
+        _ => NiceLongOptionMatch::Ambiguous(matches),
+    }
+}
+
+fn nice_usage_error(message: Vec<u8>) -> Box<dyn ctcore::ct_error::CTError> {
+    Box::new(NiceUsageError { message })
+}
+
+fn validate_nice_long_option(argument: &[u8], has_next: bool) -> CTResult<NiceOptionAction> {
+    let long = &argument[2..];
+    let separator = long.iter().position(|byte| *byte == b'=');
+    let name = &long[..separator.unwrap_or(long.len())];
+
+    match match_nice_long_option(name) {
+        NiceLongOptionMatch::None => {
+            let mut message = b"unrecognized option '".to_vec();
+            message.extend_from_slice(argument);
+            message.push(b'\'');
+            Err(nice_usage_error(message))
+        }
+        NiceLongOptionMatch::Ambiguous(options) => {
+            let mut message = b"option '".to_vec();
+            message.extend_from_slice(argument);
+            message.extend_from_slice(b"' is ambiguous; possibilities:");
+            for option in options {
+                message.extend_from_slice(b" '--");
+                message.extend_from_slice(option.as_bytes());
+                message.push(b'\'');
+            }
+            Err(nice_usage_error(message))
+        }
+        NiceLongOptionMatch::Recognized("adjustment") if separator.is_none() && !has_next => Err(
+            nice_usage_error(b"option '--adjustment' requires an argument".to_vec()),
+        ),
+        NiceLongOptionMatch::Recognized("adjustment") if separator.is_none() => {
+            Ok(NiceOptionAction::ConsumeNext)
+        }
+        NiceLongOptionMatch::Recognized("adjustment") => Ok(NiceOptionAction::Continue),
+        NiceLongOptionMatch::Recognized(canonical) if separator.is_some() => Err(nice_usage_error(
+            format!("option '--{canonical}' doesn't allow an argument").into_bytes(),
+        )),
+        NiceLongOptionMatch::Recognized("help" | "version") => Ok(NiceOptionAction::Stop),
+        NiceLongOptionMatch::Recognized(_) => unreachable!("all nice long options are handled"),
+    }
+}
+
+fn validate_nice_short_option(argument: &[u8], has_next: bool) -> CTResult<NiceOptionAction> {
+    let option = argument[1];
+    if option != b'n' {
+        let mut message = b"invalid option -- '".to_vec();
+        message.push(option);
+        message.push(b'\'');
+        return Err(nice_usage_error(message));
+    }
+
+    if argument.len() == 2 {
+        if !has_next {
+            return Err(nice_usage_error(
+                b"option requires an argument -- 'n'".to_vec(),
+            ));
+        }
+        return Ok(NiceOptionAction::ConsumeNext);
+    }
+
+    Ok(NiceOptionAction::Continue)
+}
+
+fn prepare_nice_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
+    let args = args.collect::<Vec<_>>();
+    let mut index = 1;
+
+    while index < args.len() {
+        let argument = args[index].as_os_str();
+        let bytes = argument.as_bytes();
+
+        if legacy_adjustment(argument).is_some() {
+            index += 1;
+            continue;
+        }
+        if bytes == b"--" || bytes.len() <= 1 || bytes[0] != b'-' {
+            break;
+        }
+
+        let action = if bytes.starts_with(b"--") {
+            validate_nice_long_option(bytes, index + 1 < args.len())?
+        } else {
+            validate_nice_short_option(bytes, index + 1 < args.len())?
+        };
+        match action {
+            NiceOptionAction::Continue => index += 1,
+            NiceOptionAction::ConsumeNext => index += 2,
+            NiceOptionAction::Stop => break,
+        }
+    }
+
+    Ok(args)
+}
+
+#[derive(Debug)]
+struct NiceUsageError {
+    message: Vec<u8>,
+}
+
+impl Display for NiceUsageError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl std::error::Error for NiceUsageError {}
+
+impl ctcore::ct_error::CTError for NiceUsageError {
+    fn code(&self) -> i32 {
+        125
+    }
+
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
 /**
  * 主要功能：根据提供的参数调整当前进程的优先级，并执行指定的命令。
  *
@@ -257,8 +415,8 @@ fn standardize_nice_args(mut args: impl ctcore::Args) -> impl ctcore::Args {
 pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    // 标准化命令行参数
-    let args = standardize_nice_args(args);
+    // Match GNU getopt_long diagnostics before clap parses normalized arguments.
+    let args = standardize_nice_args(prepare_nice_args(args)?.into_iter());
 
     // 使用 clap 库解析命令行参数
     let args_match = ct_app().try_get_matches_from(args).with_exit_code(125)?;
@@ -426,6 +584,69 @@ mod tests {
             -39
         );
         assert!(parse_adjustment(OsStr::new("1 ")).is_err());
+    }
+
+    #[test]
+    fn test_prepare_nice_args_uses_gnu_getopt_diagnostics() {
+        let cases = [
+            (vec!["nice", "-z"], b"invalid option -- 'z'".as_slice()),
+            (
+                vec!["nice", "--unknown"],
+                b"unrecognized option '--unknown'".as_slice(),
+            ),
+            (vec!["nice", "---"], b"unrecognized option '---'".as_slice()),
+            (
+                vec!["nice", "-n"],
+                b"option requires an argument -- 'n'".as_slice(),
+            ),
+            (
+                vec!["nice", "--adjustment"],
+                b"option '--adjustment' requires an argument".as_slice(),
+            ),
+            (
+                vec!["nice", "--a"],
+                b"option '--adjustment' requires an argument".as_slice(),
+            ),
+            (
+                vec!["nice", "--help=value"],
+                b"option '--help' doesn't allow an argument".as_slice(),
+            ),
+            (
+                vec!["nice", "--=value"],
+                b"option '--=value' is ambiguous; possibilities: '--adjustment' '--help' '--version'"
+                    .as_slice(),
+            ),
+        ];
+
+        for (args, expected) in cases {
+            let error = prepare_nice_args(args.into_iter().map(OsString::from)).unwrap_err();
+            assert_eq!(error.code(), 125);
+            assert_eq!(error.diagnostic_bytes().as_ref(), expected);
+            assert!(error.usage());
+        }
+    }
+
+    #[test]
+    fn test_prepare_nice_args_stops_at_command_and_terminal_options() {
+        let command_args = [
+            OsString::from("nice"),
+            OsString::from("command"),
+            OsString::from("--unknown"),
+        ];
+        assert_eq!(
+            prepare_nice_args(command_args.clone().into_iter()).unwrap(),
+            command_args
+        );
+
+        let help_args = [
+            OsString::from("nice"),
+            OsString::from("--help"),
+            OsString::from("--unknown"),
+        ];
+        assert_eq!(
+            prepare_nice_args(help_args.clone().into_iter()).unwrap(),
+            help_args
+        );
     }
 
     #[test]

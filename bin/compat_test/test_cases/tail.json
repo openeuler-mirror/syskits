@@ -594,6 +594,48 @@
       },
       "cleanup_commands": [],
       "tags": ["linux", "follow", "stdin", "closed-fd"]
+    },
+    {
+      "command": "tail",
+      "description": "Linux下--follow=name跟随初始符号链接tail-link.txt，目标文件初始字节为696e697469616c0a并在延后写入61646465640a；GNU退回轮询后预期stdout完整字节=61646465640a、stderr为空。",
+      "setup_commands": [
+        "printf 'initial\\n' > tail-link-target.txt; ln -s tail-link-target.txt tail-link.txt; (sleep .3; printf 'added\\n' >> tail-link-target.txt) >/dev/null 2>&1 &"
+      ],
+      "args": ["--follow=name", "--sleep-interval=.1", "-n", "0", "tail-link.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "added\n",
+          "stderr": ""
+        },
+        "ignore_fields": {
+          "ignore_exit_code": true
+        }
+      },
+      "timeout": 2,
+      "cleanup_commands": ["rm -f tail-link.txt tail-link-target.txt"],
+      "tags": ["linux", "follow", "name", "symlink", "polling"]
+    },
+    {
+      "command": "tail",
+      "description": "Linux下--follow=name运行中将tail-link-switch.txt原子替换为指向目标的符号链接；目标初始字节=7461726765740a，随后追加=61646465640a，预期stdout完整字节=7461726765740a61646465640a，stderr为替换诊断。",
+      "setup_commands": [
+        "printf 'old\\n' > tail-link-switch.txt; printf 'target\\n' > tail-link-switch-target.txt; (sleep .3; ln -s tail-link-switch-target.txt tail-link-switch-new; mv -T tail-link-switch-new tail-link-switch.txt; sleep .2; printf 'added\\n' >> tail-link-switch-target.txt) >/dev/null 2>&1 &"
+      ],
+      "args": ["--follow=name", "--sleep-interval=.1", "-n", "0", "tail-link-switch.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "target\nadded\n",
+          "stderr": "tail: 'tail-link-switch.txt' has been replaced;  following new file\n"
+        },
+        "ignore_fields": {
+          "ignore_exit_code": true
+        }
+      },
+      "timeout": 2,
+      "cleanup_commands": ["rm -f tail-link-switch.txt tail-link-switch-new tail-link-switch-target.txt"],
+      "tags": ["linux", "follow", "name", "symlink", "polling", "replace"]
     }
   ]
 }

@@ -201,9 +201,13 @@ fn standardize_nice_args(mut args: impl ctcore::Args) -> impl ctcore::Args {
             is_saw_command = true;
         } else if is_saw_n {
             // 如果已看到"-n"，则将当前参数与"-n"合并
-            let mut new_arg: OsString = "-n".into();
-            new_arg.push(str);
-            vec.push(new_arg);
+            if str.is_empty() {
+                vec.push("--adjustment=".into());
+            } else {
+                let mut new_arg: OsString = "-n".into();
+                new_arg.push(str);
+                vec.push(new_arg);
+            }
             is_saw_n = false; // 重置"-n"标记
         } else if str.to_str() == Some("-n")
             || str
@@ -479,6 +483,18 @@ mod tests {
             vec![
                 OsString::from("nice"),
                 OsString::from("-n15"),
+                OsString::from("command"),
+            ]
+        );
+
+        let args = vec!["nice", "-n", "", "command"];
+        let result: Vec<OsString> =
+            standardize_nice_args(args.into_iter().map(OsString::from)).collect();
+        assert_eq!(
+            result,
+            vec![
+                OsString::from("nice"),
+                OsString::from("--adjustment="),
                 OsString::from("command"),
             ]
         );

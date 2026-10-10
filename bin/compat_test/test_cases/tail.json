@@ -466,6 +466,46 @@
     },
     {
       "command": "tail",
+      "description": "Linux下--pid 的GNU无符号十进制解析必须接受前导ASCII空格；参数=--pid= 1 /dev/null，预期RC=0、stdout为空、stderr仅包含PID ignored警告。",
+      "args": ["--pid= 1", "/dev/null"],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": "tail: warning: PID ignored; --pid=PID is useful only when following\n"
+        }
+      },
+      "cleanup_commands": [],
+      "tags": ["linux", "options", "pid", "numeric"]
+    },
+    {
+      "command": "tail",
+      "description": "Linux下--pid=1K必须采用GNU非法PID诊断，不能泄漏Rust整数解析错误；预期RC=1、stdout为空、stderr为tail: invalid PID: '1K'。",
+      "args": ["--pid=1K"],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tail: invalid PID: '1K'\n"
+        }
+      },
+      "cleanup_commands": [],
+      "tags": ["linux", "options", "diagnostics", "pid"]
+    },
+    {
+      "command": "tail",
       "description": "Advanced: --retry without -f (should warn)",
       "args": ["--retry", "/etc/hosts"],
       "expectation": {

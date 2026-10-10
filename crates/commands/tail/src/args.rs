@@ -333,35 +333,7 @@ impl TailOptions {
         }
 
         if let Some(pid_str) = matches.get_one::<String>(tail_flags::TAIL_PID) {
-            #[cfg(unix)]
-            if pid_str.starts_with('-') {
-                return Err(CtSimpleError::new(
-                    1,
-                    format!("invalid PID: {}", pid_str.quote()),
-                ));
-            }
-
-            match pid_str.parse() {
-                Ok(pid) => {
-                    // NOTE: on unix platform::Pid is i32, on windows platform::Pid is u32
-                    #[cfg(unix)]
-                    if pid < 0 {
-                        // NOTE: tail only accepts an unsigned pid
-                        return Err(CtSimpleError::new(
-                            1,
-                            format!("invalid PID: {}", pid_str.quote()),
-                        ));
-                    }
-
-                    settings.pid = pid;
-                }
-                Err(e) => {
-                    return Err(CtSimpleError::new(
-                        1,
-                        format!("invalid PID: {}: {}", pid_str.quote(), e),
-                    ));
-                }
-            }
+            settings.pid = tail_parse_pid(pid_str)?;
         }
 
         let quiet = matches.get_flag(tail_flags::verbosity::TAIL_QUIET);
@@ -516,6 +488,42 @@ fn tail_parse_num(src: &str) -> Result<TailSignum, ParseSizeError> {
         },
         Err(err) => Err(err),
     }
+}
+
+fn tail_parse_pid(src: &str) -> CTResult<platform::Pid> {
+    if src.starts_with('-') {
+        return Err(invalid_pid_error(src, false));
+    }
+
+    // GNU's xdectoumax skips leading C whitespace but rejects any trailing
+    // whitespace or non-decimal characters.
+    let digits = src.trim_start_matches(|c: char| c.is_ascii_whitespace());
+    let numeric_digits = digits.strip_prefix('+').unwrap_or(digits);
+    let numeric_only =
+        !numeric_digits.is_empty() && numeric_digits.as_bytes().iter().all(u8::is_ascii_digit);
+
+    let pid = match digits.parse::<u64>() {
+        Ok(pid) => pid,
+        Err(_) => return Err(invalid_pid_error(src, numeric_only)),
+    };
+
+    if pid > platform::Pid::MAX as u64 {
+        return Err(invalid_pid_error(src, true));
+    }
+
+    Ok(pid as platform::Pid)
+}
+
+fn invalid_pid_error(src: &str, out_of_range: bool) -> Box<dyn ctcore::ct_error::CTError> {
+    let range_suffix = out_of_range.then_some(": Value too large for defined data type");
+    CtSimpleError::new(
+        1,
+        format!(
+            "invalid PID: {}{}",
+            src.quote(),
+            range_suffix.unwrap_or_default()
+        ),
+    )
 }
 
 /// 解析命令行参数并返回 TailOptions
@@ -828,6 +836,33 @@ mod tests {
             let result = tail_parse_args(create_args(&["--pid=-0"]));
 
             assert_eq!(result.unwrap_err().to_string(), "invalid PID: '-0'");
+        }
+
+        #[test]
+        fn test_pid_accepts_leading_ascii_whitespace() {
+            let options = tail_parse_args(create_args(&["--pid= 1"]))
+                .expect("GNU tail accepts leading ASCII whitespace before a PID");
+
+            assert_eq!(options.pid, 1);
+        }
+
+        #[test]
+        fn test_invalid_pid_does_not_expose_rust_parse_error() {
+            let error = tail_parse_args(create_args(&["--pid=1K"]))
+                .expect_err("non-decimal PID must be rejected");
+
+            assert_eq!(error.to_string(), "invalid PID: '1K'");
+        }
+
+        #[test]
+        fn test_out_of_range_pid_reports_gnu_range_error() {
+            let error = tail_parse_args(create_args(&["--pid=2147483648"]))
+                .expect_err("PID beyond Linux pid_t maximum must be rejected");
+
+            assert_eq!(
+                error.to_string(),
+                "invalid PID: '2147483648': Value too large for defined data type"
+            );
         }
 
         #[test]

@@ -615,6 +615,31 @@
         },
         {
             "command": "nice",
+            "description": "GNU getopt_long将紧随-n的--作为调整值而不是选项终止符；调整值解析必须报告invalid adjustment '--'并以125退出。",
+            "args": [
+                "-n",
+                "--"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: invalid adjustment '--'\n"
+                }
+            },
+            "tags": [
+                "adjustment",
+                "option-terminator"
+            ]
+        },
+        {
+            "command": "nice",
             "description": "nice: invalid adjustment -n 1a (coreutils nice-fail.sh)",
             "args": [
                 "-n",

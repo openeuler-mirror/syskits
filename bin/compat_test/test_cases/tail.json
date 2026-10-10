@@ -472,6 +472,27 @@
         }
       },
       "tags": ["linux", "options", "max-unchanged-stats", "uintmax"]
+    },
+    {
+      "command": "tail",
+      "description": "Linux下--disable-inotify轮询跟随-n 0时必须跳过启动前完整输入existing\\n，只输出延后追加的added\\n；初始文件完整字节=6578697374696e670a，追加字节=61646465640a，预期stdout完整字节=61646465640a、stderr完整字节=空。",
+      "setup_commands": [
+        "printf 'existing\\n' > tail-zero-follow.txt; (sleep .3; printf 'added\\n' >> tail-zero-follow.txt) >/dev/null 2>&1 &"
+      ],
+      "args": ["---disable-inotify", "--sleep-interval=.1", "-n", "0", "-f", "tail-zero-follow.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "added\n",
+          "stderr": ""
+        },
+        "ignore_fields": {
+          "ignore_exit_code": true
+        }
+      },
+      "timeout": 2,
+      "cleanup_commands": ["rm -f tail-zero-follow.txt"],
+      "tags": ["linux", "follow", "polling", "zero-count"]
     }
   ]
 }

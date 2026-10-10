@@ -42,6 +42,19 @@ fn is_prefix_of(prefix: &str, target: &str, min_match: usize) -> bool {
     &target[0..prefix.len()] == prefix
 }
 
+fn legacy_adjustment(argument: &str) -> Option<&str> {
+    let bytes = argument.as_bytes();
+    if bytes.first() != Some(&b'-') {
+        return None;
+    }
+
+    let number_index = 1 + usize::from(matches!(bytes.get(1), Some(b'-' | b'+')));
+    bytes
+        .get(number_index)
+        .filter(|byte| byte.is_ascii_digit())
+        .map(|_| &argument[1..])
+}
+
 const NZERO: i32 = 20;
 const MIN_ADJUSTMENT: i64 = 1 - 2 * NZERO as i64;
 const MAX_ADJUSTMENT: i64 = 2 * NZERO as i64 - 1;
@@ -190,23 +203,14 @@ fn standardize_nice_args(mut args: impl ctcore::Args) -> impl ctcore::Args {
             // 处理"-n"和"--adjustment"参数
             is_saw_n = true;
         } else if let Ok(s) = str.clone().into_string() {
-            // 尝试将参数解析为可能的数值调整
-            if let Some(stripped) = s.strip_prefix('-') {
-                match stripped.parse::<i64>() {
-                    Ok(ix) => {
-                        // 如果是数值，添加"-n"前缀并添加到结果中
-                        let mut new_arg: OsString = "-n".into();
-                        new_arg.push(ix.to_string());
-                        vec.push(new_arg);
-                    }
-                    Err(_) => {
-                        // 如果不能解析为数值，将其作为普通参数添加
-                        vec.push(s.into());
-                    }
-                }
+            if let Some(adjustment) = legacy_adjustment(&s) {
+                // GNU在转换数值前按首数字识别传统-N、--N和-+N形式。
+                let mut new_arg: OsString = "-n".into();
+                new_arg.push(adjustment);
+                vec.push(new_arg);
             } else {
-                // 如果参数不以连字符开头，视为命令并添加
-                is_saw_command = true;
+                // 首个非选项参数开始命令及其参数；未知选项仍交由clap诊断。
+                is_saw_command |= !s.starts_with('-');
                 vec.push(s.into());
             }
         } else {
@@ -492,6 +496,32 @@ mod tests {
                 OsString::from("nice"),
                 OsString::from("--"),
                 OsString::from("-1"),
+                OsString::from("command"),
+            ]
+        );
+
+        // GNU在转换数值前按首数字识别传统调整值形式，因此超出i64或
+        // 带有无效后缀的值仍必须作为调整值进入后续诊断。
+        let args = vec!["nice", "-+9223372036854775808", "command"];
+        let result: Vec<OsString> =
+            standardize_nice_args(args.into_iter().map(OsString::from)).collect();
+        assert_eq!(
+            result,
+            vec![
+                OsString::from("nice"),
+                OsString::from("-n+9223372036854775808"),
+                OsString::from("command"),
+            ]
+        );
+
+        let args = vec!["nice", "--1a", "command"];
+        let result: Vec<OsString> =
+            standardize_nice_args(args.into_iter().map(OsString::from)).collect();
+        assert_eq!(
+            result,
+            vec![
+                OsString::from("nice"),
+                OsString::from("-n-1a"),
                 OsString::from("command"),
             ]
         );

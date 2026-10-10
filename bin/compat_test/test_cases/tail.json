@@ -459,6 +459,19 @@
           }
         ]
       }
+    },
+    {
+      "command": "tail",
+      "description": "Linux下--max-unchanged-stats接受超过u32的GNU UINTMAX计数；参数=--max-unchanged-stats=4294967296 /dev/null，预期RC=0、stdout和stderr均为空。",
+      "args": ["--max-unchanged-stats=4294967296", "/dev/null"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "tags": ["linux", "options", "max-unchanged-stats", "uintmax"]
     }
   ]
 }

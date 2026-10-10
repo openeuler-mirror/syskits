@@ -19,6 +19,7 @@ use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code, strip_errno};
 use ctcore::ct_gnu_regex::{GnuRegex, GnuRegexCompileOptions, GnuRegexError};
 use ctcore::ct_posix::GnuGetoptCommandExt;
+use ctcore::ct_quoting_style::gnu_quote_shell;
 use ctcore::{Args, ct_show_error};
 use std::cell::RefCell;
 use std::ffi::OsString;
@@ -413,6 +414,10 @@ fn nl_write_error(error: std::io::Error) -> Box<dyn ctcore::ct_error::CTError> {
     CtSimpleError::new(1, format!("write error: {}", strip_errno(&error)))
 }
 
+fn nl_quote_path(path: &Path) -> String {
+    gnu_quote_shell(path.as_os_str(), false)
+}
+
 /// 行号格式枚举
 #[derive(Default, Clone, PartialEq, Eq, Debug)]
 enum NlNumberFormat {
@@ -713,7 +718,7 @@ where
         } else {
             let path = Path::new(file);
             if path.is_dir() {
-                ct_show_error!("{}: Is a directory", path.display());
+                ct_show_error!("{}: Is a directory", nl_quote_path(path));
                 had_errors = true;
             } else {
                 match File::open(path) {
@@ -729,9 +734,9 @@ where
                     }
                     Err(e) => {
                         if e.kind() == std::io::ErrorKind::NotFound {
-                            ct_show_error!("{}: No such file or directory", path.display());
+                            ct_show_error!("{}: No such file or directory", nl_quote_path(path));
                         } else {
-                            ct_show_error!("{}: {}", path.display(), e);
+                            ct_show_error!("{}: {}", nl_quote_path(path), e);
                         }
                         had_errors = true;
                     }
@@ -771,7 +776,7 @@ pub fn nl_native_semantic(args: impl Args) -> CTResult<NlSemantic> {
         } else {
             let path = Path::new(file);
             if path.is_dir() {
-                stderr_text.push_str(&format!("nl: {}: Is a directory\n", path.display()));
+                stderr_text.push_str(&format!("nl: {}: Is a directory\n", nl_quote_path(path)));
                 had_errors = true;
             } else {
                 match File::open(path) {
@@ -790,10 +795,10 @@ pub fn nl_native_semantic(args: impl Args) -> CTResult<NlSemantic> {
                         if err.kind() == std::io::ErrorKind::NotFound {
                             stderr_text.push_str(&format!(
                                 "nl: {}: No such file or directory\n",
-                                path.display()
+                                nl_quote_path(path)
                             ));
                         } else {
-                            stderr_text.push_str(&format!("nl: {}: {err}\n", path.display()));
+                            stderr_text.push_str(&format!("nl: {}: {err}\n", nl_quote_path(path)));
                         }
                         had_errors = true;
                     }
@@ -1244,6 +1249,24 @@ mod tests {
 
         result.unwrap();
         assert_eq!(output, b"     1\t\xc3\xa9\n     2\tA\n       1\n");
+    }
+
+    #[test]
+    fn test_native_semantic_quotes_special_missing_file_name() {
+        let semantic = nl_native_semantic(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("missing[0-9]+"),
+            ]
+            .into_iter(),
+        )
+        .expect("missing file should be reported as a semantic error");
+
+        assert_eq!(semantic.exit_code, 1);
+        assert_eq!(
+            semantic.stderr_text,
+            "nl: 'missing[0-9]+': No such file or directory\n"
+        );
     }
 
     /// 测试NlFlags相关功能

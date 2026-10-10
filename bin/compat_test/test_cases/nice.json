@@ -1039,6 +1039,90 @@
                 "raw-bytes",
                 "quoting"
             ]
+        },
+        {
+            "command": "nice",
+            "description": "LANGUAGE=C必须覆盖zh_CN.UTF-8消息翻译，但LC_CTYPE仍决定UTF-8弯引号；LC_ALL=zh_CN.UTF-8 LANGUAGE=C下nice -n bad /usr/bin/true应以125退出、stdout为空、stderr为英文invalid adjustment ‘bad’。",
+            "args": [
+                "-n",
+                "bad",
+                "/usr/bin/true"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zh_CN.UTF-8",
+                    "LANG": "zh_CN.UTF-8",
+                    "LANGUAGE": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: invalid adjustment ‘bad’\n"
+                }
+            },
+            "tags": [
+                "locale",
+                "language",
+                "diagnostics"
+            ]
+        },
+        {
+            "command": "nice",
+            "description": "LANGUAGE指定不存在的翻译目录时GNU回退原始英文而非LC_ALL中文翻译；LC_ALL=zh_CN.UTF-8 LANGUAGE=missing-locale下nice -n bad /usr/bin/true应以125退出、stdout为空、stderr为英文invalid adjustment ‘bad’。",
+            "args": [
+                "-n",
+                "bad",
+                "/usr/bin/true"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zh_CN.UTF-8",
+                    "LANG": "zh_CN.UTF-8",
+                    "LANGUAGE": "missing-locale"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: invalid adjustment ‘bad’\n"
+                }
+            },
+            "tags": [
+                "locale",
+                "language",
+                "fallback"
+            ]
+        },
+        {
+            "command": "nice",
+            "description": "LANGUAGE为仅含分隔符的非空候选链时GNU使用英文原文；LC_ALL=zh_CN.UTF-8 LANGUAGE=:下nice -n bad /usr/bin/true应以125退出、stdout为空、stderr为英文invalid adjustment ‘bad’。",
+            "args": [
+                "-n",
+                "bad",
+                "/usr/bin/true"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zh_CN.UTF-8",
+                    "LANG": "zh_CN.UTF-8",
+                    "LANGUAGE": ":"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: invalid adjustment ‘bad’\n"
+                }
+            },
+            "tags": [
+                "locale",
+                "language",
+                "fallback"
+            ]
         }
     ]
 }

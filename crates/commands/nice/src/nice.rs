@@ -28,7 +28,6 @@ use ctcore::{
     ct_error::{CTResult, UClapError, set_ct_exit_code, strip_errno},
     ct_quoting_style::gnu_quote_locale,
 };
-use sys_locale::get_locale;
 
 pub mod opt_flags {
     pub static ADJUSTMENT: &str = "adjustment";
@@ -144,7 +143,60 @@ fn set_niceness_error_message_for_locale(error: &Error, simplified_chinese: bool
 }
 
 fn nice_uses_simplified_chinese() -> bool {
-    rust_i18n::locale() == "zh-CN"
+    let message_locale = ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .into_iter()
+        .find_map(|name| std::env::var_os(name).filter(|value| !value.is_empty()))
+        .unwrap_or_else(|| OsString::from("C"));
+    nice_uses_simplified_chinese_for_locale(
+        message_locale.as_os_str(),
+        std::env::var_os("LANGUAGE")
+            .filter(|language| !language.is_empty())
+            .as_deref(),
+    )
+}
+
+fn nice_uses_simplified_chinese_for_locale(
+    message_locale: &OsStr,
+    language: Option<&OsStr>,
+) -> bool {
+    if nice_c_message_locale(message_locale) {
+        return false;
+    }
+
+    if let Some(language) = language {
+        for candidate in language
+            .to_string_lossy()
+            .split(':')
+            .filter(|candidate| !candidate.is_empty())
+        {
+            let candidate = OsStr::new(candidate);
+            if nice_c_message_locale(candidate) {
+                return false;
+            }
+            if nice_simplified_chinese_locale(candidate) {
+                return true;
+            }
+        }
+
+        // gettext treats a nonempty LANGUAGE list as the complete message-locale
+        // search path.  When none of its entries has a translation, it uses the
+        // untranslated English message instead of falling back to LC_MESSAGES.
+        return false;
+    }
+
+    nice_simplified_chinese_locale(message_locale)
+}
+
+fn nice_c_message_locale(locale: &OsStr) -> bool {
+    matches!(
+        locale.to_string_lossy().to_ascii_uppercase().as_str(),
+        "C" | "POSIX"
+    )
+}
+
+fn nice_simplified_chinese_locale(locale: &OsStr) -> bool {
+    let locale = locale.to_string_lossy();
+    locale == "zh_CN" || locale.starts_with("zh_CN.") || locale.starts_with("zh_CN@")
 }
 
 fn nice_missing_command_message(simplified_chinese: bool) -> String {
@@ -436,11 +488,13 @@ fn nice_normalize_stdout_write_error(error: Error, stdout_was_closed: bool) -> E
 
 fn nice_write_error(error: Error, stdout_was_closed: bool) -> Box<dyn ctcore::ct_error::CTError> {
     let error = nice_normalize_stdout_write_error(error, stdout_was_closed);
-    nice_diagnostic_error(
-        125,
-        format!("{}: {}", t!("nice.errors.write_error"), strip_errno(&error)),
-        None,
-    )
+    let simplified_chinese = nice_uses_simplified_chinese();
+    let write_error = if simplified_chinese {
+        t!("nice.errors.write_error", locale = "zh-CN")
+    } else {
+        t!("nice.errors.write_error", locale = "en-US")
+    };
+    nice_diagnostic_error(125, format!("{write_error}: {}", strip_errno(&error)), None)
 }
 
 fn write_niceness(
@@ -769,8 +823,11 @@ impl ctcore::ct_error::CTError for NiceUsageError {
  * 会返回相应的错误代码和错误信息。
  */
 pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    rust_i18n::set_locale(if nice_uses_simplified_chinese() {
+        "zh-CN"
+    } else {
+        "en-US"
+    });
     // Match GNU getopt_long diagnostics before clap parses normalized arguments.
     let args = standardize_nice_args(prepare_nice_args(args)?.into_iter());
 
@@ -1068,6 +1125,34 @@ mod tests {
             nice_quote_operand_bytes(OsStr::new("a\"b\\c"), true, Some("UTF-8")),
             b"\"a\\\"b\\\\c\""
         );
+    }
+
+    #[test]
+    fn test_message_locale_honors_language_override() {
+        assert!(!nice_uses_simplified_chinese_for_locale(
+            OsStr::new("zh_CN.UTF-8"),
+            Some(OsStr::new("C"))
+        ));
+        assert!(nice_uses_simplified_chinese_for_locale(
+            OsStr::new("zh_CN.UTF-8"),
+            Some(OsStr::new("zh_CN:C"))
+        ));
+        assert!(nice_uses_simplified_chinese_for_locale(
+            OsStr::new("zh_CN.UTF-8"),
+            Some(OsStr::new("missing-locale:zh_CN"))
+        ));
+        assert!(!nice_uses_simplified_chinese_for_locale(
+            OsStr::new("C"),
+            Some(OsStr::new("zh_CN"))
+        ));
+        assert!(!nice_uses_simplified_chinese_for_locale(
+            OsStr::new("zh_CN.UTF-8"),
+            Some(OsStr::new("missing-locale"))
+        ));
+        assert!(!nice_uses_simplified_chinese_for_locale(
+            OsStr::new("zh_CN.UTF-8"),
+            Some(OsStr::new(":"))
+        ));
     }
 
     #[cfg(target_os = "linux")]

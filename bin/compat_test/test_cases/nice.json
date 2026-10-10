@@ -193,6 +193,38 @@
         },
         {
             "command": "nice",
+            "description": "Linux下清除继承环境后，LC_MESSAGES指定不存在locale而LC_CTYPE为C.utf8时，GNU setlocale(LC_ALL, \"\")失败并保留C locale；nice -n bad /usr/bin/true必须以125退出，stdout为空，stderr使用ASCII单引号invalid adjustment 'bad'，不能按LC_CTYPE输出UTF-8弯引号。",
+            "args": [
+                "-n",
+                "bad",
+                "/usr/bin/true"
+            ],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "PATH": "/usr/bin:/bin",
+                    "LC_MESSAGES": "zz_ZZ.UTF-8",
+                    "LC_CTYPE": "C.utf8",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: invalid adjustment 'bad'\n"
+                }
+            },
+            "tags": [
+                "linux",
+                "locale",
+                "fallback",
+                "invalid-locale",
+                "quote"
+            ]
+        },
+        {
+            "command": "nice",
             "description": "空调整值用例：LC_ALL=C下执行nice -n 空字符串 /usr/bin/true；GNU保留-n的空值并报告invalid adjustment ''，预期RC=125、stdout为空、stderr为nice: invalid adjustment ''。",
             "args": [
                 "-n",

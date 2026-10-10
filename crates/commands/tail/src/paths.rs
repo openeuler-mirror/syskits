@@ -171,9 +171,9 @@ impl TailMetadataExt for Metadata {
         }
     }
 
-    /// Return true if the file was modified and is now shorter
+    /// Return true if the file is now shorter.
     fn got_truncated(&self, other: &Metadata) -> CTResult<bool> {
-        Ok(other.len() < self.len() && other.modified()? != self.modified()?)
+        Ok(other.len() < self.len())
     }
 
     fn file_id_eq(&self, _other: &Metadata) -> bool {
@@ -236,4 +236,29 @@ pub fn tail_stdin_is_bad_fd() -> bool {
     }
     //#[cfg(not(unix))]
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TailMetadataExt;
+    use std::fs::{self, File, FileTimes};
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn detects_truncation_when_mtime_is_unchanged() {
+        let file = NamedTempFile::new().unwrap();
+        fs::write(file.path(), b"before\n").unwrap();
+        let before = fs::metadata(file.path()).unwrap();
+
+        fs::write(file.path(), b"x\n").unwrap();
+        File::open(file.path())
+            .unwrap()
+            .set_times(FileTimes::new().set_modified(before.modified().unwrap()))
+            .unwrap();
+        let after = fs::metadata(file.path()).unwrap();
+
+        assert!(before.len() > after.len());
+        assert_eq!(before.modified().unwrap(), after.modified().unwrap());
+        assert!(before.got_truncated(&after).unwrap());
+    }
 }

@@ -493,6 +493,27 @@
       "timeout": 2,
       "cleanup_commands": ["rm -f tail-zero-follow.txt"],
       "tags": ["linux", "follow", "polling", "zero-count"]
+    },
+    {
+      "command": "tail",
+      "description": "Linux下--disable-inotify轮询跟随检测到文件长度从696e697469616c0a缩短为61667465720a且mtime恢复为旧值时，必须按GNU规则报告截断并从起点输出after\\n；预期stdout完整字节=61667465720a，stderr为tail: tail-truncate-mtime.txt: file truncated\\n。",
+      "setup_commands": [
+        "printf 'initial\\n' > tail-truncate-mtime.txt; old=$(stat -c %y tail-truncate-mtime.txt); (sleep .3; : > tail-truncate-mtime.txt; touch -d \"$old\" tail-truncate-mtime.txt; printf 'after\\n' > tail-truncate-mtime.txt; touch -d \"$old\" tail-truncate-mtime.txt) >/dev/null 2>&1 &"
+      ],
+      "args": ["---disable-inotify", "--sleep-interval=.1", "-n", "0", "-f", "tail-truncate-mtime.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "after\n",
+          "stderr": "tail: tail-truncate-mtime.txt: file truncated\n"
+        },
+        "ignore_fields": {
+          "ignore_exit_code": true
+        }
+      },
+      "timeout": 2,
+      "cleanup_commands": ["rm -f tail-truncate-mtime.txt"],
+      "tags": ["linux", "follow", "polling", "truncation", "mtime"]
     }
   ]
 }

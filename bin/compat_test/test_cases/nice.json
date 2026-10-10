@@ -1123,6 +1123,45 @@
                 "language",
                 "fallback"
             ]
+        },
+        {
+            "command": "nice",
+            "description": "Linux下提高优先级失败且stderr在启动前关闭时，GNU检测到权限诊断无法写入后以125退出且不执行COMMAND；LC_ALL=C下nice -n -1 /bin/sh -c 'printf invoked > executed'应保持stdout、stderr为空并且不得创建executed。",
+            "args": [
+                "-n",
+                "-1",
+                "/bin/sh",
+                "-c",
+                "printf invoked > executed"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stderr": "closed"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "test ! -e executed",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "tags": [
+                "linux",
+                "niceness",
+                "stderr",
+                "write-error"
+            ]
         }
     ]
 }

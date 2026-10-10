@@ -574,7 +574,7 @@ fn should_try_obsolete_syntax(args: &[OsString], modern_result: &CTResult<TailOp
     if modern_result.is_ok() {
         // 现代语法解析成功，但如果长得像 `+2`，那其实是过时语法
         if arg1.starts_with('+') {
-            return true;
+            return gnu_tail_allows_traditional_plus_syntax();
         }
         return false;
     }
@@ -582,7 +582,7 @@ fn should_try_obsolete_syntax(args: &[OsString], modern_result: &CTResult<TailOp
     // 如果现代语法解析失败
     // 只有当 arg1 真的看起来像过时语法时，我们才尝试。
     if arg1.starts_with('+') {
-        return true;
+        return gnu_tail_allows_traditional_plus_syntax();
     }
     if arg1.starts_with('-') && arg1.len() > 1 {
         let second_char = arg1.chars().nth(1).unwrap_or('\0');
@@ -594,6 +594,22 @@ fn should_try_obsolete_syntax(args: &[OsString], modern_result: &CTResult<TailOp
     }
 
     false
+}
+
+fn gnu_tail_allows_traditional_plus_syntax() -> bool {
+    const GNU_DEFAULT_POSIX2_VERSION: i32 = 200_112;
+
+    let posix2_version = std::env::var("_POSIX2_VERSION")
+        .ok()
+        .and_then(|value| value.trim_start().parse::<i64>().ok())
+        .map(|value| value.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32)
+        .unwrap_or(GNU_DEFAULT_POSIX2_VERSION);
+
+    gnu_tail_allows_traditional_plus_syntax_at(posix2_version)
+}
+
+fn gnu_tail_allows_traditional_plus_syntax_at(posix2_version: i32) -> bool {
+    !(200_112..200_809).contains(&posix2_version)
 }
 
 /// 解析过时语法
@@ -773,6 +789,16 @@ mod tests {
         }
 
         #[test]
+        fn test_plus_number_is_filename_at_default_posix2_version() {
+            let options = tail_parse_args(create_args(&["+1", "input"]))
+                .expect("a plus-prefixed filename is a valid operand");
+
+            assert_eq!(options.inputs.len(), 2);
+            assert_eq!(options.inputs[0].display_name, "+1");
+            assert_eq!(options.inputs[1].display_name, "input");
+        }
+
+        #[test]
         fn test_repeated_sleep_interval_uses_last_value() {
             let options =
                 tail_parse_args(create_args(&["--sleep-interval=1", "--sleep-interval=2"]))
@@ -897,13 +923,14 @@ mod tests {
                 options.mode,
                 TailFilterMode::Lines(TailSignum::Negative(10), b'\n')
             );
+        }
 
-            let args = create_args(&["+10"]);
-            let options = tail_parse_args(args).unwrap();
-            assert_eq!(
-                options.mode,
-                TailFilterMode::Lines(TailSignum::Positive(10), b'\n')
-            );
+        #[test]
+        fn test_traditional_plus_syntax_posix2_versions() {
+            assert!(gnu_tail_allows_traditional_plus_syntax_at(0));
+            assert!(!gnu_tail_allows_traditional_plus_syntax_at(200_112));
+            assert!(!gnu_tail_allows_traditional_plus_syntax_at(200_808));
+            assert!(gnu_tail_allows_traditional_plus_syntax_at(200_809));
         }
 
         #[test]

@@ -23,7 +23,7 @@ use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::{
     Tool,
     ct_display::Quotable,
-    ct_error::{CTResult, CtSimpleError, UClapError, set_ct_exit_code},
+    ct_error::{CTResult, CtSimpleError, UClapError, set_ct_exit_code, strip_errno},
     ct_show_error,
 };
 use sys_locale::get_locale;
@@ -91,6 +91,16 @@ fn perm_related_errno(err: i32) -> bool {
     err == libc::EACCES || err == libc::EPERM
 }
 
+fn set_niceness_error_message(error: &Error) -> String {
+    let errno = error.raw_os_error().unwrap_or_default();
+    let description = if perm_related_errno(errno) {
+        String::from("Permission denied")
+    } else {
+        strip_errno(error)
+    };
+    format!("cannot set niceness: {description}")
+}
+
 fn get_current_niceness() -> Result<c_int, Error> {
     nix::errno::Errno::clear();
     let value = unsafe { libc_nice(0) };
@@ -107,24 +117,15 @@ fn apply_adjustment(adjustment: c_int) -> Result<(), CTResult<()>> {
     let err = Error::last_os_error();
     if value == -1 && err.raw_os_error().unwrap_or(0) != 0 {
         let errno = err.raw_os_error().unwrap_or(0);
+        let message = set_niceness_error_message(&err);
         if perm_related_errno(errno) {
-            if writeln!(
-                std::io::stderr(),
-                "{}: cannot set niceness: {}",
-                ctcore::ct_util_name(),
-                err
-            )
-            .is_err()
-            {
+            if writeln!(std::io::stderr(), "{}: {}", ctcore::ct_util_name(), message).is_err() {
                 set_ct_exit_code(125);
                 return Err(Ok(()));
             }
             return Ok(());
         }
-        return Err(Err(CtSimpleError::new(
-            125,
-            format!("cannot set niceness: {err}"),
-        )));
+        return Err(Err(CtSimpleError::new(125, message)));
     }
     Ok(())
 }
@@ -387,6 +388,15 @@ mod tests {
         assert_eq!(parse_adjustment("9223372036854775808").unwrap(), 39);
         assert_eq!(parse_adjustment("-9223372036854775809").unwrap(), -39);
         assert!(parse_adjustment("1 ").is_err());
+    }
+
+    #[test]
+    fn test_set_niceness_permission_error_matches_gnu_linux_text() {
+        let error = Error::from_raw_os_error(libc::EPERM);
+        assert_eq!(
+            set_niceness_error_message(&error),
+            "cannot set niceness: Permission denied"
+        );
     }
 
     #[test]

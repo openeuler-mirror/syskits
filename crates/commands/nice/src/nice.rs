@@ -195,12 +195,8 @@ fn standardize_nice_args(mut args: impl ctcore::Args) -> impl ctcore::Args {
     for str in args {
         if is_saw_command {
             vec.push(str);
-        } else if str.to_str() == Some("--") {
-            // "--" 结束选项解析，后续均视为命令参数
-            vec.push(str);
-            is_saw_command = true;
         } else if is_saw_n {
-            // 如果已看到"-n"，则将当前参数与"-n"合并
+            // getopt_long treats `--` as the required value of -n.
             if str.is_empty() {
                 vec.push("--adjustment=".into());
             } else {
@@ -209,6 +205,10 @@ fn standardize_nice_args(mut args: impl ctcore::Args) -> impl ctcore::Args {
                 vec.push(new_arg);
             }
             is_saw_n = false; // 重置"-n"标记
+        } else if str.to_str() == Some("--") {
+            // "--" 结束选项解析，后续均视为命令参数
+            vec.push(str);
+            is_saw_command = true;
         } else if str.to_str() == Some("-n")
             || str
                 .to_str()
@@ -504,6 +504,14 @@ mod tests {
         let result: Vec<OsString> =
             standardize_nice_args(args.into_iter().map(OsString::from)).collect();
         assert_eq!(result, vec![OsString::from("nice"), OsString::from("-n"),]);
+
+        // GNU getopt_long treats `--` as the required value of a preceding
+        // -n option, so it must reach the adjustment parser rather than end
+        // option processing.
+        let args = vec!["nice", "-n", "--"];
+        let result: Vec<OsString> =
+            standardize_nice_args(args.into_iter().map(OsString::from)).collect();
+        assert_eq!(result, vec![OsString::from("nice"), OsString::from("-n--")]);
 
         // 测试非数值类型的参数
         let args = vec!["nice", "-invalid", "command"];

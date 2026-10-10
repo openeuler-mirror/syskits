@@ -179,7 +179,7 @@ impl TailMetadataExt for Metadata {
     fn file_id_eq(&self, _other: &Metadata) -> bool {
         #[cfg(unix)]
         {
-            self.ino().eq(&_other.ino())
+            self.dev() == _other.dev() && self.ino() == _other.ino()
         }
         #[cfg(windows)]
         {
@@ -250,6 +250,8 @@ mod tests {
     #[cfg(unix)]
     use super::is_bad_file_descriptor;
     use std::fs::{self, File, FileTimes};
+    #[cfg(target_os = "linux")]
+    use std::os::unix::fs::MetadataExt;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -268,6 +270,17 @@ mod tests {
         assert!(before.len() > after.len());
         assert_eq!(before.modified().unwrap(), after.modified().unwrap());
         assert!(before.got_truncated(&after).unwrap());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn file_identity_includes_device_number() {
+        let proc_metadata = fs::metadata("/proc").unwrap();
+        let sys_metadata = fs::metadata("/sys").unwrap();
+
+        assert_eq!(proc_metadata.ino(), sys_metadata.ino());
+        assert_ne!(proc_metadata.dev(), sys_metadata.dev());
+        assert!(!proc_metadata.file_id_eq(&sys_metadata));
     }
 
     #[cfg(unix)]

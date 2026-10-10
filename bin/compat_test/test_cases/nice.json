@@ -1162,6 +1162,38 @@
                 "stderr",
                 "write-error"
             ]
+        },
+        {
+            "command": "nice",
+            "description": "Linux下父进程使用默认SIGPIPE且stderr连接无读端管道时，GNU在输出无效调整值诊断时必须被SIGPIPE终止；LC_ALL=C下nice -n bad /usr/bin/true预期RC=141，stdout和stderr均为空。",
+            "args": [
+                "-n",
+                "bad",
+                "/usr/bin/true"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stderr": "closed_pipe",
+                    "sigpipe": "default"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 141,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "linux",
+                "sigpipe",
+                "stderr",
+                "diagnostics"
+            ]
         }
     ]
 }

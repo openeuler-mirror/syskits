@@ -21,7 +21,7 @@ use fundu::{DurationParser, SaturatingInto};
 use same_file::Handle;
 
 use ctcore::ct_display::locale_quote;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
+use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 use ctcore::ct_show_warning;
 
@@ -321,7 +321,7 @@ impl TailOptions {
             settings.max_unchanged_stats = match s.parse::<u64>() {
                 Ok(s) => s,
                 Err(_) => {
-                    return Err(CTsageError::new(
+                    return Err(CtSimpleError::new(
                         1,
                         format!(
                             "invalid maximum number of unchanged stats between opens: {}",
@@ -801,6 +801,18 @@ mod tests {
             .expect("GNU tail accepts repeated --max-unchanged-stats options");
 
             assert_eq!(options.max_unchanged_stats, 2);
+        }
+
+        #[test]
+        fn test_invalid_max_unchanged_stats_does_not_request_usage() {
+            let error = tail_parse_args(create_args(&["--max-unchanged-stats=-1"]))
+                .expect_err("negative max unchanged stats value must be rejected");
+
+            assert_eq!(
+                error.to_string(),
+                "invalid maximum number of unchanged stats between opens: '-1'"
+            );
+            assert!(!error.usage());
         }
 
         #[test]

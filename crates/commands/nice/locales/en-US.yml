@@ -1,6 +1,10 @@
 nice:
   errors:
     write_error: write error
+    invalid_adjustment: "invalid adjustment %{value}"
+    missing_command: a command must be given with an adjustment
+    cannot_get_niceness: cannot get niceness
+    cannot_set_niceness: cannot set niceness
   clap:
     adjustment: add N to the niceness (default is 10)
   usage: nice [OPTIONS] [COMMAND [ARGS]]

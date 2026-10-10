@@ -84,7 +84,7 @@ fn parse_adjustment(value: &OsStr) -> Result<i32, Box<dyn ctcore::ct_error::CTEr
     if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
         return Err(CtSimpleError::new(
             125,
-            format!("invalid adjustment {}", gnu_quote_locale(original_value)),
+            nice_invalid_adjustment_message(original_value, nice_uses_simplified_chinese()),
         ));
     }
 
@@ -119,17 +119,121 @@ fn perm_related_errno(err: i32) -> bool {
 }
 
 fn set_niceness_error_message(error: &Error) -> String {
+    set_niceness_error_message_for_locale(error, nice_uses_simplified_chinese())
+}
+
+fn set_niceness_error_message_for_locale(error: &Error, simplified_chinese: bool) -> String {
     let errno = error.raw_os_error().unwrap_or_default();
     let description = if perm_related_errno(errno) {
         String::from("Permission denied")
     } else {
         strip_errno(error)
     };
-    format!("cannot set niceness: {description}")
+    let message = if simplified_chinese {
+        t!("nice.errors.cannot_set_niceness", locale = "zh-CN")
+    } else {
+        t!("nice.errors.cannot_set_niceness", locale = "en-US")
+    };
+    format!("{message}: {description}")
 }
 
 fn exec_error_message(command: &OsStr, error: &Error) -> String {
-    format!("{}: {}", gnu_quote_locale(command), strip_errno(error))
+    exec_error_message_for_locale(command, error, nice_uses_simplified_chinese())
+}
+
+fn exec_error_message_for_locale(
+    command: &OsStr,
+    error: &Error,
+    simplified_chinese: bool,
+) -> String {
+    format!(
+        "{}: {}",
+        nice_quote_operand(command, simplified_chinese),
+        strip_errno(error)
+    )
+}
+
+fn nice_uses_simplified_chinese() -> bool {
+    rust_i18n::locale() == "zh-CN"
+}
+
+fn nice_invalid_adjustment_message(value: &OsStr, simplified_chinese: bool) -> String {
+    let quoted = nice_quote_operand(value, simplified_chinese);
+    if simplified_chinese {
+        t!(
+            "nice.errors.invalid_adjustment",
+            locale = "zh-CN",
+            value = quoted
+        )
+        .to_string()
+    } else {
+        format!("invalid adjustment {quoted}")
+    }
+}
+
+fn nice_missing_command_message(simplified_chinese: bool) -> String {
+    if simplified_chinese {
+        t!("nice.errors.missing_command", locale = "zh-CN").to_string()
+    } else {
+        t!("nice.errors.missing_command", locale = "en-US").to_string()
+    }
+}
+
+fn nice_get_niceness_message(simplified_chinese: bool) -> String {
+    if simplified_chinese {
+        t!("nice.errors.cannot_get_niceness", locale = "zh-CN").to_string()
+    } else {
+        t!("nice.errors.cannot_get_niceness", locale = "en-US").to_string()
+    }
+}
+
+fn nice_usage_hint(utility_name: &str, simplified_chinese: bool) -> Vec<u8> {
+    if simplified_chinese {
+        format!("请尝试执行 \"{utility_name} --help\" 来获取更多信息。").into_bytes()
+    } else {
+        format!("Try '{utility_name} --help' for more information.").into_bytes()
+    }
+}
+
+fn nice_quote_operand(value: &OsStr, simplified_chinese: bool) -> String {
+    if !simplified_chinese {
+        return gnu_quote_locale(value);
+    }
+
+    let bytes = value.as_bytes();
+    let mut quoted = String::with_capacity(bytes.len() + 2);
+    quoted.push('"');
+    let mut index = 0;
+    while index < bytes.len() {
+        if !bytes[index].is_ascii()
+            && let Ok(remaining) = std::str::from_utf8(&bytes[index..])
+        {
+            quoted.push_str(remaining);
+            break;
+        }
+
+        match bytes[index] {
+            b'\x07' => quoted.push_str("\\a"),
+            b'\x08' => quoted.push_str("\\b"),
+            b'\t' => quoted.push_str("\\t"),
+            b'\n' => quoted.push_str("\\n"),
+            b'\x0b' => quoted.push_str("\\v"),
+            b'\x0c' => quoted.push_str("\\f"),
+            b'\r' => quoted.push_str("\\r"),
+            b'\\' => quoted.push_str("\\\\"),
+            b'"' => quoted.push_str("\\\""),
+            0x20..=0x7e => quoted.push(char::from(bytes[index])),
+            byte => {
+                quoted.push('\\');
+                quoted.push(char::from(b'0' + (byte >> 6)));
+                quoted.push(char::from(b'0' + ((byte >> 3) & 0o7)));
+                quoted.push(char::from(b'0' + (byte & 0o7)));
+            }
+        }
+        index += 1;
+    }
+    quoted.push('"');
+    quoted
 }
 
 fn command_arg_to_cstring(argument: &OsStr) -> CString {
@@ -304,7 +408,13 @@ fn match_nice_long_option(name: &[u8]) -> NiceLongOptionMatch {
 }
 
 fn nice_usage_error(message: Vec<u8>) -> Box<dyn ctcore::ct_error::CTError> {
-    Box::new(NiceUsageError { message })
+    Box::new(NiceUsageError {
+        message,
+        usage_hint: nice_usage_hint(
+            ctcore::ct_help_utility_name(),
+            nice_uses_simplified_chinese(),
+        ),
+    })
 }
 
 fn validate_nice_long_option(argument: &[u8], has_next: bool) -> CTResult<NiceOptionAction> {
@@ -400,6 +510,7 @@ fn prepare_nice_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
 #[derive(Debug)]
 struct NiceUsageError {
     message: Vec<u8>,
+    usage_hint: Vec<u8>,
 }
 
 impl Display for NiceUsageError {
@@ -417,6 +528,10 @@ impl ctcore::ct_error::CTError for NiceUsageError {
 
     fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Borrowed(&self.message)
+    }
+
+    fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
+        Some(Cow::Borrowed(&self.usage_hint))
     }
 
     fn usage(&self) -> bool {
@@ -452,8 +567,15 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
     if !has_command {
         if let Some(value) = adjustment_value {
             let _ = parse_adjustment(value.as_os_str())?;
-            ct_show_error!("a command must be given with an adjustment");
-            eprintln!("Try 'nice --help' for more information.");
+            let simplified_chinese = nice_uses_simplified_chinese();
+            ct_show_error!("{}", nice_missing_command_message(simplified_chinese));
+            eprintln!(
+                "{}",
+                String::from_utf8_lossy(&nice_usage_hint(
+                    ctcore::ct_help_utility_name(),
+                    simplified_chinese,
+                ))
+            );
             set_ct_exit_code(125);
             return Ok(());
         }
@@ -465,7 +587,11 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
                 return Ok(());
             }
             Err(err) => {
-                ct_show_error!("cannot get niceness: {}", err);
+                ct_show_error!(
+                    "{}: {}",
+                    nice_get_niceness_message(nice_uses_simplified_chinese()),
+                    strip_errno(&err)
+                );
                 set_ct_exit_code(125);
                 return Ok(());
             }
@@ -704,6 +830,37 @@ mod tests {
         assert_eq!(
             set_niceness_error_message(&error),
             "cannot set niceness: Permission denied"
+        );
+    }
+
+    #[test]
+    fn test_simplified_chinese_diagnostics_match_gnu() {
+        let permission_error = Error::from_raw_os_error(libc::EPERM);
+        let missing_error = Error::from_raw_os_error(libc::ENOENT);
+
+        assert_eq!(
+            nice_invalid_adjustment_message(OsStr::new("bad"), true),
+            "无效的调整值 \"bad\""
+        );
+        assert_eq!(
+            nice_missing_command_message(true),
+            "指定调整值时，必须同时指定命令"
+        );
+        assert_eq!(
+            nice_usage_hint("nice", true),
+            "请尝试执行 \"nice --help\" 来获取更多信息。".as_bytes()
+        );
+        assert_eq!(
+            set_niceness_error_message_for_locale(&permission_error, true),
+            "无法设置优先级: Permission denied"
+        );
+        assert_eq!(
+            exec_error_message_for_locale(OsStr::new("no_such"), &missing_error, true),
+            "\"no_such\": No such file or directory"
+        );
+        assert_eq!(
+            nice_quote_operand(OsStr::new("a\"b\\c"), true),
+            "\"a\\\"b\\\\c\""
         );
     }
 

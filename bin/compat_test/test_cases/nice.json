@@ -823,6 +823,136 @@
                     "stderr": "nice: 'no_such': No such file or directory\n"
                 }
             }
+        },
+        {
+            "command": "nice",
+            "description": "zh_CN.UTF-8下无效调整值必须使用GNU简体中文文本和双引号；nice -n bad /usr/bin/true应以125退出，stdout为空，stderr完整内容为nice: 无效的调整值 \"bad\"。",
+            "args": [
+                "-n",
+                "bad",
+                "/usr/bin/true"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zh_CN.UTF-8",
+                    "LANG": "zh_CN.UTF-8"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: 无效的调整值 \"bad\"\n"
+                }
+            },
+            "tags": [
+                "locale",
+                "zh-cn",
+                "diagnostics"
+            ]
+        },
+        {
+            "command": "nice",
+            "description": "zh_CN.UTF-8下指定调整值却没有COMMAND时，GNU输出本地化诊断和双引号帮助提示；nice -n 1应以125退出且stdout为空。",
+            "args": [
+                "-n",
+                "1"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zh_CN.UTF-8",
+                    "LANG": "zh_CN.UTF-8"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: 指定调整值时，必须同时指定命令\n请尝试执行 \"nice --help\" 来获取更多信息。\n"
+                }
+            },
+            "tags": [
+                "locale",
+                "zh-cn",
+                "usage"
+            ]
+        },
+        {
+            "command": "nice",
+            "description": "zh_CN.UTF-8下执行不存在的COMMAND时，GNU使用双引号引用名称；nice no_such应以127退出，stdout为空。",
+            "args": [
+                "no_such"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zh_CN.UTF-8",
+                    "LANG": "zh_CN.UTF-8"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 127,
+                    "stdout": "",
+                    "stderr": "nice: \"no_such\": No such file or directory\n"
+                }
+            },
+            "tags": [
+                "locale",
+                "zh-cn",
+                "diagnostics"
+            ]
+        },
+        {
+            "command": "nice",
+            "description": "zh_CN.UTF-8下请求-1调整值且权限不足时，GNU输出无法设置优先级而仍执行COMMAND；nice -n -1 /usr/bin/true应以0退出、stdout为空、stderr完整内容为本地化权限诊断。",
+            "args": [
+                "-n",
+                "-1",
+                "/usr/bin/true"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zh_CN.UTF-8",
+                    "LANG": "zh_CN.UTF-8"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": "nice: 无法设置优先级: Permission denied\n"
+                }
+            },
+            "tags": [
+                "locale",
+                "zh-cn",
+                "niceness"
+            ]
+        },
+        {
+            "command": "nice",
+            "description": "zh_CN.UTF-8下GNU getopt非法选项文本仍为英文，但简短帮助必须为简体中文且使用双引号；nice -z应以125退出。",
+            "args": [
+                "-z"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zh_CN.UTF-8",
+                    "LANG": "zh_CN.UTF-8"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: invalid option -- 'z'\n请尝试执行 \"nice --help\" 来获取更多信息。\n"
+                }
+            },
+            "tags": [
+                "locale",
+                "zh-cn",
+                "usage"
+            ]
         }
     ]
 }

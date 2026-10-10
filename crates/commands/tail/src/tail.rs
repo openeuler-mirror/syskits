@@ -1023,7 +1023,7 @@ fn handle_bounded_lines<W: Write>(
             file.seek(SeekFrom::Start(skip_bytes as u64))?;
             io::copy(file, writer)?;
         }
-        _ => {}
+        TailSignum::MinusZero => {}
     }
     Ok(())
 }
@@ -1058,7 +1058,7 @@ fn handle_bounded_bytes<W: Write>(
             file.seek(SeekFrom::Start(count.saturating_sub(1)))?;
             io::copy(file, writer)?;
         }
-        _ => {}
+        TailSignum::MinusZero => {}
     }
     Ok(())
 }
@@ -1148,6 +1148,11 @@ fn tail_unbounded_to_writer<T: Read, W: Write>(
     writer: &mut W,
 ) -> CTResult<()> {
     match &options.mode {
+        TailFilterMode::Lines(TailSignum::MinusZero, _)
+        | TailFilterMode::Bytes(TailSignum::MinusZero) => {
+            let mut sink = io::sink();
+            io::copy(reader, &mut sink)?;
+        }
         TailFilterMode::Lines(TailSignum::Negative(count), sep) => {
             let mut chunks = chunks::TailLinesChunkBuffer::new(*sep, *count);
             chunks.fill(reader)?;
@@ -1202,7 +1207,6 @@ fn tail_unbounded_to_writer<T: Read, W: Write>(
             }
             io::copy(reader, writer)?;
         }
-        _ => {}
     }
     writer.flush()?;
     Ok(())
@@ -1730,6 +1734,22 @@ mod test_tail_bounded_unbounded {
         tail_unbounded(&mut reader, &options, Some(&mut buffer)).unwrap();
 
         assert_eq!(String::from_utf8(buffer).unwrap().trim(), "");
+    }
+
+    #[test]
+    #[serial]
+    fn test_tail_unbounded_minus_zero_consumes_initial_input() {
+        let temp_file = create_temp_file("existing\n");
+        let mut reader = BufReader::new(File::open(temp_file.path()).unwrap());
+        let options = create_basic_options(TailFilterMode::Lines(TailSignum::MinusZero, b'\n'));
+        let mut output = Vec::new();
+
+        tail_unbounded(&mut reader, &options, Some(&mut output)).unwrap();
+
+        assert!(output.is_empty());
+        let mut unread = Vec::new();
+        reader.read_to_end(&mut unread).unwrap();
+        assert!(unread.is_empty());
     }
 
     #[test]

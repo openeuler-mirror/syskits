@@ -384,30 +384,25 @@ impl TryFrom<&[u8]> for NlNumberingStyle {
     type Error = String;
 
     fn try_from(style: &[u8]) -> Result<Self, Self::Error> {
-        if style == b"a" {
-            return Ok(Self::All);
+        match style.first() {
+            Some(b'a') => Ok(Self::All),
+            Some(b't') => Ok(Self::NonEmpty),
+            Some(b'n') => Ok(Self::None),
+            Some(b'p') => {
+                let pattern = style[1..].to_vec();
+                let compiled =
+                    GnuRegex::compile(&pattern, GnuRegexCompileOptions::posix_basic_permissive())
+                        .map_err(nl_regex_error_message)?;
+                Ok(Self::Regex {
+                    pattern,
+                    compiled: RefCell::new(compiled),
+                })
+            }
+            _ => Err(format!(
+                "invalid numbering style: '{}'",
+                String::from_utf8_lossy(style)
+            )),
         }
-        if style == b"t" {
-            return Ok(Self::NonEmpty);
-        }
-        if style == b"n" {
-            return Ok(Self::None);
-        }
-        if let Some(pattern) = style.strip_prefix(b"p") {
-            let pattern = pattern.to_vec();
-            let compiled =
-                GnuRegex::compile(&pattern, GnuRegexCompileOptions::posix_basic_permissive())
-                    .map_err(nl_regex_error_message)?;
-            return Ok(Self::Regex {
-                pattern,
-                compiled: RefCell::new(compiled),
-            });
-        }
-
-        Err(format!(
-            "invalid numbering style: '{}'",
-            String::from_utf8_lossy(style)
-        ))
     }
 }
 
@@ -1370,6 +1365,19 @@ mod tests {
                 NlNumberingStyle::try_from("invalid").unwrap_err(),
                 "invalid numbering style: 'invalid'"
             );
+        }
+
+        #[test]
+        fn test_flags_numbering_styles_ignore_trailing_bytes_after_atn() {
+            let cases = [
+                ("ax", NlNumberingStyle::All),
+                ("tx", NlNumberingStyle::NonEmpty),
+                ("nx", NlNumberingStyle::None),
+            ];
+
+            for (style, expected) in cases {
+                assert_eq!(NlNumberingStyle::try_from(style).unwrap(), expected);
+            }
         }
 
         /// 测试基本标志设置

@@ -884,6 +884,28 @@
           }
         },
         "tags": ["linux", "input-error", "file-operand", "diagnostic"]
+      },
+      {
+        "command": "nl",
+        "description": "GNU的编号样式a、t和n只检查首字节；-bax中的x会被忽略，正文的非空行与空行均编号。",
+        "setup_commands": [
+          "printf 'line\\n\\n' > input"
+        ],
+        "args": ["-bax", "input"],
+        "environment": {
+          "env_vars": {
+            "LC_ALL": "C",
+            "LANG": "C"
+          }
+        },
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "     1\tline\n     2\t\n",
+            "stderr": ""
+          }
+        },
+        "tags": ["numbering-style", "style-prefix", "body-numbering"]
       }
     ]
   }

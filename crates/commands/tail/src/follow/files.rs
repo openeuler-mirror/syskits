@@ -11,7 +11,7 @@
 
 use crate::args::TailOptions;
 use crate::chunks::TailBytesChunkBuffer;
-use crate::paths::{TailHeaderPrinter, TailPathExt};
+use crate::paths::{TailHeaderPrinter, TailMetadataExt, TailPathExt};
 use crate::text;
 use ctcore::ct_error::CTResult;
 use std::collections::HashMap;
@@ -165,7 +165,18 @@ impl FileHandling {
             chunks.print(writer)?;
 
             self.last.replace(path.to_owned());
-            self.update_metadata(path, None);
+            // A descriptor reader can outlive a renamed path; do not replace
+            // its metadata with that of a different file at the old path.
+            if let Ok(metadata) = path.metadata() {
+                let tracks_same_file = self
+                    .get(path)
+                    .metadata
+                    .as_ref()
+                    .is_none_or(|old| old.file_id_eq(&metadata));
+                if tracks_same_file {
+                    self.update_metadata(path, Some(metadata));
+                }
+            }
             Ok(true)
         } else {
             Ok(false)

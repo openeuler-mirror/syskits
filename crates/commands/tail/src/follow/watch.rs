@@ -418,6 +418,12 @@ impl Observer {
                     let is_tailable = new_md.is_tailable();
                     let pd = self.files.get(&tracked_path);
                     if let Some(old_md) = &pd.metadata {
+                        if self.follow_descriptor() && !old_md.file_id_eq(&new_md) {
+                            // PollWatcher reports a recreated original path after a rename as
+                            // a create event. Descriptor following must retain the old reader.
+                            paths.push(tracked_path.clone());
+                            return Ok(paths);
+                        }
                         if is_tailable {
                             // We resume tracking from the start of the file,
                             // assuming it has been truncated to 0. This mimics GNU's `tail`
@@ -971,10 +977,10 @@ fn check_io_health() -> (bool, bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use notify::event::{ModifyKind, RemoveKind, RenameMode};
+    use notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
     use notify::{Event, EventKind};
     use std::fs::{self, File, OpenOptions};
-    use std::io::{BufReader, Write};
+    use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
     #[cfg(unix)]
     use std::os::unix::fs::symlink;
     use tempfile::tempdir;
@@ -1054,6 +1060,44 @@ mod tests {
         assert!(observer.files.contains_key(&new_path));
         assert!(!observer.files.contains_key(&old_path));
         assert!(observer.pending_renames.is_empty());
+    }
+
+    #[test]
+    fn polling_descriptor_follow_keeps_original_reader_after_path_replacement() {
+        let mut options = descriptor_options();
+        options.use_polling = true;
+        let mut observer = Observer::from(&options);
+        let temp_dir = tempdir().unwrap();
+        let old_path = temp_dir.path().join("a");
+        let moved_path = temp_dir.path().join("b");
+
+        fs::write(&old_path, b"initial\n").unwrap();
+        let mut reader_file = File::open(&old_path).unwrap();
+        reader_file.seek(SeekFrom::End(0)).unwrap();
+        observer
+            .add_path(
+                &old_path,
+                "a",
+                Some(Box::new(BufReader::new(reader_file))),
+                false,
+            )
+            .unwrap();
+
+        fs::rename(&old_path, &moved_path).unwrap();
+        OpenOptions::new()
+            .append(true)
+            .open(&moved_path)
+            .unwrap()
+            .write_all(b"old-file\n")
+            .unwrap();
+        assert!(observer.files.tail_file(&old_path, false).unwrap());
+        fs::write(&old_path, b"new-file\n").unwrap();
+
+        let event = Event::new(EventKind::Create(CreateKind::File)).add_path(old_path.clone());
+        observer.handle_event(&event, &options).unwrap();
+
+        let reader = observer.files.get_mut(&old_path).reader.as_mut().unwrap();
+        assert!(reader.fill_buf().unwrap().is_empty());
     }
 
     #[test]

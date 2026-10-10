@@ -53,6 +53,10 @@ fn input_requires_polling(input: &TailInput) -> bool {
     }
 }
 
+fn input_is_missing_file(input: &TailInput) -> bool {
+    matches!(input.kind(), TailInputKind::File(path) if !path.exists())
+}
+
 pub struct WatcherRx {
     watcher: Box<dyn Watcher>,
     receiver: Receiver<Result<notify::Event, notify::Error>>,
@@ -250,7 +254,9 @@ impl Observer {
 
         // Like GNU tail, only use event watching for regular files and FIFOs.
         // Inotify cannot reliably follow symlink names or character devices.
-        if options.inputs.iter().any(input_requires_polling) {
+        if options.inputs.iter().any(input_requires_polling)
+            || (self.follow_descriptor() && options.inputs.iter().any(input_is_missing_file))
+        {
             self.use_polling = true;
         }
 
@@ -1174,6 +1180,22 @@ mod tests {
         let options = TailOptions {
             follow: Some(TailFollowMode::Descriptor),
             inputs: vec![TailInput::from("/dev/null")],
+            ..TailOptions::default()
+        };
+        let mut observer = Observer::from(&options);
+
+        observer.start(&options).unwrap();
+
+        assert!(observer.use_polling);
+    }
+
+    #[test]
+    fn start_uses_polling_for_missing_descriptor_input() {
+        let temp_dir = tempdir().unwrap();
+        let missing = temp_dir.path().join("missing");
+        let options = TailOptions {
+            follow: Some(TailFollowMode::Descriptor),
+            inputs: vec![TailInput::from(missing.as_os_str())],
             ..TailOptions::default()
         };
         let mut observer = Observer::from(&options);

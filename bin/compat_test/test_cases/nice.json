@@ -1229,6 +1229,36 @@
         },
         {
             "command": "nice",
+            "description": "Linux下execvp执行目录失败且stderr为/dev/full时，GNU检测到exec诊断无法写入并以125取消；LC_ALL=C下nice .应保持stdout、stderr为空。",
+            "args": [
+                "."
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stderr": "full"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "linux",
+                "exec",
+                "stderr",
+                "write-error",
+                "full"
+            ]
+        },
+        {
+            "command": "nice",
             "description": "Linux下启动前关闭stderr且execvp找不到COMMAND时，GNU无法输出exec诊断并以125取消；LC_ALL=C下nice /does-not-exist应保持stdout、stderr为空。",
             "args": [
                 "/does-not-exist"

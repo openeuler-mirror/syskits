@@ -373,10 +373,14 @@ fn nice_diagnostic_error_bytes(
 
 fn write_nice_diagnostic(message: impl AsRef<[u8]>) -> Result<(), Error> {
     let message = nice_locale_diagnostic_bytes(message.as_ref(), nice_uses_simplified_chinese());
+    write_nice_diagnostic_bytes(&message)
+}
+
+fn write_nice_diagnostic_bytes(message: &[u8]) -> Result<(), Error> {
     let mut diagnostic = Vec::with_capacity(ctcore::ct_util_name().len() + message.len() + 3);
     diagnostic.extend_from_slice(ctcore::ct_util_name().as_bytes());
     diagnostic.extend_from_slice(b": ");
-    diagnostic.extend_from_slice(&message);
+    diagnostic.extend_from_slice(message);
     diagnostic.push(b'\n');
     write_all_nice_diagnostic(&diagnostic)
 }
@@ -553,8 +557,14 @@ fn nice_permission_diagnostic_failed(stderr_was_closed: bool, write_failed: bool
     stderr_was_closed || write_failed
 }
 
-fn nice_exec_failure_diagnostic_failed(stderr_was_closed: bool) -> bool {
-    stderr_was_closed
+fn finish_exec_failure(
+    exit_code: i32,
+    write_diagnostic: impl FnOnce() -> Result<(), Error>,
+) -> CTResult<()> {
+    if write_diagnostic().is_err() {
+        return Err(125.into());
+    }
+    Err(nice_diagnostic_error_bytes(exit_code, Vec::new(), None))
 }
 
 fn apply_adjustment(adjustment: c_int) -> Result<(), CTResult<()>> {
@@ -1011,14 +1021,8 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
     } else {
         126
     };
-    if nice_exec_failure_diagnostic_failed(ctcore::ct_stderr_was_closed()) {
-        return Err(125.into());
-    }
-    Err(nice_diagnostic_error_bytes(
-        exit_code,
-        exec_error_diagnostic(command_args[0].as_os_str(), &exec_error),
-        None,
-    ))
+    let diagnostic = exec_error_diagnostic(command_args[0].as_os_str(), &exec_error);
+    finish_exec_failure(exit_code, || write_nice_diagnostic_bytes(&diagnostic))
 }
 
 pub fn ct_app() -> Command {
@@ -1232,9 +1236,11 @@ mod tests {
     }
 
     #[test]
-    fn test_closed_stderr_makes_exec_failure_fatal() {
-        assert!(nice_exec_failure_diagnostic_failed(true));
-        assert!(!nice_exec_failure_diagnostic_failed(false));
+    fn test_exec_failure_diagnostic_write_error_is_fatal() {
+        let error =
+            finish_exec_failure(126, || Err(Error::from_raw_os_error(libc::ENOSPC))).unwrap_err();
+        assert_eq!(error.code(), 125);
+        assert!(error.diagnostic_bytes().is_empty());
     }
 
     #[cfg(target_os = "linux")]

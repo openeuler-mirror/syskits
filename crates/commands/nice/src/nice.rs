@@ -15,15 +15,16 @@ extern crate rust_i18n;
 use libc::{c_char, c_int, execvp, nice as libc_nice};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use std::ffi::{CString, OsString};
+use std::ffi::{CString, OsStr, OsString};
 use std::io::{Error, Write};
 use std::ptr;
 
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use ctcore::{
     Tool,
     ct_display::Quotable,
     ct_error::{CTResult, CtSimpleError, UClapError, set_ct_exit_code, strip_errno},
+    ct_quoting_style::gnu_quote_shell,
     ct_show_error,
 };
 use sys_locale::get_locale;
@@ -101,8 +102,13 @@ fn set_niceness_error_message(error: &Error) -> String {
     format!("cannot set niceness: {description}")
 }
 
-fn exec_error_message(command: &str, error: &Error) -> String {
-    format!("{}: {}", command.quote(), strip_errno(error))
+fn exec_error_message(command: &OsStr, error: &Error) -> String {
+    format!("{}: {}", gnu_quote_shell(command, true), strip_errno(error))
+}
+
+fn command_arg_to_cstring(argument: &OsStr) -> CString {
+    CString::new(argument.as_encoded_bytes())
+        .expect("process arguments received from the operating system cannot contain NUL bytes")
 }
 
 fn get_current_niceness() -> Result<c_int, Error> {
@@ -275,14 +281,14 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     // 准备执行命令需要的参数，并执行命令
-    let command_args: Vec<String> = args_match
-        .get_many::<String>(opt_flags::COMMAND)
+    let command_args: Vec<OsString> = args_match
+        .get_many::<OsString>(opt_flags::COMMAND)
         .unwrap()
-        .map(|x| x.to_string())
+        .cloned()
         .collect();
     let cstr: Vec<CString> = command_args
         .iter()
-        .map(|x| CString::new(x.as_bytes()).unwrap())
+        .map(|x| command_arg_to_cstring(x.as_os_str()))
         .collect();
 
     let mut args: Vec<*const c_char> = cstr.iter().map(|s| s.as_ptr()).collect();
@@ -293,7 +299,10 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
 
     // 执行命令失败的处理
     let exec_error = Error::last_os_error();
-    ct_show_error!("{}", exec_error_message(&command_args[0], &exec_error));
+    ct_show_error!(
+        "{}",
+        exec_error_message(command_args[0].as_os_str(), &exec_error)
+    );
     let exit_code = if exec_error.raw_os_error().unwrap_or(0) as c_int == libc::ENOENT {
         127
     } else {
@@ -319,6 +328,7 @@ pub fn ct_app() -> Command {
             .allow_hyphen_values(true),
         Arg::new(opt_flags::COMMAND)
             .action(ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::CommandName),
     ];
 
@@ -407,7 +417,7 @@ mod tests {
     fn test_exec_error_message_omits_rust_os_error_suffix() {
         let error = Error::from_raw_os_error(libc::ENOENT);
         assert_eq!(
-            exec_error_message("no_such", &error),
+            exec_error_message(OsStr::new("no_such"), &error),
             "'no_such': No such file or directory"
         );
     }
@@ -538,9 +548,10 @@ mod tests {
     }
 
     mod tests_false_app {
-        use crate::ct_app;
+        use crate::{ct_app, opt_flags};
 
         use clap::error::ErrorKind;
+        use std::ffi::OsString;
 
         #[test]
         fn test_ct_app_version() {
@@ -589,6 +600,28 @@ mod tests {
             assert!(result.is_ok());
             let matches = result.unwrap();
             assert_eq!(matches.get_one::<String>("adjustment").unwrap(), "-5");
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_ct_app_preserves_non_utf8_command_arguments() {
+            use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+            let command = ct_app();
+            let arguments = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("/usr/bin/printf"),
+                OsString::from("%s"),
+                OsString::from_vec(vec![0xff]),
+            ];
+
+            let matches = command.try_get_matches_from(arguments).unwrap();
+            let command_args: Vec<_> = matches
+                .get_many::<OsString>(opt_flags::COMMAND)
+                .unwrap()
+                .collect();
+
+            assert_eq!(command_args[2].as_os_str().as_bytes(), [0xff]);
         }
     }
 }

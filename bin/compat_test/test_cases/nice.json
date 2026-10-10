@@ -1,6 +1,35 @@
 {
     "tests": [
         {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "nice",
+            "description": "原始字节命令参数用例：LC_ALL=C下执行nice /usr/bin/printf %s并传入单字节0xff参数；参数完整十六进制=2f7573722f62696e2f7072696e7466 2573 ff；stdin完整十六进制=空；GNU必须保留参数原始字节，预期RC=0、stdout完整十六进制=ff、stderr完整十六进制=空。",
+            "args": [
+                "2f7573722f62696e2f7072696e7466",
+                "2573",
+                "ff"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "ff",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "raw-bytes",
+                "non-utf8",
+                "command-arguments"
+            ]
+        },
+        {
             "command": "nice",
             "description": "GNU xstrtol允许-n参数的前导ASCII空白，并将超出long范围的正数夹到可用的最大niceness adjustment。",
             "args": ["-n", " 9223372036854775808", "/usr/bin/true"],

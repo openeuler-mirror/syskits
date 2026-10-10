@@ -17,12 +17,12 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::ffi::{CString, OsStr, OsString};
 use std::io::{Error, Write};
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::ptr;
 
 use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use ctcore::{
     Tool,
-    ct_display::Quotable,
     ct_error::{CTResult, CtSimpleError, UClapError, set_ct_exit_code, strip_errno},
     ct_quoting_style::gnu_quote_locale,
     ct_show_error,
@@ -42,7 +42,7 @@ fn is_prefix_of(prefix: &str, target: &str, min_match: usize) -> bool {
     &target[0..prefix.len()] == prefix
 }
 
-fn legacy_adjustment(argument: &str) -> Option<&str> {
+fn legacy_adjustment(argument: &OsStr) -> Option<OsString> {
     let bytes = argument.as_bytes();
     if bytes.first() != Some(&b'-') {
         return None;
@@ -52,26 +52,37 @@ fn legacy_adjustment(argument: &str) -> Option<&str> {
     bytes
         .get(number_index)
         .filter(|byte| byte.is_ascii_digit())
-        .map(|_| &argument[1..])
+        .map(|_| OsString::from_vec(bytes[1..].to_vec()))
 }
 
 const NZERO: i32 = 20;
 const MIN_ADJUSTMENT: i64 = 1 - 2 * NZERO as i64;
 const MAX_ADJUSTMENT: i64 = 2 * NZERO as i64 - 1;
 
-fn parse_adjustment(value: &str) -> Result<i32, Box<dyn ctcore::ct_error::CTError>> {
+fn parse_adjustment(value: &OsStr) -> Result<i32, Box<dyn ctcore::ct_error::CTError>> {
     let original_value = value;
-    let value = value.trim_start_matches(|character: char| character.is_ascii_whitespace());
-    let (negative, digits) = match value.as_bytes().first() {
-        Some(b'-') => (true, &value[1..]),
-        Some(b'+') => (false, &value[1..]),
-        _ => (false, value),
+    let bytes = value.as_bytes();
+    let mut digit_start = bytes
+        .iter()
+        .position(|byte| !byte.is_ascii_whitespace())
+        .unwrap_or(bytes.len());
+    let negative = match bytes.get(digit_start) {
+        Some(b'-') => {
+            digit_start += 1;
+            true
+        }
+        Some(b'+') => {
+            digit_start += 1;
+            false
+        }
+        _ => false,
     };
+    let digits = &bytes[digit_start..];
 
-    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+    if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
         return Err(CtSimpleError::new(
             125,
-            format!("invalid adjustment {}", original_value.quote()),
+            format!("invalid adjustment {}", gnu_quote_locale(original_value)),
         ));
     }
 
@@ -81,7 +92,7 @@ fn parse_adjustment(value: &str) -> Result<i32, Box<dyn ctcore::ct_error::CTErro
         MAX_ADJUSTMENT
     };
     let mut adjustment = 0i64;
-    for byte in digits.bytes() {
+    for byte in digits {
         adjustment = adjustment
             .saturating_mul(10)
             .saturating_add((byte - b'0') as i64);
@@ -202,17 +213,15 @@ fn standardize_nice_args(mut args: impl ctcore::Args) -> impl ctcore::Args {
         {
             // 处理"-n"和"--adjustment"参数
             is_saw_n = true;
+        } else if let Some(adjustment) = legacy_adjustment(str.as_os_str()) {
+            // GNU在转换数值前按首数字识别传统-N、--N和-+N形式。
+            let mut new_arg: OsString = "-n".into();
+            new_arg.push(adjustment);
+            vec.push(new_arg);
         } else if let Ok(s) = str.clone().into_string() {
-            if let Some(adjustment) = legacy_adjustment(&s) {
-                // GNU在转换数值前按首数字识别传统-N、--N和-+N形式。
-                let mut new_arg: OsString = "-n".into();
-                new_arg.push(adjustment);
-                vec.push(new_arg);
-            } else {
-                // 首个非选项参数开始命令及其参数；未知选项仍交由clap诊断。
-                is_saw_command |= !s.starts_with('-');
-                vec.push(s.into());
-            }
+            // 首个非选项参数开始命令及其参数；未知选项仍交由clap诊断。
+            is_saw_command |= !s.starts_with('-');
+            vec.push(s.into());
         } else {
             // 添加非字符串可转换的参数作为命令
             is_saw_command = true;
@@ -251,11 +260,11 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
     let args_match = ct_app().try_get_matches_from(args).with_exit_code(125)?;
 
     let has_command = args_match.contains_id(opt_flags::COMMAND);
-    let adjustment_value = args_match.get_one::<String>(opt_flags::ADJUSTMENT);
+    let adjustment_value = args_match.get_one::<OsString>(opt_flags::ADJUSTMENT);
 
     if !has_command {
         if let Some(value) = adjustment_value {
-            let _ = parse_adjustment(value)?;
+            let _ = parse_adjustment(value.as_os_str())?;
             ct_show_error!("a command must be given with an adjustment");
             eprintln!("Try 'nice --help' for more information.");
             set_ct_exit_code(125);
@@ -276,7 +285,7 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     let adjustment = match adjustment_value {
-        Some(value) => parse_adjustment(value)?,
+        Some(value) => parse_adjustment(value.as_os_str())?,
         None => 10,
     };
 
@@ -328,6 +337,7 @@ pub fn ct_app() -> Command {
             .long(opt_flags::ADJUSTMENT)
             .help(t!("nice.clap.adjustment"))
             .action(ArgAction::Set)
+            .value_parser(OsStringValueParser::new())
             .overrides_with(opt_flags::ADJUSTMENT)
             .allow_hyphen_values(true),
         Arg::new(opt_flags::COMMAND)
@@ -402,10 +412,16 @@ mod tests {
 
     #[test]
     fn test_parse_adjustment_matches_gnu_xstrtol_rules() {
-        assert_eq!(parse_adjustment(" 1").unwrap(), 1);
-        assert_eq!(parse_adjustment("9223372036854775808").unwrap(), 39);
-        assert_eq!(parse_adjustment("-9223372036854775809").unwrap(), -39);
-        assert!(parse_adjustment("1 ").is_err());
+        assert_eq!(parse_adjustment(OsStr::new(" 1")).unwrap(), 1);
+        assert_eq!(
+            parse_adjustment(OsStr::new("9223372036854775808")).unwrap(),
+            39
+        );
+        assert_eq!(
+            parse_adjustment(OsStr::new("-9223372036854775809")).unwrap(),
+            -39
+        );
+        assert!(parse_adjustment(OsStr::new("1 ")).is_err());
     }
 
     #[test]
@@ -525,16 +541,35 @@ mod tests {
                 OsString::from("command"),
             ]
         );
+
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+            let args = vec![
+                OsString::from("nice"),
+                OsString::from_vec(vec![b'-', b'1', 0xff]),
+                OsString::from("command"),
+            ];
+            let result: Vec<OsString> = standardize_nice_args(args.into_iter()).collect();
+            assert_eq!(result[1].as_os_str().as_bytes(), b"-n1\xff");
+        }
     }
 
     #[test]
     fn test_parse_adjustment() {
-        assert_eq!(parse_adjustment("5").unwrap(), 5);
-        assert_eq!(parse_adjustment("+1").unwrap(), 1);
-        assert_eq!(parse_adjustment("-1").unwrap(), -1);
-        assert_eq!(parse_adjustment("100").unwrap(), MAX_ADJUSTMENT as i32);
-        assert_eq!(parse_adjustment("-100").unwrap(), MIN_ADJUSTMENT as i32);
-        assert!(parse_adjustment("invalid").is_err());
+        assert_eq!(parse_adjustment(OsStr::new("5")).unwrap(), 5);
+        assert_eq!(parse_adjustment(OsStr::new("+1")).unwrap(), 1);
+        assert_eq!(parse_adjustment(OsStr::new("-1")).unwrap(), -1);
+        assert_eq!(
+            parse_adjustment(OsStr::new("100")).unwrap(),
+            MAX_ADJUSTMENT as i32
+        );
+        assert_eq!(
+            parse_adjustment(OsStr::new("-100")).unwrap(),
+            MIN_ADJUSTMENT as i32
+        );
+        assert!(parse_adjustment(OsStr::new("invalid")).is_err());
     }
 
     // 以下测试需要使用 mock 或集成测试才能完全测试，
@@ -628,7 +663,10 @@ mod tests {
 
             assert!(result.is_ok());
             let matches = result.unwrap();
-            assert_eq!(matches.get_one::<String>("adjustment").unwrap(), "-5");
+            assert_eq!(
+                matches.get_one::<OsString>("adjustment").unwrap(),
+                &OsString::from("-5")
+            );
         }
 
         #[cfg(target_os = "linux")]
@@ -651,6 +689,22 @@ mod tests {
                 .collect();
 
             assert_eq!(command_args[2].as_os_str().as_bytes(), [0xff]);
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_ct_app_preserves_non_utf8_adjustment() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let command = ct_app();
+            let arguments = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-n"),
+                OsString::from_vec(vec![b'1', 0xff]),
+                OsString::from("/usr/bin/true"),
+            ];
+
+            assert!(command.try_get_matches_from(arguments).is_ok());
         }
     }
 }

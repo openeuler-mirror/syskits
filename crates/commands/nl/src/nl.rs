@@ -839,43 +839,50 @@ pub fn ct_app() -> Command {
             .long(nl_flags::NL_BODY_NUMBERING)
             .help(t!("nl.clap.nl_body_numbering"))
             .value_name("STYLE")
-            .value_parser(OsStringValueParser::new()),
+            .value_parser(OsStringValueParser::new())
+            .allow_hyphen_values(true),
         Arg::new(nl_flags::NL_SECTION_DELIMITER)
             .short('d')
             .long(nl_flags::NL_SECTION_DELIMITER)
             .help(t!("nl.clap.nl_section_delimiter"))
             .value_name("CC")
-            .value_parser(OsStringValueParser::new()),
+            .value_parser(OsStringValueParser::new())
+            .allow_hyphen_values(true),
         Arg::new(nl_flags::NL_FOOTER_NUMBERING)
             .short('f')
             .long(nl_flags::NL_FOOTER_NUMBERING)
             .help(t!("nl.clap.nl_footer_numbering"))
             .value_name("STYLE")
-            .value_parser(OsStringValueParser::new()),
+            .value_parser(OsStringValueParser::new())
+            .allow_hyphen_values(true),
         Arg::new(nl_flags::NL_HEADER_NUMBERING)
             .short('h')
             .long(nl_flags::NL_HEADER_NUMBERING)
             .help(t!("nl.clap.nl_header_numbering"))
             .value_name("STYLE")
-            .value_parser(OsStringValueParser::new()),
+            .value_parser(OsStringValueParser::new())
+            .allow_hyphen_values(true),
         Arg::new(nl_flags::NL_LINE_INCREMENT)
             .short('i')
             .long(nl_flags::NL_LINE_INCREMENT)
             .help(t!("nl.clap.nl_line_increment"))
             .value_name("NUMBER")
-            .value_parser(clap::value_parser!(i64)),
+            .value_parser(clap::value_parser!(i64))
+            .allow_hyphen_values(true),
         Arg::new(nl_flags::NL_JOIN_BLANK_LINES)
             .short('l')
             .long(nl_flags::NL_JOIN_BLANK_LINES)
             .help(t!("nl.clap.nl_join_blank_lines"))
             .value_name("NUMBER")
-            .value_parser(clap::value_parser!(i64)),
+            .value_parser(clap::value_parser!(i64))
+            .allow_hyphen_values(true),
         Arg::new(nl_flags::NL_NUMBER_FORMAT)
             .short('n')
             .long(nl_flags::NL_NUMBER_FORMAT)
             .help(t!("nl.clap.nl_number_format"))
             .value_name("FORMAT")
-            .value_parser(["ln", "rn", "rz"]),
+            .value_parser(["ln", "rn", "rz"])
+            .allow_hyphen_values(true),
         Arg::new(nl_flags::NL_NO_RENUMBER)
             .short('p')
             .long(nl_flags::NL_NO_RENUMBER)
@@ -886,19 +893,22 @@ pub fn ct_app() -> Command {
             .long(nl_flags::NL_NUMBER_SEPARATOR)
             .help(t!("nl.clap.nl_number_separator"))
             .value_name("STRING")
-            .value_parser(OsStringValueParser::new()),
+            .value_parser(OsStringValueParser::new())
+            .allow_hyphen_values(true),
         Arg::new(nl_flags::NL_STARTING_LINE_NUMBER)
             .short('v')
             .long(nl_flags::NL_STARTING_LINE_NUMBER)
             .help(t!("nl.clap.nl_starting_line_number"))
             .value_name("STRING")
-            .num_args(1),
+            .num_args(1)
+            .allow_hyphen_values(true),
         Arg::new(nl_flags::NL_NUMBER_WIDTH)
             .short('w')
             .long(nl_flags::NL_NUMBER_WIDTH)
             .help(t!("nl.clap.nl_number_width"))
             .value_name("NUMBER")
-            .value_parser(clap::value_parser!(i32)),
+            .value_parser(clap::value_parser!(i32))
+            .allow_hyphen_values(true),
     ];
 
     Command::new(utility_name)
@@ -1730,6 +1740,20 @@ mod tests {
 
             let expected = "     1 | Line 1\n     2 | Line 2\n";
             assert_eq!(String::from_utf8(output).unwrap(), expected);
+        }
+
+        #[test]
+        fn test_number_separator_accepts_hyphen_prefixed_value() {
+            let matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "-s", "-X"])
+                .unwrap();
+            let mut flags = NlFlags::new(matches).unwrap();
+            let mut output = Vec::new();
+            let mut reader = BufReader::new(Cursor::new("Line 1\n"));
+
+            nl(&mut output, &mut reader, &mut flags).unwrap();
+
+            assert_eq!(output, b"     1-XLine 1\n");
         }
 
         /// 测试正则表达式编号功能

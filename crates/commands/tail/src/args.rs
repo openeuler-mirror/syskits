@@ -333,6 +333,14 @@ impl TailOptions {
         }
 
         if let Some(pid_str) = matches.get_one::<String>(tail_flags::TAIL_PID) {
+            #[cfg(unix)]
+            if pid_str.starts_with('-') {
+                return Err(CtSimpleError::new(
+                    1,
+                    format!("invalid PID: {}", pid_str.quote()),
+                ));
+            }
+
             match pid_str.parse() {
                 Ok(pid) => {
                     // NOTE: on unix platform::Pid is i32, on windows platform::Pid is u32
@@ -801,6 +809,13 @@ mod tests {
                 .expect("GNU tail accepts repeated --pid options");
 
             assert_eq!(options.pid, 2);
+        }
+
+        #[test]
+        fn test_negative_zero_pid_is_rejected() {
+            let result = tail_parse_args(create_args(&["--pid=-0"]));
+
+            assert_eq!(result.unwrap_err().to_string(), "invalid PID: '-0'");
         }
 
         #[test]

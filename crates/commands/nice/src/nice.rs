@@ -143,6 +143,11 @@ fn set_niceness_error_message_for_locale(error: &Error, simplified_chinese: bool
 }
 
 fn nice_uses_simplified_chinese() -> bool {
+    #[cfg(target_os = "linux")]
+    if !nice_locale_environment_is_valid() {
+        return false;
+    }
+
     let message_locale = ["LC_ALL", "LC_MESSAGES", "LANG"]
         .into_iter()
         .find_map(|name| std::env::var_os(name).filter(|value| !value.is_empty()))
@@ -254,6 +259,11 @@ fn nice_ctype_codeset() -> Option<String> {
     let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
         .into_iter()
         .find_map(|name| std::env::var_os(name).filter(|value| !value.is_empty()))?;
+    nice_codeset_for_locale(locale.as_os_str())
+}
+
+#[cfg(target_os = "linux")]
+fn nice_codeset_for_locale(locale: &OsStr) -> Option<String> {
     let locale = CString::new(locale.as_encoded_bytes()).ok()?;
     let locale_handle =
         unsafe { libc::newlocale(libc::LC_CTYPE_MASK, locale.as_ptr(), std::ptr::null_mut()) };
@@ -266,6 +276,17 @@ fn nice_ctype_codeset() -> Option<String> {
     };
     unsafe { libc::freelocale(locale_handle) };
     String::from_utf8(codeset?).ok()
+}
+
+#[cfg(target_os = "linux")]
+fn nice_locale_environment_is_valid() -> bool {
+    let locale_handle =
+        unsafe { libc::newlocale(libc::LC_ALL_MASK, c"".as_ptr(), std::ptr::null_mut()) };
+    if locale_handle.is_null() {
+        return false;
+    }
+    unsafe { libc::freelocale(locale_handle) };
+    true
 }
 
 #[cfg(target_os = "linux")]
@@ -436,6 +457,11 @@ fn nice_quote_operand_bytes(
     codeset: Option<&str>,
 ) -> Vec<u8> {
     if !simplified_chinese {
+        #[cfg(target_os = "linux")]
+        if nice_ctype_codeset().is_none() {
+            return nice_quote_c_locale_bytes(value);
+        }
+
         return gnu_quote_locale(value).into_bytes();
     }
 
@@ -482,6 +508,35 @@ fn nice_quote_operand_bytes(
         index += 1;
     }
     quoted.push(b'"');
+    quoted
+}
+
+#[cfg(target_os = "linux")]
+fn nice_quote_c_locale_bytes(value: &OsStr) -> Vec<u8> {
+    let bytes = value.as_bytes();
+    let mut quoted = Vec::with_capacity(bytes.len() + 2);
+    quoted.push(b'\'');
+    for byte in bytes {
+        match *byte {
+            b'\x07' => quoted.extend_from_slice(b"\\a"),
+            b'\x08' => quoted.extend_from_slice(b"\\b"),
+            b'\t' => quoted.extend_from_slice(b"\\t"),
+            b'\n' => quoted.extend_from_slice(b"\\n"),
+            b'\x0b' => quoted.extend_from_slice(b"\\v"),
+            b'\x0c' => quoted.extend_from_slice(b"\\f"),
+            b'\r' => quoted.extend_from_slice(b"\\r"),
+            b'\\' => quoted.extend_from_slice(b"\\\\"),
+            b'\'' => quoted.extend_from_slice(b"\\'"),
+            0x20..=0x7e => quoted.push(*byte),
+            byte => {
+                quoted.push(b'\\');
+                quoted.push(b'0' + (byte >> 6));
+                quoted.push(b'0' + ((byte >> 3) & 0o7));
+                quoted.push(b'0' + (byte & 0o7));
+            }
+        }
+    }
+    quoted.push(b'\'');
     quoted
 }
 
@@ -1322,6 +1377,12 @@ mod tests {
                 0xce, 0xde, 0xd0, 0xa7, 0xb5, 0xc4, 0xb5, 0xf7, 0xd5, 0xfb, 0xd6, 0xb5,
             ])
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_missing_ctype_locale_has_no_codeset() {
+        assert!(nice_codeset_for_locale(OsStr::new("zz_ZZ.UTF-8")).is_none());
     }
 
     #[cfg(target_os = "linux")]

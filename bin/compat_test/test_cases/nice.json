@@ -164,6 +164,35 @@
         },
         {
             "command": "nice",
+            "description": "Linux下LC_ALL指定不存在的zz_ZZ.UTF-8 locale时，GNU setlocale失败并保留C locale；nice -n bad /usr/bin/true必须以125退出，stdout为空，stderr使用C locale的ASCII单引号invalid adjustment 'bad'。",
+            "args": [
+                "-n",
+                "bad",
+                "/usr/bin/true"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "zz_ZZ.UTF-8",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: invalid adjustment 'bad'\n"
+                }
+            },
+            "tags": [
+                "linux",
+                "locale",
+                "fallback",
+                "invalid-locale",
+                "quote"
+            ]
+        },
+        {
+            "command": "nice",
             "description": "空调整值用例：LC_ALL=C下执行nice -n 空字符串 /usr/bin/true；GNU保留-n的空值并报告invalid adjustment ''，预期RC=125、stdout为空、stderr为nice: invalid adjustment ''。",
             "args": [
                 "-n",

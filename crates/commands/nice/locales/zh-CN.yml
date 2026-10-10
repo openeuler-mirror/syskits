@@ -1,4 +1,6 @@
 nice:
+  errors:
+    write_error: 写入错误
   clap:
     adjustment: 向nice值添加N（默认为10）
   usage: nice [选项] [命令 [参数]]

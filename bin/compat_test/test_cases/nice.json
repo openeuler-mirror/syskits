@@ -215,6 +215,50 @@
         },
         {
             "command": "nice",
+            "description": "LC_ALL=C下无参数查询niceness且stdout为/dev/full；GNU close_stdout报告write error: No space left on device并以125退出，不能触发Rust panic。",
+            "args": [],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "full",
+                    "stderr": "capture"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: write error: No space left on device\n"
+                }
+            }
+        },
+        {
+            "command": "nice",
+            "description": "LC_ALL=C下启动前关闭stdout并无参数查询niceness；GNU保留原始EBADF语义，报告write error: Bad file descriptor且以125退出。",
+            "args": [],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stdout": "closed",
+                    "stderr": "capture"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: write error: Bad file descriptor\n"
+                }
+            }
+        },
+        {
+            "command": "nice",
             "description": "nice: --adjustment=1 (long option)",
             "args": [
                 "--adjustment=1",

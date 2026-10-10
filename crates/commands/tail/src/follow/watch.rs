@@ -18,6 +18,7 @@ use ctcore::ct_error::{CTResult, CtSimpleError, set_ct_exit_code, strip_errno};
 use ctcore::ct_show_error;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::fs::Metadata;
 use std::io::BufRead;
 #[cfg(unix)]
@@ -199,6 +200,23 @@ impl Observer {
         reader: Option<Box<dyn BufRead>>,
         update_last: bool,
     ) -> CTResult<()> {
+        self.add_path_with_header(
+            path,
+            display_name,
+            OsStr::new(display_name),
+            reader,
+            update_last,
+        )
+    }
+
+    pub fn add_path_with_header(
+        &mut self,
+        path: &Path,
+        display_name: &str,
+        header_name: &OsStr,
+        reader: Option<Box<dyn BufRead>>,
+        update_last: bool,
+    ) -> CTResult<()> {
         if self.follow.is_some() {
             let path = if path.is_relative() {
                 std::env::current_dir()?.join(path)
@@ -208,7 +226,7 @@ impl Observer {
             let metadata = path.metadata().ok();
             self.files.insert(
                 &path,
-                PathData::new(reader, metadata, display_name),
+                PathData::new(reader, metadata, display_name, header_name),
                 update_last,
             );
         }
@@ -234,14 +252,15 @@ impl Observer {
         Ok(())
     }
 
-    pub fn add_bad_path(
+    pub fn add_bad_path_with_header(
         &mut self,
         path: &Path,
         display_name: &str,
+        header_name: &OsStr,
         update_last: bool,
     ) -> CTResult<()> {
         if self.retry && self.follow.is_some() {
-            return self.add_path(path, display_name, None, update_last);
+            return self.add_path_with_header(path, display_name, header_name, None, update_last);
         }
 
         Ok(())
@@ -1403,7 +1422,9 @@ mod tests {
         let target = temp_dir.path().join("target");
 
         symlink(&target, &link_path).unwrap();
-        observer.add_bad_path(&link_path, "symlink", false).unwrap();
+        observer
+            .add_bad_path_with_header(&link_path, "symlink", OsStr::new("symlink"), false)
+            .unwrap();
 
         fs::write(&target, b"").unwrap();
         assert!(!observer.reconcile_follow_name_retry(false).unwrap());

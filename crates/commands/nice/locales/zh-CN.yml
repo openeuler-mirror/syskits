@@ -1,6 +1,10 @@
 nice:
   errors:
     write_error: 写入错误
+    invalid_adjustment: "无效的调整值 %{value}"
+    missing_command: 指定调整值时，必须同时指定命令
+    cannot_get_niceness: 无法获取优先级
+    cannot_set_niceness: 无法设置优先级
   clap:
     adjustment: 向nice值添加N（默认为10）
   usage: nice [选项] [命令 [参数]]

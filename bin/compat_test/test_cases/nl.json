@@ -679,7 +679,7 @@
           "execution": {
             "exit_code": 1,
             "stdout": "",
-            "stderr": null
+            "stderr": "nl: invalid line number field width: '2147483648': Value too large for defined data type\n"
           }
         },
         "tags": ["number-width", "integer-range", "invalid-option"]
@@ -698,7 +698,7 @@
           "execution": {
             "exit_code": 1,
             "stdout": "",
-            "stderr": null
+            "stderr": "nl: invalid line number of blank lines: '9223372036854775808': Value too large for defined data type\n"
           }
         },
         "tags": ["join-blank-lines", "integer-range", "invalid-option"]

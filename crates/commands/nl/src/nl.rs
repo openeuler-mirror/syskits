@@ -22,9 +22,10 @@ use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::ct_quoting_style::gnu_quote_shell;
 use ctcore::{Args, ct_show_error};
 use std::cell::RefCell;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write, stdout};
+use std::num::{IntErrorKind, ParseIntError};
 use std::path::Path;
 use std::str::FromStr;
 use sys_locale::get_locale;
@@ -232,47 +233,28 @@ impl NlFlags {
 
         // GNU xdectoimax skips only leading ASCII whitespace.  Keep the raw
         // value through clap so the command-level parser can apply that rule.
-        match matches
-            .get_one::<String>(nl_flags::NL_NUMBER_WIDTH)
-            .map(|value| parse_gnu_decimal::<i32>(value))
-        {
-            None => {}
-            Some(Ok(num)) if num > 0 => flags.number_width = num as usize,
-            Some(Ok(_)) => errs.push(String::from(
-                "Invalid line number field width: '0': Numerical result out of range",
-            )),
-            Some(Err(_)) => errs.push(String::from("invalid line number field width")),
+        if let Some(value) = matches.get_one::<String>(nl_flags::NL_NUMBER_WIDTH) {
+            let number = parse_nl_decimal::<i32>("line number field width", value)?;
+            if number <= 0 {
+                return Err(nl_numeric_range_error("line number field width", value));
+            }
+            flags.number_width = number as usize;
         }
 
-        match matches
-            .get_one::<String>(nl_flags::NL_JOIN_BLANK_LINES)
-            .map(|value| parse_gnu_decimal::<i64>(value))
-        {
-            None => {}
-            Some(Ok(num)) if num > 0 => flags.join_blank_lines = num as u64,
-            Some(Ok(_)) => errs.push(String::from(
-                "Invalid line number of blank lines: '0': Numerical result out of range",
-            )),
-            Some(Err(_)) => errs.push(String::from("invalid line number of blank lines")),
+        if let Some(value) = matches.get_one::<String>(nl_flags::NL_JOIN_BLANK_LINES) {
+            let number = parse_nl_decimal::<i64>("line number of blank lines", value)?;
+            if number <= 0 {
+                return Err(nl_numeric_range_error("line number of blank lines", value));
+            }
+            flags.join_blank_lines = number as u64;
         }
 
         if let Some(value) = matches.get_one::<String>(nl_flags::NL_LINE_INCREMENT) {
-            match parse_gnu_decimal::<i64>(value) {
-                Ok(num) => flags.line_increment = num,
-                Err(_) => errs.push(String::from("invalid line number increment")),
-            }
+            flags.line_increment = parse_nl_decimal("line number increment", value)?;
         }
 
         if let Some(num) = matches.get_one::<String>(nl_flags::NL_STARTING_LINE_NUMBER) {
-            // 检测溢出：当数值超出 i64 范围时返回错误
-            match parse_gnu_decimal::<i64>(num) {
-                Ok(n) => flags.starting_line_number = n,
-                Err(_) => {
-                    errs.push(format!(
-                        "invalid starting line number: '{num}': Numerical result out of range"
-                    ));
-                }
-            }
+            flags.starting_line_number = parse_nl_decimal("starting line number", num)?;
         }
 
         // 提取重新编号选项
@@ -291,10 +273,45 @@ impl NlFlags {
     }
 }
 
-fn parse_gnu_decimal<T: FromStr>(value: &str) -> Result<T, T::Err> {
+fn parse_gnu_decimal<T: FromStr<Err = ParseIntError>>(value: &str) -> Result<T, ParseIntError> {
     value
         .trim_start_matches(|character: char| character.is_ascii_whitespace())
         .parse()
+}
+
+fn parse_nl_decimal<T: FromStr<Err = ParseIntError>>(
+    option_name: &str,
+    value: &str,
+) -> CTResult<T> {
+    parse_gnu_decimal(value).map_err(|error| nl_numeric_parse_error(option_name, value, &error))
+}
+
+fn nl_numeric_parse_error(
+    option_name: &str,
+    value: &str,
+    error: &ParseIntError,
+) -> Box<dyn ctcore::ct_error::CTError> {
+    let mut message = format!(
+        "invalid {option_name}: {}",
+        gnu_quote_shell(OsStr::new(value), true)
+    );
+    if matches!(
+        error.kind(),
+        &IntErrorKind::PosOverflow | &IntErrorKind::NegOverflow
+    ) {
+        message.push_str(": Value too large for defined data type");
+    }
+    CtSimpleError::new(1, message)
+}
+
+fn nl_numeric_range_error(option_name: &str, value: &str) -> Box<dyn ctcore::ct_error::CTError> {
+    CtSimpleError::new(
+        1,
+        format!(
+            "invalid {option_name}: {}: Numerical result out of range",
+            gnu_quote_shell(OsStr::new(value), true)
+        ),
+    )
 }
 
 /// 行号格式化状态结构
@@ -1448,6 +1465,40 @@ mod tests {
                 .unwrap();
 
             assert!(NlFlags::new(matches).is_err());
+        }
+
+        #[test]
+        fn test_flags_numeric_range_errors_use_gnu_diagnostics() {
+            let cases = [
+                (
+                    ["-w", "2147483648"],
+                    "invalid line number field width: '2147483648': Value too large for defined data type",
+                ),
+                (
+                    ["-l", "0"],
+                    "invalid line number of blank lines: '0': Numerical result out of range",
+                ),
+                (
+                    ["-i", "9223372036854775808"],
+                    "invalid line number increment: '9223372036854775808': Value too large for defined data type",
+                ),
+                (
+                    ["-v", "not-a-number"],
+                    "invalid starting line number: 'not-a-number'",
+                ),
+            ];
+
+            for (args, expected) in cases {
+                let matches = ct_app()
+                    .try_get_matches_from([ctcore::ct_util_name(), args[0], args[1]])
+                    .unwrap();
+
+                let error = match NlFlags::new(matches) {
+                    Ok(_) => panic!("invalid numeric option must be rejected"),
+                    Err(error) => error,
+                };
+                assert_eq!(error.to_string(), expected);
+            }
         }
 
         /// 测试多文件处理

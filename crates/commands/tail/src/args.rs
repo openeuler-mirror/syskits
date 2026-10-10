@@ -309,7 +309,7 @@ impl TailOptions {
             settings.sleep_sec = match DurationParser::without_time_units().parse(source) {
                 Ok(duration) => SaturatingInto::<std::time::Duration>::saturating_into(duration),
                 Err(_) => {
-                    return Err(CTsageError::new(
+                    return Err(CtSimpleError::new(
                         1,
                         format!("invalid number of seconds: '{source}'"),
                     ));
@@ -849,6 +849,15 @@ mod tests {
                     .expect("GNU tail accepts repeated --sleep-interval options");
 
             assert_eq!(options.sleep_sec, Duration::from_secs(2));
+        }
+
+        #[test]
+        fn test_invalid_sleep_interval_does_not_request_usage() {
+            let error = tail_parse_args(create_args(&["--sleep-interval=-1"]))
+                .expect_err("negative sleep interval must be rejected");
+
+            assert_eq!(error.to_string(), "invalid number of seconds: '-1'");
+            assert!(!error.usage());
         }
 
         #[test]

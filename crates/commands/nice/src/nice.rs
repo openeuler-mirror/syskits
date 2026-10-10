@@ -228,28 +228,43 @@ fn nice_get_niceness_message(simplified_chinese: bool) -> String {
     }
 }
 
-fn nice_usage_hint(utility_name: &str, simplified_chinese: bool) -> Vec<u8> {
+fn nice_usage_hint_with_c_string_status(
+    utility_name: &str,
+    simplified_chinese: bool,
+) -> (Vec<u8>, bool) {
     let hint = if simplified_chinese {
         format!("请尝试执行 \"{utility_name} --help\" 来获取更多信息。").into_bytes()
     } else {
         format!("Try '{utility_name} --help' for more information.").into_bytes()
     };
-    nice_locale_diagnostic_bytes(&hint, simplified_chinese)
+    nice_locale_diagnostic_bytes_with_c_string_status(&hint, simplified_chinese)
+}
+
+fn nice_usage_hint_appends_newline(was_truncated: bool) -> bool {
+    !was_truncated
 }
 
 fn nice_locale_diagnostic_bytes(text: &[u8], simplified_chinese: bool) -> Vec<u8> {
+    nice_locale_diagnostic_bytes_with_c_string_status(text, simplified_chinese).0
+}
+
+fn nice_locale_diagnostic_bytes_with_c_string_status(
+    text: &[u8],
+    simplified_chinese: bool,
+) -> (Vec<u8>, bool) {
     if !simplified_chinese {
-        return text.to_vec();
+        return (text.to_vec(), false);
     }
 
     #[cfg(target_os = "linux")]
     if let Some(codeset) = nice_output_codeset()
-        && let Some(encoded) = nice_encode_locale_text(text, &codeset)
+        && let Some(mut encoded) = nice_encode_locale_text(text, &codeset)
     {
-        return encoded;
+        let truncated = nice_truncate_c_string(&mut encoded);
+        return (encoded, truncated);
     }
 
-    text.to_vec()
+    (text.to_vec(), false)
 }
 
 #[cfg(target_os = "linux")]
@@ -317,6 +332,14 @@ fn nice_codeset_supports_utf8(codeset: &str) -> bool {
         return false;
     }
     unsafe { libc::iconv_close(converter) };
+    true
+}
+
+fn nice_truncate_c_string(bytes: &mut Vec<u8>) -> bool {
+    let Some(nul_index) = bytes.iter().position(|byte| *byte == 0) else {
+        return false;
+    };
+    bytes.truncate(nul_index);
     true
 }
 
@@ -416,10 +439,20 @@ fn nice_diagnostic_error_bytes(
     message: Vec<u8>,
     usage_hint: Option<Vec<u8>>,
 ) -> Box<dyn ctcore::ct_error::CTError> {
+    nice_diagnostic_error_bytes_with_usage_hint(code, message, usage_hint, true)
+}
+
+fn nice_diagnostic_error_bytes_with_usage_hint(
+    code: i32,
+    message: Vec<u8>,
+    usage_hint: Option<Vec<u8>>,
+    usage_hint_appends_newline: bool,
+) -> Box<dyn ctcore::ct_error::CTError> {
     Box::new(NiceDiagnosticError {
         code,
         message,
         usage_hint,
+        usage_hint_appends_newline,
     })
 }
 
@@ -586,8 +619,11 @@ fn nice_invalid_adjustment_diagnostic(value: &OsStr) -> Vec<u8> {
     } else {
         String::from("invalid adjustment ")
     };
-    let mut diagnostic = nice_locale_diagnostic_bytes(label.as_bytes(), simplified_chinese);
-    diagnostic.extend_from_slice(&nice_quote_operand_bytes(value, simplified_chinese, None));
+    let (mut diagnostic, format_string_was_truncated) =
+        nice_locale_diagnostic_bytes_with_c_string_status(label.as_bytes(), simplified_chinese);
+    if !format_string_was_truncated {
+        diagnostic.extend_from_slice(&nice_quote_operand_bytes(value, simplified_chinese, None));
+    }
     diagnostic
 }
 
@@ -796,12 +832,14 @@ fn match_nice_long_option(name: &[u8]) -> NiceLongOptionMatch {
 }
 
 fn nice_usage_error(message: Vec<u8>) -> Box<dyn ctcore::ct_error::CTError> {
+    let (usage_hint, was_truncated) = nice_usage_hint_with_c_string_status(
+        ctcore::ct_help_utility_name(),
+        nice_uses_simplified_chinese(),
+    );
     Box::new(NiceUsageError {
         message,
-        usage_hint: nice_usage_hint(
-            ctcore::ct_help_utility_name(),
-            nice_uses_simplified_chinese(),
-        ),
+        usage_hint,
+        usage_hint_appends_newline: nice_usage_hint_appends_newline(was_truncated),
     })
 }
 
@@ -899,6 +937,7 @@ fn prepare_nice_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
 struct NiceUsageError {
     message: Vec<u8>,
     usage_hint: Vec<u8>,
+    usage_hint_appends_newline: bool,
 }
 
 #[derive(Debug)]
@@ -906,6 +945,7 @@ struct NiceDiagnosticError {
     code: i32,
     message: Vec<u8>,
     usage_hint: Option<Vec<u8>>,
+    usage_hint_appends_newline: bool,
 }
 
 impl Display for NiceDiagnosticError {
@@ -927,6 +967,10 @@ impl ctcore::ct_error::CTError for NiceDiagnosticError {
 
     fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
         self.usage_hint.as_deref().map(Cow::Borrowed)
+    }
+
+    fn usage_hint_appends_newline(&self) -> bool {
+        self.usage_hint_appends_newline
     }
 
     fn usage(&self) -> bool {
@@ -953,6 +997,10 @@ impl ctcore::ct_error::CTError for NiceUsageError {
 
     fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
         Some(Cow::Borrowed(&self.usage_hint))
+    }
+
+    fn usage_hint_appends_newline(&self) -> bool {
+        self.usage_hint_appends_newline
     }
 
     fn usage(&self) -> bool {
@@ -1046,13 +1094,18 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
         if let Some(value) = adjustment_value {
             let _ = parse_adjustment(value.as_os_str())?;
             let simplified_chinese = nice_uses_simplified_chinese();
-            return Err(nice_diagnostic_error(
+            let (usage_hint, was_truncated) = nice_usage_hint_with_c_string_status(
+                ctcore::ct_help_utility_name(),
+                simplified_chinese,
+            );
+            return Err(nice_diagnostic_error_bytes_with_usage_hint(
                 125,
-                nice_missing_command_message(simplified_chinese),
-                Some(nice_usage_hint(
-                    ctcore::ct_help_utility_name(),
+                nice_locale_diagnostic_bytes(
+                    nice_missing_command_message(simplified_chinese).as_bytes(),
                     simplified_chinese,
-                )),
+                ),
+                Some(usage_hint),
+                nice_usage_hint_appends_newline(was_truncated),
             ));
         }
 
@@ -1361,7 +1414,7 @@ mod tests {
             "指定调整值时，必须同时指定命令"
         );
         assert_eq!(
-            nice_usage_hint("nice", true),
+            nice_usage_hint_with_c_string_status("nice", true).0,
             "请尝试执行 \"nice --help\" 来获取更多信息。".as_bytes()
         );
         assert_eq!(
@@ -1432,6 +1485,19 @@ mod tests {
     fn test_invalid_output_charset_disables_translation() {
         assert!(nice_codeset_supports_utf8("UTF-8"));
         assert!(!nice_codeset_supports_utf8("invalid-charset"));
+    }
+
+    #[test]
+    fn test_embedded_nul_truncates_localized_c_string() {
+        let mut bytes = b"invalid adjustment \0%s".to_vec();
+        assert!(nice_truncate_c_string(&mut bytes));
+        assert_eq!(bytes, b"invalid adjustment ");
+    }
+
+    #[test]
+    fn test_truncated_usage_hint_does_not_append_newline() {
+        assert!(!nice_usage_hint_appends_newline(true));
+        assert!(nice_usage_hint_appends_newline(false));
     }
 
     #[cfg(target_os = "linux")]

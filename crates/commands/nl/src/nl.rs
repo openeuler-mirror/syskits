@@ -184,7 +184,9 @@ impl NlFlags {
             for delimiter in delimiters {
                 let delimiter = delimiter.as_encoded_bytes();
                 if delimiter.len() == 1 || delimiter.len() == 2 {
-                    flags.section_delimiter[..delimiter.len()].copy_from_slice(delimiter);
+                    if flags.section_delimiter.len() >= delimiter.len() {
+                        flags.section_delimiter[..delimiter.len()].copy_from_slice(delimiter);
+                    }
                 } else {
                     flags.section_delimiter = delimiter.to_vec();
                 }

@@ -945,6 +945,23 @@
           }
         },
         "tags": ["section-delimiter", "repeated-options", "gnu-extension"]
+      },
+      {
+        "command": "nl",
+        "description": "-d ''禁用分节匹配；后续短-d x在GNU Linux上不恢复匹配，xx保持普通正文且命令不得崩溃。",
+        "tstdin": "xx\nline\n",
+        "args": ["-d", "", "-d", "x"],
+        "environment": {
+          "env_vars": {"LC_ALL": "C", "LANG": "C"}
+        },
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "     1\txx\n     2\tline\n",
+            "stderr": ""
+          }
+        },
+        "tags": ["section-delimiter", "empty-value", "repeated-options"]
       }
     ]
   }

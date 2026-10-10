@@ -24,6 +24,11 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
 use std::time::Duration;
 
+fn is_symlink(path: &Path) -> bool {
+    path.symlink_metadata()
+        .is_ok_and(|metadata| metadata.file_type().is_symlink())
+}
+
 pub struct WatcherRx {
     watcher: Box<dyn Watcher>,
     receiver: Receiver<Result<notify::Event, notify::Error>>,
@@ -219,6 +224,17 @@ impl Observer {
             return Ok(());
         }
 
+        // Like GNU tail, use polling for symlink operands. Inotify reports
+        // changes to their targets, which cannot be matched reliably to the
+        // names given on the command line.
+        if options
+            .inputs
+            .iter()
+            .any(|input| matches!(input.kind(), TailInputKind::File(path) if is_symlink(path)))
+        {
+            self.use_polling = true;
+        }
+
         let (tx, rx) = channel();
 
         /*
@@ -392,6 +408,9 @@ impl Observer {
         };
         if self.follow_name() {
             self.files.reset_unchanged_stats(&tracked_path);
+            if is_symlink(&tracked_path) {
+                self.use_polling = true;
+            }
         }
         let display_name = self.files.get(&tracked_path).display_name.clone();
 
@@ -1107,6 +1126,59 @@ mod tests {
         assert!(observer.files.contains_key(&new_path));
         assert!(!observer.files.contains_key(&old_path));
         assert!(observer.pending_renames.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn start_uses_polling_for_symlink_input() {
+        let temp_dir = tempdir().unwrap();
+        let target = temp_dir.path().join("target");
+        let link = temp_dir.path().join("link");
+        fs::write(&target, b"initial\n").unwrap();
+        symlink(&target, &link).unwrap();
+
+        let options = TailOptions {
+            follow: Some(TailFollowMode::Name),
+            inputs: vec![TailInput::from(link.as_os_str())],
+            ..TailOptions::default()
+        };
+        let mut observer = Observer::from(&options);
+
+        observer.start(&options).unwrap();
+
+        assert!(observer.use_polling);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn follow_name_switches_to_polling_when_path_becomes_symlink() {
+        let options = TailOptions {
+            follow: Some(TailFollowMode::Name),
+            ..TailOptions::default()
+        };
+        let mut observer = Observer::from(&options);
+        let temp_dir = tempdir().unwrap();
+        let path = temp_dir.path().join("file");
+        let target = temp_dir.path().join("target");
+
+        fs::write(&path, b"old\n").unwrap();
+        fs::write(&target, b"new\n").unwrap();
+        observer
+            .add_path(
+                &path,
+                "file",
+                Some(Box::new(BufReader::new(File::open(&path).unwrap()))),
+                false,
+            )
+            .unwrap();
+
+        fs::remove_file(&path).unwrap();
+        symlink(&target, &path).unwrap();
+        let event = Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::To))).add_path(path);
+
+        observer.handle_event(&event, &options).unwrap();
+
+        assert!(observer.use_polling);
     }
 
     #[test]

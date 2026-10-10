@@ -865,6 +865,25 @@
           }
         },
         "tags": ["regex", "gnu-bre", "body-numbering"]
+      },
+      {
+        "command": "nl",
+        "description": "Linux下/proc/self/mem可成功打开但读取返回EIO；GNU将读取错误关联到文件操作数并保留系统错误文本。",
+        "args": ["/proc/self/mem"],
+        "environment": {
+          "env_vars": {
+            "LC_ALL": "C",
+            "LANG": "C"
+          }
+        },
+        "expectation": {
+          "execution": {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "nl: /proc/self/mem: Input/output error\n"
+          }
+        },
+        "tags": ["linux", "input-error", "file-operand", "diagnostic"]
       }
     ]
   }

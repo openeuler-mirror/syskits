@@ -717,6 +717,28 @@
         "rm -f -- \"$(printf '\\146\\151\\154\\145\\055\\377')\""
       ],
       "tags": ["linux", "raw-bytes", "non-utf8", "headers"]
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "tail",
+      "description": "原始字节打开失败诊断用例：LC_ALL=C、LANG=C下执行 tail 操作数 missing-\\377（参数完整十六进制=6d697373696e672dff），该文件不存在；预期RC=1、stdout为0字节，stderr完整十六进制=7461696c3a2063616e6e6f74206f70656e20276d697373696e672d2724275c3337372720666f722072656164696e673a204e6f20737563682066696c65206f72206469726563746f72790a，对应GNU路径引用 'missing-'$'\\377'。",
+      "args": ["6d697373696e672dff"],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "7461696c3a2063616e6e6f74206f70656e20276d697373696e672d2724275c3337372720666f722072656164696e673a204e6f20737563682066696c65206f72206469726563746f72790a"
+        }
+      },
+      "cleanup_commands": [],
+      "tags": ["linux", "raw-bytes", "non-utf8", "diagnostics"]
     }
   ]
 }

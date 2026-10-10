@@ -26,12 +26,13 @@ use clap::Command;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, get_ct_exit_code, set_ct_exit_code};
+use ctcore::ct_quoting_style::gnu_quote_shell_bytes;
 use ctcore::{ct_show, ct_show_error};
 use follow::Observer;
 use paths::{TailHeaderPrinter, TailInput, TailInputKind};
 use same_file::Handle;
 use std::cmp::Ordering;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::{File, FileType, Metadata};
 use std::io::{
     self, BufRead, BufReader, BufWriter, IsTerminal, Read, Seek, SeekFrom, Write, stdin, stdout,
@@ -571,10 +572,10 @@ fn tail_file(
 
 fn handle_file_not_found(input: &TailInput, path: &Path, observer: &mut Observer) -> CTResult<()> {
     set_ct_exit_code(1);
-    ct_show_error!(
-        "cannot open '{}' for reading: {}",
-        input.display_name,
-        text::TAIL_NO_SUCH_FILE
+    tail_show_path_diagnostic(
+        b"cannot open ",
+        input.header_name(),
+        format!(" for reading: {}", text::TAIL_NO_SUCH_FILE).as_bytes(),
     );
     observer.add_bad_path_with_header(
         path,
@@ -583,6 +584,24 @@ fn handle_file_not_found(input: &TailInput, path: &Path, observer: &mut Observer
         false,
     )?;
     Ok(())
+}
+
+fn tail_show_path_diagnostic(prefix: &[u8], path: &OsStr, suffix: &[u8]) {
+    let mut diagnostic = Vec::with_capacity(prefix.len() + path.len() + suffix.len() + 16);
+    diagnostic.extend_from_slice(ctcore::ct_util_name().as_bytes());
+    diagnostic.extend_from_slice(b": ");
+    diagnostic.extend_from_slice(&tail_path_diagnostic_bytes(prefix, path, suffix));
+    diagnostic.push(b'\n');
+    let _ = io::stderr().lock().write_all(&diagnostic);
+}
+
+fn tail_path_diagnostic_bytes(prefix: &[u8], path: &OsStr, suffix: &[u8]) -> Vec<u8> {
+    let quoted_path = gnu_quote_shell_bytes(path, true);
+    let mut diagnostic = Vec::with_capacity(prefix.len() + quoted_path.len() + suffix.len());
+    diagnostic.extend_from_slice(prefix);
+    diagnostic.extend_from_slice(&quoted_path);
+    diagnostic.extend_from_slice(suffix);
+    diagnostic
 }
 
 fn handle_directory(
@@ -1247,10 +1266,14 @@ mod tests {
     use crate::follow::Observer;
     use crate::paths::{TailHeaderPrinter, TailInput};
     use crate::tail_forwards_thru_file;
+    #[cfg(unix)]
+    use std::ffi::OsStr;
     use std::ffi::OsString;
     use std::fs::File;
     use std::io::Cursor;
     use std::io::{Read, Write};
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStrExt;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -1268,6 +1291,19 @@ mod tests {
         let args: Vec<OsString> = vec![OsString::from("tail"), OsString::from("--help")];
         let result = tool.execute(&args);
         assert!(result.is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cannot_open_diagnostic_preserves_non_utf8_operand_bytes() {
+        assert_eq!(
+            tail_path_diagnostic_bytes(
+                b"cannot open ",
+                OsStr::from_bytes(b"missing-\xff"),
+                b" for reading: No such file or directory",
+            ),
+            b"cannot open 'missing-'$'\\377' for reading: No such file or directory"
+        );
     }
 
     #[test]

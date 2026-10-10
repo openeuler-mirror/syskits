@@ -503,6 +503,7 @@ fn nl_process_reader<R, W, F>(
     writer: &mut W,
     reader: &mut BufReader<R>,
     flags: &mut NlFlags,
+    source: Option<&OsStr>,
     mut on_row: F,
 ) -> CTResult<()>
 where
@@ -518,7 +519,7 @@ where
         buf.clear();
         let n = reader
             .read_until(b'\n', &mut buf)
-            .map_err_context(|| "could not read line".to_string())?;
+            .map_err(|error| nl_read_error(source, error))?;
 
         if n == 0 {
             break;
@@ -642,6 +643,18 @@ where
     Ok(())
 }
 
+fn nl_read_error(
+    source: Option<&OsStr>,
+    error: std::io::Error,
+) -> Box<dyn ctcore::ct_error::CTError> {
+    let error = strip_errno(&error);
+    let message = source.map_or_else(
+        || format!("could not read line: {error}"),
+        |source| format!("{}: {error}", gnu_quote_shell(source, false)),
+    );
+    CtSimpleError::new(1, message)
+}
+
 impl NlSectionDelimiter {
     /// 解析分节符
     ///
@@ -725,7 +738,7 @@ where
     for file in &files {
         if file == "-" {
             let mut buffer = BufReader::new(ctcore::ct_io::stdin_reader_box());
-            match nl(writer, &mut buffer, &mut flags) {
+            match nl_with_source(writer, &mut buffer, &mut flags, file.as_os_str()) {
                 Ok(_) => {}
                 Err(e) => {
                     ct_show_error!("{}", e);
@@ -741,7 +754,7 @@ where
                 match File::open(path) {
                     Ok(reader) => {
                         let mut buffer = BufReader::new(reader);
-                        match nl(writer, &mut buffer, &mut flags) {
+                        match nl_with_source(writer, &mut buffer, &mut flags, file.as_os_str()) {
                             Ok(_) => {}
                             Err(e) => {
                                 ct_show_error!("{}", e);
@@ -784,9 +797,13 @@ pub fn nl_native_semantic(args: impl Args) -> CTResult<NlSemantic> {
     for file in &files {
         if file == "-" {
             let mut buffer = BufReader::new(ctcore::ct_io::stdin_reader_box());
-            if let Err(err) =
-                nl_process_reader(&mut writer, &mut buffer, &mut flags, |row| rows.push(row))
-            {
+            if let Err(err) = nl_process_reader(
+                &mut writer,
+                &mut buffer,
+                &mut flags,
+                Some(file.as_os_str()),
+                |row| rows.push(row),
+            ) {
                 stderr_text.push_str(&format!("nl: {err}\n"));
                 had_errors = true;
             }
@@ -799,11 +816,13 @@ pub fn nl_native_semantic(args: impl Args) -> CTResult<NlSemantic> {
                 match File::open(path) {
                     Ok(reader) => {
                         let mut buffer = BufReader::new(reader);
-                        if let Err(err) =
-                            nl_process_reader(&mut writer, &mut buffer, &mut flags, |row| {
-                                rows.push(row)
-                            })
-                        {
+                        if let Err(err) = nl_process_reader(
+                            &mut writer,
+                            &mut buffer,
+                            &mut flags,
+                            Some(file.as_os_str()),
+                            |row| rows.push(row),
+                        ) {
                             stderr_text.push_str(&format!("nl: {err}\n"));
                             had_errors = true;
                         }
@@ -848,12 +867,26 @@ pub fn nl_native_semantic(args: impl Args) -> CTResult<NlSemantic> {
 ///
 /// # 返回值
 /// * `CTResult<()>` - 处理结果
+#[cfg(test)]
 fn nl<R, W>(writer: &mut W, reader: &mut BufReader<R>, flags: &mut NlFlags) -> CTResult<()>
 where
     R: std::io::Read,
     W: std::io::Write,
 {
-    nl_process_reader(writer, reader, flags, |_| {})
+    nl_process_reader(writer, reader, flags, None, |_| {})
+}
+
+fn nl_with_source<R, W>(
+    writer: &mut W,
+    reader: &mut BufReader<R>,
+    flags: &mut NlFlags,
+    source: &OsStr,
+) -> CTResult<()>
+where
+    R: std::io::Read,
+    W: std::io::Write,
+{
+    nl_process_reader(writer, reader, flags, Some(source), |_| {})
 }
 
 /// 命令行应用程序配置函数
@@ -1283,6 +1316,25 @@ mod tests {
         assert_eq!(
             semantic.stderr_text,
             "nl: 'missing[0-9]+': No such file or directory\n"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_native_semantic_reports_input_read_errors_with_path() {
+        let semantic = nl_native_semantic(
+            [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("/proc/self/mem"),
+            ]
+            .into_iter(),
+        )
+        .unwrap();
+
+        assert_eq!(semantic.exit_code, 1);
+        assert_eq!(
+            semantic.stderr_text,
+            "nl: /proc/self/mem: Input/output error\n"
         );
     }
 

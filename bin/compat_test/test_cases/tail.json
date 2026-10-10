@@ -447,6 +447,25 @@
     },
     {
       "command": "tail",
+      "description": "Linux下--pid=-0不是无符号PID；预期RC=1、stdout为空、stderr为invalid PID诊断。",
+      "args": ["--pid=-0"],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tail: invalid PID: '-0'\n"
+        }
+      },
+      "tags": ["linux", "pid", "invalid-option"]
+    },
+    {
+      "command": "tail",
       "description": "Advanced: --retry without -f (should warn)",
       "args": ["--retry", "/etc/hosts"],
       "expectation": {

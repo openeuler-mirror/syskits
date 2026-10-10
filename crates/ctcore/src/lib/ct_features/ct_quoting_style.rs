@@ -584,6 +584,95 @@ pub fn gnu_quote_shell(name: &OsStr, always_quote: bool) -> String {
     }
 }
 
+/// Quote a diagnostic operand with GNU `quote()` semantics for C and UTF-8
+/// locales. Invalid byte sequences are rendered with octal escapes so the
+/// resulting diagnostic is always valid UTF-8.
+#[cfg(target_os = "linux")]
+pub fn gnu_quote_locale(name: &OsStr) -> String {
+    let (left_quote, right_quote) = crate::ct_display::locale_quote_marks();
+    quote_locale_bytes(
+        name.as_bytes(),
+        left_quote,
+        right_quote,
+        left_quote == "‘" && right_quote == "’",
+    )
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn gnu_quote_locale(name: &OsStr) -> String {
+    crate::ct_display::locale_quote(&name.to_string_lossy())
+}
+
+#[cfg(target_os = "linux")]
+fn quote_locale_bytes(
+    bytes: &[u8],
+    left_quote: &str,
+    right_quote: &str,
+    utf8_locale: bool,
+) -> String {
+    let mut quoted = String::with_capacity(bytes.len() + left_quote.len() + right_quote.len());
+    quoted.push_str(left_quote);
+
+    let mut index = 0;
+    while index < bytes.len() {
+        if utf8_locale && !bytes[index].is_ascii() {
+            if let Some(length) = utf8_sequence_length(bytes[index]) {
+                if let Some(sequence) = bytes.get(index..index + length) {
+                    if let Ok(sequence) = std::str::from_utf8(sequence) {
+                        let character = sequence
+                            .chars()
+                            .next()
+                            .expect("a valid UTF-8 sequence contains one character");
+                        if !character.is_control() {
+                            quoted.push(character);
+                            index += length;
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+
+        append_locale_escaped_byte(&mut quoted, bytes[index], left_quote == "'");
+        index += 1;
+    }
+
+    quoted.push_str(right_quote);
+    quoted
+}
+
+#[cfg(target_os = "linux")]
+fn utf8_sequence_length(byte: u8) -> Option<usize> {
+    match byte {
+        0xc2..=0xdf => Some(2),
+        0xe0..=0xef => Some(3),
+        0xf0..=0xf4 => Some(4),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn append_locale_escaped_byte(output: &mut String, byte: u8, escape_apostrophe: bool) {
+    match byte {
+        b'\x07' => output.push_str("\\a"),
+        b'\x08' => output.push_str("\\b"),
+        b'\t' => output.push_str("\\t"),
+        b'\n' => output.push_str("\\n"),
+        b'\x0b' => output.push_str("\\v"),
+        b'\x0c' => output.push_str("\\f"),
+        b'\r' => output.push_str("\\r"),
+        b'\\' => output.push_str("\\\\"),
+        b'\'' if escape_apostrophe => output.push_str("\\'"),
+        0x20..=0x7e => output.push(char::from(byte)),
+        _ => {
+            output.push('\\');
+            output.push(char::from(b'0' + (byte >> 6)));
+            output.push(char::from(b'0' + ((byte >> 3) & 0o7)));
+            output.push(char::from(b'0' + (byte & 0o7)));
+        }
+    }
+}
+
 fn escape_shell_byte_segments_pass(
     name: &[u8],
     segments: &[ShellByteSegment],
@@ -809,7 +898,7 @@ impl fmt::Display for CtQuotes {
 mod tests {
     use crate::ct_quoting_style::{
         CtQuotes, CtQuotingStyle, escape_name, escape_shell_bytes_with_classifier,
-        escape_unibyte_c_bytes, escape_unibyte_shell_bytes, gnu_quote_shell,
+        escape_unibyte_c_bytes, escape_unibyte_shell_bytes, gnu_quote_shell, quote_locale_bytes,
     };
     use std::ffi::OsStr;
 
@@ -1541,6 +1630,22 @@ mod tests {
 
         for (input, style, expected_output) in test_cases {
             assert_eq!(escape_name(input, &style), expected_output);
+        }
+    }
+
+    #[test]
+    fn test_gnu_quote_locale_escapes_raw_bytes_like_gnu_quote() {
+        #[cfg(target_os = "linux")]
+        use std::os::unix::ffi::OsStringExt;
+
+        #[cfg(target_os = "linux")]
+        {
+            let name = std::ffi::OsString::from_vec(vec![b'a', 0xff, b'\\', b'\'', b'b']);
+            assert_eq!(
+                quote_locale_bytes(name.as_encoded_bytes(), "'", "'", false),
+                "'a\\377\\\\\\'b'"
+            );
+            assert_eq!(quote_locale_bytes("中".as_bytes(), "‘", "’", true), "‘中’");
         }
     }
 

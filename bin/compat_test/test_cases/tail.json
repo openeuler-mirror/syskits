@@ -514,6 +514,27 @@
       "timeout": 2,
       "cleanup_commands": ["rm -f tail-truncate-mtime.txt"],
       "tags": ["linux", "follow", "polling", "truncation", "mtime"]
+    },
+    {
+      "command": "tail",
+      "description": "Linux下--disable-inotify配合默认--follow=descriptor时，重命名tail-descriptor-a.txt为tail-descriptor-b.txt后仍须只读取原文件描述符的追加字节6f6c642d66696c650a，不得切换到随后重建路径写入的6e65772d66696c650a；预期stdout完整字节=6f6c642d66696c650a，stderr完整字节=空。",
+      "setup_commands": [
+        "printf 'initial\\n' > tail-descriptor-a.txt; (sleep .3; mv tail-descriptor-a.txt tail-descriptor-b.txt; printf 'old-file\\n' >> tail-descriptor-b.txt; sleep .3; printf 'new-file\\n' > tail-descriptor-a.txt) >/dev/null 2>&1 &"
+      ],
+      "args": ["---disable-inotify", "--sleep-interval=.1", "-n", "0", "-f", "tail-descriptor-a.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "old-file\n",
+          "stderr": ""
+        },
+        "ignore_fields": {
+          "ignore_exit_code": true
+        }
+      },
+      "timeout": 2,
+      "cleanup_commands": ["rm -f tail-descriptor-a.txt tail-descriptor-b.txt"],
+      "tags": ["linux", "follow", "descriptor", "polling", "rename"]
     }
   ]
 }

@@ -173,6 +173,23 @@
       {
         "tstdin": "",
         "command": "nl",
+        "description": "分离传递的-s参数可使用连字符开头的值；-X作为行号分隔符而非新的选项。",
+        "setup_commands": [
+          "printf 'line\\n' > input"
+        ],
+        "args": ["-s", "-X", "input"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "     1-Xline\n",
+            "stderr": ""
+          }
+        },
+        "tags": ["option-parsing", "hyphen-value"]
+      },
+      {
+        "tstdin": "",
+        "command": "nl",
         "description": "测试不编号样式",
         "setup_commands": [
           "mkdir -p test_dir",

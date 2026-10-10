@@ -367,6 +367,28 @@
     },
     {
       "command": "tail",
+      "description": "Linux下_POSIX2_VERSION=200809启用旧式+NUM语法，+1 -- FILE必须跳过选项分隔符并从第一行输出FILE；stdout完整字节=610a620a，stderr为空。",
+      "setup_commands": [
+        "printf 'a\\nb\\n' > tail-plus-separator-input"
+      ],
+      "args": ["+1", "--", "tail-plus-separator-input"],
+      "environment": {
+        "env_vars": {
+          "_POSIX2_VERSION": "200809"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "a\nb\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": ["rm -f tail-plus-separator-input"],
+      "tags": ["linux", "posix2", "obsolete-syntax", "option-terminator"]
+    },
+    {
+      "command": "tail",
       "description": "Help: --help flag",
       "args": ["--help"],
       "expectation": {

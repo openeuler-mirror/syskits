@@ -564,8 +564,7 @@ fn parse_modern_syntax(args: &[OsString]) -> CTResult<TailOptions> {
 
 /// 判断是否需要尝试过时语法
 fn should_try_obsolete_syntax(args: &[OsString], modern_result: &CTResult<TailOptions>) -> bool {
-    // 只有在参数数量为2或3时才考虑过时语法
-    if args.len() != 2 && args.len() != 3 {
+    if !gnu_tail_obsolete_syntax_shape(args) {
         return false;
     }
 
@@ -612,10 +611,26 @@ fn gnu_tail_allows_traditional_plus_syntax_at(posix2_version: i32) -> bool {
     !(200_112..200_809).contains(&posix2_version)
 }
 
+fn gnu_tail_obsolete_syntax_shape(args: &[OsString]) -> bool {
+    match args {
+        [_, _] => true,
+        [_, _, input] => {
+            let input = input.to_string_lossy();
+            !(input.starts_with('-') && input.len() > 1)
+        }
+        [_, _, separator, _] => separator == "--",
+        _ => false,
+    }
+}
+
 /// 解析过时语法
 fn parse_obsolete_syntax(args: &[OsString]) -> CTResult<Option<TailOptions>> {
     let possible_obsolete_args = &args[1];
-    let input = args.get(2);
+    let input = if args.get(2).is_some_and(|arg| arg == "--") {
+        args.get(3)
+    } else {
+        args.get(2)
+    };
 
     tail_parse_obsolete(possible_obsolete_args, input)
 }
@@ -796,6 +811,20 @@ mod tests {
             assert_eq!(options.inputs.len(), 2);
             assert_eq!(options.inputs[0].display_name, "+1");
             assert_eq!(options.inputs[1].display_name, "input");
+        }
+
+        #[test]
+        fn test_obsolete_syntax_skips_option_terminator_before_input() {
+            let args = ["tail", "+1", "--", "input"]
+                .into_iter()
+                .map(OsString::from)
+                .collect::<Vec<_>>();
+            let options = parse_obsolete_syntax(&args)
+                .expect("obsolete syntax is well formed")
+                .expect("obsolete syntax should be recognized");
+
+            assert_eq!(options.inputs.len(), 1);
+            assert_eq!(options.inputs[0].display_name, "input");
         }
 
         #[test]

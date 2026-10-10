@@ -833,6 +833,39 @@ fn nice_restore_default_sigpipe_if_needed(
     }
 }
 
+#[cfg(target_os = "linux")]
+fn nice_restore_initial_standard_fds_before_exec() {
+    nice_close_initial_standard_fds(
+        ctcore::ct_stdin_was_closed(),
+        ctcore::ct_stdout_was_closed(),
+        ctcore::ct_stderr_was_closed(),
+        |fd| unsafe {
+            libc::close(fd);
+        },
+    );
+}
+
+#[cfg(not(target_os = "linux"))]
+fn nice_restore_initial_standard_fds_before_exec() {}
+
+#[cfg(target_os = "linux")]
+fn nice_close_initial_standard_fds(
+    stdin_was_closed: bool,
+    stdout_was_closed: bool,
+    stderr_was_closed: bool,
+    mut close_fd: impl FnMut(c_int),
+) {
+    for (fd, was_closed) in [
+        (libc::STDIN_FILENO, stdin_was_closed),
+        (libc::STDOUT_FILENO, stdout_was_closed),
+        (libc::STDERR_FILENO, stderr_was_closed),
+    ] {
+        if was_closed {
+            close_fd(fd);
+        }
+    }
+}
+
 /**
  * 主要功能：根据提供的参数调整当前进程的优先级，并执行指定的命令。
  *
@@ -918,6 +951,7 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let mut args: Vec<*const c_char> = cstr.iter().map(|s| s.as_ptr()).collect();
     args.push(ptr::null::<c_char>());
+    nice_restore_initial_standard_fds_before_exec();
     unsafe {
         execvp(args[0], args.as_mut_ptr());
     }
@@ -1147,6 +1181,14 @@ mod tests {
         restored = false;
         nice_restore_default_sigpipe_if_needed(false, || restored = true);
         assert!(!restored);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_initially_closed_standard_fds_are_closed_before_exec() {
+        let mut closed = Vec::new();
+        nice_close_initial_standard_fds(true, false, true, |fd| closed.push(fd));
+        assert_eq!(closed, vec![libc::STDIN_FILENO, libc::STDERR_FILENO]);
     }
 
     #[test]

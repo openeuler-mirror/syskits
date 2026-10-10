@@ -16,6 +16,7 @@ use crate::text;
 use ctcore::ct_error::CTResult;
 use std::collections::HashMap;
 use std::collections::hash_map::Keys;
+use std::ffi::{OsStr, OsString};
 use std::fs::{File, Metadata};
 use std::io::{BufRead, BufReader, BufWriter, Seek, SeekFrom, stdout};
 use std::path::{Path, PathBuf};
@@ -170,8 +171,8 @@ impl FileHandling {
         }
         if chunks.has_data() {
             if self.needs_header(path, verbose) {
-                let display_name = self.get(path).display_name.clone();
-                self.header_printer.print(display_name.as_str());
+                let header_name = self.get(path).header_name.clone();
+                self.header_printer.print_os(header_name.as_os_str());
             }
 
             let stdout = stdout();
@@ -216,6 +217,7 @@ pub struct PathData {
     pub reader: Option<Box<dyn BufRead>>,
     pub metadata: Option<Metadata>,
     pub display_name: String,
+    pub header_name: OsString,
     unchanged_stats: u64,
 }
 
@@ -224,11 +226,13 @@ impl PathData {
         reader: Option<Box<dyn BufRead>>,
         metadata: Option<Metadata>,
         display_name: &str,
+        header_name: &OsStr,
     ) -> Self {
         Self {
             reader,
             metadata,
             display_name: display_name.to_owned(),
+            header_name: header_name.to_owned(),
             unchanged_stats: 0,
         }
     }
@@ -246,7 +250,12 @@ impl PathData {
             None
         };
 
-        Self::new(reader, path.metadata().ok(), data.display_name.as_str())
+        Self::new(
+            reader,
+            path.metadata().ok(),
+            data.display_name.as_str(),
+            data.header_name.as_os_str(),
+        )
     }
 }
 
@@ -268,7 +277,12 @@ mod tests {
         let reader = Box::new(BufReader::new(File::open(&old_path).unwrap())) as Box<dyn BufRead>;
         files.insert(
             &old_path,
-            PathData::new(Some(reader), old_path.metadata().ok(), "a"),
+            PathData::new(
+                Some(reader),
+                old_path.metadata().ok(),
+                "a",
+                std::ffi::OsStr::new("a"),
+            ),
             false,
         );
 
@@ -287,7 +301,12 @@ mod tests {
         fs::write(&path, b"x\n").unwrap();
         files.insert(
             &path,
-            PathData::new(None, path.metadata().ok(), "file"),
+            PathData::new(
+                None,
+                path.metadata().ok(),
+                "file",
+                std::ffi::OsStr::new("file"),
+            ),
             false,
         );
 

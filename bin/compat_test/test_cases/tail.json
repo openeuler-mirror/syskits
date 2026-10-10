@@ -694,6 +694,29 @@
       "timeout": 2,
       "cleanup_commands": ["rm -f tail-link-switch.txt tail-link-switch-new tail-link-switch-target.txt"],
       "tags": ["linux", "follow", "name", "symlink", "polling", "replace"]
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "tail",
+      "description": "原始字节文件头用例：LC_ALL=C、LANG=C下创建文件名 file-\\377（参数完整十六进制=66696c652dff），文件内容完整十六进制=646174610a；执行 tail -v 后预期RC=0、stderr为空，stdout完整十六进制=3d3d3e2066696c652dff203c3d3d0a646174610a，文件头中的ff必须保持原始字节。",
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "p=$(printf '%b' '\\146\\151\\154\\145\\055\\377'); printf 'data\\n' > \"$p\""
+      ],
+      "args": ["2d76", "66696c652dff"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "3d3d3e2066696c652dff203c3d3d0a646174610a",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [
+        "rm -f -- \"$(printf '\\146\\151\\154\\145\\055\\377')\""
+      ],
+      "tags": ["linux", "raw-bytes", "non-utf8", "headers"]
     }
   ]
 }

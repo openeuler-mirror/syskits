@@ -576,7 +576,12 @@ fn handle_file_not_found(input: &TailInput, path: &Path, observer: &mut Observer
         input.display_name,
         text::TAIL_NO_SUCH_FILE
     );
-    observer.add_bad_path(path, input.display_name.as_str(), false)?;
+    observer.add_bad_path_with_header(
+        path,
+        input.display_name.as_str(),
+        input.header_name(),
+        false,
+    )?;
     Ok(())
 }
 
@@ -609,7 +614,12 @@ fn handle_directory(
 
     // 只有在确实需要 follow_name_retry（即 -F 模式）时，
     // 才将该目录加入到坏路径队列，交由 follow.rs 在后台持续重试和监听。
-    observer.add_bad_path(path, input.display_name.as_str(), false)?;
+    observer.add_bad_path_with_header(
+        path,
+        input.display_name.as_str(),
+        input.header_name(),
+        false,
+    )?;
 
     Ok(())
 }
@@ -640,9 +650,10 @@ fn handle_tailable_file(
                     reader
                 };
 
-            observer.add_path(
+            observer.add_path_with_header(
                 path,
                 input.display_name.as_str(),
+                input.header_name(),
                 Some(Box::new(reader)),
                 true,
             )?;
@@ -748,7 +759,12 @@ fn handle_file_open_error(
     path: &Path,
     observer: &mut Observer,
 ) -> CTResult<()> {
-    observer.add_bad_path(path, input.display_name.as_str(), false)?;
+    observer.add_bad_path_with_header(
+        path,
+        input.display_name.as_str(),
+        input.header_name(),
+        false,
+    )?;
     if e.kind() == std::io::ErrorKind::PermissionDenied {
         ct_show!(
             e.map_err_context(|| { format!("cannot open '{}' for reading", input.display_name) })

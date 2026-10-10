@@ -11,8 +11,11 @@
 
 use crate::text;
 use ctcore::ct_error::CTResult;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fs::Metadata;
+use std::io::{Write, stdout};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
@@ -49,6 +52,7 @@ impl From<&OsStr> for TailInputKind {
 pub struct TailInput {
     kind: TailInputKind,
     pub display_name: String,
+    header_name: OsString,
 }
 
 impl TailInput {
@@ -60,12 +64,24 @@ impl TailInput {
             TailInputKind::File(_) => string.to_string_lossy().to_string(),
             TailInputKind::Stdin => text::TAIL_STDIN_HEADER.to_string(),
         };
+        let header_name = match kind {
+            TailInputKind::File(_) => string.to_owned(),
+            TailInputKind::Stdin => OsString::from(text::TAIL_STDIN_HEADER),
+        };
 
-        Self { kind, display_name }
+        Self {
+            kind,
+            display_name,
+            header_name,
+        }
     }
 
     pub fn kind(&self) -> &TailInputKind {
         &self.kind
+    }
+
+    pub fn header_name(&self) -> &OsStr {
+        self.header_name.as_os_str()
     }
 
     pub fn is_stdin(&self) -> bool {
@@ -106,6 +122,7 @@ impl Default for TailInput {
         Self {
             kind: TailInputKind::Stdin,
             display_name: String::from(text::TAIL_STDIN_HEADER),
+            header_name: OsString::from(text::TAIL_STDIN_HEADER),
         }
     }
 }
@@ -125,17 +142,22 @@ impl TailHeaderPrinter {
     }
 
     pub fn print_input(&mut self, input: &TailInput) {
-        self.print(input.display_name.as_str());
+        self.print_os(input.header_name());
     }
 
-    pub fn print(&mut self, string: &str) {
-        if let Some(header) = self.render(string) {
-            print!("{header}");
+    pub fn print_os(&mut self, name: &OsStr) {
+        if let Some(header) = self.render_os(name) {
+            let _ = stdout().lock().write_all(&header);
         }
     }
 
     pub fn render_input(&mut self, input: &TailInput) -> Option<String> {
         self.render(input.display_name.as_str())
+    }
+
+    #[cfg(test)]
+    pub fn render_input_bytes(&mut self, input: &TailInput) -> Option<Vec<u8>> {
+        self.render_os(input.header_name())
     }
 
     pub fn render(&mut self, string: &str) -> Option<String> {
@@ -145,6 +167,25 @@ impl TailHeaderPrinter {
                 if self.first_header { "" } else { "\n" },
                 string,
             );
+            self.first_header = false;
+            Some(header)
+        } else {
+            None
+        }
+    }
+
+    pub fn render_os(&mut self, name: &OsStr) -> Option<Vec<u8>> {
+        if self.verbose {
+            let mut header = Vec::with_capacity(name.len() + 10);
+            if !self.first_header {
+                header.push(b'\n');
+            }
+            header.extend_from_slice(b"==> ");
+            #[cfg(unix)]
+            header.extend_from_slice(name.as_bytes());
+            #[cfg(not(unix))]
+            header.extend_from_slice(name.to_string_lossy().as_bytes());
+            header.extend_from_slice(b" <==\n");
             self.first_header = false;
             Some(header)
         } else {
@@ -246,13 +287,29 @@ fn is_bad_file_descriptor(fd: libc::c_int) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::TailMetadataExt;
     #[cfg(unix)]
     use super::is_bad_file_descriptor;
+    use super::{TailHeaderPrinter, TailInput, TailMetadataExt};
+    #[cfg(unix)]
+    use std::ffi::OsStr;
     use std::fs::{self, File, FileTimes};
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStrExt;
     #[cfg(target_os = "linux")]
     use std::os::unix::fs::MetadataExt;
     use tempfile::NamedTempFile;
+
+    #[cfg(unix)]
+    #[test]
+    fn verbose_header_preserves_non_utf8_operand_bytes() {
+        let input = TailInput::from(OsStr::from_bytes(b"file-\xff"));
+        let mut printer = TailHeaderPrinter::new(true, true);
+
+        assert_eq!(
+            printer.render_input_bytes(&input),
+            Some(b"==> file-\xff <==\n".to_vec())
+        );
+    }
 
     #[test]
     fn detects_truncation_when_mtime_is_unchanged() {

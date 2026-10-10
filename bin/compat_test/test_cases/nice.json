@@ -984,6 +984,32 @@
                 "raw-bytes",
                 "diagnostics"
             ]
+        },
+        {
+            "command": "nice",
+            "description": "GNU getopt将短选项-n=1的附带值识别为字面量=1，而不是把等号当作分隔符；LC_ALL=C下nice -n=1 /usr/bin/true必须以125退出，stdout为空，stderr为invalid adjustment '=1'。",
+            "args": [
+                "-n=1",
+                "/usr/bin/true"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: invalid adjustment '=1'\n"
+                }
+            },
+            "tags": [
+                "adjustment",
+                "short-option",
+                "attached-value"
+            ]
         }
     ]
 }

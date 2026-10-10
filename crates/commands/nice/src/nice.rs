@@ -56,6 +56,12 @@ fn legacy_adjustment(argument: &OsStr) -> Option<OsString> {
         .map(|_| OsString::from_vec(bytes[1..].to_vec()))
 }
 
+fn adjustment_option_with_value(value: &OsStr) -> OsString {
+    let mut option = OsString::from("--adjustment=");
+    option.push(value);
+    option
+}
+
 const NZERO: i32 = 20;
 const MIN_ADJUSTMENT: i64 = 1 - 2 * NZERO as i64;
 const MAX_ADJUSTMENT: i64 = 2 * NZERO as i64 - 1;
@@ -426,6 +432,10 @@ fn standardize_nice_args(mut args: impl ctcore::Args) -> impl ctcore::Args {
             // getopt_long treats `--` as the required value of -n.
             if str.is_empty() {
                 vec.push("--adjustment=".into());
+            } else if str.as_bytes().first() == Some(&b'=') {
+                // clap treats '=' as a separator for short-option values, but
+                // getopt_long includes it in the value of a preceding -n.
+                vec.push(adjustment_option_with_value(str.as_os_str()));
             } else {
                 let mut new_arg: OsString = "-n".into();
                 new_arg.push(str);
@@ -444,6 +454,10 @@ fn standardize_nice_args(mut args: impl ctcore::Args) -> impl ctcore::Args {
         {
             // 处理"-n"和"--adjustment"参数
             is_saw_n = true;
+        } else if str.as_bytes().starts_with(b"-n=") {
+            vec.push(adjustment_option_with_value(OsStr::from_bytes(
+                &str.as_bytes()[2..],
+            )));
         } else if let Some(adjustment) = legacy_adjustment(str.as_os_str()) {
             // GNU在转换数值前按首数字识别传统-N、--N和-+N形式。
             let mut new_arg: OsString = "-n".into();
@@ -1061,6 +1075,18 @@ mod tests {
             vec![
                 OsString::from("nice"),
                 OsString::from("--adjustment="),
+                OsString::from("command"),
+            ]
+        );
+
+        let args = vec!["nice", "-n=1", "command"];
+        let result: Vec<OsString> =
+            standardize_nice_args(args.into_iter().map(OsString::from)).collect();
+        assert_eq!(
+            result,
+            vec![
+                OsString::from("nice"),
+                OsString::from("--adjustment==1"),
                 OsString::from("command"),
             ]
         );

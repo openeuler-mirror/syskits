@@ -575,6 +575,25 @@
       },
       "cleanup_commands": [],
       "tags": ["linux", "stdin", "closed-fd"]
+    },
+    {
+      "command": "tail",
+      "description": "Linux下启动前关闭fd 0并以-f跟随默认标准输入；GNU必须返回1，stdout为空，stderr依次为fstat失败、读取失败、no files remaining和操作数-的Bad file descriptor四行。",
+      "args": ["-f"],
+      "environment": {
+        "standardStreams": {
+          "stdin": "closed"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tail: cannot fstat 'standard input': Bad file descriptor\\ntail: error reading 'standard input': Bad file descriptor\\ntail: no files remaining\\ntail: -: Bad file descriptor\\n"
+        }
+      },
+      "cleanup_commands": [],
+      "tags": ["linux", "follow", "stdin", "closed-fd"]
     }
   ]
 }

@@ -813,6 +813,26 @@ impl ctcore::ct_error::CTError for NiceUsageError {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn nice_configure_sigpipe() {
+    nice_restore_default_sigpipe_if_needed(ctcore::ct_sigpipe_was_default(), || {
+        let _ = ctcore::ct_signals::enable_pipe_errors();
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
+fn nice_configure_sigpipe() {}
+
+#[cfg(target_os = "linux")]
+fn nice_restore_default_sigpipe_if_needed(
+    inherited_sigpipe_was_default: bool,
+    restore_default: impl FnOnce(),
+) {
+    if inherited_sigpipe_was_default {
+        restore_default();
+    }
+}
+
 /**
  * 主要功能：根据提供的参数调整当前进程的优先级，并执行指定的命令。
  *
@@ -827,6 +847,7 @@ impl ctcore::ct_error::CTError for NiceUsageError {
  * 会返回相应的错误代码和错误信息。
  */
 pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
+    nice_configure_sigpipe();
     rust_i18n::set_locale(if nice_uses_simplified_chinese() {
         "zh-CN"
     } else {
@@ -1114,6 +1135,18 @@ mod tests {
         assert!(nice_permission_diagnostic_failed(true, false));
         assert!(nice_permission_diagnostic_failed(false, true));
         assert!(!nice_permission_diagnostic_failed(false, false));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_sigpipe_default_is_only_restored_for_default_inheritance() {
+        let mut restored = false;
+        nice_restore_default_sigpipe_if_needed(true, || restored = true);
+        assert!(restored);
+
+        restored = false;
+        nice_restore_default_sigpipe_if_needed(false, || restored = true);
+        assert!(!restored);
     }
 
     #[test]

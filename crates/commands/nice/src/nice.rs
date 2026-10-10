@@ -45,15 +45,46 @@ const NZERO: i32 = 20;
 const MIN_ADJUSTMENT: i64 = 1 - 2 * NZERO as i64;
 const MAX_ADJUSTMENT: i64 = 2 * NZERO as i64 - 1;
 
-fn clamp_adjustment(value: i64) -> i32 {
-    value.clamp(MIN_ADJUSTMENT, MAX_ADJUSTMENT) as i32
-}
-
 fn parse_adjustment(value: &str) -> Result<i32, Box<dyn ctcore::ct_error::CTError>> {
-    let parsed: i64 = value
-        .parse()
-        .map_err(|_| CtSimpleError::new(125, format!("invalid adjustment {}", value.quote())))?;
-    Ok(clamp_adjustment(parsed))
+    let original_value = value;
+    let value = value.trim_start_matches(|character: char| character.is_ascii_whitespace());
+    let (negative, digits) = match value.as_bytes().first() {
+        Some(b'-') => (true, &value[1..]),
+        Some(b'+') => (false, &value[1..]),
+        _ => (false, value),
+    };
+
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(CtSimpleError::new(
+            125,
+            format!("invalid adjustment {}", original_value.quote()),
+        ));
+    }
+
+    let limit = if negative {
+        -MIN_ADJUSTMENT
+    } else {
+        MAX_ADJUSTMENT
+    };
+    let mut adjustment = 0i64;
+    for byte in digits.bytes() {
+        adjustment = adjustment
+            .saturating_mul(10)
+            .saturating_add((byte - b'0') as i64);
+        if adjustment > limit {
+            return Ok(if negative {
+                MIN_ADJUSTMENT as i32
+            } else {
+                MAX_ADJUSTMENT as i32
+            });
+        }
+    }
+
+    Ok(if negative {
+        -(adjustment as i32)
+    } else {
+        adjustment as i32
+    })
 }
 
 fn perm_related_errno(err: i32) -> bool {
@@ -348,6 +379,14 @@ mod tests {
 
         // 非前缀字符串
         assert!(!is_prefix_of("--other", "--adjustment", "--a".len()));
+    }
+
+    #[test]
+    fn test_parse_adjustment_matches_gnu_xstrtol_rules() {
+        assert_eq!(parse_adjustment(" 1").unwrap(), 1);
+        assert_eq!(parse_adjustment("9223372036854775808").unwrap(), 39);
+        assert_eq!(parse_adjustment("-9223372036854775809").unwrap(), -39);
+        assert!(parse_adjustment("1 ").is_err());
     }
 
     #[test]

@@ -2,6 +2,18 @@
     "tests": [
         {
             "command": "nice",
+            "description": "GNU xstrtol允许-n参数的前导ASCII空白，并将超出long范围的正数夹到可用的最大niceness adjustment。",
+            "args": ["-n", " 9223372036854775808", "/usr/bin/true"],
+            "environment": {
+                "env_vars": {"LC_ALL": "C", "LANG": "C"}
+            },
+            "expectation": {
+                "execution": {"exit_code": 0, "stdout": "", "stderr": ""}
+            },
+            "tags": ["adjustment", "numeric-overflow", "leading-whitespace"]
+        },
+        {
+            "command": "nice",
             "description": "nice: no args prints current niceness",
             "args": [],
             "expectation": {

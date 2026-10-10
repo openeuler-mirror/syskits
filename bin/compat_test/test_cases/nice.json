@@ -1197,6 +1197,36 @@
         },
         {
             "command": "nice",
+            "description": "Linux下启动前关闭stderr且execvp找不到COMMAND时，GNU无法输出exec诊断并以125取消；LC_ALL=C下nice /does-not-exist应保持stdout、stderr为空。",
+            "args": [
+                "/does-not-exist"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                },
+                "standardStreams": {
+                    "stderr": "closed"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "linux",
+                "exec",
+                "stderr",
+                "closed-fd",
+                "write-error"
+            ]
+        },
+        {
+            "command": "nice",
             "description": "Linux下启动前关闭stdin后，GNU nice执行COMMAND时必须保留fd 0关闭状态；LC_ALL=C下/bin/sh检查/proc/self/fd/0不存在，预期RC=0且标准输出、标准错误为空。",
             "args": [
                 "/bin/sh",

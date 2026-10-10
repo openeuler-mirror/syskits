@@ -148,6 +148,20 @@ impl FileHandling {
         };
     }
 
+    pub fn reset_unchanged_stats(&mut self, path: &Path) {
+        self.get_mut(path).unchanged_stats = 0;
+    }
+
+    pub fn should_recheck_unchanged_stats(&mut self, path: &Path, max_stats: u64) -> bool {
+        let data = self.get_mut(path);
+        let should_recheck = data.unchanged_stats >= max_stats;
+        data.unchanged_stats = data.unchanged_stats.saturating_add(1);
+        if should_recheck {
+            data.unchanged_stats = 0;
+        }
+        should_recheck
+    }
+
     /// Read new data from `path` and print it to stdout
     pub fn tail_file(&mut self, path: &Path, verbose: bool) -> CTResult<bool> {
         let mut chunks = TailBytesChunkBuffer::new(u64::MAX);
@@ -202,6 +216,7 @@ pub struct PathData {
     pub reader: Option<Box<dyn BufRead>>,
     pub metadata: Option<Metadata>,
     pub display_name: String,
+    unchanged_stats: u64,
 }
 
 impl PathData {
@@ -214,6 +229,7 @@ impl PathData {
             reader,
             metadata,
             display_name: display_name.to_owned(),
+            unchanged_stats: 0,
         }
     }
     pub fn from_other_with_path(data: Self, path: &Path) -> Self {
@@ -259,5 +275,28 @@ mod tests {
         fs::rename(&old_path, &new_path).unwrap();
 
         assert!(files.files_remaining());
+    }
+
+    #[test]
+    fn unchanged_stats_rechecks_at_the_configured_interval() {
+        let options = TailOptions::default();
+        let mut files = FileHandling::from(&options);
+        let temp_dir = tempdir().unwrap();
+        let path = temp_dir.path().join("file");
+
+        fs::write(&path, b"x\n").unwrap();
+        files.insert(
+            &path,
+            PathData::new(None, path.metadata().ok(), "file"),
+            false,
+        );
+
+        assert!(!files.should_recheck_unchanged_stats(&path, 1));
+        assert!(files.should_recheck_unchanged_stats(&path, 1));
+        assert!(!files.should_recheck_unchanged_stats(&path, 1));
+
+        files.reset_unchanged_stats(&path);
+        assert!(!files.should_recheck_unchanged_stats(&path, 1));
+        assert!(files.should_recheck_unchanged_stats(&path, 0));
     }
 }

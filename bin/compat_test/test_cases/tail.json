@@ -535,6 +535,27 @@
       "timeout": 2,
       "cleanup_commands": ["rm -f tail-descriptor-a.txt tail-descriptor-b.txt"],
       "tags": ["linux", "follow", "descriptor", "polling", "rename"]
+    },
+    {
+      "command": "tail",
+      "description": "Linux下--disable-inotify --follow=name的--max-unchanged-stats=1必须重新检查内容和mtime均未变化的路径替换：将736565640a移动后以相同字节和旧mtime重建，预期从新文件输出736565640a，并输出tail: 'tail-name-recheck.txt' has been replaced;  following new file\\n。",
+      "setup_commands": [
+        "printf 'seed\\n' > tail-name-recheck.txt; old=$(stat -c %y tail-name-recheck.txt); (sleep .3; mv tail-name-recheck.txt tail-name-recheck-old.txt; printf 'seed\\n' > tail-name-recheck.txt; touch -d \"$old\" tail-name-recheck.txt) >/dev/null 2>&1 &"
+      ],
+      "args": ["---disable-inotify", "--follow=name", "--sleep-interval=.1", "--max-unchanged-stats=1", "-n", "0", "tail-name-recheck.txt"],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "seed\n",
+          "stderr": "tail: 'tail-name-recheck.txt' has been replaced;  following new file\n"
+        },
+        "ignore_fields": {
+          "ignore_exit_code": true
+        }
+      },
+      "timeout": 2,
+      "cleanup_commands": ["rm -f tail-name-recheck.txt tail-name-recheck-old.txt"],
+      "tags": ["linux", "follow", "name", "polling", "max-unchanged-stats"]
     }
   ]
 }

@@ -101,6 +101,10 @@ fn set_niceness_error_message(error: &Error) -> String {
     format!("cannot set niceness: {description}")
 }
 
+fn exec_error_message(command: &str, error: &Error) -> String {
+    format!("{}: {}", command.quote(), strip_errno(error))
+}
+
 fn get_current_niceness() -> Result<c_int, Error> {
     nix::errno::Errno::clear();
     let value = unsafe { libc_nice(0) };
@@ -289,7 +293,7 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
 
     // 执行命令失败的处理
     let exec_error = Error::last_os_error();
-    ct_show_error!("{}: {}", command_args[0].quote(), exec_error);
+    ct_show_error!("{}", exec_error_message(&command_args[0], &exec_error));
     let exit_code = if exec_error.raw_os_error().unwrap_or(0) as c_int == libc::ENOENT {
         127
     } else {
@@ -396,6 +400,15 @@ mod tests {
         assert_eq!(
             set_niceness_error_message(&error),
             "cannot set niceness: Permission denied"
+        );
+    }
+
+    #[test]
+    fn test_exec_error_message_omits_rust_os_error_suffix() {
+        let error = Error::from_raw_os_error(libc::ENOENT);
+        assert_eq!(
+            exec_error_message("no_such", &error),
+            "'no_such': No such file or directory"
         );
     }
 

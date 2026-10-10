@@ -659,6 +659,7 @@ pub fn ct_app() -> Command {
                     Arg::new(tail_flags::TAIL_MAX_UNCHANGED_STATS)
                         .value_name("N")
                         .long(tail_flags::TAIL_MAX_UNCHANGED_STATS)
+                        .overrides_with(tail_flags::TAIL_MAX_UNCHANGED_STATS)
                         .help(
                             "Reopen a FILE which has not changed size after N (default 5) iterations \
                         to see if it has been unlinked or renamed (this is the usual case of rotated \
@@ -749,6 +750,17 @@ mod tests {
             .expect("GNU tail accepts the UINTMAX_MAX option value");
 
             assert_eq!(options.max_unchanged_stats, u64::MAX);
+        }
+
+        #[test]
+        fn test_repeated_max_unchanged_stats_uses_last_value() {
+            let options = tail_parse_args(create_args(&[
+                "--max-unchanged-stats=1",
+                "--max-unchanged-stats=2",
+            ]))
+            .expect("GNU tail accepts repeated --max-unchanged-stats options");
+
+            assert_eq!(options.max_unchanged_stats, 2);
         }
 
         #[test]

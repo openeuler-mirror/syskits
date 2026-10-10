@@ -1,4 +1,6 @@
 nice:
+  errors:
+    write_error: write error
   clap:
     adjustment: add N to the niceness (default is 10)
   usage: nice [OPTIONS] [COMMAND [ARGS]]

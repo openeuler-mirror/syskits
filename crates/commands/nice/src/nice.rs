@@ -147,6 +147,31 @@ fn get_current_niceness() -> Result<c_int, Error> {
     Ok(value)
 }
 
+fn nice_normalize_stdout_write_error(error: Error, stdout_was_closed: bool) -> Error {
+    #[cfg(unix)]
+    if stdout_was_closed {
+        return Error::from_raw_os_error(libc::EBADF);
+    }
+
+    error
+}
+
+fn nice_write_error(error: Error, stdout_was_closed: bool) -> Box<dyn ctcore::ct_error::CTError> {
+    let error = nice_normalize_stdout_write_error(error, stdout_was_closed);
+    CtSimpleError::new(
+        125,
+        format!("{}: {}", t!("nice.errors.write_error"), strip_errno(&error)),
+    )
+}
+
+fn write_niceness(
+    writer: &mut impl Write,
+    niceness: c_int,
+    stdout_was_closed: bool,
+) -> CTResult<()> {
+    writeln!(writer, "{niceness}").map_err(|error| nice_write_error(error, stdout_was_closed))
+}
+
 fn apply_adjustment(adjustment: c_int) -> Result<(), CTResult<()>> {
     nix::errno::Errno::clear();
     let value = unsafe { libc_nice(adjustment) };
@@ -435,7 +460,8 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
 
         match get_current_niceness() {
             Ok(value) => {
-                println!("{value}");
+                let mut stdout = std::io::stdout().lock();
+                write_niceness(&mut stdout, value, ctcore::ct_stdout_was_closed())?;
                 return Ok(());
             }
             Err(err) => {
@@ -647,6 +673,29 @@ mod tests {
             prepare_nice_args(help_args.clone().into_iter()).unwrap(),
             help_args
         );
+    }
+
+    #[test]
+    fn test_write_niceness_reports_gnu_style_output_errors() {
+        struct FullWriter;
+
+        impl Write for FullWriter {
+            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+                Err(Error::from_raw_os_error(libc::ENOSPC))
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let error = write_niceness(&mut FullWriter, 0, false).unwrap_err();
+        assert_eq!(error.code(), 125);
+        assert_eq!(error.to_string(), "write error: No space left on device");
+
+        let closed =
+            nice_normalize_stdout_write_error(Error::from_raw_os_error(libc::ENOSPC), true);
+        assert_eq!(closed.raw_os_error(), Some(libc::EBADF));
     }
 
     #[test]

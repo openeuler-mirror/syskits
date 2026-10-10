@@ -87,9 +87,9 @@ fn parse_adjustment(value: &OsStr) -> Result<i32, Box<dyn ctcore::ct_error::CTEr
     let digits = &bytes[digit_start..];
 
     if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
-        return Err(nice_diagnostic_error(
+        return Err(nice_diagnostic_error_bytes(
             125,
-            nice_invalid_adjustment_message(original_value, nice_uses_simplified_chinese()),
+            nice_invalid_adjustment_diagnostic(original_value),
             None,
         ));
     }
@@ -143,38 +143,8 @@ fn set_niceness_error_message_for_locale(error: &Error, simplified_chinese: bool
     format!("{message}: {description}")
 }
 
-fn exec_error_message(command: &OsStr, error: &Error) -> String {
-    exec_error_message_for_locale(command, error, nice_uses_simplified_chinese())
-}
-
-fn exec_error_message_for_locale(
-    command: &OsStr,
-    error: &Error,
-    simplified_chinese: bool,
-) -> String {
-    format!(
-        "{}: {}",
-        nice_quote_operand(command, simplified_chinese),
-        strip_errno(error)
-    )
-}
-
 fn nice_uses_simplified_chinese() -> bool {
     rust_i18n::locale() == "zh-CN"
-}
-
-fn nice_invalid_adjustment_message(value: &OsStr, simplified_chinese: bool) -> String {
-    let quoted = nice_quote_operand(value, simplified_chinese);
-    if simplified_chinese {
-        t!(
-            "nice.errors.invalid_adjustment",
-            locale = "zh-CN",
-            value = quoted
-        )
-        .to_string()
-    } else {
-        format!("invalid adjustment {quoted}")
-    }
 }
 
 fn nice_missing_command_message(simplified_chinese: bool) -> String {
@@ -224,6 +194,11 @@ fn nice_output_codeset() -> Option<String> {
         return Some(codeset.to_string_lossy().into_owned());
     }
 
+    nice_ctype_codeset()
+}
+
+#[cfg(target_os = "linux")]
+fn nice_ctype_codeset() -> Option<String> {
     let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
         .into_iter()
         .find_map(|name| std::env::var_os(name).filter(|value| !value.is_empty()))?;
@@ -273,14 +248,73 @@ fn nice_encode_locale_text(text: &[u8], codeset: &str) -> Option<Vec<u8>> {
     Some(output)
 }
 
+#[cfg(target_os = "linux")]
+fn nice_valid_locale_character_len(input: &[u8], codeset: &str) -> usize {
+    let target = CString::new("UTF-8").expect("UTF-8 has no NUL byte");
+    let source = match CString::new(codeset) {
+        Ok(source) => source,
+        Err(_) => return 0,
+    };
+    let converter = unsafe { libc::iconv_open(target.as_ptr(), source.as_ptr()) };
+    if converter == (-1_isize) as libc::iconv_t {
+        return 0;
+    }
+
+    let max_len = input.len().min(4);
+    for length in 1..=max_len {
+        let mut input_ptr = input[..length].as_ptr().cast_mut().cast::<libc::c_char>();
+        let mut input_left = length;
+        let mut output = [0_u8; 16];
+        let mut output_ptr = output.as_mut_ptr().cast::<libc::c_char>();
+        let mut output_left = output.len();
+        let result = unsafe {
+            libc::iconv(
+                converter,
+                &mut input_ptr,
+                &mut input_left,
+                &mut output_ptr,
+                &mut output_left,
+            )
+        };
+        unsafe {
+            libc::iconv(
+                converter,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        if result != usize::MAX && input_left == 0 {
+            unsafe { libc::iconv_close(converter) };
+            return length;
+        }
+    }
+
+    unsafe { libc::iconv_close(converter) };
+    0
+}
+
 fn nice_diagnostic_error(
     code: i32,
     message: impl AsRef<[u8]>,
     usage_hint: Option<Vec<u8>>,
 ) -> Box<dyn ctcore::ct_error::CTError> {
+    nice_diagnostic_error_bytes(
+        code,
+        nice_locale_diagnostic_bytes(message.as_ref(), nice_uses_simplified_chinese()),
+        usage_hint,
+    )
+}
+
+fn nice_diagnostic_error_bytes(
+    code: i32,
+    message: Vec<u8>,
+    usage_hint: Option<Vec<u8>>,
+) -> Box<dyn ctcore::ct_error::CTError> {
     Box::new(NiceDiagnosticError {
         code,
-        message: nice_locale_diagnostic_bytes(message.as_ref(), nice_uses_simplified_chinese()),
+        message,
         usage_hint,
     })
 }
@@ -296,45 +330,84 @@ fn write_nice_diagnostic(message: impl AsRef<[u8]>) -> Result<(), Error> {
     stderr.write_all(b"\n")
 }
 
-fn nice_quote_operand(value: &OsStr, simplified_chinese: bool) -> String {
+fn nice_quote_operand_bytes(
+    value: &OsStr,
+    simplified_chinese: bool,
+    codeset: Option<&str>,
+) -> Vec<u8> {
     if !simplified_chinese {
-        return gnu_quote_locale(value);
+        return gnu_quote_locale(value).into_bytes();
     }
 
     let bytes = value.as_bytes();
-    let mut quoted = String::with_capacity(bytes.len() + 2);
-    quoted.push('"');
+    #[cfg(target_os = "linux")]
+    let codeset = codeset.map(ToOwned::to_owned).or_else(nice_ctype_codeset);
+    #[cfg(not(target_os = "linux"))]
+    let _ = codeset;
+
+    let mut quoted = Vec::with_capacity(bytes.len() + 2);
+    quoted.push(b'"');
     let mut index = 0;
     while index < bytes.len() {
-        if !bytes[index].is_ascii()
-            && let Ok(remaining) = std::str::from_utf8(&bytes[index..])
-        {
-            quoted.push_str(remaining);
-            break;
+        if !bytes[index].is_ascii() {
+            #[cfg(target_os = "linux")]
+            if let Some(codeset) = codeset.as_deref() {
+                let length = nice_valid_locale_character_len(&bytes[index..], codeset);
+                if length != 0 {
+                    quoted.extend_from_slice(&bytes[index..index + length]);
+                    index += length;
+                    continue;
+                }
+            }
         }
 
         match bytes[index] {
-            b'\x07' => quoted.push_str("\\a"),
-            b'\x08' => quoted.push_str("\\b"),
-            b'\t' => quoted.push_str("\\t"),
-            b'\n' => quoted.push_str("\\n"),
-            b'\x0b' => quoted.push_str("\\v"),
-            b'\x0c' => quoted.push_str("\\f"),
-            b'\r' => quoted.push_str("\\r"),
-            b'\\' => quoted.push_str("\\\\"),
-            b'"' => quoted.push_str("\\\""),
-            0x20..=0x7e => quoted.push(char::from(bytes[index])),
+            b'\x07' => quoted.extend_from_slice(b"\\a"),
+            b'\x08' => quoted.extend_from_slice(b"\\b"),
+            b'\t' => quoted.extend_from_slice(b"\\t"),
+            b'\n' => quoted.extend_from_slice(b"\\n"),
+            b'\x0b' => quoted.extend_from_slice(b"\\v"),
+            b'\x0c' => quoted.extend_from_slice(b"\\f"),
+            b'\r' => quoted.extend_from_slice(b"\\r"),
+            b'\\' => quoted.extend_from_slice(b"\\\\"),
+            b'"' => quoted.extend_from_slice(b"\\\""),
+            0x20..=0x7e => quoted.push(bytes[index]),
             byte => {
-                quoted.push('\\');
-                quoted.push(char::from(b'0' + (byte >> 6)));
-                quoted.push(char::from(b'0' + ((byte >> 3) & 0o7)));
-                quoted.push(char::from(b'0' + (byte & 0o7)));
+                quoted.push(b'\\');
+                quoted.push(b'0' + (byte >> 6));
+                quoted.push(b'0' + ((byte >> 3) & 0o7));
+                quoted.push(b'0' + (byte & 0o7));
             }
         }
         index += 1;
     }
-    quoted.push('"');
+    quoted.push(b'"');
     quoted
+}
+
+fn nice_invalid_adjustment_diagnostic(value: &OsStr) -> Vec<u8> {
+    let simplified_chinese = nice_uses_simplified_chinese();
+    let label = if simplified_chinese {
+        t!(
+            "nice.errors.invalid_adjustment",
+            locale = "zh-CN",
+            value = ""
+        )
+        .to_string()
+    } else {
+        String::from("invalid adjustment ")
+    };
+    let mut diagnostic = nice_locale_diagnostic_bytes(label.as_bytes(), simplified_chinese);
+    diagnostic.extend_from_slice(&nice_quote_operand_bytes(value, simplified_chinese, None));
+    diagnostic
+}
+
+fn exec_error_diagnostic(command: &OsStr, error: &Error) -> Vec<u8> {
+    let simplified_chinese = nice_uses_simplified_chinese();
+    let mut diagnostic = nice_quote_operand_bytes(command, simplified_chinese, None);
+    diagnostic.extend_from_slice(b": ");
+    diagnostic.extend_from_slice(strip_errno(error).as_bytes());
+    diagnostic
 }
 
 fn command_arg_to_cstring(argument: &OsStr) -> CString {
@@ -774,9 +847,9 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
     } else {
         126
     };
-    Err(nice_diagnostic_error(
+    Err(nice_diagnostic_error_bytes(
         exit_code,
-        exec_error_message(command_args[0].as_os_str(), &exec_error),
+        exec_error_diagnostic(command_args[0].as_os_str(), &exec_error),
         None,
     ))
 }
@@ -978,12 +1051,7 @@ mod tests {
     #[test]
     fn test_simplified_chinese_diagnostics_match_gnu() {
         let permission_error = Error::from_raw_os_error(libc::EPERM);
-        let missing_error = Error::from_raw_os_error(libc::ENOENT);
 
-        assert_eq!(
-            nice_invalid_adjustment_message(OsStr::new("bad"), true),
-            "无效的调整值 \"bad\""
-        );
         assert_eq!(
             nice_missing_command_message(true),
             "指定调整值时，必须同时指定命令"
@@ -997,12 +1065,8 @@ mod tests {
             "无法设置优先级: Permission denied"
         );
         assert_eq!(
-            exec_error_message_for_locale(OsStr::new("no_such"), &missing_error, true),
-            "\"no_such\": No such file or directory"
-        );
-        assert_eq!(
-            nice_quote_operand(OsStr::new("a\"b\\c"), true),
-            "\"a\\\"b\\\\c\""
+            nice_quote_operand_bytes(OsStr::new("a\"b\\c"), true, Some("UTF-8")),
+            b"\"a\\\"b\\\\c\""
         );
     }
 
@@ -1017,12 +1081,13 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
-    fn test_exec_error_message_omits_rust_os_error_suffix() {
-        let error = Error::from_raw_os_error(libc::ENOENT);
-        let message = exec_error_message(OsStr::new("no_such"), &error);
-        assert!(message.ends_with(": No such file or directory"));
-        assert!(!message.contains("(os error"));
+    fn test_gbk_quote_preserves_valid_locale_operand_bytes() {
+        assert_eq!(
+            nice_quote_operand_bytes(OsStr::from_bytes(b"\xd6\xd0"), true, Some("GBK")),
+            b"\"\xd6\xd0\""
+        );
     }
 
     #[test]

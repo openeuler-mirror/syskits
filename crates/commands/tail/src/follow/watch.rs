@@ -20,6 +20,8 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
 use std::collections::HashMap;
 use std::fs::Metadata;
 use std::io::BufRead;
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
 use std::time::Duration;
@@ -27,6 +29,28 @@ use std::time::Duration;
 fn is_symlink(path: &Path) -> bool {
     path.symlink_metadata()
         .is_ok_and(|metadata| metadata.file_type().is_symlink())
+}
+
+fn input_requires_polling(input: &TailInput) -> bool {
+    match input.kind() {
+        TailInputKind::Stdin => true,
+        TailInputKind::File(path) if is_symlink(path) => true,
+        TailInputKind::File(path) => {
+            #[cfg(unix)]
+            {
+                path.metadata().is_ok_and(|metadata| {
+                    metadata.is_tailable()
+                        && !metadata.file_type().is_file()
+                        && !metadata.file_type().is_fifo()
+                })
+            }
+            #[cfg(not(unix))]
+            {
+                let _ = path;
+                false
+            }
+        }
+    }
 }
 
 pub struct WatcherRx {
@@ -224,14 +248,9 @@ impl Observer {
             return Ok(());
         }
 
-        // Like GNU tail, use polling for symlink operands. Inotify reports
-        // changes to their targets, which cannot be matched reliably to the
-        // names given on the command line.
-        if options
-            .inputs
-            .iter()
-            .any(|input| matches!(input.kind(), TailInputKind::File(path) if is_symlink(path)))
-        {
+        // Like GNU tail, only use event watching for regular files and FIFOs.
+        // Inotify cannot reliably follow symlink names or character devices.
+        if options.inputs.iter().any(input_requires_polling) {
             self.use_polling = true;
         }
 
@@ -1140,6 +1159,21 @@ mod tests {
         let options = TailOptions {
             follow: Some(TailFollowMode::Name),
             inputs: vec![TailInput::from(link.as_os_str())],
+            ..TailOptions::default()
+        };
+        let mut observer = Observer::from(&options);
+
+        observer.start(&options).unwrap();
+
+        assert!(observer.use_polling);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn start_uses_polling_for_character_device_input() {
+        let options = TailOptions {
+            follow: Some(TailFollowMode::Descriptor),
+            inputs: vec![TailInput::from("/dev/null")],
             ..TailOptions::default()
         };
         let mut observer = Observer::from(&options);

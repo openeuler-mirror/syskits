@@ -290,6 +290,14 @@ fn nice_locale_environment_is_valid() -> bool {
 }
 
 #[cfg(target_os = "linux")]
+fn nice_c_locale_quotes_required(
+    locale_environment_is_valid: bool,
+    ctype_codeset_is_available: bool,
+) -> bool {
+    !locale_environment_is_valid || !ctype_codeset_is_available
+}
+
+#[cfg(target_os = "linux")]
 fn nice_encode_locale_text(text: &[u8], codeset: &str) -> Option<Vec<u8>> {
     let target = CString::new(format!("{codeset}//TRANSLIT")).ok()?;
     let source = CString::new("UTF-8").expect("UTF-8 has no NUL byte");
@@ -458,7 +466,10 @@ fn nice_quote_operand_bytes(
 ) -> Vec<u8> {
     if !simplified_chinese {
         #[cfg(target_os = "linux")]
-        if nice_ctype_codeset().is_none() {
+        if nice_c_locale_quotes_required(
+            nice_locale_environment_is_valid(),
+            nice_ctype_codeset().is_some(),
+        ) {
             return nice_quote_c_locale_bytes(value);
         }
 
@@ -1383,6 +1394,14 @@ mod tests {
     #[test]
     fn test_missing_ctype_locale_has_no_codeset() {
         assert!(nice_codeset_for_locale(OsStr::new("zz_ZZ.UTF-8")).is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_invalid_locale_environment_requires_c_locale_quotes() {
+        assert!(nice_c_locale_quotes_required(false, true));
+        assert!(nice_c_locale_quotes_required(true, false));
+        assert!(!nice_c_locale_quotes_required(true, true));
     }
 
     #[cfg(target_os = "linux")]

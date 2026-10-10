@@ -350,6 +350,23 @@
     },
     {
       "command": "tail",
+      "description": "Linux下默认_POSIX2_VERSION规则中，旧式+NUM是文件操作数；缺失+1后仍输出后续文件完整内容及文件头。",
+      "setup_commands": [
+        "printf 'line1\\nline2\\n' > tail-plus-number-input"
+      ],
+      "args": ["+1", "tail-plus-number-input"],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "==> tail-plus-number-input <==\nline1\nline2\n",
+          "stderr": "tail: cannot open '+1' for reading: No such file or directory\n"
+        }
+      },
+      "cleanup_commands": ["rm -f tail-plus-number-input"],
+      "tags": ["linux", "posix2", "obsolete-syntax"]
+    },
+    {
+      "command": "tail",
       "description": "Help: --help flag",
       "args": ["--help"],
       "expectation": {

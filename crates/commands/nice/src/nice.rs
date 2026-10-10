@@ -509,6 +509,10 @@ fn nice_permission_diagnostic_failed(stderr_was_closed: bool, write_failed: bool
     stderr_was_closed || write_failed
 }
 
+fn nice_exec_failure_diagnostic_failed(stderr_was_closed: bool) -> bool {
+    stderr_was_closed
+}
+
 fn apply_adjustment(adjustment: c_int) -> Result<(), CTResult<()>> {
     nix::errno::Errno::clear();
     let value = unsafe { libc_nice(adjustment) };
@@ -963,6 +967,9 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
     } else {
         126
     };
+    if nice_exec_failure_diagnostic_failed(ctcore::ct_stderr_was_closed()) {
+        return Err(125.into());
+    }
     Err(nice_diagnostic_error_bytes(
         exit_code,
         exec_error_diagnostic(command_args[0].as_os_str(), &exec_error),
@@ -1169,6 +1176,12 @@ mod tests {
         assert!(nice_permission_diagnostic_failed(true, false));
         assert!(nice_permission_diagnostic_failed(false, true));
         assert!(!nice_permission_diagnostic_failed(false, false));
+    }
+
+    #[test]
+    fn test_closed_stderr_makes_exec_failure_fatal() {
+        assert!(nice_exec_failure_diagnostic_failed(true));
+        assert!(!nice_exec_failure_diagnostic_failed(false));
     }
 
     #[cfg(target_os = "linux")]

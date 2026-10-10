@@ -18,7 +18,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fmt::{Display, Formatter};
-use std::io::{Error, Write};
+use std::io::{Error, ErrorKind, Write};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::ptr;
 
@@ -372,14 +372,58 @@ fn nice_diagnostic_error_bytes(
 }
 
 fn write_nice_diagnostic(message: impl AsRef<[u8]>) -> Result<(), Error> {
+    let message = nice_locale_diagnostic_bytes(message.as_ref(), nice_uses_simplified_chinese());
+    let mut diagnostic = Vec::with_capacity(ctcore::ct_util_name().len() + message.len() + 3);
+    diagnostic.extend_from_slice(ctcore::ct_util_name().as_bytes());
+    diagnostic.extend_from_slice(b": ");
+    diagnostic.extend_from_slice(&message);
+    diagnostic.push(b'\n');
+    write_all_nice_diagnostic(&diagnostic)
+}
+
+#[cfg(unix)]
+fn write_all_nice_diagnostic(bytes: &[u8]) -> Result<(), Error> {
+    write_all_nice_diagnostic_with(bytes, |pending| {
+        let written = unsafe {
+            libc::write(
+                libc::STDERR_FILENO,
+                pending.as_ptr().cast::<libc::c_void>(),
+                pending.len(),
+            )
+        };
+        if written < 0 {
+            Err(Error::last_os_error())
+        } else {
+            Ok(written as usize)
+        }
+    })
+}
+
+#[cfg(not(unix))]
+fn write_all_nice_diagnostic(bytes: &[u8]) -> Result<(), Error> {
     let mut stderr = std::io::stderr().lock();
-    stderr.write_all(ctcore::ct_util_name().as_bytes())?;
-    stderr.write_all(b": ")?;
-    stderr.write_all(&nice_locale_diagnostic_bytes(
-        message.as_ref(),
-        nice_uses_simplified_chinese(),
-    ))?;
-    stderr.write_all(b"\n")
+    stderr.write_all(bytes)?;
+    stderr.flush()
+}
+
+fn write_all_nice_diagnostic_with(
+    mut bytes: &[u8],
+    mut write: impl FnMut(&[u8]) -> Result<usize, Error>,
+) -> Result<(), Error> {
+    while !bytes.is_empty() {
+        match write(bytes) {
+            Ok(0) => {
+                return Err(Error::new(
+                    ErrorKind::WriteZero,
+                    "failed to write diagnostic",
+                ));
+            }
+            Ok(written) => bytes = &bytes[written..],
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
 }
 
 fn nice_quote_operand_bytes(
@@ -1176,6 +1220,15 @@ mod tests {
         assert!(nice_permission_diagnostic_failed(true, false));
         assert!(nice_permission_diagnostic_failed(false, true));
         assert!(!nice_permission_diagnostic_failed(false, false));
+    }
+
+    #[test]
+    fn test_permission_diagnostic_propagates_raw_stderr_write_errors() {
+        let error = write_all_nice_diagnostic_with(b"diagnostic", |_| {
+            Err(Error::from_raw_os_error(libc::EBADF))
+        })
+        .unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(libc::EBADF));
     }
 
     #[test]

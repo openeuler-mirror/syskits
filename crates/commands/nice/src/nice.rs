@@ -123,23 +123,46 @@ fn perm_related_errno(err: i32) -> bool {
     err == libc::EACCES || err == libc::EPERM
 }
 
-fn set_niceness_error_message(error: &Error) -> String {
-    set_niceness_error_message_for_locale(error, nice_uses_simplified_chinese())
-}
-
-fn set_niceness_error_message_for_locale(error: &Error, simplified_chinese: bool) -> String {
+fn nice_errno_description(error: &Error) -> String {
     let errno = error.raw_os_error().unwrap_or_default();
-    let description = if perm_related_errno(errno) {
+    if perm_related_errno(errno) {
         String::from("Permission denied")
     } else {
         strip_errno(error)
-    };
-    let message = if simplified_chinese {
+    }
+}
+
+fn set_niceness_error_label(simplified_chinese: bool) -> String {
+    if simplified_chinese {
         t!("nice.errors.cannot_set_niceness", locale = "zh-CN")
     } else {
         t!("nice.errors.cannot_set_niceness", locale = "en-US")
-    };
-    format!("{message}: {description}")
+    }
+    .to_string()
+}
+
+fn nice_append_errno_message(message: &mut Vec<u8>, description: &str) {
+    message.extend_from_slice(b": ");
+    message.extend_from_slice(description.as_bytes());
+}
+
+fn nice_errno_diagnostic_bytes(
+    message: impl AsRef<[u8]>,
+    error: &Error,
+    simplified_chinese: bool,
+) -> Vec<u8> {
+    let mut diagnostic = nice_locale_diagnostic_bytes(message.as_ref(), simplified_chinese);
+    nice_append_errno_message(&mut diagnostic, &nice_errno_description(error));
+    diagnostic
+}
+
+fn set_niceness_diagnostic(error: &Error) -> Vec<u8> {
+    let simplified_chinese = nice_uses_simplified_chinese();
+    nice_errno_diagnostic_bytes(
+        set_niceness_error_label(simplified_chinese),
+        error,
+        simplified_chinese,
+    )
 }
 
 fn nice_uses_simplified_chinese() -> bool {
@@ -422,18 +445,6 @@ fn nice_valid_locale_character_len(input: &[u8], codeset: &str) -> usize {
     0
 }
 
-fn nice_diagnostic_error(
-    code: i32,
-    message: impl AsRef<[u8]>,
-    usage_hint: Option<Vec<u8>>,
-) -> Box<dyn ctcore::ct_error::CTError> {
-    nice_diagnostic_error_bytes(
-        code,
-        nice_locale_diagnostic_bytes(message.as_ref(), nice_uses_simplified_chinese()),
-        usage_hint,
-    )
-}
-
 fn nice_diagnostic_error_bytes(
     code: i32,
     message: Vec<u8>,
@@ -454,11 +465,6 @@ fn nice_diagnostic_error_bytes_with_usage_hint(
         usage_hint,
         usage_hint_appends_newline,
     })
-}
-
-fn write_nice_diagnostic(message: impl AsRef<[u8]>) -> Result<(), Error> {
-    let message = nice_locale_diagnostic_bytes(message.as_ref(), nice_uses_simplified_chinese());
-    write_nice_diagnostic_bytes(&message)
 }
 
 fn write_nice_diagnostic_bytes(message: &[u8]) -> Result<(), Error> {
@@ -667,7 +673,11 @@ fn nice_write_error(error: Error, stdout_was_closed: bool) -> Box<dyn ctcore::ct
     } else {
         t!("nice.errors.write_error", locale = "en-US")
     };
-    nice_diagnostic_error(125, format!("{write_error}: {}", strip_errno(&error)), None)
+    nice_diagnostic_error_bytes(
+        125,
+        nice_errno_diagnostic_bytes(&write_error, &error, simplified_chinese),
+        None,
+    )
 }
 
 fn write_niceness(
@@ -698,15 +708,15 @@ fn apply_adjustment(adjustment: c_int) -> Result<(), CTResult<()>> {
     let err = Error::last_os_error();
     if value == -1 && err.raw_os_error().unwrap_or(0) != 0 {
         let errno = err.raw_os_error().unwrap_or(0);
-        let message = set_niceness_error_message(&err);
+        let message = set_niceness_diagnostic(&err);
         if perm_related_errno(errno) {
-            let write_failed = write_nice_diagnostic(message).is_err();
+            let write_failed = write_nice_diagnostic_bytes(&message).is_err();
             if nice_permission_diagnostic_failed(ctcore::ct_stderr_was_closed(), write_failed) {
                 return Err(Err(125.into()));
             }
             return Ok(());
         }
-        return Err(Err(nice_diagnostic_error(125, message, None)));
+        return Err(Err(nice_diagnostic_error_bytes(125, message, None)));
     }
     Ok(())
 }
@@ -1116,12 +1126,13 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
                 return Ok(());
             }
             Err(err) => {
-                return Err(nice_diagnostic_error(
+                let simplified_chinese = nice_uses_simplified_chinese();
+                return Err(nice_diagnostic_error_bytes(
                     125,
-                    format!(
-                        "{}: {}",
-                        nice_get_niceness_message(nice_uses_simplified_chinese()),
-                        strip_errno(&err)
+                    nice_errno_diagnostic_bytes(
+                        nice_get_niceness_message(simplified_chinese),
+                        &err,
+                        simplified_chinese,
                     ),
                     None,
                 ));
@@ -1355,9 +1366,22 @@ mod tests {
     #[test]
     fn test_set_niceness_permission_error_matches_gnu_linux_text() {
         let error = Error::from_raw_os_error(libc::EPERM);
+        assert_eq!(nice_errno_description(&error), "Permission denied");
+        assert_eq!(set_niceness_error_label(false), "cannot set niceness");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_errno_text_follows_localized_c_string() {
+        let mut primary = nice_encode_locale_text("无法设置优先级".as_bytes(), "UTF-16LE")
+            .expect("UTF-16LE must support UTF-8 input");
+        assert!(!nice_truncate_c_string(&mut primary));
+
+        nice_append_errno_message(&mut primary, "Permission denied");
+
         assert_eq!(
-            set_niceness_error_message(&error),
-            "cannot set niceness: Permission denied"
+            primary,
+            b"\xe0\x65\xd5\x6c\xbe\x8b\x6e\x7f\x18\x4f\x48\x51\xa7\x7e: Permission denied"
         );
     }
 
@@ -1407,8 +1431,6 @@ mod tests {
 
     #[test]
     fn test_simplified_chinese_diagnostics_match_gnu() {
-        let permission_error = Error::from_raw_os_error(libc::EPERM);
-
         assert_eq!(
             nice_missing_command_message(true),
             "指定调整值时，必须同时指定命令"
@@ -1417,10 +1439,7 @@ mod tests {
             nice_usage_hint_with_c_string_status("nice", true).0,
             "请尝试执行 \"nice --help\" 来获取更多信息。".as_bytes()
         );
-        assert_eq!(
-            set_niceness_error_message_for_locale(&permission_error, true),
-            "无法设置优先级: Permission denied"
-        );
+        assert_eq!(set_niceness_error_label(true), "无法设置优先级");
         assert_eq!(
             nice_quote_operand_bytes(OsStr::new("a\"b\\c"), true, Some("UTF-8")),
             b"\"a\\\"b\\\\c\""

@@ -675,6 +675,7 @@ pub fn ct_app() -> Command {
                     Arg::new(tail_flags::TAIL_ZERO_TERM)
                         .short('z')
                         .long(tail_flags::TAIL_ZERO_TERM)
+                        .overrides_with(tail_flags::TAIL_ZERO_TERM)
                         .help("Line delimiter is NUL, not newline")
                         .action(ArgAction::SetTrue),
                     Arg::new(tail_flags::TAIL_USE_POLLING)
@@ -821,6 +822,17 @@ mod tests {
                 TailFilterMode::Lines(_, delimiter) => assert_eq!(delimiter, 0),
                 _ => panic!("Expected Lines mode"),
             }
+        }
+
+        #[test]
+        fn test_repeated_zero_terminated_is_accepted() {
+            let options = tail_parse_args(create_args(&["-z", "-z"]))
+                .expect("GNU tail accepts repeated -z options");
+
+            assert_eq!(
+                options.mode,
+                TailFilterMode::Lines(TailSignum::Negative(10), 0)
+            );
         }
 
         #[test]

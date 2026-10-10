@@ -152,12 +152,20 @@ fn nice_uses_simplified_chinese() -> bool {
         .into_iter()
         .find_map(|name| std::env::var_os(name).filter(|value| !value.is_empty()))
         .unwrap_or_else(|| OsString::from("C"));
-    nice_uses_simplified_chinese_for_locale(
+    let simplified_chinese = nice_uses_simplified_chinese_for_locale(
         message_locale.as_os_str(),
         std::env::var_os("LANGUAGE")
             .filter(|language| !language.is_empty())
             .as_deref(),
-    )
+    );
+
+    #[cfg(target_os = "linux")]
+    let simplified_chinese = simplified_chinese
+        && nice_output_codeset()
+            .as_deref()
+            .is_some_and(nice_codeset_supports_utf8);
+
+    simplified_chinese
 }
 
 fn nice_uses_simplified_chinese_for_locale(
@@ -295,6 +303,21 @@ fn nice_c_locale_quotes_required(
     ctype_codeset_is_available: bool,
 ) -> bool {
     !locale_environment_is_valid || !ctype_codeset_is_available
+}
+
+#[cfg(target_os = "linux")]
+fn nice_codeset_supports_utf8(codeset: &str) -> bool {
+    let target = match CString::new(format!("{codeset}//TRANSLIT")) {
+        Ok(target) => target,
+        Err(_) => return false,
+    };
+    let source = CString::new("UTF-8").expect("UTF-8 has no NUL byte");
+    let converter = unsafe { libc::iconv_open(target.as_ptr(), source.as_ptr()) };
+    if converter == (-1_isize) as libc::iconv_t {
+        return false;
+    }
+    unsafe { libc::iconv_close(converter) };
+    true
 }
 
 #[cfg(target_os = "linux")]
@@ -1402,6 +1425,13 @@ mod tests {
         assert!(nice_c_locale_quotes_required(false, true));
         assert!(nice_c_locale_quotes_required(true, false));
         assert!(!nice_c_locale_quotes_required(true, true));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_invalid_output_charset_disables_translation() {
+        assert!(nice_codeset_supports_utf8("UTF-8"));
+        assert!(!nice_codeset_supports_utf8("invalid-charset"));
     }
 
     #[cfg(target_os = "linux")]

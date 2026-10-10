@@ -203,7 +203,7 @@ pub enum TailVerificationResult {
 #[derive(Debug)]
 pub struct TailOptions {
     pub follow: Option<TailFollowMode>,
-    pub max_unchanged_stats: u32,
+    pub max_unchanged_stats: u64,
     pub mode: TailFilterMode,
     pub pid: platform::Pid,
     pub retry: bool,
@@ -318,7 +318,7 @@ impl TailOptions {
         }
 
         if let Some(s) = matches.get_one::<String>(tail_flags::TAIL_MAX_UNCHANGED_STATS) {
-            settings.max_unchanged_stats = match s.parse::<u32>() {
+            settings.max_unchanged_stats = match s.parse::<u64>() {
                 Ok(s) => s,
                 Err(_) => {
                     return Err(CTsageError::new(
@@ -736,6 +736,17 @@ mod tests {
                 options.mode,
                 TailFilterMode::Lines(TailSignum::Negative(10), b'\n')
             );
+        }
+
+        #[test]
+        fn test_max_unchanged_stats_accepts_uintmax() {
+            let options = tail_parse_args(create_args(&[
+                "--max-unchanged-stats=18446744073709551615",
+                "/dev/null",
+            ]))
+            .expect("GNU tail accepts the UINTMAX_MAX option value");
+
+            assert_eq!(options.max_unchanged_stats, u64::MAX);
         }
 
         #[test]

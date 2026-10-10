@@ -24,7 +24,7 @@ use ctcore::{
     Tool,
     ct_display::Quotable,
     ct_error::{CTResult, CtSimpleError, UClapError, set_ct_exit_code, strip_errno},
-    ct_quoting_style::gnu_quote_shell,
+    ct_quoting_style::gnu_quote_locale,
     ct_show_error,
 };
 use sys_locale::get_locale;
@@ -103,7 +103,7 @@ fn set_niceness_error_message(error: &Error) -> String {
 }
 
 fn exec_error_message(command: &OsStr, error: &Error) -> String {
-    format!("{}: {}", gnu_quote_shell(command, true), strip_errno(error))
+    format!("{}: {}", gnu_quote_locale(command), strip_errno(error))
 }
 
 fn command_arg_to_cstring(argument: &OsStr) -> CString {
@@ -416,10 +416,9 @@ mod tests {
     #[test]
     fn test_exec_error_message_omits_rust_os_error_suffix() {
         let error = Error::from_raw_os_error(libc::ENOENT);
-        assert_eq!(
-            exec_error_message(OsStr::new("no_such"), &error),
-            "'no_such': No such file or directory"
-        );
+        let message = exec_error_message(OsStr::new("no_such"), &error);
+        assert!(message.ends_with(": No such file or directory"));
+        assert!(!message.contains("(os error"));
     }
 
     #[test]

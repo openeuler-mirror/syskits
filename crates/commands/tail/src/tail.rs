@@ -25,9 +25,11 @@ use chunks::TailReverseChunks;
 use clap::Command;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, get_ct_exit_code, set_ct_exit_code};
+use ctcore::ct_error::{
+    CTResult, CtSimpleError, FromIo, get_ct_exit_code, set_ct_exit_code, strip_errno,
+};
 use ctcore::ct_quoting_style::gnu_quote_shell_bytes;
-use ctcore::{ct_show, ct_show_error};
+use ctcore::ct_show_error;
 use follow::Observer;
 use paths::{TailHeaderPrinter, TailInput, TailInputKind};
 use same_file::Handle;
@@ -547,27 +549,36 @@ fn tail_file(
     offset: u64,
     buffer: Option<&mut Vec<u8>>,
 ) -> CTResult<()> {
-    // 检查文件是否存在
-    if !path.exists() {
-        return handle_file_not_found(input, path, observer);
+    match classify_tail_path(path) {
+        TailPathAccess::Missing => handle_file_not_found(input, path, observer),
+        TailPathAccess::Directory => handle_directory(input, path, options, observer),
+        TailPathAccess::OpenError(error) => handle_file_open_error(error, input, path, observer),
+        TailPathAccess::Ready => handle_tailable_file(
+            options,
+            header_printer,
+            input,
+            path,
+            observer,
+            offset,
+            buffer,
+        ),
     }
+}
 
-    // 检查路径是否为目录
-    if path.is_dir() {
-        return handle_directory(input, path, options, observer);
+enum TailPathAccess {
+    Missing,
+    Directory,
+    Ready,
+    OpenError(io::Error),
+}
+
+fn classify_tail_path(path: &Path) -> TailPathAccess {
+    match path.metadata() {
+        Ok(metadata) if metadata.is_dir() => TailPathAccess::Directory,
+        Ok(_) => TailPathAccess::Ready,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => TailPathAccess::Missing,
+        Err(error) => TailPathAccess::OpenError(error),
     }
-
-    // 块设备（Block Device）和字符设备同样可以被 tail 读取。
-    // 直接将控制权交给 handle_tailable_file，让底层的 File::open 和 seek 来决定是否可读。
-    handle_tailable_file(
-        options,
-        header_printer,
-        input,
-        path,
-        observer,
-        offset,
-        buffer,
-    )
 }
 
 fn handle_file_not_found(input: &TailInput, path: &Path, observer: &mut Observer) -> CTResult<()> {
@@ -784,15 +795,12 @@ fn handle_file_open_error(
         input.header_name(),
         false,
     )?;
-    if e.kind() == std::io::ErrorKind::PermissionDenied {
-        ct_show!(
-            e.map_err_context(|| { format!("cannot open '{}' for reading", input.display_name) })
-        );
-    } else {
-        return Err(
-            e.map_err_context(|| format!("cannot open '{}' for reading", input.display_name))
-        );
-    }
+    set_ct_exit_code(1);
+    tail_show_path_diagnostic(
+        b"cannot open ",
+        input.header_name(),
+        format!(" for reading: {}", strip_errno(&e)).as_bytes(),
+    );
     Ok(())
 }
 
@@ -1274,7 +1282,11 @@ mod tests {
     use std::io::{Read, Write};
     #[cfg(unix)]
     use std::os::unix::ffi::OsStrExt;
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
     use tempfile::NamedTempFile;
+    #[cfg(unix)]
+    use tempfile::tempdir;
 
     #[test]
     fn test_tool_implementation() {
@@ -1304,6 +1316,21 @@ mod tests {
             ),
             b"cannot open 'missing-'$'\\377' for reading: No such file or directory"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_loop_is_classified_as_an_open_error() {
+        let temp_dir = tempdir().unwrap();
+        let link = temp_dir.path().join("loop");
+        symlink("loop", &link).unwrap();
+
+        match classify_tail_path(&link) {
+            TailPathAccess::OpenError(error) => {
+                assert_eq!(error.raw_os_error(), Some(libc::ELOOP));
+            }
+            _ => panic!("symlink loop must preserve its open error"),
+        }
     }
 
     #[test]

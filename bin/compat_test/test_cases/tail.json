@@ -739,6 +739,31 @@
       },
       "cleanup_commands": [],
       "tags": ["linux", "raw-bytes", "non-utf8", "diagnostics"]
+    },
+    {
+      "command": "tail",
+      "description": "Linux下符号链接环 tail-symlink-loop 指向自身；tail 必须保留 open(2) 的 ELOOP errno，预期RC=1、stdout为空、stderr为 cannot open 'tail-symlink-loop' for reading: Too many levels of symbolic links。",
+      "setup_commands": [
+        "ln -s tail-symlink-loop tail-symlink-loop"
+      ],
+      "args": ["tail-symlink-loop"],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tail: cannot open 'tail-symlink-loop' for reading: Too many levels of symbolic links\n"
+        }
+      },
+      "cleanup_commands": [
+        "rm -f tail-symlink-loop"
+      ],
+      "tags": ["linux", "filesystem", "symlink", "diagnostics"]
     }
   ]
 }

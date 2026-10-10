@@ -201,34 +201,34 @@ impl NlFlags {
             .unwrap_or_default();
 
         // 提取各种编号样式选项
-        match matches
-            .get_one::<OsString>(nl_flags::NL_HEADER_NUMBERING)
-            .map(|style| style.as_encoded_bytes())
-            .map(TryInto::try_into)
-        {
-            None => {}
-            Some(Ok(style)) => flags.header_numbering = style,
-            Some(Err(message)) => errs.push(message),
+        if let Some(style) = matches.get_one::<OsString>(nl_flags::NL_HEADER_NUMBERING) {
+            match parse_nl_numbering_style(style) {
+                Ok(numbering_style) => flags.header_numbering = numbering_style,
+                Err(NlNumberingStyleError::Regex(message)) => {
+                    return Err(CtSimpleError::new(1, message));
+                }
+                Err(NlNumberingStyleError::InvalidStyle(message)) => errs.push(message),
+            }
         }
 
-        match matches
-            .get_one::<OsString>(nl_flags::NL_BODY_NUMBERING)
-            .map(|style| style.as_encoded_bytes())
-            .map(TryInto::try_into)
-        {
-            None => {}
-            Some(Ok(style)) => flags.body_numbering = style,
-            Some(Err(message)) => errs.push(message),
+        if let Some(style) = matches.get_one::<OsString>(nl_flags::NL_BODY_NUMBERING) {
+            match parse_nl_numbering_style(style) {
+                Ok(numbering_style) => flags.body_numbering = numbering_style,
+                Err(NlNumberingStyleError::Regex(message)) => {
+                    return Err(CtSimpleError::new(1, message));
+                }
+                Err(NlNumberingStyleError::InvalidStyle(message)) => errs.push(message),
+            }
         }
 
-        match matches
-            .get_one::<OsString>(nl_flags::NL_FOOTER_NUMBERING)
-            .map(|style| style.as_encoded_bytes())
-            .map(TryInto::try_into)
-        {
-            None => {}
-            Some(Ok(style)) => flags.footer_numbering = style,
-            Some(Err(message)) => errs.push(message),
+        if let Some(style) = matches.get_one::<OsString>(nl_flags::NL_FOOTER_NUMBERING) {
+            match parse_nl_numbering_style(style) {
+                Ok(numbering_style) => flags.footer_numbering = numbering_style,
+                Err(NlNumberingStyleError::Regex(message)) => {
+                    return Err(CtSimpleError::new(1, message));
+                }
+                Err(NlNumberingStyleError::InvalidStyle(message)) => errs.push(message),
+            }
         }
 
         // GNU xdectoimax skips only leading ASCII whitespace.  Keep the raw
@@ -351,6 +351,21 @@ enum NlNumberingStyle {
         pattern: Vec<u8>,
         compiled: RefCell<GnuRegex>,
     },
+}
+
+enum NlNumberingStyleError {
+    InvalidStyle(String),
+    Regex(String),
+}
+
+fn parse_nl_numbering_style(style: &OsStr) -> Result<NlNumberingStyle, NlNumberingStyleError> {
+    NlNumberingStyle::try_from(style.as_encoded_bytes()).map_err(|message| {
+        if style.as_encoded_bytes().starts_with(b"p") {
+            NlNumberingStyleError::Regex(message)
+        } else {
+            NlNumberingStyleError::InvalidStyle(message)
+        }
+    })
 }
 
 impl std::fmt::Debug for NlNumberingStyle {
@@ -1665,6 +1680,17 @@ mod tests {
             let matches =
                 create_test_matches(&[ctcore::ct_util_name(), "-h", "invalid", "test.txt"]);
             assert!(NlFlags::new(matches).is_err());
+        }
+
+        #[test]
+        fn test_flags_invalid_regex_style_reports_regex_error_directly() {
+            let matches = create_test_matches(&[ctcore::ct_util_name(), "-bp[", "test.txt"]);
+            let error = match NlFlags::new(matches) {
+                Ok(_) => panic!("invalid regex style must be rejected"),
+                Err(error) => error,
+            };
+
+            assert_eq!(error.to_string(), "Invalid regular expression");
         }
 
         /// 测试负数起始行号设置

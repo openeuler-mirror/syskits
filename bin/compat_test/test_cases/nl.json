@@ -906,6 +906,25 @@
           }
         },
         "tags": ["numbering-style", "style-prefix", "body-numbering"]
+      },
+      {
+        "command": "nl",
+        "description": "-bp[的BRE不完整；GNU在编译编号正则时直接报告Invalid regular expression，不附加通用参数汇总或帮助提示。",
+        "args": ["-bp["],
+        "environment": {
+          "env_vars": {
+            "LC_ALL": "C",
+            "LANG": "C"
+          }
+        },
+        "expectation": {
+          "execution": {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "nl: Invalid regular expression\n"
+          }
+        },
+        "tags": ["regex", "invalid-option", "diagnostic"]
       }
     ]
   }

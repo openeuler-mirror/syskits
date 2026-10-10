@@ -227,20 +227,28 @@ pub fn path_is_tailable(path: &Path) -> bool {
 
 #[inline]
 pub fn tail_stdin_is_bad_fd() -> bool {
-    // FIXME : Rust's stdlib is reopening fds as /dev/null
-    // see also: https://github.com/ctutils/coreutils/issues/2873
-    // (gnu/tests/tail-2/follow-stdin.sh fails because of this)
-    //#[cfg(unix)]
+    #[cfg(unix)]
     {
-        //platform::stdin_is_bad_fd()
+        ctcore::ct_stdin_was_closed() || is_bad_file_descriptor(libc::STDIN_FILENO)
     }
-    //#[cfg(not(unix))]
-    false
+
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
+#[cfg(unix)]
+fn is_bad_file_descriptor(fd: libc::c_int) -> bool {
+    let fcntl_failed = unsafe { libc::fcntl(fd, libc::F_GETFD) == -1 };
+    fcntl_failed && std::io::Error::last_os_error().raw_os_error() == Some(libc::EBADF)
 }
 
 #[cfg(test)]
 mod tests {
     use super::TailMetadataExt;
+    #[cfg(unix)]
+    use super::is_bad_file_descriptor;
     use std::fs::{self, File, FileTimes};
     use tempfile::NamedTempFile;
 
@@ -260,5 +268,11 @@ mod tests {
         assert!(before.len() > after.len());
         assert_eq!(before.modified().unwrap(), after.modified().unwrap());
         assert!(before.got_truncated(&after).unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn detects_invalid_file_descriptor() {
+        assert!(is_bad_file_descriptor(-1));
     }
 }

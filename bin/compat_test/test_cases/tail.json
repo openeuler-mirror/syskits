@@ -556,6 +556,25 @@
       "timeout": 2,
       "cleanup_commands": ["rm -f tail-name-recheck.txt tail-name-recheck-old.txt"],
       "tags": ["linux", "follow", "name", "polling", "max-unchanged-stats"]
+    },
+    {
+      "command": "tail",
+      "description": "Linux下启动前关闭fd 0并以默认标准输入执行tail；GNU必须返回1，stdout为空，并依次报告无法fstat standard input及操作数-的Bad file descriptor。",
+      "args": [],
+      "environment": {
+        "standardStreams": {
+          "stdin": "closed"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tail: cannot fstat 'standard input': Bad file descriptor\\ntail: -: Bad file descriptor\\n"
+        }
+      },
+      "cleanup_commands": [],
+      "tags": ["linux", "stdin", "closed-fd"]
     }
   ]
 }

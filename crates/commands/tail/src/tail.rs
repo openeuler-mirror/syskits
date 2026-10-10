@@ -759,6 +759,10 @@ fn tail_stdin(
     observer: &mut Observer,
     buffer: Option<&mut Vec<u8>>,
 ) -> CTResult<()> {
+    if paths::tail_stdin_is_bad_fd() {
+        return handle_bad_stdin_fd(options, input);
+    }
+
     match input.resolve() {
         Some(path) => handle_fifo_stdin(options, header_printer, input, observer, &path, buffer),
         None => handle_pipe_stdin(options, header_printer, input, observer, buffer),

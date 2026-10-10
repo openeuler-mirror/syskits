@@ -914,6 +914,37 @@
         },
         {
             "command": "nice",
+            "description": "Linux下LC_ALL=zh_CN.utf8但OUTPUT_CHARSET为不存在字符集时，GNU gettext放弃中文翻译并按LC_CTYPE输出英文与UTF-8弯引号；nice -n bad /usr/bin/true必须以125退出，stdout为空，stderr为nice: invalid adjustment ‘bad’。",
+            "args": [
+                "-n",
+                "bad",
+                "/usr/bin/true"
+            ],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "PATH": "/usr/bin:/bin",
+                    "LC_ALL": "zh_CN.utf8",
+                    "OUTPUT_CHARSET": "invalid-charset"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 125,
+                    "stdout": "",
+                    "stderr": "nice: invalid adjustment ‘bad’\n"
+                }
+            },
+            "tags": [
+                "linux",
+                "locale",
+                "output-charset",
+                "fallback",
+                "diagnostics"
+            ]
+        },
+        {
+            "command": "nice",
             "description": "zh_CN.UTF-8下指定调整值却没有COMMAND时，GNU输出本地化诊断和双引号帮助提示；nice -n 1应以125退出且stdout为空。",
             "args": [
                 "-n",

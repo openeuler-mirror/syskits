@@ -641,6 +641,7 @@ pub fn ct_app() -> Command {
                     Arg::new(tail_flags::TAIL_PID)
                         .long(tail_flags::TAIL_PID)
                         .value_name("PID")
+                        .overrides_with(tail_flags::TAIL_PID)
                         .help("With -f, terminate after process ID, PID dies"),
                     Arg::new(tail_flags::verbosity::TAIL_QUIET)
                         .short('q')
@@ -747,6 +748,14 @@ mod tests {
             .expect("GNU tail accepts the UINTMAX_MAX option value");
 
             assert_eq!(options.max_unchanged_stats, u64::MAX);
+        }
+
+        #[test]
+        fn test_repeated_pid_uses_last_value() {
+            let options = tail_parse_args(create_args(&["--pid=1", "--pid=2"]))
+                .expect("GNU tail accepts repeated --pid options");
+
+            assert_eq!(options.pid, 2);
         }
 
         #[test]

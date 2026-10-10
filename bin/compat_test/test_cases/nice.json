@@ -1011,6 +1011,40 @@
             ]
         },
         {
+            "tstdin": "",
+            "byteMode": true,
+            "command": "nice",
+            "description": "Linux下LC_ALL=zh_CN.utf8、OUTPUT_CHARSET=UTF-16LE时，提高优先级失败会进入GNU error()；error()先按C字符串输出截断后的中文主诊断，再由print_errno_message原样追加ASCII错误文本。参数完整十六进制=2d6e 2d31 2f7573722f62696e2f74727565，stdin完整十六进制=空，预期RC=0、stdout完整十六进制=空、stderr完整十六进制=6e6963653a20e065d56cbe8b6e7f184f4851a77e3a205065726d697373696f6e2064656e6965640a。",
+            "args": [
+                "2d6e",
+                "2d31",
+                "2f7573722f62696e2f74727565"
+            ],
+            "environment": {
+                "clearEnv": true,
+                "env_vars": {
+                    "PATH": "/usr/bin:/bin",
+                    "LC_ALL": "zh_CN.utf8",
+                    "OUTPUT_CHARSET": "UTF-16LE"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": "6e6963653a20e065d56cbe8b6e7f184f4851a77e3a205065726d697373696f6e2064656e6965640a"
+                }
+            },
+            "tags": [
+                "linux",
+                "locale",
+                "output-charset",
+                "byte-mode",
+                "errno",
+                "niceness"
+            ]
+        },
+        {
             "command": "nice",
             "description": "zh_CN.UTF-8下指定调整值却没有COMMAND时，GNU输出本地化诊断和双引号帮助提示；nice -n 1应以125退出且stdout为空。",
             "args": [

@@ -16,7 +16,7 @@ use libc::{c_char, c_int, execvp, nice as libc_nice};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::borrow::Cow;
-use std::ffi::{CString, OsStr, OsString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use std::io::{Error, Write};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
@@ -25,9 +25,8 @@ use std::ptr;
 use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use ctcore::{
     Tool,
-    ct_error::{CTResult, CtSimpleError, UClapError, set_ct_exit_code, strip_errno},
+    ct_error::{CTResult, UClapError, set_ct_exit_code, strip_errno},
     ct_quoting_style::gnu_quote_locale,
-    ct_show_error,
 };
 use sys_locale::get_locale;
 
@@ -82,9 +81,10 @@ fn parse_adjustment(value: &OsStr) -> Result<i32, Box<dyn ctcore::ct_error::CTEr
     let digits = &bytes[digit_start..];
 
     if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
-        return Err(CtSimpleError::new(
+        return Err(nice_diagnostic_error(
             125,
             nice_invalid_adjustment_message(original_value, nice_uses_simplified_chinese()),
+            None,
         ));
     }
 
@@ -188,11 +188,106 @@ fn nice_get_niceness_message(simplified_chinese: bool) -> String {
 }
 
 fn nice_usage_hint(utility_name: &str, simplified_chinese: bool) -> Vec<u8> {
-    if simplified_chinese {
+    let hint = if simplified_chinese {
         format!("请尝试执行 \"{utility_name} --help\" 来获取更多信息。").into_bytes()
     } else {
         format!("Try '{utility_name} --help' for more information.").into_bytes()
+    };
+    nice_locale_diagnostic_bytes(&hint, simplified_chinese)
+}
+
+fn nice_locale_diagnostic_bytes(text: &[u8], simplified_chinese: bool) -> Vec<u8> {
+    if !simplified_chinese {
+        return text.to_vec();
     }
+
+    #[cfg(target_os = "linux")]
+    if let Some(codeset) = nice_output_codeset()
+        && let Some(encoded) = nice_encode_locale_text(text, &codeset)
+    {
+        return encoded;
+    }
+
+    text.to_vec()
+}
+
+#[cfg(target_os = "linux")]
+fn nice_output_codeset() -> Option<String> {
+    if let Some(codeset) = std::env::var_os("OUTPUT_CHARSET").filter(|codeset| !codeset.is_empty())
+    {
+        return Some(codeset.to_string_lossy().into_owned());
+    }
+
+    let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
+        .into_iter()
+        .find_map(|name| std::env::var_os(name).filter(|value| !value.is_empty()))?;
+    let locale = CString::new(locale.as_encoded_bytes()).ok()?;
+    let locale_handle =
+        unsafe { libc::newlocale(libc::LC_CTYPE_MASK, locale.as_ptr(), std::ptr::null_mut()) };
+    if locale_handle.is_null() {
+        return None;
+    }
+    let codeset = unsafe {
+        let codeset = libc::nl_langinfo_l(libc::CODESET, locale_handle);
+        (!codeset.is_null()).then(|| CStr::from_ptr(codeset).to_bytes().to_vec())
+    };
+    unsafe { libc::freelocale(locale_handle) };
+    String::from_utf8(codeset?).ok()
+}
+
+#[cfg(target_os = "linux")]
+fn nice_encode_locale_text(text: &[u8], codeset: &str) -> Option<Vec<u8>> {
+    let target = CString::new(format!("{codeset}//TRANSLIT")).ok()?;
+    let source = CString::new("UTF-8").expect("UTF-8 has no NUL byte");
+    let converter = unsafe { libc::iconv_open(target.as_ptr(), source.as_ptr()) };
+    if converter == (-1_isize) as libc::iconv_t {
+        return None;
+    }
+
+    let mut input = text.as_ptr().cast_mut().cast::<libc::c_char>();
+    let mut input_left = text.len();
+    let mut output = vec![0_u8; text.len().saturating_mul(4).max(16)];
+    let mut output_ptr = output.as_mut_ptr().cast::<libc::c_char>();
+    let mut output_left = output.len();
+    let result = unsafe {
+        libc::iconv(
+            converter,
+            &mut input,
+            &mut input_left,
+            &mut output_ptr,
+            &mut output_left,
+        )
+    };
+    unsafe { libc::iconv_close(converter) };
+    if result == usize::MAX || input_left != 0 {
+        return None;
+    }
+
+    output.truncate(output.len() - output_left);
+    Some(output)
+}
+
+fn nice_diagnostic_error(
+    code: i32,
+    message: impl AsRef<[u8]>,
+    usage_hint: Option<Vec<u8>>,
+) -> Box<dyn ctcore::ct_error::CTError> {
+    Box::new(NiceDiagnosticError {
+        code,
+        message: nice_locale_diagnostic_bytes(message.as_ref(), nice_uses_simplified_chinese()),
+        usage_hint,
+    })
+}
+
+fn write_nice_diagnostic(message: impl AsRef<[u8]>) -> Result<(), Error> {
+    let mut stderr = std::io::stderr().lock();
+    stderr.write_all(ctcore::ct_util_name().as_bytes())?;
+    stderr.write_all(b": ")?;
+    stderr.write_all(&nice_locale_diagnostic_bytes(
+        message.as_ref(),
+        nice_uses_simplified_chinese(),
+    ))?;
+    stderr.write_all(b"\n")
 }
 
 fn nice_quote_operand(value: &OsStr, simplified_chinese: bool) -> String {
@@ -262,9 +357,10 @@ fn nice_normalize_stdout_write_error(error: Error, stdout_was_closed: bool) -> E
 
 fn nice_write_error(error: Error, stdout_was_closed: bool) -> Box<dyn ctcore::ct_error::CTError> {
     let error = nice_normalize_stdout_write_error(error, stdout_was_closed);
-    CtSimpleError::new(
+    nice_diagnostic_error(
         125,
         format!("{}: {}", t!("nice.errors.write_error"), strip_errno(&error)),
+        None,
     )
 }
 
@@ -284,13 +380,13 @@ fn apply_adjustment(adjustment: c_int) -> Result<(), CTResult<()>> {
         let errno = err.raw_os_error().unwrap_or(0);
         let message = set_niceness_error_message(&err);
         if perm_related_errno(errno) {
-            if writeln!(std::io::stderr(), "{}: {}", ctcore::ct_util_name(), message).is_err() {
+            if write_nice_diagnostic(message).is_err() {
                 set_ct_exit_code(125);
                 return Err(Ok(()));
             }
             return Ok(());
         }
-        return Err(Err(CtSimpleError::new(125, message)));
+        return Err(Err(nice_diagnostic_error(125, message, None)));
     }
     Ok(())
 }
@@ -513,6 +609,39 @@ struct NiceUsageError {
     usage_hint: Vec<u8>,
 }
 
+#[derive(Debug)]
+struct NiceDiagnosticError {
+    code: i32,
+    message: Vec<u8>,
+    usage_hint: Option<Vec<u8>>,
+}
+
+impl Display for NiceDiagnosticError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        String::from_utf8_lossy(&self.message).fmt(formatter)
+    }
+}
+
+impl std::error::Error for NiceDiagnosticError {}
+
+impl ctcore::ct_error::CTError for NiceDiagnosticError {
+    fn code(&self) -> i32 {
+        self.code
+    }
+
+    fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Borrowed(&self.message)
+    }
+
+    fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
+        self.usage_hint.as_deref().map(Cow::Borrowed)
+    }
+
+    fn usage(&self) -> bool {
+        self.usage_hint.is_some()
+    }
+}
+
 impl Display for NiceUsageError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
         String::from_utf8_lossy(&self.message).fmt(formatter)
@@ -568,16 +697,14 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
         if let Some(value) = adjustment_value {
             let _ = parse_adjustment(value.as_os_str())?;
             let simplified_chinese = nice_uses_simplified_chinese();
-            ct_show_error!("{}", nice_missing_command_message(simplified_chinese));
-            eprintln!(
-                "{}",
-                String::from_utf8_lossy(&nice_usage_hint(
+            return Err(nice_diagnostic_error(
+                125,
+                nice_missing_command_message(simplified_chinese),
+                Some(nice_usage_hint(
                     ctcore::ct_help_utility_name(),
                     simplified_chinese,
-                ))
-            );
-            set_ct_exit_code(125);
-            return Ok(());
+                )),
+            ));
         }
 
         match get_current_niceness() {
@@ -587,13 +714,15 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
                 return Ok(());
             }
             Err(err) => {
-                ct_show_error!(
-                    "{}: {}",
-                    nice_get_niceness_message(nice_uses_simplified_chinese()),
-                    strip_errno(&err)
-                );
-                set_ct_exit_code(125);
-                return Ok(());
+                return Err(nice_diagnostic_error(
+                    125,
+                    format!(
+                        "{}: {}",
+                        nice_get_niceness_message(nice_uses_simplified_chinese()),
+                        strip_errno(&err)
+                    ),
+                    None,
+                ));
             }
         }
     }
@@ -626,17 +755,16 @@ pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
 
     // 执行命令失败的处理
     let exec_error = Error::last_os_error();
-    ct_show_error!(
-        "{}",
-        exec_error_message(command_args[0].as_os_str(), &exec_error)
-    );
     let exit_code = if exec_error.raw_os_error().unwrap_or(0) as c_int == libc::ENOENT {
         127
     } else {
         126
     };
-    set_ct_exit_code(exit_code);
-    Ok(())
+    Err(nice_diagnostic_error(
+        exit_code,
+        exec_error_message(command_args[0].as_os_str(), &exec_error),
+        None,
+    ))
 }
 
 pub fn ct_app() -> Command {
@@ -861,6 +989,17 @@ mod tests {
         assert_eq!(
             nice_quote_operand(OsStr::new("a\"b\\c"), true),
             "\"a\\\"b\\\\c\""
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_gbk_diagnostic_text_uses_locale_encoding() {
+        assert_eq!(
+            nice_encode_locale_text("无效的调整值".as_bytes(), "GBK"),
+            Some(vec![
+                0xce, 0xde, 0xd0, 0xa7, 0xb5, 0xc4, 0xb5, 0xf7, 0xd5, 0xfb, 0xd6, 0xb5,
+            ])
         );
     }
 

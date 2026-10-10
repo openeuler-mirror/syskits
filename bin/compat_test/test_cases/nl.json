@@ -925,6 +925,26 @@
           }
         },
         "tags": ["regex", "invalid-option", "diagnostic"]
+      },
+      {
+        "command": "nl",
+        "description": "GNU先以三字节-d abc设置扩展分节符，再以短-d x原地覆写首字节，最终分节符为xbc而非x:；xbcxbc是正文分节线。",
+        "tstdin": "xbcxbc\nline\n",
+        "args": ["-d", "abc", "-d", "x"],
+        "environment": {
+          "env_vars": {
+            "LC_ALL": "C",
+            "LANG": "C"
+          }
+        },
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "\n     1\tline\n",
+            "stderr": ""
+          }
+        },
+        "tags": ["section-delimiter", "repeated-options", "gnu-extension"]
       }
     ]
   }

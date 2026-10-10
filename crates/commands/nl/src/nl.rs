@@ -180,13 +180,15 @@ impl NlFlags {
             .map_or_else(|| vec![OsString::from("-")], |v| v.cloned().collect());
 
         // 提取分隔符选项
-        if let Some(delimiter) = matches.get_one::<OsString>(nl_flags::NL_SECTION_DELIMITER) {
-            let delimiter = delimiter.as_encoded_bytes();
-            flags.section_delimiter = if delimiter.len() == 1 {
-                [delimiter, b":"].concat()
-            } else {
-                delimiter.to_vec()
-            };
+        if let Some(delimiters) = matches.get_many::<OsString>(nl_flags::NL_SECTION_DELIMITER) {
+            for delimiter in delimiters {
+                let delimiter = delimiter.as_encoded_bytes();
+                if delimiter.len() == 1 || delimiter.len() == 2 {
+                    flags.section_delimiter[..delimiter.len()].copy_from_slice(delimiter);
+                } else {
+                    flags.section_delimiter = delimiter.to_vec();
+                }
+            }
         }
 
         // 提取行号分隔符
@@ -931,6 +933,7 @@ pub fn ct_app() -> Command {
             .help(t!("nl.clap.nl_section_delimiter"))
             .value_name("CC")
             .value_parser(OsStringValueParser::new())
+            .action(ArgAction::Append)
             .allow_hyphen_values(true),
         Arg::new(nl_flags::NL_FOOTER_NUMBERING)
             .short('f')
@@ -1450,6 +1453,15 @@ mod tests {
                 let flags = NlFlags::new(matches).unwrap();
                 assert_eq!(flags.section_delimiter, expected);
             }
+        }
+
+        #[test]
+        fn test_flags_repeated_section_delimiter_preserves_gnu_overwrite_state() {
+            let matches =
+                create_test_matches(&[ctcore::ct_util_name(), "-d", "abc", "-d", "x", "test.txt"]);
+            let flags = NlFlags::new(matches).unwrap();
+
+            assert_eq!(flags.section_delimiter, b"xbc");
         }
 
         /// 测试数值选项设置

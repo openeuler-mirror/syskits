@@ -190,6 +190,23 @@
       {
         "tstdin": "",
         "command": "nl",
+        "description": "数值选项按GNU xdectoimax规则忽略前导ASCII空白；-v空格3、-i制表符2、-l回车2、-w换页符4分别解析为3、2、2、4。",
+        "setup_commands": [
+          "printf 'one\\ntwo\\n' > input"
+        ],
+        "args": ["-v", " 3", "-i", "\t2", "-l", "\r2", "-w", "\f4", "input"],
+        "expectation": {
+          "execution": {
+            "exit_code": 0,
+            "stdout": "   3\\tone\n   5\\ttwo\n",
+            "stderr": ""
+          }
+        },
+        "tags": ["numeric-options", "ascii-whitespace"]
+      },
+      {
+        "tstdin": "",
+        "command": "nl",
         "description": "测试不编号样式",
         "setup_commands": [
           "mkdir -p test_dir",

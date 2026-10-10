@@ -25,6 +25,7 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write, stdout};
 use std::path::Path;
+use std::str::FromStr;
 use sys_locale::get_locale;
 /// 行号格式化工具的标志和选项
 pub mod nl_flags {
@@ -228,30 +229,42 @@ impl NlFlags {
             Some(Err(message)) => errs.push(message),
         }
 
-        // 提取数值选项
-        match matches.get_one::<i32>(nl_flags::NL_NUMBER_WIDTH) {
+        // GNU xdectoimax skips only leading ASCII whitespace.  Keep the raw
+        // value through clap so the command-level parser can apply that rule.
+        match matches
+            .get_one::<String>(nl_flags::NL_NUMBER_WIDTH)
+            .map(|value| parse_gnu_decimal::<i32>(value))
+        {
             None => {}
-            Some(num) if *num > 0 => flags.number_width = *num as usize,
-            Some(_) => errs.push(String::from(
+            Some(Ok(num)) if num > 0 => flags.number_width = num as usize,
+            Some(Ok(_)) => errs.push(String::from(
                 "Invalid line number field width: '0': Numerical result out of range",
             )),
+            Some(Err(_)) => errs.push(String::from("invalid line number field width")),
         }
 
-        match matches.get_one::<i64>(nl_flags::NL_JOIN_BLANK_LINES) {
+        match matches
+            .get_one::<String>(nl_flags::NL_JOIN_BLANK_LINES)
+            .map(|value| parse_gnu_decimal::<i64>(value))
+        {
             None => {}
-            Some(num) if *num > 0 => flags.join_blank_lines = *num as u64,
-            Some(_) => errs.push(String::from(
+            Some(Ok(num)) if num > 0 => flags.join_blank_lines = num as u64,
+            Some(Ok(_)) => errs.push(String::from(
                 "Invalid line number of blank lines: '0': Numerical result out of range",
             )),
+            Some(Err(_)) => errs.push(String::from("invalid line number of blank lines")),
         }
 
-        if let Some(num) = matches.get_one::<i64>(nl_flags::NL_LINE_INCREMENT) {
-            flags.line_increment = *num;
+        if let Some(value) = matches.get_one::<String>(nl_flags::NL_LINE_INCREMENT) {
+            match parse_gnu_decimal::<i64>(value) {
+                Ok(num) => flags.line_increment = num,
+                Err(_) => errs.push(String::from("invalid line number increment")),
+            }
         }
 
         if let Some(num) = matches.get_one::<String>(nl_flags::NL_STARTING_LINE_NUMBER) {
             // 检测溢出：当数值超出 i64 范围时返回错误
-            match num.parse::<i64>() {
+            match parse_gnu_decimal::<i64>(num) {
                 Ok(n) => flags.starting_line_number = n,
                 Err(_) => {
                     errs.push(format!(
@@ -275,6 +288,12 @@ impl NlFlags {
         flags.stats = NlStats::new(flags.starting_line_number);
         Ok(flags)
     }
+}
+
+fn parse_gnu_decimal<T: FromStr>(value: &str) -> Result<T, T::Err> {
+    value
+        .trim_start_matches(|character: char| character.is_ascii_whitespace())
+        .parse()
 }
 
 /// 行号格式化状态结构
@@ -867,14 +886,12 @@ pub fn ct_app() -> Command {
             .long(nl_flags::NL_LINE_INCREMENT)
             .help(t!("nl.clap.nl_line_increment"))
             .value_name("NUMBER")
-            .value_parser(clap::value_parser!(i64))
             .allow_hyphen_values(true),
         Arg::new(nl_flags::NL_JOIN_BLANK_LINES)
             .short('l')
             .long(nl_flags::NL_JOIN_BLANK_LINES)
             .help(t!("nl.clap.nl_join_blank_lines"))
             .value_name("NUMBER")
-            .value_parser(clap::value_parser!(i64))
             .allow_hyphen_values(true),
         Arg::new(nl_flags::NL_NUMBER_FORMAT)
             .short('n')
@@ -907,7 +924,6 @@ pub fn ct_app() -> Command {
             .long(nl_flags::NL_NUMBER_WIDTH)
             .help(t!("nl.clap.nl_number_width"))
             .value_name("NUMBER")
-            .value_parser(clap::value_parser!(i32))
             .allow_hyphen_values(true),
     ];
 
@@ -1344,6 +1360,29 @@ mod tests {
             assert_eq!(flags.number_width, 10);
         }
 
+        #[test]
+        fn test_flags_numeric_options_accept_leading_ascii_whitespace() {
+            let matches = ct_app()
+                .try_get_matches_from([
+                    ctcore::ct_util_name(),
+                    "-v",
+                    " 3",
+                    "-i",
+                    "\t2",
+                    "-l",
+                    "\r2",
+                    "-w",
+                    "\x0c4",
+                ])
+                .unwrap();
+            let flags = NlFlags::new(matches).unwrap();
+
+            assert_eq!(flags.starting_line_number, 3);
+            assert_eq!(flags.line_increment, 2);
+            assert_eq!(flags.join_blank_lines, 2);
+            assert_eq!(flags.number_width, 4);
+        }
+
         /// 测试无效数值选项处理
         #[test]
         fn test_flags_invalid_numeric_options() {
@@ -1367,25 +1406,25 @@ mod tests {
 
         #[test]
         fn test_flags_reject_number_width_larger_than_c_int() {
-            assert!(
-                ct_app()
-                    .try_get_matches_from([ctcore::ct_util_name(), "-w", "2147483648", "test.txt",])
-                    .is_err()
-            );
+            let matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "-w", "2147483648", "test.txt"])
+                .unwrap();
+
+            assert!(NlFlags::new(matches).is_err());
         }
 
         #[test]
         fn test_flags_reject_join_blank_lines_larger_than_intmax() {
-            assert!(
-                ct_app()
-                    .try_get_matches_from([
-                        ctcore::ct_util_name(),
-                        "-l",
-                        "9223372036854775808",
-                        "test.txt",
-                    ])
-                    .is_err()
-            );
+            let matches = ct_app()
+                .try_get_matches_from([
+                    ctcore::ct_util_name(),
+                    "-l",
+                    "9223372036854775808",
+                    "test.txt",
+                ])
+                .unwrap();
+
+            assert!(NlFlags::new(matches).is_err());
         }
 
         /// 测试多文件处理

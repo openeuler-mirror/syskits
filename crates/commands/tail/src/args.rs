@@ -654,6 +654,7 @@ pub fn ct_app() -> Command {
                         .short('s')
                         .value_name("N")
                         .long(tail_flags::TAIL_SLEEP_INT)
+                        .overrides_with(tail_flags::TAIL_SLEEP_INT)
                         .help("Number of seconds to sleep between polling the file when running with -f"),
                     Arg::new(tail_flags::TAIL_MAX_UNCHANGED_STATS)
                         .value_name("N")
@@ -756,6 +757,15 @@ mod tests {
                 .expect("GNU tail accepts repeated --pid options");
 
             assert_eq!(options.pid, 2);
+        }
+
+        #[test]
+        fn test_repeated_sleep_interval_uses_last_value() {
+            let options =
+                tail_parse_args(create_args(&["--sleep-interval=1", "--sleep-interval=2"]))
+                    .expect("GNU tail accepts repeated --sleep-interval options");
+
+            assert_eq!(options.sleep_sec, Duration::from_secs(2));
         }
 
         #[test]

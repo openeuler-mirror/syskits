@@ -673,7 +673,7 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
     } else {
         // 打开指定路径的文件
         let file_name = File::open(filename)
-            .map_err_context(|| format!("cannot access {}", filename.quote()))?;
+            .map_err_context(|| format!("cannot open {} for reading", filename.quote()))?;
 
         // 使用缓冲读取器读取文件，并进行拆分
         csplit(&csplit_opts, patterns, BufReader::new(file_name)).map_err(|err| {

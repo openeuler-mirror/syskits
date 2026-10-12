@@ -183,3 +183,41 @@ fn chroot_reports_unknown_long_options_like_gnu() {
         );
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn chroot_reports_long_option_argument_errors_like_gnu() {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+
+    for (argument, message) in [
+        ("--groups", "option '--groups' requires an argument"),
+        ("--userspec", "option '--userspec' requires an argument"),
+        ("--help=1", "option '--help' doesn't allow an argument"),
+        (
+            "--version=1",
+            "option '--version' doesn't allow an argument",
+        ),
+        (
+            "--skip-chdir=1",
+            "option '--skip-chdir' doesn't allow an argument",
+        ),
+        (
+            "--=1",
+            "option '--=1' is ambiguous; possibilities: '--groups' '--userspec' '--skip-chdir' '--help' '--version'",
+        ),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_chroot"))
+            .env("LC_ALL", "C")
+            .arg0("chroot")
+            .arg(argument)
+            .output()
+            .expect("run chroot");
+
+        assert_eq!(output.status.code(), Some(125));
+        assert_eq!(
+            String::from_utf8(output.stderr).expect("stderr is UTF-8"),
+            format!("chroot: {message}\nTry 'chroot --help' for more information.\n")
+        );
+    }
+}

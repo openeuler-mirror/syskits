@@ -236,10 +236,36 @@ fn normalize_gnu_option_parsing(mut args: Vec<OsString>) -> CTResult<Vec<OsStrin
                     format!("unrecognized option {}", locale_quote(argument)),
                 ));
             }
-            if !long_option.contains('=')
-                && matching_options.len() == 1
-                && [opt_flags::GROUPS, opt_flags::USERSPEC].contains(&matching_options[0])
-            {
+            if matching_options.len() > 1 {
+                let possibilities = matching_options
+                    .iter()
+                    .map(|option| locale_quote(&format!("--{option}")))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                return Err(CTsageError::new(
+                    125,
+                    format!(
+                        "option {} is ambiguous; possibilities: {possibilities}",
+                        locale_quote(argument)
+                    ),
+                ));
+            }
+
+            let option = matching_options[0];
+            let takes_value = gnu_long_option_takes_value(option);
+            if long_option.contains('=') && !takes_value {
+                return Err(CTsageError::new(
+                    125,
+                    format!("option '--{option}' doesn't allow an argument"),
+                ));
+            }
+            if !long_option.contains('=') && takes_value {
+                if args.get(index + 1).is_none() {
+                    return Err(CTsageError::new(
+                        125,
+                        format!("option '--{option}' requires an argument"),
+                    ));
+                }
                 index += 1;
             }
         } else if let Some(short_options) = argument.strip_prefix('-')
@@ -263,6 +289,10 @@ fn gnu_long_option_matches(option_name: &str) -> Vec<&'static str> {
         .copied()
         .filter(|option| option.starts_with(option_name))
         .collect()
+}
+
+fn gnu_long_option_takes_value(option: &str) -> bool {
+    [opt_flags::GROUPS, opt_flags::USERSPEC].contains(&option)
 }
 
 /**

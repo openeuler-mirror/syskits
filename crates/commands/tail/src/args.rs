@@ -496,7 +496,7 @@ fn tail_parse_num(src: &str) -> Result<TailSignum, ParseSizeError> {
         ));
     }
 
-    match parse_size_u64(size_string) {
+    match tail_parse_decimal_size(size_string) {
         Ok(n) => match (n, starting_with) {
             (0, true) => Ok(TailSignum::PlusZero),
             (0, false) => Ok(TailSignum::MinusZero),
@@ -504,6 +504,27 @@ fn tail_parse_num(src: &str) -> Result<TailSignum, ParseSizeError> {
             (n, false) => Ok(TailSignum::Negative(n)),
         },
         Err(err) => Err(err),
+    }
+}
+
+fn tail_parse_decimal_size(size: &str) -> Result<u64, ParseSizeError> {
+    let digits_len = size.bytes().take_while(u8::is_ascii_digit).count();
+    if digits_len > 1 && size.starts_with('0') {
+        // ctcore accepts octal numbers, while GNU tail's xdectoumax is decimal.
+        let digits = &size[..digits_len];
+        let normalized_digits = digits.trim_start_matches('0');
+        let decimal_size = format!(
+            "{}{}",
+            if normalized_digits.is_empty() {
+                "0"
+            } else {
+                normalized_digits
+            },
+            &size[digits_len..]
+        );
+        parse_size_u64(&decimal_size)
+    } else {
+        parse_size_u64(size)
     }
 }
 
@@ -1216,6 +1237,11 @@ mod tests {
     #[test]
     fn test_parse_num_uses_gnu_decimal_lexical_rules() {
         assert_eq!(tail_parse_num("- 1"), Ok(TailSignum::Negative(1)));
+        assert_eq!(tail_parse_num("012"), Ok(TailSignum::Negative(12)));
+        assert_eq!(
+            tail_parse_num("-0012K"),
+            Ok(TailSignum::Negative(12 * 1024))
+        );
         assert!(tail_parse_num("0x10").is_err());
     }
 

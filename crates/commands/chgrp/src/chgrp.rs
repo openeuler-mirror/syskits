@@ -109,12 +109,140 @@ impl Tool for Chgrp {
     }
 }
 
+const GNU_LONG_OPTIONS: [&str; 12] = [
+    "recursive",
+    "changes",
+    "dereference",
+    "no-dereference",
+    "no-preserve-root",
+    "preserve-root",
+    "quiet",
+    "silent",
+    "reference",
+    "verbose",
+    "help",
+    "version",
+];
+
+fn gnu_long_option(option: &str) -> Option<&'static str> {
+    if let Some(option) = GNU_LONG_OPTIONS.iter().find(|known| **known == option) {
+        return Some(option);
+    }
+
+    let mut matches = GNU_LONG_OPTIONS
+        .iter()
+        .filter(|known| known.starts_with(option));
+    let option = matches.next()?;
+    if matches.next().is_some() {
+        None
+    } else {
+        Some(option)
+    }
+}
+
+fn gnu_help_requested(args: &[OsString]) -> bool {
+    let mut reference_takes_next = false;
+
+    for arg in args.iter().skip(1) {
+        let Some(arg) = arg.to_str() else {
+            continue;
+        };
+        if reference_takes_next {
+            reference_takes_next = false;
+            continue;
+        }
+        if arg == "--" {
+            break;
+        }
+        if let Some(long_option) = arg.strip_prefix("--") {
+            if long_option.is_empty() {
+                break;
+            }
+            let (option, value) = long_option
+                .split_once('=')
+                .map_or((long_option, None), |(name, value)| (name, Some(value)));
+            let Some(option) = gnu_long_option(option) else {
+                return false;
+            };
+            if value.is_some() && option != opt_flags::REFERENCE {
+                return false;
+            }
+            if option == opt_flags::REFERENCE && value.is_none() {
+                reference_takes_next = true;
+            } else if option == opt_flags::HELP {
+                return true;
+            } else if option == "version" {
+                return false;
+            }
+        } else if let Some(short_options) = arg.strip_prefix('-') {
+            if !short_options
+                .chars()
+                .all(|option| matches!(option, 'H' | 'L' | 'P' | 'R' | 'c' | 'f' | 'h' | 'v'))
+            {
+                return false;
+            }
+        }
+    }
+    false
+}
+
+const GNU_HELP_TEMPLATE: &str = r#"Usage: {program} [OPTION]... GROUP FILE...
+  or:  {program} [OPTION]... --reference=RFILE FILE...
+Change the group of each FILE to GROUP.
+With --reference, change the group of each FILE to that of RFILE.
+
+  -c, --changes          like verbose but report only when a change is made
+  -f, --silent, --quiet  suppress most error messages
+  -v, --verbose          output a diagnostic for every file processed
+      --dereference      affect the referent of each symbolic link (this is
+                         the default), rather than the symbolic link itself
+  -h, --no-dereference   affect symbolic links instead of any referenced file
+                         (useful only on systems that can change the
+                         ownership of a symlink)
+      --no-preserve-root  do not treat '/' specially (the default)
+      --preserve-root    fail to operate recursively on '/'
+      --reference=RFILE  use RFILE's group rather than specifying a GROUP.
+                         RFILE is always dereferenced if a symbolic link.
+  -R, --recursive        operate on files and directories recursively
+
+The following options modify how a hierarchy is traversed when the -R
+option is also specified.  If more than one is specified, only the final
+one takes effect.
+
+  -H                     if a command line argument is a symbolic link
+                         to a directory, traverse it
+  -L                     traverse every symbolic link to a directory
+                         encountered
+  -P                     do not traverse any symbolic links (default)
+
+      --help        display this help and exit
+      --version     output version information and exit
+
+Examples:
+  {program} staff /u      Change the group of /u to "staff".
+  {program} -hR staff /u  Change the group of /u and subfiles to "staff".
+
+GNU coreutils online help: <https://www.gnu.org/software/coreutils/>
+Report any translation bugs to <https://translationproject.org/team/>
+Full documentation <https://www.gnu.org/software/coreutils/chgrp>
+or available locally via: info '(coreutils) chgrp invocation'
+"#;
+
+fn gnu_help_output(program: &str) -> String {
+    GNU_HELP_TEMPLATE.replace("{program}", program)
+}
+
 pub fn chgrp_main(args: impl ctcore::Args) -> CTResult<()> {
+    let args: Vec<_> = args.collect();
     let lang_code = sys_locale::get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    if gnu_help_requested(&args) {
+        print!("{}", gnu_help_output(ctcore::ct_util_name()));
+        return Ok(());
+    }
     ownership_change_base(
         ct_app(),
-        args,
+        args.into_iter(),
         opt_flags::ARG_GROUP,
         chgrp_parse_gid_and_uid,
         true,
@@ -242,7 +370,7 @@ mod tests {
         // Test execute with --help, which should succeed
         let help_args: Vec<OsString> = vec![OsString::from("chgrp"), OsString::from("--help")];
         let help_result = chgrp.execute(&help_args);
-        assert!(help_result.is_err());
+        assert!(help_result.is_ok());
     }
 
     #[test]
@@ -419,7 +547,7 @@ mod tests {
     fn test_help_ctmain() {
         let args = [ctcore::ct_util_name(), "--help"];
         let result = chgrp_main(args.iter().map(OsString::from));
-        assert!(result.is_err());
+        assert!(result.is_ok());
     }
 
     #[test]

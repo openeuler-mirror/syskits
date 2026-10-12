@@ -44,10 +44,7 @@ impl SplitName {
         // 获取前缀
         let prefix_opt_str = prefix_opt_strs.unwrap_or_else(|| "xx".to_string());
 
-        let n_digits = n_digits_opt_strs
-            .map(parse_digits)
-            .transpose()?
-            .unwrap_or(2);
+        let n_digits = parse_digits_option(n_digits_opt_strs.as_deref())?.unwrap_or(2);
 
         let format_str = match format_opt_strs {
             Some(f) => f,
@@ -103,6 +100,12 @@ fn parse_digits(option: String) -> Result<usize, CsplitError> {
     }
 
     Ok(digits as usize)
+}
+
+pub(crate) fn parse_digits_option(option: Option<&str>) -> Result<Option<usize>, CsplitError> {
+    option
+        .map(|option| parse_digits(option.to_owned()))
+        .transpose()
 }
 
 fn validate_suffix_format(format: &str) -> Result<(), CsplitError> {

@@ -209,7 +209,9 @@ pub fn cat_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let args = args.collect::<Vec<_>>();
     match parse_cat_args(&args)? {
-        CatAction::Run(options, files) => cat_files_info(&files, &options),
+        CatAction::Run(options, files) => {
+            cat_files_info_with_program(&files, &options, &cat_usage_name(&args))
+        }
         CatAction::Help => {
             println!("{}", cat_help_text(&cat_usage_name(&args)));
             Ok(())
@@ -747,28 +749,29 @@ fn cat_path_to_writer<W: Write>(
     }
 }
 
-fn render_cat_file_error(file_path: &OsStr, err: &CatError) -> String {
+fn render_cat_file_error(program_name: &str, file_path: &OsStr, err: &CatError) -> String {
     let display_path = file_path.to_string_lossy();
     let quoted_path = display_path.as_ref().maybe_quote();
 
     match err {
         CatError::OutputIsInput => {
-            format!("cat: {quoted_path}: input file is output file\n")
+            format!("{program_name}: {quoted_path}: input file is output file\n")
         }
-        CatError::Io(io_err) => format!("cat: {quoted_path}: {}\n", strip_errno(io_err)),
-        CatError::Write(io_err) => render_cat_write_error(io_err),
-        other => format!("cat: {quoted_path}: {other}\n"),
+        CatError::Io(io_err) => format!("{program_name}: {quoted_path}: {}\n", strip_errno(io_err)),
+        CatError::Write(io_err) => render_cat_write_error(program_name, io_err),
+        other => format!("{program_name}: {quoted_path}: {other}\n"),
     }
 }
 
-fn render_cat_write_error(err: &io::Error) -> String {
-    format!("cat: write error: {}\n", strip_errno(err))
+fn render_cat_write_error(program_name: &str, err: &io::Error) -> String {
+    format!("{program_name}: write error: {}\n", strip_errno(err))
 }
 
-fn cat_files_to_writer<W: Write, S: AsRef<OsStr>>(
+fn cat_files_to_writer_with_program<W: Write, S: AsRef<OsStr>>(
     input_files: &[S],
     output_options: &CatOutputOptions,
     cat_writer: &mut W,
+    program_name: &str,
 ) -> CatRunOutcome {
     let output_info = CtFileInformation::from_file(&std::io::stdout()).ok();
     let mut output_state = CatOutputState {
@@ -791,7 +794,7 @@ fn cat_files_to_writer<W: Write, S: AsRef<OsStr>>(
         ) {
             let stop_processing = matches!(&err, CatError::Write(_));
             exit_code = 1;
-            stderr_text.push_str(&render_cat_file_error(input_path, &err));
+            stderr_text.push_str(&render_cat_file_error(program_name, input_path, &err));
             if stop_processing {
                 break;
             }
@@ -801,7 +804,7 @@ fn cat_files_to_writer<W: Write, S: AsRef<OsStr>>(
     if output_state.skipped_carriage_return {
         if let Err(err) = cat_writer.write_all(b"\r").and_then(|_| cat_writer.flush()) {
             exit_code = 1;
-            stderr_text.push_str(&render_cat_write_error(&err));
+            stderr_text.push_str(&render_cat_write_error(program_name, &err));
         }
     }
 
@@ -817,9 +820,18 @@ fn cat_files_to_writer<W: Write, S: AsRef<OsStr>>(
  * 此函数遍历给定的文件路径列表，尝试合并这些文件的内容到标准输出中。
  * 它处理各种输出选项，并在遇到错误时收集错误信息，最后返回成功或失败的结果。
  */
+#[cfg(test)]
 fn cat_files_info<S: AsRef<OsStr>>(
     input_files: &[S],
     output_options: &CatOutputOptions,
+) -> CTResult<()> {
+    cat_files_info_with_program(input_files, output_options, "cat")
+}
+
+fn cat_files_info_with_program<S: AsRef<OsStr>>(
+    input_files: &[S],
+    output_options: &CatOutputOptions,
+    program_name: &str,
 ) -> CTResult<()> {
     let output_info = CtFileInformation::from_file(&std::io::stdout()).ok();
     let mut output_state = CatOutputState {
@@ -840,7 +852,7 @@ fn cat_files_info<S: AsRef<OsStr>>(
         ) {
             let stop_processing = matches!(&err, CatError::Write(_));
             set_ct_exit_code(1);
-            stderr_text.push_str(&render_cat_file_error(input_path, &err));
+            stderr_text.push_str(&render_cat_file_error(program_name, input_path, &err));
             if stop_processing {
                 break;
             }
@@ -851,8 +863,10 @@ fn cat_files_info<S: AsRef<OsStr>>(
         if let Err(err) = cat_write_pending_carriage_return() {
             set_ct_exit_code(1);
             match err {
-                CatError::Write(io_err) => stderr_text.push_str(&render_cat_write_error(&io_err)),
-                other => stderr_text.push_str(&format!("cat: {other}\n")),
+                CatError::Write(io_err) => {
+                    stderr_text.push_str(&render_cat_write_error(program_name, &io_err))
+                }
+                other => stderr_text.push_str(&format!("{program_name}: {other}\n")),
             }
         }
     }
@@ -1236,9 +1250,11 @@ fn cat_rows_from_output(output: &str) -> Vec<CatRow> {
 fn cat_semantic_from_invocation(
     input_files: &[OsString],
     output_options: &CatOutputOptions,
+    program_name: &str,
 ) -> CatSemantic {
     let mut buffer = Vec::new();
-    let outcome = cat_files_to_writer(input_files, output_options, &mut buffer);
+    let outcome =
+        cat_files_to_writer_with_program(input_files, output_options, &mut buffer, program_name);
     let classic_text = String::from_utf8_lossy(&buffer).into_owned();
 
     CatSemantic {
@@ -1260,7 +1276,11 @@ pub fn cat_native_semantic(args: impl ctcore::Args) -> CTResult<CatSemantic> {
 
     let args = args.collect::<Vec<_>>();
     match parse_cat_args(&args)? {
-        CatAction::Run(options, files) => Ok(cat_semantic_from_invocation(&files, &options)),
+        CatAction::Run(options, files) => Ok(cat_semantic_from_invocation(
+            &files,
+            &options,
+            &cat_usage_name(&args),
+        )),
         CatAction::Help => Err(CtSimpleError::new(0, cat_help_text(&cat_usage_name(&args)))),
         CatAction::Version => Err(CtSimpleError::new(
             0,
@@ -1515,6 +1535,20 @@ mod tests {
 
         assert_eq!(options.num_mode, CatNumberingMode::None);
         assert_eq!(files, vec![OsString::from("file"), OsString::from("-n")]);
+    }
+
+    #[test]
+    fn test_file_error_uses_the_invocation_name() {
+        let temp_dir = tempdir().expect("tempdir");
+        let missing = temp_dir.path().join("missing");
+
+        let semantic = cat_native_semantic(
+            [OsString::from("cat-custom"), missing.into_os_string()].into_iter(),
+        )
+        .expect("semantic");
+
+        assert_eq!(semantic.exit_code, 1);
+        assert!(semantic.stderr_text.starts_with("cat-custom: "));
     }
 
     #[test]

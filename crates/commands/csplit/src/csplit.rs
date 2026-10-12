@@ -14,7 +14,7 @@ extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::{Quotable, locale_quote};
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_lines;
 use ctcore::{Tool, ct_crash_if_err};
@@ -660,14 +660,21 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
     let args_match = ct_app().try_get_matches_from(args)?;
 
     // 获取待拆分的文件名
-    let filename = args_match.get_one::<String>(opt_flags::FILE).unwrap();
+    let filename = args_match
+        .get_one::<String>(opt_flags::FILE)
+        .ok_or_else(|| csplit_usage_error(&usage_name, "missing operand".to_string()))?;
 
     // 获取拆分所用的模式
     let patterns: Vec<String> = args_match
         .get_many::<String>(opt_flags::PATTERN)
-        .unwrap()
-        .map(|s| s.to_string())
-        .collect();
+        .map(|patterns| patterns.map(ToString::to_string).collect())
+        .unwrap_or_default();
+    if patterns.is_empty() {
+        return Err(csplit_usage_error(
+            &usage_name,
+            format!("missing operand after {}", locale_quote(filename)),
+        ));
+    }
     let csplit_opts = CsplitOptions::new(&args_match);
 
     // 根据文件名是标准输入还是文件路径，来决定如何处理文件
@@ -762,12 +769,10 @@ fn csplit_args_init() -> Vec<Arg> {
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::FILE)
             .hide(true)
-            .required(true)
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(opt_flags::PATTERN)
             .hide(true)
-            .action(clap::ArgAction::Append)
-            .required(true),
+            .action(clap::ArgAction::Append),
     ];
     args
 }

@@ -340,3 +340,36 @@ fn chroot_reports_invalid_userspec_principals_like_gnu() {
         );
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn chroot_reports_command_execution_errors_without_rust_errno_suffixes() {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+
+    if unsafe { libc::geteuid() } != 0 {
+        return;
+    }
+
+    for (command, status, error) in [
+        (
+            "definitely-no-such-command",
+            127,
+            "No such file or directory",
+        ),
+        (".", 126, "Permission denied"),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_chroot"))
+            .env("LC_ALL", "C")
+            .arg0("chroot")
+            .args(["/", command])
+            .output()
+            .expect("run chroot");
+
+        assert_eq!(output.status.code(), Some(status));
+        assert_eq!(
+            String::from_utf8(output.stderr).expect("stderr is UTF-8"),
+            format!("chroot: failed to run command '{command}': {error}\n")
+        );
+    }
+}

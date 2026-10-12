@@ -376,8 +376,10 @@ fn chroot_set_context(root_path: &Path, args_option: &clap::ArgMatches) -> CTRes
             }
         } else {
             // 指定了用户，没指定组，系统里又查不到这个人！
-            // 此时既不知道主组是什么，又不能随便猜，必须报错 125！
-            return Err(ChrootError::InvalidUserspec(u.to_string()).into());
+            return Err(match chroot_parse_numeric_uid(u) {
+                Some(uid) => ChrootError::NoGroupSpecifiedForUnknownUid(uid).into(),
+                None => ChrootError::InvalidUser.into(),
+            });
         }
     }
 
@@ -465,7 +467,7 @@ fn chroot_resolve_main_group(chroot_group: &str) -> CTResult<libc::gid_t> {
     if let Some(id_str) = chroot_group.strip_prefix('+') {
         return id_str
             .parse::<libc::gid_t>()
-            .map_err(|_| ChrootError::NoSuchGroup(chroot_group.to_string()).into());
+            .map_err(|_| ChrootError::InvalidUserspecGroup.into());
     }
 
     ct_entries::grp2gid(chroot_group)
@@ -474,7 +476,7 @@ fn chroot_resolve_main_group(chroot_group: &str) -> CTResult<libc::gid_t> {
                 .parse::<libc::gid_t>()
                 .map_err(|_| std::io::Error::new(std::io::ErrorKind::NotFound, "group not found"))
         })
-        .map_err(|_| ChrootError::NoSuchGroup(chroot_group.to_string()).into())
+        .map_err(|_| ChrootError::InvalidUserspecGroup.into())
 }
 
 fn chroot_set_main_group_id(group_id: libc::gid_t) -> CTResult<()> {
@@ -547,13 +549,13 @@ fn chroot_set_user(username: &str) -> CTResult<()> {
         let user_id = if let Some(id_str) = username.strip_prefix('+') {
             id_str
                 .parse::<libc::uid_t>()
-                .map_err(|_| ChrootError::NoSuchUser(username.to_string()))?
+                .map_err(|_| ChrootError::InvalidUser)?
         } else {
             match ct_entries::usr2uid(username) {
                 Ok(u) => u,
                 Err(_) => username
                     .parse::<libc::uid_t>()
-                    .map_err(|_| ChrootError::NoSuchUser(username.to_string()))?,
+                    .map_err(|_| ChrootError::InvalidUser)?,
             }
         };
         let err = unsafe { setuid(user_id as libc::uid_t) };
@@ -564,6 +566,14 @@ fn chroot_set_user(username: &str) -> CTResult<()> {
         }
     }
     Ok(())
+}
+
+fn chroot_parse_numeric_uid(user: &str) -> Option<libc::uid_t> {
+    user.strip_prefix('+')
+        .unwrap_or(user)
+        .parse::<libc::uid_t>()
+        .ok()
+        .filter(|uid| *uid != libc::uid_t::MAX)
 }
 
 #[derive(Default)]

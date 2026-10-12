@@ -307,3 +307,36 @@ fn chroot_uses_explicit_primary_gid_for_supplementary_groups() {
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(output.stdout, b"65534\n");
 }
+
+#[cfg(unix)]
+#[test]
+fn chroot_reports_invalid_userspec_principals_like_gnu() {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+
+    if unsafe { libc::geteuid() } != 0 {
+        return;
+    }
+
+    for (userspec, message) in [
+        ("definitely-no-such-user", "invalid user"),
+        ("definitely-no-such-user:0", "invalid user"),
+        ("0:definitely-no-such-group", "invalid group"),
+        ("999999999", "no group specified for unknown uid: 999999999"),
+        ("+12342", "no group specified for unknown uid: 12342"),
+    ] {
+        let option = format!("--userspec={userspec}");
+        let output = Command::new(env!("CARGO_BIN_EXE_chroot"))
+            .env("LC_ALL", "C")
+            .arg0("chroot")
+            .args([option.as_str(), "/", "true"])
+            .output()
+            .expect("run chroot");
+
+        assert_eq!(output.status.code(), Some(125));
+        assert_eq!(
+            String::from_utf8(output.stderr).expect("stderr is UTF-8"),
+            format!("chroot: {message}\n")
+        );
+    }
+}

@@ -16,7 +16,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::{Quotable, locale_quote};
 pub use ctcore::ct_entries;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
-use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, chown_base, opt_flags};
+use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, ownership_change_base, opt_flags};
 
 use std::ffi::OsString;
 
@@ -109,7 +109,7 @@ impl Tool for Chgrp {
 pub fn chgrp_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = sys_locale::get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    chown_base(
+    ownership_change_base(
         ct_app(),
         args,
         opt_flags::ARG_GROUP,

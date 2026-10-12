@@ -1825,20 +1825,20 @@ pub(crate) fn copy_attributes_with_deref(
     #[cfg(unix)]
     cp_handle_preserve(&attr.ownership, || -> CopyResult<()> {
         use ctcore::ct_perms::Verbosity;
-        use ctcore::ct_perms::wrap_chown;
-        use ctcore::ct_perms::{CtChownOutputNames, CtVerbosityLevel};
+        use ctcore::ct_perms::change_ownership;
+        use ctcore::ct_perms::{CtOwnershipChangeOutputNames, CtVerbosityLevel};
         use std::os::unix::prelude::MetadataExt;
 
         let dest_uid = sour_metadata.uid();
         let dest_gid = sour_metadata.gid();
 
         // 首先尝试完整复制 UID 和 GID（特权用户场景）
-        match wrap_chown(
+        match change_ownership(
             dest_path,
             &dest_path.symlink_metadata().context(str)?,
             Some(dest_uid),
             Some(dest_gid),
-            CtChownOutputNames::default(),
+            CtOwnershipChangeOutputNames::default(),
             false,
             Verbosity {
                 groups_only: false,
@@ -1857,12 +1857,12 @@ pub(crate) fn copy_attributes_with_deref(
                     ownership_preserved.set(false);
                     // 降级策略——尝试仅保留 GID
                     // 如果 GID 是进程的附加组，即使无法保留 UID，也应保留 GID
-                    let _ = wrap_chown(
+                    let _ = change_ownership(
                         dest_path,
                         &dest_path.symlink_metadata().context(str)?,
                         None, // 不更改 UID（保持为当前进程 UID）
                         Some(dest_gid),
-                        CtChownOutputNames::default(),
+                        CtOwnershipChangeOutputNames::default(),
                         false,
                         Verbosity {
                             groups_only: true, // 标记为仅设置组

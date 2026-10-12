@@ -6,7 +6,8 @@ fn chgrp_verbose_failure_separates_status_from_diagnostic() {
     use std::process::Command;
 
     let temp_dir = tempfile::tempdir().expect("tempdir");
-    fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o755)).expect("make tempdir traversable");
+    fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o755))
+        .expect("make tempdir traversable");
     let file = temp_dir.path().join("file");
     fs::write(&file, []).expect("create file");
     fs::set_permissions(&file, Permissions::from_mode(0o644)).expect("set file permissions");
@@ -15,7 +16,7 @@ fn chgrp_verbose_failure_separates_status_from_diagnostic() {
     command
         .env("LC_ALL", "C")
         .arg0("chgrp")
-        .args(["-v", "55555"])
+        .args(["-v", "65534"])
         .arg(&file);
     if unsafe { libc::geteuid() } == 0 {
         command.uid(65534).gid(65534);
@@ -27,7 +28,7 @@ fn chgrp_verbose_failure_separates_status_from_diagnostic() {
 
     assert_eq!(output.status.code(), Some(1));
     assert!(stdout.starts_with("failed to change group of "));
-    assert!(stdout.ends_with(" to 55555\n"));
+    assert!(stdout.ends_with(" to 65534\n"));
     assert_eq!(stdout.lines().count(), 1);
     assert!(stderr.starts_with("chgrp: changing group of "));
     assert!(stderr.ends_with(": Operation not permitted\n"));

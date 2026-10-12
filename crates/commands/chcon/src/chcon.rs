@@ -758,7 +758,7 @@ fn chcon_change_file_context(
                 // 应用新的安全上下文到文件。
                 SecurityContext::from_c_str(&context_string, false)
                     .set_for_path(chcon_path, chcon_options.affect_symlink_referent, false)
-                    .map_err(|r| Error::from_selinux("Setting security context", r))
+                    .map_err(|r| chcon_change_context_error(chcon_path, &context_string, r))
             }
         }
 
@@ -767,7 +767,7 @@ fn chcon_change_file_context(
             if let Some(c_context) = security_context.to_c_string()? {
                 SecurityContext::from_c_str(c_context.as_ref(), false)
                     .set_for_path(chcon_path, chcon_options.affect_symlink_referent, false)
-                    .map_err(|r| Error::from_selinux("Setting security context", r))
+                    .map_err(|r| chcon_change_context_error(chcon_path, c_context.as_ref(), r))
             } else {
                 // 如果无法将安全上下文转换为C字符串，则报错。
                 let err = io::ErrorKind::InvalidInput.into();
@@ -775,6 +775,37 @@ fn chcon_change_file_context(
             }
         }
     }
+}
+
+fn chcon_change_context_error(
+    path: &Path,
+    context: &CStr,
+    source: selinux::errors::Error,
+) -> Error {
+    if let Some(source) =
+        std::error::Error::source(&source).and_then(|source| source.downcast_ref::<io::Error>())
+    {
+        return Error::Diagnostic(format!(
+            "failed to change context of {} to {}: {}",
+            path.quote(),
+            chcon_quote_context(context),
+            strip_errno(source)
+        ));
+    }
+
+    Error::from_selinux("Setting security context", source)
+}
+
+fn chcon_quote_context(context: &CStr) -> String {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+
+        return chcon_quote_operand(OsStr::from_bytes(context.to_bytes()));
+    }
+
+    #[cfg(not(unix))]
+    context.to_string_lossy().into_owned()
 }
 
 #[cfg(unix)]

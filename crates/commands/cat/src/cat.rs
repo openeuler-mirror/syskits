@@ -218,6 +218,9 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        // GNU getopt accepts repeated no-argument options, including forms
+        // such as `-nn` and `--number --number`.
+        .args_override_self(true)
         .disable_help_flag(true)
         .disable_version_flag(true)
         .args(&args)
@@ -1458,6 +1461,17 @@ mod tests {
         let matches = command.try_get_matches_from(args).unwrap();
 
         assert!(matches.get_flag(opt_flags::CAT_IGNORED_U));
+    }
+
+    #[test]
+    fn test_repeated_options_are_accepted() {
+        for args in [
+            vec![ctcore::ct_util_name(), "-nn"],
+            vec![ctcore::ct_util_name(), "--number", "--number"],
+            vec![ctcore::ct_util_name(), "-AA"],
+        ] {
+            assert!(get_command().try_get_matches_from(args).is_ok());
+        }
     }
 
     use tempfile::tempdir;

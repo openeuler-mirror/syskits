@@ -221,3 +221,44 @@ fn chroot_reports_long_option_argument_errors_like_gnu() {
         );
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn chroot_parses_supplementary_group_lists_like_gnu() {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+
+    if unsafe { libc::geteuid() } != 0 {
+        return;
+    }
+
+    for (groups, message) in [
+        (" ", "invalid group ' '"),
+        (",", "invalid group list ','"),
+        ("invalid ignored", "invalid group 'invalid ignored'"),
+        (" root", "invalid group ' root'"),
+    ] {
+        let option = format!("--groups={groups}");
+        let output = Command::new(env!("CARGO_BIN_EXE_chroot"))
+            .env("LC_ALL", "C")
+            .arg0("chroot")
+            .args([option.as_str(), "/", "true"])
+            .output()
+            .expect("run chroot");
+
+        assert_eq!(output.status.code(), Some(125));
+        assert_eq!(
+            String::from_utf8(output.stderr).expect("stderr is UTF-8"),
+            format!("chroot: {message}\n")
+        );
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_chroot"))
+        .env("LC_ALL", "C")
+        .arg0("chroot")
+        .args(["--groups= +0, 65534", "/", "/usr/bin/id", "-G"])
+        .output()
+        .expect("run chroot");
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"0 65534\n");
+}

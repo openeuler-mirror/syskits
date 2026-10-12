@@ -388,7 +388,10 @@ impl CTError for CTsageError {
     }
 
     fn usage(&self) -> bool {
-        true
+        !matches!(
+            self.error.kind(),
+            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+        )
     }
 }
 
@@ -998,6 +1001,21 @@ mod tests {
             clap_display_output_error(enospc, true, true).raw_os_error(),
             Some(libc::ENOSPC)
         );
+    }
+
+    #[test]
+    fn test_clap_error_wrapper_usage_for_display_errors() {
+        for kind in [
+            clap::error::ErrorKind::DisplayHelp,
+            clap::error::ErrorKind::DisplayVersion,
+        ] {
+            let wrapper = clap::Error::raw(kind, "display").with_exit_code(1);
+            assert!(!wrapper.usage());
+        }
+
+        let wrapper =
+            clap::Error::raw(clap::error::ErrorKind::UnknownArgument, "invalid").with_exit_code(1);
+        assert!(wrapper.usage());
     }
 
     #[test]

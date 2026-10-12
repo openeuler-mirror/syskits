@@ -600,6 +600,26 @@
     },
     {
       "command": "tail",
+      "description": "Linux下--max-unchanged-stats 的GNU无符号数解析必须接受前导ASCII空格；参数=--max-unchanged-stats= 1 /dev/null，预期RC=0、stdout和stderr均为空。",
+      "args": ["--max-unchanged-stats= 1", "/dev/null"],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tags": ["linux", "options", "max-unchanged-stats", "numeric"]
+    },
+    {
+      "command": "tail",
       "description": "Linux下--max-unchanged-stats=-1必须仅输出GNU的一行无效未变更统计次数诊断，不得附加帮助提示；预期RC=1、stdout为空、stderr为tail: invalid maximum number of unchanged stats between opens: '-1'。",
       "args": ["--max-unchanged-stats=-1"],
       "environment": {

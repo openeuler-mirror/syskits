@@ -319,7 +319,8 @@ impl TailOptions {
         }
 
         if let Some(s) = matches.get_one::<String>(tail_flags::TAIL_MAX_UNCHANGED_STATS) {
-            settings.max_unchanged_stats = match s.parse::<u64>() {
+            let parsed_stats = s.trim_start_matches(|c: char| c.is_ascii_whitespace());
+            settings.max_unchanged_stats = match parsed_stats.parse::<u64>() {
                 Ok(s) => s,
                 Err(_) => {
                     return Err(CtSimpleError::new(
@@ -799,6 +800,14 @@ mod tests {
             .expect("GNU tail accepts the UINTMAX_MAX option value");
 
             assert_eq!(options.max_unchanged_stats, u64::MAX);
+        }
+
+        #[test]
+        fn test_max_unchanged_stats_accepts_leading_ascii_whitespace() {
+            let options = tail_parse_args(create_args(&["--max-unchanged-stats= 1"]))
+                .expect("GNU tail accepts leading ASCII whitespace before unchanged stats");
+
+            assert_eq!(options.max_unchanged_stats, 1);
         }
 
         #[test]

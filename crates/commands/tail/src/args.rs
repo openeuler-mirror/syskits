@@ -306,7 +306,8 @@ impl TailOptions {
             //   `DURATION::MAX` or `infinity` was given
             // * not applied here but it supports customizable time units and provides better error
             //   messages
-            settings.sleep_sec = match DurationParser::without_time_units().parse(source) {
+            let parsed_source = source.trim_start_matches(|c: char| c.is_ascii_whitespace());
+            settings.sleep_sec = match DurationParser::without_time_units().parse(parsed_source) {
                 Ok(duration) => SaturatingInto::<std::time::Duration>::saturating_into(duration),
                 Err(_) => {
                     return Err(CtSimpleError::new(
@@ -896,6 +897,14 @@ mod tests {
                     .expect("GNU tail accepts repeated --sleep-interval options");
 
             assert_eq!(options.sleep_sec, Duration::from_secs(2));
+        }
+
+        #[test]
+        fn test_sleep_interval_accepts_leading_ascii_whitespace() {
+            let options = tail_parse_args(create_args(&["--sleep-interval= 1"]))
+                .expect("GNU tail accepts leading ASCII whitespace before seconds");
+
+            assert_eq!(options.sleep_sec, Duration::from_secs(1));
         }
 
         #[test]

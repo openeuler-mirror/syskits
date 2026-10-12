@@ -375,7 +375,9 @@ fn change_ownership_with_diagnostics<P: AsRef<Path>>(
                     _ => (),
                 };
             } else if verbosity.level == CtVerbosityLevel::Verbose {
-                out = if group_only {
+                out = if verbosity.groups_only && dest_gid.is_none() {
+                    t!("ctcore.chown.retained_ownership_no_change", file = path_str).to_string()
+                } else if group_only {
                     t!(
                         "ctcore.chgrp.retained_group",
                         file = path_str,

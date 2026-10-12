@@ -317,14 +317,7 @@ fn wrap_chown_with_diagnostics<P: AsRef<Path>>(
                 }
             });
             let stderr = (!verbosity.force_silent && verbosity.level != CtVerbosityLevel::Silent)
-                .then(|| {
-                    format!(
-                        "changing {} of {}: {}",
-                        if group_only { "group" } else { "ownership" },
-                        path_str,
-                        strip_errno(&e)
-                    )
-                });
+                .then(|| ownership_change_failure_message(&path_str, group_only, &e));
 
             return Err(ChownFailure {
                 stderr,
@@ -403,6 +396,14 @@ fn wrap_chown_with_diagnostics<P: AsRef<Path>>(
         }
     }
     Ok(out)
+}
+
+fn ownership_change_failure_message(path: &str, groups_only: bool, error: &IOError) -> String {
+    format!(
+        "changing {} of {path}: {}",
+        if groups_only { "group" } else { "ownership" },
+        strip_errno(error)
+    )
 }
 
 pub enum CtIfFrom {
@@ -1061,6 +1062,16 @@ mod tests {
     use std::path::{Component, PathBuf};
     #[cfg(unix)]
     use tempfile::tempdir;
+
+    #[test]
+    fn test_ownership_change_failure_message_strips_errno_code() {
+        let error = IOError::from_raw_os_error(libc::EPERM);
+        assert_eq!(
+            ownership_change_failure_message("'file'", true, &error),
+            "changing group of 'file': Operation not permitted"
+        );
+    }
+
     #[test]
     fn test_empty_string() {
         let path = PathBuf::new();

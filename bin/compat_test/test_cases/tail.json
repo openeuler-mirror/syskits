@@ -542,6 +542,26 @@
     },
     {
       "command": "tail",
+      "description": "Linux下--sleep-interval 的GNU浮点解析必须接受前导ASCII空格；参数=--sleep-interval= 1 /dev/null，预期RC=0、stdout和stderr均为空。",
+      "args": ["--sleep-interval= 1", "/dev/null"],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tags": ["linux", "options", "sleep-interval", "numeric"]
+    },
+    {
+      "command": "tail",
       "description": "Linux下--sleep-interval=-1必须仅输出GNU的一行无效秒数诊断，不得附加帮助提示；预期RC=1、stdout为空、stderr为tail: invalid number of seconds: '-1'。",
       "args": ["--sleep-interval=-1"],
       "environment": {

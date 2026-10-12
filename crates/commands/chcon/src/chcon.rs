@@ -206,6 +206,7 @@ fn chcon_args_init() -> Vec<Arg> {
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::preserve_root::NO_PRESERVE_ROOT)
             .long(opt_flags::preserve_root::NO_PRESERVE_ROOT)
+            .overrides_with(opt_flags::preserve_root::PRESERVE_ROOT)
             .help(t!("chcon.clap.no_preserve_root"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::REFERENCE)
@@ -1012,6 +1013,31 @@ mod tests {
 
         assert!(matches.get_flag(opt_flags::preserve_root::NO_PRESERVE_ROOT));
         assert!(!matches.get_flag(opt_flags::preserve_root::PRESERVE_ROOT));
+    }
+
+    #[test]
+    fn test_last_preserve_root_option_wins() {
+        let args = [
+            ctcore::ct_util_name(),
+            "--preserve-root",
+            "--no-preserve-root",
+            "context",
+            "file",
+        ];
+        let options = chcon_parse_command_line(ct_app(), args.iter().map(OsString::from))
+            .expect("options should parse");
+        assert!(!options.preserve_root);
+
+        let args = [
+            ctcore::ct_util_name(),
+            "--no-preserve-root",
+            "--preserve-root",
+            "context",
+            "file",
+        ];
+        let options = chcon_parse_command_line(ct_app(), args.iter().map(OsString::from))
+            .expect("options should parse");
+        assert!(options.preserve_root);
     }
 
     #[test]

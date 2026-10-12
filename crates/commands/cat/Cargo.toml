@@ -17,7 +17,7 @@ path = "src/cat.rs"
 [dependencies]
 clap = { workspace = true }
 thiserror = { workspace = true }
-ctcore = { workspace = true, features = ["fs", "pipes"] }
+ctcore = { workspace = true, features = ["fs", "pipes", "signals"] }
 rust-i18n = { workspace = true }
 sys-locale = { workspace = true }
 

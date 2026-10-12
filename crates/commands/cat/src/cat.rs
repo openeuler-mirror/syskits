@@ -29,6 +29,8 @@ use sys_locale::get_locale;
 use thiserror::Error;
 rust_i18n::i18n!("locales", fallback = "en-US");
 
+#[cfg(target_os = "linux")]
+use ctcore::ct_signals::enable_pipe_errors;
 #[cfg(unix)]
 use nix::libc;
 #[cfg(unix)]
@@ -203,6 +205,9 @@ mod opt_flags {
 pub fn cat_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+
+    #[cfg(target_os = "linux")]
+    enable_pipe_errors().map_err(|err| CtSimpleError::new(1, err.to_string()))?;
 
     let args = args.collect::<Vec<_>>();
     match parse_cat_args(&args)? {

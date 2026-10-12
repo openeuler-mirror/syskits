@@ -1844,6 +1844,7 @@ pub(crate) fn copy_attributes_with_deref(
                 groups_only: false,
                 force_silent: false,
                 level: CtVerbosityLevel::Normal,
+                force_silent: false,
             },
         ) {
             Ok(_) => Ok(()),
@@ -1868,6 +1869,7 @@ pub(crate) fn copy_attributes_with_deref(
                             groups_only: true, // 标记为仅设置组
                             force_silent: false,
                             level: CtVerbosityLevel::Normal,
+                            force_silent: false,
                         },
                     );
                     // 无论第二次尝试成败，都静默继续（GNU 兼容行为）

@@ -12,7 +12,7 @@
 
 extern crate rust_i18n;
 use clap::builder::ValueParser;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, strip_errno};
 use ctcore::{ct_display::Quotable, ct_show_error, ct_show_warning};
 
 use clap::{Arg, ArgAction, Command, crate_version};
@@ -166,7 +166,10 @@ pub fn chcon_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     for result in &results {
-        ct_show_error!("{}.", report_full_error(result));
+        match result {
+            Error::Diagnostic(message) => ct_show_error!("{message}"),
+            _ => ct_show_error!("{}.", report_full_error(result)),
+        }
     }
     Err(libc::EXIT_FAILURE.into())
 }
@@ -563,12 +566,10 @@ fn chcon_process_file(
         Err(Error::from_io1(s, &file_path_name, r))
     };
 
-    // 获取文件的设备号和 inode 号，用于后续的检查。
-    let file_dev_ino: ChconDeviceAndINode = if let Some(st) = entry_ref.stat() {
-        st.try_into()?
-    } else {
-        return Err(err("Getting meta data", io::ErrorKind::InvalidInput));
-    };
+    let file_dev_ino = entry_ref
+        .stat()
+        .map(ChconDeviceAndINode::try_from)
+        .transpose()?;
 
     let mut result = Ok(());
 
@@ -577,7 +578,9 @@ fn chcon_process_file(
         fts_sys::FTS_D => {
             // 处理目录，决定是否递归更改。
             if chcon_options.recursive_mode.is_recursive() {
-                if chcon_root_dev_ino_check(chcon_device_inode, file_dev_ino) {
+                if file_dev_ino.is_some_and(|file_dev_ino| {
+                    chcon_root_dev_ino_check(chcon_device_inode, file_dev_ino)
+                }) {
                     chcon_root_dev_ino_warn(&file_path_name);
                     let _ = fts_info.set(fts_sys::FTS_SKIP);
                     let _ = fts_info.read_next_entry();
@@ -602,7 +605,8 @@ fn chcon_process_file(
                 return Ok(());
             }
 
-            result = fts_err("Accessing");
+            let source = io::Error::from_raw_os_error(entry_ref.errno());
+            result = Err(chcon_cannot_access_error(&file_path_name, &source));
         }
 
         fts_sys::FTS_ERR => result = fts_err("Accessing"),
@@ -626,7 +630,8 @@ fn chcon_process_file(
     // 在处理完文件类型和遍历逻辑后，检查是否需要更改文件的安全上下文。
     if entry_ref.flags() == fts_sys::FTS_DP
         && result.is_ok()
-        && chcon_root_dev_ino_check(chcon_device_inode, file_dev_ino)
+        && file_dev_ino
+            .is_some_and(|file_dev_ino| chcon_root_dev_ino_check(chcon_device_inode, file_dev_ino))
     {
         chcon_root_dev_ino_warn(&file_path_name);
         result = Err(err("Modifying root path", io::ErrorKind::PermissionDenied));
@@ -652,6 +657,14 @@ fn chcon_process_file(
         let _ignored = fts_info.set(fts_sys::FTS_SKIP);
     }
     result
+}
+
+fn chcon_cannot_access_error(path: &Path, source: &io::Error) -> Error {
+    Error::Diagnostic(format!(
+        "cannot access {}: {}",
+        path.quote(),
+        strip_errno(source)
+    ))
 }
 /**
  * 更改文件的安全上下文。

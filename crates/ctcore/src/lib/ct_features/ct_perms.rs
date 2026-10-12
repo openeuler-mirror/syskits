@@ -286,7 +286,7 @@ fn change_ownership_with_diagnostics<P: AsRef<Path>>(
             ),
         }
     };
-    let path_str = path.quote().to_string();
+    let path_str = quote_path_for_diagnostic(path);
 
     let chown_result = if follow && !matches!(filter, CtIfFrom::All) {
         restricted_chown(path, meta, uid_for_syscall, gid_for_syscall, filter)
@@ -404,6 +404,40 @@ fn ownership_change_failure_message(path: &str, groups_only: bool, error: &IOErr
         if groups_only { "group" } else { "ownership" },
         strip_errno(error)
     )
+}
+
+fn quote_path_for_diagnostic(path: &Path) -> String {
+    let Some(path) = path.to_str() else {
+        return path.quote().to_string();
+    };
+    if !path.chars().any(char::is_control) {
+        return path.quote().to_string();
+    }
+
+    let mut quoted = String::from("'");
+    for character in path.chars() {
+        match character {
+            '\n' => quoted.push_str("'$'\\n'"),
+            '\r' => quoted.push_str("'$'\\r'"),
+            '\t' => quoted.push_str("'$'\\t'"),
+            '\'' => quoted.push_str("'\\''"),
+            character if character.is_control() => {
+                quoted.push_str("'$'");
+                for byte in character.to_string().as_bytes() {
+                    use std::fmt::Write;
+                    write!(quoted, "\\x{byte:02X}").expect("write to string");
+                }
+                quoted.push('\'');
+            }
+            character => quoted.push(character),
+        }
+
+        if character.is_control() {
+            quoted.push('\'');
+        }
+    }
+    quoted.push('\'');
+    quoted
 }
 
 pub enum CtIfFrom {
@@ -540,7 +574,7 @@ impl CtOwnershipChangeExecutor {
             Some(m) => m,
             _ => {
                 if self.verbosity.level == CtVerbosityLevel::Verbose {
-                    let path_str = path.quote().to_string();
+                    let path_str = quote_path_for_diagnostic(path);
                     let message = if self.verbosity.groups_only {
                         t!(
                             "ctcore.chgrp.failed_change_without_old",
@@ -621,7 +655,7 @@ impl CtOwnershipChangeExecutor {
                             ct_show_error!(
                                 "cannot {} {}: {}",
                                 action.expect("path action is available"),
-                                path.quote(),
+                                quote_path_for_diagnostic(path),
                                 if let Some(error) = e.io_error() {
                                     strip_errno(error)
                                 } else {
@@ -709,7 +743,7 @@ impl CtOwnershipChangeExecutor {
                     ct_show_error!(
                         "cannot {} {}: {}",
                         metadata_failure_action(path, follow),
-                        path.quote(),
+                        quote_path_for_diagnostic(path),
                         strip_errno(&e)
                     );
                 }
@@ -769,7 +803,7 @@ impl CtOwnershipChangeExecutor {
 
     fn print_verbose_ownership_retained_as(&self, path: &Path, uid: u32, gid: Option<u32>) {
         if self.verbosity.level == CtVerbosityLevel::Verbose {
-            let path_str = path.quote().to_string();
+            let path_str = quote_path_for_diagnostic(path);
             if self.group_only_output() {
                 let gid_val = gid.unwrap_or(0);
                 let old_str = ct_entries::gid2grp(gid_val).unwrap_or_else(|_| gid_val.to_string());
@@ -1131,6 +1165,14 @@ mod tests {
         assert_eq!(
             ownership_change_failure_message("'file'", true, &error),
             "changing group of 'file': Operation not permitted"
+        );
+    }
+
+    #[test]
+    fn test_quote_path_for_diagnostic_splits_control_characters() {
+        assert_eq!(
+            quote_path_for_diagnostic(Path::new("file\nname")),
+            "'file'$'\\n''name'"
         );
     }
 

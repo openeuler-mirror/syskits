@@ -16,7 +16,9 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::{Quotable, locale_quote};
 pub use ctcore::ct_entries;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
-use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, opt_flags, ownership_change_base};
+use ctcore::ct_perms::{
+    CtGidUidOwnerFilter, CtIfFrom, normalize_posixly_correct_args, opt_flags, ownership_change_base,
+};
 
 use std::ffi::OsString;
 
@@ -301,9 +303,11 @@ fn gnu_version_output(program: &str) -> String {
 }
 
 pub fn chgrp_main(args: impl ctcore::Args) -> CTResult<()> {
-    let args: Vec<_> = args.collect();
+    let args = args.collect();
     let lang_code = sys_locale::get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let command = ct_app();
+    let args = normalize_posixly_correct_args(&command, args);
     if gnu_terminal_option_requested(&args, opt_flags::HELP) {
         print!("{}", gnu_help_output(ctcore::ct_util_name()));
         return Ok(());
@@ -316,7 +320,7 @@ pub fn chgrp_main(args: impl ctcore::Args) -> CTResult<()> {
         return Err(CTsageError::new(libc::EXIT_FAILURE, message));
     }
     ownership_change_base(
-        ct_app(),
+        command,
         args.into_iter(),
         opt_flags::ARG_GROUP,
         chgrp_parse_gid_and_uid,

@@ -830,6 +830,12 @@ fn reject_incompatible_options(args: &[OsString], usage_name: &str) -> CTResult<
                     format!("option '{arg}' is ambiguous; possibilities: {possibilities}"),
                 ));
             }
+            if matches.is_empty() {
+                return Err(csplit_usage_error(
+                    usage_name,
+                    format!("unrecognized option '{arg}'"),
+                ));
+            }
             index += 1;
             continue;
         }

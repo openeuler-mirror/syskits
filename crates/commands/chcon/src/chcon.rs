@@ -138,6 +138,13 @@ pub fn chcon_main(args: impl ctcore::Args) -> CTResult<()> {
         ChconCommandLineMode::Custom { .. } => ChconSELinuxSecurityContext::String(None),
     };
 
+    if opt_flags.reference_with_components {
+        return Err(CTsageError::new(
+            libc::EXIT_FAILURE,
+            "conflicting security context specifiers given",
+        ));
+    }
+
     let root_device_info = if opt_flags.preserve_root && opt_flags.recursive_mode.is_recursive() {
         match chcon_get_root_dev_ino() {
             Ok(r) => Some(r),
@@ -217,12 +224,6 @@ fn chcon_args_init() -> Vec<Arg> {
             .long(opt_flags::REFERENCE)
             .value_name("RFILE")
             .value_hint(clap::ValueHint::FilePath)
-            .conflicts_with_all([
-                opt_flags::USER,
-                opt_flags::ROLE,
-                opt_flags::TYPE,
-                opt_flags::RANGE,
-            ])
             .help(t!("chcon.clap.reference"))
             .value_parser(ValueParser::os_string()),
         Arg::new(opt_flags::USER)
@@ -299,6 +300,7 @@ struct ChconOptions {
     preserve_root: bool,
     recursive_mode: ChconRecursiveMode,
     affect_symlink_referent: bool,
+    reference_with_components: bool,
     mode: ChconCommandLineMode,
     files: Vec<PathBuf>,
 }
@@ -344,15 +346,19 @@ fn chcon_parse_command_line(
 
     let mut match_files = args_match.get_many::<OsString>("FILE").unwrap_or_default();
 
+    let component_specified = args_match.contains_id(opt_flags::USER)
+        || args_match.contains_id(opt_flags::ROLE)
+        || args_match.contains_id(opt_flags::TYPE)
+        || args_match.contains_id(opt_flags::RANGE);
+
+    let reference_with_components =
+        args_match.contains_id(opt_flags::REFERENCE) && component_specified;
+
     let command_mode = if let Some(path) = args_match.get_one::<OsString>(opt_flags::REFERENCE) {
         ChconCommandLineMode::ReferenceBased {
             reference: PathBuf::from(path),
         }
-    } else if args_match.contains_id(opt_flags::USER)
-        || args_match.contains_id(opt_flags::ROLE)
-        || args_match.contains_id(opt_flags::TYPE)
-        || args_match.contains_id(opt_flags::RANGE)
-    {
+    } else if component_specified {
         ChconCommandLineMode::Custom {
             user: args_match
                 .get_one::<OsString>(opt_flags::USER)
@@ -392,6 +398,7 @@ fn chcon_parse_command_line(
         preserve_root: match_preserve_root,
         recursive_mode,
         affect_symlink_referent,
+        reference_with_components,
         mode: command_mode,
         files,
     })
@@ -938,6 +945,27 @@ mod tests {
             parse_error(&[ctcore::ct_util_name(), "-u", "user"]),
             "missing operand"
         );
+    }
+
+    #[test]
+    fn test_reference_component_conflict_matches_gnu() {
+        let args = [
+            ctcore::ct_util_name(),
+            "--reference=/tmp",
+            "-u",
+            "user",
+            "/tmp",
+        ];
+        let options = chcon_parse_command_line(ct_app(), args.iter().map(OsString::from))
+            .expect("the parser must defer the GNU semantic conflict");
+        assert!(options.reference_with_components);
+
+        let err = chcon_main(args.iter().map(OsString::from)).expect_err("expected conflict");
+        assert_eq!(
+            err.to_string(),
+            "conflicting security context specifiers given"
+        );
+        assert!(err.usage());
     }
 
     #[test]

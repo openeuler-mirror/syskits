@@ -57,6 +57,7 @@ impl SplitName {
             None => format!("%0{n_digits}u"),
         };
 
+        validate_suffix_format(&format_str)?;
         let format = match Format::<UnsignedInt>::parse(format_str) {
             Ok(format) => Ok(format),
             Err(FormatError::TooManySpecs(_)) => Err(CsplitError::SuffixFormatTooManyPercents),
@@ -77,10 +78,97 @@ impl SplitName {
     }
 }
 
+fn validate_suffix_format(format: &str) -> Result<(), CsplitError> {
+    let bytes = format.as_bytes();
+    let mut position = 0;
+    let mut conversion_found = false;
+
+    while position < bytes.len() {
+        if bytes[position] != b'%' {
+            position += 1;
+            continue;
+        }
+        position += 1;
+
+        if position == bytes.len() {
+            return Err(CsplitError::SuffixFormatMissingSpecifier);
+        }
+        if bytes[position] == b'%' {
+            position += 1;
+            continue;
+        }
+        if conversion_found {
+            return Err(CsplitError::SuffixFormatTooManyPercents);
+        }
+        conversion_found = true;
+
+        let mut alternative = false;
+        let mut thousands = false;
+        while let Some(flag) = bytes.get(position) {
+            match flag {
+                b'-' | b'0' => position += 1,
+                b'#' => {
+                    alternative = true;
+                    position += 1;
+                }
+                b'\'' => {
+                    thousands = true;
+                    position += 1;
+                }
+                _ => break,
+            }
+        }
+        while bytes.get(position).is_some_and(u8::is_ascii_digit) {
+            position += 1;
+        }
+        if bytes.get(position) == Some(&b'.') {
+            position += 1;
+            while bytes.get(position).is_some_and(u8::is_ascii_digit) {
+                position += 1;
+            }
+        }
+
+        let Some(&conversion) = bytes.get(position) else {
+            return Err(CsplitError::SuffixFormatMissingSpecifier);
+        };
+        let allowed_flags = match conversion {
+            b'd' | b'i' | b'u' => thousands && !alternative,
+            b'o' | b'x' | b'X' => alternative && !thousands,
+            _ => {
+                return Err(CsplitError::SuffixFormatInvalidSpecifier(
+                    suffix_conversion_description(conversion),
+                ));
+            }
+        };
+        if (alternative || thousands) && !allowed_flags {
+            let invalid_flag = if alternative { '#' } else { '\'' };
+            return Err(CsplitError::SuffixFormatInvalidFlags(format!(
+                "%{invalid_flag}{}",
+                conversion as char
+            )));
+        }
+        position += 1;
+    }
+
+    if conversion_found {
+        Ok(())
+    } else {
+        Err(CsplitError::SuffixFormatMissingConversion)
+    }
+}
+
+fn suffix_conversion_description(conversion: u8) -> String {
+    if conversion.is_ascii_graphic() || conversion == b' ' {
+        (conversion as char).to_string()
+    } else {
+        format!("\\{conversion:03o}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::csplit_error::CsplitError;
-    use crate::split_name::SplitName;
+    use crate::split_name::{SplitName, validate_suffix_format};
 
     #[test]
     fn test_split_name_new_default_prefix_and_format() {
@@ -164,8 +252,8 @@ mod tests {
     fn invalid_suffix_format1() {
         let split_name = SplitName::new(None, Some(String::from("no conversion string")), None);
         match split_name {
-            Err(CsplitError::SuffixFormatIncorrect) => (),
-            _ => panic!("should fail with SuffixFormatIncorrect"),
+            Err(CsplitError::SuffixFormatMissingConversion) => (),
+            _ => panic!("should fail with SuffixFormatMissingConversion"),
         };
     }
 
@@ -173,9 +261,34 @@ mod tests {
     fn invalid_suffix_format2() {
         let split_name = SplitName::new(None, Some(String::from("%042a")), None);
         match split_name {
-            Err(CsplitError::SuffixFormatIncorrect) => (),
-            _ => panic!("should fail with SuffixFormatIncorrect"),
+            Err(CsplitError::SuffixFormatInvalidSpecifier(specifier)) if specifier == "a" => (),
+            _ => panic!("should fail with SuffixFormatInvalidSpecifier"),
         };
+    }
+
+    #[test]
+    fn suffix_format_validation_matches_gnu_categories() {
+        assert!(matches!(
+            validate_suffix_format("%%"),
+            Err(CsplitError::SuffixFormatMissingConversion)
+        ));
+        assert!(matches!(
+            validate_suffix_format("%"),
+            Err(CsplitError::SuffixFormatMissingSpecifier)
+        ));
+        assert!(matches!(
+            validate_suffix_format("%llx"),
+            Err(CsplitError::SuffixFormatInvalidSpecifier(specifier)) if specifier == "l"
+        ));
+        assert!(matches!(
+            validate_suffix_format("%#d"),
+            Err(CsplitError::SuffixFormatInvalidFlags(flags)) if flags == "%#d"
+        ));
+        assert!(matches!(
+            validate_suffix_format("%'x"),
+            Err(CsplitError::SuffixFormatInvalidFlags(flags)) if flags == "%'x"
+        ));
+        assert!(validate_suffix_format("%%-%0#6.3x").is_ok());
     }
 
     #[test]

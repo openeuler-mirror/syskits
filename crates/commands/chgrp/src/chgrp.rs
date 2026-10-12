@@ -164,10 +164,12 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::preserve_root::PRESERVE)
             .long(opt_flags::preserve_root::PRESERVE)
+            .overrides_with(opt_flags::preserve_root::NO_PRESERVE)
             .help("fail to operate recursively on '/'")
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::preserve_root::NO_PRESERVE)
             .long(opt_flags::preserve_root::NO_PRESERVE)
+            .overrides_with(opt_flags::preserve_root::PRESERVE)
             .help("do not treat '/' specially (the default)")
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::REFERENCE)
@@ -339,6 +341,29 @@ mod tests {
 
         assert!(matches.get_flag(opt_flags::preserve_root::NO_PRESERVE));
         assert!(!matches.get_flag(opt_flags::preserve_root::PRESERVE));
+    }
+
+    #[test]
+    fn test_last_preserve_root_option_wins() {
+        let no_preserve_last = ct_app()
+            .try_get_matches_from([
+                ctcore::ct_util_name(),
+                "--preserve-root",
+                "--no-preserve-root",
+            ])
+            .expect("parse preserve-root options");
+        assert!(!no_preserve_last.get_flag(opt_flags::preserve_root::PRESERVE));
+        assert!(no_preserve_last.get_flag(opt_flags::preserve_root::NO_PRESERVE));
+
+        let preserve_last = ct_app()
+            .try_get_matches_from([
+                ctcore::ct_util_name(),
+                "--no-preserve-root",
+                "--preserve-root",
+            ])
+            .expect("parse preserve-root options");
+        assert!(preserve_last.get_flag(opt_flags::preserve_root::PRESERVE));
+        assert!(!preserve_last.get_flag(opt_flags::preserve_root::NO_PRESERVE));
     }
 
     #[test]

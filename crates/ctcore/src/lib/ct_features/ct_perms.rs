@@ -964,9 +964,34 @@ fn has_help_option(command: &Command, args: &[OsString]) -> bool {
     has_option_before_operand(command, args, |argument| argument == "--help")
 }
 
+fn gnu_long_option_argument_message(args: &[OsString], command: &Command) -> Option<String> {
+    for (index, argument) in args.iter().enumerate().skip(1) {
+        if argument == "--" {
+            break;
+        }
+
+        let Some((option, has_inline_value)) = matching_long_option(command, argument) else {
+            continue;
+        };
+        let option_name = option.get_long()?;
+        let takes_values = option.get_action().takes_values();
+
+        if has_inline_value && !takes_values {
+            return Some(format!(
+                "option '--{option_name}' doesn't allow an argument"
+            ));
+        }
+
+        if !has_inline_value && takes_values && index + 1 == args.len() {
+            return Some(format!("option '--{option_name}' requires an argument"));
+        }
+    }
+    None
+}
+
 fn gnu_unknown_option_message(args: &[OsString], command: &Command) -> Option<String> {
-    for arg in args.iter().skip(1) {
-        let arg = arg.to_str()?;
+    for argument in args.iter().skip(1) {
+        let arg = argument.to_str()?;
         if arg == "--" {
             break;
         }
@@ -975,14 +1000,7 @@ fn gnu_unknown_option_message(args: &[OsString], command: &Command) -> Option<St
             if long_option.is_empty() {
                 break;
             }
-            let option_name = long_option
-                .split_once('=')
-                .map_or(long_option, |(name, _)| name);
-            let mut matching_options = command
-                .get_arguments()
-                .filter_map(|argument| argument.get_long())
-                .filter(|known_option| known_option.starts_with(option_name));
-            if matching_options.next().is_none() || matching_options.next().is_some() {
+            if matching_long_option(command, argument).is_none() {
                 return Some(format!("unrecognized option {}", locale_quote(arg)));
             }
         } else if let Some(short_options) = arg.strip_prefix('-') {
@@ -1044,6 +1062,9 @@ pub fn ownership_change_base(
             .num_args(1..),
     );
     let command_for_errors = command.clone();
+    if let Some(message) = gnu_long_option_argument_message(&args, &command_for_errors) {
+        return Err(CTsageError::new(libc::EXIT_FAILURE, message));
+    }
     let matches = match command.try_get_matches_from(args.clone()) {
         Ok(matches) => matches,
         Err(error) if error.kind() == clap::error::ErrorKind::UnknownArgument => {

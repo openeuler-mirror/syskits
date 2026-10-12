@@ -705,8 +705,14 @@ impl CtOwnershipChangeExecutor {
             {
                 // Pre-order traversal lets us avoid entering a symlinked /.
                 iterator.skip_current_dir();
-                ret = 1;
-                continue;
+                if defer_directories {
+                    ret |= self.change_deferred_directories(
+                        &mut deferred_directories,
+                        &unreadable_directories,
+                        0,
+                    );
+                }
+                return ret | 1;
             }
 
             if defer_directories && entry.file_type().is_dir() {

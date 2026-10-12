@@ -28,6 +28,7 @@ use sys_locale::get_locale;
 use std::ffi::CString;
 use std::ffi::OsString;
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 use std::process;
 use std::process::ExitStatus;
@@ -133,7 +134,10 @@ fn chroot_process_status_code(pstatus: ExitStatus) -> i32 {
     if pstatus.success() {
         0
     } else {
-        pstatus.code().unwrap_or(-1)
+        pstatus
+            .code()
+            .or_else(|| pstatus.signal().map(|signal| 128 + signal))
+            .unwrap_or(1)
     }
 }
 
@@ -1224,8 +1228,10 @@ mod tests {
 
     #[cfg(test)]
     mod tests_private_fn {
+        use crate::chroot_process_status_code;
         use crate::{chroot_enter, chroot_parse_user_spec, chroot_set_user};
         use crate::{chroot_set_groups_from_str, chroot_set_main_group};
+        use std::os::unix::process::ExitStatusExt;
 
         #[test]
         fn test_set_user_empty_user() {
@@ -1235,6 +1241,14 @@ mod tests {
                 Err(_) => 1,
             };
             assert_eq!(err, 0);
+        }
+
+        #[test]
+        fn test_process_status_signal_uses_shell_exit_convention() {
+            assert_eq!(
+                chroot_process_status_code(std::process::ExitStatus::from_raw(libc::SIGTERM)),
+                143
+            );
         }
 
         #[test]

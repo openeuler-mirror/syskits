@@ -622,6 +622,7 @@ impl CtOwnershipChangeExecutor {
         let mut unreadable_directories = HashSet::<PathBuf>::new();
         let mut deferred_directories = Vec::<(usize, PathBuf, Metadata)>::new();
         let defer_directories = self.traverse_symlinks == CtTraverseSymlinks::All;
+        let mut walk_error_paths = HashSet::<PathBuf>::new();
         // 我们不能使用 for 循环，因为在循环内部我们需要操作迭代器。
         while let Some(entry) = iterator.next() {
             if defer_directories {
@@ -643,13 +644,16 @@ impl CtOwnershipChangeExecutor {
                     ret = 1;
                     let path = e.path();
                     let action = path.map(|path| {
+                        walk_error_paths.insert(path.to_path_buf());
                         let action = traversal_failure_action(path, self.dereference);
                         if action == "read directory" {
                             unreadable_directories.insert(path.to_path_buf());
                         }
                         action
                     });
-                    if !self.verbosity.force_silent {
+                    if !self.verbosity.force_silent
+                        && self.verbosity.level != CtVerbosityLevel::Silent
+                    {
                         if let Some(path) = path {
                             ct_show_error!(
                                 "cannot {} {}: {}",
@@ -675,6 +679,12 @@ impl CtOwnershipChangeExecutor {
                 continue;
             }
             let path = entry.path();
+            if walk_error_paths.remove(path) {
+                if entry.file_type().is_dir() {
+                    iterator.skip_current_dir();
+                }
+                continue;
+            }
             if unreadable_directories.contains(path) {
                 continue;
             }

@@ -10,12 +10,12 @@
  */
 
 extern crate rust_i18n;
-use ctcore::Tool;
+use ctcore::{Tool, libc};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::{Quotable, locale_quote};
 pub use ctcore::ct_entries;
-use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, opt_flags, ownership_change_base};
 
 use std::ffi::OsString;
@@ -140,6 +140,63 @@ fn gnu_long_option(option: &str) -> Option<&'static str> {
     }
 }
 
+fn gnu_ambiguous_long_option_message(args: &[OsString]) -> Option<String> {
+    let mut reference_takes_next = false;
+
+    for arg in args.iter().skip(1) {
+        let Some(arg) = arg.to_str() else {
+            continue;
+        };
+        if reference_takes_next {
+            reference_takes_next = false;
+            continue;
+        }
+        if arg == "--" {
+            break;
+        }
+        let Some(long_option) = arg.strip_prefix("--") else {
+            continue;
+        };
+        if long_option.is_empty() {
+            break;
+        }
+        let (option, value) = long_option
+            .split_once('=')
+            .map_or((long_option, None), |(name, value)| (name, Some(value)));
+        let matching_options: Vec<_> = GNU_LONG_OPTIONS
+            .iter()
+            .filter(|known| known.starts_with(option))
+            .copied()
+            .collect();
+
+        if matching_options.len() > 1 {
+            let possibilities = matching_options
+                .iter()
+                .map(|option| locale_quote(&format!("--{option}")))
+                .collect::<Vec<_>>()
+                .join(" ");
+            return Some(format!(
+                "option {} is ambiguous; possibilities: {possibilities}",
+                locale_quote(arg)
+            ));
+        }
+
+        let Some(option) = matching_options.first() else {
+            // Let the shared parser report the first preceding unknown option.
+            return None;
+        };
+        if value.is_some() && *option != opt_flags::REFERENCE {
+            // The shared parser produces GNU's no-argument diagnostic first.
+            return None;
+        }
+        if *option == opt_flags::REFERENCE && value.is_none() {
+            reference_takes_next = true;
+        }
+    }
+
+    None
+}
+
 fn gnu_terminal_option_requested(args: &[OsString], terminal_option: &str) -> bool {
     let mut reference_takes_next = false;
 
@@ -254,6 +311,9 @@ pub fn chgrp_main(args: impl ctcore::Args) -> CTResult<()> {
     if gnu_terminal_option_requested(&args, "version") {
         print!("{}", gnu_version_output(ctcore::ct_util_name()));
         return Ok(());
+    }
+    if let Some(message) = gnu_ambiguous_long_option_message(&args) {
+        return Err(CTsageError::new(libc::EXIT_FAILURE, message));
     }
     ownership_change_base(
         ct_app(),

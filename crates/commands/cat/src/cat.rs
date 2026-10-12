@@ -41,13 +41,8 @@ use std::os::unix::ffi::OsStrExt;
 #[allow(dead_code)]
 mod splice;
 
-/// Unix domain socket support
-#[cfg(unix)]
-use std::net::Shutdown;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-#[cfg(unix)]
-use std::os::unix::net::UnixStream;
 
 #[derive(Error, Debug)]
 enum CatError {
@@ -649,17 +644,6 @@ fn cat_path(
             cat_handle(&mut handle, output_options, output_state)
         }
         CatInputType::Directory => Err(CatError::IsDirectory), // 目录不是有效的输入
-        #[cfg(unix)]
-        CatInputType::Socket => {
-            // 连接到Unix套接字并处理输入
-            let socket = UnixStream::connect(Path::new(input_path))?;
-            socket.shutdown(Shutdown::Write)?;
-            let mut handle = CatInputHandle {
-                reader: socket,
-                is_interactive: false,
-            };
-            cat_handle(&mut handle, output_options, output_state)
-        }
         _ => {
             // 处理普通文件输入
             let file = File::open(Path::new(input_path))?;
@@ -722,16 +706,6 @@ fn cat_path_to_writer<W: Write>(
             cat_handle_to_writer(&mut handle, output_options, output_state, cat_writer)
         }
         CatInputType::Directory => Err(CatError::IsDirectory),
-        #[cfg(unix)]
-        CatInputType::Socket => {
-            let socket = UnixStream::connect(Path::new(input_path))?;
-            socket.shutdown(Shutdown::Write)?;
-            let mut handle = CatInputHandle {
-                reader: socket,
-                is_interactive: false,
-            };
-            cat_handle_to_writer(&mut handle, output_options, output_state, cat_writer)
-        }
         _ => {
             let file = File::open(Path::new(input_path))?;
 
@@ -1543,6 +1517,24 @@ mod tests {
         assert_eq!(semantic.classic_text, "payload\n");
         assert_eq!(semantic.stderr_text, "");
         assert_eq!(semantic.exit_code, 0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_unix_socket_uses_the_gnu_open_error_path() {
+        use std::os::unix::net::UnixListener;
+
+        let temp_dir = tempdir().expect("tempdir");
+        let socket_path = temp_dir.path().join("cat.sock");
+        let _listener = UnixListener::bind(&socket_path).expect("bind socket");
+
+        let semantic =
+            cat_native_semantic([OsString::from("cat"), socket_path.into_os_string()].into_iter())
+                .expect("semantic");
+
+        assert_eq!(semantic.classic_text, "");
+        assert_eq!(semantic.exit_code, 1);
+        assert!(semantic.stderr_text.contains("No such device or address"));
     }
 
     #[test]

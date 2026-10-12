@@ -750,8 +750,7 @@ fn cat_path_to_writer<W: Write>(
 }
 
 fn render_cat_file_error(program_name: &str, file_path: &OsStr, err: &CatError) -> String {
-    let display_path = file_path.to_string_lossy();
-    let quoted_path = display_path.as_ref().maybe_quote();
+    let quoted_path = cat_quote_path(file_path);
 
     match err {
         CatError::OutputIsInput => {
@@ -761,6 +760,92 @@ fn render_cat_file_error(program_name: &str, file_path: &OsStr, err: &CatError) 
         CatError::Write(io_err) => render_cat_write_error(program_name, io_err),
         other => format!("{program_name}: {quoted_path}: {other}\n"),
     }
+}
+
+fn cat_quote_path(file_path: &OsStr) -> String {
+    #[cfg(unix)]
+    if file_path.to_str().is_none() {
+        return cat_quote_non_utf8_path(file_path.as_bytes());
+    }
+
+    file_path
+        .to_string_lossy()
+        .as_ref()
+        .maybe_quote()
+        .to_string()
+}
+
+#[cfg(unix)]
+enum CatQuoteSegment {
+    Plain,
+    Escaped,
+}
+
+#[cfg(unix)]
+fn cat_quote_non_utf8_path(bytes: &[u8]) -> String {
+    let mut result = String::with_capacity(bytes.len() + 8);
+    let mut segment = None;
+
+    for &byte in bytes {
+        match byte {
+            b'\x07' => cat_push_escaped_byte(&mut result, &mut segment, "a"),
+            b'\x08' => cat_push_escaped_byte(&mut result, &mut segment, "b"),
+            b'\x09' => cat_push_escaped_byte(&mut result, &mut segment, "t"),
+            b'\x0a' => cat_push_escaped_byte(&mut result, &mut segment, "n"),
+            b'\x0b' => cat_push_escaped_byte(&mut result, &mut segment, "v"),
+            b'\x0c' => cat_push_escaped_byte(&mut result, &mut segment, "f"),
+            b'\x0d' => cat_push_escaped_byte(&mut result, &mut segment, "r"),
+            b'\x20'..=b'\x7e' => cat_push_plain_byte(&mut result, &mut segment, byte),
+            _ => {
+                let escaped = format!("{:03o}", byte);
+                cat_push_escaped_byte(&mut result, &mut segment, &escaped);
+            }
+        }
+    }
+
+    match segment {
+        Some(CatQuoteSegment::Plain) | Some(CatQuoteSegment::Escaped) => result.push('\''),
+        None => result.push_str("''"),
+    }
+
+    result
+}
+
+#[cfg(unix)]
+fn cat_push_plain_byte(result: &mut String, segment: &mut Option<CatQuoteSegment>, byte: u8) {
+    if matches!(segment, Some(CatQuoteSegment::Escaped)) {
+        result.push('\'');
+        *segment = None;
+    }
+    if segment.is_none() {
+        result.push('\'');
+        *segment = Some(CatQuoteSegment::Plain);
+    }
+
+    if byte == b'\'' {
+        result.push_str("'\\''");
+    } else {
+        result.push(char::from(byte));
+    }
+}
+
+#[cfg(unix)]
+fn cat_push_escaped_byte(
+    result: &mut String,
+    segment: &mut Option<CatQuoteSegment>,
+    escaped: &str,
+) {
+    if matches!(segment, Some(CatQuoteSegment::Plain)) {
+        result.push('\'');
+        *segment = None;
+    }
+    if segment.is_none() {
+        result.push_str("$'");
+        *segment = Some(CatQuoteSegment::Escaped);
+    }
+
+    result.push('\\');
+    result.push_str(escaped);
 }
 
 fn render_cat_write_error(program_name: &str, err: &io::Error) -> String {
@@ -1568,6 +1653,30 @@ mod tests {
         assert_eq!(semantic.classic_text, "payload\n");
         assert_eq!(semantic.stderr_text, "");
         assert_eq!(semantic.exit_code, 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_non_utf8_file_name_diagnostic_uses_gnu_shell_escaping() {
+        use std::os::unix::ffi::OsStringExt;
+
+        assert_eq!(
+            cat_quote_non_utf8_path(b"cat-missing-\xff-tail"),
+            "'cat-missing-'$'\\377''-tail'"
+        );
+
+        let temp_dir = tempdir().expect("tempdir");
+        let path = temp_dir
+            .path()
+            .join(OsString::from_vec(b"cat-missing-\xff-tail".to_vec()));
+
+        let semantic =
+            cat_native_semantic([OsString::from("cat"), path.into_os_string()].into_iter())
+                .expect("semantic");
+
+        assert_eq!(semantic.exit_code, 1);
+        assert!(semantic.stderr_text.contains("'$'\\377''"));
+        assert!(!semantic.stderr_text.contains('\u{fffd}'));
     }
 
     #[cfg(target_os = "linux")]

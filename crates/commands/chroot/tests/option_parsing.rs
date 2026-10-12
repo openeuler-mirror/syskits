@@ -286,3 +286,24 @@ fn chroot_accepts_gnu_userspec_empty_forms() {
         assert_eq!(output.stdout, b"0\n");
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn chroot_uses_explicit_primary_gid_for_supplementary_groups() {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+
+    if unsafe { libc::geteuid() } != 0 {
+        return;
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_chroot"))
+        .env("LC_ALL", "C")
+        .arg0("chroot")
+        .args(["--userspec=0:65534", "/", "/usr/bin/id", "-G"])
+        .output()
+        .expect("run chroot");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"65534\n");
+}

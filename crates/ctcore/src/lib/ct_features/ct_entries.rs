@@ -246,14 +246,25 @@ impl CtPasswd {
     /// updated by `getgrouplist`, `ngroups` needs to be increased in a
     /// loop until `getgrouplist` stops returning -1.
     pub fn belongs_to(&self) -> Vec<gid_t> {
+        self.belongs_to_with_primary_gid(self.gid)
+    }
+
+    /// Return the groups for this user using `primary_gid` as the login group.
+    pub fn belongs_to_with_primary_gid(&self, primary_gid: gid_t) -> Vec<gid_t> {
         let mut ngroups: c_int = 8;
         let mut ngroups_old: c_int;
         let mut groups = vec![0; ngroups.try_into().unwrap()];
         let name = CString::new(self.name.as_bytes()).unwrap();
         loop {
             ngroups_old = ngroups;
-            if unsafe { getgrouplist(name.as_ptr(), self.gid, groups.as_mut_ptr(), &mut ngroups) }
-                == -1
+            if unsafe {
+                getgrouplist(
+                    name.as_ptr(),
+                    primary_gid,
+                    groups.as_mut_ptr(),
+                    &mut ngroups,
+                )
+            } == -1
             {
                 if ngroups == ngroups_old {
                     ngroups *= 2;

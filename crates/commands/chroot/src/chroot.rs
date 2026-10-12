@@ -333,14 +333,20 @@ fn chroot_set_context(root_path: &Path, args_option: &clap::ArgMatches) -> CTRes
         lookup_pwd = ctcore::ct_entries::CtPasswd::locate(lookup_name).ok();
     }
 
+    let final_group_id = final_group.map(chroot_resolve_main_group).transpose()?;
+
     if let Some(groups_str) = arg_groups {
         // 如果显式传入了 --groups 参数（即便是空字符串代表清空），则直接设置
         chroot_set_groups_from_str(groups_str)?;
     } else if final_user.is_some() {
         // 如果没传 --groups 参数，但指定了用户，我们需要尝试自动补全
         if let Some(pwd) = lookup_pwd.as_ref() {
-            // 查到了用户，自动补全其所属的所有附加组
-            let groups = pwd.belongs_to();
+            // GNU uses the explicit primary GID when resolving the user's
+            // supplementary groups.
+            let groups = match final_group_id {
+                Some(gid) => pwd.belongs_to_with_primary_gid(gid),
+                None => pwd.belongs_to(),
+            };
             let err = chroot_set_groups(&groups);
             if err != 0 {
                 return Err(ChrootError::SetGroupsFailed(Error::last_os_error()).into());
@@ -356,9 +362,8 @@ fn chroot_set_context(root_path: &Path, args_option: &clap::ArgMatches) -> CTRes
         // 如果没查到用户，且没指定主组，我们先跳过，它会在下一步报错
     }
 
-    if let Some(g) = final_group {
-        // 用户显式指定了主组，直接设置
-        chroot_set_main_group(g)?;
+    if let Some(gid) = final_group_id {
+        chroot_set_main_group_id(gid)?;
     } else if let Some(u) = final_user {
         // 用户没有指定主组，需要自动补全
         if let Some(pwd) = lookup_pwd.as_ref() {
@@ -447,27 +452,37 @@ fn chroot_enter(root_path: &Path, is_skip_chdir: bool) -> CTResult<()> {
     Ok(())
 }
 
+#[cfg(test)]
 fn chroot_set_main_group(chroot_group: &str) -> CTResult<()> {
-    if !chroot_group.is_empty() {
-        let group_id = if let Some(id_str) = chroot_group.strip_prefix('+') {
-            id_str
-                .parse::<libc::gid_t>()
-                .map_err(|_| ChrootError::NoSuchGroup(chroot_group.to_string()))?
-        } else {
-            match ct_entries::grp2gid(chroot_group) {
-                Ok(g) => g,
-                Err(_) => chroot_group
-                    .parse::<libc::gid_t>()
-                    .map_err(|_| ChrootError::NoSuchGroup(chroot_group.to_string()))?,
-            }
-        };
-        let err = unsafe { setgid(group_id) };
-        if err != 0 {
-            return Err(
-                ChrootError::SetGidFailed(group_id.to_string(), Error::last_os_error()).into(),
-            );
-        }
+    if chroot_group.is_empty() {
+        return Ok(());
     }
+
+    chroot_set_main_group_id(chroot_resolve_main_group(chroot_group)?)
+}
+
+fn chroot_resolve_main_group(chroot_group: &str) -> CTResult<libc::gid_t> {
+    if let Some(id_str) = chroot_group.strip_prefix('+') {
+        return id_str
+            .parse::<libc::gid_t>()
+            .map_err(|_| ChrootError::NoSuchGroup(chroot_group.to_string()).into());
+    }
+
+    ct_entries::grp2gid(chroot_group)
+        .or_else(|_| {
+            chroot_group
+                .parse::<libc::gid_t>()
+                .map_err(|_| std::io::Error::new(std::io::ErrorKind::NotFound, "group not found"))
+        })
+        .map_err(|_| ChrootError::NoSuchGroup(chroot_group.to_string()).into())
+}
+
+fn chroot_set_main_group_id(group_id: libc::gid_t) -> CTResult<()> {
+    let err = unsafe { setgid(group_id) };
+    if err != 0 {
+        return Err(ChrootError::SetGidFailed(group_id.to_string(), Error::last_os_error()).into());
+    }
+
     Ok(())
 }
 

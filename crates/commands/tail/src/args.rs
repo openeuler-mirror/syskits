@@ -468,7 +468,7 @@ pub fn tail_parse_obsolete(
 }
 
 fn tail_parse_num(src: &str) -> Result<TailSignum, ParseSizeError> {
-    let mut size_string = src.trim();
+    let mut size_string = src.trim_start_matches(|c: char| c.is_ascii_whitespace());
     let mut starting_with = false;
 
     if let Some(c) = size_string.chars().next() {
@@ -1092,6 +1092,11 @@ mod tests {
         let result = tail_parse_num("1");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), TailSignum::Negative(1));
+    }
+
+    #[test]
+    fn test_parse_num_rejects_trailing_ascii_whitespace() {
+        assert!(tail_parse_num("1 ").is_err());
     }
 
     #[test]

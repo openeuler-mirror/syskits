@@ -61,7 +61,10 @@ fn chgrp_parse_gid_and_uid(args_match: &ArgMatches) -> CTResult<CtGidUidOwnerFil
             // 尝试将组名转换为GID，如果失败则尝试解析为数字GID
             match ct_entries::grp2gid(group_info) {
                 Ok(g) => Some(g),
-                _ => match group_info.parse::<u32>() {
+                _ => match group_info
+                    .trim_start_matches([' ', '\t', '\n', '\r', '\u{000B}', '\u{000C}'])
+                    .parse::<u32>()
+                {
                     Ok(gid) => Some(gid),
                     Err(_) => {
                         return Err(CtSimpleError::new(

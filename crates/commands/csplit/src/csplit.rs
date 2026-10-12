@@ -79,6 +79,19 @@ mod opt_flags {
     pub const PATTERN: &str = "pattern";
 }
 
+const GNU_LONG_OPTIONS: &[&str] = &[
+    "digits",
+    "quiet",
+    "silent",
+    "keep-files",
+    "elide-empty-files",
+    "prefix",
+    "suffix-format",
+    "suppress-matched",
+    "help",
+    "version",
+];
+
 /// Command line options for csplit.
 pub struct CsplitOptions {
     split_name: crate::SplitName,
@@ -654,7 +667,7 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
     let usage_name = csplit_usage_name(&args);
-    reject_invalid_short_options(&args, &usage_name)?;
+    reject_incompatible_options(&args, &usage_name)?;
 
     // 使用 clap 库解析命令行参数
     let args_match = ct_app().try_get_matches_from(args)?;
@@ -792,7 +805,7 @@ fn csplit_usage_error(usage_name: &str, message: String) -> Box<dyn ctcore::ct_e
     )
 }
 
-fn reject_invalid_short_options(args: &[OsString], usage_name: &str) -> CTResult<()> {
+fn reject_incompatible_options(args: &[OsString], usage_name: &str) -> CTResult<()> {
     let mut index = 1;
 
     while index < args.len() {
@@ -800,7 +813,27 @@ fn reject_invalid_short_options(args: &[OsString], usage_name: &str) -> CTResult
         if arg == "--" {
             break;
         }
-        if !arg.starts_with('-') || arg == "-" || arg.starts_with("--") {
+        if arg.starts_with("--") {
+            let name = arg[2..]
+                .split('=')
+                .next()
+                .expect("split always yields a part");
+            let matches = gnu_long_option_matches(name);
+            if matches.len() > 1 {
+                let possibilities = matches
+                    .iter()
+                    .map(|option| format!("'--{option}'"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                return Err(csplit_usage_error(
+                    usage_name,
+                    format!("option '{arg}' is ambiguous; possibilities: {possibilities}"),
+                ));
+            }
+            index += 1;
+            continue;
+        }
+        if !arg.starts_with('-') || arg == "-" {
             index += 1;
             continue;
         }
@@ -827,6 +860,14 @@ fn reject_invalid_short_options(args: &[OsString], usage_name: &str) -> CTResult
     }
 
     Ok(())
+}
+
+fn gnu_long_option_matches(name: &str) -> Vec<&'static str> {
+    GNU_LONG_OPTIONS
+        .iter()
+        .copied()
+        .filter(|option| option.starts_with(name))
+        .collect()
 }
 
 #[derive(Default)]

@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::CTError;
+use ctcore::ct_error::{CTError, strip_errno};
 use std::fmt::Display;
 use std::io::Error;
 
@@ -17,7 +17,10 @@ use std::io::Error;
 #[derive(Debug)]
 pub enum ChrootError {
     /// Failed to enter the specified directory.
-    CannotEnter(String, Error),
+    CannotChangeRoot(String, Error),
+
+    /// Failed to change the working directory after entering the new root.
+    CannotChdir(Error),
 
     /// Failed to execute the specified command.
     CommandFailed(String, Error),
@@ -36,9 +39,6 @@ pub enum ChrootError {
 
     /// Failed to find the specified user.
     NoSuchUser(String),
-
-    /// The given directory does not exist.
-    NoSuchDirectory(String),
 
     /// The call to `setgid()` failed.
     SetGidFailed(String, Error),
@@ -71,7 +71,13 @@ impl CTError for ChrootError {
 impl Display for ChrootError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::CannotEnter(s, e) => write!(f, "cannot chroot to {}: {}", s.quote(), e,),
+            Self::CannotChangeRoot(s, e) => write!(
+                f,
+                "cannot change root directory to {}: {}",
+                s.quote(),
+                strip_errno(e),
+            ),
+            Self::CannotChdir(e) => write!(f, "cannot chdir to root directory: {}", strip_errno(e)),
             Self::CommandFailed(s, e) | Self::CommandNotFound(s, e) => {
                 write!(f, "failed to run command {}: {}", s.to_string().quote(), e,)
             }
@@ -83,11 +89,6 @@ impl Display for ChrootError {
             ),
             Self::NoSuchGroup(s) => write!(f, "no such group: {}", s.maybe_quote(),),
             Self::NoSuchUser(s) => write!(f, "no such user: {}", s.maybe_quote(),),
-            Self::NoSuchDirectory(s) => write!(
-                f,
-                "cannot change root directory to {}: no such directory",
-                s.quote(),
-            ),
             Self::SetGidFailed(s, e) => write!(f, "cannot set gid to {s}: {e}"),
             Self::SetGroupsFailed(e) => write!(f, "cannot set groups: {e}"),
             Self::SetUserFailed(s, e) => {
@@ -102,14 +103,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_cannot_enter_error() {
+    fn test_cannot_change_root_error() {
         let error_message = "permission denied";
         let os_error = std::io::Error::new(std::io::ErrorKind::PermissionDenied, error_message);
-        let error = ChrootError::CannotEnter("/path/to/chroot".into(), os_error);
+        let error = ChrootError::CannotChangeRoot("/path/to/chroot".into(), os_error);
 
         assert_eq!(
             format!("{error}"),
-            "cannot chroot to '/path/to/chroot': permission denied"
+            "cannot change root directory to '/path/to/chroot': permission denied"
+        );
+        assert_eq!(error.code(), 125);
+    }
+
+    #[test]
+    fn test_cannot_chdir_error() {
+        let error_message = "permission denied";
+        let os_error = std::io::Error::new(std::io::ErrorKind::PermissionDenied, error_message);
+        let error = ChrootError::CannotChdir(os_error);
+
+        assert_eq!(
+            format!("{error}"),
+            "cannot chdir to root directory: permission denied"
         );
         assert_eq!(error.code(), 125);
     }
@@ -165,17 +179,6 @@ mod tests {
     }
 
     #[test]
-    fn test_no_such_directory_error() {
-        let error = ChrootError::NoSuchDirectory("/nonexistent/directory".into());
-
-        assert_eq!(
-            format!("{error}"),
-            "cannot change root directory to '/nonexistent/directory': no such directory"
-        );
-        assert_eq!(error.code(), 125);
-    }
-
-    #[test]
     fn test_set_gid_failed_error() {
         let error_message = "operation not permitted";
         let os_error = std::io::Error::new(std::io::ErrorKind::PermissionDenied, error_message);
@@ -215,10 +218,10 @@ mod tests {
     }
 
     #[test]
-    fn test_code_for_cannot_enter_error() {
+    fn test_code_for_cannot_change_root_error() {
         let error_message = "user not found";
         let os_error = std::io::Error::new(std::io::ErrorKind::NotFound, error_message);
-        let error = ChrootError::CannotEnter("/path/to/chroot".into(), os_error);
+        let error = ChrootError::CannotChangeRoot("/path/to/chroot".into(), os_error);
         assert_eq!(error.code(), 125);
     }
 
@@ -259,12 +262,6 @@ mod tests {
     #[test]
     fn test_code_for_no_such_user_error() {
         let error = ChrootError::NoSuchUser("unknown_user".into());
-        assert_eq!(error.code(), 125);
-    }
-
-    #[test]
-    fn test_code_for_no_such_directory_error() {
-        let error = ChrootError::NoSuchDirectory("/nonexistent/directory".into());
         assert_eq!(error.code(), 125);
     }
 

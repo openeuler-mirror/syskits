@@ -71,11 +71,6 @@ pub fn chroot_main(args: impl ctcore::Args) -> CTResult<()> {
         ));
     }
 
-    // 检查新的根目录是否存在
-    if !new_root.is_dir() {
-        return Err(ChrootError::NoSuchDirectory(format!("{}", new_root.display())).into());
-    }
-
     // 解析命令参数
     let cmds = match args_match.get_many::<String>(opt_flags::COMMAND) {
         Some(v) => v.map(|s| s.as_str()).collect(),
@@ -396,7 +391,7 @@ fn chroot_parse_user_spec(
 
 fn chroot_enter(root_path: &Path, is_skip_chdir: bool) -> CTResult<()> {
     let root_c = CString::new(root_path.as_os_str().as_bytes()).map_err(|e| {
-        ChrootError::CannotEnter(
+        ChrootError::CannotChangeRoot(
             root_path.display().to_string(),
             Error::new(std::io::ErrorKind::InvalidInput, e),
         )
@@ -404,7 +399,7 @@ fn chroot_enter(root_path: &Path, is_skip_chdir: bool) -> CTResult<()> {
 
     let err = unsafe { chroot(root_c.as_ptr()) };
     if err != 0 {
-        return Err(ChrootError::CannotEnter(
+        return Err(ChrootError::CannotChangeRoot(
             root_path.display().to_string(),
             Error::last_os_error(),
         )
@@ -412,7 +407,7 @@ fn chroot_enter(root_path: &Path, is_skip_chdir: bool) -> CTResult<()> {
     }
 
     if !is_skip_chdir {
-        std::env::set_current_dir("/").map_err(|e| ChrootError::CannotEnter("/".to_string(), e))?;
+        std::env::set_current_dir("/").map_err(|e| ChrootError::CannotChdir(e))?;
     }
     Ok(())
 }

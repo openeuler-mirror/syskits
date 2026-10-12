@@ -140,7 +140,7 @@ fn gnu_long_option(option: &str) -> Option<&'static str> {
     }
 }
 
-fn gnu_help_requested(args: &[OsString]) -> bool {
+fn gnu_terminal_option_requested(args: &[OsString], terminal_option: &str) -> bool {
     let mut reference_takes_next = false;
 
     for arg in args.iter().skip(1) {
@@ -169,10 +169,8 @@ fn gnu_help_requested(args: &[OsString]) -> bool {
             }
             if option == opt_flags::REFERENCE && value.is_none() {
                 reference_takes_next = true;
-            } else if option == opt_flags::HELP {
-                return true;
-            } else if option == "version" {
-                return false;
+            } else if option == opt_flags::HELP || option == "version" {
+                return option == terminal_option;
             }
         } else if let Some(short_options) = arg.strip_prefix('-') {
             if !short_options
@@ -232,12 +230,29 @@ fn gnu_help_output(program: &str) -> String {
     GNU_HELP_TEMPLATE.replace("{program}", program)
 }
 
+const GNU_VERSION_TEMPLATE: &str = r#"{program} (GNU coreutils) 9.4
+Copyright (C) 2023 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+Written by David MacKenzie and Jim Meyering.
+"#;
+
+fn gnu_version_output(program: &str) -> String {
+    GNU_VERSION_TEMPLATE.replace("{program}", program)
+}
+
 pub fn chgrp_main(args: impl ctcore::Args) -> CTResult<()> {
     let args: Vec<_> = args.collect();
     let lang_code = sys_locale::get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    if gnu_help_requested(&args) {
+    if gnu_terminal_option_requested(&args, opt_flags::HELP) {
         print!("{}", gnu_help_output(ctcore::ct_util_name()));
+        return Ok(());
+    }
+    if gnu_terminal_option_requested(&args, "version") {
+        print!("{}", gnu_version_output(ctcore::ct_util_name()));
         return Ok(());
     }
     ownership_change_base(
@@ -540,7 +555,7 @@ mod tests {
     fn test_version_ctmain() {
         let args = [ctcore::ct_util_name(), "--version"];
         let result = chgrp_main(args.iter().map(OsString::from));
-        assert!(result.is_err());
+        assert!(result.is_ok());
     }
 
     #[test]

@@ -184,7 +184,10 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
                 .rposition(|byte| *byte == delimiter)
                 .map(|position| position + 1);
             let Some(closing_delimiter) = closing_delimiter else {
-                return Err(CsplitError::InvalidPattern(arg.to_string()));
+                return Err(CsplitError::ClosingDelimiterMissing(
+                    arg.to_string(),
+                    delimiter as char,
+                ));
             };
             let expression = &arg[1..closing_delimiter];
             let offset_text = &arg[closing_delimiter + 1..];
@@ -569,6 +572,18 @@ mod tests {
             patterns.first(),
             Some(CsplitPattern::UpToLine(24, _))
         ));
+    }
+
+    #[test]
+    fn test_missing_closing_delimiter() {
+        for input in ["/test", "%test"] {
+            let delimiter = input.chars().next().unwrap();
+            assert!(matches!(
+                get_patterns(&[input.to_string()]),
+                Err(CsplitError::ClosingDelimiterMissing(pattern, actual_delimiter))
+                    if pattern == input && actual_delimiter == delimiter
+            ));
+        }
     }
 
     #[test]

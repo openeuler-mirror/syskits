@@ -324,6 +324,13 @@ const CAT_LONG_OPTIONS: [&str; 9] = [
 ];
 
 fn parse_cat_args(args: &[OsString]) -> CTResult<CatAction> {
+    parse_cat_args_with_posixly_correct(args, std::env::var_os("POSIXLY_CORRECT").is_some())
+}
+
+fn parse_cat_args_with_posixly_correct(
+    args: &[OsString],
+    posixly_correct: bool,
+) -> CTResult<CatAction> {
     let usage_name = cat_usage_name(args);
     let mut number = false;
     let mut number_nonblank = false;
@@ -345,6 +352,10 @@ fn parse_cat_args(args: &[OsString]) -> CTResult<CatAction> {
 
         if arg_bytes == b"-" || !arg_bytes.starts_with(b"-") {
             files.push(args[i].clone());
+            if posixly_correct {
+                files.extend(args[i + 1..].iter().cloned());
+                break;
+            }
             i += 1;
             continue;
         }
@@ -1483,12 +1494,31 @@ mod tests {
             .map(OsString::from)
             .collect::<Vec<_>>();
 
-        let CatAction::Run(options, files) = parse_cat_args(&args).unwrap() else {
+        let CatAction::Run(options, files) =
+            parse_cat_args_with_posixly_correct(&args, false).unwrap()
+        else {
             panic!("expected a normal cat invocation");
         };
 
         assert_eq!(options.num_mode, CatNumberingMode::All);
         assert_eq!(files, vec![OsString::from("file")]);
+    }
+
+    #[test]
+    fn test_posixly_correct_stops_option_parsing_at_the_first_operand() {
+        let args = ["cat", "file", "-n"]
+            .into_iter()
+            .map(OsString::from)
+            .collect::<Vec<_>>();
+
+        let CatAction::Run(options, files) =
+            parse_cat_args_with_posixly_correct(&args, true).unwrap()
+        else {
+            panic!("expected a normal cat invocation");
+        };
+
+        assert_eq!(options.num_mode, CatNumberingMode::None);
+        assert_eq!(files, vec![OsString::from("file"), OsString::from("-n")]);
     }
 
     #[test]

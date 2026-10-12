@@ -100,3 +100,35 @@ fn chroot_skip_chdir_rejects_unresolvable_newroot_without_panicking() {
         );
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn chroot_reports_kernel_root_directory_errors() {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+
+    if unsafe { libc::geteuid() } != 0 {
+        return;
+    }
+
+    for (newroot, error) in [
+        (
+            "/definitely-missing-chroot-root",
+            "No such file or directory",
+        ),
+        ("/dev/null", "Not a directory"),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_chroot"))
+            .env("LC_ALL", "C")
+            .arg0("chroot")
+            .args([newroot, "true"])
+            .output()
+            .expect("run chroot");
+
+        assert_eq!(output.status.code(), Some(125));
+        assert_eq!(
+            String::from_utf8(output.stderr).expect("stderr is UTF-8"),
+            format!("chroot: cannot change root directory to '{newroot}': {error}\n")
+        );
+    }
+}

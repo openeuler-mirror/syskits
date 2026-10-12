@@ -40,6 +40,9 @@ pub enum ChrootError {
     /// The group portion of --userspec is invalid.
     InvalidUserspecGroup,
 
+    /// A userspec with an omitted login group is invalid.
+    InvalidSpec,
+
     /// The new root directory was not given.
     MissingNewRoot,
 
@@ -96,6 +99,7 @@ impl Display for ChrootError {
             Self::InvalidGroup(s) => write!(f, "invalid group {}", s.quote()),
             Self::InvalidUser => write!(f, "invalid user"),
             Self::InvalidUserspecGroup => write!(f, "invalid group"),
+            Self::InvalidSpec => write!(f, "invalid spec"),
             Self::MissingNewRoot => write!(
                 f,
                 "missing operand\nTry '{} --help' for more information.",
@@ -189,6 +193,7 @@ mod tests {
             format!("{}", ChrootError::InvalidUserspecGroup),
             "invalid group"
         );
+        assert_eq!(format!("{}", ChrootError::InvalidSpec), "invalid spec");
         assert_eq!(
             format!("{unknown_uid}"),
             "no group specified for unknown uid: 12342"

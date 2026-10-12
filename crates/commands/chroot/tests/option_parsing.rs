@@ -343,6 +343,30 @@ fn chroot_reports_invalid_userspec_principals_like_gnu() {
 
 #[cfg(unix)]
 #[test]
+fn chroot_rejects_numeric_userspec_with_omitted_login_group() {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+
+    if unsafe { libc::geteuid() } != 0 {
+        return;
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_chroot"))
+        .env("LC_ALL", "C")
+        .arg0("chroot")
+        .args(["--userspec=0::", "/", "true"])
+        .output()
+        .expect("run chroot");
+
+    assert_eq!(output.status.code(), Some(125));
+    assert_eq!(
+        String::from_utf8(output.stderr).expect("stderr is UTF-8"),
+        "chroot: invalid spec\n"
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn chroot_reports_command_execution_errors_without_rust_errno_suffixes() {
     use std::os::unix::process::CommandExt;
     use std::process::Command;

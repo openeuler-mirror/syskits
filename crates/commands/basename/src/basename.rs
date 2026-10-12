@@ -12,16 +12,16 @@
 extern crate rust_i18n;
 use clap::Arg;
 use clap::ArgAction;
-use clap::ArgMatches;
 use clap::Command;
 use clap::crate_version;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CTsageError};
+use ctcore::ct_error::{CTResult, CtSimpleError};
 use ctcore::ct_line_ending::CtLineEnding;
 use std::ffi::OsString;
-use std::path::PathBuf;
-use std::path::is_separator;
+use std::io::{self, Write};
+use std::os::unix::ffi::OsStrExt;
+use std::path::Path;
 use sys_locale::get_locale;
 
 use rust_i18n::t;
@@ -48,53 +48,8 @@ pub struct BasenameSemantic {
 
 struct BasenameOptions {
     line_ending: CtLineEnding,
-    names: Vec<String>,
-    suffix: String,
-}
-
-impl BasenameOptions {
-    fn from_matches(args_match: &ArgMatches) -> CTResult<Self> {
-        let line_ending = CtLineEnding::from_zero_flag(args_match.get_flag(flags::ZERO));
-
-        let mut names = args_match
-            .get_many::<String>(flags::NAME)
-            .unwrap_or_default()
-            .cloned()
-            .collect::<Vec<_>>();
-        if names.is_empty() {
-            return Err(CTsageError::new(1, t!("basename.errors.missing_operand")));
-        }
-
-        let paths = args_match.get_one::<String>(flags::SUFFIX).is_some()
-            || args_match.get_flag(flags::MULTIPLE);
-        let suffix = if paths {
-            args_match
-                .get_one::<String>(flags::SUFFIX)
-                .cloned()
-                .unwrap_or_default()
-        } else {
-            match names.len() {
-                1 => String::new(),
-                2 => names.pop().unwrap(),
-                _ => {
-                    return Err(CTsageError::new(
-                        1,
-                        format!(
-                            "{} {}",
-                            t!("basename.errors.extra_operand"),
-                            names[2].quote()
-                        ),
-                    ));
-                }
-            }
-        };
-
-        Ok(Self {
-            line_ending,
-            names,
-            suffix,
-        })
-    }
+    names: Vec<Vec<u8>>,
+    suffix: Vec<u8>,
 }
 
 #[derive(Default)]
@@ -118,12 +73,21 @@ pub fn basename_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
-    let args = args.collect_lossy();
-
-    let args_match = ct_app().try_get_matches_from(args)?;
-    let options = BasenameOptions::from_matches(&args_match)?;
-    let semantic = basename_semantic_from_options(&options);
-    print!("{}", semantic.classic_text);
+    let args = args.collect::<Vec<_>>();
+    let options = match parse_basename_args(&args)? {
+        BasenameAction::Run(options) => options,
+        BasenameAction::Help => {
+            println!("{}", basename_help_text(&basename_usage_name(&args)));
+            return Ok(());
+        }
+        BasenameAction::Version => {
+            println!("{}", basename_version_text(&basename_program_name(&args)));
+            return Ok(());
+        }
+    };
+    io::stdout()
+        .write_all(&basename_output_bytes(&options))
+        .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
 
     Ok(())
 }
@@ -132,9 +96,22 @@ pub fn basename_native_semantic(args: impl ctcore::Args) -> CTResult<BasenameSem
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
-    let args = args.collect_lossy();
-    let args_match = ct_app().try_get_matches_from(args)?;
-    let options = BasenameOptions::from_matches(&args_match)?;
+    let args = args.collect::<Vec<_>>();
+    let options = match parse_basename_args(&args)? {
+        BasenameAction::Run(options) => options,
+        BasenameAction::Help => {
+            return Err(CtSimpleError::new(
+                0,
+                basename_help_text(&basename_usage_name(&args)),
+            ));
+        }
+        BasenameAction::Version => {
+            return Err(CtSimpleError::new(
+                0,
+                basename_version_text(&basename_program_name(&args)),
+            ));
+        }
+    };
     Ok(basename_semantic_from_options(&options))
 }
 
@@ -143,16 +120,331 @@ fn basename_semantic_from_options(options: &BasenameOptions) -> BasenameSemantic
     let mut classic_text = String::new();
 
     for input in &options.names {
-        let output = basename(input, &options.suffix);
-        classic_text.push_str(&output);
+        let output = basename_bytes(input, &options.suffix);
+        let output_text = String::from_utf8_lossy(&output).into_owned();
+        classic_text.push_str(&output_text);
         classic_text.push_str(&options.line_ending.to_string());
         rows.push(BasenameRow {
-            input: input.clone(),
-            basename: output,
+            input: String::from_utf8_lossy(input).into_owned(),
+            basename: output_text,
         });
     }
 
     BasenameSemantic { rows, classic_text }
+}
+
+fn basename_output_bytes(options: &BasenameOptions) -> Vec<u8> {
+    let mut output = Vec::new();
+    let line_ending = u8::from(options.line_ending);
+
+    for input in &options.names {
+        output.extend(basename_bytes(input, &options.suffix));
+        output.push(line_ending);
+    }
+
+    output
+}
+
+enum BasenameAction {
+    Run(BasenameOptions),
+    Help,
+    Version,
+}
+
+fn parse_basename_args(args: &[OsString]) -> CTResult<BasenameAction> {
+    let usage_name = basename_usage_name(args);
+    let mut multiple_names = false;
+    let mut use_nuls = false;
+    let mut suffix = None;
+    let mut operands = Vec::new();
+    let mut i = 1;
+
+    while i < args.len() {
+        let arg = args[i].as_os_str().as_bytes();
+
+        if arg == b"--" {
+            operands.extend(args[i + 1..].iter().map(os_string_bytes));
+            break;
+        }
+
+        if arg == b"-" || !arg.starts_with(b"-") {
+            operands.extend(args[i..].iter().map(os_string_bytes));
+            break;
+        }
+
+        if let Some(long) = arg.strip_prefix(b"--") {
+            if let Some(action) = parse_basename_long_option(
+                args,
+                &usage_name,
+                long,
+                arg,
+                &mut i,
+                &mut multiple_names,
+                &mut use_nuls,
+                &mut suffix,
+            )? {
+                return Ok(action);
+            }
+            i += 1;
+            continue;
+        }
+
+        parse_basename_short_options(
+            args,
+            &usage_name,
+            &arg[1..],
+            &mut i,
+            &mut multiple_names,
+            &mut use_nuls,
+            &mut suffix,
+        )?;
+        i += 1;
+    }
+
+    basename_options_from_operands(&usage_name, multiple_names, use_nuls, suffix, operands)
+}
+
+fn parse_basename_short_options(
+    args: &[OsString],
+    usage_name: &str,
+    options: &[u8],
+    i: &mut usize,
+    multiple_names: &mut bool,
+    use_nuls: &mut bool,
+    suffix: &mut Option<Vec<u8>>,
+) -> CTResult<()> {
+    for (index, option) in options.iter().enumerate() {
+        match option {
+            b'a' => *multiple_names = true,
+            b'z' => *use_nuls = true,
+            b's' => {
+                *multiple_names = true;
+                let suffix_start = index + 1;
+                if suffix_start < options.len() {
+                    *suffix = Some(options[suffix_start..].to_vec());
+                } else {
+                    *i += 1;
+                    let Some(value) = args.get(*i) else {
+                        return Err(basename_usage_error(
+                            usage_name,
+                            "option requires an argument -- 's'".to_owned(),
+                        ));
+                    };
+                    *suffix = Some(os_string_bytes(value));
+                }
+                return Ok(());
+            }
+            invalid => {
+                return Err(basename_usage_error(
+                    usage_name,
+                    format!("invalid option -- '{}'", *invalid as char),
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn parse_basename_long_option(
+    args: &[OsString],
+    usage_name: &str,
+    long: &[u8],
+    raw_arg: &[u8],
+    i: &mut usize,
+    multiple_names: &mut bool,
+    use_nuls: &mut bool,
+    suffix: &mut Option<Vec<u8>>,
+) -> CTResult<Option<BasenameAction>> {
+    let (name, value) = match long.iter().position(|byte| *byte == b'=') {
+        Some(index) => (&long[..index], Some(&long[index + 1..])),
+        None => (long, None),
+    };
+    let matches = basename_long_option_matches(name);
+    let raw_arg = String::from_utf8_lossy(raw_arg);
+
+    match matches.as_slice() {
+        [] => Err(basename_usage_error(
+            usage_name,
+            format!("unrecognized option '{raw_arg}'"),
+        )),
+        [option] => match *option {
+            "multiple" => {
+                reject_unexpected_long_value(usage_name, option, value)?;
+                *multiple_names = true;
+                Ok(None)
+            }
+            "zero" => {
+                reject_unexpected_long_value(usage_name, option, value)?;
+                *use_nuls = true;
+                Ok(None)
+            }
+            "help" => {
+                reject_unexpected_long_value(usage_name, option, value)?;
+                Ok(Some(BasenameAction::Help))
+            }
+            "version" => {
+                reject_unexpected_long_value(usage_name, option, value)?;
+                Ok(Some(BasenameAction::Version))
+            }
+            "suffix" => {
+                *multiple_names = true;
+                if let Some(value) = value {
+                    *suffix = Some(value.to_vec());
+                } else {
+                    *i += 1;
+                    let Some(value) = args.get(*i) else {
+                        return Err(basename_usage_error(
+                            usage_name,
+                            "option '--suffix' requires an argument".to_owned(),
+                        ));
+                    };
+                    *suffix = Some(os_string_bytes(value));
+                }
+                Ok(None)
+            }
+            _ => Ok(None),
+        },
+        _ => Err(basename_usage_error(
+            usage_name,
+            format!(
+                "option '{raw_arg}' is ambiguous; possibilities: {}",
+                matches
+                    .iter()
+                    .map(|option| format!("'--{option}'"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
+        )),
+    }
+}
+
+fn reject_unexpected_long_value(
+    usage_name: &str,
+    option: &str,
+    value: Option<&[u8]>,
+) -> CTResult<()> {
+    if value.is_some() {
+        return Err(basename_usage_error(
+            usage_name,
+            format!("option '--{option}' doesn't allow an argument"),
+        ));
+    }
+
+    Ok(())
+}
+
+fn basename_long_option_matches(name: &[u8]) -> Vec<&'static str> {
+    ["multiple", "suffix", "zero", "help", "version"]
+        .into_iter()
+        .filter(|option| option.as_bytes().starts_with(name))
+        .collect()
+}
+
+fn basename_options_from_operands(
+    usage_name: &str,
+    multiple_names: bool,
+    use_nuls: bool,
+    suffix: Option<Vec<u8>>,
+    mut operands: Vec<Vec<u8>>,
+) -> CTResult<BasenameAction> {
+    if operands.is_empty() {
+        return Err(basename_usage_error(
+            usage_name,
+            "missing operand".to_owned(),
+        ));
+    }
+
+    let suffix = if multiple_names {
+        suffix.unwrap_or_default()
+    } else {
+        match operands.len() {
+            1 => Vec::new(),
+            2 => operands.pop().unwrap(),
+            _ => {
+                let extra = String::from_utf8_lossy(&operands[2]).into_owned();
+                return Err(basename_usage_error(
+                    usage_name,
+                    format!("extra operand {}", extra.quote()),
+                ));
+            }
+        }
+    };
+
+    Ok(BasenameAction::Run(BasenameOptions {
+        line_ending: CtLineEnding::from_zero_flag(use_nuls),
+        names: operands,
+        suffix,
+    }))
+}
+
+fn basename_usage_name(args: &[OsString]) -> String {
+    args.first()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .filter(|arg| !arg.is_empty())
+        .unwrap_or_else(|| ctcore::ct_util_name().to_owned())
+}
+
+fn basename_program_name(args: &[OsString]) -> String {
+    let usage_name = basename_usage_name(args);
+
+    Path::new(&usage_name)
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .filter(|name| !name.is_empty())
+        .unwrap_or(usage_name)
+}
+
+fn basename_usage_error(usage_name: &str, message: String) -> Box<dyn ctcore::ct_error::CTError> {
+    CtSimpleError::new(
+        1,
+        format!("{message}\nTry '{usage_name} --help' for more information."),
+    )
+}
+
+fn basename_help_text(usage_name: &str) -> String {
+    format!(
+        "\
+Usage: {usage_name} NAME [SUFFIX]
+  or:  {usage_name} OPTION... NAME...
+Print NAME with any leading directory components removed.
+If specified, also remove a trailing SUFFIX.
+
+Mandatory arguments to long options are mandatory for short options too.
+  -a, --multiple       support multiple arguments and treat each as a NAME
+  -s, --suffix=SUFFIX  remove a trailing SUFFIX; implies -a
+  -z, --zero           end each output line with NUL, not newline
+      --help        display this help and exit
+      --version     output version information and exit
+
+Examples:
+  {usage_name} /usr/bin/sort          -> \"sort\"
+  {usage_name} include/stdio.h .h     -> \"stdio\"
+  {usage_name} -s .h include/stdio.h  -> \"stdio\"
+  {usage_name} -a any/str1 any/str2   -> \"str1\" followed by \"str2\"
+
+GNU coreutils online help: <https://www.gnu.org/software/coreutils/>
+Report any translation bugs to <https://translationproject.org/team/>
+Full documentation <https://www.gnu.org/software/coreutils/basename>
+or available locally via: info '(coreutils) basename invocation'"
+    )
+}
+
+fn basename_version_text(program_name: &str) -> String {
+    format!(
+        "\
+{program_name} (syskits) {}
+Copyright (C) 2022-2025 China Telecom Cloud Technologies Co., Ltd.
+License Mulan PSL v2: <http://license.coscl.org.cn/MulanPSL2>.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.",
+        crate_version!()
+    )
+}
+
+fn os_string_bytes(arg: &OsString) -> Vec<u8> {
+    arg.as_os_str().as_bytes().to_vec()
 }
 
 pub fn ct_app() -> Command {
@@ -198,12 +490,10 @@ fn basename_args_init() -> Vec<Arg> {
             .action(ArgAction::SetTrue)
             .overrides_with(flags::ZERO),
         Arg::new("help")
-            .short('h')
             .long("help")
             .help(t!("basename.clap.help"))
             .action(ArgAction::Help),
         Arg::new("version")
-            .short('V')
             .long("version")
             .help(t!("basename.clap.version"))
             .action(ArgAction::Version),
@@ -211,56 +501,38 @@ fn basename_args_init() -> Vec<Arg> {
     args
 }
 
+#[cfg(test)]
 fn basename(fullname: &str, suffix: &str) -> String {
-    // 步骤1：从末尾移除所有平台特定的路径分隔符
-    let trimmed_path = fullname.trim_end_matches(is_separator);
+    String::from_utf8(basename_bytes(fullname.as_bytes(), suffix.as_bytes()))
+        .expect("basename of UTF-8 input is UTF-8")
+}
 
-    // 步骤2：确保在修剪后路径不为空，处理仅由后缀字符组成的特殊情况
-    let adjusted_path = if trimmed_path.is_empty() {
-        // 恢复为原始的fullname以避免返回空路径
-        fullname
-    } else {
-        trimmed_path
-    };
-
-    // 步骤3：将调整后的路径转换为PathBuf
-    let path_buffer = PathBuf::from(adjusted_path);
-
-    // 步骤4：获取路径的最后一部分
-    let last_component_option = path_buffer.components().next_back();
-
-    // 步骤5：处理最后一部分缺失的情况
-    match last_component_option {
-        Some(last_component) => {
-            // 步骤6：将最后一部分作为字符串获取
-            let last_component_name = last_component.as_os_str().to_str().unwrap();
-
-            // 步骤7：比较最后一部分名称与提供的后缀
-            if last_component_name == suffix {
-                // 步骤8：若两者相等，则将后缀本身作为基名称返回
-                last_component_name.to_string()
-            } else {
-                // 步骤9：若两者不相等，则尝试从前一部分移除后缀
-                let stripped_name = last_component_name.strip_suffix(suffix);
-
-                // 步骤10：处理移除后缀的结果
-                match stripped_name {
-                    Some(stripped) => {
-                        // 步骤11：如果成功，返回剥离后的名称作为基名称
-                        stripped.to_string()
-                    }
-                    None => {
-                        // 步骤12：如果剥离失败（即后缀不匹配），则返回原始的最后一部分名称作为基名称
-                        last_component_name.to_string()
-                    }
-                }
-            }
-        }
-        None => {
-            // 步骤13：如果没有最后一部分，则返回空字符串作为基名称
-            String::new()
-        }
+fn basename_bytes(fullname: &[u8], suffix: &[u8]) -> Vec<u8> {
+    if fullname.is_empty() {
+        return Vec::new();
     }
+
+    let mut end = fullname.len();
+    while end > 0 && fullname[end - 1] == b'/' {
+        end -= 1;
+    }
+
+    if end == 0 {
+        return vec![b'/'];
+    }
+
+    let trimmed = &fullname[..end];
+    let start = trimmed
+        .iter()
+        .rposition(|byte| *byte == b'/')
+        .map_or(0, |index| index + 1);
+    let mut name = trimmed[start..].to_vec();
+
+    if !suffix.is_empty() && name.len() > suffix.len() && name.ends_with(suffix) {
+        name.truncate(name.len() - suffix.len());
+    }
+
+    name
 }
 
 #[cfg(test)]
@@ -268,6 +540,7 @@ mod tests {
     use super::*;
     use clap::error::ErrorKind;
     use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
 
     #[test]
     fn test_i18n_help_messages() {
@@ -323,10 +596,110 @@ mod tests {
     #[test]
     fn test_extra_operand_message_without_placeholder() {
         rust_i18n::set_locale("en-US");
-        let args = [ctcore::ct_util_name(), "a", "b", "c"];
+        let args = ["basename", "a", "b", "c"];
         let err = basename_main(args.iter().map(OsString::from)).unwrap_err();
-        assert_eq!(err.to_string(), "extra operand 'c'");
-        assert!(err.usage());
+        assert_eq!(
+            err.to_string(),
+            "extra operand 'c'\nTry 'basename --help' for more information."
+        );
+        assert!(!err.usage());
+    }
+
+    #[test]
+    fn test_basename_gnu_option_error_diagnostics() {
+        let cases = [
+            (
+                vec!["basename", "-H"],
+                "invalid option -- 'H'\nTry 'basename --help' for more information.",
+            ),
+            (
+                vec!["basename", "-s"],
+                "option requires an argument -- 's'\nTry 'basename --help' for more information.",
+            ),
+            (
+                vec!["basename", "--suffix"],
+                "option '--suffix' requires an argument\nTry 'basename --help' for more information.",
+            ),
+            (
+                vec!["basename", "--invalid"],
+                "unrecognized option '--invalid'\nTry 'basename --help' for more information.",
+            ),
+            (
+                vec!["basename", "--=x"],
+                "option '--=x' is ambiguous; possibilities: '--multiple' '--suffix' '--zero' '--help' '--version'\nTry 'basename --help' for more information.",
+            ),
+            (
+                vec!["basename", "--multiple=1", "foo"],
+                "option '--multiple' doesn't allow an argument\nTry 'basename --help' for more information.",
+            ),
+        ];
+
+        for (args, expected) in cases {
+            let err = basename_native_semantic(args.iter().map(OsString::from)).unwrap_err();
+
+            assert_eq!(err.code(), 1);
+            assert!(!err.usage());
+            assert_eq!(err.to_string(), expected);
+        }
+    }
+
+    #[test]
+    fn test_basename_gnu_option_parsing_semantics() {
+        let args = ["basename", "--suf", ".c", "foo.c", "bar.c"];
+        let semantic = basename_native_semantic(args.iter().map(OsString::from)).unwrap();
+        assert_eq!(semantic.classic_text, "foo\nbar\n");
+
+        let args = ["basename", "-az", "/tmp/foo"];
+        let semantic = basename_native_semantic(args.iter().map(OsString::from)).unwrap();
+        assert_eq!(semantic.classic_text, "foo\0");
+
+        let args = ["basename", "-as.c", "foo.c"];
+        let semantic = basename_native_semantic(args.iter().map(OsString::from)).unwrap();
+        assert_eq!(semantic.classic_text, "foo\n");
+
+        let args = ["basename", "foo", "-a"];
+        let semantic = basename_native_semantic(args.iter().map(OsString::from)).unwrap();
+        assert_eq!(semantic.classic_text, "foo\n");
+    }
+
+    #[test]
+    fn test_basename_preserves_non_utf8_bytes() {
+        assert_eq!(basename_bytes(b"dir/a\xffb.txt", b".txt"), b"a\xffb");
+
+        let args = vec![
+            OsString::from("basename"),
+            OsString::from_vec(b"dir/a\xffb.txt".to_vec()),
+            OsString::from(".txt"),
+        ];
+        let BasenameAction::Run(options) = parse_basename_args(&args).unwrap() else {
+            panic!("expected basename run action");
+        };
+
+        assert_eq!(basename_output_bytes(&options), b"a\xffb\n");
+    }
+
+    #[test]
+    fn test_basename_gnu_help_and_version_output() {
+        let args = ["basename", "--help", "foo"];
+        let err = basename_native_semantic(args.iter().map(OsString::from)).unwrap_err();
+        assert_eq!(err.code(), 0);
+        assert!(!err.usage());
+        assert!(err.to_string().starts_with("Usage: basename NAME [SUFFIX]"));
+        assert!(
+            err.to_string()
+                .contains("  or:  basename OPTION... NAME...")
+        );
+        assert!(
+            err.to_string()
+                .contains("      --help        display this help and exit")
+        );
+
+        let args = ["basename", "--version", "foo"];
+        let err = basename_native_semantic(args.iter().map(OsString::from)).unwrap_err();
+        assert_eq!(err.code(), 0);
+        assert!(!err.usage());
+        assert!(err.to_string().starts_with("basename (syskits) "));
+        assert!(err.to_string().contains("License Mulan PSL v2"));
     }
 
     #[test]
@@ -342,6 +715,12 @@ mod tests {
 
         // 测试 execute 方法
         let args = vec![OsString::from("basename"), OsString::from("/usr/bin/sort")];
+        assert!(tool.execute(&args).is_ok());
+
+        let args = vec![OsString::from("basename"), OsString::from("--help")];
+        assert!(tool.execute(&args).is_ok());
+
+        let args = vec![OsString::from("basename"), OsString::from("--version")];
         assert!(tool.execute(&args).is_ok());
     }
 
@@ -379,7 +758,7 @@ mod tests {
 
             let result = command.try_get_matches_from(args);
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
     }
 
@@ -437,7 +816,7 @@ mod tests {
 
             let result = command.try_get_matches_from(args);
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
     }
 

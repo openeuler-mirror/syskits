@@ -143,10 +143,14 @@ impl TailFilterMode {
         let mode = if let Some(arg) = matches.get_one::<String>(tail_flags::TAIL_BYTES) {
             match tail_parse_num(arg) {
                 Ok(signum) => Self::Bytes(signum),
-                Err(e) => {
+                Err(err) => {
                     return Err(CtSimpleError::new(
                         1,
-                        format!("invalid number of bytes: {e}"),
+                        format!(
+                            "invalid number of bytes: {}{}",
+                            tail_number_error_token(arg).quote(),
+                            tail_number_error_suffix(&err)
+                        ),
                     ));
                 }
             }
@@ -157,13 +161,11 @@ impl TailFilterMode {
                     Self::Lines(signum, delimiter)
                 }
                 Err(err) => {
-                    let message = match err {
-                        ParseSizeError::SizeTooBig(_) => format!(
-                            "invalid number of lines: {}: Value too large for defined data type",
-                            locale_quote(arg)
-                        ),
-                        _ => format!("invalid number of lines: {}", locale_quote(arg)),
-                    };
+                    let message = format!(
+                        "invalid number of lines: {}{}",
+                        locale_quote(tail_number_error_token(arg)),
+                        tail_number_error_suffix(&err)
+                    );
                     return Err(CtSimpleError::new(1, message));
                 }
             }
@@ -504,6 +506,18 @@ fn tail_parse_num(src: &str) -> Result<TailSignum, ParseSizeError> {
             (n, false) => Ok(TailSignum::Negative(n)),
         },
         Err(err) => Err(err),
+    }
+}
+
+fn tail_number_error_token(src: &str) -> &str {
+    src.strip_prefix('-').unwrap_or(src)
+}
+
+fn tail_number_error_suffix(err: &ParseSizeError) -> &'static str {
+    if matches!(err, ParseSizeError::SizeTooBig(_)) {
+        ": Value too large for defined data type"
+    } else {
+        ""
     }
 }
 
@@ -1025,12 +1039,35 @@ mod tests {
                     &["-c", "99999999999999999999"][..],
                     "invalid number of bytes: '99999999999999999999': Value too large for defined data type",
                 ),
+                (&["-c", " abc"][..], "invalid number of bytes: ' abc'"),
+                (&["-c", "-"][..], "invalid number of bytes: ''"),
                 (&["-c", "--"][..], "invalid number of bytes: '-'"),
+                (&["-c", "--1"][..], "invalid number of bytes: '-1'"),
             ];
 
             for (args, expected) in cases {
                 let err = tail_parse_args(create_args(args)).unwrap_err();
                 assert_eq!(err.to_string(), expected);
+            }
+        }
+
+        #[test]
+        fn test_invalid_line_count_messages_use_token_after_optional_minus() {
+            let cases = [
+                (&["-n", "-"][..], ""),
+                (&["-n", "--"][..], "-"),
+                (&["-n", "--1"][..], "-1"),
+                (&["-n", "-0x1"][..], "0x1"),
+                (&["-n", "- 1x"][..], " 1x"),
+                (&["-n", " abc"][..], " abc"),
+            ];
+
+            for (args, token) in cases {
+                let err = tail_parse_args(create_args(args)).unwrap_err();
+                assert_eq!(
+                    err.to_string(),
+                    format!("invalid number of lines: {}", locale_quote(token))
+                );
             }
         }
 

@@ -499,43 +499,18 @@ fn chroot_set_groups_from_str(groups: &str) -> CTResult<()> {
         return Ok(());
     }
 
-    // Rule 2 pipeline: split → trim → skip empty → parse.
     let mut groups_vec = vec![];
-    let mut first_bad_raw: Option<&str> = None;
 
     for raw_group in groups.split(',') {
-        let group = raw_group.trim();
-        if group.is_empty() {
-            // Remember the first empty/whitespace-only token for a potential error
-            // message, but don't error yet – consecutive commas are allowed by GNU.
-            if first_bad_raw.is_none() {
-                first_bad_raw = Some(raw_group);
-            }
+        if raw_group.is_empty() {
             continue;
         }
-        // Reset bad-token sentinel: we found at least one real token.
-        first_bad_raw = None;
-        let gid = if let Some(id_str) = group.strip_prefix('+') {
-            // '+' prefix forces strict numeric-ID resolution, bypassing NSS.
-            id_str
-                .parse::<libc::gid_t>()
-                .map_err(|_| ChrootError::NoSuchGroup(group.to_string()))?
-        } else {
-            match ct_entries::grp2gid(group) {
-                Ok(g) => g,
-                Err(_) => group
-                    .parse::<libc::gid_t>()
-                    .map_err(|_| ChrootError::NoSuchGroup(group.to_string()))?,
-            }
-        };
-        groups_vec.push(gid);
+
+        groups_vec.push(chroot_parse_supplementary_group(raw_group)?);
     }
 
-    // Rule 3: if the non-empty input produced zero valid groups, the entire
-    // value was whitespace or bare commas – report the first offending token.
     if groups_vec.is_empty() {
-        let bad = first_bad_raw.unwrap_or(groups);
-        return Err(ChrootError::NoSuchGroup(bad.to_string()).into());
+        return Err(ChrootError::InvalidGroupList(groups.to_string()).into());
     }
 
     let err = chroot_set_groups(&groups_vec);
@@ -543,6 +518,26 @@ fn chroot_set_groups_from_str(groups: &str) -> CTResult<()> {
         return Err(ChrootError::SetGroupsFailed(Error::last_os_error()).into());
     }
     Ok(())
+}
+
+fn chroot_parse_supplementary_group(group: &str) -> CTResult<libc::gid_t> {
+    let trimmed = group.trim();
+    let numeric_value = trimmed
+        .strip_prefix('+')
+        .unwrap_or(trimmed)
+        .parse::<libc::gid_t>();
+
+    if let Ok(gid) = numeric_value {
+        if !trimmed.starts_with('+') {
+            let group_name = group.trim_start();
+            if let Ok(named_gid) = ct_entries::grp2gid(group_name) {
+                return Ok(named_gid);
+            }
+        }
+        return Ok(gid);
+    }
+
+    ct_entries::grp2gid(group).map_err(|_| ChrootError::InvalidGroup(group.to_string()).into())
 }
 
 fn chroot_set_user(username: &str) -> CTResult<()> {

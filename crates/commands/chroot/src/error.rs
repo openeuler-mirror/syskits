@@ -31,6 +31,12 @@ pub enum ChrootError {
     /// The given user and group specification was invalid.
     InvalidUserspec(String),
 
+    /// The supplementary group list contains no group tokens.
+    InvalidGroupList(String),
+
+    /// A supplementary group token is invalid.
+    InvalidGroup(String),
+
     /// The new root directory was not given.
     MissingNewRoot,
 
@@ -82,6 +88,8 @@ impl Display for ChrootError {
                 write!(f, "failed to run command {}: {}", s.to_string().quote(), e,)
             }
             Self::InvalidUserspec(s) => write!(f, "invalid userspec: {}", s.quote(),),
+            Self::InvalidGroupList(s) => write!(f, "invalid group list {}", s.quote()),
+            Self::InvalidGroup(s) => write!(f, "invalid group {}", s.quote()),
             Self::MissingNewRoot => write!(
                 f,
                 "missing operand\nTry '{} --help' for more information.",
@@ -160,6 +168,17 @@ mod tests {
 
         assert_eq!(format!("{error}"), "invalid userspec: 'user:group'");
         assert_eq!(error.code(), 125);
+    }
+
+    #[test]
+    fn test_invalid_group_errors() {
+        let invalid_group = ChrootError::InvalidGroup("invalid group".into());
+        let invalid_list = ChrootError::InvalidGroupList(",".into());
+
+        assert_eq!(format!("{invalid_group}"), "invalid group 'invalid group'");
+        assert_eq!(format!("{invalid_list}"), "invalid group list ','");
+        assert_eq!(invalid_group.code(), 125);
+        assert_eq!(invalid_list.code(), 125);
     }
 
     #[test]

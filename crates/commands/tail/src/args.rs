@@ -470,25 +470,23 @@ pub fn tail_parse_obsolete(
 }
 
 fn tail_parse_num(src: &str) -> Result<TailSignum, ParseSizeError> {
-    let mut size_string = src.trim_start_matches(|c: char| c.is_ascii_whitespace());
+    let mut size_string = src;
     let mut starting_with = false;
 
-    if let Some(c) = size_string.chars().next() {
+    if let Some(c) = src.chars().next() {
         if c == '+' || c == '-' {
             // tail: '-' is not documented (8.32 man pages)
-            size_string = &size_string[1..];
             if c == '+' {
                 starting_with = true;
-                if size_string
-                    .chars()
-                    .next()
-                    .is_some_and(|c| c.is_ascii_whitespace())
-                {
-                    return Err(ParseSizeError::ParseFailure(src.quote().to_string()));
-                }
+                size_string = tail_strip_numeric_plus(size_string, src)?;
             } else {
+                size_string = &size_string[1..];
                 size_string = size_string.trim_start_matches(|c: char| c.is_ascii_whitespace());
+                size_string = tail_strip_numeric_plus(size_string, src)?;
             }
+        } else {
+            size_string = size_string.trim_start_matches(|c: char| c.is_ascii_whitespace());
+            size_string = tail_strip_numeric_plus(size_string, src)?;
         }
     }
 
@@ -506,6 +504,21 @@ fn tail_parse_num(src: &str) -> Result<TailSignum, ParseSizeError> {
             (n, false) => Ok(TailSignum::Negative(n)),
         },
         Err(err) => Err(err),
+    }
+}
+
+fn tail_strip_numeric_plus<'a>(value: &'a str, original: &str) -> Result<&'a str, ParseSizeError> {
+    if let Some(value_without_plus) = value.strip_prefix('+') {
+        if value_without_plus
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_whitespace())
+        {
+            return Err(ParseSizeError::ParseFailure(original.quote().to_string()));
+        }
+        Ok(value_without_plus)
+    } else {
+        Ok(value)
     }
 }
 
@@ -1069,6 +1082,55 @@ mod tests {
                     format!("invalid number of lines: {}", locale_quote(token))
                 );
             }
+        }
+
+        #[test]
+        fn test_leading_whitespace_does_not_enable_tail_sign_prefix() {
+            let line_error = tail_parse_args(create_args(&["-n", " -1"]))
+                .expect_err("a minus after leading whitespace is not a tail count prefix");
+            assert_eq!(
+                line_error.to_string(),
+                format!("invalid number of lines: {}", locale_quote(" -1"))
+            );
+
+            let byte_error = tail_parse_args(create_args(&["-c", " -1"]))
+                .expect_err("a minus after leading whitespace is not a tail byte prefix");
+            assert_eq!(byte_error.to_string(), "invalid number of bytes: ' -1'");
+
+            let line_options = tail_parse_args(create_args(&["-n", " +0"]))
+                .expect("a plus after leading whitespace is a numeric sign, not a tail prefix");
+            assert_eq!(
+                line_options.mode,
+                TailFilterMode::Lines(TailSignum::MinusZero, b'\n')
+            );
+
+            let byte_options = tail_parse_args(create_args(&["-c", " +0"]))
+                .expect("a plus after leading whitespace is a numeric sign, not a tail prefix");
+            assert_eq!(
+                byte_options.mode,
+                TailFilterMode::Bytes(TailSignum::MinusZero)
+            );
+
+            let minus_prefixed_numeric_plus = tail_parse_args(create_args(&["-n", "- +1"]))
+                .expect("GNU tail accepts a numeric plus after a tail minus prefix");
+            assert_eq!(
+                minus_prefixed_numeric_plus.mode,
+                TailFilterMode::Lines(TailSignum::Negative(1), b'\n')
+            );
+
+            let whitespace_number = tail_parse_args(create_args(&["-n", " 1"]))
+                .expect("GNU tail accepts leading whitespace before an unsigned count");
+            assert_eq!(
+                whitespace_number.mode,
+                TailFilterMode::Lines(TailSignum::Negative(1), b'\n')
+            );
+
+            let spaced_numeric_plus = tail_parse_args(create_args(&["-n", " + 1"]))
+                .expect_err("whitespace after a numeric plus remains invalid");
+            assert_eq!(
+                spaced_numeric_plus.to_string(),
+                format!("invalid number of lines: {}", locale_quote(" + 1"))
+            );
         }
 
         #[test]

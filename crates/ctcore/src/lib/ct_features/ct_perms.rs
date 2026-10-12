@@ -11,8 +11,8 @@
 
 //! Common functions to manage permissions
 
-use crate::ct_display::Quotable;
-use crate::ct_error::{CTResult, CtSimpleError, strip_errno};
+use crate::ct_display::{Quotable, locale_quote};
+use crate::ct_error::{CTResult, CTsageError, CtSimpleError, strip_errno};
 pub use crate::ct_features::ct_entries;
 use crate::ct_show_error;
 use clap::{Arg, ArgMatches, Command, builder::OsStringValueParser};
@@ -944,7 +944,7 @@ pub fn chown_base(
         command = command.arg(
             Arg::new(add_arg_if_not_reference)
                 .value_name(add_arg_if_not_reference)
-                .required(true),
+                .required(false),
         );
     }
     command = command.arg(
@@ -953,7 +953,7 @@ pub fn chown_base(
             .value_hint(clap::ValueHint::FilePath)
             .value_parser(OsStringValueParser::new())
             .action(clap::ArgAction::Append)
-            .required(true)
+            .required(false)
             .num_args(1..),
     );
     let matches = command.try_get_matches_from(args)?;
@@ -962,6 +962,17 @@ pub fn chown_base(
         .get_many::<OsString>(opt_flags::ARG_FILES)
         .map(|v| v.cloned().collect())
         .unwrap_or_default();
+
+    if files.is_empty() {
+        let message = if reference {
+            "missing operand".to_owned()
+        } else if let Some(group) = matches.get_one::<String>(add_arg_if_not_reference) {
+            format!("missing operand after {}", locale_quote(group))
+        } else {
+            "missing operand".to_owned()
+        };
+        return Err(CTsageError::new(libc::EXIT_FAILURE, message));
+    }
 
     let preserve_root = matches.get_flag(opt_flags::preserve_root::PRESERVE);
 

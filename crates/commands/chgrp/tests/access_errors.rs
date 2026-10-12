@@ -75,3 +75,49 @@ fn chgrp_reports_one_error_for_an_inaccessible_recursive_directory() {
         "chgrp: cannot access 'd/no-x/y': Permission denied\n"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn chgrp_reports_recursive_unreadable_directories_like_gnu() {
+    use std::fs::{self, Permissions};
+    use std::os::unix::{fs::PermissionsExt, process::CommandExt};
+    use std::process::Command;
+    use tempfile::tempdir;
+
+    if unsafe { ctcore::libc::geteuid() } != 0 {
+        return;
+    }
+
+    let temp = tempdir().expect("create temporary directory");
+    let tree = temp.path().join("d");
+    let unreadable = tree.join("no-read");
+    fs::create_dir_all(&unreadable).expect("create tree");
+    fs::set_permissions(temp.path(), Permissions::from_mode(0o755))
+        .expect("make temporary directory searchable");
+
+    let ownership = Command::new("chown")
+        .args(["-R", "65534:65534"])
+        .arg(&tree)
+        .status()
+        .expect("make nobody own the tree");
+    assert!(ownership.success());
+    fs::set_permissions(&unreadable, Permissions::from_mode(0o011))
+        .expect("remove directory read permission");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_chgrp"))
+        .current_dir(temp.path())
+        .env("LC_ALL", "C")
+        .arg0("chgrp")
+        .uid(65534)
+        .gid(65534)
+        .args(["-R", "65534", "d"])
+        .output()
+        .expect("run chgrp as nobody");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stderr).expect("stderr is UTF-8"),
+        "chgrp: cannot read directory 'd/no-read': Permission denied\n"
+    );
+}

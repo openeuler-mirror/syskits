@@ -62,12 +62,9 @@ pub fn chroot_main(args: impl ctcore::Args) -> CTResult<()> {
     let skip_chdir = args_match.get_flag(opt_flags::SKIP_CHDIR);
 
     // 如果启用了跳过更改目录且新的根目录不是根目录，则返回错误
-    if skip_chdir
-        && canonicalize(new_root, MissingHandling::Normal, ResolveMode::Logical)
-            .unwrap()
-            .to_str()
-            != Some("/")
-    {
+    let is_old_root = canonicalize(new_root, MissingHandling::Normal, ResolveMode::Logical)
+        .is_ok_and(|resolved| resolved == Path::new("/"));
+    if skip_chdir && !is_old_root {
         return Err(CTsageError::new(
             125,
             "option --skip-chdir only permitted if NEWROOT is old '/'",

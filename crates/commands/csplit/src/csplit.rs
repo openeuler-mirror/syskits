@@ -814,10 +814,10 @@ fn reject_incompatible_options(args: &[OsString], usage_name: &str) -> CTResult<
             break;
         }
         if arg.starts_with("--") {
-            let name = arg[2..]
-                .split('=')
-                .next()
-                .expect("split always yields a part");
+            let long = &arg[2..];
+            let (name, value) = long
+                .split_once('=')
+                .map_or((long, None), |(name, value)| (name, Some(value)));
             let matches = gnu_long_option_matches(name);
             if matches.len() > 1 {
                 let possibilities = matches
@@ -834,6 +834,20 @@ fn reject_incompatible_options(args: &[OsString], usage_name: &str) -> CTResult<
                 return Err(csplit_usage_error(
                     usage_name,
                     format!("unrecognized option '{arg}'"),
+                ));
+            }
+            let option = matches[0];
+            if value.is_some() && !gnu_long_option_requires_value(option) {
+                return Err(csplit_usage_error(
+                    usage_name,
+                    format!("option '--{option}' doesn't allow an argument"),
+                ));
+            }
+            if value.is_none() && gnu_long_option_requires_value(option) && index + 1 == args.len()
+            {
+                return Err(csplit_usage_error(
+                    usage_name,
+                    format!("option '--{option}' requires an argument"),
                 ));
             }
             index += 1;
@@ -874,6 +888,10 @@ fn gnu_long_option_matches(name: &str) -> Vec<&'static str> {
         .copied()
         .filter(|option| option.starts_with(name))
         .collect()
+}
+
+fn gnu_long_option_requires_value(option: &str) -> bool {
+    matches!(option, "digits" | "prefix" | "suffix-format")
 }
 
 #[derive(Default)]

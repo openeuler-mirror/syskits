@@ -24,6 +24,7 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::fs::metadata;
 use std::io::{self, IsTerminal, Read, Write};
+use std::path::Path;
 use sys_locale::get_locale;
 use thiserror::Error;
 rust_i18n::i18n!("locales", fallback = "en-US");
@@ -204,9 +205,13 @@ pub fn cat_main(args: impl ctcore::Args) -> CTResult<()> {
     let args = args.collect::<Vec<_>>();
     match parse_cat_args(&args)? {
         CatAction::Run(options, files) => cat_files_info(&files, &options),
-        CatAction::Help | CatAction::Version => {
-            let _ = ct_app().try_get_matches_from(args)?;
-            unreachable!("clap help and version actions always return an error")
+        CatAction::Help => {
+            println!("{}", cat_help_text(&cat_usage_name(&args)));
+            Ok(())
+        }
+        CatAction::Version => {
+            println!("{}", cat_version_text(&cat_program_name(&args)));
+            Ok(())
         }
     }
 }
@@ -478,6 +483,60 @@ fn cat_usage_error(usage_name: &str, message: String) -> Box<dyn ctcore::ct_erro
     CtSimpleError::new(
         1,
         format!("{message}\nTry '{usage_name} --help' for more information."),
+    )
+}
+
+fn cat_program_name(args: &[OsString]) -> String {
+    let usage_name = cat_usage_name(args);
+
+    Path::new(&usage_name)
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .filter(|name| !name.is_empty())
+        .unwrap_or(usage_name)
+}
+
+fn cat_help_text(usage_name: &str) -> String {
+    format!(
+        "\
+Usage: {usage_name} [OPTION]... [FILE]...
+Concatenate FILE(s) to standard output.
+
+With no FILE, or when FILE is -, read standard input.
+
+  -A, --show-all           equivalent to -vET
+  -b, --number-nonblank    number nonempty output lines, overrides -n
+  -e                       equivalent to -vE
+  -E, --show-ends          display $ at end of each line
+  -n, --number             number all output lines
+  -s, --squeeze-blank      suppress repeated empty output lines
+  -t                       equivalent to -vT
+  -T, --show-tabs          display TAB characters as ^I
+  -u                       (ignored)
+  -v, --show-nonprinting   use ^ and M- notation, except for LFD and TAB
+      --help        display this help and exit
+      --version     output version information and exit
+
+Examples:
+  {usage_name} f - g  Output f's contents, then standard input, then g's contents.
+  {usage_name}        Copy standard input to standard output.
+
+GNU coreutils online help: <https://www.gnu.org/software/coreutils/>
+Report any translation bugs to <https://translationproject.org/team/>
+Full documentation <https://www.gnu.org/software/coreutils/cat>
+or available locally via: info '(coreutils) cat invocation'"
+    )
+}
+
+fn cat_version_text(program_name: &str) -> String {
+    format!(
+        "\
+{program_name} (syskits) {}
+Copyright (C) 2022-2025 China Telecom Cloud Technologies Co., Ltd.
+License Mulan PSL v2: <http://license.coscl.org.cn/MulanPSL2>.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.",
+        crate_version!()
     )
 }
 
@@ -1192,10 +1251,11 @@ pub fn cat_native_semantic(args: impl ctcore::Args) -> CTResult<CatSemantic> {
     let args = args.collect::<Vec<_>>();
     match parse_cat_args(&args)? {
         CatAction::Run(options, files) => Ok(cat_semantic_from_invocation(&files, &options)),
-        CatAction::Help | CatAction::Version => {
-            let _ = ct_app().try_get_matches_from(args)?;
-            unreachable!("clap help and version actions always return an error")
-        }
+        CatAction::Help => Err(CtSimpleError::new(0, cat_help_text(&cat_usage_name(&args)))),
+        CatAction::Version => Err(CtSimpleError::new(
+            0,
+            cat_version_text(&cat_program_name(&args)),
+        )),
     }
 }
 
@@ -1239,7 +1299,7 @@ mod tests {
 
         // 测试 execute 方法
         let args = vec![OsString::from("cat"), OsString::from("--version")];
-        assert!(tool.execute(&args).is_err());
+        assert!(tool.execute(&args).is_ok());
     }
 
     // Usage: target/debug/syskits cat [OPTION]... [FILE]...
@@ -1293,6 +1353,35 @@ mod tests {
         let result = command.try_get_matches_from(help_args);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+    }
+
+    #[test]
+    fn test_gnu_help_and_version_text() {
+        let help = match cat_native_semantic(
+            [OsString::from("cat"), OsString::from("--help")].into_iter(),
+        ) {
+            Ok(_) => panic!("help should be represented as an exit-zero semantic error"),
+            Err(err) => err,
+        };
+        assert_eq!(help.code(), 0);
+        assert!(
+            help.to_string()
+                .starts_with("Usage: cat [OPTION]... [FILE]...\n")
+        );
+        assert!(
+            help.to_string()
+                .contains("      --help        display this help and exit")
+        );
+        assert!(!help.to_string().contains("-h, --help"));
+
+        let version = match cat_native_semantic(
+            [OsString::from("cat"), OsString::from("--version")].into_iter(),
+        ) {
+            Ok(_) => panic!("version should be represented as an exit-zero semantic error"),
+            Err(err) => err,
+        };
+        assert_eq!(version.code(), 0);
+        assert!(version.to_string().starts_with("cat (syskits) "));
     }
 
     #[test]

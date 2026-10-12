@@ -203,7 +203,10 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
             } else {
                 csplit_patterns.push(CsplitPattern::SkipToMatch(pattern, offset, execute_n_times));
             }
-        } else if let Ok(line_number) = arg.parse::<usize>() {
+        } else if let Ok(line_number) = arg
+            .trim_start_matches(|character: char| character.is_ascii_whitespace())
+            .parse::<usize>()
+        {
             // 如果参数是行号，构建相应的行号模式
             csplit_patterns.push(CsplitPattern::UpToLine(line_number, execute_n_times));
         } else {
@@ -555,6 +558,16 @@ mod tests {
         assert!(matches!(
             patterns.first(),
             Some(CsplitPattern::UpToMatch(pattern, 0, _)) if pattern.as_str().is_empty()
+        ));
+    }
+
+    #[test]
+    fn test_line_number_allows_leading_whitespace() {
+        let input = vec![" \t+24".to_string()];
+        let patterns = get_patterns(&input).unwrap();
+        assert!(matches!(
+            patterns.first(),
+            Some(CsplitPattern::UpToLine(24, _))
         ));
     }
 

@@ -989,6 +989,52 @@ fn gnu_long_option_argument_message(args: &[OsString], command: &Command) -> Opt
     None
 }
 
+fn normalize_reference_option_argument(args: &[OsString], command: &Command) -> Vec<OsString> {
+    let mut normalized = Vec::with_capacity(args.len());
+    let mut index = 0;
+
+    while index < args.len() {
+        let arg = &args[index];
+        if index == 0 {
+            normalized.push(arg.clone());
+            index += 1;
+            continue;
+        }
+
+        let Some(arg) = arg.to_str() else {
+            normalized.push(args[index].clone());
+            index += 1;
+            continue;
+        };
+        if arg == "--" {
+            normalized.extend_from_slice(&args[index..]);
+            break;
+        }
+        let Some(long_option) = arg.strip_prefix("--") else {
+            normalized.push(args[index].clone());
+            index += 1;
+            continue;
+        };
+        if long_option.contains('=')
+            || find_long_option(command, long_option)
+                .is_none_or(|argument| argument.get_long() != Some(opt_flags::REFERENCE))
+            || index + 1 == args.len()
+            || !args[index + 1].as_os_str().as_bytes().starts_with(b"-")
+        {
+            normalized.push(args[index].clone());
+            index += 1;
+            continue;
+        }
+
+        let mut option = OsString::from("--reference=");
+        option.push(&args[index + 1]);
+        normalized.push(option);
+        index += 2;
+    }
+
+    normalized
+}
+
 fn gnu_unknown_option_message(args: &[OsString], command: &Command) -> Option<String> {
     for argument in args.iter().skip(1) {
         let arg = argument.to_str()?;
@@ -1065,7 +1111,8 @@ pub fn ownership_change_base(
     if let Some(message) = gnu_long_option_argument_message(&args, &command_for_errors) {
         return Err(CTsageError::new(libc::EXIT_FAILURE, message));
     }
-    let matches = match command.try_get_matches_from(args.clone()) {
+    let normalized_args = normalize_reference_option_argument(&args, &command_for_errors);
+    let matches = match command.try_get_matches_from(normalized_args) {
         Ok(matches) => matches,
         Err(error) if error.kind() == clap::error::ErrorKind::UnknownArgument => {
             if let Some(message) = gnu_unknown_option_message(&args, &command_for_errors) {

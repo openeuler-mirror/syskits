@@ -659,6 +659,8 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
     // 使用 clap 库解析命令行参数
     let args_match = ct_app().try_get_matches_from(args)?;
 
+    let csplit_opts = CsplitOptions::new(&args_match);
+
     // 获取待拆分的文件名
     let filename = args_match
         .get_one::<String>(opt_flags::FILE)
@@ -675,8 +677,6 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
             format!("missing operand after {}", locale_quote(filename)),
         ));
     }
-    let csplit_opts = CsplitOptions::new(&args_match);
-
     // 根据文件名是标准输入还是文件路径，来决定如何处理文件
     if filename == "-" {
         // 处理标准输入
@@ -754,6 +754,7 @@ fn csplit_args_init() -> Vec<Arg> {
             .short('n')
             .long(opt_flags::DIGITS)
             .value_name("DIGITS")
+            .allow_hyphen_values(true)
             .help(t!("csplit.clap.digits")),
         Arg::new(opt_flags::QUIET)
             .short('q')

@@ -10,6 +10,7 @@
  */
 
 use ctcore::ct_format::{Format, FormatError, num_format::UnsignedInt};
+use std::num::IntErrorKind;
 
 use crate::csplit_error::CsplitError;
 
@@ -44,11 +45,7 @@ impl SplitName {
         let prefix_opt_str = prefix_opt_strs.unwrap_or_else(|| "xx".to_string());
 
         let n_digits = n_digits_opt_strs
-            .map(|opt| {
-                opt.trim_start_matches(|character: char| character.is_ascii_whitespace())
-                    .parse::<usize>()
-                    .map_err(|_| CsplitError::InvalidNumber(opt))
-            })
+            .map(parse_digits)
             .transpose()?
             .unwrap_or(2);
 
@@ -76,6 +73,36 @@ impl SplitName {
         self.format.fmt(&mut v, n as u64).unwrap();
         String::from_utf8_lossy(&v).to_string()
     }
+}
+
+fn parse_digits(option: String) -> Result<usize, CsplitError> {
+    let value = option.trim_start_matches(|character: char| character.is_ascii_whitespace());
+    let digits = match value.parse::<i64>() {
+        Ok(digits) => digits,
+        Err(error)
+            if matches!(
+                error.kind(),
+                IntErrorKind::PosOverflow | IntErrorKind::NegOverflow
+            ) =>
+        {
+            return Err(CsplitError::InvalidNumberTooLarge(option));
+        }
+        Err(_) => return Err(CsplitError::InvalidNumber(option)),
+    };
+
+    if digits < 0 {
+        // This mirrors GNU xdectoimax's ERANGE versus EOVERFLOW threshold.
+        return Err(if digits < i64::from(i32::MIN) / 2 {
+            CsplitError::InvalidNumberTooLarge(option)
+        } else {
+            CsplitError::InvalidNumberOutOfRange(option)
+        });
+    }
+    if digits > i64::from(i32::MAX) {
+        return Err(CsplitError::InvalidNumberTooLarge(option));
+    }
+
+    Ok(digits as usize)
 }
 
 fn validate_suffix_format(format: &str) -> Result<(), CsplitError> {
@@ -240,6 +267,24 @@ mod tests {
             Err(CsplitError::InvalidNumber(_)) => (),
             _ => panic!("should fail with InvalidNumber"),
         };
+    }
+
+    #[test]
+    fn digits_match_gnu_range_rules() {
+        assert!(SplitName::new(None, None, Some("-0".into())).is_ok());
+        assert!(SplitName::new(None, None, Some("+2".into())).is_ok());
+        assert!(matches!(
+            SplitName::new(None, None, Some("-1".into())),
+            Err(CsplitError::InvalidNumberOutOfRange(_))
+        ));
+        assert!(matches!(
+            SplitName::new(None, None, Some("-2147483648".into())),
+            Err(CsplitError::InvalidNumberTooLarge(_))
+        ));
+        assert!(matches!(
+            SplitName::new(None, None, Some("2147483648".into())),
+            Err(CsplitError::InvalidNumberTooLarge(_))
+        ));
     }
 
     #[test]

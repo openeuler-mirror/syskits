@@ -373,3 +373,25 @@ fn chroot_reports_command_execution_errors_without_rust_errno_suffixes() {
         );
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn chroot_propagates_signal_exit_status_like_gnu() {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+
+    if unsafe { libc::geteuid() } != 0 {
+        return;
+    }
+
+    for (signal, expected_status) in [("TERM", 143), ("KILL", 137), ("INT", 130)] {
+        let output = Command::new(env!("CARGO_BIN_EXE_chroot"))
+            .env("LC_ALL", "C")
+            .arg0("chroot")
+            .args(["/", "/bin/sh", "-c", &format!("kill -{signal} $$")])
+            .output()
+            .expect("run chroot");
+
+        assert_eq!(output.status.code(), Some(expected_status));
+    }
+}

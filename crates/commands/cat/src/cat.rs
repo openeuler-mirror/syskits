@@ -49,6 +49,9 @@ enum CatError {
     /// Wrapper around `io::Error`
     #[error("{0}")]
     Io(#[from] io::Error),
+    /// An error while writing transformed or copied bytes to stdout.
+    #[error("{0}")]
+    Write(io::Error),
     /// Wrapper around `nix::Error`
     #[cfg(target_os = "linux")]
     #[error("{0}")]
@@ -566,11 +569,8 @@ fn cat_handle<R: CatFdReadable>(
     output_options: &CatOutputOptions,
     output_state: &mut CatOutputState,
 ) -> CatResult<()> {
-    if output_options.cat_can_write_fast() {
-        cat_write_fast(input_handle)
-    } else {
-        cat_write_lines(input_handle, output_options, output_state)
-    }
+    let mut cat_stdout = cat_stdout_file()?;
+    cat_handle_to_writer(input_handle, output_options, output_state, &mut cat_stdout)
 }
 
 fn cat_handle_to_writer<R: CatFdReadable, W: Write>(
@@ -584,6 +584,11 @@ fn cat_handle_to_writer<R: CatFdReadable, W: Write>(
     } else {
         cat_write_lines_to_writer(input_handle, output_options, output_state, cat_writer)
     }
+}
+
+fn cat_stdout_file() -> CatResult<File> {
+    let stdout = io::stdout();
+    Ok(ctcore::ct_io::CtOwnedFileDescriptorOrHandle::from(&stdout)?.into_file())
 }
 
 /**
@@ -751,8 +756,13 @@ fn render_cat_file_error(file_path: &OsStr, err: &CatError) -> String {
             format!("cat: {quoted_path}: input file is output file\n")
         }
         CatError::Io(io_err) => format!("cat: {quoted_path}: {}\n", strip_errno(io_err)),
+        CatError::Write(io_err) => render_cat_write_error(io_err),
         other => format!("cat: {quoted_path}: {other}\n"),
     }
+}
+
+fn render_cat_write_error(err: &io::Error) -> String {
+    format!("cat: write error: {}\n", strip_errno(err))
 }
 
 fn cat_files_to_writer<W: Write, S: AsRef<OsStr>>(
@@ -779,13 +789,20 @@ fn cat_files_to_writer<W: Write, S: AsRef<OsStr>>(
             output_info.as_ref(),
             cat_writer,
         ) {
+            let stop_processing = matches!(&err, CatError::Write(_));
             exit_code = 1;
             stderr_text.push_str(&render_cat_file_error(input_path, &err));
+            if stop_processing {
+                break;
+            }
         }
     }
 
     if output_state.skipped_carriage_return {
-        let _ = cat_writer.write_all(b"\r");
+        if let Err(err) = cat_writer.write_all(b"\r").and_then(|_| cat_writer.flush()) {
+            exit_code = 1;
+            stderr_text.push_str(&render_cat_write_error(&err));
+        }
     }
 
     CatRunOutcome {
@@ -821,13 +838,23 @@ fn cat_files_info<S: AsRef<OsStr>>(
             &mut output_state,
             output_info.as_ref(),
         ) {
+            let stop_processing = matches!(&err, CatError::Write(_));
             set_ct_exit_code(1);
             stderr_text.push_str(&render_cat_file_error(input_path, &err));
+            if stop_processing {
+                break;
+            }
         }
     }
 
     if output_state.skipped_carriage_return {
-        print!("\r");
+        if let Err(err) = cat_write_pending_carriage_return() {
+            set_ct_exit_code(1);
+            match err {
+                CatError::Write(io_err) => stderr_text.push_str(&render_cat_write_error(&io_err)),
+                other => stderr_text.push_str(&format!("cat: {other}\n")),
+            }
+        }
     }
 
     if stderr_text.is_empty() {
@@ -836,6 +863,12 @@ fn cat_files_info<S: AsRef<OsStr>>(
         eprint!("{stderr_text}");
         Err(CtSimpleError::new(1, String::new()))
     }
+}
+
+fn cat_write_pending_carriage_return() -> CatResult<()> {
+    let mut writer = cat_stdout_file()?;
+    writer.write_all(b"\r").map_err(CatError::Write)?;
+    writer.flush().map_err(CatError::Write)
 }
 
 /// Classifies the `InputType` of file at `path` if possible
@@ -881,14 +914,6 @@ fn cat_get_input_type(input_path: &OsStr) -> CatResult<CatInputType> {
     }
 }
 
-/// Writes handle to stdout with no configuration. This allows a
-/// simple memory copy.
-fn cat_write_fast<R: CatFdReadable>(input_handle: &mut CatInputHandle<R>) -> CatResult<()> {
-    let stdout_info = io::stdout();
-    let mut cat_stdout_lock = stdout_info.lock();
-    cat_write_fast_to_writer(input_handle, &mut cat_stdout_lock)
-}
-
 fn cat_write_fast_to_writer<R: CatFdReadable, W: Write>(
     input_handle: &mut CatInputHandle<R>,
     cat_writer: &mut W,
@@ -903,26 +928,11 @@ fn cat_write_fast_to_writer<R: CatFdReadable, W: Write>(
         if n == 0 {
             break;
         }
-        cat_writer.write_all(&buffer[..n])?;
+        cat_writer
+            .write_all(&buffer[..n])
+            .map_err(CatError::Write)?;
     }
-    Ok(())
-}
-
-/// Outputs file contents to stdout in a line-by-line fashion,
-/// propagating any errors that might occur.
-fn cat_write_lines<R: CatFdReadable>(
-    input_handle: &mut CatInputHandle<R>,
-    output_options: &CatOutputOptions,
-    output_state: &mut CatOutputState,
-) -> CatResult<()> {
-    let stdout_info = io::stdout();
-    let mut stdout_writer = stdout_info.lock();
-    cat_write_lines_to_writer(
-        input_handle,
-        output_options,
-        output_state,
-        &mut stdout_writer,
-    )
+    cat_writer.flush().map_err(CatError::Write)
 }
 
 fn cat_write_lines_to_writer<R: CatFdReadable, W: Write>(
@@ -957,19 +967,20 @@ fn cat_write_lines_to_writer<R: CatFdReadable, W: Write>(
                 continue;
             }
             if output_state.skipped_carriage_return {
-                stdout_writer.write_all(b"\r")?;
+                stdout_writer.write_all(b"\r").map_err(CatError::Write)?;
                 output_state.skipped_carriage_return = false;
                 output_state.at_line_start = false;
             }
             // 重置空行保留状态，因为我们遇到了非空行内容
             output_state.one_blank_kept = false;
             if output_state.at_line_start && output_options.num_mode != CatNumberingMode::None {
-                write!(stdout_writer, "{0:6}\t", output_state.line_number)?;
+                write!(stdout_writer, "{0:6}\t", output_state.line_number)
+                    .map_err(CatError::Write)?;
                 output_state.line_number += 1;
             }
 
             // 打印至行尾或缓冲区尾部。
-            let offset = cat_write_end(&mut stdout_writer, &in_buffer[position..], output_options);
+            let offset = cat_write_end(&mut stdout_writer, &in_buffer[position..], output_options)?;
 
             // 是否已到达缓冲区尾部？
             if offset + position == in_buffer.len() {
@@ -983,9 +994,9 @@ fn cat_write_lines_to_writer<R: CatFdReadable, W: Write>(
                 {
                     // 这是\r\n序列，作为一个完整的换行处理
                     if output_options.show_ends {
-                        stdout_writer.write_all(b"^M")?;
+                        stdout_writer.write_all(b"^M").map_err(CatError::Write)?;
                     } else {
-                        stdout_writer.write_all(b"\r")?;
+                        stdout_writer.write_all(b"\r").map_err(CatError::Write)?;
                     }
                     cat_write_end_of_line(
                         &mut stdout_writer,
@@ -1011,7 +1022,7 @@ fn cat_write_lines_to_writer<R: CatFdReadable, W: Write>(
         }
     }
 
-    Ok(())
+    stdout_writer.flush().map_err(CatError::Write)
 }
 
 // 当启用show_ends时，将\r后跟\n打印为^M，以便\r\n显示为^M$。
@@ -1031,9 +1042,9 @@ fn cat_write_new_line<W: Write>(
     // 如果之前跳过了回车符，需要先处理它
     if output_state.skipped_carriage_return {
         if output_options.show_ends {
-            cat_writer.write_all(b"^M")?;
+            cat_writer.write_all(b"^M").map_err(CatError::Write)?;
         } else {
-            cat_writer.write_all(b"\r")?;
+            cat_writer.write_all(b"\r").map_err(CatError::Write)?;
         }
         output_state.skipped_carriage_return = false;
     }
@@ -1050,15 +1061,17 @@ fn cat_write_new_line<W: Write>(
 
     // 如果处于行首且要求对所有行编号，则写入行号
     if output_state.at_line_start && output_options.num_mode == CatNumberingMode::All {
-        write!(cat_writer, "{0:6}\t", output_state.line_number)?;
+        write!(cat_writer, "{0:6}\t", output_state.line_number).map_err(CatError::Write)?;
         output_state.line_number += 1;
     }
 
     // 根据选项，写入行尾标记
-    cat_writer.write_all(output_options.cat_end_of_line().as_bytes())?;
+    cat_writer
+        .write_all(output_options.cat_end_of_line().as_bytes())
+        .map_err(CatError::Write)?;
     // 如果处于交互模式，刷新输出
     if is_interactive {
-        cat_writer.flush()?;
+        cat_writer.flush().map_err(CatError::Write)?;
     }
     Ok(())
 }
@@ -1070,7 +1083,7 @@ fn cat_write_end<W: Write>(
     cat_writer: &mut W,
     in_buffer: &[u8],
     output_options: &CatOutputOptions,
-) -> usize {
+) -> CatResult<usize> {
     // 根据选项决定如何处理并写入数据
     if output_options.show_non_print {
         // 如果显示非打印字符，则调用相应函数处理并写入
@@ -1099,18 +1112,20 @@ fn cat_write_end<W: Write>(
  * # 返回值
  * 返回值为写入的字节数。
  */
-fn cat_write_to_end<W: Write>(in_buffer: &[u8], cat_writer: &mut W) -> usize {
+fn cat_write_to_end<W: Write>(in_buffer: &[u8], cat_writer: &mut W) -> CatResult<usize> {
     // 查找缓冲区中第一个换行符或回车符的位置
     match in_buffer.iter().position(|c| *c == b'\n' || *c == b'\r') {
         Some(p) => {
             // 如果找到了换行符或回车符，将从缓冲区起始位置到该位置的字节写入写入器
-            cat_writer.write_all(&in_buffer[..p]).unwrap();
-            p // 返回写入的字节数
+            cat_writer
+                .write_all(&in_buffer[..p])
+                .map_err(CatError::Write)?;
+            Ok(p) // 返回写入的字节数
         }
         None => {
             // 如果没有找到换行符或回车符，将整个缓冲区的字节写入写入器
-            cat_writer.write_all(in_buffer).unwrap();
-            in_buffer.len() // 返回写入的字节数（即整个缓冲区的长度）
+            cat_writer.write_all(in_buffer).map_err(CatError::Write)?;
+            Ok(in_buffer.len()) // 返回写入的字节数（即整个缓冲区的长度）
         }
     }
 }
@@ -1121,7 +1136,7 @@ fn cat_write_to_end<W: Write>(in_buffer: &[u8], cat_writer: &mut W) -> usize {
  * - 对于换行符或回车符，停止处理当前行，并返回已处理字符的数量。
  *
  */
-fn cat_write_tab_to_end<W: Write>(mut in_buffer: &[u8], cat_writer: &mut W) -> usize {
+fn cat_write_tab_to_end<W: Write>(mut in_buffer: &[u8], cat_writer: &mut W) -> CatResult<usize> {
     let mut count = 0; // 已处理字符计数器。
 
     loop {
@@ -1132,22 +1147,24 @@ fn cat_write_tab_to_end<W: Write>(mut in_buffer: &[u8], cat_writer: &mut W) -> u
         {
             Some(p) => {
                 // 写入找到特殊字符之前的切片内容。
-                cat_writer.write_all(&in_buffer[..p]).unwrap();
+                cat_writer
+                    .write_all(&in_buffer[..p])
+                    .map_err(CatError::Write)?;
 
                 if in_buffer[p] == b'\t' {
                     // 如果找到的是制表符，替换为"^I"并继续处理后续字符。
-                    cat_writer.write_all(b"^I").unwrap();
+                    cat_writer.write_all(b"^I").map_err(CatError::Write)?;
                     in_buffer = &in_buffer[p + 1..];
                     count += p + 1;
                 } else {
                     // 如果找到的是换行符或回车符，停止处理当前行。
-                    return count + p;
+                    return Ok(count + p);
                 }
             }
             None => {
                 // 如果切片中没有特殊字符，一次性写入全部内容并返回。
-                cat_writer.write_all(in_buffer).unwrap();
-                return count + in_buffer.len();
+                cat_writer.write_all(in_buffer).map_err(CatError::Write)?;
+                return Ok(count + in_buffer.len());
             }
         };
     }
@@ -1166,7 +1183,7 @@ fn cat_write_non_print_to_end<W: Write>(
     in_buffer: &[u8],
     cat_writer: &mut W,
     cat_tab: &[u8],
-) -> usize {
+) -> CatResult<usize> {
     let mut count = 0; // 用于记录已写入的字节数
 
     for c in in_buffer.iter().copied() {
@@ -1183,10 +1200,10 @@ fn cat_write_non_print_to_end<W: Write>(
             160..=254 => cat_writer.write_all(&[b'M', b'-', c - 128]), // 处理160-254范围的字符
             _ => cat_writer.write_all(b"M-^?"), // 对于其他未知字符，使用默认转义序列
         }
-        .unwrap(); // 确保写入操作成功
+        .map_err(CatError::Write)?;
         count += 1; // 增加处理的字节计数
     }
-    count
+    Ok(count)
 }
 
 fn cat_write_end_of_line<W: Write>(
@@ -1194,9 +1211,9 @@ fn cat_write_end_of_line<W: Write>(
     end_of_line: &[u8],
     is_interactive: bool,
 ) -> CatResult<()> {
-    cat_writer.write_all(end_of_line)?;
+    cat_writer.write_all(end_of_line).map_err(CatError::Write)?;
     if is_interactive {
-        cat_writer.flush()?;
+        cat_writer.flush().map_err(CatError::Write)?;
     }
     Ok(())
 }
@@ -1419,7 +1436,7 @@ mod tests {
         let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
         let in_buf = &[9u8];
         let tab = b"tab";
-        super::cat_write_non_print_to_end(in_buf, &mut writer, tab);
+        super::cat_write_non_print_to_end(in_buf, &mut writer, tab).unwrap();
         assert_eq!(writer.buffer(), tab);
     }
 
@@ -1625,7 +1642,7 @@ mod tests {
         let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
         let in_buf = b"\n";
         let tab = b"";
-        super::cat_write_non_print_to_end(in_buf, &mut writer, tab);
+        super::cat_write_non_print_to_end(in_buf, &mut writer, tab).unwrap();
         assert_eq!(writer.buffer().len(), 0);
     }
 
@@ -1665,7 +1682,7 @@ mod tests {
             let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
             let in_buf = &[byte];
             let tab = b"";
-            super::cat_write_non_print_to_end(in_buf, &mut writer, tab);
+            super::cat_write_non_print_to_end(in_buf, &mut writer, tab).unwrap();
             assert_eq!(writer.buffer(), [b'^', byte + 64]);
         }
     }
@@ -1940,7 +1957,7 @@ mod tests {
         let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
         let in_buf = &[9u8];
         let tab = b"tab";
-        super::cat_write_non_print_to_end(in_buf, &mut writer, tab);
+        super::cat_write_non_print_to_end(in_buf, &mut writer, tab).unwrap();
         assert_eq!(writer.buffer(), tab);
     }
 
@@ -1950,7 +1967,7 @@ mod tests {
             let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
             let in_buf = &[byte];
             let tab = b"";
-            super::cat_write_non_print_to_end(in_buf, &mut writer, tab);
+            super::cat_write_non_print_to_end(in_buf, &mut writer, tab).unwrap();
             assert_eq!(writer.buffer(), [b'^', byte + 64]);
         }
     }

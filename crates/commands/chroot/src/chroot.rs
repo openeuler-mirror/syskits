@@ -33,8 +33,6 @@ use std::process::ExitStatus;
 
 mod opt_flags {
     pub const NEWROOT: &str = "newroot";
-    pub const USER: &str = "user";
-    pub const GROUP: &str = "group";
     pub const GROUPS: &str = "groups";
     pub const USERSPEC: &str = "userspec";
     pub const COMMAND: &str = "command";
@@ -44,6 +42,9 @@ mod opt_flags {
 pub fn chroot_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args: Vec<_> = args.collect();
+
+    reject_unsupported_short_options(&args)?;
     // 尝试从 args 中获取匹配项，并在匹配失败时返回错误代码 125
     let args_match = ct_app().try_get_matches_from(args).with_exit_code(125)?;
 
@@ -163,18 +164,7 @@ fn args_init() -> Vec<Arg> {
             .hide(true)
             .required(true)
             .index(1),
-        Arg::new(opt_flags::USER)
-            .short('u')
-            .long(opt_flags::USER)
-            .help(t!("chroot.clap.user"))
-            .value_name("USER"),
-        Arg::new(opt_flags::GROUP)
-            .short('g')
-            .long(opt_flags::GROUP)
-            .help(t!("chroot.clap.group"))
-            .value_name("GROUP"),
         Arg::new(opt_flags::GROUPS)
-            .short('G')
             .long(opt_flags::GROUPS)
             .help(t!("chroot.clap.groups"))
             .action(ArgAction::Append)
@@ -183,8 +173,7 @@ fn args_init() -> Vec<Arg> {
             .long(opt_flags::USERSPEC)
             .help(
                 "Colon-separated user and group to switch to. \
-                     Same as -u USER -g GROUP. \
-                     Userspec has higher preference than -u and/or -g",
+                     User and group may be IDs or names.",
             )
             .action(ArgAction::Set)
             .overrides_with(opt_flags::USERSPEC)
@@ -203,17 +192,63 @@ fn args_init() -> Vec<Arg> {
             .hide(true)
             .index(2),
         Arg::new("help")
-            .short('h')
             .long("help")
             .help(t!("chroot.clap.help", default = "Print help"))
             .action(ArgAction::Help),
         Arg::new("version")
-            .short('V')
             .long("version")
             .help(t!("chroot.clap.version", default = "Print version"))
             .action(ArgAction::Version),
     ];
     args
+}
+
+/// GNU chroot has no short options.  Stop scanning at NEWROOT, because options
+/// after it belong to COMMAND and must be passed through unchanged.
+fn reject_unsupported_short_options(args: &[OsString]) -> CTResult<()> {
+    let mut index = 1;
+
+    while let Some(argument) = args.get(index) {
+        let Some(argument) = argument.to_str() else {
+            break;
+        };
+
+        if argument == "--" || argument == "-" || !argument.starts_with('-') {
+            break;
+        }
+
+        if let Some(long_option) = argument.strip_prefix("--") {
+            if long_option.is_empty() {
+                break;
+            }
+
+            let option_name = long_option
+                .split_once('=')
+                .map_or(long_option, |(name, _)| name);
+            if !long_option.contains('=') && gnu_option_takes_value(option_name) {
+                index += 1;
+            }
+        } else if let Some(short_options) = argument.strip_prefix('-')
+            && let Some(invalid) = short_options.chars().next()
+        {
+            return Err(CTsageError::new(
+                125,
+                format!("invalid option -- '{invalid}'"),
+            ));
+        }
+
+        index += 1;
+    }
+
+    Ok(())
+}
+
+fn gnu_option_takes_value(option_name: &str) -> bool {
+    [opt_flags::GROUPS, opt_flags::USERSPEC]
+        .iter()
+        .filter(|option| option.starts_with(option_name))
+        .count()
+        == 1
 }
 
 /**
@@ -228,10 +263,6 @@ fn args_init() -> Vec<Arg> {
  */
 fn chroot_set_context(root_path: &Path, args_option: &clap::ArgMatches) -> CTResult<()> {
     let user_spec_str = args_option.get_one::<String>(opt_flags::USERSPEC);
-    let arg_user = args_option.get_one::<String>(opt_flags::USER);
-    let arg_group = args_option
-        .get_one::<String>(opt_flags::GROUP)
-        .map(|s| s.as_str());
     let arg_groups = args_option
         .get_many::<String>(opt_flags::GROUPS)
         .and_then(|mut vals| vals.next_back())
@@ -245,15 +276,8 @@ fn chroot_set_context(root_path: &Path, args_option: &clap::ArgMatches) -> CTRes
         Err(value) => return value, // 如果解析失败，直接返回错误
     };
 
-    // 解析 --user，在 GNU 中 --user 同样支持 USER:GROUP 的语法
-    let user_arg_spec = match chroot_parse_user_spec(arg_user) {
-        Ok(value) => value,
-        Err(value) => return value,
-    };
-
-    // 智能合并解析结果：优先级 --userspec > --user > --group
-    let final_user = user_spec.0.or(user_arg_spec.0);
-    let final_group = user_spec.1.or(user_arg_spec.1).or(arg_group);
+    let final_user = user_spec.0;
+    let final_group = user_spec.1;
 
     // 进入新的根目录（如果配置中允许）
     chroot_enter(root_path, skip_chdir)?;
@@ -567,53 +591,49 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_app_user_short_flag() {
+        fn test_ct_app_user_prefix_maps_to_userspec() {
             let command = ct_app();
             let binding = String::from("path/to/newroot");
-            let args = vec![ctcore::ct_util_name(), &binding, "-u", "testuser"];
+            let args = vec![ctcore::ct_util_name(), "--user", "testuser", &binding];
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
             let matches = result.unwrap();
             assert_eq!(
-                matches.get_one::<String>(opt_flags::USER).unwrap(),
+                matches.get_one::<String>(opt_flags::USERSPEC).unwrap(),
                 "testuser"
             );
         }
 
         #[test]
-        fn test_ct_app_group_long_flag() {
+        fn test_ct_app_group_prefix_maps_to_groups() {
             let command = ct_app();
             let binding = String::from("path/to/newroot");
-            let args = vec![ctcore::ct_util_name(), &binding, "--group", "testgroup"];
-            let result = command.try_get_matches_from(args);
-
-            assert!(result.is_ok());
-            let matches = result.unwrap();
-            assert_eq!(
-                matches.get_one::<String>(opt_flags::GROUP).unwrap(),
-                "testgroup"
-            );
-        }
-
-        #[test]
-        fn test_ct_app_groups_short_flag() {
-            let command = ct_app();
-            let binding = String::from("path/to/newroot");
-            let args = vec![
-                ctcore::ct_util_name(),
-                &binding,
-                "-G",
-                "group1,group2,group3",
-            ];
+            let args = vec![ctcore::ct_util_name(), "--group", "testgroup", &binding];
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
             let matches = result.unwrap();
             assert_eq!(
                 matches.get_one::<String>(opt_flags::GROUPS).unwrap(),
-                "group1,group2,group3"
+                "testgroup"
             );
+        }
+
+        #[test]
+        fn test_ct_app_rejects_short_options() {
+            let command = ct_app();
+            let binding = String::from("path/to/newroot");
+            for option in ["-h", "-V", "-u", "-g", "-G"] {
+                let result = command.clone().try_get_matches_from([
+                    ctcore::ct_util_name(),
+                    option,
+                    &binding,
+                ]);
+
+                assert!(result.is_err());
+                assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+            }
         }
 
         #[test]
@@ -779,17 +799,13 @@ mod tests {
             let binding = String::from("path/to/newroot");
             let args = vec![
                 ctcore::ct_util_name(),
-                &binding,
-                "-g",
-                "testgroup",
                 "--groups",
                 "anothergroup",
                 "--groups",
                 "yetanothergroup",
-                "-u",
-                "testuser",
                 "--userspec",
                 "anotheruser:anothertestgroup",
+                &binding,
             ];
             let result = command.try_get_matches_from(args);
 
@@ -802,14 +818,12 @@ mod tests {
             let binding = String::from("path/to/newroot");
             let args = vec![
                 ctcore::ct_util_name(),
-                &binding,
                 "--userspec=0",
-                "-g",
-                "testgroup",
                 "--groups",
                 "anothergroup",
                 "--groups",
                 "yetanothergroup",
+                &binding,
             ];
             let result = command.try_get_matches_from(args);
 
@@ -838,13 +852,11 @@ mod tests {
             let binding = String::from("path/to/newroot");
             let args = vec![
                 ctcore::ct_util_name(),
-                &binding,
-                "-g",
-                "testgroup",
                 "--groups",
                 "anothergroup",
                 "--groups",
                 "yetanothergroup",
+                &binding,
             ];
             let result = command.try_get_matches_from(args);
 

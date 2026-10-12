@@ -28,23 +28,23 @@ pub enum ChrootError {
     /// Failed to find the specified command.
     CommandNotFound(String, Error),
 
-    /// The given user and group specification was invalid.
-    InvalidUserspec(String),
-
     /// The supplementary group list contains no group tokens.
     InvalidGroupList(String),
 
     /// A supplementary group token is invalid.
     InvalidGroup(String),
 
+    /// The user portion of --userspec is invalid.
+    InvalidUser,
+
+    /// The group portion of --userspec is invalid.
+    InvalidUserspecGroup,
+
     /// The new root directory was not given.
     MissingNewRoot,
 
-    /// Failed to find the specified group.
-    NoSuchGroup(String),
-
-    /// Failed to find the specified user.
-    NoSuchUser(String),
+    /// A numeric UID was given without a resolvable primary group.
+    NoGroupSpecifiedForUnknownUid(ctcore::libc::uid_t),
 
     /// The call to `setgid()` failed.
     SetGidFailed(String, Error),
@@ -87,16 +87,18 @@ impl Display for ChrootError {
             Self::CommandFailed(s, e) | Self::CommandNotFound(s, e) => {
                 write!(f, "failed to run command {}: {}", s.to_string().quote(), e,)
             }
-            Self::InvalidUserspec(s) => write!(f, "invalid userspec: {}", s.quote(),),
             Self::InvalidGroupList(s) => write!(f, "invalid group list {}", s.quote()),
             Self::InvalidGroup(s) => write!(f, "invalid group {}", s.quote()),
+            Self::InvalidUser => write!(f, "invalid user"),
+            Self::InvalidUserspecGroup => write!(f, "invalid group"),
             Self::MissingNewRoot => write!(
                 f,
                 "missing operand\nTry '{} --help' for more information.",
                 ctcore::ct_execute_phrase(),
             ),
-            Self::NoSuchGroup(s) => write!(f, "no such group: {}", s.maybe_quote(),),
-            Self::NoSuchUser(s) => write!(f, "no such user: {}", s.maybe_quote(),),
+            Self::NoGroupSpecifiedForUnknownUid(uid) => {
+                write!(f, "no group specified for unknown uid: {uid}")
+            }
             Self::SetGidFailed(s, e) => write!(f, "cannot set gid to {s}: {e}"),
             Self::SetGroupsFailed(e) => write!(f, "cannot set groups: {e}"),
             Self::SetUserFailed(s, e) => {
@@ -163,14 +165,6 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_userspec_error() {
-        let error = ChrootError::InvalidUserspec("user:group".into());
-
-        assert_eq!(format!("{error}"), "invalid userspec: 'user:group'");
-        assert_eq!(error.code(), 125);
-    }
-
-    #[test]
     fn test_invalid_group_errors() {
         let invalid_group = ChrootError::InvalidGroup("invalid group".into());
         let invalid_list = ChrootError::InvalidGroupList(",".into());
@@ -182,19 +176,19 @@ mod tests {
     }
 
     #[test]
-    fn test_no_such_group_error() {
-        let error = ChrootError::NoSuchGroup("unknown_group".into());
+    fn test_invalid_userspec_principal_errors() {
+        let unknown_uid = ChrootError::NoGroupSpecifiedForUnknownUid(12342);
 
-        assert_eq!(format!("{error}"), "no such group: unknown_group");
-        assert_eq!(error.code(), 125);
-    }
-
-    #[test]
-    fn test_no_such_user_error() {
-        let error = ChrootError::NoSuchUser("unknown_user".into());
-
-        assert_eq!(format!("{error}"), "no such user: unknown_user");
-        assert_eq!(error.code(), 125);
+        assert_eq!(format!("{}", ChrootError::InvalidUser), "invalid user");
+        assert_eq!(
+            format!("{}", ChrootError::InvalidUserspecGroup),
+            "invalid group"
+        );
+        assert_eq!(
+            format!("{unknown_uid}"),
+            "no group specified for unknown uid: 12342"
+        );
+        assert_eq!(unknown_uid.code(), 125);
     }
 
     #[test]
@@ -261,12 +255,6 @@ mod tests {
     }
 
     #[test]
-    fn test_code_for_invalid_userspec_error() {
-        let error = ChrootError::InvalidUserspec("user:group".into());
-        assert_eq!(error.code(), 125);
-    }
-
-    #[test]
     fn test_code_for_missing_new_root_error() {
         let error = ChrootError::MissingNewRoot;
         assert_eq!(
@@ -276,18 +264,6 @@ mod tests {
                 ctcore::ct_execute_phrase()
             )
         );
-        assert_eq!(error.code(), 125);
-    }
-
-    #[test]
-    fn test_code_for_no_such_group_error() {
-        let error = ChrootError::NoSuchGroup("unknown_group".into());
-        assert_eq!(error.code(), 125);
-    }
-
-    #[test]
-    fn test_code_for_no_such_user_error() {
-        let error = ChrootError::NoSuchUser("unknown_user".into());
         assert_eq!(error.code(), 125);
     }
 

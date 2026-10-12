@@ -11,7 +11,7 @@
 use std::io;
 use thiserror::Error;
 
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::{Quotable, locale_quote};
 use ctcore::ct_error::CTError;
 
 /// Errors thrown by the csplit command
@@ -50,8 +50,18 @@ pub enum CsplitError {
     RepeatCountMissingClosingBrace(String),
     #[error("{}: integer required between '{{' and '}}'", _0)]
     RepeatCountIntegerRequired(String),
-    #[error("invalid number: {}", ._0.quote())]
+    #[error("invalid number: {}", locale_quote(&._0))]
     InvalidNumber(String),
+    #[error(
+        "invalid number: {}: Numerical result out of range",
+        locale_quote(&._0)
+    )]
+    InvalidNumberOutOfRange(String),
+    #[error(
+        "invalid number: {}: Value too large for defined data type",
+        locale_quote(&._0)
+    )]
+    InvalidNumberTooLarge(String),
     #[error("missing % conversion specification in suffix")]
     SuffixFormatMissingConversion,
     #[error("missing conversion specifier in suffix")]
@@ -201,7 +211,13 @@ mod tests_csplit {
         use crate::csplit_error::CsplitError;
         let error = CsplitError::InvalidNumber("123".into());
 
-        assert_eq!(error.to_string(), "invalid number: \'123\'");
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "invalid number: {}",
+                ctcore::ct_display::locale_quote("123")
+            )
+        );
     }
 
     #[test]

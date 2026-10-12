@@ -8,7 +8,7 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Write;
 use std::io;
 
@@ -29,6 +29,9 @@ pub(crate) enum Error {
 
     #[error("{0}")]
     ArgumentsMismatch(String),
+
+    #[error("{0}")]
+    Diagnostic(String),
 
     #[error(transparent)]
     CommandLine(#[from] clap::Error),
@@ -53,7 +56,7 @@ pub(crate) enum Error {
     },
 }
 
-pub(crate) fn chcon_quote_operand(operand: &OsString) -> String {
+pub(crate) fn chcon_quote_operand(operand: &OsStr) -> String {
     match operand.to_str() {
         Some(operand) => locale_quote(operand),
         None => operand.quote().to_string(),

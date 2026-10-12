@@ -23,6 +23,10 @@ libc = { workspace = true }
 fts-sys = { workspace = true }
 rust-i18n = { workspace = true }
 sys-locale = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [[bin]]
 name = "chcon"
 path = "src/main.rs"

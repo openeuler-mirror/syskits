@@ -282,12 +282,10 @@ fn args_init() -> Vec<Arg> {
             .help(t!("cat.clap.ignored-u"))
             .action(ArgAction::SetTrue),
         Arg::new("help")
-            .short('h')
             .long("help")
             .help(t!("cat.clap.help"))
             .action(ArgAction::Help),
         Arg::new("version")
-            .short('V')
             .long("version")
             .help(t!("cat.clap.version"))
             .action(ArgAction::Version),
@@ -1141,14 +1139,13 @@ mod tests {
     fn test_ct_app_execution_other_version() {
         let command = ct_app();
 
-        // 测试用例1：有效输入
+        // GNU cat reserves only the long form for --version.
         let args = vec![ctcore::ct_util_name(), "-V"];
 
-        // Assuming `command` has a method to retrieve the executable name, replace it with the actual one
         let executable = command.try_get_matches_from(args);
 
         assert!(executable.is_err());
-        assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        assert_eq!(executable.unwrap_err().kind(), ErrorKind::UnknownArgument);
     }
 
     #[test]
@@ -1191,13 +1188,12 @@ mod tests {
 
     #[test]
     fn test_ct_app_execution_unsupport_help() {
-        let command = ct_app();
-
-        // 测试用例2：验证 --help 参数是否正确处理
-        let help_args = vec![ctcore::ct_util_name(), "-H"];
-        let result = command.try_get_matches_from(help_args);
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        for short_option in ["-h", "-H"] {
+            let help_args = vec![ctcore::ct_util_name(), short_option];
+            let result = ct_app().try_get_matches_from(help_args);
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
     }
 
     #[test]

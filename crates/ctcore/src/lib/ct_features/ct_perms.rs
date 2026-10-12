@@ -963,17 +963,6 @@ pub fn chown_base(
         .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
-    if files.is_empty() {
-        let message = if reference {
-            "missing operand".to_owned()
-        } else if let Some(group) = matches.get_one::<String>(add_arg_if_not_reference) {
-            format!("missing operand after {}", locale_quote(group))
-        } else {
-            "missing operand".to_owned()
-        };
-        return Err(CTsageError::new(libc::EXIT_FAILURE, message));
-    }
-
     let preserve_root = matches.get_flag(opt_flags::preserve_root::PRESERVE);
 
     let mut dereference = if matches.get_flag(opt_flags::dereference::DEREFERENCE) {
@@ -1005,6 +994,17 @@ pub fn chown_base(
         }
     } else {
         traverse_symlinks = CtTraverseSymlinks::None;
+    }
+
+    if files.is_empty() {
+        let message = if reference {
+            "missing operand".to_owned()
+        } else if let Some(group) = matches.get_one::<String>(add_arg_if_not_reference) {
+            format!("missing operand after {}", locale_quote(group))
+        } else {
+            "missing operand".to_owned()
+        };
+        return Err(CTsageError::new(libc::EXIT_FAILURE, message));
     }
 
     let verbosity = verbosity_from_matches(&matches, groups_only);

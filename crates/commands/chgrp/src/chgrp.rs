@@ -15,7 +15,6 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::Quotable;
 pub use ctcore::ct_entries;
-use ctcore::ct_entries::{CtPasswd, Group, Locate};
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, chown_base, opt_flags};
 
@@ -33,68 +32,8 @@ use std::os::unix::fs::MetadataExt;
  * 如果提供了引用文件参数，则从该文件的元数据中读取GID，并尝试将其转换为组名；
  * 如果没有提供引用文件，但提供了组名参数，则尝试将组名转换为GID。
  */
-/// 解析 `--from` 参数的 OWNER:GROUP 格式，返回对应的 CtIfFrom 过滤条件。
-///
-/// 支持以下格式：
-/// - `OWNER:GROUP` → 同时匹配 UID 和 GID
-/// - `:GROUP` → 仅匹配 GID
-/// - `OWNER:` → 仅匹配 UID
-/// - `OWNER` → 仅匹配 UID（无冒号分隔符）
-fn chgrp_parse_from_spec(spec: &str) -> CTResult<CtIfFrom> {
-    let mut parts = spec.splitn(2, ':');
-    let owner_part = parts.next().unwrap_or("");
-    let group_part = parts.next(); // None if no ':' was found
-
-    // 解析 OWNER 部分为 UID
-    let uid = if owner_part.is_empty() {
-        None
-    } else {
-        match CtPasswd::locate(owner_part) {
-            Ok(pw) => Some(pw.uid),
-            Err(_) => match owner_part.parse::<u32>() {
-                Ok(id) => Some(id),
-                Err(_) => {
-                    return Err(CtSimpleError::new(
-                        1,
-                        format!("invalid user: {}", owner_part.quote()),
-                    ));
-                }
-            },
-        }
-    };
-
-    // 解析 GROUP 部分为 GID
-    let gid = match group_part {
-        None | Some("") => None,
-        Some(g) => match Group::locate(g) {
-            Ok(gr) => Some(gr.gid),
-            Err(_) => match g.parse::<u32>() {
-                Ok(id) => Some(id),
-                Err(_) => {
-                    return Err(CtSimpleError::new(
-                        1,
-                        format!("invalid group: {}", g.quote()),
-                    ));
-                }
-            },
-        },
-    };
-
-    match (uid, gid) {
-        (Some(u), Some(g)) => Ok(CtIfFrom::UserGroup(u, g)),
-        (Some(u), None) => Ok(CtIfFrom::User(u)),
-        (None, Some(g)) => Ok(CtIfFrom::Group(g)),
-        (None, None) => Ok(CtIfFrom::All),
-    }
-}
-
 fn chgrp_parse_gid_and_uid(args_match: &ArgMatches) -> CTResult<CtGidUidOwnerFilter> {
-    // 解析 --from 参数，确定过滤条件
-    let filter = if let Some(spec) = args_match.get_one::<String>(opt_flags::FROM) {
-        chgrp_parse_from_spec(spec)?
-    } else {
-        CtIfFrom::All
-    };
+    let filter = CtIfFrom::All;
 
     // 初始化用于存储原始组名或ID的变量
     let mut chgrp_raw_group: String = String::new();
@@ -223,15 +162,6 @@ pub fn ct_app() -> Command {
                 "affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)",
             )
             .action(ArgAction::SetTrue),
-        Arg::new(opt_flags::FROM)
-            .long(opt_flags::FROM)
-            .help(
-                "change the group of each file only if its current owner and/or \
-                 group match those specified here. Either may be omitted, in \
-                 which case a match is not required for the omitted attribute",
-            )
-            .num_args(1)
-            .value_name("CURRENT_OWNER:CURRENT_GROUP"),
         Arg::new(opt_flags::preserve_root::PRESERVE)
             .long(opt_flags::preserve_root::PRESERVE)
             .help("fail to operate recursively on '/'")
@@ -337,6 +267,16 @@ mod tests {
         let command = ct_app();
 
         let args = vec![ctcore::ct_util_name(), "-V"];
+        let executable = command.try_get_matches_from(args);
+
+        assert!(executable.is_err());
+        assert_eq!(executable.unwrap_err().kind(), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_ct_app_rejects_from_option() {
+        let command = ct_app();
+        let args = vec![ctcore::ct_util_name(), "--from=0:0"];
         let executable = command.try_get_matches_from(args);
 
         assert!(executable.is_err());

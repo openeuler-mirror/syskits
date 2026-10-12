@@ -12,7 +12,6 @@
 extern crate rust_i18n;
 use clap::Arg;
 use clap::ArgAction;
-use clap::ArgMatches;
 use clap::Command;
 use clap::crate_version;
 
@@ -201,9 +200,15 @@ mod opt_flags {
 pub fn cat_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args_match = ct_app().try_get_matches_from(args)?;
-    let (options, cat_files) = cat_options_from_matches(&args_match);
-    cat_files_info(&cat_files, &options)
+
+    let args = args.collect::<Vec<_>>();
+    match parse_cat_args(&args)? {
+        CatAction::Run(options, files) => cat_files_info(&files, &options),
+        CatAction::Help | CatAction::Version => {
+            let _ = ct_app().try_get_matches_from(args)?;
+            unreachable!("clap help and version actions always return an error")
+        }
+    }
 }
 
 pub fn ct_app() -> Command {
@@ -293,62 +298,187 @@ fn args_init() -> Vec<Arg> {
     args
 }
 
-fn cat_numbering_mode(args_match: &ArgMatches) -> CatNumberingMode {
-    if args_match.get_flag(opt_flags::CAT_NUMBER_NO_NBLANK) {
-        CatNumberingMode::NonEmpty
-    } else if args_match.get_flag(opt_flags::CAT_NUMBER) {
-        CatNumberingMode::All
-    } else {
-        CatNumberingMode::None
+enum CatAction {
+    Run(CatOutputOptions, Vec<String>),
+    Help,
+    Version,
+}
+
+const CAT_LONG_OPTIONS: [&str; 9] = [
+    "number-nonblank",
+    "number",
+    "squeeze-blank",
+    "show-nonprinting",
+    "show-ends",
+    "show-tabs",
+    "show-all",
+    "help",
+    "version",
+];
+
+fn parse_cat_args(args: &[OsString]) -> CTResult<CatAction> {
+    let usage_name = cat_usage_name(args);
+    let mut number = false;
+    let mut number_nonblank = false;
+    let mut squeeze_blank = false;
+    let mut show_ends = false;
+    let mut show_non_print = false;
+    let mut show_tabs = false;
+    let mut files = Vec::new();
+    let mut i = 1;
+
+    while i < args.len() {
+        let arg = args[i].to_string_lossy();
+
+        if arg == "--" {
+            files.extend(
+                args[i + 1..]
+                    .iter()
+                    .map(|file| file.to_string_lossy().into_owned()),
+            );
+            break;
+        }
+
+        if arg == "-" || !arg.starts_with('-') {
+            files.push(arg.into_owned());
+            i += 1;
+            continue;
+        }
+
+        if let Some(long) = arg.strip_prefix("--") {
+            let (name, has_value) = match long.split_once('=') {
+                Some((name, _)) => (name, true),
+                None => (long, false),
+            };
+            let matches = cat_long_option_matches(name);
+
+            match matches.as_slice() {
+                [] => {
+                    return Err(cat_usage_error(
+                        &usage_name,
+                        format!("unrecognized option '{arg}'"),
+                    ));
+                }
+                [option] => {
+                    if has_value {
+                        return Err(cat_usage_error(
+                            &usage_name,
+                            format!("option '--{option}' doesn't allow an argument"),
+                        ));
+                    }
+
+                    match *option {
+                        "number-nonblank" => {
+                            number = true;
+                            number_nonblank = true;
+                        }
+                        "number" => number = true,
+                        "squeeze-blank" => squeeze_blank = true,
+                        "show-nonprinting" => show_non_print = true,
+                        "show-ends" => show_ends = true,
+                        "show-tabs" => show_tabs = true,
+                        "show-all" => {
+                            show_non_print = true;
+                            show_ends = true;
+                            show_tabs = true;
+                        }
+                        "help" => return Ok(CatAction::Help),
+                        "version" => return Ok(CatAction::Version),
+                        _ => unreachable!("all GNU cat long options are covered"),
+                    }
+                }
+                _ => {
+                    let possibilities = matches
+                        .iter()
+                        .map(|option| format!("'--{option}'"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    return Err(cat_usage_error(
+                        &usage_name,
+                        format!("option '{arg}' is ambiguous; possibilities: {possibilities}"),
+                    ));
+                }
+            }
+        } else {
+            for option in arg[1..].chars() {
+                match option {
+                    'b' => {
+                        number = true;
+                        number_nonblank = true;
+                    }
+                    'e' => {
+                        show_ends = true;
+                        show_non_print = true;
+                    }
+                    'n' => number = true,
+                    's' => squeeze_blank = true,
+                    't' => {
+                        show_tabs = true;
+                        show_non_print = true;
+                    }
+                    'u' => {}
+                    'v' => show_non_print = true,
+                    'A' => {
+                        show_non_print = true;
+                        show_ends = true;
+                        show_tabs = true;
+                    }
+                    'E' => show_ends = true,
+                    'T' => show_tabs = true,
+                    invalid => {
+                        return Err(cat_usage_error(
+                            &usage_name,
+                            format!("invalid option -- '{invalid}'"),
+                        ));
+                    }
+                }
+            }
+        }
+
+        i += 1;
     }
+
+    if files.is_empty() {
+        files.push("-".to_owned());
+    }
+
+    Ok(CatAction::Run(
+        CatOutputOptions {
+            num_mode: if number_nonblank {
+                CatNumberingMode::NonEmpty
+            } else if number {
+                CatNumberingMode::All
+            } else {
+                CatNumberingMode::None
+            },
+            squeeze_blank,
+            show_tabs,
+            show_ends,
+            show_non_print,
+        },
+        files,
+    ))
 }
 
-fn cat_show_non_print(args_match: &ArgMatches) -> bool {
-    [
-        opt_flags::CAT_SHOW_ALL.to_owned(),
-        opt_flags::CAT_SHOW_NON_PRINTING_ENDS.to_owned(),
-        opt_flags::CAT_SHOW_NON_PRINTING_TABS.to_owned(),
-        opt_flags::CAT_SHOW_NON_PRINTING.to_owned(),
-    ]
-    .iter()
-    .any(|v| args_match.get_flag(v))
+fn cat_long_option_matches(name: &str) -> Vec<&'static str> {
+    CAT_LONG_OPTIONS
+        .into_iter()
+        .filter(|option| option.starts_with(name))
+        .collect()
 }
 
-fn cat_show_ends(args_match: &ArgMatches) -> bool {
-    [
-        opt_flags::CAT_SHOW_ENDS.to_owned(),
-        opt_flags::CAT_SHOW_ALL.to_owned(),
-        opt_flags::CAT_SHOW_NON_PRINTING_ENDS.to_owned(),
-    ]
-    .iter()
-    .any(|v| args_match.get_flag(v))
+fn cat_usage_name(args: &[OsString]) -> String {
+    args.first()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .filter(|arg| !arg.is_empty())
+        .unwrap_or_else(|| ctcore::ct_util_name().to_owned())
 }
 
-fn cat_show_tabs(args_match: &ArgMatches) -> bool {
-    [
-        opt_flags::CAT_SHOW_ALL.to_owned(),
-        opt_flags::CAT_SHOW_TABS.to_owned(),
-        opt_flags::CAT_SHOW_NON_PRINTING_TABS.to_owned(),
-    ]
-    .iter()
-    .any(|v| args_match.get_flag(v))
-}
-
-fn cat_options_from_matches(args_match: &ArgMatches) -> (CatOutputOptions, Vec<String>) {
-    let options = CatOutputOptions {
-        show_ends: cat_show_ends(args_match),
-        num_mode: cat_numbering_mode(args_match),
-        show_non_print: cat_show_non_print(args_match),
-        show_tabs: cat_show_tabs(args_match),
-        squeeze_blank: args_match.get_flag(opt_flags::CAT_SQUEEZE_BLANK),
-    };
-
-    let files = match args_match.get_many::<String>(opt_flags::CAT_FILE) {
-        Some(v) => v.cloned().collect(),
-        None => vec!["-".to_owned()],
-    };
-
-    (options, files)
+fn cat_usage_error(usage_name: &str, message: String) -> Box<dyn ctcore::ct_error::CTError> {
+    CtSimpleError::new(
+        1,
+        format!("{message}\nTry '{usage_name} --help' for more information."),
+    )
 }
 
 fn cat_numbering_mode_name(mode: CatNumberingMode) -> &'static str {
@@ -1058,9 +1188,15 @@ fn cat_semantic_from_invocation(
 pub fn cat_native_semantic(args: impl ctcore::Args) -> CTResult<CatSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args_match = ct_app().try_get_matches_from(args)?;
-    let (options, files) = cat_options_from_matches(&args_match);
-    Ok(cat_semantic_from_invocation(&files, &options))
+
+    let args = args.collect::<Vec<_>>();
+    match parse_cat_args(&args)? {
+        CatAction::Run(options, files) => Ok(cat_semantic_from_invocation(&files, &options)),
+        CatAction::Help | CatAction::Version => {
+            let _ = ct_app().try_get_matches_from(args)?;
+            unreachable!("clap help and version actions always return an error")
+        }
+    }
 }
 
 #[derive(Default)]
@@ -1214,6 +1350,53 @@ mod tests {
         let result = command.try_get_matches_from(invalid_args);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_gnu_option_error_diagnostics() {
+        let cases = [
+            (
+                vec!["cat", "-h"],
+                "invalid option -- 'h'\nTry 'cat --help' for more information.",
+            ),
+            (
+                vec!["cat", "--invalid"],
+                "unrecognized option '--invalid'\nTry 'cat --help' for more information.",
+            ),
+            (
+                vec!["cat", "--show-tabs=yes"],
+                "option '--show-tabs' doesn't allow an argument\nTry 'cat --help' for more information.",
+            ),
+            (
+                vec!["cat", "--show"],
+                "option '--show' is ambiguous; possibilities: '--show-nonprinting' '--show-ends' '--show-tabs' '--show-all'\nTry 'cat --help' for more information.",
+            ),
+        ];
+
+        for (args, expected) in cases {
+            let args = args.into_iter().map(OsString::from).collect::<Vec<_>>();
+            let err = match parse_cat_args(&args) {
+                Ok(_) => panic!("expected GNU-style option parse error"),
+                Err(err) => err,
+            };
+            assert_eq!(err.code(), 1);
+            assert_eq!(err.to_string(), expected);
+        }
+    }
+
+    #[test]
+    fn test_gnu_option_parser_continues_after_an_operand() {
+        let args = ["cat", "file", "-n"]
+            .into_iter()
+            .map(OsString::from)
+            .collect::<Vec<_>>();
+
+        let CatAction::Run(options, files) = parse_cat_args(&args).unwrap() else {
+            panic!("expected a normal cat invocation");
+        };
+
+        assert_eq!(options.num_mode, CatNumberingMode::All);
+        assert_eq!(files, vec!["file"]);
     }
 
     #[test]

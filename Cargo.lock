@@ -1621,6 +1621,7 @@ dependencies = [
  "rust-i18n",
  "selinux",
  "sys-locale 0.2.4",
+ "tempfile",
  "thiserror 1.0.69",
 ]
 

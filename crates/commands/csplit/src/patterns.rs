@@ -23,11 +23,11 @@ pub enum CsplitPattern {
     /// integer is an offset relative to the matched line of what to include (if positive) or
     /// to exclude (if negative). The number of times the pattern is executed is detailed in
     /// [`CsplitExecutePattern`].
-    UpToMatch(BytesRegex, i32, CsplitExecutePattern),
+    UpToMatch(BytesRegex, i64, CsplitExecutePattern),
     /// Skip the file's content up to, not including, the line matching the regex. The integer
     /// is an offset relative to the matched line of what to include (if positive) or to exclude
     /// (if negative). The number of times the pattern is executed is detailed in [`CsplitExecutePattern`].
-    SkipToMatch(BytesRegex, i32, CsplitExecutePattern),
+    SkipToMatch(BytesRegex, i64, CsplitExecutePattern),
 }
 
 #[allow(clippy::to_string_trait_impl)]
@@ -123,9 +123,6 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
     // 初始化用于储存解析后模式的向量
     let mut csplit_patterns = Vec::with_capacity(args.len());
 
-    // 正则表达式用于匹配模式中的"upto"、"skipto"和可选的偏移量
-    let to_match_reg =
-        Regex::new(r"^(/(?P<UPTO>.+)/|%(?P<SKIPTO>.+)%)(?P<OFFSET>[+-]?\d+)?$").unwrap();
     // 正则表达式用于匹配模式重复的次数
     let execute_n_times_reg = Regex::new(r"^\{(?:(?P<TIMES>\d+)|\*)\}$").unwrap();
 
@@ -155,20 +152,32 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
         };
 
         // 解析模式定义
-        if let Some(captures) = to_match_reg.captures(arg) {
-            // 解析偏移量
-            let offset = match captures.name("OFFSET") {
-                None => 0,
-                Some(m) => m.as_str().parse().unwrap(),
+        if matches!(arg.as_bytes().first(), Some(b'/') | Some(b'%')) {
+            let delimiter = arg.as_bytes()[0];
+            let closing_delimiter = arg.as_bytes()[1..]
+                .iter()
+                .rposition(|byte| *byte == delimiter)
+                .map(|position| position + 1);
+            let Some(closing_delimiter) = closing_delimiter else {
+                return Err(CsplitError::InvalidPattern(arg.to_string()));
             };
-            // 根据匹配的类型，构建相应的模式
-            if let Some(up_to_match) = captures.name("UPTO") {
-                let pattern = BytesRegex::new(&bre_to_rust_regex(up_to_match.as_str()))
-                    .map_err(|_| CsplitError::InvalidPattern(arg.to_string()))?;
+            let expression = &arg[1..closing_delimiter];
+            if expression.is_empty() {
+                return Err(CsplitError::InvalidPattern(arg.to_string()));
+            }
+            let offset_text = &arg[closing_delimiter + 1..];
+            let offset = if offset_text.is_empty() {
+                0
+            } else {
+                offset_text
+                    .parse::<i64>()
+                    .map_err(|_| CsplitError::IntegerExpectedAfterDelimiter(arg.to_string()))?
+            };
+            let pattern = BytesRegex::new(&bre_to_rust_regex(expression))
+                .map_err(|_| CsplitError::InvalidPattern(arg.to_string()))?;
+            if delimiter == b'/' {
                 csplit_patterns.push(CsplitPattern::UpToMatch(pattern, offset, execute_n_times));
-            } else if let Some(skip_to_match) = captures.name("SKIPTO") {
-                let pattern = BytesRegex::new(&bre_to_rust_regex(skip_to_match.as_str()))
-                    .map_err(|_| CsplitError::InvalidPattern(arg.to_string()))?;
+            } else {
                 csplit_patterns.push(CsplitPattern::SkipToMatch(pattern, offset, execute_n_times));
             }
         } else if let Ok(line_number) = arg.parse::<usize>() {
@@ -494,6 +503,26 @@ mod tests {
             }
             _ => panic!("expected SkipToMatch pattern"),
         };
+    }
+
+    #[test]
+    fn test_invalid_offset_reports_integer_expected() {
+        let input = vec!["/test/not-a-number".to_string()];
+        assert!(matches!(
+            get_patterns(&input),
+            Err(CsplitError::IntegerExpectedAfterDelimiter(pattern))
+                if pattern == "/test/not-a-number"
+        ));
+    }
+
+    #[test]
+    fn test_offset_uses_intmax_width() {
+        let input = vec!["/test/2147483648".to_string()];
+        let patterns = get_patterns(&input).unwrap();
+        assert!(matches!(
+            patterns.first(),
+            Some(CsplitPattern::UpToMatch(_, 2_147_483_648, _))
+        ));
     }
 
     #[test]

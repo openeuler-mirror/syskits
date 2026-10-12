@@ -474,7 +474,7 @@ impl SplitWriter<'_> {
         &mut self,
         pattern_as_str: &str,
         regex: &Regex,
-        offset: i32,
+        offset: i64,
         input_splitter: &mut InputSplitter<I>,
     ) -> Result<(), CsplitError>
     where
@@ -516,7 +516,7 @@ impl SplitWriter<'_> {
                 self.write_line(&l)?;
             }
         } else {
-            let f_usize = -offset as usize;
+            let f_usize = offset.unsigned_abs() as usize;
             input_splitter.csplit_set_size_of_buffer(f_usize);
             while let Some((ln, line)) = input_splitter.next() {
                 let l = line?;

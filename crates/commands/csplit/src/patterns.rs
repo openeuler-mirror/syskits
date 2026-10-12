@@ -23,6 +23,7 @@ pub struct CsplitRegex {
 
 impl CsplitRegex {
     fn new(expression: &str, source: String) -> Result<Self, CsplitError> {
+        validate_bre_interval_ranges(expression, &source)?;
         let compiled = OnigRegex::with_options_and_encoding(
             EncodedBytes::ascii(expression.as_bytes()),
             RegexOptions::REGEX_OPTION_NONE,
@@ -41,6 +42,57 @@ impl CsplitRegex {
             .find_with_encoding(EncodedBytes::ascii(text))
             .is_some()
     }
+}
+
+fn validate_bre_interval_ranges(expression: &str, source: &str) -> Result<(), CsplitError> {
+    let bytes = expression.as_bytes();
+    let mut index = 0;
+    let mut in_bracket_expression = false;
+
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\\'
+                if !in_bracket_expression
+                    && bytes.get(index + 1) == Some(&b'{')
+                    && index > 0
+                    && bytes[index - 1] != b'\\' =>
+            {
+                let content_start = index + 2;
+                let Some(content_end) = (content_start..bytes.len().saturating_sub(1))
+                    .find(|position| bytes[*position] == b'\\' && bytes[*position + 1] == b'}')
+                else {
+                    break;
+                };
+
+                if let Some((lower, upper)) = expression[content_start..content_end].split_once(',')
+                    && lower.bytes().all(|byte| byte.is_ascii_digit())
+                    && upper.bytes().all(|byte| byte.is_ascii_digit())
+                    && !lower.is_empty()
+                    && !upper.is_empty()
+                    && let (Ok(lower), Ok(upper)) = (lower.parse::<u64>(), upper.parse::<u64>())
+                    && lower > upper
+                {
+                    return Err(CsplitError::InvalidRegularExpression(
+                        source.to_string(),
+                        "Invalid content of \\{\\}".to_string(),
+                    ));
+                }
+                index = content_end + 2;
+            }
+            b'\\' => index += 2,
+            b'[' if !in_bracket_expression => {
+                in_bracket_expression = true;
+                index += 1;
+            }
+            b']' if in_bracket_expression => {
+                in_bracket_expression = false;
+                index += 1;
+            }
+            _ => index += 1,
+        }
+    }
+
+    Ok(())
 }
 
 impl fmt::Display for CsplitRegex {

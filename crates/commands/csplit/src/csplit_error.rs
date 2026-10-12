@@ -42,6 +42,8 @@ pub enum CsplitError {
     LineNumberSmallerThanPrevious(usize, usize),
     #[error("{}: invalid pattern", ._0.quote())]
     InvalidPattern(String),
+    #[error("{}: invalid regular expression: {}", ._0.quote(), _1)]
+    InvalidRegularExpression(String, String),
     #[error("{}: closing delimiter '{}' missing", _0, _1)]
     ClosingDelimiterMissing(String, char),
     #[error("{}: integer expected after delimiter", ._0.quote())]

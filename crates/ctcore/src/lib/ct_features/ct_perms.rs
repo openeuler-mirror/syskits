@@ -549,7 +549,6 @@ fn traversal_failure_action(path: &Path, dereference: bool) -> &'static str {
 fn traversal_walk(root: &Path, traverse_symlinks: &CtTraverseSymlinks) -> WalkDir {
     WalkDir::new(root)
         .follow_links(traverse_symlinks == &CtTraverseSymlinks::All)
-        .min_depth(1)
         // Followed directories must be yielded before their contents so
         // --preserve-root can reject a link to / before reading its hierarchy.
         .contents_first(traverse_symlinks != &CtTraverseSymlinks::All)
@@ -670,6 +669,11 @@ impl CtOwnershipChangeExecutor {
                 }
                 Ok(entry) => entry,
             };
+            // The root is handled by traverse after all descendants. Filtering it
+            // with min_depth breaks WalkDir's post-order output for root symlinks.
+            if entry.depth() == 0 {
+                continue;
+            }
             let path = entry.path();
             if unreadable_directories.contains(path) {
                 continue;
@@ -1392,7 +1396,7 @@ mod tests {
             .map(|entry| entry.unwrap().into_path())
             .collect();
 
-        assert_eq!(paths, vec![child, directory]);
+        assert_eq!(paths, vec![child, directory, tree]);
     }
 
     #[cfg(unix)]
@@ -1413,7 +1417,7 @@ mod tests {
             .map(|entry| entry.unwrap().into_path())
             .collect();
 
-        assert_eq!(paths, vec![link.clone(), link.join("child")]);
+        assert_eq!(paths, vec![tree, link.clone(), link.join("child")]);
     }
 
     #[cfg(unix)]

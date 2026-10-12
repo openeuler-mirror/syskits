@@ -1154,7 +1154,7 @@ fn cat_write_tab_to_end<W: Write>(mut in_buffer: &[u8], cat_writer: &mut W) -> u
             None => {
                 // 如果切片中没有特殊字符，一次性写入全部内容并返回。
                 cat_writer.write_all(in_buffer).unwrap();
-                return in_buffer.len();
+                return count + in_buffer.len();
             }
         };
     }
@@ -1486,6 +1486,26 @@ mod tests {
 
         assert_eq!(options.num_mode, CatNumberingMode::All);
         assert_eq!(files, vec!["file"]);
+    }
+
+    #[test]
+    fn test_show_tabs_without_a_trailing_newline() {
+        let temp_dir = tempdir().expect("tempdir");
+        let path = temp_dir.path().join("tab-without-newline");
+        fs::write(&path, b"a\tb").expect("write fixture");
+
+        let semantic = cat_native_semantic(
+            [
+                OsString::from("cat"),
+                OsString::from("-T"),
+                path.into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .expect("cat -T should not panic for a final TAB-containing line");
+
+        assert_eq!(semantic.classic_text, "a^Ib");
+        assert_eq!(semantic.exit_code, 0);
     }
 
     #[test]

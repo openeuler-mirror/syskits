@@ -19,7 +19,7 @@ sys-locale = { workspace = true }
 rust-i18n = { workspace = true }
 clap = { workspace = true }
 thiserror = { workspace = true }
-regex = { workspace = true }
+onig = { workspace = true }
 ctcore = { workspace = true, features = ["entries", "fs", "format"] }
 
 [dev-dependencies]

@@ -18,7 +18,6 @@ use ctcore::ct_display::{Quotable, locale_quote};
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_lines;
 use ctcore::{Tool, ct_crash_if_err};
-use regex::bytes::Regex;
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::io::{self, BufReader};
@@ -487,7 +486,7 @@ impl SplitWriter<'_> {
     fn csplit_do_to_match<I>(
         &mut self,
         pattern_as_str: &str,
-        regex: &Regex,
+        regex: &patterns::CsplitRegex,
         offset: i64,
         input_splitter: &mut InputSplitter<I>,
     ) -> Result<(), CsplitError>

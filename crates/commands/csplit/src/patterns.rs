@@ -11,33 +11,41 @@
 
 use crate::csplit_error::CsplitError;
 use ctcore::{ct_display::Quotable, ct_show_warning};
-use regex::bytes::Regex as BytesRegex;
+use onig::{EncodedBytes, Regex as OnigRegex, RegexOptions, Syntax};
 use std::fmt;
-use std::ops::Deref;
 
 #[derive(Debug)]
 pub struct CsplitRegex {
-    compiled: BytesRegex,
+    compiled: OnigRegex,
+    expression: String,
     source: String,
 }
 
 impl CsplitRegex {
-    fn new(compiled: BytesRegex, source: String) -> Self {
-        Self { compiled, source }
+    fn new(expression: &str, source: String) -> Result<Self, CsplitError> {
+        let compiled = OnigRegex::with_options_and_encoding(
+            EncodedBytes::ascii(expression.as_bytes()),
+            RegexOptions::REGEX_OPTION_NONE,
+            Syntax::grep(),
+        )
+        .map_err(|_| CsplitError::InvalidPattern(source.clone()))?;
+        Ok(Self {
+            compiled,
+            expression: expression.to_string(),
+            source,
+        })
     }
-}
 
-impl Deref for CsplitRegex {
-    type Target = BytesRegex;
-
-    fn deref(&self) -> &Self::Target {
-        &self.compiled
+    pub fn is_match(&self, text: &[u8]) -> bool {
+        self.compiled
+            .find_with_encoding(EncodedBytes::ascii(text))
+            .is_some()
     }
 }
 
 impl fmt::Display for CsplitRegex {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.compiled.fmt(formatter)
+        self.expression.fmt(formatter)
     }
 }
 
@@ -185,9 +193,7 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
                     .parse::<i64>()
                     .map_err(|_| CsplitError::IntegerExpectedAfterDelimiter(arg.to_string()))?
             };
-            let compiled = BytesRegex::new(&bre_to_rust_regex(expression))
-                .map_err(|_| CsplitError::InvalidPattern(arg.to_string()))?;
-            let pattern = CsplitRegex::new(compiled, arg.to_string());
+            let pattern = CsplitRegex::new(expression, arg.to_string())?;
             if delimiter == b'/' {
                 csplit_patterns.push(CsplitPattern::UpToMatch(pattern, offset, execute_n_times));
             } else {
@@ -228,46 +234,6 @@ fn parse_repeat_count(argument: &str) -> Result<CsplitExecutePattern, CsplitErro
             without_closing_brace.quote()
         ))),
     }
-}
-
-fn bre_to_rust_regex(pattern: &str) -> String {
-    let mut out = String::with_capacity(pattern.len());
-    let mut chars = pattern.chars().peekable();
-    let mut in_bracket = false;
-
-    while let Some(ch) = chars.next() {
-        if ch == '\\' {
-            if let Some(next) = chars.next() {
-                if !in_bracket && matches!(next, '{' | '}' | '(' | ')' | '+' | '?' | '|') {
-                    out.push(next);
-                } else {
-                    out.push('\\');
-                    out.push(next);
-                }
-            } else {
-                out.push('\\');
-            }
-            continue;
-        }
-
-        if ch == '[' {
-            in_bracket = true;
-            out.push(ch);
-            continue;
-        }
-        if ch == ']' && in_bracket {
-            in_bracket = false;
-            out.push(ch);
-            continue;
-        }
-
-        if !in_bracket && matches!(ch, '{' | '}' | '(' | ')' | '+' | '?' | '|') {
-            out.push('\\');
-        }
-        out.push(ch);
-    }
-
-    out
 }
 
 /// Asserts the line numbers are in increasing order, starting at 1.
@@ -468,7 +434,7 @@ mod tests {
             Some(CsplitPattern::UpToMatch(reg, 0, CsplitExecutePattern::Times(1))) => {
                 assert!(!reg.is_match(b"aaab"));
                 assert!(reg.is_match(b"a+b"));
-                assert_eq!(format!("{reg}"), r"a\+b");
+                assert_eq!(format!("{reg}"), "a+b");
             }
             _ => panic!("expected UpToMatch pattern"),
         }
@@ -482,7 +448,7 @@ mod tests {
             Some(CsplitPattern::UpToMatch(reg, 0, CsplitExecutePattern::Times(1))) => {
                 assert!(reg.is_match(b"aaab"));
                 assert!(!reg.is_match(b"a+b"));
-                assert_eq!(format!("{reg}"), "a+b");
+                assert_eq!(format!("{reg}"), r"a\+b");
             }
             _ => panic!("expected UpToMatch pattern"),
         }
@@ -569,7 +535,7 @@ mod tests {
         let patterns = get_patterns(&input).unwrap();
         assert!(matches!(
             patterns.first(),
-            Some(CsplitPattern::UpToMatch(pattern, 0, _)) if pattern.as_str().is_empty()
+            Some(CsplitPattern::UpToMatch(pattern, 0, _)) if pattern.to_string().is_empty()
         ));
     }
 

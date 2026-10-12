@@ -540,11 +540,21 @@ impl CtOwnershipChangeExecutor {
             Some(m) => m,
             _ => {
                 if self.verbosity.level == CtVerbosityLevel::Verbose {
-                    println!(
-                        "failed to change ownership of {} to {}",
-                        path.quote(),
-                        self.raw_owner
-                    );
+                    let path_str = path.quote().to_string();
+                    let message = if self.verbosity.groups_only {
+                        t!(
+                            "ctcore.chgrp.failed_change_without_old",
+                            file = path_str,
+                            new = self.raw_owner
+                        )
+                    } else {
+                        t!(
+                            "ctcore.chown.failed_change_without_old",
+                            file = path_str,
+                            new = self.raw_owner
+                        )
+                    };
+                    println!("{message}");
                 }
                 return 1;
             }

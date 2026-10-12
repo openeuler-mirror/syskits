@@ -415,6 +415,9 @@ fn chroot_parse_user_spec(
             let user_spec = u.strip_suffix(':').unwrap_or(u);
 
             if let Some((user_part, group_part)) = user_spec.split_once(':') {
+                if group_part.is_empty() && chroot_userspec_is_numeric_user(user_part) {
+                    return Err(Err(ChrootError::InvalidSpec.into()));
+                }
                 let user = if user_part.is_empty() {
                     None
                 } else {
@@ -578,6 +581,11 @@ fn chroot_parse_numeric_uid(user: &str) -> Option<libc::uid_t> {
         .parse::<libc::uid_t>()
         .ok()
         .filter(|uid| *uid != libc::uid_t::MAX)
+}
+
+fn chroot_userspec_is_numeric_user(user: &str) -> bool {
+    let user = user.strip_prefix('+').unwrap_or(user);
+    !user.is_empty() && user.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 #[derive(Default)]
@@ -1274,6 +1282,12 @@ mod tests {
                 chroot_parse_user_spec(Some(&userspec)).unwrap(),
                 (None, Some("0"))
             );
+
+            let userspec = String::from("0::");
+            let error = chroot_parse_user_spec(Some(&userspec))
+                .expect_err("numeric user with an omitted login group is invalid")
+                .expect_err("userspec parser returns a chroot error");
+            assert_eq!(format!("{error}"), "invalid spec");
         }
 
         #[test]

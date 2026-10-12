@@ -162,9 +162,6 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
                 return Err(CsplitError::InvalidPattern(arg.to_string()));
             };
             let expression = &arg[1..closing_delimiter];
-            if expression.is_empty() {
-                return Err(CsplitError::InvalidPattern(arg.to_string()));
-            }
             let offset_text = &arg[closing_delimiter + 1..];
             let offset = if offset_text.is_empty() {
                 0
@@ -522,6 +519,16 @@ mod tests {
         assert!(matches!(
             patterns.first(),
             Some(CsplitPattern::UpToMatch(_, 2_147_483_648, _))
+        ));
+    }
+
+    #[test]
+    fn test_empty_regular_expression_is_valid() {
+        let input = vec!["//".to_string()];
+        let patterns = get_patterns(&input).unwrap();
+        assert!(matches!(
+            patterns.first(),
+            Some(CsplitPattern::UpToMatch(pattern, 0, _)) if pattern.as_str().is_empty()
         ));
     }
 

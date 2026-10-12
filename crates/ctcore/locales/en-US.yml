@@ -4,7 +4,9 @@ ctcore:
     retained_ownership: "ownership of %{file} retained as %{old}"
     retained_ownership_no_change: "ownership of %{file} retained"
     failed_change: "failed to change ownership of %{file} from %{old} to %{new}"
+    failed_change_without_old: "failed to change ownership of %{file} to %{new}"
   chgrp:
     changed_group: "changed group of %{file} from %{old} to %{new}"
     retained_group: "group of %{file} retained as %{old}"
     failed_change: "failed to change group of %{file} from %{old} to %{new}"
+    failed_change_without_old: "failed to change group of %{file} to %{new}"

@@ -76,6 +76,10 @@ pub fn chcon_main(args: impl ctcore::Args) -> CTResult<()> {
                 return Err(r.into());
             }
 
+            if let Error::ArgumentsMismatch(message) = r {
+                return Err(CtSimpleError::new(libc::EXIT_FAILURE, message));
+            }
+
             if matches!(r, Error::MissingOperand | Error::MissingOperandAfter(_)) {
                 return Err(CTsageError::new(libc::EXIT_FAILURE, r.to_string()));
             }
@@ -310,31 +314,21 @@ fn chcon_parse_command_line(
     let (recursive_mode, affect_symlink_referent) = if args_match.get_flag(opt_flags::RECURSIVE) {
         if args_match.get_flag(opt_flags::sym_links::FOLLOW_DIR_SYM_LINKS) {
             if args_match.get_flag(opt_flags::dereference::NO_DEREFERENCE) {
-                return Err(Error::ArgumentsMismatch(format!(
-                    "'--{}' with '--{}' require '-P'",
-                    opt_flags::RECURSIVE,
-                    opt_flags::dereference::NO_DEREFERENCE
-                )));
+                return Err(Error::ArgumentsMismatch("-R -h requires -P".to_string()));
             }
 
             (ChconRecursiveMode::RecursiveAndFollowAllDirSymLinks, true)
         } else if args_match.get_flag(opt_flags::sym_links::FOLLOW_ARG_DIR_SYM_LINK) {
             if args_match.get_flag(opt_flags::dereference::NO_DEREFERENCE) {
-                return Err(Error::ArgumentsMismatch(format!(
-                    "'--{}' with '--{}' require '-P'",
-                    opt_flags::RECURSIVE,
-                    opt_flags::dereference::NO_DEREFERENCE
-                )));
+                return Err(Error::ArgumentsMismatch("-R -h requires -P".to_string()));
             }
 
             (ChconRecursiveMode::RecursiveAndFollowArgDirSymLinks, true)
         } else {
             if args_match.get_flag(opt_flags::dereference::DEREFERENCE) {
-                return Err(Error::ArgumentsMismatch(format!(
-                    "'--{}' with '--{}' require either '-H' or '-L'",
-                    opt_flags::RECURSIVE,
-                    opt_flags::dereference::DEREFERENCE
-                )));
+                return Err(Error::ArgumentsMismatch(
+                    "-R --dereference requires either -H or -L".to_string(),
+                ));
             }
 
             (ChconRecursiveMode::RecursiveButDoNotFollowSymLinks, false)
@@ -1060,6 +1054,24 @@ mod tests {
         let matches = command.try_get_matches_from(args).unwrap();
 
         assert!(matches.get_flag(opt_flags::RECURSIVE));
+    }
+
+    #[test]
+    fn test_recursive_symlink_option_diagnostics_match_gnu() {
+        for (args, expected) in [
+            (
+                &["chcon", "-R", "--dereference", "context", "file"][..],
+                "-R --dereference requires either -H or -L",
+            ),
+            (
+                &["chcon", "-R", "-L", "-h", "context", "file"][..],
+                "-R -h requires -P",
+            ),
+        ] {
+            let err = chcon_main(args.iter().map(OsString::from)).expect_err("expected error");
+            assert_eq!(err.to_string(), expected);
+            assert!(!err.usage());
+        }
     }
 
     // 对于布尔选项，例如 --verbose

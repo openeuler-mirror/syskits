@@ -52,6 +52,14 @@ pub enum CsplitError {
     RepeatCountIntegerRequired(String),
     #[error("invalid number: {}", ._0.quote())]
     InvalidNumber(String),
+    #[error("missing % conversion specification in suffix")]
+    SuffixFormatMissingConversion,
+    #[error("missing conversion specifier in suffix")]
+    SuffixFormatMissingSpecifier,
+    #[error("invalid conversion specifier in suffix: {}", _0)]
+    SuffixFormatInvalidSpecifier(String),
+    #[error("invalid flags in conversion specification: {}", _0)]
+    SuffixFormatInvalidFlags(String),
     #[error("incorrect conversion specification in suffix")]
     SuffixFormatIncorrect,
     #[error("too many % conversion specifications in suffix")]

@@ -12,6 +12,34 @@
 use crate::csplit_error::CsplitError;
 use ctcore::ct_show_warning;
 use regex::{Regex, bytes::Regex as BytesRegex};
+use std::fmt;
+use std::ops::Deref;
+
+#[derive(Debug)]
+pub struct CsplitRegex {
+    compiled: BytesRegex,
+    source: String,
+}
+
+impl CsplitRegex {
+    fn new(compiled: BytesRegex, source: String) -> Self {
+        Self { compiled, source }
+    }
+}
+
+impl Deref for CsplitRegex {
+    type Target = BytesRegex;
+
+    fn deref(&self) -> &Self::Target {
+        &self.compiled
+    }
+}
+
+impl fmt::Display for CsplitRegex {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.compiled.fmt(formatter)
+    }
+}
 
 /// The definition of a pattern to match on a line.
 #[derive(Debug)]
@@ -23,11 +51,11 @@ pub enum CsplitPattern {
     /// integer is an offset relative to the matched line of what to include (if positive) or
     /// to exclude (if negative). The number of times the pattern is executed is detailed in
     /// [`CsplitExecutePattern`].
-    UpToMatch(BytesRegex, i64, CsplitExecutePattern),
+    UpToMatch(CsplitRegex, i64, CsplitExecutePattern),
     /// Skip the file's content up to, not including, the line matching the regex. The integer
     /// is an offset relative to the matched line of what to include (if positive) or to exclude
     /// (if negative). The number of times the pattern is executed is detailed in [`CsplitExecutePattern`].
-    SkipToMatch(BytesRegex, i64, CsplitExecutePattern),
+    SkipToMatch(CsplitRegex, i64, CsplitExecutePattern),
 }
 
 #[allow(clippy::to_string_trait_impl)]
@@ -35,10 +63,7 @@ impl ToString for CsplitPattern {
     fn to_string(&self) -> String {
         match self {
             Self::UpToLine(n, _) => n.to_string(),
-            Self::UpToMatch(regex, 0, _) => format!("/{}/", regex.as_str()),
-            Self::UpToMatch(regex, offset, _) => format!("/{}/{:+}", regex.as_str(), offset),
-            Self::SkipToMatch(regex, 0, _) => format!("%{}%", regex.as_str()),
-            Self::SkipToMatch(regex, offset, _) => format!("%{}%{:+}", regex.as_str(), offset),
+            Self::UpToMatch(regex, _, _) | Self::SkipToMatch(regex, _, _) => regex.source.clone(),
         }
     }
 }
@@ -170,8 +195,9 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
                     .parse::<i64>()
                     .map_err(|_| CsplitError::IntegerExpectedAfterDelimiter(arg.to_string()))?
             };
-            let pattern = BytesRegex::new(&bre_to_rust_regex(expression))
+            let compiled = BytesRegex::new(&bre_to_rust_regex(expression))
                 .map_err(|_| CsplitError::InvalidPattern(arg.to_string()))?;
+            let pattern = CsplitRegex::new(compiled, arg.to_string());
             if delimiter == b'/' {
                 csplit_patterns.push(CsplitPattern::UpToMatch(pattern, offset, execute_n_times));
             } else {

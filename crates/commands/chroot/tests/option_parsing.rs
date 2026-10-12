@@ -262,3 +262,27 @@ fn chroot_parses_supplementary_group_lists_like_gnu() {
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(output.stdout, b"0 65534\n");
 }
+
+#[cfg(unix)]
+#[test]
+fn chroot_accepts_gnu_userspec_empty_forms() {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+
+    if unsafe { libc::geteuid() } != 0 {
+        return;
+    }
+
+    for userspec in ["", ":", "::", ":0:"] {
+        let option = format!("--userspec={userspec}");
+        let output = Command::new(env!("CARGO_BIN_EXE_chroot"))
+            .env("LC_ALL", "C")
+            .arg0("chroot")
+            .args([option.as_str(), "/", "/usr/bin/id", "-u"])
+            .output()
+            .expect("run chroot");
+
+        assert_eq!(output.status.code(), Some(0), "userspec: {userspec:?}");
+        assert_eq!(output.stdout, b"0\n");
+    }
+}

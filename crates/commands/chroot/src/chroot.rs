@@ -401,11 +401,9 @@ fn chroot_parse_user_spec(
 ) -> Result<(Option<&str>, Option<&str>), CTResult<()>> {
     match user_spec_str {
         Some(u) => {
-            if u.matches(':').count() > 1 {
-                return Err(Err(ChrootError::InvalidUserspec(u.to_string()).into()));
-            }
+            let user_spec = u.strip_suffix(':').unwrap_or(u);
 
-            if let Some((user_part, group_part)) = u.split_once(':') {
+            if let Some((user_part, group_part)) = user_spec.split_once(':') {
                 let user = if user_part.is_empty() {
                     None
                 } else {
@@ -417,20 +415,9 @@ fn chroot_parse_user_spec(
                     Some(group_part)
                 };
 
-                if user.is_none() && group.is_none() {
-                    // ":" is invalid (both empty)
-                    Err(Err(ChrootError::InvalidUserspec(u.to_string()).into()))
-                } else {
-                    Ok((user, group))
-                }
+                Ok((user, group))
             } else {
-                // No colon means only user was provided
-                let user = if u.is_empty() { None } else { Some(u.as_str()) };
-                if user.is_none() {
-                    Err(Err(ChrootError::InvalidUserspec(u.to_string()).into()))
-                } else {
-                    Ok((user, None))
-                }
+                Ok(((!user_spec.is_empty()).then_some(user_spec), None))
             }
         }
         None => Ok((None, None)), // If input is None, return all Nones
@@ -1226,16 +1213,28 @@ mod tests {
         }
 
         #[test]
-        fn test_parse_user_spec_rejects_extra_colons() {
+        fn test_parse_user_spec_keeps_remaining_colons_in_group() {
             let userspec = String::from("a:b:c");
             let result = chroot_parse_user_spec(Some(&userspec));
 
-            let err = result
-                .expect_err("userspec with more than one colon must be invalid")
-                .expect_err("invalid userspec should return an error");
+            assert_eq!(result.unwrap(), (Some("a"), Some("b:c")));
+        }
 
-            assert_eq!(format!("{err}"), "invalid userspec: 'a:b:c'");
-            assert_eq!(err.code(), 125);
+        #[test]
+        fn test_parse_user_spec_accepts_empty_fields_after_trailing_colon_normalization() {
+            for userspec in ["", ":", "::"] {
+                let userspec = String::from(userspec);
+                assert_eq!(
+                    chroot_parse_user_spec(Some(&userspec)).unwrap(),
+                    (None, None)
+                );
+            }
+
+            let userspec = String::from(":0:");
+            assert_eq!(
+                chroot_parse_user_spec(Some(&userspec)).unwrap(),
+                (None, Some("0"))
+            );
         }
 
         #[test]

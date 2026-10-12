@@ -477,8 +477,23 @@ fn tail_parse_num(src: &str) -> Result<TailSignum, ParseSizeError> {
             size_string = &size_string[1..];
             if c == '+' {
                 starting_with = true;
+                if size_string
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_ascii_whitespace())
+                {
+                    return Err(ParseSizeError::ParseFailure(src.quote().to_string()));
+                }
+            } else {
+                size_string = size_string.trim_start_matches(|c: char| c.is_ascii_whitespace());
             }
         }
+    }
+
+    if size_string.starts_with("0x") || size_string.starts_with("0X") {
+        return Err(ParseSizeError::ParseFailure(
+            size_string.quote().to_string(),
+        ));
     }
 
     match parse_size_u64(size_string) {
@@ -1097,6 +1112,12 @@ mod tests {
     #[test]
     fn test_parse_num_rejects_trailing_ascii_whitespace() {
         assert!(tail_parse_num("1 ").is_err());
+    }
+
+    #[test]
+    fn test_parse_num_uses_gnu_decimal_lexical_rules() {
+        assert_eq!(tail_parse_num("- 1"), Ok(TailSignum::Negative(1)));
+        assert!(tail_parse_num("0x10").is_err());
     }
 
     #[test]

@@ -252,6 +252,47 @@
     },
     {
       "command": "tail",
+      "description": "Linux下-n - 1必须按GNU规则跳过负号后的前导ASCII空格并输出最后一行；预期RC=0、stdout为y换行、stderr为空。",
+      "args": ["-n", "- 1"],
+      "stdin": "x\ny\n",
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "y\n",
+          "stderr": ""
+        }
+      },
+      "cleanup_commands": [],
+      "tags": ["linux", "options", "lines", "numeric"]
+    },
+    {
+      "command": "tail",
+      "description": "Linux下-c 0x10必须按GNU十进制词法规则拒绝十六进制前缀；预期RC=1、stdout为空、stderr为tail: invalid number of bytes: '0x10'。",
+      "args": ["-c", "0x10"],
+      "environment": {
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C"
+        }
+      },
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "tail: invalid number of bytes: '0x10'\n"
+        }
+      },
+      "cleanup_commands": [],
+      "tags": ["linux", "options", "bytes", "numeric"]
+    },
+    {
+      "command": "tail",
       "description": "Linux下-c 1后的尾随ASCII空格必须按GNU规则拒绝；预期RC=1、stdout为空、stderr为tail: invalid number of bytes: '1 '。",
       "args": ["-c", "1 "],
       "environment": {

@@ -190,6 +190,9 @@ pub fn ct_app() -> Command {
             .long(opt_flags::HELP)
             .help("Print help information.")
             .action(ArgAction::Help),
+        Arg::new("version")
+            .long("version")
+            .action(ArgAction::Version),
         Arg::new(opt_flags::verbosity::CHANGES)
             .short('c')
             .long(opt_flags::verbosity::CHANGES)
@@ -271,6 +274,7 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .infer_long_args(true)
         .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(&args)
 }
 
@@ -329,15 +333,14 @@ mod tests {
     }
 
     #[test]
-    fn test_ct_app_execution_version_valid() {
+    fn test_ct_app_rejects_short_version_option() {
         let command = ct_app();
 
-        // 测试用例：有效输入 --help
         let args = vec![ctcore::ct_util_name(), "-V"];
         let executable = command.try_get_matches_from(args);
 
         assert!(executable.is_err());
-        assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+        assert_eq!(executable.unwrap_err().kind(), ErrorKind::UnknownArgument);
     }
 
     #[test]
@@ -442,7 +445,7 @@ mod tests {
     }
 
     #[test]
-    fn test_version_valid_ctmain() {
+    fn test_short_version_ctmain_is_invalid() {
         let args = [ctcore::ct_util_name(), "-V"];
         let result = chgrp_main(args.iter().map(OsString::from));
         assert!(result.is_err());

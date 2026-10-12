@@ -871,6 +871,12 @@ fn reject_incompatible_options(args: &[OsString], usage_name: &str) -> CTResult<
             match option {
                 'f' | 'b' | 'n' => {
                     if options.next().is_none() {
+                        if index + 1 == args.len() {
+                            return Err(csplit_usage_error(
+                                usage_name,
+                                format!("option requires an argument -- '{option}'"),
+                            ));
+                        }
                         index += 1;
                     }
                     break;

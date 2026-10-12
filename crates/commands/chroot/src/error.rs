@@ -85,7 +85,12 @@ impl Display for ChrootError {
             ),
             Self::CannotChdir(e) => write!(f, "cannot chdir to root directory: {}", strip_errno(e)),
             Self::CommandFailed(s, e) | Self::CommandNotFound(s, e) => {
-                write!(f, "failed to run command {}: {}", s.to_string().quote(), e,)
+                write!(
+                    f,
+                    "failed to run command {}: {}",
+                    s.to_string().quote(),
+                    strip_errno(e),
+                )
             }
             Self::InvalidGroupList(s) => write!(f, "invalid group list {}", s.quote()),
             Self::InvalidGroup(s) => write!(f, "invalid group {}", s.quote()),

@@ -756,11 +756,13 @@ fn csplit_args_init() -> Vec<Arg> {
             .short('b')
             .long(opt_flags::SUFFIX_FORMAT)
             .value_name("FORMAT")
+            .allow_hyphen_values(true)
             .help(t!("csplit.clap.suffix_format")),
         Arg::new(opt_flags::PREFIX)
             .short('f')
             .long(opt_flags::PREFIX)
             .value_name("PREFIX")
+            .allow_hyphen_values(true)
             .help(t!("csplit.clap.prefix")),
         Arg::new(opt_flags::KEEP_FILES)
             .short('k')
@@ -851,12 +853,15 @@ fn reject_incompatible_options(args: &[OsString], usage_name: &str) -> CTResult<
                     format!("option '--{option}' doesn't allow an argument"),
                 ));
             }
-            if value.is_none() && gnu_long_option_requires_value(option) && index + 1 == args.len()
-            {
-                return Err(csplit_usage_error(
-                    usage_name,
-                    format!("option '--{option}' requires an argument"),
-                ));
+            if value.is_none() && gnu_long_option_requires_value(option) {
+                if index + 1 == args.len() {
+                    return Err(csplit_usage_error(
+                        usage_name,
+                        format!("option '--{option}' requires an argument"),
+                    ));
+                }
+                index += 2;
+                continue;
             }
             index += 1;
             continue;

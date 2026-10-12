@@ -17,6 +17,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
+use ctcore::ct_display::locale_quote;
 use ctcore::ct_entries::{self, Locate};
 use ctcore::ct_error::{CTResult, CTsageError, UClapError, set_ct_exit_code};
 use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
@@ -38,6 +39,14 @@ mod opt_flags {
     pub const COMMAND: &str = "command";
     pub const SKIP_CHDIR: &str = "skip-chdir";
 }
+
+const GNU_LONG_OPTIONS: [&str; 5] = [
+    opt_flags::GROUPS,
+    opt_flags::USERSPEC,
+    opt_flags::SKIP_CHDIR,
+    "help",
+    "version",
+];
 
 pub fn chroot_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
@@ -220,7 +229,17 @@ fn normalize_gnu_option_parsing(mut args: Vec<OsString>) -> CTResult<Vec<OsStrin
             let option_name = long_option
                 .split_once('=')
                 .map_or(long_option, |(name, _)| name);
-            if !long_option.contains('=') && gnu_option_takes_value(option_name) {
+            let matching_options = gnu_long_option_matches(option_name);
+            if matching_options.is_empty() {
+                return Err(CTsageError::new(
+                    125,
+                    format!("unrecognized option {}", locale_quote(argument)),
+                ));
+            }
+            if !long_option.contains('=')
+                && matching_options.len() == 1
+                && [opt_flags::GROUPS, opt_flags::USERSPEC].contains(&matching_options[0])
+            {
                 index += 1;
             }
         } else if let Some(short_options) = argument.strip_prefix('-')
@@ -238,12 +257,12 @@ fn normalize_gnu_option_parsing(mut args: Vec<OsString>) -> CTResult<Vec<OsStrin
     Ok(args)
 }
 
-fn gnu_option_takes_value(option_name: &str) -> bool {
-    [opt_flags::GROUPS, opt_flags::USERSPEC]
+fn gnu_long_option_matches(option_name: &str) -> Vec<&'static str> {
+    GNU_LONG_OPTIONS
         .iter()
+        .copied()
         .filter(|option| option.starts_with(option_name))
-        .count()
-        == 1
+        .collect()
 }
 
 /**

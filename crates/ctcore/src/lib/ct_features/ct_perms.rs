@@ -350,7 +350,10 @@ fn change_ownership_with_diagnostics<P: AsRef<Path>>(
             });
         }
         Ok(RestrictedChownResult::Applied) => {
-            let changed = dest_uid_val != meta.uid() || dest_gid_val != meta.gid();
+            // gid_t::MAX is the chown(2) sentinel meaning "do not change the
+            // group", even when it was supplied as a numeric group.
+            let changed = dest_uid_val != meta.uid()
+                || (dest_gid_val != meta.gid() && dest_gid != Some(gid_t::MAX));
             if changed {
                 match verbosity.level {
                     CtVerbosityLevel::Changes | CtVerbosityLevel::Verbose => {

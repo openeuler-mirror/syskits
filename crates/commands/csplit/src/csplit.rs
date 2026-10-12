@@ -295,7 +295,12 @@ impl SplitWriter<'_> {
     fn new_writer(&mut self) -> Result<(), CsplitError> {
         self.close_current_writer()?;
         let file_name = self.options.split_name.get(self.counter);
-        let file = File::create(&file_name)?;
+        let file = File::create(&file_name).map_err(|error| {
+            CsplitError::OutputCreateError(
+                file_name.clone(),
+                trim_os_error_suffix(error.to_string()),
+            )
+        })?;
         self.current_writer = Some(BufWriter::new(file));
         self.current_filename = Some(file_name);
 

@@ -26,6 +26,8 @@ pub enum CsplitError {
     },
     #[error("{}: {}", _0, _1)]
     WriteError(String, String),
+    #[error("{}: {}", ._0.maybe_quote(), _1)]
+    OutputCreateError(String, String),
     #[error("{}: line number out of range", ._0.quote())]
     LineOutOfRange(String),
     #[error("{}: line number out of range on repetition {}", ._0.quote(), _1)]

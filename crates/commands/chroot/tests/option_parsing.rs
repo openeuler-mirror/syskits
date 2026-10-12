@@ -78,3 +78,25 @@ fn chroot_stops_option_parsing_at_newroot() {
         assert_eq!(output.status.code(), Some(127), "command: {command}");
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn chroot_skip_chdir_rejects_unresolvable_newroot_without_panicking() {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+
+    for newroot in [".", "/definitely-missing-chroot-root"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_chroot"))
+            .env("LC_ALL", "C")
+            .arg0("chroot")
+            .args(["--skip-chdir", newroot, "true"])
+            .output()
+            .expect("run chroot");
+
+        assert_eq!(output.status.code(), Some(125));
+        assert_eq!(
+            String::from_utf8(output.stderr).expect("stderr is UTF-8"),
+            "chroot: option --skip-chdir only permitted if NEWROOT is old '/'\nTry 'chroot --help' for more information.\n"
+        );
+    }
+}

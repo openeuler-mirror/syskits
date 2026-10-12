@@ -20,7 +20,7 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, set_ct_exit_code, strip_errno};
 use ctcore::ct_fs::CtFileInformation;
 use rust_i18n::t;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::fs::metadata;
 use std::io::{self, IsTerminal, Read, Write};
@@ -31,6 +31,8 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 
 #[cfg(unix)]
 use nix::libc;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 
 /// Linux splice support
 #[cfg(target_os = "linux")]
@@ -304,7 +306,7 @@ fn args_init() -> Vec<Arg> {
 }
 
 enum CatAction {
-    Run(CatOutputOptions, Vec<String>),
+    Run(CatOutputOptions, Vec<OsString>),
     Help,
     Version,
 }
@@ -333,35 +335,33 @@ fn parse_cat_args(args: &[OsString]) -> CTResult<CatAction> {
     let mut i = 1;
 
     while i < args.len() {
-        let arg = args[i].to_string_lossy();
+        let arg = args[i].as_os_str();
+        let arg_bytes = arg.as_bytes();
 
-        if arg == "--" {
-            files.extend(
-                args[i + 1..]
-                    .iter()
-                    .map(|file| file.to_string_lossy().into_owned()),
-            );
+        if arg_bytes == b"--" {
+            files.extend(args[i + 1..].iter().cloned());
             break;
         }
 
-        if arg == "-" || !arg.starts_with('-') {
-            files.push(arg.into_owned());
+        if arg_bytes == b"-" || !arg_bytes.starts_with(b"-") {
+            files.push(args[i].clone());
             i += 1;
             continue;
         }
 
-        if let Some(long) = arg.strip_prefix("--") {
-            let (name, has_value) = match long.split_once('=') {
-                Some((name, _)) => (name, true),
+        if let Some(long) = arg_bytes.strip_prefix(b"--") {
+            let (name, has_value) = match long.iter().position(|byte| *byte == b'=') {
+                Some(index) => (&long[..index], true),
                 None => (long, false),
             };
-            let matches = cat_long_option_matches(name);
+            let matches = cat_long_option_matches(&String::from_utf8_lossy(name));
+            let display_arg = String::from_utf8_lossy(arg_bytes);
 
             match matches.as_slice() {
                 [] => {
                     return Err(cat_usage_error(
                         &usage_name,
-                        format!("unrecognized option '{arg}'"),
+                        format!("unrecognized option '{display_arg}'"),
                     ));
                 }
                 [option] => {
@@ -400,40 +400,42 @@ fn parse_cat_args(args: &[OsString]) -> CTResult<CatAction> {
                         .join(" ");
                     return Err(cat_usage_error(
                         &usage_name,
-                        format!("option '{arg}' is ambiguous; possibilities: {possibilities}"),
+                        format!(
+                            "option '{display_arg}' is ambiguous; possibilities: {possibilities}"
+                        ),
                     ));
                 }
             }
         } else {
-            for option in arg[1..].chars() {
+            for option in &arg_bytes[1..] {
                 match option {
-                    'b' => {
+                    b'b' => {
                         number = true;
                         number_nonblank = true;
                     }
-                    'e' => {
+                    b'e' => {
                         show_ends = true;
                         show_non_print = true;
                     }
-                    'n' => number = true,
-                    's' => squeeze_blank = true,
-                    't' => {
+                    b'n' => number = true,
+                    b's' => squeeze_blank = true,
+                    b't' => {
                         show_tabs = true;
                         show_non_print = true;
                     }
-                    'u' => {}
-                    'v' => show_non_print = true,
-                    'A' => {
+                    b'u' => {}
+                    b'v' => show_non_print = true,
+                    b'A' => {
                         show_non_print = true;
                         show_ends = true;
                         show_tabs = true;
                     }
-                    'E' => show_ends = true,
-                    'T' => show_tabs = true,
+                    b'E' => show_ends = true,
+                    b'T' => show_tabs = true,
                     invalid => {
                         return Err(cat_usage_error(
                             &usage_name,
-                            format!("invalid option -- '{invalid}'"),
+                            format!("invalid option -- '{}'", *invalid as char),
                         ));
                     }
                 }
@@ -444,7 +446,7 @@ fn parse_cat_args(args: &[OsString]) -> CTResult<CatAction> {
     }
 
     if files.is_empty() {
-        files.push("-".to_owned());
+        files.push(OsString::from("-"));
     }
 
     Ok(CatAction::Run(
@@ -578,7 +580,7 @@ fn cat_handle_to_writer<R: CatFdReadable, W: Write>(
  *
  */
 fn cat_path(
-    input_path: &str,
+    input_path: &OsStr,
     output_options: &CatOutputOptions,
     output_state: &mut CatOutputState,
     out_info: Option<&CtFileInformation>,
@@ -634,7 +636,7 @@ fn cat_path(
         #[cfg(unix)]
         CatInputType::Socket => {
             // 连接到Unix套接字并处理输入
-            let socket = UnixStream::connect(input_path)?;
+            let socket = UnixStream::connect(Path::new(input_path))?;
             socket.shutdown(Shutdown::Write)?;
             let mut handle = CatInputHandle {
                 reader: socket,
@@ -644,7 +646,7 @@ fn cat_path(
         }
         _ => {
             // 处理普通文件输入
-            let file = File::open(input_path)?;
+            let file = File::open(Path::new(input_path))?;
 
             // 如果提供了输出信息且尝试将输出重定向到输入，进行位置检测
             if let Some(out_info) = out_info {
@@ -688,7 +690,7 @@ fn cat_path(
 }
 
 fn cat_path_to_writer<W: Write>(
-    input_path: &str,
+    input_path: &OsStr,
     output_options: &CatOutputOptions,
     output_state: &mut CatOutputState,
     out_info: Option<&CtFileInformation>,
@@ -706,7 +708,7 @@ fn cat_path_to_writer<W: Write>(
         CatInputType::Directory => Err(CatError::IsDirectory),
         #[cfg(unix)]
         CatInputType::Socket => {
-            let socket = UnixStream::connect(input_path)?;
+            let socket = UnixStream::connect(Path::new(input_path))?;
             socket.shutdown(Shutdown::Write)?;
             let mut handle = CatInputHandle {
                 reader: socket,
@@ -715,7 +717,7 @@ fn cat_path_to_writer<W: Write>(
             cat_handle_to_writer(&mut handle, output_options, output_state, cat_writer)
         }
         _ => {
-            let file = File::open(input_path)?;
+            let file = File::open(Path::new(input_path))?;
 
             if let Some(out_info) = out_info {
                 if CtFileInformation::from_file(&file).ok().as_ref() == Some(out_info) {
@@ -750,25 +752,21 @@ fn cat_path_to_writer<W: Write>(
     }
 }
 
-fn render_cat_file_error(file_path: &str, err: &CatError) -> String {
+fn render_cat_file_error(file_path: &OsStr, err: &CatError) -> String {
+    let display_path = file_path.to_string_lossy();
+    let quoted_path = display_path.as_ref().maybe_quote();
+
     match err {
         CatError::OutputIsInput => {
-            format!(
-                "cat: {}: input file is output file\n",
-                file_path.maybe_quote()
-            )
+            format!("cat: {quoted_path}: input file is output file\n")
         }
-        CatError::Io(io_err) => format!(
-            "cat: {}: {}\n",
-            file_path.maybe_quote(),
-            strip_errno(io_err)
-        ),
-        other => format!("cat: {}: {}\n", file_path.maybe_quote(), other),
+        CatError::Io(io_err) => format!("cat: {quoted_path}: {}\n", strip_errno(io_err)),
+        other => format!("cat: {quoted_path}: {other}\n"),
     }
 }
 
-fn cat_files_to_writer<W: Write>(
-    input_files: &[String],
+fn cat_files_to_writer<W: Write, S: AsRef<OsStr>>(
+    input_files: &[S],
     output_options: &CatOutputOptions,
     cat_writer: &mut W,
 ) -> CatRunOutcome {
@@ -783,15 +781,16 @@ fn cat_files_to_writer<W: Write>(
     let mut exit_code = 0;
 
     for file_path in input_files {
+        let input_path = file_path.as_ref();
         if let Err(err) = cat_path_to_writer(
-            file_path,
+            input_path,
             output_options,
             &mut output_state,
             output_info.as_ref(),
             cat_writer,
         ) {
             exit_code = 1;
-            stderr_text.push_str(&render_cat_file_error(file_path, &err));
+            stderr_text.push_str(&render_cat_file_error(input_path, &err));
         }
     }
 
@@ -811,7 +810,10 @@ fn cat_files_to_writer<W: Write>(
  * 此函数遍历给定的文件路径列表，尝试合并这些文件的内容到标准输出中。
  * 它处理各种输出选项，并在遇到错误时收集错误信息，最后返回成功或失败的结果。
  */
-fn cat_files_info(input_files: &[String], output_options: &CatOutputOptions) -> CTResult<()> {
+fn cat_files_info<S: AsRef<OsStr>>(
+    input_files: &[S],
+    output_options: &CatOutputOptions,
+) -> CTResult<()> {
     let output_info = CtFileInformation::from_file(&std::io::stdout()).ok();
     let mut output_state = CatOutputState {
         line_number: 1,
@@ -822,14 +824,15 @@ fn cat_files_info(input_files: &[String], output_options: &CatOutputOptions) -> 
     let mut stderr_text = String::new();
 
     for file_path in input_files {
+        let input_path = file_path.as_ref();
         if let Err(err) = cat_path(
-            file_path,
+            input_path,
             output_options,
             &mut output_state,
             output_info.as_ref(),
         ) {
             set_ct_exit_code(1);
-            stderr_text.push_str(&render_cat_file_error(file_path, &err));
+            stderr_text.push_str(&render_cat_file_error(input_path, &err));
         }
     }
 
@@ -850,12 +853,12 @@ fn cat_files_info(input_files: &[String], output_options: &CatOutputOptions) -> 
 /// # Arguments
 ///
 /// * `path` - Path on a file system to classify metadata
-fn cat_get_input_type(input_path: &str) -> CatResult<CatInputType> {
-    if input_path == "-" {
+fn cat_get_input_type(input_path: &OsStr) -> CatResult<CatInputType> {
+    if input_path == OsStr::new("-") {
         return Ok(CatInputType::StdIn);
     }
 
-    let file_type = match metadata(input_path) {
+    let file_type = match metadata(Path::new(input_path)) {
         Ok(metadata) => metadata.file_type(),
         Err(e) => {
             if let Some(raw_error_msg) = e.raw_os_error() {
@@ -1224,7 +1227,7 @@ fn cat_rows_from_output(output: &str) -> Vec<CatRow> {
 }
 
 fn cat_semantic_from_invocation(
-    input_files: &[String],
+    input_files: &[OsString],
     output_options: &CatOutputOptions,
 ) -> CatSemantic {
     let mut buffer = Vec::new();
@@ -1485,7 +1488,26 @@ mod tests {
         };
 
         assert_eq!(options.num_mode, CatNumberingMode::All);
-        assert_eq!(files, vec!["file"]);
+        assert_eq!(files, vec![OsString::from("file")]);
+    }
+
+    #[test]
+    fn test_non_utf8_file_name_is_opened_as_raw_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let temp_dir = tempdir().expect("tempdir");
+        let path = temp_dir
+            .path()
+            .join(OsString::from_vec(b"cat-non-utf8-\xff".to_vec()));
+        fs::write(&path, b"payload\n").expect("write fixture");
+
+        let semantic =
+            cat_native_semantic([OsString::from("cat"), path.into_os_string()].into_iter())
+                .expect("cat should open a non-UTF-8 path");
+
+        assert_eq!(semantic.classic_text, "payload\n");
+        assert_eq!(semantic.stderr_text, "");
+        assert_eq!(semantic.exit_code, 0);
     }
 
     #[test]

@@ -42,9 +42,7 @@ mod opt_flags {
 pub fn chroot_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args: Vec<_> = args.collect();
-
-    reject_unsupported_short_options(&args)?;
+    let args = normalize_gnu_option_parsing(args.collect())?;
     // 尝试从 args 中获取匹配项，并在匹配失败时返回错误代码 125
     let args_match = ct_app().try_get_matches_from(args).with_exit_code(125)?;
 
@@ -203,17 +201,23 @@ fn args_init() -> Vec<Arg> {
     args
 }
 
-/// GNU chroot has no short options.  Stop scanning at NEWROOT, because options
-/// after it belong to COMMAND and must be passed through unchanged.
-fn reject_unsupported_short_options(args: &[OsString]) -> CTResult<()> {
+/// GNU chroot uses getopt_long with a leading '+', which stops parsing at
+/// NEWROOT.  Insert `--` so Clap leaves COMMAND and its arguments untouched.
+fn normalize_gnu_option_parsing(mut args: Vec<OsString>) -> CTResult<Vec<OsString>> {
     let mut index = 1;
 
     while let Some(argument) = args.get(index) {
         let Some(argument) = argument.to_str() else {
+            args.insert(index, OsString::from("--"));
             break;
         };
 
-        if argument == "--" || argument == "-" || !argument.starts_with('-') {
+        if argument == "--" {
+            break;
+        }
+
+        if argument == "-" || !argument.starts_with('-') {
+            args.insert(index, OsString::from("--"));
             break;
         }
 
@@ -240,7 +244,7 @@ fn reject_unsupported_short_options(args: &[OsString]) -> CTResult<()> {
         index += 1;
     }
 
-    Ok(())
+    Ok(args)
 }
 
 fn gnu_option_takes_value(option_name: &str) -> bool {

@@ -56,3 +56,25 @@ fn chroot_long_option_prefixes_use_gnu_targets() {
     assert_eq!(user_output.status.code(), Some(0));
     assert_eq!(user_output.stdout, b"65534\n");
 }
+
+#[cfg(unix)]
+#[test]
+fn chroot_stops_option_parsing_at_newroot() {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+
+    if unsafe { libc::geteuid() } != 0 {
+        return;
+    }
+
+    for command in ["-h", "--group=65534", "--userspec=65534", "--skip-chdir"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_chroot"))
+            .env("LC_ALL", "C")
+            .arg0("chroot")
+            .args(["/", command])
+            .output()
+            .expect("run chroot");
+
+        assert_eq!(output.status.code(), Some(127), "command: {command}");
+    }
+}

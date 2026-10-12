@@ -84,7 +84,7 @@ impl Display for ChrootError {
             Self::InvalidUserspec(s) => write!(f, "invalid userspec: {}", s.quote(),),
             Self::MissingNewRoot => write!(
                 f,
-                "Missing operand: NEWROOT\nTry '{} --help' for more information.",
+                "missing operand\nTry '{} --help' for more information.",
                 ctcore::ct_execute_phrase(),
             ),
             Self::NoSuchGroup(s) => write!(f, "no such group: {}", s.maybe_quote(),),
@@ -250,6 +250,13 @@ mod tests {
     #[test]
     fn test_code_for_missing_new_root_error() {
         let error = ChrootError::MissingNewRoot;
+        assert_eq!(
+            format!("{error}"),
+            format!(
+                "missing operand\nTry '{} --help' for more information.",
+                ctcore::ct_execute_phrase()
+            )
+        );
         assert_eq!(error.code(), 125);
     }
 

@@ -132,3 +132,30 @@ fn chroot_reports_kernel_root_directory_errors() {
         );
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn chroot_reports_missing_newroot_like_gnu() {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+
+    for arguments in [
+        Vec::new(),
+        vec!["--groups=0"],
+        vec!["--userspec=0"],
+        vec!["--skip-chdir"],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_chroot"))
+            .env("LC_ALL", "C")
+            .arg0("chroot")
+            .args(arguments)
+            .output()
+            .expect("run chroot");
+
+        assert_eq!(output.status.code(), Some(125));
+        assert_eq!(
+            String::from_utf8(output.stderr).expect("stderr is UTF-8"),
+            "chroot: missing operand\nTry 'chroot --help' for more information.\n"
+        );
+    }
+}

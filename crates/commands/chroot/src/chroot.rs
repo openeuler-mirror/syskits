@@ -152,7 +152,6 @@ fn args_init() -> Vec<Arg> {
         Arg::new(opt_flags::NEWROOT)
             .value_hint(clap::ValueHint::DirPath)
             .hide(true)
-            .required(true)
             .index(1),
         Arg::new(opt_flags::GROUPS)
             .long(opt_flags::GROUPS)
@@ -574,15 +573,17 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_app_newroot_required() {
+        fn test_ct_app_accepts_missing_newroot_for_custom_diagnostic() {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name()];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().kind(),
-                ErrorKind::MissingRequiredArgument
+            assert!(result.is_ok());
+            assert!(
+                result
+                    .unwrap()
+                    .get_one::<String>(opt_flags::NEWROOT)
+                    .is_none()
             );
         }
 
@@ -906,16 +907,12 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_app_missing_command_argument() {
+        fn test_ct_app_allows_missing_newroot() {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name()];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().kind(),
-                ErrorKind::MissingRequiredArgument
-            );
+            assert!(result.is_ok());
         }
 
         #[test]

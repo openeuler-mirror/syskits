@@ -258,11 +258,7 @@ fn trim_os_error_suffix(message: String) -> String {
 }
 
 fn line_for_match(line: &[u8]) -> &[u8] {
-    if let Some(without_lf) = line.strip_suffix(b"\n") {
-        without_lf.strip_suffix(b"\r").unwrap_or(without_lf)
-    } else {
-        line
-    }
+    line.strip_suffix(b"\n").unwrap_or(line)
 }
 
 /// Write a portion of the input file into a split which filename is based on an incrementing

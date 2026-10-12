@@ -13,7 +13,7 @@ extern crate rust_i18n;
 use ctcore::Tool;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::{Quotable, locale_quote};
 pub use ctcore::ct_entries;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, chown_base, opt_flags};
@@ -66,7 +66,7 @@ fn chgrp_parse_gid_and_uid(args_match: &ArgMatches) -> CTResult<CtGidUidOwnerFil
                     Err(_) => {
                         return Err(CtSimpleError::new(
                             1,
-                            format!("invalid group: {}", group_info.quote()),
+                            format!("invalid group: {}", locale_quote(group_info)),
                         ));
                     }
                 },

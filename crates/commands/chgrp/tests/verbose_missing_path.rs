@@ -22,3 +22,33 @@ fn chgrp_verbose_missing_path_reports_group_change() {
         format!("chgrp: cannot access '{path}': No such file or directory\n")
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn chgrp_force_silent_keeps_verbose_status() {
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+
+    let path = "/definitely-missing-chgrp-file";
+    for options in [
+        vec!["-f", "-v"],
+        vec!["-v", "-f"],
+        vec!["--quiet", "--verbose"],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_chgrp"))
+            .env("LC_ALL", "C")
+            .arg0("chgrp")
+            .args(&options)
+            .args(["0", path])
+            .output()
+            .expect("run chgrp");
+
+        assert_eq!(output.status.code(), Some(1), "options: {options:?}");
+        assert_eq!(
+            String::from_utf8(output.stdout).expect("stdout is UTF-8"),
+            format!("failed to change group of '{path}' to 0\n"),
+            "options: {options:?}"
+        );
+        assert!(output.stderr.is_empty(), "options: {options:?}");
+    }
+}

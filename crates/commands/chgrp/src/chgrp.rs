@@ -135,39 +135,21 @@ pub fn ct_app() -> Command {
         Arg::new(opt_flags::verbosity::CHANGES)
             .short('c')
             .long(opt_flags::verbosity::CHANGES)
-            .overrides_with_all([
-                opt_flags::verbosity::SILENT,
-                opt_flags::verbosity::QUIET,
-                opt_flags::verbosity::VERBOSE,
-            ])
+            .overrides_with(opt_flags::verbosity::VERBOSE)
             .help("like verbose but report only when a change is made")
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::verbosity::SILENT)
             .short('f')
             .long(opt_flags::verbosity::SILENT)
-            .overrides_with_all([
-                opt_flags::verbosity::CHANGES,
-                opt_flags::verbosity::QUIET,
-                opt_flags::verbosity::VERBOSE,
-            ])
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::verbosity::QUIET)
             .long(opt_flags::verbosity::QUIET)
-            .overrides_with_all([
-                opt_flags::verbosity::CHANGES,
-                opt_flags::verbosity::SILENT,
-                opt_flags::verbosity::VERBOSE,
-            ])
             .help("suppress most error messages")
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::verbosity::VERBOSE)
             .short('v')
             .long(opt_flags::verbosity::VERBOSE)
-            .overrides_with_all([
-                opt_flags::verbosity::CHANGES,
-                opt_flags::verbosity::SILENT,
-                opt_flags::verbosity::QUIET,
-            ])
+            .overrides_with(opt_flags::verbosity::CHANGES)
             .help("output a diagnostic for every file processed")
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::dereference::DEREFERENCE)
@@ -387,18 +369,18 @@ mod tests {
     }
 
     #[test]
-    fn test_last_verbosity_option_wins() {
+    fn test_changes_and_verbose_options_override_each_other() {
         let verbose_last = ct_app()
             .try_get_matches_from([ctcore::ct_util_name(), "-c", "-v"])
             .expect("parse verbosity options");
         assert!(!verbose_last.get_flag(opt_flags::verbosity::CHANGES));
         assert!(verbose_last.get_flag(opt_flags::verbosity::VERBOSE));
 
-        let silent_last = ct_app()
+        let quiet_and_verbose = ct_app()
             .try_get_matches_from([ctcore::ct_util_name(), "-v", "--quiet"])
             .expect("parse verbosity options");
-        assert!(!silent_last.get_flag(opt_flags::verbosity::VERBOSE));
-        assert!(silent_last.get_flag(opt_flags::verbosity::QUIET));
+        assert!(quiet_and_verbose.get_flag(opt_flags::verbosity::VERBOSE));
+        assert!(quiet_and_verbose.get_flag(opt_flags::verbosity::QUIET));
     }
 
     #[test]

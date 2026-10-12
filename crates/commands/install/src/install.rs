@@ -755,6 +755,7 @@ impl Installer {
             groups_only: self.owner_id.is_none(),
             force_silent: false,
             level: CtVerbosityLevel::Normal,
+            force_silent: false,
         }
     }
 }

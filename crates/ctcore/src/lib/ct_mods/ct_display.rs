@@ -40,13 +40,44 @@ pub use os_display::{Quotable, Quoted};
 // coreutils uses for simple messages.
 pub fn locale_quote(text: &str) -> String {
     let (left_quote, right_quote) = locale_quote_marks();
-    let escaped = if right_quote == "'" {
-        text.replace('\\', "\\\\").replace('\'', "\\'")
-    } else {
-        text.to_string()
-    };
+    let normalized_locale = locale_name_for_ctype().to_ascii_uppercase();
+    let utf8_locale = normalized_locale.contains("UTF-8") || normalized_locale.contains("UTF8");
+    let escaped = locale_quote_escape(text, right_quote == "'", utf8_locale);
 
     format!("{left_quote}{escaped}{right_quote}")
+}
+
+fn locale_quote_escape(text: &str, escape_apostrophe: bool, utf8_locale: bool) -> String {
+    let mut escaped = String::new();
+
+    for character in text.chars() {
+        match character {
+            '\\' => escaped.push_str("\\\\"),
+            '\'' if escape_apostrophe => escaped.push_str("\\'"),
+            '\u{0007}' => escaped.push_str("\\a"),
+            '\u{0008}' => escaped.push_str("\\b"),
+            '\t' => escaped.push_str("\\t"),
+            '\n' => escaped.push_str("\\n"),
+            '\u{000B}' => escaped.push_str("\\v"),
+            '\u{000C}' => escaped.push_str("\\f"),
+            '\r' => escaped.push_str("\\r"),
+            character if character.is_control() => {
+                for byte in character.to_string().as_bytes() {
+                    use std::fmt::Write;
+                    write!(escaped, "\\{byte:03o}").expect("write to string");
+                }
+            }
+            character if utf8_locale || character.is_ascii() => escaped.push(character),
+            character => {
+                for byte in character.to_string().as_bytes() {
+                    use std::fmt::Write;
+                    write!(escaped, "\\{byte:03o}").expect("write to string");
+                }
+            }
+        }
+    }
+
+    escaped
 }
 
 /// Return the locale-sensitive opening and closing marks used by GNU diagnostics.
@@ -57,7 +88,7 @@ pub fn locale_quote_marks() -> (&'static str, &'static str) {
     if normalized.contains("UTF-8") || normalized.contains("UTF8") {
         ("‘", "’")
     } else if normalized.contains("GB18030") {
-        ("\u{a1ae}", "\u{a1af}")
+        ("\"", "\"")
     } else {
         ("'", "'")
     }

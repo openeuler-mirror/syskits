@@ -10,8 +10,8 @@
  */
 
 use crate::csplit_error::CsplitError;
-use ctcore::ct_show_warning;
-use regex::{Regex, bytes::Regex as BytesRegex};
+use ctcore::{ct_display::Quotable, ct_show_warning};
+use regex::bytes::Regex as BytesRegex;
 use std::fmt;
 use std::ops::Deref;
 
@@ -74,7 +74,7 @@ pub enum CsplitExecutePattern {
     /// Execute the pattern as many times as possible
     Always,
     /// Execute the pattern a fixed number of times
-    Times(usize),
+    Times(u64),
 }
 
 impl CsplitExecutePattern {
@@ -87,20 +87,20 @@ impl CsplitExecutePattern {
 }
 
 pub struct CsplitExecutePatternIter {
-    max: Option<usize>,
-    cur: usize,
+    max: Option<u64>,
+    cur: u64,
 }
 
 impl CsplitExecutePatternIter {
-    fn new(max: Option<usize>) -> Self {
+    fn new(max: Option<u64>) -> Self {
         Self { max, cur: 0 }
     }
 }
 
 impl Iterator for CsplitExecutePatternIter {
-    type Item = (Option<usize>, usize);
+    type Item = (Option<u64>, u64);
 
-    fn next(&mut self) -> Option<(Option<usize>, usize)> {
+    fn next(&mut self) -> Option<(Option<u64>, u64)> {
         match self.max {
             // iterate until m is reached
             Some(m) => {
@@ -148,9 +148,6 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
     // 初始化用于储存解析后模式的向量
     let mut csplit_patterns = Vec::with_capacity(args.len());
 
-    // 正则表达式用于匹配模式重复的次数
-    let execute_n_times_reg = Regex::new(r"^\{(?:(?P<TIMES>\d+)|\*)\}$").unwrap();
-
     // 使用peekable迭代器以便于向前查看下一个参数
     let mut iter = args.iter().peekable();
 
@@ -158,22 +155,12 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
         // 解析模式的重复执行次数
         let execute_n_times = match iter.peek() {
             None => CsplitExecutePattern::Times(1),
-            Some(&next_item) => {
-                match execute_n_times_reg.captures(next_item) {
-                    None => CsplitExecutePattern::Times(1),
-                    Some(r) => {
-                        // 跳过当前参数，因为它已经被用于重复次数的解析
-                        iter.next();
-                        if let Some(times) = r.name("TIMES") {
-                            CsplitExecutePattern::Times(
-                                times.as_str().parse::<usize>().unwrap() + 1,
-                            )
-                        } else {
-                            CsplitExecutePattern::Always
-                        }
-                    }
-                }
+            Some(&next_item) if next_item.starts_with('{') => {
+                let repeat_count = parse_repeat_count(next_item)?;
+                iter.next();
+                repeat_count
             }
+            Some(_) => CsplitExecutePattern::Times(1),
         };
 
         // 解析模式定义
@@ -219,6 +206,28 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
     }
     // 成功解析所有参数后，返回模式向量
     Ok(csplit_patterns)
+}
+
+fn parse_repeat_count(argument: &str) -> Result<CsplitExecutePattern, CsplitError> {
+    let Some(without_closing_brace) = argument.strip_suffix('}') else {
+        return Err(CsplitError::RepeatCountMissingClosingBrace(
+            argument.to_string(),
+        ));
+    };
+    let value = without_closing_brace.strip_prefix('{').unwrap_or(argument);
+    if value == "*" {
+        return Ok(CsplitExecutePattern::Always);
+    }
+
+    match value.parse::<u64>() {
+        Ok(repeat_count) if repeat_count <= i64::MAX as u64 => {
+            Ok(CsplitExecutePattern::Times(repeat_count + 1))
+        }
+        _ => Err(CsplitError::RepeatCountIntegerRequired(format!(
+            "{}}}",
+            without_closing_brace.quote()
+        ))),
+    }
 }
 
 fn bre_to_rust_regex(pattern: &str) -> String {
@@ -584,6 +593,26 @@ mod tests {
                     if pattern == input && actual_delimiter == delimiter
             ));
         }
+    }
+
+    #[test]
+    fn test_repeat_count_diagnostics_and_range() {
+        assert!(matches!(
+            parse_repeat_count("{2"),
+            Err(CsplitError::RepeatCountMissingClosingBrace(value)) if value == "{2"
+        ));
+        assert!(matches!(
+            parse_repeat_count("{x}"),
+            Err(CsplitError::RepeatCountIntegerRequired(value)) if value == "'{x'}"
+        ));
+        assert!(matches!(
+            parse_repeat_count("{9223372036854775807}"),
+            Ok(CsplitExecutePattern::Times(9_223_372_036_854_775_808))
+        ));
+        assert!(matches!(
+            parse_repeat_count("{9223372036854775808}"),
+            Err(CsplitError::RepeatCountIntegerRequired(_))
+        ));
     }
 
     #[test]

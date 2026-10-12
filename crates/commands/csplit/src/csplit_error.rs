@@ -29,11 +29,11 @@ pub enum CsplitError {
     #[error("{}: line number out of range", ._0.quote())]
     LineOutOfRange(String),
     #[error("{}: line number out of range on repetition {}", ._0.quote(), _1)]
-    LineOutOfRangeOnRepetition(String, usize),
+    LineOutOfRangeOnRepetition(String, u64),
     #[error("{}: match not found", ._0.quote())]
     MatchNotFound(String),
     #[error("{}: match not found on repetition {}", ._0.quote(), _1)]
-    MatchNotFoundOnRepetition(String, usize),
+    MatchNotFoundOnRepetition(String, u64),
     #[error("0: line number must be greater than zero")]
     LineNumberIsZero,
     #[error("line number '{}' is smaller than preceding line number, {}", _0, _1)]
@@ -44,6 +44,10 @@ pub enum CsplitError {
     ClosingDelimiterMissing(String, char),
     #[error("{}: integer expected after delimiter", ._0.quote())]
     IntegerExpectedAfterDelimiter(String),
+    #[error("{}: '}}' is required in repeat count", ._0.quote())]
+    RepeatCountMissingClosingBrace(String),
+    #[error("{}: integer required between '{{' and '}}'", _0)]
+    RepeatCountIntegerRequired(String),
     #[error("invalid number: {}", ._0.quote())]
     InvalidNumber(String),
     #[error("incorrect conversion specification in suffix")]

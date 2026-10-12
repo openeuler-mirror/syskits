@@ -49,15 +49,15 @@ pub struct Verbosity {
 
 /// Names to use in ownership-change diagnostics.
 #[derive(Default)]
-pub struct CtChownOutputNames<'a> {
+pub struct CtOwnershipChangeOutputNames<'a> {
     pub user: Option<&'a str>,
     pub group: Option<&'a str>,
 }
 
-struct CtChownRequest<'a> {
+struct CtOwnershipChangeRequest<'a> {
     dest_uid: Option<u32>,
     dest_gid: Option<u32>,
-    output_names: CtChownOutputNames<'a>,
+    output_names: CtOwnershipChangeOutputNames<'a>,
     filter: &'a CtIfFrom,
     follow: bool,
     verbosity: Verbosity,
@@ -66,12 +66,12 @@ struct CtChownRequest<'a> {
 static ALL_FILTER: CtIfFrom = CtIfFrom::All;
 
 #[derive(Debug)]
-struct ChownFailure {
+struct OwnershipChangeFailure {
     stderr: Option<String>,
     stdout: Option<String>,
 }
 
-impl ChownFailure {
+impl OwnershipChangeFailure {
     fn into_error_message(self) -> String {
         match (self.stderr, self.stdout) {
             (Some(stderr), Some(stdout)) => format!("{stderr}\n{stdout}"),
@@ -183,19 +183,19 @@ fn chown_ids_for_syscall(dest_uid: Option<u32>, dest_gid: Option<u32>) -> (uid_t
 /// Perform the change of owner on a path
 /// with the various options
 /// and error messages management
-pub fn wrap_chown<P: AsRef<Path>>(
+pub fn change_ownership<P: AsRef<Path>>(
     path: P,
     meta: &Metadata,
     dest_uid: Option<u32>,
     dest_gid: Option<u32>,
-    output_names: CtChownOutputNames<'_>,
+    output_names: CtOwnershipChangeOutputNames<'_>,
     follow: bool,
     verbosity: Verbosity,
 ) -> Result<String, String> {
-    wrap_chown_with_diagnostics(
+    change_ownership_with_diagnostics(
         path,
         meta,
-        CtChownRequest {
+        CtOwnershipChangeRequest {
             dest_uid,
             dest_gid,
             output_names,
@@ -204,15 +204,15 @@ pub fn wrap_chown<P: AsRef<Path>>(
             verbosity,
         },
     )
-    .map_err(ChownFailure::into_error_message)
+    .map_err(OwnershipChangeFailure::into_error_message)
 }
 
-fn wrap_chown_with_diagnostics<P: AsRef<Path>>(
+fn change_ownership_with_diagnostics<P: AsRef<Path>>(
     path: P,
     meta: &Metadata,
-    request: CtChownRequest<'_>,
-) -> Result<String, ChownFailure> {
-    let CtChownRequest {
+    request: CtOwnershipChangeRequest<'_>,
+) -> Result<String, OwnershipChangeFailure> {
+    let CtOwnershipChangeRequest {
         dest_uid,
         dest_gid,
         output_names,
@@ -319,7 +319,7 @@ fn wrap_chown_with_diagnostics<P: AsRef<Path>>(
             let stderr = (!verbosity.force_silent && verbosity.level != CtVerbosityLevel::Silent)
                 .then(|| ownership_change_failure_message(&path_str, group_only, &e));
 
-            return Err(ChownFailure {
+            return Err(OwnershipChangeFailure {
                 stderr,
                 stdout: verbose_output,
             });
@@ -344,7 +344,7 @@ fn wrap_chown_with_diagnostics<P: AsRef<Path>>(
                     .to_string()
                 }
             });
-            return Err(ChownFailure {
+            return Err(OwnershipChangeFailure {
                 stderr: None,
                 stdout,
             });
@@ -420,7 +420,7 @@ pub enum CtTraverseSymlinks {
     All,
 }
 
-pub struct CtChownExecutor {
+pub struct CtOwnershipChangeExecutor {
     pub dest_uid: Option<u32>,
     pub dest_gid: Option<u32>,
     pub dest_user_name: Option<String>,
@@ -521,7 +521,7 @@ fn traversal_walk(root: &Path, traverse_symlinks: &CtTraverseSymlinks) -> WalkDi
         .contents_first(traverse_symlinks != &CtTraverseSymlinks::All)
 }
 
-impl CtChownExecutor {
+impl CtOwnershipChangeExecutor {
     pub fn exec(&self) -> CTResult<()> {
         let mut ret = 0;
         for f in &self.files {
@@ -716,13 +716,13 @@ impl CtChownExecutor {
 
     fn change_path(&self, path: &Path, meta: &Metadata) -> i32 {
         if self.matched(meta.uid(), meta.gid()) {
-            match wrap_chown_with_diagnostics(
+            match change_ownership_with_diagnostics(
                 path,
                 meta,
-                CtChownRequest {
+                CtOwnershipChangeRequest {
                     dest_uid: self.dest_uid,
                     dest_gid: self.dest_gid,
-                    output_names: CtChownOutputNames {
+                    output_names: CtOwnershipChangeOutputNames {
                         user: self.dest_user_name.as_deref(),
                         group: self.dest_group_name.as_deref(),
                     },
@@ -928,7 +928,7 @@ fn has_help_option(command: &Command, args: &[OsString]) -> bool {
 /// from `ArgMatches`.
 /// `groups_only` determines whether verbose output will only mention the group.
 #[allow(clippy::cognitive_complexity)]
-pub fn chown_base(
+pub fn ownership_change_base(
     mut command: Command,
     args: impl crate::Args,
     add_arg_if_not_reference: &'static str,
@@ -1018,7 +1018,7 @@ pub fn chown_base(
         filter,
     } = parse_gid_uid_and_filter(&matches)?;
 
-    let executor = CtChownExecutor {
+    let executor = CtOwnershipChangeExecutor {
         traverse_symlinks,
         dest_gid,
         dest_uid,
@@ -1153,7 +1153,7 @@ mod tests {
         unix::fs::symlink("missing", tree.join("dangle")).unwrap();
         fs::write(tree.join("regular"), b"").unwrap();
 
-        let executor = CtChownExecutor {
+        let executor = CtOwnershipChangeExecutor {
             dest_uid: Some(unsafe { libc::geteuid() }),
             dest_gid: Some(unsafe { libc::getegid() }),
             dest_user_name: None,
@@ -1183,7 +1183,7 @@ mod tests {
         fs::create_dir(&tree).unwrap();
         unix::fs::symlink("../tree", tree.join("loop")).unwrap();
 
-        let executor = CtChownExecutor {
+        let executor = CtOwnershipChangeExecutor {
             dest_uid: Some(unsafe { libc::geteuid() }),
             dest_gid: Some(unsafe { libc::getegid() }),
             dest_user_name: None,
@@ -1252,12 +1252,12 @@ mod tests {
         fs::write(&file, b"").unwrap();
         let meta = file.metadata().unwrap();
 
-        let output = wrap_chown(
+        let output = change_ownership(
             &file,
             &meta,
             None,
             None,
-            CtChownOutputNames::default(),
+            CtOwnershipChangeOutputNames::default(),
             true,
             Verbosity {
                 groups_only: false,
@@ -1272,20 +1272,20 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn test_verbose_chown_failure_keeps_diagnostics_on_separate_streams() {
+    fn test_verbose_ownership_change_failure_keeps_diagnostics_on_separate_streams() {
         let temp_dir = tempdir().unwrap();
         let file = temp_dir.path().join("file");
         fs::write(&file, b"").unwrap();
         let meta = file.metadata().unwrap();
         fs::remove_file(&file).unwrap();
 
-        let failure = wrap_chown_with_diagnostics(
+        let failure = change_ownership_with_diagnostics(
             &file,
             &meta,
-            CtChownRequest {
+            CtOwnershipChangeRequest {
                 dest_uid: Some(1),
                 dest_gid: None,
-                output_names: CtChownOutputNames::default(),
+                output_names: CtOwnershipChangeOutputNames::default(),
                 filter: &ALL_FILTER,
                 follow: true,
                 verbosity: Verbosity {
@@ -1316,7 +1316,7 @@ mod tests {
 
     #[test]
     fn test_filtered_group_change_uses_group_diagnostic() {
-        let executor = CtChownExecutor {
+        let executor = CtOwnershipChangeExecutor {
             dest_uid: None,
             dest_gid: Some(0),
             dest_user_name: None,
@@ -1433,7 +1433,7 @@ mod tests {
         fs::remove_file(&victim).unwrap();
         unix::fs::symlink("protected", &victim).unwrap();
 
-        let executor = CtChownExecutor {
+        let executor = CtOwnershipChangeExecutor {
             dest_uid: Some(safe_meta.uid()),
             dest_gid: None,
             dest_user_name: None,

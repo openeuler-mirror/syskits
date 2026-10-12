@@ -42,7 +42,7 @@ use ctcore::ct_entries::{grp2gid, usr2uid};
 use ctcore::ct_error::{CTError, CTIoError, CTResult, FromIo};
 use ctcore::ct_fs::dir_strip_dot_for_creation;
 use ctcore::ct_mode::get_umask;
-use ctcore::ct_perms::{CtChownOutputNames, CtVerbosityLevel, Verbosity, wrap_chown};
+use ctcore::ct_perms::{CtOwnershipChangeOutputNames, CtVerbosityLevel, Verbosity, change_ownership};
 use ctcore::ct_process::{getegid, geteuid};
 use ctcore::{ct_show, ct_show_error, uio_error};
 use file_diff::diff;
@@ -1117,12 +1117,12 @@ fn chown_optional_user_group(path: &Path, b: &Installer) -> CTResult<()> {
     };
 
     let verbosity = b.get_verbosity();
-    match wrap_chown(
+    match change_ownership(
         path,
         &meta,
         Some(owner_id),
         Some(group_id),
-        CtChownOutputNames::default(),
+        CtOwnershipChangeOutputNames::default(),
         false,
         verbosity,
     ) {

@@ -16,7 +16,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 pub use ctcore::ct_entries::{self, CtPasswd, Group, Locate};
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
-use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, chown_base, opt_flags};
+use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, ownership_change_base, opt_flags};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use sys_locale::get_locale;
 
@@ -30,7 +30,7 @@ use std::os::unix::fs::MetadataExt;
 pub fn chown_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    chown_base(
+    ownership_change_base(
         ct_app(),
         args,
         opt_flags::ARG_OWNER,

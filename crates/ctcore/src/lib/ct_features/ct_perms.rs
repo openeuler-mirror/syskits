@@ -1060,6 +1060,40 @@ fn normalize_reference_option_argument(args: &[OsString], command: &Command) -> 
     normalized
 }
 
+/// GNU getopt stops option processing at the first non-option when
+/// POSIXLY_CORRECT is set. Insert `--` to make clap use the same ordering.
+pub fn normalize_posixly_correct_args(command: &Command, mut args: Vec<OsString>) -> Vec<OsString> {
+    if std::env::var_os("POSIXLY_CORRECT").is_none() {
+        return args;
+    }
+
+    let mut index = 1;
+    let mut option_takes_next = false;
+    while index < args.len() {
+        if option_takes_next {
+            option_takes_next = false;
+            index += 1;
+            continue;
+        }
+
+        let Some(arg) = args[index].to_str() else {
+            args.insert(index, OsString::from("--"));
+            break;
+        };
+        if arg == "--" {
+            break;
+        }
+        if arg == "-" || !arg.starts_with('-') {
+            args.insert(index, OsString::from("--"));
+            break;
+        }
+
+        option_takes_next = long_option_takes_next_value(command, &args[index]);
+        index += 1;
+    }
+    args
+}
+
 fn gnu_unknown_option_message(args: &[OsString], command: &Command) -> Option<String> {
     for argument in args.iter().skip(1) {
         let arg = argument.to_str()?;
@@ -1110,7 +1144,7 @@ pub fn ownership_change_base(
     parse_gid_uid_and_filter: GidUidFilterOwnerParser,
     groups_only: bool,
 ) -> CTResult<()> {
-    let args: Vec<_> = args.collect();
+    let args = normalize_posixly_correct_args(&command, args.collect());
     let help = has_help_option(&command, &args);
     let reference = has_reference_option(&command, &args);
 

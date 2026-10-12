@@ -15,7 +15,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, FromIo};
+use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_lines;
 use ctcore::{Tool, ct_crash_if_err};
 use regex::bytes::Regex;
@@ -652,6 +652,10 @@ where
 pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = args.collect::<Vec<_>>();
+    let usage_name = csplit_usage_name(&args);
+    reject_invalid_short_options(&args, &usage_name)?;
+
     // 使用 clap 库解析命令行参数
     let args_match = ct_app().try_get_matches_from(args)?;
 
@@ -713,12 +717,10 @@ pub fn ct_app() -> Command {
 fn csplit_args_init() -> Vec<Arg> {
     let args = vec![
         Arg::new("help")
-            .short('h')
             .long("help")
             .help(t!("csplit.clap.help"))
             .action(ArgAction::Help),
         Arg::new("version")
-            .short('V')
             .long("version")
             .help(t!("csplit.clap.version"))
             .action(ArgAction::Version),
@@ -768,6 +770,57 @@ fn csplit_args_init() -> Vec<Arg> {
             .required(true),
     ];
     args
+}
+
+fn csplit_usage_name(args: &[OsString]) -> String {
+    args.first()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .filter(|arg| !arg.is_empty())
+        .unwrap_or_else(|| ctcore::ct_util_name().to_owned())
+}
+
+fn csplit_usage_error(usage_name: &str, message: String) -> Box<dyn ctcore::ct_error::CTError> {
+    CtSimpleError::new(
+        1,
+        format!("{message}\nTry '{usage_name} --help' for more information."),
+    )
+}
+
+fn reject_invalid_short_options(args: &[OsString], usage_name: &str) -> CTResult<()> {
+    let mut index = 1;
+
+    while index < args.len() {
+        let arg = args[index].to_string_lossy();
+        if arg == "--" {
+            break;
+        }
+        if !arg.starts_with('-') || arg == "-" || arg.starts_with("--") {
+            index += 1;
+            continue;
+        }
+
+        let mut options = arg[1..].chars();
+        while let Some(option) = options.next() {
+            match option {
+                'f' | 'b' | 'n' => {
+                    if options.next().is_none() {
+                        index += 1;
+                    }
+                    break;
+                }
+                'k' | 'q' | 's' | 'z' => {}
+                invalid => {
+                    return Err(csplit_usage_error(
+                        usage_name,
+                        format!("invalid option -- '{invalid}'"),
+                    ));
+                }
+            }
+        }
+        index += 1;
+    }
+
+    Ok(())
 }
 
 #[derive(Default)]
@@ -850,7 +903,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
 
         #[test]
@@ -870,7 +923,7 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
 
         #[test]
@@ -2885,16 +2938,16 @@ mod tests {
         #[test]
         fn test_ct_main_v() {
             let args = [ctcore::ct_util_name(), "-V"];
-            let result = csplit_main(args.iter().map(OsString::from));
+            let error = csplit_main(args.iter().map(OsString::from)).unwrap_err();
 
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 0);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
+            assert_eq!(error.code(), 1);
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "invalid option -- 'V'\nTry '{} --help' for more information.",
+                    ctcore::ct_util_name()
+                )
+            );
         }
 
         #[test]
@@ -2915,16 +2968,16 @@ mod tests {
         #[test]
         fn test_ct_main_h() {
             let args = [ctcore::ct_util_name(), "-h"];
-            let result = csplit_main(args.iter().map(OsString::from));
+            let error = csplit_main(args.iter().map(OsString::from)).unwrap_err();
 
-            match result {
-                Err(output) => {
-                    assert_eq!(output.code(), 0);
-                }
-                Ok(output) => {
-                    assert_eq!(output, 0);
-                }
-            }
+            assert_eq!(error.code(), 1);
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "invalid option -- 'h'\nTry '{} --help' for more information.",
+                    ctcore::ct_util_name()
+                )
+            );
         }
 
         fn remove_tem_file(name: String) {

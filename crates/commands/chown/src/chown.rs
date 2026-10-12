@@ -16,7 +16,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 pub use ctcore::ct_entries::{self, CtPasswd, Group, Locate};
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
-use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, ownership_change_base, opt_flags};
+use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, opt_flags, ownership_change_base};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use sys_locale::get_locale;
 

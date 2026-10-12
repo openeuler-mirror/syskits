@@ -930,6 +930,48 @@ fn has_help_option(command: &Command, args: &[OsString]) -> bool {
     has_option_before_operand(command, args, |argument| argument == "--help")
 }
 
+fn gnu_unknown_option_message(args: &[OsString], command: &Command) -> Option<String> {
+    for arg in args.iter().skip(1) {
+        let arg = arg.to_str()?;
+        if arg == "--" {
+            break;
+        }
+
+        if let Some(long_option) = arg.strip_prefix("--") {
+            if long_option.is_empty() {
+                break;
+            }
+            let option_name = long_option
+                .split_once('=')
+                .map_or(long_option, |(name, _)| name);
+            let mut matching_options = command
+                .get_arguments()
+                .filter_map(|argument| argument.get_long())
+                .filter(|known_option| known_option.starts_with(option_name));
+            if matching_options.next().is_none() || matching_options.next().is_some() {
+                return Some(format!("unrecognized option {}", locale_quote(arg)));
+            }
+        } else if let Some(short_options) = arg.strip_prefix('-') {
+            if short_options.is_empty() {
+                continue;
+            }
+            for option in short_options.chars() {
+                if !command
+                    .get_arguments()
+                    .filter_map(|argument| argument.get_short())
+                    .any(|known_option| known_option == option)
+                {
+                    return Some(format!(
+                        "invalid option -- {}",
+                        locale_quote(&option.to_string())
+                    ));
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Base implementation for `chgrp` and `chown`.
 ///
 /// An argument called `add_arg_if_not_reference` will be added to `command` if
@@ -967,7 +1009,17 @@ pub fn ownership_change_base(
             .required(false)
             .num_args(1..),
     );
-    let matches = command.try_get_matches_from(args)?;
+    let command_for_errors = command.clone();
+    let matches = match command.try_get_matches_from(args.clone()) {
+        Ok(matches) => matches,
+        Err(error) if error.kind() == clap::error::ErrorKind::UnknownArgument => {
+            if let Some(message) = gnu_unknown_option_message(&args, &command_for_errors) {
+                return Err(CTsageError::new(libc::EXIT_FAILURE, message));
+            }
+            return Err(error.into());
+        }
+        Err(error) => return Err(error.into()),
+    };
 
     let files: Vec<OsString> = matches
         .get_many::<OsString>(opt_flags::ARG_FILES)

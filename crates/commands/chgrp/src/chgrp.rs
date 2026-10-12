@@ -16,7 +16,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::{Quotable, locale_quote};
 pub use ctcore::ct_entries;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
-use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, ownership_change_base, opt_flags};
+use ctcore::ct_perms::{CtGidUidOwnerFilter, CtIfFrom, opt_flags, ownership_change_base};
 
 use std::ffi::OsString;
 

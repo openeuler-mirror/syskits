@@ -40,6 +40,8 @@ pub enum CsplitError {
     LineNumberSmallerThanPrevious(usize, usize),
     #[error("{}: invalid pattern", ._0.quote())]
     InvalidPattern(String),
+    #[error("{}: integer expected after delimiter", ._0.quote())]
+    IntegerExpectedAfterDelimiter(String),
     #[error("invalid number: {}", ._0.quote())]
     InvalidNumber(String),
     #[error("incorrect conversion specification in suffix")]

@@ -736,6 +736,7 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .args_override_self(true)
         .disable_help_flag(true)
         .disable_version_flag(true)
         .args(&args)
@@ -2674,7 +2675,10 @@ mod tests {
                 "--suppress-matched",
             ];
             let result = command.try_get_matches_from(args);
-            assert!(result.is_err());
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_flag(opt_flags::KEEP_FILES));
+            assert!(matches.get_flag(opt_flags::SUPPRESS_MATCHED));
         }
 
         #[test]

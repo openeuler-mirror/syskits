@@ -12,7 +12,7 @@ use std::ffi::OsString;
 use std::fmt::Write;
 use std::io;
 
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::{Quotable, locale_quote};
 
 pub(crate) type Result<T> = std::result::Result<T, Error>;
 
@@ -21,8 +21,8 @@ pub(crate) enum Error {
     #[error("missing operand")]
     MissingOperand,
 
-    #[error("missing operand after {}", .0.quote())]
-    MissingOperandAfter(OsString),
+    #[error("missing operand after {0}")]
+    MissingOperandAfter(String),
 
     #[error("Data is out of range")]
     OutOfRange,
@@ -51,6 +51,13 @@ pub(crate) enum Error {
         operand1: OsString,
         source: io::Error,
     },
+}
+
+pub(crate) fn chcon_quote_operand(operand: &OsString) -> String {
+    match operand.to_str() {
+        Some(operand) => locale_quote(operand),
+        None => operand.quote().to_string(),
+    }
 }
 
 impl Error {
@@ -156,9 +163,12 @@ mod tests {
 
     #[test]
     fn test_missing_operand_after_error() {
-        let error = Error::MissingOperandAfter(OsString::from("testfile"));
+        let error = Error::MissingOperandAfter(chcon_quote_operand(&OsString::from("testfile")));
         let result = report_full_error(&error);
-        assert_eq!(result, "missing operand after 'testfile'");
+        assert_eq!(
+            result,
+            format!("missing operand after {}", locale_quote("testfile"))
+        );
     }
 
     #[test]

@@ -385,7 +385,7 @@ fn chcon_parse_command_line(
     if files.is_empty() {
         return Err(match &command_mode {
             ChconCommandLineMode::ContextBased { context } => {
-                Error::MissingOperandAfter(context.clone())
+                Error::MissingOperandAfter(chcon_quote_operand(context))
             }
             ChconCommandLineMode::ReferenceBased { .. } | ChconCommandLineMode::Custom { .. } => {
                 Error::MissingOperand
@@ -935,7 +935,10 @@ mod tests {
         assert_eq!(parse_error(&[ctcore::ct_util_name()]), "missing operand");
         assert_eq!(
             parse_error(&[ctcore::ct_util_name(), "testfile"]),
-            "missing operand after 'testfile'"
+            format!(
+                "missing operand after {}",
+                ctcore::ct_display::locale_quote("testfile")
+            )
         );
         assert_eq!(
             parse_error(&[ctcore::ct_util_name(), "--reference=testfile"]),

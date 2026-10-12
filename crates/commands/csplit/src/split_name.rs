@@ -45,7 +45,8 @@ impl SplitName {
 
         let n_digits = n_digits_opt_strs
             .map(|opt| {
-                opt.parse::<usize>()
+                opt.trim_start_matches(|character: char| character.is_ascii_whitespace())
+                    .parse::<usize>()
                     .map_err(|_| CsplitError::InvalidNumber(opt))
             })
             .transpose()?
@@ -151,6 +152,12 @@ mod tests {
             Err(CsplitError::InvalidNumber(_)) => (),
             _ => panic!("should fail with InvalidNumber"),
         };
+    }
+
+    #[test]
+    fn digits_allow_leading_whitespace() {
+        let split_name = SplitName::new(None, None, Some(String::from(" \t+3"))).unwrap();
+        assert_eq!(split_name.get(2), "xx002");
     }
 
     #[test]

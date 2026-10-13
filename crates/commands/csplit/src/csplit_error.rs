@@ -120,6 +120,11 @@ pub enum CsplitError {
         source: Box<CsplitError>,
         diagnostics: Vec<(OutputFileName, String)>,
     },
+    #[error("{source}")]
+    FinalStdoutError {
+        source: Box<CsplitError>,
+        message: String,
+    },
     #[error("write error for {}: {}", ._0.shell_quote(), _1)]
     WriteError(OutputFileName, String),
     #[error("{}: {}", _0, _1)]
@@ -207,6 +212,15 @@ impl CsplitError {
             return Ok(());
         }
 
+        if let Self::FinalStdoutError { source, message } = self {
+            source.write_diagnostic(utility_name)?;
+            writeln!(
+                io::stderr().lock(),
+                "{utility_name}: write error: {message}"
+            )?;
+            return Ok(());
+        }
+
         if let Self::ClosingDelimiterMissing(pattern, delimiter) = self
             && pattern.has_non_utf8_bytes()
         {
@@ -247,6 +261,13 @@ impl CsplitError {
         }
     }
 
+    pub fn with_final_stdout_error(source: Self, message: String) -> Self {
+        Self::FinalStdoutError {
+            source: Box::new(source),
+            message,
+        }
+    }
+
     pub fn is_match_not_found(&self) -> bool {
         match self {
             Self::MatchNotFound(_) => true,
@@ -258,9 +279,9 @@ impl CsplitError {
     pub fn preserves_splits_on_error(&self) -> bool {
         match self {
             Self::InputDisappeared | Self::StdoutWriteError(_) => true,
-            Self::DeferredOutput { source, .. } | Self::CleanupDiagnostics { source, .. } => {
-                source.preserves_splits_on_error()
-            }
+            Self::DeferredOutput { source, .. }
+            | Self::CleanupDiagnostics { source, .. }
+            | Self::FinalStdoutError { source, .. } => source.preserves_splits_on_error(),
             _ => false,
         }
     }
@@ -270,7 +291,9 @@ impl CsplitError {
             Self::DeferredOutput { stdout_lines, .. } => {
                 Some(stdout_lines.iter().map(String::as_str))
             }
-            Self::CleanupDiagnostics { source, .. } => source.deferred_stdout_lines(),
+            Self::CleanupDiagnostics { source, .. } | Self::FinalStdoutError { source, .. } => {
+                source.deferred_stdout_lines()
+            }
             _ => None,
         }
     }

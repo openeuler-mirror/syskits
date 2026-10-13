@@ -233,7 +233,7 @@ where
         Err(e) => Err(e),
     };
 
-    let final_result = match final_result {
+    let mut final_result = match final_result {
         Err(error @ CsplitError::ReadError(_)) => match split_writer.finish_split_output() {
             Ok(stdout_line) => Err(CsplitError::with_deferred_stdout(
                 error,
@@ -250,8 +250,15 @@ where
         .is_err_and(CsplitError::preserves_splits_on_error);
     if final_result.is_err() && !csplit_opts.keep_files && !preserve_splits {
         let cleanup_diagnostics = split_writer.delete_all_splits();
-        return final_result
+        final_result = final_result
             .map_err(|error| CsplitError::with_cleanup_diagnostics(error, cleanup_diagnostics));
+    }
+
+    if let Some(message) = split_writer.take_stdout_error() {
+        final_result = match final_result {
+            Ok(()) => Err(CsplitError::StdoutWriteError(message)),
+            Err(error) => Err(CsplitError::with_final_stdout_error(error, message)),
+        };
     }
 
     final_result
@@ -623,6 +630,7 @@ struct SplitWriter<'a> {
     /// flag to indicate that no content should be written to a split
     dev_null: bool,
     created_files: Arc<Mutex<Vec<PathBuf>>>,
+    stdout_error: Option<String>,
 }
 
 impl SplitWriter<'_> {
@@ -635,6 +643,7 @@ impl SplitWriter<'_> {
             size: 0,
             dev_null: false,
             created_files: Arc::clone(&options.created_files),
+            stdout_error: None,
         }
     }
 
@@ -728,7 +737,11 @@ impl SplitWriter<'_> {
         Ok(())
     }
 
-    fn write_split_size(&self, line: &str) -> Result<(), CsplitError> {
+    fn write_split_size(&mut self, line: &str) -> Result<(), CsplitError> {
+        if self.stdout_error.is_some() {
+            return Ok(());
+        }
+
         let result = write_stdout_line(line);
 
         if let Err(error) = result {
@@ -744,18 +757,22 @@ impl SplitWriter<'_> {
                 }
                 let _ = signal_hook::low_level::emulate_default_handler(libc::SIGPIPE);
             }
-            return Err(CsplitError::IoError(error));
+            self.stdout_error = Some(trim_os_error_suffix(error.to_string()));
         }
         Ok(())
     }
 
-    fn emit_deferred_stdout(&self, error: &CsplitError) -> Result<(), CsplitError> {
+    fn emit_deferred_stdout(&mut self, error: &CsplitError) -> Result<(), CsplitError> {
         if let Some(lines) = error.deferred_stdout_lines() {
             for line in lines {
                 self.write_split_size(line)?;
             }
         }
         Ok(())
+    }
+
+    fn take_stdout_error(&mut self) -> Option<String> {
+        self.stdout_error.take()
     }
 
     fn finish_split_output(&mut self) -> Result<Option<String>, CsplitError> {

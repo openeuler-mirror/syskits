@@ -424,6 +424,10 @@ fn shell_quote_non_utf8_file_operand(bytes: &[u8]) -> String {
     let mut result = String::with_capacity(bytes.len() + 8);
     let mut segment = None;
 
+    if !matches!(bytes.first(), Some(b'\x20'..=b'\x7e')) {
+        result.push_str("''");
+    }
+
     for &byte in bytes {
         match byte {
             b'\x07' => push_shell_escaped_byte(&mut result, &mut segment, "a"),
@@ -580,7 +584,7 @@ struct SplitWriter<'a> {
     /// the writer to the current split
     current_writer: Option<BufWriter<File>>,
     /// filename of the current split
-    current_filename: Option<String>,
+    current_filename: Option<PathBuf>,
     /// the size in bytes of the current split
     size: usize,
     /// flag to indicate that no content should be written to a split
@@ -606,7 +610,6 @@ impl SplitWriter<'_> {
     fn new_writer(&mut self) -> Result<(), CsplitError> {
         self.close_current_writer()?;
         let file_path = self.options.split_name.get_path(self.counter);
-        let file_name = file_path.to_string_lossy().into_owned();
         let output_file_name = OutputFileName::from(file_path.as_os_str().to_os_string());
         let mut created_files = self
             .created_files
@@ -618,10 +621,10 @@ impl SplitWriter<'_> {
                 trim_os_error_suffix(error.to_string()),
             )
         })?;
-        created_files.push(file_path);
+        created_files.push(file_path.clone());
         drop(created_files);
         self.current_writer = Some(BufWriter::new(file));
-        self.current_filename = Some(file_name);
+        self.current_filename = Some(file_path);
 
         self.suppress_next_write = self.options.suppress_matched && self.counter > 0;
 
@@ -632,11 +635,15 @@ impl SplitWriter<'_> {
     }
 
     fn current_write_error(&self, err: io::Error) -> CsplitError {
-        let filename = self
-            .current_filename
-            .clone()
-            .unwrap_or_else(|| "<unknown>".to_string());
+        let filename = self.current_output_file_name();
         CsplitError::WriteError(filename, trim_os_error_suffix(err.to_string()))
+    }
+
+    fn current_output_file_name(&self) -> OutputFileName {
+        self.current_filename
+            .as_ref()
+            .map(|filename| OutputFileName::from(filename.as_os_str().to_os_string()))
+            .unwrap_or_else(|| OutputFileName::from(OsString::from("<unknown>")))
     }
 
     fn close_current_writer(&mut self) -> Result<(), CsplitError> {
@@ -667,12 +674,9 @@ impl SplitWriter<'_> {
         }
 
         if !self.dev_null {
+            let filename = self.current_output_file_name();
             match self.current_writer {
                 Some(ref mut current_writer) => {
-                    let filename = self
-                        .current_filename
-                        .clone()
-                        .unwrap_or_else(|| "<unknown>".to_string());
                     current_writer.write_all(line).map_err(|err| {
                         CsplitError::WriteError(
                             filename.clone(),
@@ -740,8 +744,8 @@ impl SplitWriter<'_> {
 
         self.close_current_writer()?;
         if self.options.elide_empty_files && self.size == 0 {
-            if let Some(file_name) = self.current_filename.take() {
-                remove_file(file_name)?;
+            if let Some(file_path) = self.current_filename.take() {
+                remove_file(file_path)?;
             }
             self.counter = self.counter.saturating_sub(1);
         } else if !self.options.quiet {

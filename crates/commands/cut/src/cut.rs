@@ -873,7 +873,7 @@ fn cut_input_delimiter_bytes(os_string: &OsString) -> CTResult<&[u8]> {
     if bytes.len() != length {
         return Err(CtSimpleError::new(
             1,
-            "the delimiter must be a single character",
+            cut_usage_error("the delimiter must be a single character"),
         ));
     }
     Ok(bytes)
@@ -885,7 +885,7 @@ fn cut_input_delimiter_bytes(os_string: &OsString) -> CTResult<&[u8]> {
     if os_string.to_string_lossy().chars().count() != 1 {
         return Err(CtSimpleError::new(
             1,
-            "the delimiter must be a single character",
+            cut_usage_error("the delimiter must be a single character"),
         ));
     }
     Ok(bytes)

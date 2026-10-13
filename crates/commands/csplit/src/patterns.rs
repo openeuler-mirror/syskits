@@ -24,6 +24,7 @@ use std::ffi::CStr;
 use std::sync::{Mutex, OnceLock};
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
+// RE_SYNTAX_POSIX_BASIC without RE_CONTEXT_INVALID_DUP and RE_NO_EMPTY_RANGES.
 const GNU_CSPLIT_REGEX_SYNTAX: libc::c_ulong = (1 << 1) | (1 << 2) | (1 << 6) | (1 << 7) | (1 << 9);
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
@@ -51,6 +52,7 @@ type ReSearch = unsafe extern "C" fn(
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 struct GnuRegexApi {
+    _library_handle: usize,
     set_syntax: ReSetSyntax,
     compile_pattern: ReCompilePattern,
     search: ReSearch,
@@ -67,6 +69,7 @@ fn gnu_regex_api() -> Result<&'static GnuRegexApi, String> {
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 fn load_gnu_regex_api() -> Result<GnuRegexApi, String> {
     unsafe {
+        // onig_sys exports these names with a different ABI, so resolve them from libc itself.
         let handle = libc::dlopen(c"libc.so.6".as_ptr(), libc::RTLD_LAZY | libc::RTLD_LOCAL);
         if handle.is_null() {
             return Err(dynamic_loader_error());
@@ -86,6 +89,7 @@ fn load_gnu_regex_api() -> Result<GnuRegexApi, String> {
         }
 
         Ok(GnuRegexApi {
+            _library_handle: handle as usize,
             set_syntax: std::mem::transmute::<*mut libc::c_void, ReSetSyntax>(set_syntax),
             compile_pattern: std::mem::transmute::<*mut libc::c_void, ReCompilePattern>(
                 compile_pattern,

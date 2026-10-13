@@ -132,6 +132,82 @@ fn cut_stdout_writer() -> Box<dyn Write> {
     }
 }
 
+#[cfg(unix)]
+fn cut_uses_c_locale() -> bool {
+    ["LC_ALL", "LC_CTYPE", "LANG"]
+        .into_iter()
+        .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
+        .is_none_or(|locale| matches!(locale.as_str(), "C" | "POSIX"))
+}
+
+#[cfg(unix)]
+fn cut_quote_c_locale_path(path: &std::ffi::OsStr) -> String {
+    let bytes = path.as_bytes();
+    if !bytes
+        .iter()
+        .any(|byte| !byte.is_ascii_graphic() && *byte != b' ')
+    {
+        return path.maybe_quote().to_string();
+    }
+
+    let mut quoted = String::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\'' => {
+                quoted.push_str("\\'");
+                index += 1;
+            }
+            byte if byte.is_ascii_graphic() || byte == b' ' => {
+                let start = index;
+                while index < bytes.len()
+                    && (bytes[index].is_ascii_graphic() || bytes[index] == b' ')
+                    && bytes[index] != b'\''
+                {
+                    index += 1;
+                }
+                quoted.push('\'');
+                quoted.extend(bytes[start..index].iter().map(|byte| char::from(*byte)));
+                quoted.push('\'');
+            }
+            _ => {
+                quoted.push_str("$'");
+                while index < bytes.len()
+                    && !bytes[index].is_ascii_graphic()
+                    && bytes[index] != b' '
+                {
+                    match bytes[index] {
+                        b'\x07' => quoted.push_str("\\a"),
+                        b'\x08' => quoted.push_str("\\b"),
+                        b'\t' => quoted.push_str("\\t"),
+                        b'\n' => quoted.push_str("\\n"),
+                        b'\x0b' => quoted.push_str("\\v"),
+                        b'\x0c' => quoted.push_str("\\f"),
+                        b'\r' => quoted.push_str("\\r"),
+                        byte => {
+                            use std::fmt::Write as _;
+                            write!(quoted, "\\{byte:03o}").expect("write to string");
+                        }
+                    }
+                    index += 1;
+                }
+                quoted.push('\'');
+            }
+        }
+    }
+
+    quoted
+}
+
+fn cut_quote_path(path: &std::ffi::OsStr) -> String {
+    #[cfg(unix)]
+    if cut_uses_c_locale() {
+        return cut_quote_c_locale_path(path);
+    }
+
+    path.maybe_quote().to_string()
+}
+
 // 将给定的字符列表转换为CtRange的集合。
 // 如果`complement`标志为true，则计算给定范围的补集。
 //
@@ -791,7 +867,7 @@ fn cut_files_to_writer<W: Write>(
             if path.is_dir() {
                 stderr_text.push_str(&format!(
                     "cut: {}: Is a directory\n",
-                    filename.as_os_str().maybe_quote()
+                    cut_quote_path(filename.as_os_str())
                 ));
                 exit_code = exit_code.max(1);
                 continue;
@@ -799,7 +875,7 @@ fn cut_files_to_writer<W: Write>(
 
             // 尝试打开文件，并根据模式对文件内容进行切割
             if let Err(err) = File::open(path)
-                .map_err_context(|| filename.as_os_str().maybe_quote().to_string())
+                .map_err_context(|| cut_quote_path(filename.as_os_str()))
                 .and_then(|file| match &mode {
                     CutMode::Bytes(ranges, opts) => cut_bytes_to_writer(file, out, ranges, opts),
                     CutMode::Fields(ranges, opts) => cut_fields_to_writer(file, out, ranges, opts),

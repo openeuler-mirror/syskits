@@ -24,9 +24,9 @@ use ctcore::Tool;
 use std::ffi::OsString;
 use std::io;
 use std::io::Write;
-use std::iter::Peekable;
 use std::ops::ControlFlow;
-use std::str::Chars;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 
 mod opt_flags {
@@ -80,79 +80,98 @@ struct EchoRender {
     classic_bytes: Vec<u8>,
 }
 
+struct EchoRenderBytes {
+    output: Vec<u8>,
+    trailing_newline: bool,
+    terminated_early: bool,
+}
+
 /// 解析`\xHH`和`\0NNN`转义序列中的数值部分
-fn echo_parse_code(input: &mut Peekable<Chars>, base: EchoBase) -> Option<u8> {
+fn echo_parse_code(input: &[u8], index: &mut usize, base: EchoBase) -> Option<u8> {
     // 由于八进制输入可能需要3个数字，这超过了`u8`的容量，因此这里需要使用溢出加法。
     // 注意，如果使用`u32`和`char::from_u32`，则会对大于`u8::MAX`的值错误地解释为Unicode字符。
-    let mut ret = input.peek().and_then(|c| c.to_digit(base as u32))? as u8;
+    let mut ret = echo_digit(input.get(*index).copied()?, base)?;
+    *index += 1;
 
-    // 安全地忽略`None`情况，因为我们只是进行了预览。
-    let _ = input.next();
-
-    // 处理剩余的数字字符，根据基数进行解析
+    // 处理剩余的数字字符，根据基数进行解析。
     for _ in 1..base.max_digits() {
-        match input.peek().and_then(|c| c.to_digit(base as u32)) {
-            Some(n) => ret = ret.wrapping_mul(base as u8).wrapping_add(n as u8),
+        match input
+            .get(*index)
+            .copied()
+            .and_then(|byte| echo_digit(byte, base))
+        {
+            Some(n) => ret = ret.wrapping_mul(base as u8).wrapping_add(n),
             None => break,
         }
-        // 安全地忽略`None`情况，因为我们只是进行了预览。
-        let _ = input.next();
+        *index += 1;
     }
 
     Some(ret)
 }
 
+fn echo_digit(byte: u8, base: EchoBase) -> Option<u8> {
+    match (base, byte) {
+        (EchoBase::Oct, b'0'..=b'7') => Some(byte - b'0'),
+        (EchoBase::Hex, b'0'..=b'9') => Some(byte - b'0'),
+        (EchoBase::Hex, b'a'..=b'f') => Some(byte - b'a' + 10),
+        (EchoBase::Hex, b'A'..=b'F') => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
 /// 将转义序列写入给定的输出流
-fn echo_print_escaped(input: &str, mut output: impl Write) -> io::Result<ControlFlow<()>> {
-    let mut iter = input.chars().peekable();
-    while let Some(c) = iter.next() {
-        if c != '\\' {
-            write!(output, "{c}")?;
+fn echo_print_escaped(input: &[u8], mut output: impl Write) -> io::Result<ControlFlow<()>> {
+    let mut index = 0;
+    while let Some(&byte) = input.get(index) {
+        index += 1;
+        if byte != b'\\' {
+            output.write_all(&[byte])?;
             continue;
         }
 
         // 处理八进制转义序列（\NNN）的逻辑
-        if let Some('1'..='7') = iter.peek() {
-            if let Some(parsed) = echo_parse_code(&mut iter, EchoBase::Oct) {
+        if matches!(input.get(index), Some(b'1'..=b'7')) {
+            if let Some(parsed) = echo_parse_code(input, &mut index, EchoBase::Oct) {
                 output.write_all(&[parsed])?;
                 continue;
             }
         }
 
-        if let Some(next) = iter.next() {
+        if let Some(&next) = input.get(index) {
+            index += 1;
             let unescaped = match next {
-                '\\' => '\\',
-                'a' => '\x07',
-                'b' => '\x08',
-                'c' => return Ok(ControlFlow::Break(())),
-                'e' => '\x1b',
-                'f' => '\x0c',
-                'n' => '\n',
-                'r' => '\r',
-                't' => '\t',
-                'v' => '\x0b',
-                'x' => {
-                    if let Some(byte) = echo_parse_code(&mut iter, EchoBase::Hex) {
+                b'\\' => b'\\',
+                b'a' => b'\x07',
+                b'b' => b'\x08',
+                b'c' => return Ok(ControlFlow::Break(())),
+                b'e' => b'\x1b',
+                b'f' => b'\x0c',
+                b'n' => b'\n',
+                b'r' => b'\r',
+                b't' => b'\t',
+                b'v' => b'\x0b',
+                b'x' => {
+                    if let Some(byte) = echo_parse_code(input, &mut index, EchoBase::Hex) {
                         output.write_all(&[byte])?;
                         continue;
                     } else {
-                        write!(output, "\\")?;
-                        'x'
+                        output.write_all(b"\\")?;
+                        b'x'
                     }
                 }
-                '0' => {
-                    let byte = echo_parse_code(&mut iter, EchoBase::Oct).unwrap_or(0);
+                b'0' => {
+                    let byte = echo_parse_code(input, &mut index, EchoBase::Oct).unwrap_or(0);
                     output.write_all(&[byte])?;
                     continue;
                 }
-                c => {
-                    write!(output, "\\")?;
-                    c
+                byte => {
+                    output.write_all(b"\\")?;
+                    byte
                 }
             };
-            write!(output, "{unescaped}")?;
+            output.write_all(&[unescaped])?;
         } else {
-            write!(output, "\\")?;
+            output.write_all(b"\\")?;
         }
     }
 
@@ -175,6 +194,7 @@ impl Tool for Echo {
     }
 }
 
+#[cfg(any(not(unix), test))]
 fn echo_is_help_or_version_request(args: &[String], posix_mode: bool) -> bool {
     !posix_mode
         && matches!(
@@ -187,6 +207,16 @@ fn echo_short_options(arg: &str) -> Option<&str> {
     let options = arg.strip_prefix('-')?;
     (!options.is_empty() && options.chars().all(|c| matches!(c, 'n' | 'e' | 'E')))
         .then_some(options)
+}
+
+#[cfg(unix)]
+fn echo_short_options_bytes(arg: &[u8]) -> Option<&[u8]> {
+    let options = arg.strip_prefix(b"-")?;
+    (!options.is_empty()
+        && options
+            .iter()
+            .all(|byte| matches!(byte, b'n' | b'e' | b'E')))
+    .then_some(options)
 }
 
 fn echo_parse_args(args_vec: &[String], posix_mode: bool) -> (bool, bool, Vec<String>) {
@@ -250,13 +280,99 @@ fn echo_parse_args(args_vec: &[String], posix_mode: bool) -> (bool, bool, Vec<St
     (no_newline, escaped, values)
 }
 
+#[cfg(unix)]
+fn echo_parse_args_bytes<'a>(
+    args: &'a [OsString],
+    posix_mode: bool,
+) -> (bool, bool, Vec<&'a [u8]>) {
+    let mut no_newline = false;
+    let mut escaped = false;
+    let mut values = Vec::new();
+
+    if posix_mode {
+        if args
+            .first()
+            .is_some_and(|arg| arg.as_os_str().as_bytes() == b"-n")
+        {
+            no_newline = true;
+            let mut parsing_options = true;
+            for arg in args.iter().skip(1) {
+                let arg = arg.as_os_str().as_bytes();
+                if parsing_options && let Some(options) = echo_short_options_bytes(arg) {
+                    if options.contains(&b'n') {
+                        no_newline = true;
+                    }
+                    continue;
+                }
+                values.push(arg);
+                parsing_options = false;
+            }
+        } else {
+            values.extend(args.iter().map(|arg| arg.as_os_str().as_bytes()));
+        }
+        escaped = true;
+    } else {
+        let mut parsing_options = true;
+        for arg in args {
+            let arg = arg.as_os_str().as_bytes();
+            if parsing_options {
+                if arg == b"--" {
+                    values.push(arg);
+                    parsing_options = false;
+                    continue;
+                }
+
+                if let Some(options) = echo_short_options_bytes(arg) {
+                    for byte in options {
+                        match byte {
+                            b'n' => no_newline = true,
+                            b'e' => escaped = true,
+                            b'E' => escaped = false,
+                            _ => unreachable!("filtered by iter().all"),
+                        }
+                    }
+                    continue;
+                }
+            }
+
+            values.push(arg);
+            parsing_options = false;
+        }
+    }
+
+    if values.is_empty() {
+        values.push(b"");
+    }
+
+    (no_newline, escaped, values)
+}
+
 fn echo_render_output(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<EchoRender> {
+    let free = free.iter().map(String::as_bytes).collect::<Vec<_>>();
+    let rendered = echo_render_output_bytes(no_newline, escaped, &free)?;
+    let text_end = rendered.output.len() - usize::from(rendered.trailing_newline);
+    let text = String::from_utf8_lossy(&rendered.output[..text_end]).into_owned();
+
+    Ok(EchoRender {
+        text,
+        trailing_newline: rendered.trailing_newline,
+        terminated_early: rendered.terminated_early,
+        classic_text: String::from_utf8_lossy(&rendered.output).into_owned(),
+        classic_bytes: rendered.output,
+    })
+}
+
+fn echo_render_output_bytes(
+    no_newline: bool,
+    escaped: bool,
+    free: &[&[u8]],
+) -> io::Result<EchoRenderBytes> {
     let mut output = Vec::new();
     let mut terminated_early = false;
 
     for (i, input) in free.iter().enumerate() {
         if i > 0 {
-            write!(output, " ")?;
+            output.write_all(b" ")?;
         }
         if escaped {
             if echo_print_escaped(input, &mut output)?.is_break() {
@@ -264,23 +380,19 @@ fn echo_render_output(no_newline: bool, escaped: bool, free: &[String]) -> io::R
                 break;
             }
         } else {
-            write!(output, "{input}")?;
+            output.write_all(input)?;
         }
     }
 
-    let text = String::from_utf8_lossy(&output).into_owned();
     let trailing_newline = !no_newline && !terminated_early;
     if trailing_newline {
         output.push(b'\n');
     }
-    let classic_text = String::from_utf8_lossy(&output).into_owned();
 
-    Ok(EchoRender {
-        text,
+    Ok(EchoRenderBytes {
+        output,
         trailing_newline,
         terminated_early,
-        classic_text,
-        classic_bytes: output,
     })
 }
 
@@ -317,6 +429,40 @@ pub fn echo_native_semantic(args: impl ctcore::Args) -> CTResult<EchoSemantic> {
     echo_native_semantic_from_args_vec(&args_vec, posix_mode)
 }
 
+fn echo_print_help_or_version(help: bool) -> CTResult<()> {
+    let mut command = ct_app();
+    if help {
+        command
+            .print_help()
+            .map_err_context(|| "could not write help to stdout".to_string())?;
+    } else {
+        print!("{}", command.render_version());
+    }
+    println!();
+    Ok(())
+}
+
+#[cfg(unix)]
+pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    let args_vec = args.skip(1).collect::<Vec<_>>();
+    let posix_mode = std::env::var("POSIXLY_CORRECT").is_ok();
+
+    if !posix_mode
+        && matches!(args_vec.as_slice(), [arg] if matches!(arg.to_str(), Some("--help" | "--version")))
+    {
+        return echo_print_help_or_version(args_vec[0].to_str() == Some("--help"));
+    }
+
+    let (no_newline, escaped, values) = echo_parse_args_bytes(&args_vec, posix_mode);
+
+    echo_execute_bytes(no_newline, escaped, &values)
+        .map_err_context(|| "could not write to stdout".to_string())
+}
+
+#[cfg(not(unix))]
 pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -328,20 +474,10 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
     let posix_mode = std::env::var("POSIXLY_CORRECT").is_ok();
 
     if echo_is_help_or_version_request(&args_vec, posix_mode) {
-        let mut command = ct_app();
-        if args_vec[0] == "--help" {
-            command
-                .print_help()
-                .map_err_context(|| "could not write help to stdout".to_string())?;
-        } else {
-            print!("{}", command.render_version());
-        }
-        println!();
-        return Ok(());
+        return echo_print_help_or_version(args_vec[0] == "--help");
     }
 
     let (no_newline, escaped, values) = echo_parse_args(&args_vec, posix_mode);
-
     echo_execute(no_newline, escaped, &values)
         .map_err_context(|| "could not write to stdout".to_string())
 }
@@ -391,9 +527,16 @@ pub fn ct_app() -> Command {
         .args(&args)
 }
 
+#[cfg(any(not(unix), test))]
 fn echo_execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<()> {
     let rendered = echo_render_output(no_newline, escaped, free)?;
     echo_write_output(&rendered.classic_bytes)
+}
+
+#[cfg(unix)]
+fn echo_execute_bytes(no_newline: bool, escaped: bool, free: &[&[u8]]) -> io::Result<()> {
+    let rendered = echo_render_output_bytes(no_newline, escaped, free)?;
+    echo_write_output(&rendered.output)
 }
 
 fn echo_write_output(output: &[u8]) -> io::Result<()> {
@@ -666,7 +809,7 @@ mod tests {
         #[test]
         fn test_echo_print_escaped_continue() {
             let mut output = Cursor::new(Vec::new());
-            let result = echo_print_escaped("\\n\\t\\x41", &mut output);
+            let result = echo_print_escaped(b"\\n\\t\\x41", &mut output);
 
             // println!("{:#?}", result.unwrap());/**/
             assert_eq!(
@@ -679,7 +822,7 @@ mod tests {
         #[test]
         fn test_echo_print_escaped_break() {
             let mut output = Cursor::new(Vec::new());
-            let result = echo_print_escaped("\\c", &mut output);
+            let result = echo_print_escaped(b"\\c", &mut output);
 
             // println!("{:#?}", result.unwrap());/**/
             assert_eq!(

@@ -1393,6 +1393,7 @@ fn cut_args_init() -> Vec<Arg> {
             .short('d')
             .long(opt_flags::DELIMITER)
             .value_parser(ValueParser::os_string())
+            .allow_hyphen_values(true)
             .help("specify the delimiter character that separates fields in the input source. Defaults to Tab.")
             .value_name("DELIM"),
         Arg::new(opt_flags::FIELDS)
@@ -1417,6 +1418,7 @@ fn cut_args_init() -> Vec<Arg> {
         Arg::new(opt_flags::OUTPUT_DELIMITER)
             .long(opt_flags::OUTPUT_DELIMITER)
             .value_parser(ValueParser::os_string())
+            .allow_hyphen_values(true)
             .help("in field mode, replace the delimiter in output lines with this option's argument")
             .value_name("NEW_DELIM"),
 

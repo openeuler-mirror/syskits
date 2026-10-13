@@ -20,11 +20,11 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 use sys_locale::get_locale;
 
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
-use ctcore::Tool;
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use ctcore::ct_colors::{CT_FILE_ATTRIBUTE_CODES, CT_FILE_COLORS, CT_FILE_TYPES, CT_TERMS};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
+use ctcore::Tool;
 
 use std::ffi::OsString;
 
@@ -171,7 +171,7 @@ fn dircolors_collect_output(
     files: Vec<&String>,
     out_format: &DircolorsOutputFmt,
 ) -> CTResult<String> {
-    let (result, had_warnings) = if files.is_empty() {
+    let (result, parse_ok) = if files.is_empty() {
         let default_config = generate_dircolors_config();
         dircolors_parse(default_config.lines(), out_format, "<internal>")
     } else if files.len() > 1 {
@@ -208,8 +208,9 @@ fn dircolors_collect_output(
         }
     };
 
-    if had_warnings {
+    if !parse_ok {
         ctcore::ct_error::set_ct_exit_code(1);
+        return Ok(String::new());
     }
     Ok(result)
 }
@@ -432,7 +433,8 @@ where
         if value.is_empty() {
             ok = false;
             eprintln!(
-                "{}:{}: invalid line;  missing second token",
+                "{}: {}:{}: invalid line;  missing second token",
+                ctcore::ct_util_name(),
                 fp.maybe_quote(),
                 num
             );
@@ -485,7 +487,8 @@ where
                 {
                     ok = false;
                     eprintln!(
-                        "{}:{}: unrecognized keyword {}",
+                        "{}: {}:{}: unrecognized keyword {}",
+                        ctcore::ct_util_name(),
                         fp.maybe_quote(),
                         num,
                         key
@@ -933,11 +936,9 @@ mod tests {
             let semantic = dircolors_native_semantic(args.iter().map(OsString::from)).unwrap();
 
             assert_eq!(semantic.output_kind, "database");
-            assert!(
-                semantic
-                    .output
-                    .starts_with("# Configuration file for dircolors")
-            );
+            assert!(semantic
+                .output
+                .starts_with("# Configuration file for dircolors"));
         }
     }
 }

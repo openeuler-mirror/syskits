@@ -68,6 +68,7 @@ pub struct EchoSemantic {
     pub escape_mode: EchoEscapeMode,
     pub terminated_early: bool,
     pub classic_text: String,
+    pub classic_bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,10 +77,11 @@ struct EchoRender {
     trailing_newline: bool,
     terminated_early: bool,
     classic_text: String,
+    classic_bytes: Vec<u8>,
 }
 
-/// 解析`\xHHH`和`\0NNN`转义序列中的数值部分
-fn echo_parse_code(input: &mut Peekable<Chars>, base: EchoBase) -> Option<char> {
+/// 解析`\xHH`和`\0NNN`转义序列中的数值部分
+fn echo_parse_code(input: &mut Peekable<Chars>, base: EchoBase) -> Option<u8> {
     // 由于八进制输入可能需要3个数字，这超过了`u8`的容量，因此这里需要使用溢出加法。
     // 注意，如果使用`u32`和`char::from_u32`，则会对大于`u8::MAX`的值错误地解释为Unicode字符。
     let mut ret = input.peek().and_then(|c| c.to_digit(base as u32))? as u8;
@@ -97,7 +99,7 @@ fn echo_parse_code(input: &mut Peekable<Chars>, base: EchoBase) -> Option<char> 
         let _ = input.next();
     }
 
-    Some(ret.into())
+    Some(ret)
 }
 
 /// 将转义序列写入给定的输出流
@@ -110,9 +112,9 @@ fn echo_print_escaped(input: &str, mut output: impl Write) -> io::Result<Control
         }
 
         // 处理八进制转义序列（\NNN）的逻辑
-        if let Some('1'..='8') = iter.peek() {
+        if let Some('1'..='7') = iter.peek() {
             if let Some(parsed) = echo_parse_code(&mut iter, EchoBase::Oct) {
-                write!(output, "{parsed}")?;
+                output.write_all(&[parsed])?;
                 continue;
             }
         }
@@ -130,14 +132,19 @@ fn echo_print_escaped(input: &str, mut output: impl Write) -> io::Result<Control
                 't' => '\t',
                 'v' => '\x0b',
                 'x' => {
-                    if let Some(c) = echo_parse_code(&mut iter, EchoBase::Hex) {
-                        c
+                    if let Some(byte) = echo_parse_code(&mut iter, EchoBase::Hex) {
+                        output.write_all(&[byte])?;
+                        continue;
                     } else {
                         write!(output, "\\")?;
                         'x'
                     }
                 }
-                '0' => echo_parse_code(&mut iter, EchoBase::Oct).unwrap_or('\0'),
+                '0' => {
+                    let byte = echo_parse_code(&mut iter, EchoBase::Oct).unwrap_or(0);
+                    output.write_all(&[byte])?;
+                    continue;
+                }
                 c => {
                     write!(output, "\\")?;
                     c
@@ -254,19 +261,19 @@ fn echo_render_output(no_newline: bool, escaped: bool, free: &[String]) -> io::R
         }
     }
 
-    let text = String::from_utf8(output).expect("echo output should be utf-8");
+    let text = String::from_utf8_lossy(&output).into_owned();
     let trailing_newline = !no_newline && !terminated_early;
-    let classic_text = if trailing_newline {
-        format!("{text}\n")
-    } else {
-        text.clone()
-    };
+    if trailing_newline {
+        output.push(b'\n');
+    }
+    let classic_text = String::from_utf8_lossy(&output).into_owned();
 
     Ok(EchoRender {
         text,
         trailing_newline,
         terminated_early,
         classic_text,
+        classic_bytes: output,
     })
 }
 
@@ -289,6 +296,7 @@ fn echo_native_semantic_from_args_vec(
         },
         terminated_early: rendered.terminated_early,
         classic_text: rendered.classic_text,
+        classic_bytes: rendered.classic_bytes,
     })
 }
 
@@ -378,13 +386,13 @@ pub fn ct_app() -> Command {
 
 fn echo_execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<()> {
     let rendered = echo_render_output(no_newline, escaped, free)?;
-    echo_write_output(&rendered.classic_text)
+    echo_write_output(&rendered.classic_bytes)
 }
 
-fn echo_write_output(output: &str) -> io::Result<()> {
+fn echo_write_output(output: &[u8]) -> io::Result<()> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
-    stdout.write_all(output.as_bytes())
+    stdout.write_all(output)
 }
 
 #[cfg(test)]
@@ -705,6 +713,7 @@ mod tests {
             assert_eq!(semantic.escape_mode, EchoEscapeMode::Literal);
             assert!(!semantic.terminated_early);
             assert_eq!(semantic.classic_text, "hello world\n");
+            assert_eq!(semantic.classic_bytes, b"hello world\n");
         }
     }
 }

@@ -184,11 +184,11 @@ pub struct DfSemantic {
 #[derive(Debug)]
 enum DfOptionsError {
     // BlockSizeTooLarge表示指定的块大小超过允许的最大值。
-    BlockSizeTooLarge(String),
+    BlockSizeTooLarge(DfBlockSizeOption, String),
     // InvalidBlockSize表示指定的块大小不合法。
-    InvalidBlockSize(String),
+    InvalidBlockSize(DfBlockSizeOption, String),
     // InvalidSuffix表示在块大小参数中使用了非法的后缀。
-    InvalidSuffix(String),
+    InvalidSuffix(DfBlockSizeOption, String),
 
     /// ColumnError封装了与输出列相关的选择和设置错误。
     ColumnError(ColumnError),
@@ -197,19 +197,38 @@ enum DfOptionsError {
     FilesystemTypeBothSelectedAndExcluded(Vec<String>),
 }
 
+#[derive(Clone, Copy, Debug)]
+enum DfBlockSizeOption {
+    Short,
+    Long,
+}
+
+impl DfBlockSizeOption {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Short => "-B",
+            Self::Long => "--block-size",
+        }
+    }
+}
+
 // fmt::Display实现为DfOptionsError提供了格式化输出的方法。
 impl fmt::Display for DfOptionsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // 根据错误类型，提供不同的错误信息格式化输出。
         match self {
             // BlockSizeTooLarge错误的输出格式化
-            Self::BlockSizeTooLarge(s) => {
-                write!(f, "--block-size argument {} too large", s.quote())
+            Self::BlockSizeTooLarge(option, s) => {
+                write!(f, "{} argument {} too large", option.name(), s.quote())
             }
             // InvalidBlockSize错误的输出格式化
-            Self::InvalidBlockSize(s) => write!(f, "invalid --block-size argument {s}"),
+            Self::InvalidBlockSize(option, s) => {
+                write!(f, "invalid {} argument {s}", option.name())
+            }
             // InvalidSuffix错误的输出格式化
-            Self::InvalidSuffix(s) => write!(f, "invalid suffix in --block-size argument {s}"),
+            Self::InvalidSuffix(option, s) => {
+                write!(f, "invalid suffix in {} argument {s}", option.name())
+            }
             Self::ColumnError(ColumnError::MultipleColumns(s)) => write!(
                 f,
                 "option --output: field {} used more than once",
@@ -240,7 +259,15 @@ impl DfOptions {
     ///
     /// - `matches`: 代表命令行参数的匹配结果，来自 `clap` 库。
     /// - 返回值: 成功时返回一个 [`DfOptions`] 实例，失败时返回一个错误信息。
+    #[cfg(test)]
     fn from(args_match: &ArgMatches) -> Result<Self, DfOptionsError> {
+        Self::from_with_block_size_option(args_match, DfBlockSizeOption::Long)
+    }
+
+    fn from_with_block_size_option(
+        args_match: &ArgMatches,
+        block_size_option: DfBlockSizeOption,
+    ) -> Result<Self, DfOptionsError> {
         // 尝试从命令行参数中提取要包含和排除的文件系统类型。
         let df_include: Option<Vec<_>> = args_match
             .get_many::<OsString>(DF_OPT_TYPE)
@@ -269,14 +296,19 @@ impl DfOptions {
                 BlockSize::Bytes(1024 * 1024)
             } else {
                 block_size_read(args_match).map_err(|e| match e {
-                    ParseSizeError::InvalidSuffix(s) => DfOptionsError::InvalidSuffix(s),
+                    ParseSizeError::InvalidSuffix(s) => {
+                        DfOptionsError::InvalidSuffix(block_size_option, s)
+                    }
                     ParseSizeError::SizeTooBig(_) => DfOptionsError::BlockSizeTooLarge(
+                        block_size_option,
                         args_match
                             .get_one::<String>(DF_OPT_BLOCKSIZE)
                             .unwrap()
                             .to_string(),
                     ),
-                    ParseSizeError::ParseFailure(s) => DfOptionsError::InvalidBlockSize(s),
+                    ParseSizeError::ParseFailure(s) => {
+                        DfOptionsError::InvalidBlockSize(block_size_option, s)
+                    }
                 })?
             },
             header_mode: {
@@ -690,6 +722,55 @@ fn df_parse_args(args: Vec<OsString>) -> CTResult<ArgMatches> {
     }
 }
 
+fn df_block_size_option(args: &[OsString]) -> DfBlockSizeOption {
+    let mut block_size_option = DfBlockSizeOption::Long;
+    let mut index = 1;
+
+    while let Some(argument) = args.get(index).and_then(|argument| argument.to_str()) {
+        if argument == "--" {
+            break;
+        }
+
+        if argument.starts_with("--") {
+            let option = &argument[2..];
+            if option.starts_with("block") {
+                block_size_option = DfBlockSizeOption::Long;
+                if !option.contains('=') {
+                    index += 1;
+                }
+            } else if (option.starts_with("type") || option.starts_with("exclude"))
+                && !option.contains('=')
+            {
+                index += 1;
+            }
+        } else if let Some(short_options) = argument.strip_prefix('-') {
+            let mut short_options = short_options.chars();
+            while let Some(option) = short_options.next() {
+                match option {
+                    'B' => {
+                        block_size_option = DfBlockSizeOption::Short;
+                        if short_options.as_str().is_empty() {
+                            index += 1;
+                        }
+                        break;
+                    }
+                    'F' | 't' | 'x' => {
+                        if short_options.as_str().is_empty() {
+                            index += 1;
+                        }
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        index += 1;
+    }
+
+    block_size_option
+}
+
 #[derive(Default)]
 pub struct Df;
 impl Tool for Df {
@@ -710,7 +791,8 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&normalize_locale(&lang_code));
     // 从args解析命令行匹配项。
-    let args_match = df_parse_args(args.collect())?;
+    let args = args.collect::<Vec<OsString>>();
+    let args_match = df_parse_args(args.clone())?;
 
     validate_conflicts(&args_match)?;
 
@@ -724,7 +806,11 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     // 从命令行匹配项中解析DfOptions。
-    let options = DfOptions::from(&args_match).map_err(DfError::OptionsError)?;
+    let options = DfOptions::from_with_block_size_option(
+        &args_match,
+        df_block_size_option(&args),
+    )
+    .map_err(DfError::OptionsError)?;
 
     let filesystem_paths = get_filesystem(args_match, &options);
 
@@ -743,7 +829,8 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn df_native_semantic(args: impl ctcore::Args) -> CTResult<DfSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&normalize_locale(&lang_code));
-    let args_match = df_parse_args(args.collect())?;
+    let args = args.collect::<Vec<OsString>>();
+    let args_match = df_parse_args(args.clone())?;
 
     #[cfg(windows)]
     {
@@ -757,7 +844,11 @@ pub fn df_native_semantic(args: impl ctcore::Args) -> CTResult<DfSemantic> {
         }
     }
 
-    let classic_options = DfOptions::from(&args_match).map_err(DfError::OptionsError)?;
+    let classic_options = DfOptions::from_with_block_size_option(
+        &args_match,
+        df_block_size_option(&args),
+    )
+    .map_err(DfError::OptionsError)?;
     let selected_fields = native_selected_fields(&args_match, &classic_options);
     let filesystems = get_filesystem(args_match, &classic_options)?;
 
@@ -1026,6 +1117,7 @@ fn df_args_init() -> Vec<Arg> {
         Arg::new(DF_OPT_BLOCKSIZE)
             .short('B')
             .long("block-size")
+            .allow_hyphen_values(true)
             .value_name("SIZE")
             .overrides_with_all([DF_OPT_KILO, DF_OPT_MEGABYTES, DF_OPT_BLOCKSIZE])
             .help(
@@ -6580,7 +6672,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "-BZ"];
             let result = df_main(args.iter().map(OsString::from));
 
-            let expected_error = "--block-size argument 'Z' too large"; //df: --block-size argument 'y' too large
+            let expected_error = "-B argument 'Z' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
             assert_eq!(result.err().unwrap().to_string(), expected_error);
         }
@@ -6609,7 +6701,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "-Bz"];
             let result = df_main(args.iter().map(OsString::from));
 
-            let expected_error = "--block-size argument 'z' too large"; //df: --block-size argument 'y' too large
+            let expected_error = "-B argument 'z' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
             assert_eq!(result.err().unwrap().to_string(), expected_error);
         }
@@ -6696,7 +6788,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "-BY"];
             let result = df_main(args.iter().map(OsString::from));
 
-            let expected_error = "--block-size argument 'Y' too large"; //df: --block-size argument 'y' too large
+            let expected_error = "-B argument 'Y' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
             assert_eq!(result.err().unwrap().to_string(), expected_error);
         }
@@ -6725,7 +6817,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "-By"];
             let result = df_main(args.iter().map(OsString::from));
 
-            let expected_error = "--block-size argument 'y' too large"; //df: --block-size argument 'y' too large
+            let expected_error = "-B argument 'y' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
             assert_eq!(result.err().unwrap().to_string(), expected_error);
         }
@@ -7485,7 +7577,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "-BZ", "--total"];
             let result = df_main(args.iter().map(OsString::from));
 
-            let expected_error = "--block-size argument 'Z' too large"; //df: --block-size argument 'y' too large
+            let expected_error = "-B argument 'Z' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
             assert_eq!(result.err().unwrap().to_string(), expected_error);
         }
@@ -7514,7 +7606,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "-Bz", "--total"];
             let result = df_main(args.iter().map(OsString::from));
 
-            let expected_error = "--block-size argument 'z' too large"; //df: --block-size argument 'y' too large
+            let expected_error = "-B argument 'z' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
             assert_eq!(result.err().unwrap().to_string(), expected_error);
         }
@@ -7601,7 +7693,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "-BY", "--total"];
             let result = df_main(args.iter().map(OsString::from));
 
-            let expected_error = "--block-size argument 'Y' too large"; //df: --block-size argument 'y' too large
+            let expected_error = "-B argument 'Y' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
             assert_eq!(result.err().unwrap().to_string(), expected_error);
         }
@@ -7630,7 +7722,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "-By", "--total"];
             let result = df_main(args.iter().map(OsString::from));
 
-            let expected_error = "--block-size argument 'y' too large"; //df: --block-size argument 'y' too large
+            let expected_error = "-B argument 'y' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
             assert_eq!(result.err().unwrap().to_string(), expected_error);
         }

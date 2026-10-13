@@ -5,7 +5,11 @@ fn closed_stdout_pipe_terminates_with_sigpipe() {
 
     for keep_files in [false, true] {
         let temp_dir = tempfile::tempdir().expect("tempdir");
-        let csplit_args = if keep_files { "-k - '/^/' '{*}'" } else { "- '/^/' '{*}'" };
+        let csplit_args = if keep_files {
+            "-k - '/^/' '{*}'"
+        } else {
+            "- '/^/' '{*}'"
+        };
         let output = Command::new("bash")
             .arg("-c")
             .arg(format!(

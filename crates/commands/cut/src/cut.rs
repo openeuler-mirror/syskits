@@ -770,14 +770,10 @@ fn os_string_as_bytes(os_string: &OsString) -> CTResult<&[u8]> {
  * 以与 GNU 行为保持一致。
  *
  * @param matches 命令行参数的匹配结果，来自 Clap 解析器。
- * @param delimiter_is_equal 指示是否因为使用了 `-d=` 而使得分隔符被设置为 `=`。
  * @return CTResult<(CutDelimiter, Option<&[u8]>)> 一个结果类型，包含分隔符和可选的输出分隔符，
  *         分别表示为 `CutDelimiter` 枚举和字节切片的选项。
  */
-fn cut_get_delimiters(
-    args_match: &ArgMatches,
-    delimiter_is_equal: bool,
-) -> CTResult<(CutDelimiter, Option<&[u8]>)> {
+fn cut_get_delimiters(args_match: &ArgMatches) -> CTResult<(CutDelimiter<'_>, Option<&[u8]>)> {
     // 检查是否指定了以空格分隔的选项
     let is_whitespace_delimited = args_match.get_flag(opt_flags::WHITESPACE_DELIMITED);
     // 尝试获取分隔符选项
@@ -792,10 +788,7 @@ fn cut_get_delimiters(
             ));
         }
         Some(os_string) => {
-            // 处理分隔符为 "=" 的特殊情况
-            if delimiter_is_equal {
-                CutDelimiter::Slice(b"=")
-            } else if os_string == "''" || os_string.is_empty() {
+            if os_string == "''" || os_string.is_empty() {
                 // 将空字符串或"''"视为空分隔符
                 CutDelimiter::Slice(b"\0")
             } else {
@@ -833,6 +826,18 @@ fn cut_get_delimiters(
         });
     // 返回分隔符和输出分隔符
     Ok((delim, out_delim))
+}
+
+fn normalize_short_delimiter_equals(args: Vec<OsString>) -> Vec<OsString> {
+    args.into_iter()
+        .flat_map(|arg| {
+            if arg == "-d=" {
+                vec![OsString::from("-d"), OsString::from("=")]
+            } else {
+                vec![arg]
+            }
+        })
+        .collect()
 }
 
 /**
@@ -983,10 +988,7 @@ pub fn cut_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     // 将传入的参数转换为 OsString 的 Vec。
-    let args = args.collect::<Vec<OsString>>();
-
-    // 检查是否使用了等号形式的分隔符参数。
-    let delimiter_is_equal = args.contains(&OsString::from("-d=")); // 特殊情况处理
+    let args = normalize_short_delimiter_equals(args.collect::<Vec<OsString>>());
     // 使用 clap 库解析命令行参数。
     let args_match = ct_app().try_get_matches_from(args)?;
 
@@ -995,7 +997,7 @@ pub fn cut_main(args: impl ctcore::Args) -> CTResult<()> {
     let is_only_delimited = args_match.get_flag(opt_flags::ONLY_DELIMITED);
 
     // 解析输入的分隔符与输出分隔符。
-    let (delimiter, out_delimiter) = cut_get_delimiters(&args_match, delimiter_is_equal)?;
+    let (delimiter, out_delimiter) = cut_get_delimiters(&args_match)?;
 
     // 从命令行参数中解析以 0 结尾的标志。
     let line_ending = CtLineEnding::from_zero_flag(args_match.get_flag(opt_flags::ZERO_TERMINATED));
@@ -1224,13 +1226,12 @@ fn cut_rows_from_output(output: &[u8], terminator: u8) -> Vec<CutRow> {
 pub fn cut_native_semantic(args: impl ctcore::Args) -> CTResult<CutSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = args.collect::<Vec<OsString>>();
-    let delimiter_is_equal = args.contains(&OsString::from("-d="));
+    let args = normalize_short_delimiter_equals(args.collect::<Vec<OsString>>());
     let args_match = ct_app().try_get_matches_from(args)?;
 
     let is_complement = args_match.get_flag(opt_flags::COMPLEMENT);
     let is_only_delimited = args_match.get_flag(opt_flags::ONLY_DELIMITED);
-    let (delimiter, out_delimiter) = cut_get_delimiters(&args_match, delimiter_is_equal)?;
+    let (delimiter, out_delimiter) = cut_get_delimiters(&args_match)?;
     let line_ending = CtLineEnding::from_zero_flag(args_match.get_flag(opt_flags::ZERO_TERMINATED));
 
     let mode_args_count = [
@@ -2394,7 +2395,7 @@ mod tests {
 
             let matches = ct_app().try_get_matches_from(args).unwrap();
 
-            let result = cut_get_delimiters(&matches, false);
+            let result = cut_get_delimiters(&matches);
             assert!(result.is_ok());
             let (delim, out_delim) = result.unwrap();
             assert_eq!(delim, CutDelimiter::Whitespace);
@@ -2419,7 +2420,7 @@ mod tests {
             let is_only_delimited = matches.get_flag(opt_flags::ONLY_DELIMITED);
 
             // 解析输入的分隔符与输出分隔符。
-            let (delimiter, out_delimiter) = cut_get_delimiters(&matches, false).unwrap();
+            let (delimiter, out_delimiter) = cut_get_delimiters(&matches).unwrap();
 
             // 从命令行参数中解析以 0 结尾的标志。
             let line_ending =
@@ -2466,7 +2467,7 @@ mod tests {
             let is_only_delimited = matches.get_flag(opt_flags::ONLY_DELIMITED);
 
             // 解析输入的分隔符与输出分隔符。
-            let (delimiter, out_delimiter) = cut_get_delimiters(&matches, false).unwrap();
+            let (delimiter, out_delimiter) = cut_get_delimiters(&matches).unwrap();
 
             // 从命令行参数中解析以 0 结尾的标志。
             let line_ending =
@@ -2513,7 +2514,7 @@ mod tests {
             let is_only_delimited = matches.get_flag(opt_flags::ONLY_DELIMITED);
 
             // 解析输入的分隔符与输出分隔符。
-            let (delimiter, out_delimiter) = cut_get_delimiters(&matches, false).unwrap();
+            let (delimiter, out_delimiter) = cut_get_delimiters(&matches).unwrap();
 
             // 从命令行参数中解析以 0 结尾的标志。
             let line_ending =
@@ -2560,7 +2561,7 @@ mod tests {
             let is_only_delimited = matches.get_flag(opt_flags::ONLY_DELIMITED);
 
             // 解析输入的分隔符与输出分隔符。
-            let (delimiter, out_delimiter) = cut_get_delimiters(&matches, false).unwrap();
+            let (delimiter, out_delimiter) = cut_get_delimiters(&matches).unwrap();
 
             // 从命令行参数中解析以 0 结尾的标志。
             let line_ending =

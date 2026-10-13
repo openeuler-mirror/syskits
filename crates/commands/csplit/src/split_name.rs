@@ -10,7 +10,9 @@
  */
 
 use ctcore::ct_format::{Format, FormatError, num_format::UnsignedInt};
+use std::ffi::OsString;
 use std::num::IntErrorKind;
+use std::path::PathBuf;
 
 use crate::csplit_error::CsplitError;
 
@@ -36,13 +38,25 @@ impl SplitName {
     ///
     /// If `n_digits_opt` and `format_opt` are defined, then width defined in `format_opt` is
     /// taken.
+    #[cfg(test)]
     pub fn new(
         prefix_opt_strs: Option<String>,
         format_opt_strs: Option<String>,
         n_digits_opt_strs: Option<String>,
     ) -> Result<Self, CsplitError> {
-        // 获取前缀
-        let prefix_opt_str = prefix_opt_strs.unwrap_or_else(|| "xx".to_string());
+        Self::new_with_prefix(
+            prefix_opt_strs.map(OsString::from),
+            format_opt_strs,
+            n_digits_opt_strs,
+        )
+    }
+
+    pub fn new_with_prefix(
+        prefix_opt: Option<OsString>,
+        format_opt_strs: Option<String>,
+        n_digits_opt_strs: Option<String>,
+    ) -> Result<Self, CsplitError> {
+        let prefix = prefix_opt.unwrap_or_else(|| OsString::from("xx"));
 
         let n_digits = parse_digits_option(n_digits_opt_strs.as_deref())?.unwrap_or(2);
 
@@ -59,17 +73,46 @@ impl SplitName {
         }?;
 
         Ok(Self {
-            prefix: prefix_opt_str.as_bytes().to_owned(),
+            prefix: os_string_to_bytes(&prefix),
             format,
         })
     }
 
     /// Returns the filename of the i-th split.
+    #[cfg(test)]
     pub fn get(&self, n: usize) -> String {
+        self.get_path(n).to_string_lossy().into_owned()
+    }
+
+    pub fn get_path(&self, n: usize) -> PathBuf {
         let mut v = self.prefix.clone();
         self.format.fmt(&mut v, n as u64).unwrap();
-        String::from_utf8_lossy(&v).to_string()
+        bytes_to_path(v)
     }
+}
+
+fn os_string_to_bytes(value: &OsString) -> Vec<u8> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+
+        value.as_os_str().as_bytes().to_owned()
+    }
+
+    #[cfg(not(unix))]
+    value.to_string_lossy().as_bytes().to_owned()
+}
+
+fn bytes_to_path(bytes: Vec<u8>) -> PathBuf {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStringExt;
+
+        PathBuf::from(OsString::from_vec(bytes))
+    }
+
+    #[cfg(not(unix))]
+    PathBuf::from(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 fn parse_digits(option: String) -> Result<usize, CsplitError> {

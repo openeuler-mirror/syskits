@@ -10,6 +10,7 @@
  */
 
 use memchr::memchr;
+#[cfg(test)]
 use memchr::memchr2;
 
 // 定义一个匹配器接口，用于在字节切片中找到下一个匹配的字节序列位置。
@@ -61,9 +62,11 @@ impl Matcher for ExactMatcher<'_> {
 }
 
 // 匹配任意数量的SPACE或TAB。
+#[cfg(test)]
 pub struct WhitespaceMatcher {}
 
 // 实现Matcher接口，用于匹配任意数量的空格或制表符。
+#[cfg(test)]
 impl Matcher for WhitespaceMatcher {
     fn next_match(&self, haystack: &[u8]) -> Option<(usize, usize)> {
         // 使用memchr2查找haystack中的第一个空格或制表符的位置。

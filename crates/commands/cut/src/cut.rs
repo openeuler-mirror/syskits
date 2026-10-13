@@ -20,7 +20,7 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_ranges::CtRange;
-use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
+use matcher::{ExactMatcher, Matcher};
 #[cfg(unix)]
 use std::ffi::CStr;
 use std::ffi::OsString;
@@ -54,7 +54,6 @@ struct CutOptions<'a> {
 
 #[derive(PartialEq, Debug)]
 enum CutDelimiter<'a> {
-    Whitespace,
     Slice(&'a [u8]),
 }
 #[derive(PartialEq, Debug)]
@@ -164,7 +163,6 @@ mod opt_flags {
     pub const ZERO_TERMINATED: &str = "zero-terminated";
     pub const ONLY_DELIMITED: &str = "only-delimited";
     pub const OUTPUT_DELIMITER: &str = "output-delimiter";
-    pub const WHITESPACE_DELIMITED: &str = "whitespace-delimited";
     pub const COMPLEMENT: &str = "complement";
     pub const FILE: &str = "file";
     pub const NO_SPLIT_MULTIBYTE: &str = "no-split-multibyte";
@@ -861,18 +859,6 @@ fn cut_fields_to_writer<R: Read, W: Write>(
                 ),
             }
         }
-        CutDelimiter::Whitespace => {
-            let matcher = WhitespaceMatcher {};
-            cut_fields_explicit_out_delim_to_writer(
-                reader,
-                out,
-                &matcher,
-                ranges,
-                field_opts.only_delimited,
-                newline_char,
-                opts.out_delimiter.unwrap_or(b"\t"),
-            )
-        }
     }
 }
 
@@ -1062,19 +1048,10 @@ fn cut_input_delimiter_bytes(os_string: &OsString) -> CTResult<&[u8]> {
  *         分别表示为 `CutDelimiter` 枚举和字节切片的选项。
  */
 fn cut_get_delimiters(args_match: &ArgMatches) -> CTResult<(CutDelimiter<'_>, Option<&[u8]>)> {
-    // 检查是否指定了以空格分隔的选项
-    let is_whitespace_delimited = args_match.get_flag(opt_flags::WHITESPACE_DELIMITED);
     // 尝试获取分隔符选项
     let delim_options = args_match.get_one::<OsString>(opt_flags::DELIMITER);
-    // 根据是否指定了分隔符和是否为空白分隔进行处理
+    // 根据是否指定了分隔符进行处理
     let delim = match delim_options {
-        Some(_) if is_whitespace_delimited => {
-            // 如果同时指定了 --delimiter 和 -w，返回错误
-            return Err(CtSimpleError::new(
-                1,
-                "invalid input: Only one of --delimiter (-d) or -w option can be specified",
-            ));
-        }
         Some(os_string) => {
             if os_string.is_empty() {
                 // 将空字符串视为NUL分隔符
@@ -1084,10 +1061,7 @@ fn cut_get_delimiters(args_match: &ArgMatches) -> CTResult<(CutDelimiter<'_>, Op
                 CutDelimiter::Slice(cut_input_delimiter_bytes(os_string)?)
             }
         }
-        None => match is_whitespace_delimited {
-            true => CutDelimiter::Whitespace,
-            false => CutDelimiter::default(),
-        },
+        None => CutDelimiter::default(),
     };
     // 获取输出分隔符，如果有指定
     let out_delim = args_match
@@ -1115,6 +1089,39 @@ fn normalize_short_delimiter_equals(args: Vec<OsString>) -> Vec<OsString> {
             }
         })
         .collect()
+}
+
+fn reject_non_gnu_whitespace_delimiter_option(args: &[OsString]) -> CTResult<()> {
+    let mut parse_options = true;
+
+    for argument in args {
+        let bytes = os_string_as_bytes(argument)?;
+        if parse_options && bytes == b"--" {
+            parse_options = false;
+            continue;
+        }
+        if !parse_options {
+            continue;
+        }
+
+        if bytes == b"-w" || (bytes.starts_with(b"-w") && bytes.len() > 2) {
+            return Err(CtSimpleError::new(
+                1,
+                cut_usage_error("invalid option -- 'w'"),
+            ));
+        }
+        if bytes.starts_with(b"--whitespace-delimited") {
+            return Err(CtSimpleError::new(
+                1,
+                cut_usage_error(format!(
+                    "unrecognized option '{}'",
+                    String::from_utf8_lossy(bytes)
+                )),
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 /**
@@ -1182,11 +1189,6 @@ fn cut_args_init() -> Vec<Arg> {
             .value_parser(ValueParser::os_string())
             .help("specify the delimiter character that separates fields in the input source. Defaults to Tab.")
             .value_name("DELIM"),
-        Arg::new(opt_flags::WHITESPACE_DELIMITED)
-            .short('w')
-            .help(t!("cut.clap.whitespace_delimited"))
-            .value_name("WHITESPACE")
-            .action(ArgAction::SetTrue),
         Arg::new(opt_flags::FIELDS)
             .short('f')
             .long(opt_flags::FIELDS)
@@ -1272,6 +1274,7 @@ pub fn cut_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&lang_code);
     // 将传入的参数转换为 OsString 的 Vec。
     let args = normalize_short_delimiter_equals(args.collect::<Vec<OsString>>());
+    reject_non_gnu_whitespace_delimiter_option(&args)?;
     // 使用 clap 库解析命令行参数。
     let args_match = ct_app().try_get_matches_from(args)?;
 
@@ -1358,11 +1361,6 @@ fn cut_mode_param_parse<'a>(
                     Err(cut_usage_error(
                         "an input delimiter may be specified only when operating on fields",
                     ))
-                }
-            CutMode::Bytes(_, _) | CutMode::Characters(_, _)
-            if args_match.get_flag(opt_flags::WHITESPACE_DELIMITED) =>
-                {
-                    Err("invalid input: The '-w' option only usable if printing a sequence of fields".into())
                 }
             CutMode::Bytes(_, _) | CutMode::Characters(_, _)
             if args_match.get_flag(opt_flags::ONLY_DELIMITED) =>
@@ -1484,10 +1482,8 @@ fn cut_mode_delimiter(mode: &CutMode) -> Option<String> {
         return None;
     };
     let field_opts = opts.field_opts.as_ref().expect("field opts");
-    match field_opts.delimiter {
-        CutDelimiter::Whitespace => Some("whitespace".into()),
-        CutDelimiter::Slice(bytes) => Some(String::from_utf8_lossy(bytes).into_owned()),
-    }
+    let CutDelimiter::Slice(bytes) = field_opts.delimiter;
+    Some(String::from_utf8_lossy(bytes).into_owned())
 }
 
 fn cut_mode_only_delimited(mode: &CutMode) -> bool {
@@ -1529,6 +1525,7 @@ pub fn cut_native_semantic(args: impl ctcore::Args) -> CTResult<CutSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = normalize_short_delimiter_equals(args.collect::<Vec<OsString>>());
+    reject_non_gnu_whitespace_delimiter_option(&args)?;
     let args_match = ct_app().try_get_matches_from(args)?;
 
     let is_complement = args_match.get_flag(opt_flags::COMPLEMENT);
@@ -2763,7 +2760,8 @@ mod tests {
             let args = vec![
                 ctcore::ct_util_name(),
                 filename1,
-                "-w",
+                "-d",
+                ":",
                 "--only-delimited",
                 "-f",
                 "1",
@@ -2774,20 +2772,13 @@ mod tests {
             let result = cut_get_delimiters(&matches);
             assert!(result.is_ok());
             let (delim, out_delim) = result.unwrap();
-            assert_eq!(delim, CutDelimiter::Whitespace);
+            assert_eq!(delim, CutDelimiter::Slice(b":"));
             assert_eq!(out_delim, None);
         }
 
         #[test]
         fn test_cut_mode_parse_bytes() {
-            let args = vec![
-                ctcore::ct_util_name(),
-                "file",
-                "-w",
-                "--only-delimited",
-                "-b",
-                "1",
-            ];
+            let args = vec![ctcore::ct_util_name(), "file", "-b", "1"];
 
             let matches = ct_app().try_get_matches_from(args).unwrap();
 
@@ -2827,14 +2818,7 @@ mod tests {
 
         #[test]
         fn test_cut_mode_parse_characters() {
-            let args = vec![
-                ctcore::ct_util_name(),
-                "file",
-                "-w",
-                "--only-delimited",
-                "-c",
-                "1",
-            ];
+            let args = vec![ctcore::ct_util_name(), "file", "-c", "1"];
 
             let matches = ct_app().try_get_matches_from(args).unwrap();
 
@@ -2877,7 +2861,8 @@ mod tests {
             let args = vec![
                 ctcore::ct_util_name(),
                 "file",
-                "-w",
+                "-d",
+                ":",
                 "--only-delimited",
                 "-f",
                 "1",
@@ -2924,7 +2909,8 @@ mod tests {
             let args = vec![
                 ctcore::ct_util_name(),
                 "file",
-                "-w",
+                "-d",
+                ":",
                 "--only-delimited",
                 "-f",
                 "1",

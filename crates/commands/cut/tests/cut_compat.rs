@@ -162,6 +162,27 @@ fn mode_selection_uses_gnu_diagnostics() {
 }
 
 #[test]
+fn non_gnu_whitespace_delimiter_options_are_rejected() {
+    let cases = [
+        (
+            vec!["-w", "-f2"],
+            "cut: invalid option -- 'w'\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--whitespace-delimited", "-f2"],
+            "cut: unrecognized option '--whitespace-delimited'\nTry 'cut --help' for more information.\n",
+        ),
+    ];
+
+    for (args, expected_stderr) in cases {
+        let output = run_cut(&args, b"");
+        assert_eq!(output.status.code(), Some(1), "args: {args:?}");
+        assert!(output.stdout.is_empty(), "args: {args:?}");
+        assert_eq!(output.stderr, expected_stderr.as_bytes(), "args: {args:?}");
+    }
+}
+
+#[test]
 fn input_delimiter_requires_field_mode() {
     for args in [&["-d:", "-b1"][..], &["-d", "", "-c1"][..]] {
         let output = run_cut(args, b"");

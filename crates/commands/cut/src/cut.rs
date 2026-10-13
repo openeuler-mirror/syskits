@@ -1186,7 +1186,9 @@ fn cut_mode_param_parse<'a>(
             CutMode::Bytes(_, _) | CutMode::Characters(_, _)
             if args_match.contains_id(opt_flags::DELIMITER) =>
                 {
-                    Err("invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields".into())
+                    Err(cut_usage_error(
+                        "an input delimiter may be specified only when operating on fields",
+                    ))
                 }
             CutMode::Bytes(_, _) | CutMode::Characters(_, _)
             if args_match.get_flag(opt_flags::WHITESPACE_DELIMITED) =>

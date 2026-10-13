@@ -132,6 +132,20 @@ fn mode_selection_uses_gnu_diagnostics() {
 }
 
 #[test]
+fn input_delimiter_requires_field_mode() {
+    for args in [&["-d:", "-b1"][..], &["-d", "", "-c1"][..]] {
+        let output = run_cut(args, b"");
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            output.stderr,
+            b"cut: an input delimiter may be specified only when operating on fields\n\
+              Try 'cut --help' for more information.\n"
+        );
+    }
+}
+
+#[test]
 fn character_mode_uses_locale_character_units() {
     let combining = run_cut_in_locale(&["-c2"], b"a\xcc\x81b\n", "en_US.utf8");
     assert!(combining.status.success());

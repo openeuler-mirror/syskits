@@ -129,8 +129,8 @@ pub enum CsplitError {
     MatchNotFound(PatternText),
     #[error("{}: match not found on repetition {}", ._0.locale_quote(), _1)]
     MatchNotFoundOnRepetition(PatternText, u64),
-    #[error("0: line number must be greater than zero")]
-    LineNumberIsZero,
+    #[error("{}: line number must be greater than zero", _0)]
+    LineNumberIsZero(String),
     #[error("line number '{}' is smaller than preceding line number, {}", _0, _1)]
     LineNumberSmallerThanPrevious(usize, usize),
     #[error("{}: invalid pattern", ._0.locale_quote())]
@@ -323,7 +323,7 @@ mod tests_csplit {
     #[test]
     fn test_csplit_error_line_number_is_zero() {
         use crate::csplit_error::CsplitError;
-        let error = CsplitError::LineNumberIsZero;
+        let error = CsplitError::LineNumberIsZero("0".to_string());
 
         assert_eq!(
             error.to_string(),

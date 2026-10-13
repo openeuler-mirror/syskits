@@ -1091,6 +1091,59 @@ fn normalize_short_delimiter_equals(args: Vec<OsString>) -> Vec<OsString> {
         .collect()
 }
 
+fn normalize_cut_posixly_correct_args(mut args: Vec<OsString>) -> Vec<OsString> {
+    if std::env::var_os("POSIXLY_CORRECT").is_none() {
+        return args;
+    }
+
+    let command = ct_app();
+    let mut index = 1;
+    while index < args.len() {
+        let Some(argument) = args[index].to_str() else {
+            args.insert(index, OsString::from("--"));
+            break;
+        };
+        if argument == "--" {
+            break;
+        }
+        if argument == "-" || !argument.starts_with('-') {
+            args.insert(index, OsString::from("--"));
+            break;
+        }
+
+        if let Some(long_option) = argument.strip_prefix("--") {
+            let option_name = long_option
+                .split_once('=')
+                .map_or(long_option, |(name, _)| name);
+            if let Some(option) = cut_find_long_option(&command, option_name) {
+                if option.get_action().takes_values() && !long_option.contains('=') {
+                    index += 1;
+                }
+            }
+        } else if let Some(short_options) = argument.strip_prefix('-') {
+            let mut short_options = short_options.chars().peekable();
+            while let Some(option) = short_options.next() {
+                let Some(option) = command
+                    .get_arguments()
+                    .find(|argument| argument.get_short() == Some(option))
+                else {
+                    break;
+                };
+                if option.get_action().takes_values() {
+                    if short_options.peek().is_none() {
+                        index += 1;
+                    }
+                    break;
+                }
+            }
+        }
+
+        index += 1;
+    }
+
+    args
+}
+
 fn reject_non_gnu_whitespace_delimiter_option(args: &[OsString]) -> CTResult<()> {
     let mut parse_options = true;
 
@@ -1479,7 +1532,9 @@ pub fn cut_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     // 将传入的参数转换为 OsString 的 Vec。
-    let args = normalize_short_delimiter_equals(args.collect::<Vec<OsString>>());
+    let args = normalize_cut_posixly_correct_args(normalize_short_delimiter_equals(
+        args.collect::<Vec<OsString>>(),
+    ));
     reject_non_gnu_whitespace_delimiter_option(&args)?;
     // 使用 clap 库解析命令行参数。
     let args_match = cut_parse_args(args)?;
@@ -1730,7 +1785,9 @@ pub fn cut_native_semantic(args: impl ctcore::Args) -> CTResult<CutSemantic> {
 
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = normalize_short_delimiter_equals(args.collect::<Vec<OsString>>());
+    let args = normalize_cut_posixly_correct_args(normalize_short_delimiter_equals(
+        args.collect::<Vec<OsString>>(),
+    ));
     reject_non_gnu_whitespace_delimiter_option(&args)?;
     let args_match = cut_parse_args(args)?;
 

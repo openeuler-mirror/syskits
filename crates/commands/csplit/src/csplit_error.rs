@@ -112,8 +112,8 @@ pub enum CsplitError {
     ClosingDelimiterMissing(PatternText, char),
     #[error("{}: integer expected after delimiter", ._0.locale_quote())]
     IntegerExpectedAfterDelimiter(PatternText),
-    #[error("{}: '}}' is required in repeat count", locale_quote(&._0))]
-    RepeatCountMissingClosingBrace(String),
+    #[error("{}: '}}' is required in repeat count", ._0.locale_quote())]
+    RepeatCountMissingClosingBrace(PatternText),
     #[error("{}: integer required between '{{' and '}}'", _0)]
     RepeatCountIntegerRequired(String),
     #[error("invalid number: {}", locale_quote(&._0))]

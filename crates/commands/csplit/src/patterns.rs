@@ -10,7 +10,9 @@
  */
 
 use crate::csplit_error::{CsplitError, PatternText};
-use ctcore::{ct_display::locale_quote, ct_show_warning};
+#[cfg(test)]
+use ctcore::ct_display::locale_quote;
+use ctcore::ct_show_warning;
 use onig::{EncodedBytes, Error as OnigError, Regex as OnigRegex, RegexOptions, Syntax};
 use std::fmt;
 
@@ -260,8 +262,7 @@ fn extract_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, Cs
         let execute_n_times = match iter.peek() {
             None => CsplitExecutePattern::Times(1),
             Some(next_item) if next_item.as_ref().starts_with(b"{") => {
-                let repeat_count =
-                    parse_repeat_count(String::from_utf8_lossy(next_item.as_ref()).as_ref())?;
+                let repeat_count = parse_repeat_count(next_item.as_ref())?;
                 iter.next();
                 repeat_count
             }
@@ -320,27 +321,29 @@ fn extract_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, Cs
     Ok(csplit_patterns)
 }
 
-fn parse_repeat_count(argument: &str) -> Result<CsplitExecutePattern, CsplitError> {
-    let Some(without_closing_brace) = argument.strip_suffix('}') else {
+fn parse_repeat_count(argument: impl AsRef<[u8]>) -> Result<CsplitExecutePattern, CsplitError> {
+    let argument = argument.as_ref();
+    let Some(without_closing_brace) = argument.strip_suffix(b"}") else {
         return Err(CsplitError::RepeatCountMissingClosingBrace(
-            argument.to_string(),
+            PatternText::from(argument.to_owned()),
         ));
     };
-    let value = without_closing_brace.strip_prefix('{').unwrap_or(argument);
-    if value == "*" {
+    let value = without_closing_brace.strip_prefix(b"{").unwrap_or(argument);
+    if value == b"*" {
         return Ok(CsplitExecutePattern::Always);
     }
 
-    match value
-        .trim_start_matches(|character: char| character.is_ascii_whitespace())
-        .parse::<u64>()
+    let value = value.trim_ascii_start();
+    match std::str::from_utf8(&value)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
     {
-        Ok(repeat_count) if repeat_count <= i64::MAX as u64 => {
+        Some(repeat_count) if repeat_count <= i64::MAX as u64 => {
             Ok(CsplitExecutePattern::Times(repeat_count + 1))
         }
         _ => Err(CsplitError::RepeatCountIntegerRequired(format!(
             "{}}}",
-            locale_quote(without_closing_brace)
+            PatternText::from(without_closing_brace.to_owned()).locale_quote()
         ))),
     }
 }

@@ -23,13 +23,29 @@ fn run_cut_os_in_locale<S: AsRef<std::ffi::OsStr>>(
     input: &[u8],
     locale: &str,
 ) -> Output {
+    run_cut_os_in_locale_with_posixly_correct(args, input, locale, false)
+}
+
+fn run_cut_posixly_correct(args: &[&str], input: &[u8]) -> Output {
+    run_cut_os_in_locale_with_posixly_correct(args, input, "C", true)
+}
+
+fn run_cut_os_in_locale_with_posixly_correct<S: AsRef<std::ffi::OsStr>>(
+    args: &[S],
+    input: &[u8],
+    locale: &str,
+    posixly_correct: bool,
+) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_cut"));
     #[cfg(unix)]
     command.arg0("cut");
 
+    command.args(args).env("LC_ALL", locale);
+    if posixly_correct {
+        command.env("POSIXLY_CORRECT", "1");
+    }
+
     let mut child = command
-        .args(args)
-        .env("LC_ALL", locale)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -340,6 +356,20 @@ fn hyphen_prefixed_option_values_are_consumed() {
     assert!(output_delimiter.status.success());
     assert_eq!(output_delimiter.stdout, b"a--b\n");
     assert!(output_delimiter.stderr.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn posixly_correct_stops_option_parsing_at_the_first_file() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("input");
+    std::fs::write(&input, b"a:b:c\n").expect("write input");
+    let input = input.to_str().expect("UTF-8 path");
+
+    let output = run_cut_posixly_correct(&["-f1", input, "-s"], b"");
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"a:b:c\n");
+    assert_eq!(output.stderr, b"cut: -s: No such file or directory\n");
 }
 
 #[test]

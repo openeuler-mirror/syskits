@@ -236,6 +236,39 @@ fn unknown_options_use_gnu_diagnostics() {
 }
 
 #[test]
+fn ambiguous_long_options_use_gnu_diagnostics() {
+    let cases = [
+        (
+            vec!["--c", "-f1"],
+            "cut: option '--c' is ambiguous; possibilities: '--characters' '--complement'\n\
+             Try 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--c=value", "-f1"],
+            "cut: option '--c=value' is ambiguous; possibilities: '--characters' '--complement'\n\
+             Try 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--o", "-f1"],
+            "cut: option '--o' is ambiguous; possibilities: '--only-delimited' '--output-delimiter'\n\
+             Try 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--o=value", "-f1"],
+            "cut: option '--o=value' is ambiguous; possibilities: '--only-delimited' '--output-delimiter'\n\
+             Try 'cut --help' for more information.\n",
+        ),
+    ];
+
+    for (args, expected_stderr) in cases {
+        let output = run_cut(&args, b"");
+        assert_eq!(output.status.code(), Some(1), "args: {args:?}");
+        assert!(output.stdout.is_empty(), "args: {args:?}");
+        assert_eq!(output.stderr, expected_stderr.as_bytes(), "args: {args:?}");
+    }
+}
+
+#[test]
 fn short_help_and_version_options_are_rejected() {
     for (args, invalid) in [
         (vec!["-h"], 'h'),

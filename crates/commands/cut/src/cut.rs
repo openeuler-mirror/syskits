@@ -1304,6 +1304,71 @@ fn cut_unexpected_option_argument_message(args: &[OsString], command: &Command) 
     None
 }
 
+fn cut_ambiguous_long_option_message(args: &[OsString], command: &Command) -> Option<String> {
+    let mut index = 1;
+
+    while index < args.len() {
+        let argument = args[index].to_str()?;
+        if argument == "--" {
+            break;
+        }
+
+        if let Some(long_option) = argument.strip_prefix("--") {
+            if long_option.is_empty() {
+                break;
+            }
+            let option_name = long_option
+                .split_once('=')
+                .map_or(long_option, |(name, _)| name);
+            let options: Vec<_> = command
+                .get_arguments()
+                .filter_map(|option| option.get_long())
+                .filter(|option| option.starts_with(option_name))
+                .collect();
+            if options.is_empty() {
+                return None;
+            }
+            if options.len() > 1 {
+                let possibilities = options
+                    .iter()
+                    .map(|option| locale_quote(&format!("--{option}")))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                return Some(format!(
+                    "option {} is ambiguous; possibilities: {possibilities}",
+                    locale_quote(argument)
+                ));
+            }
+
+            let option = cut_find_long_option(command, option_name)?;
+            if option.get_action().takes_values() && !long_option.contains('=') {
+                index += 1;
+            }
+        } else if let Some(short_options) = argument.strip_prefix('-') {
+            if short_options.is_empty() {
+                index += 1;
+                continue;
+            }
+
+            for option in short_options.chars() {
+                let Some(option) = command
+                    .get_arguments()
+                    .find(|argument| argument.get_short() == Some(option))
+                else {
+                    return None;
+                };
+                if option.get_action().takes_values() {
+                    break;
+                }
+            }
+        }
+
+        index += 1;
+    }
+
+    None
+}
+
 fn cut_unknown_option_message(args: &[OsString], command: &Command) -> Option<String> {
     let mut index = 1;
 
@@ -1373,7 +1438,9 @@ fn cut_parse_args(args: Vec<OsString>) -> CTResult<ArgMatches> {
             }
         }
         Err(error) if error.kind() == clap::error::ErrorKind::UnknownArgument => {
-            if let Some(message) = cut_unknown_option_message(&args, &command) {
+            if let Some(message) = cut_ambiguous_long_option_message(&args, &command)
+                .or_else(|| cut_unknown_option_message(&args, &command))
+            {
                 Err(CtSimpleError::new(1, cut_usage_error(message)))
             } else {
                 Err(error.into())

@@ -245,24 +245,50 @@ fn validate_bre_interval_ranges(
             continue;
         }
 
-        match bytes[index] {
-            b'\\'
-                if !in_bracket_expression
-                    && bytes.get(index + 1) == Some(&b'{')
-                    && index > 0
-                    && bytes[index - 1] != b'\\' =>
+        if bytes[index] == b'\\' {
+            let slash_start = index;
+            while bytes.get(index) == Some(&b'\\') {
+                index += 1;
+            }
+            let slash_count = index - slash_start;
+
+            // The last slash in an odd-length run begins a BRE interval delimiter.
+            if !in_bracket_expression
+                && slash_start > 0
+                && slash_count % 2 == 1
+                && bytes.get(index) == Some(&b'{')
             {
-                let content_start = index + 2;
-                let Some(content_end) = (content_start..bytes.len().saturating_sub(1))
-                    .find(|position| bytes[*position] == b'\\' && bytes[*position + 1] == b'}')
-                else {
+                let content_start = index + 1;
+                let mut content_end = content_start;
+                let Some(closing_backslash) = (loop {
+                    if content_end >= bytes.len() {
+                        break None;
+                    }
+                    if bytes[content_end] != b'\\' {
+                        content_end += 1;
+                        continue;
+                    }
+
+                    let closing_start = content_end;
+                    while bytes.get(content_end) == Some(&b'\\') {
+                        content_end += 1;
+                    }
+                    if (content_end - closing_start) % 2 == 1
+                        && bytes.get(content_end) == Some(&b'}')
+                    {
+                        break Some(content_end - 1);
+                    }
+                    if (content_end - closing_start) % 2 == 1 {
+                        content_end += 1;
+                    }
+                }) else {
                     return Err(CsplitError::InvalidRegularExpression(
                         source.clone(),
                         "Unmatched \\{".to_string(),
                     ));
                 };
 
-                let interval = &bytes[content_start..content_end];
+                let interval = &bytes[content_start..closing_backslash];
                 if let Some(comma) = interval.iter().position(|byte| *byte == b',')
                     && let (lower, upper) = interval.split_at(comma)
                     && let upper = &upper[1..]
@@ -281,9 +307,17 @@ fn validate_bre_interval_ranges(
                         "Invalid content of \\{\\}".to_string(),
                     ));
                 }
-                index = content_end + 2;
+                index = content_end + 1;
+                continue;
             }
-            b'\\' => index += 2,
+
+            if slash_count % 2 == 1 && index < bytes.len() {
+                index += 1;
+            }
+            continue;
+        }
+
+        match bytes[index] {
             b'[' if !in_bracket_expression => {
                 in_bracket_expression = true;
                 index += 1;

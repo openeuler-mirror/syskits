@@ -5,6 +5,8 @@ use std::process::{Command, Output, Stdio};
 use std::ffi::OsString;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 
 fn run_cut(args: &[&str], input: &[u8]) -> Output {
     run_cut_in_locale(args, input, "C")
@@ -19,7 +21,11 @@ fn run_cut_os_in_locale<S: AsRef<std::ffi::OsStr>>(
     input: &[u8],
     locale: &str,
 ) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_cut"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_cut"));
+    #[cfg(unix)]
+    command.arg0("cut");
+
+    let mut child = command
         .args(args)
         .env("LC_ALL", locale)
         .stdin(Stdio::piped())
@@ -64,6 +70,44 @@ fn input_delimiter_uses_locale_character_rules() {
     assert!(gb18030.status.success());
     assert_eq!(gb18030.stdout, b"b\n");
     assert!(gb18030.stderr.is_empty());
+}
+
+#[test]
+fn invalid_ranges_use_gnu_diagnostics() {
+    let cases = [
+        (
+            vec!["-b0"],
+            "cut: byte/character positions are numbered from 1\n\
+             Try 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["-f", "2-0"],
+            "cut: invalid decreasing range\n\
+             Try 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["-f", "-"],
+            "cut: invalid range with no endpoint: -\n\
+             Try 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["-b", "--"],
+            "cut: invalid byte or character range\n\
+             Try 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["-f", "word"],
+            "cut: invalid field value 'word'\n\
+             Try 'cut --help' for more information.\n",
+        ),
+    ];
+
+    for (args, expected_stderr) in cases {
+        let output = run_cut(&args, b"");
+        assert!(!output.status.success(), "args: {args:?}");
+        assert!(output.stdout.is_empty(), "args: {args:?}");
+        assert_eq!(output.stderr, expected_stderr.as_bytes(), "args: {args:?}");
+    }
 }
 
 #[test]

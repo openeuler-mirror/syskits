@@ -136,73 +136,168 @@ fn cut_stdout_writer() -> Box<dyn Write> {
 // 如果`complement`标志为true，则计算给定范围的补集。
 //
 
-// 解析字节/字符位置范围，使用GNU兼容的错误消息
-// 对于字符和字节模式，不自动合并相邻范围以保持与GNU cut兼容的output-delimiter行为
-fn parse_position_ranges(list: &str, complement: bool) -> Result<Vec<CtRange>, String> {
-    let mut ct_ranges = Vec::new();
+fn cut_usage_error(message: impl AsRef<str>) -> String {
+    format!(
+        "{}\nTry 'cut --help' for more information.",
+        message.as_ref()
+    )
+}
 
-    for item in list.split(&[',', ' ']) {
-        let range_item: CtRange = std::str::FromStr::from_str(item)
-            .map_err(|e| format!("range {} was invalid: {}", item.quote(), e))?;
-        ct_ranges.push(range_item);
-    }
-
-    ct_ranges.sort();
-
-    let result = if complement {
-        // 先合并再求补集，防止互补运算出现重叠/非法缝隙
-        let mut merged = Vec::new();
-        if !ct_ranges.is_empty() {
-            merged.push(CtRange {
-                low: ct_ranges[0].low,
-                high: ct_ranges[0].high,
-            });
-
-            for r in &ct_ranges[1..] {
-                let last = merged.last_mut().unwrap();
-                // 如果相交或相邻，则合并（例如 1-2 和 3-4 合并为 1-4）
-                if r.low <= last.high.saturating_add(1) {
-                    last.high = last.high.max(r.high);
-                } else {
-                    merged.push(CtRange {
-                        low: r.low,
-                        high: r.high,
-                    });
-                }
-            }
-        }
-        Ok(ctcore::ct_ranges::complement(&merged))
-    } else {
-        Ok(ct_ranges)
+fn parse_ranges(list: &str, positions: bool, complement: bool) -> Result<Vec<CtRange>, String> {
+    let numbered_from_one = || {
+        cut_usage_error(if positions {
+            "byte/character positions are numbered from 1"
+        } else {
+            "fields are numbered from 1"
+        })
+    };
+    let invalid_range = || {
+        cut_usage_error(if positions {
+            "invalid byte or character range"
+        } else {
+            "invalid field range"
+        })
     };
 
-    // 转换错误消息以匹配GNU格式
-    result.map_err(|err: String| {
-        if err.contains("fields and positions are numbered from 1") {
-            "byte/character positions are numbered from 1\nTry 'cut --help' for more information."
-                .to_string()
-        } else {
-            err
+    let bytes = list.as_bytes();
+    let mut ranges = Vec::new();
+    let mut index = 0;
+    let mut initial = 1;
+    let mut value = 0usize;
+    let mut lhs_specified = false;
+    let mut rhs_specified = false;
+    let mut dash_found = false;
+    let mut in_digits = false;
+    let mut number_start = 0;
+
+    loop {
+        let byte = bytes.get(index).copied().unwrap_or(0);
+        match byte {
+            b'-' => {
+                in_digits = false;
+                if dash_found {
+                    return Err(invalid_range());
+                }
+                dash_found = true;
+                index += 1;
+                if lhs_specified && value == 0 {
+                    return Err(numbered_from_one());
+                }
+                initial = if lhs_specified { value } else { 1 };
+                value = 0;
+            }
+            b',' | b' ' | b'\t' | 0 => {
+                in_digits = false;
+                if dash_found {
+                    dash_found = false;
+                    if !lhs_specified && !rhs_specified {
+                        return Err(cut_usage_error("invalid range with no endpoint: -"));
+                    }
+                    if rhs_specified {
+                        if value < initial {
+                            return Err(cut_usage_error("invalid decreasing range"));
+                        }
+                        ranges.push(CtRange {
+                            low: initial,
+                            high: value,
+                        });
+                    } else {
+                        ranges.push(CtRange {
+                            low: initial,
+                            high: usize::MAX - 1,
+                        });
+                    }
+                    value = 0;
+                } else {
+                    if value == 0 {
+                        return Err(numbered_from_one());
+                    }
+                    ranges.push(CtRange {
+                        low: value,
+                        high: value,
+                    });
+                    value = 0;
+                }
+
+                if byte == 0 {
+                    break;
+                }
+                index += 1;
+                lhs_specified = false;
+                rhs_specified = false;
+            }
+            b'0'..=b'9' => {
+                if !in_digits {
+                    number_start = index;
+                }
+                in_digits = true;
+                if dash_found {
+                    rhs_specified = true;
+                } else {
+                    lhs_specified = true;
+                }
+
+                let digit = usize::from(byte - b'0');
+                value = value
+                    .checked_mul(10)
+                    .and_then(|current| current.checked_add(digit))
+                    .unwrap_or(usize::MAX);
+                if value == usize::MAX {
+                    let number_end = bytes[number_start..]
+                        .iter()
+                        .position(|byte| !byte.is_ascii_digit())
+                        .map_or(bytes.len(), |offset| number_start + offset);
+                    let number = &list[number_start..number_end];
+                    return Err(cut_usage_error(format!(
+                        "{} {} is too large",
+                        if positions {
+                            "byte/character offset"
+                        } else {
+                            "field number"
+                        },
+                        number.quote()
+                    )));
+                }
+                index += 1;
+            }
+            _ => {
+                return Err(cut_usage_error(format!(
+                    "{} {}",
+                    if positions {
+                        "invalid byte/character position"
+                    } else {
+                        "invalid field value"
+                    },
+                    list[index..].quote()
+                )));
+            }
         }
+    }
+
+    ranges.sort();
+    Ok(if complement {
+        let mut merged: Vec<CtRange> = Vec::with_capacity(ranges.len());
+        for range in ranges {
+            if let Some(last) = merged.last_mut()
+                && range.low <= last.high
+            {
+                last.high = last.high.max(range.high);
+            } else {
+                merged.push(range);
+            }
+        }
+        ctcore::ct_ranges::complement(&merged)
+    } else {
+        ranges
     })
 }
 
-// 解析字段范围，使用GNU兼容的错误消息
-fn parse_field_ranges(list: &str, complement: bool) -> Result<Vec<CtRange>, String> {
-    let result = if complement {
-        CtRange::from_list(list).map(|r| ctcore::ct_ranges::complement(&r))
-    } else {
-        CtRange::from_list(list)
-    };
+fn parse_position_ranges(list: &str, complement: bool) -> Result<Vec<CtRange>, String> {
+    parse_ranges(list, true, complement)
+}
 
-    // 转换错误消息以匹配GNU格式
-    result.map_err(|err| {
-        if err.contains("fields and positions are numbered from 1") {
-            "fields are numbered from 1\nTry 'cut --help' for more information.".to_string()
-        } else {
-            err
-        }
-    })
+fn parse_field_ranges(list: &str, complement: bool) -> Result<Vec<CtRange>, String> {
+    parse_ranges(list, false, complement)
 }
 
 /**

@@ -1615,6 +1615,23 @@ fn cut_character_units(line: &[u8]) -> Vec<(usize, usize)> {
     units
 }
 
+#[cfg(unix)]
+fn cut_multibyte_prefix_is_invalid(line: &[u8]) -> bool {
+    if line.is_empty() || cut_uses_c_locale() {
+        return false;
+    }
+
+    let mut state: libc::mbstate_t = unsafe { std::mem::zeroed() };
+    let mut wide_char = 0;
+    let length = unsafe { mbrtowc(&mut wide_char, line.as_ptr().cast(), line.len(), &mut state) };
+    length == usize::MAX || length == usize::MAX - 1
+}
+
+#[cfg(not(unix))]
+fn cut_multibyte_prefix_is_invalid(_: &[u8]) -> bool {
+    false
+}
+
 #[cfg(not(unix))]
 fn cut_character_units(line: &[u8]) -> Vec<(usize, usize)> {
     let mut units = Vec::new();
@@ -1641,7 +1658,18 @@ fn cut_characters_to_writer<R: Read, W: Write>(
     let mut buf_in = BufReader::new(reader);
     let out_delim = opts.out_delimiter.unwrap_or(b"\t");
 
+    let mut has_previous_record = false;
     let result = buf_in.for_byte_record(newline_char, |line| {
+        let mut line = line;
+        if has_previous_record {
+            // GNU retains the preceding terminator in WC after a conversion
+            // failure, so every invalid leading byte completes an empty record.
+            while cut_multibyte_prefix_is_invalid(line) {
+                out.write_all(&[newline_char])?;
+                line = &line[1..];
+            }
+        }
+
         let units = cut_character_units(line);
 
         let mut merged_segments = Vec::new();
@@ -1690,6 +1718,7 @@ fn cut_characters_to_writer<R: Read, W: Write>(
         }
         // 核心修复：无条件补齐换行符/终结符
         out.write_all(&[newline_char])?;
+        has_previous_record = true;
         Ok(true)
     });
 

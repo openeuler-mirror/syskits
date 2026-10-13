@@ -315,6 +315,19 @@ fn character_mode_uses_locale_character_units() {
 }
 
 #[test]
+fn character_mode_matches_gnu_after_an_invalid_multibyte_record_prefix() {
+    let output = run_cut_in_locale(&["-c1"], b"A\n\xffX\n", "en_US.utf8");
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"A\n\nX\n");
+    assert!(output.stderr.is_empty());
+
+    let byte_no_split = run_cut_in_locale(&["-b1-3", "-n"], b"A\n\xffX\n", "en_US.utf8");
+    assert!(byte_no_split.status.success());
+    assert_eq!(byte_no_split.stdout, b"A\n\nX\n");
+    assert!(byte_no_split.stderr.is_empty());
+}
+
+#[test]
 fn byte_no_split_mode_uses_locale_character_units() {
     let second = run_cut_in_locale(&["-b2", "-n"], b"\xe4\xb8\xadX\n", "en_US.utf8");
     assert!(second.status.success());

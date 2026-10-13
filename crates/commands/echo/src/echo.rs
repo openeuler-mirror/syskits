@@ -17,8 +17,10 @@ use clap::ArgAction;
 use clap::Command;
 use clap::crate_version;
 
-use ctcore::ct_error::CTResult;
 use ctcore::ct_error::FromIo;
+use ctcore::ct_error::{CTResult, CtSimpleError, strip_errno};
+#[cfg(all(target_os = "linux", not(test)))]
+use ctcore::ct_signals::enable_pipe_errors;
 
 use ctcore::Tool;
 use std::ffi::OsString;
@@ -28,6 +30,33 @@ use std::ops::ControlFlow;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
+
+#[cfg(all(target_os = "linux", not(test)))]
+static INHERITED_SIGPIPE_IGNORED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(all(target_os = "linux", not(test)))]
+extern "C" fn record_inherited_sigpipe_disposition() {
+    unsafe {
+        let mut action: libc::sigaction = std::mem::zeroed();
+        if libc::sigaction(libc::SIGPIPE, std::ptr::null(), &mut action) == 0
+            && action.sa_sigaction == libc::SIG_IGN
+        {
+            INHERITED_SIGPIPE_IGNORED.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+}
+
+// This runs before Rust's runtime replaces SIGPIPE with SIG_IGN.
+#[cfg(all(target_os = "linux", not(test)))]
+#[used]
+#[unsafe(link_section = ".preinit_array")]
+static RECORD_INHERITED_SIGPIPE_DISPOSITION: extern "C" fn() = record_inherited_sigpipe_disposition;
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn inherited_sigpipe_is_ignored() -> bool {
+    INHERITED_SIGPIPE_IGNORED.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 mod opt_flags {
     pub const STRING: &str = "STRING";
@@ -447,6 +476,11 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
+    #[cfg(all(target_os = "linux", not(test)))]
+    if !inherited_sigpipe_is_ignored() {
+        enable_pipe_errors().map_err(|error| CtSimpleError::new(1, error.to_string()))?;
+    }
+
     let args_vec = args.skip(1).collect::<Vec<_>>();
     let posix_mode = std::env::var("POSIXLY_CORRECT").is_ok();
 
@@ -458,8 +492,7 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let (no_newline, escaped, values) = echo_parse_args_bytes(&args_vec, posix_mode);
 
-    echo_execute_bytes(no_newline, escaped, &values)
-        .map_err_context(|| "could not write to stdout".to_string())
+    echo_write_result(echo_execute_bytes(no_newline, escaped, &values))
 }
 
 #[cfg(not(unix))]
@@ -478,8 +511,7 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     let (no_newline, escaped, values) = echo_parse_args(&args_vec, posix_mode);
-    echo_execute(no_newline, escaped, &values)
-        .map_err_context(|| "could not write to stdout".to_string())
+    echo_write_result(echo_execute(no_newline, escaped, &values))
 }
 
 pub fn ct_app() -> Command {
@@ -543,6 +575,17 @@ fn echo_write_output(output: &[u8]) -> io::Result<()> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
     stdout.write_all(output)
+}
+
+fn echo_write_result(result: io::Result<()>) -> CTResult<()> {
+    match result {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Err(CtSimpleError::new(
+            1,
+            format!("write error: {}", strip_errno(&error)),
+        )),
+        Err(error) => Err(error.map_err_context(|| "could not write to stdout".to_string())),
+    }
 }
 
 #[cfg(test)]

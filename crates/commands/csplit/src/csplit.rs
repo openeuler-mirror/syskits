@@ -270,7 +270,11 @@ where
                             ));
                         }
                         Err(err) => return Err(err),
-                        Ok(()) => (),
+                        Ok(()) => {
+                            if split_writer.options.suppress_matched {
+                                input_iter.csplit_discard_next_line()?;
+                            }
+                        }
                     }
                     up_to_line += n;
                 }
@@ -297,7 +301,11 @@ where
                             ));
                         }
                         (Err(err), _) => return Err(err),
-                        (Ok(()), _) => (),
+                        (Ok(()), _) => {
+                            if split_writer.options.suppress_matched {
+                                input_iter.csplit_discard_next_line()?;
+                            }
+                        }
                     };
                 }
             }
@@ -589,7 +597,6 @@ struct SplitWriter<'a> {
     size: usize,
     /// flag to indicate that no content should be written to a split
     dev_null: bool,
-    suppress_next_write: bool,
     created_files: Arc<Mutex<Vec<PathBuf>>>,
 }
 
@@ -602,7 +609,6 @@ impl SplitWriter<'_> {
             current_filename: None,
             size: 0,
             dev_null: false,
-            suppress_next_write: false,
             created_files: Arc::clone(&options.created_files),
         }
     }
@@ -625,8 +631,6 @@ impl SplitWriter<'_> {
         drop(created_files);
         self.current_writer = Some(BufWriter::new(file));
         self.current_filename = Some(file_path);
-
-        self.suppress_next_write = self.options.suppress_matched && self.counter > 0;
 
         self.counter += 1;
         self.size = 0;
@@ -667,12 +671,6 @@ impl SplitWriter<'_> {
     ///
     /// Some [`io::Error`] may occur when attempting to write the line.
     fn write_line(&mut self, line: &[u8]) -> Result<(), CsplitError> {
-        // 【执行拦截】：悄悄把这行丢掉，深藏功与名
-        if self.suppress_next_write {
-            self.suppress_next_write = false;
-            return Ok(());
-        }
-
         if !self.dev_null {
             let filename = self.current_output_file_name();
             match self.current_writer {
@@ -979,6 +977,18 @@ where
     /// Drain the content of the buffer.
     fn csplit_drain_buffer(&mut self) -> impl Iterator<Item = Vec<u8>> + '_ {
         self.buffer.drain(..).map(|(_, line)| line.unwrap())
+    }
+
+    fn csplit_discard_next_line(&mut self) -> io::Result<()> {
+        if !self.buffer.is_empty() {
+            let (_, line) = self.buffer.remove(0);
+            return line.map(|_| ());
+        }
+
+        match self.next() {
+            Some((_, line)) => line.map(|_| ()),
+            None => Ok(()),
+        }
     }
 
     /// Set the maximum number of lines to keep.

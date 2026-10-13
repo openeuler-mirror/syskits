@@ -1203,6 +1203,54 @@ fn cut_missing_option_argument_message(args: &[OsString], command: &Command) -> 
     None
 }
 
+fn cut_unexpected_option_argument_message(args: &[OsString], command: &Command) -> Option<String> {
+    let mut index = 1;
+
+    while index < args.len() {
+        let argument = args[index].to_str()?;
+        if argument == "--" {
+            break;
+        }
+
+        if let Some(long_option) = argument.strip_prefix("--") {
+            if long_option.is_empty() {
+                break;
+            }
+            let option_name = long_option
+                .split_once('=')
+                .map_or(long_option, |(name, _)| name);
+            let option = cut_find_long_option(command, option_name)?;
+            if !option.get_action().takes_values() && long_option.contains('=') {
+                return Some(format!(
+                    "option '--{}' doesn't allow an argument",
+                    option.get_long()?
+                ));
+            }
+            if option.get_action().takes_values() && !long_option.contains('=') {
+                index += 1;
+            }
+        } else if let Some(short_options) = argument.strip_prefix('-') {
+            if short_options.is_empty() {
+                index += 1;
+                continue;
+            }
+
+            for option in short_options.chars() {
+                let option = command
+                    .get_arguments()
+                    .find(|argument| argument.get_short() == Some(option))?;
+                if option.get_action().takes_values() {
+                    break;
+                }
+            }
+        }
+
+        index += 1;
+    }
+
+    None
+}
+
 fn cut_unknown_option_message(args: &[OsString], command: &Command) -> Option<String> {
     let mut index = 1;
 
@@ -1259,6 +1307,13 @@ fn cut_parse_args(args: Vec<OsString>) -> CTResult<ArgMatches> {
         Ok(matches) => Ok(matches),
         Err(error) if error.kind() == clap::error::ErrorKind::InvalidValue => {
             if let Some(message) = cut_missing_option_argument_message(&args, &command) {
+                Err(CtSimpleError::new(1, cut_usage_error(message)))
+            } else {
+                Err(error.into())
+            }
+        }
+        Err(error) if error.kind() == clap::error::ErrorKind::TooManyValues => {
+            if let Some(message) = cut_unexpected_option_argument_message(&args, &command) {
                 Err(CtSimpleError::new(1, cut_usage_error(message)))
             } else {
                 Err(error.into())

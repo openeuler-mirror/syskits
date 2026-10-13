@@ -125,12 +125,13 @@ impl CsplitError {
         }
     }
 
-    pub fn emit_deferred_stdout(&self) {
+    pub fn emit_deferred_stdout(&self) -> io::Result<()> {
         if let Some(stdout_lines) = self.deferred_stdout_lines() {
             for line in stdout_lines {
-                println!("{line}");
+                super::write_stdout_line(line)?;
             }
         }
+        Ok(())
     }
 
     pub fn replace_source_preserving_deferred(self, new_source: Self) -> Self {

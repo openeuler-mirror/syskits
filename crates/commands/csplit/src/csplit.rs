@@ -318,7 +318,7 @@ fn line_for_match(line: &[u8]) -> &[u8] {
 }
 
 #[cfg(target_os = "linux")]
-fn write_stdout_line(line: &str) -> io::Result<()> {
+pub(crate) fn write_stdout_line(line: &str) -> io::Result<()> {
     let output = format!("{line}\n");
     let mut written = 0;
     while written < output.len() {
@@ -344,6 +344,11 @@ fn write_stdout_line(line: &str) -> io::Result<()> {
         return Err(error);
     }
     Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn write_stdout_line(line: &str) -> io::Result<()> {
+    writeln!(io::stdout().lock(), "{line}")
 }
 
 #[cfg(target_os = "linux")]
@@ -529,12 +534,7 @@ impl SplitWriter<'_> {
     }
 
     fn write_split_size(&self, line: &str) -> Result<(), CsplitError> {
-        #[cfg(target_os = "linux")]
         let result = write_stdout_line(line);
-        #[cfg(not(target_os = "linux"))]
-        let mut stdout = io::stdout().lock();
-        #[cfg(not(target_os = "linux"))]
-        let result = writeln!(stdout, "{line}");
 
         if let Err(error) = result {
             #[cfg(target_os = "linux")]
@@ -743,6 +743,23 @@ impl SplitWriter<'_> {
     }
 }
 
+fn emit_deferred_stdout(error: &CsplitError, inherited_sigpipe_ignored: bool) {
+    let Err(write_error) = error.emit_deferred_stdout() else {
+        return;
+    };
+
+    #[cfg(target_os = "linux")]
+    if write_error.kind() == io::ErrorKind::BrokenPipe && !inherited_sigpipe_ignored {
+        let _ = signal_hook::low_level::emulate_default_handler(libc::SIGPIPE);
+    }
+
+    eprintln!(
+        "{}: write error: {}",
+        ctcore::ct_util_name(),
+        trim_os_error_suffix(write_error.to_string())
+    );
+}
+
 /// An iterator which can output items from a buffer filled externally.
 /// This is used to pass matching lines to the next split and to support patterns with a negative offset.
 struct InputSplitter<I>
@@ -845,6 +862,8 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
 
     #[cfg(target_os = "linux")]
     let inherited_sigpipe_ignored = inherited_sigpipe_is_ignored();
+    #[cfg(not(target_os = "linux"))]
+    let inherited_sigpipe_ignored = false;
     #[cfg(target_os = "linux")]
     if !inherited_sigpipe_ignored {
         enable_pipe_errors().map_err(|err| CtSimpleError::new(1, err.to_string()))?;
@@ -897,7 +916,7 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
         let stdin = io::stdin();
         csplit(&csplit_opts, patterns, stdin.lock()).map_err(|err| {
             eprintln!("{}: {err}", ctcore::ct_util_name());
-            err.emit_deferred_stdout();
+            emit_deferred_stdout(&err, inherited_sigpipe_ignored);
             1 // 错误时返回状态码 1
         })?;
     } else {
@@ -912,7 +931,7 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
         // 使用缓冲读取器读取文件，并进行拆分
         csplit(&csplit_opts, patterns, BufReader::new(file_name)).map_err(|err| {
             eprintln!("{}: {err}", ctcore::ct_util_name());
-            err.emit_deferred_stdout();
+            emit_deferred_stdout(&err, inherited_sigpipe_ignored);
             1 // 错误时返回状态码 1
         })?;
     }

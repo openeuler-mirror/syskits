@@ -115,6 +115,7 @@ impl CsplitRegex {
         let expression_for_compilation = normalize_empty_bre_intervals(expression);
         validate_bre_interval_ranges(&expression_for_compilation, &source)?;
         let compiled = compile_regex(&expression_for_compilation, &source)?;
+        validate_bre_backreferences(expression, &source)?;
         Ok(Self {
             compiled,
             expression: expression.to_owned(),
@@ -214,6 +215,7 @@ fn gnu_libc_regular_expression_error(error: i32) -> &'static str {
     match error {
         libc::REG_ECOLLATE => "Invalid collation character",
         libc::REG_ECTYPE => "Invalid character class name",
+        libc::REG_ESUBREG => "Invalid back reference",
         libc::REG_EBRACK => "Unmatched [, [^, [:, [., or [=",
         libc::REG_EPAREN => "Unmatched ( or \\(",
         libc::REG_EBRACE | libc::REG_BADBR | libc::REG_ERANGE => "Invalid content of \\{\\}",
@@ -273,12 +275,105 @@ fn gnu_regular_expression_error(error: &OnigError, expression: &[u8]) -> &'stati
         onig_sys::ONIGERR_END_PATTERN_WITH_UNMATCHED_PARENTHESIS
         | onig_sys::ONIGERR_END_PATTERN_IN_GROUP => "Unmatched ( or \\(",
         onig_sys::ONIGERR_UNMATCHED_RANGE_SPECIFIER_IN_CHAR_CLASS => "Invalid range end",
+        onig_sys::ONIGERR_INVALID_BACKREF => "Invalid back reference",
         onig_sys::ONIGERR_INVALID_POSIX_BRACKET_TYPE => "Invalid character class name",
         onig_sys::ONIGERR_TOO_BIG_NUMBER_FOR_REPEAT_RANGE => "Regular expression too big",
         onig_sys::ONIGERR_INVALID_REPEAT_RANGE_PATTERN
         | onig_sys::ONIGERR_UPPER_SMALLER_THAN_LOWER_IN_REPEAT_RANGE => "Invalid content of \\{\\}",
         _ => "Invalid regular expression",
     }
+}
+
+fn validate_bre_backreferences(expression: &[u8], source: &PatternText) -> Result<(), CsplitError> {
+    let mut index = 0;
+    let mut in_bracket_expression = false;
+    let mut bracket_has_content = false;
+    let mut group_stack = Vec::new();
+    let mut closed_groups = Vec::new();
+
+    while index < expression.len() {
+        if in_bracket_expression {
+            if expression[index] == b'['
+                && let Some(marker @ (b':' | b'.' | b'=')) = expression.get(index + 1)
+            {
+                bracket_has_content = true;
+                index += 2;
+                while index + 1 < expression.len()
+                    && (expression[index] != *marker || expression[index + 1] != b']')
+                {
+                    index += 1;
+                }
+                index = (index + 2).min(expression.len());
+                continue;
+            }
+            if expression[index] == b']' && bracket_has_content {
+                in_bracket_expression = false;
+                index += 1;
+                continue;
+            }
+            bracket_has_content = true;
+            if expression[index] == b'\\' {
+                index += 1;
+                if index < expression.len() {
+                    index += 1;
+                }
+            } else {
+                index += 1;
+            }
+            continue;
+        }
+
+        if expression[index] == b'[' {
+            in_bracket_expression = true;
+            bracket_has_content = false;
+            index += 1;
+            if expression.get(index) == Some(&b'^') {
+                index += 1;
+            }
+            continue;
+        }
+
+        if expression[index] != b'\\' {
+            index += 1;
+            continue;
+        }
+
+        let slash_start = index;
+        while expression.get(index) == Some(&b'\\') {
+            index += 1;
+        }
+        if (index - slash_start) % 2 == 0 {
+            continue;
+        }
+
+        match expression.get(index) {
+            Some(b'(') => {
+                let group = closed_groups.len();
+                closed_groups.push(false);
+                group_stack.push(group);
+            }
+            Some(b')') => {
+                if let Some(group) = group_stack.pop() {
+                    closed_groups[group] = true;
+                }
+            }
+            Some(digit @ b'1'..=b'9') => {
+                let group = usize::from(*digit - b'1');
+                if !closed_groups.get(group).copied().unwrap_or(false) {
+                    return Err(CsplitError::InvalidRegularExpression(
+                        source.clone(),
+                        "Invalid back reference".to_string(),
+                    ));
+                }
+            }
+            _ => {}
+        }
+        if index < expression.len() {
+            index += 1;
+        }
+    }
+
+    Ok(())
 }
 
 fn normalize_empty_bre_intervals(expression: &[u8]) -> Vec<u8> {

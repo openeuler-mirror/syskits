@@ -115,6 +115,8 @@ pub enum CsplitError {
     StdoutWriteError(String),
     #[error("{}: {}", _0, _1)]
     OutputCreateError(OutputFileName, String),
+    #[error("read error: {}", _0)]
+    ReadError(String),
     #[error("input disappeared")]
     InputDisappeared,
     #[error("{}: line number out of range", ._0.locale_quote())]

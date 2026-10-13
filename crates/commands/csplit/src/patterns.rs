@@ -218,8 +218,8 @@ fn gnu_regular_expression_error(error: &OnigError) -> &'static str {
         onig_sys::ONIGERR_END_PATTERN_WITH_UNMATCHED_PARENTHESIS
         | onig_sys::ONIGERR_END_PATTERN_IN_GROUP => "Unmatched ( or \\(",
         onig_sys::ONIGERR_INVALID_POSIX_BRACKET_TYPE => "Invalid character class name",
+        onig_sys::ONIGERR_TOO_BIG_NUMBER_FOR_REPEAT_RANGE => "Regular expression too big",
         onig_sys::ONIGERR_INVALID_REPEAT_RANGE_PATTERN
-        | onig_sys::ONIGERR_TOO_BIG_NUMBER_FOR_REPEAT_RANGE
         | onig_sys::ONIGERR_UPPER_SMALLER_THAN_LOWER_IN_REPEAT_RANGE => "Invalid content of \\{\\}",
         _ => "Invalid regular expression",
     }

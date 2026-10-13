@@ -276,7 +276,9 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
             }
         } else if let Ok(line_number) = arg
             .trim_start_matches(|character: char| character.is_ascii_whitespace())
-            .parse::<usize>()
+            .parse::<u64>()
+            && line_number <= i64::MAX as u64
+            && let Ok(line_number) = usize::try_from(line_number)
         {
             // 如果参数是行号，构建相应的行号模式
             csplit_patterns.push(CsplitPattern::UpToLine(line_number, execute_n_times));

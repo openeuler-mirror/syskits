@@ -185,7 +185,8 @@ where
     };
 
     // 第三步：发生错误时的清理
-    if final_result.is_err() && !csplit_opts.keep_files {
+    let preserve_empty_split = matches!(&final_result, Err(CsplitError::InputDisappeared));
+    if final_result.is_err() && !csplit_opts.keep_files && !preserve_empty_split {
         let _ = split_writer.delete_all_splits();
     }
 
@@ -457,8 +458,10 @@ impl SplitWriter<'_> {
         input_iter.csplit_set_size_of_buffer(1);
 
         let mut result = Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
+        let mut read_line = false;
         while let Some((ln, line)) = input_iter.next() {
             let l = line?;
+            read_line = true;
             match n.cmp(&(&ln + 1)) {
                 Ordering::Less => {
                     assert!(
@@ -480,6 +483,12 @@ impl SplitWriter<'_> {
             }
             self.write_line(&l)?;
         }
+
+        if !read_line {
+            self.close_current_writer()?;
+            return Err(CsplitError::InputDisappeared);
+        }
+
         self.finish_split()?;
         result
     }

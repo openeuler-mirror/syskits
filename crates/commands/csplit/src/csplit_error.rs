@@ -28,6 +28,8 @@ pub enum CsplitError {
     WriteError(String, String),
     #[error("{}: {}", ._0.maybe_quote(), _1)]
     OutputCreateError(String, String),
+    #[error("input disappeared")]
+    InputDisappeared,
     #[error("{}: line number out of range", locale_quote(&._0))]
     LineOutOfRange(String),
     #[error(

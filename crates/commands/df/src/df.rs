@@ -215,11 +215,9 @@ impl fmt::Display for DfOptionsError {
                 "option --output: field {} used more than once",
                 s.quote()
             ),
-            Self::ColumnError(ColumnError::UnknownColumn(s)) => write!(
-                f,
-                "option --output: field {} unknown",
-                s.quote()
-            ),
+            Self::ColumnError(ColumnError::UnknownColumn(s)) => {
+                write!(f, "option --output: field {} unknown", s.quote())
+            }
             // FilesystemTypeBothSelectedAndExcluded错误会在控制台打印详细信息，不会直接影响fmt输出。
             #[allow(clippy::print_in_format_impl)]
             Self::FilesystemTypeBothSelectedAndExcluded(types) => {
@@ -572,7 +570,10 @@ impl Error for DfError {}
 impl CTError for DfError {
     // 如果错误类型为OptionsError且具体错误为ColumnError，则返回true，表示需要显示用法信息。
     fn usage(&self) -> bool {
-        matches!(self, Self::OptionsError(DfOptionsError::ColumnError(_)) | Self::ConflictError(_))
+        matches!(
+            self,
+            Self::OptionsError(DfOptionsError::ColumnError(_)) | Self::ConflictError(_)
+        )
     }
 }
 
@@ -594,24 +595,28 @@ fn validate_conflicts(args_match: &ArgMatches) -> CTResult<()> {
         if args_match.get_flag(DF_OPT_INODES) {
             return Err(DfError::ConflictError(
                 "options -i and --output are mutually exclusive".into(),
-            ).into());
+            )
+            .into());
         }
         if args_match.get_flag(DF_OPT_PORTABILITY) {
             return Err(DfError::ConflictError(
                 "options -P and --output are mutually exclusive".into(),
-            ).into());
+            )
+            .into());
         }
         if args_match.get_flag(DF_OPT_PRINT_TYPE) {
             return Err(DfError::ConflictError(
                 "options -T and --output are mutually exclusive".into(),
-            ).into());
+            )
+            .into());
         }
     }
 
     if args_match.get_flag(DF_OPT_DIRECT) && args_match.get_flag(DF_OPT_LOCAL) {
         return Err(DfError::ConflictError(
             "options --direct and --local (-l) are mutually exclusive".into(),
-        ).into());
+        )
+        .into());
     }
 
     Ok(())
@@ -1101,6 +1106,7 @@ fn df_args_init() -> Vec<Arg> {
             .action(ArgAction::SetTrue),
         Arg::new(DF_OPT_TYPE)
             .short('t')
+            .short_alias('F')
             .long("type")
             .value_parser(ValueParser::os_string())
             .value_name("TYPE")
@@ -5615,6 +5621,26 @@ mod tests {
                     .map(|x| x.as_os_str())
                     .unwrap()
             );
+        }
+
+        #[test]
+        fn test_ct_app_df_short_type_alias() {
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-F",
+                "proc",
+                "-t",
+                "sysfs",
+            ];
+            let matches = command.try_get_matches_from(args).unwrap();
+            let types = matches
+                .get_many::<OsString>(DF_OPT_TYPE)
+                .unwrap()
+                .map(|value| value.to_string_lossy().into_owned())
+                .collect::<Vec<_>>();
+
+            assert_eq!(types, ["proc", "sysfs"]);
         }
 
         #[test]

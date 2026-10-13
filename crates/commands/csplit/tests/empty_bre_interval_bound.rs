@@ -80,4 +80,34 @@ fn empty_bre_interval_lower_bounds_match_gnu() {
         std::fs::read(temp_dir.path().join("xx01")).expect("read second split"),
         b"{,2}\nother\n"
     );
+
+    for (input, pattern) in [
+        (b"{,}\nother\n".as_slice(), r"/^\{,\}/"),
+        (b"{2,1}\nother\n".as_slice(), r"/^\{2,1\}/"),
+    ] {
+        let temp_dir = tempfile::tempdir().expect("create temporary directory");
+        std::fs::write(temp_dir.path().join("input"), input).expect("write input");
+        let output = Command::new("bash")
+            .args(["-c", "exec -a csplit \"$0\" \"$@\""])
+            .arg(env!("CARGO_BIN_EXE_csplit"))
+            .args(["-q", "input", pattern, "{*}"])
+            .current_dir(temp_dir.path())
+            .env("LC_ALL", "C")
+            .output()
+            .expect("run csplit");
+
+        assert!(output.status.success(), "{pattern}: {output:?}");
+        assert!(output.stdout.is_empty(), "{pattern}: {output:?}");
+        assert!(output.stderr.is_empty(), "{pattern}: {output:?}");
+        assert_eq!(
+            std::fs::read(temp_dir.path().join("xx00")).expect("read first split"),
+            b"",
+            "{pattern}"
+        );
+        assert_eq!(
+            std::fs::read(temp_dir.path().join("xx01")).expect("read second split"),
+            input,
+            "{pattern}"
+        );
+    }
 }

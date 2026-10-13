@@ -183,6 +183,43 @@ fn non_gnu_whitespace_delimiter_options_are_rejected() {
 }
 
 #[test]
+fn unknown_options_use_gnu_diagnostics() {
+    let cases = [
+        (
+            vec!["-q", "-f1"],
+            "cut: invalid option -- 'q'\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["-ab1"],
+            "cut: invalid option -- 'a'\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["-nq", "-b1"],
+            "cut: invalid option -- 'q'\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--no-such", "-f1"],
+            "cut: unrecognized option '--no-such'\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--no-such=value", "-f1"],
+            "cut: unrecognized option '--no-such=value'\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--output-delimiterx=value", "-f1"],
+            "cut: unrecognized option '--output-delimiterx=value'\nTry 'cut --help' for more information.\n",
+        ),
+    ];
+
+    for (args, expected_stderr) in cases {
+        let output = run_cut(&args, b"");
+        assert_eq!(output.status.code(), Some(1), "args: {args:?}");
+        assert!(output.stdout.is_empty(), "args: {args:?}");
+        assert_eq!(output.stderr, expected_stderr.as_bytes(), "args: {args:?}");
+    }
+}
+
+#[test]
 fn input_delimiter_requires_field_mode() {
     for args in [&["-d:", "-b1"][..], &["-d", "", "-c1"][..]] {
         let output = run_cut(args, b"");

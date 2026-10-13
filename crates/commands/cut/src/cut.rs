@@ -16,7 +16,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use self::searcher::Searcher;
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, crate_version};
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::{Quotable, locale_quote};
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_ranges::CtRange;
@@ -1124,6 +1124,92 @@ fn reject_non_gnu_whitespace_delimiter_option(args: &[OsString]) -> CTResult<()>
     Ok(())
 }
 
+fn cut_find_long_option<'a>(command: &'a Command, option_name: &str) -> Option<&'a Arg> {
+    if let Some(argument) = command
+        .get_arguments()
+        .find(|argument| argument.get_long() == Some(option_name))
+    {
+        return Some(argument);
+    }
+
+    let mut matches = command.get_arguments().filter(|argument| {
+        argument
+            .get_long()
+            .is_some_and(|known| known.starts_with(option_name))
+    });
+    let argument = matches.next()?;
+    if matches.next().is_some() {
+        None
+    } else {
+        Some(argument)
+    }
+}
+
+fn cut_unknown_option_message(args: &[OsString], command: &Command) -> Option<String> {
+    let mut index = 1;
+
+    while index < args.len() {
+        let argument = args[index].to_str()?;
+        if argument == "--" {
+            break;
+        }
+
+        if let Some(long_option) = argument.strip_prefix("--") {
+            if long_option.is_empty() {
+                break;
+            }
+            let option_name = long_option
+                .split_once('=')
+                .map_or(long_option, |(name, _)| name);
+            let Some(option) = cut_find_long_option(command, option_name) else {
+                return Some(format!("unrecognized option {}", locale_quote(argument)));
+            };
+            if option.get_action().takes_values() && !long_option.contains('=') {
+                index += 1;
+            }
+        } else if let Some(short_options) = argument.strip_prefix('-') {
+            if short_options.is_empty() {
+                index += 1;
+                continue;
+            }
+
+            for option in short_options.chars() {
+                let Some(argument) = command
+                    .get_arguments()
+                    .find(|argument| argument.get_short() == Some(option))
+                else {
+                    return Some(format!(
+                        "invalid option -- {}",
+                        locale_quote(&option.to_string())
+                    ));
+                };
+                if argument.get_action().takes_values() {
+                    break;
+                }
+            }
+        }
+
+        index += 1;
+    }
+
+    None
+}
+
+fn cut_parse_args(args: Vec<OsString>) -> CTResult<ArgMatches> {
+    let command = ct_app();
+    match command.clone().try_get_matches_from(args.clone()) {
+        Ok(matches) => Ok(matches),
+        Err(error) if error.kind() == clap::error::ErrorKind::UnknownArgument => {
+            if let Some(message) = cut_unknown_option_message(&args, &command) {
+                Err(CtSimpleError::new(1, cut_usage_error(message)))
+            } else {
+                Err(error.into())
+            }
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
 /**
  * 构建并返回一个代表`cut`命令的`Command`实例。
  *
@@ -1276,7 +1362,7 @@ pub fn cut_main(args: impl ctcore::Args) -> CTResult<()> {
     let args = normalize_short_delimiter_equals(args.collect::<Vec<OsString>>());
     reject_non_gnu_whitespace_delimiter_option(&args)?;
     // 使用 clap 库解析命令行参数。
-    let args_match = ct_app().try_get_matches_from(args)?;
+    let args_match = cut_parse_args(args)?;
 
     // 获取命令行指定的额外选项。
     let is_complement = args_match.get_flag(opt_flags::COMPLEMENT);
@@ -1526,7 +1612,7 @@ pub fn cut_native_semantic(args: impl ctcore::Args) -> CTResult<CutSemantic> {
     rust_i18n::set_locale(&lang_code);
     let args = normalize_short_delimiter_equals(args.collect::<Vec<OsString>>());
     reject_non_gnu_whitespace_delimiter_option(&args)?;
-    let args_match = ct_app().try_get_matches_from(args)?;
+    let args_match = cut_parse_args(args)?;
 
     let is_complement = args_match.get_flag(opt_flags::COMPLEMENT);
     let is_only_delimited = args_match.get_flag(opt_flags::ONLY_DELIMITED);

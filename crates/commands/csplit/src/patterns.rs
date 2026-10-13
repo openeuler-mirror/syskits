@@ -332,6 +332,25 @@ fn find_bre_interval_closing(bytes: &[u8], mut index: usize) -> Option<(usize, u
     None
 }
 
+fn parse_bre_repeat_count(value: &[u8]) -> Option<u64> {
+    if value.is_empty() || !value.iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    let mut count = 0_u64;
+    for digit in value {
+        count = count
+            .saturating_mul(10)
+            .saturating_add(u64::from(*digit - b'0'));
+    }
+    Some(count)
+}
+
+fn bre_repeat_count_exceeds_gnu_limit(value: &[u8]) -> bool {
+    const GNU_RE_DUP_MAX: u64 = 0x7fff;
+
+    parse_bre_repeat_count(value).is_some_and(|count| count > GNU_RE_DUP_MAX)
+}
+
 fn validate_bre_interval_ranges(
     expression: &[u8],
     source: &PatternText,
@@ -377,22 +396,30 @@ fn validate_bre_interval_ranges(
                 };
 
                 let interval = &bytes[content_start..closing_backslash];
-                if let Some(comma) = interval.iter().position(|byte| *byte == b',')
-                    && let (lower, upper) = interval.split_at(comma)
-                    && let upper = &upper[1..]
-                    && lower.iter().all(u8::is_ascii_digit)
-                    && upper.iter().all(u8::is_ascii_digit)
-                    && !lower.is_empty()
-                    && !upper.is_empty()
-                    && let (Ok(lower), Ok(upper)) = (
-                        std::str::from_utf8(lower).unwrap().parse::<u64>(),
-                        std::str::from_utf8(upper).unwrap().parse::<u64>(),
-                    )
-                    && lower > upper
-                {
+                if let Some(comma) = interval.iter().position(|byte| *byte == b',') {
+                    let (lower, upper) = interval.split_at(comma);
+                    let upper = &upper[1..];
+                    if let (Some(lower), Some(upper)) =
+                        (parse_bre_repeat_count(lower), parse_bre_repeat_count(upper))
+                        && lower > upper
+                    {
+                        return Err(CsplitError::InvalidRegularExpression(
+                            source.clone(),
+                            "Invalid content of \\{\\}".to_string(),
+                        ));
+                    }
+                    if bre_repeat_count_exceeds_gnu_limit(lower)
+                        || bre_repeat_count_exceeds_gnu_limit(upper)
+                    {
+                        return Err(CsplitError::InvalidRegularExpression(
+                            source.clone(),
+                            "Regular expression too big".to_string(),
+                        ));
+                    }
+                } else if bre_repeat_count_exceeds_gnu_limit(interval) {
                     return Err(CsplitError::InvalidRegularExpression(
                         source.clone(),
-                        "Invalid content of \\{\\}".to_string(),
+                        "Regular expression too big".to_string(),
                     ));
                 }
                 index = after_interval;

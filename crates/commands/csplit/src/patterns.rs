@@ -16,9 +16,96 @@ use ctcore::ct_show_warning;
 use onig::{EncodedBytes, Error as OnigError, Regex as OnigRegex, RegexOptions, Syntax};
 use std::fmt;
 
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+use std::ffi::CString;
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+use std::mem::MaybeUninit;
+
+#[derive(Debug)]
+enum RegexEngine {
+    Oniguruma(OnigRegex),
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    Libc(LibcRegex),
+}
+
+impl RegexEngine {
+    fn is_match(&self, text: &[u8]) -> bool {
+        match self {
+            Self::Oniguruma(regex) => regex
+                .find_with_encoding(EncodedBytes::ascii(text))
+                .is_some(),
+            #[cfg(all(target_os = "linux", target_env = "gnu"))]
+            Self::Libc(regex) => regex.is_match(text),
+        }
+    }
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+struct LibcRegex {
+    compiled: libc::regex_t,
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+impl fmt::Debug for LibcRegex {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("LibcRegex").finish_non_exhaustive()
+    }
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+impl LibcRegex {
+    fn new(expression: &[u8]) -> Result<Self, i32> {
+        let expression =
+            CString::new(expression).expect("command-line patterns cannot contain NUL");
+        let mut compiled = MaybeUninit::<libc::regex_t>::zeroed();
+
+        // GNU csplit initializes the C library locale from the environment before compiling REs.
+        unsafe {
+            libc::setlocale(libc::LC_ALL, c"".as_ptr());
+        }
+
+        let error = unsafe { libc::regcomp(compiled.as_mut_ptr(), expression.as_ptr(), 0) };
+        if error != 0 {
+            return Err(error);
+        }
+
+        Ok(Self {
+            compiled: unsafe { compiled.assume_init() },
+        })
+    }
+
+    fn is_match(&self, text: &[u8]) -> bool {
+        let mut bounds = libc::regmatch_t {
+            rm_so: 0,
+            rm_eo: text
+                .len()
+                .try_into()
+                .expect("input line length fits in regoff_t"),
+        };
+        unsafe {
+            libc::regexec(
+                &self.compiled,
+                text.as_ptr().cast(),
+                1,
+                &mut bounds,
+                libc::REG_STARTEND,
+            ) == 0
+        }
+    }
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+impl Drop for LibcRegex {
+    fn drop(&mut self) {
+        unsafe {
+            libc::regfree(&mut self.compiled);
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct CsplitRegex {
-    compiled: OnigRegex,
+    compiled: RegexEngine,
     expression: Vec<u8>,
     source: PatternText,
 }
@@ -26,17 +113,7 @@ pub struct CsplitRegex {
 impl CsplitRegex {
     fn new(expression: &[u8], source: PatternText) -> Result<Self, CsplitError> {
         validate_bre_interval_ranges(expression, &source)?;
-        let compiled = OnigRegex::with_options_and_encoding(
-            EncodedBytes::ascii(expression),
-            RegexOptions::REGEX_OPTION_NONE,
-            Syntax::grep(),
-        )
-        .map_err(|error| {
-            CsplitError::InvalidRegularExpression(
-                source.clone(),
-                gnu_regular_expression_error(&error).to_string(),
-            )
-        })?;
+        let compiled = compile_regex(expression, &source)?;
         Ok(Self {
             compiled,
             expression: expression.to_owned(),
@@ -45,9 +122,91 @@ impl CsplitRegex {
     }
 
     pub fn is_match(&self, text: &[u8]) -> bool {
-        self.compiled
-            .find_with_encoding(EncodedBytes::ascii(text))
-            .is_some()
+        self.compiled.is_match(text)
+    }
+}
+
+fn compile_regex(expression: &[u8], source: &PatternText) -> Result<RegexEngine, CsplitError> {
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    if contains_posix_collating_construct(expression) {
+        return LibcRegex::new(expression)
+            .map(RegexEngine::Libc)
+            .map_err(|error| {
+                CsplitError::InvalidRegularExpression(
+                    source.clone(),
+                    gnu_libc_regular_expression_error(error).to_string(),
+                )
+            });
+    }
+
+    OnigRegex::with_options_and_encoding(
+        EncodedBytes::ascii(expression),
+        RegexOptions::REGEX_OPTION_NONE,
+        Syntax::grep(),
+    )
+    .map_err(|error| {
+        CsplitError::InvalidRegularExpression(
+            source.clone(),
+            gnu_regular_expression_error(&error).to_string(),
+        )
+    })
+    .map(RegexEngine::Oniguruma)
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn contains_posix_collating_construct(expression: &[u8]) -> bool {
+    let mut index = 0;
+    let mut in_bracket_expression = false;
+
+    while index < expression.len() {
+        if expression[index] == b'\\' {
+            index += 2;
+            continue;
+        }
+
+        if !in_bracket_expression {
+            if expression[index] == b'[' {
+                in_bracket_expression = true;
+            }
+            index += 1;
+            continue;
+        }
+
+        if expression[index] == b'[' {
+            match expression.get(index + 1) {
+                Some(b'.' | b'=') => return true,
+                Some(b':') => {
+                    index += 2;
+                    while index + 1 < expression.len()
+                        && (expression[index] != b':' || expression[index + 1] != b']')
+                    {
+                        index += 1;
+                    }
+                    index += 2;
+                    continue;
+                }
+                _ => {}
+            }
+        }
+
+        if expression[index] == b']' {
+            in_bracket_expression = false;
+        }
+        index += 1;
+    }
+
+    false
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn gnu_libc_regular_expression_error(error: i32) -> &'static str {
+    match error {
+        libc::REG_ECOLLATE => "Invalid collation character",
+        libc::REG_ECTYPE => "Invalid character class name",
+        libc::REG_EBRACK => "Unmatched [, [^, [:, [., or [=",
+        libc::REG_EPAREN => "Unmatched ( or \\(",
+        libc::REG_EBRACE | libc::REG_BADBR | libc::REG_ERANGE => "Invalid content of \\{\\}",
+        _ => "Invalid regular expression",
     }
 }
 

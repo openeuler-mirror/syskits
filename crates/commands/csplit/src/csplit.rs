@@ -822,6 +822,9 @@ impl SplitWriter<'_> {
 
         if !read_line {
             self.close_current_writer()?;
+            if self.options.suppress_matched {
+                return Err(CsplitError::LineOutOfRange(pattern.clone()));
+            }
             return Err(CsplitError::InputDisappeared);
         }
 

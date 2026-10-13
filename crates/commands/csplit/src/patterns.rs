@@ -261,7 +261,13 @@ fn normalize_empty_bre_intervals(expression: &[u8]) -> Vec<u8> {
                 if let Some((content_end, after_interval)) =
                     find_bre_interval_closing(expression, content_start)
                 {
-                    if expression[content_start] == b','
+                    if slash_start == 1 && expression[0] == b'^' {
+                        // GNU treats \{...\} immediately after an anchor as literal text.
+                        normalized.extend_from_slice(&expression[copied..slash_start]);
+                        normalized.extend_from_slice(&expression[index..content_end]);
+                        normalized.push(b'}');
+                        copied = after_interval;
+                    } else if expression[content_start] == b','
                         && expression[content_start + 1..content_end]
                             .iter()
                             .all(u8::is_ascii_digit)

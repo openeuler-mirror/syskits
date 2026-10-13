@@ -163,6 +163,22 @@ fn invalid_input_delimiter_includes_help_hint() {
 }
 
 #[test]
+fn literal_quotes_are_not_treated_as_an_empty_delimiter() {
+    let input_delimiter = run_cut(&["-d", "''", "-f1"], b"");
+    assert_eq!(input_delimiter.status.code(), Some(1));
+    assert_eq!(
+        input_delimiter.stderr,
+        b"cut: the delimiter must be a single character\n\
+          Try 'cut --help' for more information.\n"
+    );
+
+    let output_delimiter = run_cut(&["-d:", "--output-delimiter=''", "-f2,3"], b"a:b:c\n");
+    assert!(output_delimiter.status.success());
+    assert_eq!(output_delimiter.stdout, b"b''c\n");
+    assert!(output_delimiter.stderr.is_empty());
+}
+
+#[test]
 fn character_mode_uses_locale_character_units() {
     let combining = run_cut_in_locale(&["-c2"], b"a\xcc\x81b\n", "en_US.utf8");
     assert!(combining.status.success());

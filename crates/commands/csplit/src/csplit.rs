@@ -64,7 +64,7 @@ mod csplit_error;
 mod patterns;
 mod split_name;
 
-use crate::csplit_error::{CsplitError, PatternText};
+use crate::csplit_error::{CsplitError, OutputFileName, PatternText};
 use crate::split_name::SplitName;
 
 #[cfg(test)]
@@ -607,13 +607,14 @@ impl SplitWriter<'_> {
         self.close_current_writer()?;
         let file_path = self.options.split_name.get_path(self.counter);
         let file_name = file_path.to_string_lossy().into_owned();
+        let output_file_name = OutputFileName::from(file_path.as_os_str().to_os_string());
         let mut created_files = self
             .created_files
             .lock()
             .expect("csplit created file tracker poisoned");
         let file = File::create(&file_path).map_err(|error| {
             CsplitError::OutputCreateError(
-                file_name.clone(),
+                output_file_name,
                 trim_os_error_suffix(error.to_string()),
             )
         })?;

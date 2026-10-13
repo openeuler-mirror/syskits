@@ -59,6 +59,8 @@ pub(crate) enum Column {
 pub(crate) enum ColumnError {
     /// 如果命令行参数中某个列出现了多次。
     MultipleColumns(String),
+    /// 如果指定了未知的列名称。
+    UnknownColumn(String),
 }
 
 impl Column {
@@ -98,7 +100,7 @@ impl Column {
                         return Err(ColumnError::MultipleColumns(name.to_string()));
                     }
                     seen.push(name);
-                    let column = Self::parse(name).unwrap();
+                    let column = Self::parse(name)?;
                     columns.push(column);
                 }
                 Ok(columns)
@@ -154,7 +156,7 @@ impl Column {
     /// # 错误
     ///
     /// 如果字符串 `s` 不是有效的列名。
-    fn parse(s: &str) -> Result<Self, ()> {
+    fn parse(s: &str) -> Result<Self, ColumnError> {
         // 根据列名字符串匹配相应的枚举变体
         match s {
             "source" => Ok(Self::Source),
@@ -169,7 +171,7 @@ impl Column {
             "pcent" => Ok(Self::Pcent),
             "file" => Ok(Self::File),
             "target" => Ok(Self::Target),
-            _ => Err(()),
+            _ => Err(ColumnError::UnknownColumn(s.to_string())),
         }
     }
 

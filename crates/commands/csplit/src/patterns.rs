@@ -164,6 +164,14 @@ impl ToString for CsplitPattern {
 }
 
 impl CsplitPattern {
+    fn set_execute_n_times(&mut self, execute_n_times: CsplitExecutePattern) {
+        match self {
+            Self::UpToLine(_, execute)
+            | Self::UpToMatch(_, _, execute)
+            | Self::SkipToMatch(_, _, execute) => *execute = execute_n_times,
+        }
+    }
+
     pub fn source(&self) -> PatternText {
         match self {
             Self::UpToLine(n, _) => n.to_string().into(),
@@ -233,9 +241,7 @@ impl Iterator for CsplitExecutePatternIter {
 /// - an invalid regular expression;
 /// - an invalid number for, e.g., the offset.
 pub fn get_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, CsplitError> {
-    let csplit_patterns = extract_patterns(args)?;
-    validate_line_numbers(&csplit_patterns)?;
-    Ok(csplit_patterns)
+    extract_patterns(args)
 }
 
 /**
@@ -251,6 +257,7 @@ pub fn get_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, Cs
 fn extract_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, CsplitError> {
     // 初始化用于储存解析后模式的向量
     let mut csplit_patterns = Vec::with_capacity(args.len());
+    let mut previous_line_number = 0;
 
     // 使用peekable迭代器以便于向前查看下一个参数
     let mut iter = args.iter().peekable();
@@ -258,16 +265,6 @@ fn extract_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, Cs
     while let Some(arg) = iter.next() {
         let arg = arg.as_ref();
         let source = PatternText::from(arg.to_owned());
-        // 解析模式的重复执行次数
-        let execute_n_times = match iter.peek() {
-            None => CsplitExecutePattern::Times(1),
-            Some(next_item) if next_item.as_ref().starts_with(b"{") => {
-                let repeat_count = parse_repeat_count(next_item.as_ref())?;
-                iter.next();
-                repeat_count
-            }
-            Some(_) => CsplitExecutePattern::Times(1),
-        };
 
         // 解析模式定义
         if matches!(arg.first(), Some(b'/') | Some(b'%')) {
@@ -299,9 +296,17 @@ fn extract_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, Cs
             };
             let pattern = CsplitRegex::new(expression, source)?;
             if delimiter == b'/' {
-                csplit_patterns.push(CsplitPattern::UpToMatch(pattern, offset, execute_n_times));
+                csplit_patterns.push(CsplitPattern::UpToMatch(
+                    pattern,
+                    offset,
+                    CsplitExecutePattern::Times(1),
+                ));
             } else {
-                csplit_patterns.push(CsplitPattern::SkipToMatch(pattern, offset, execute_n_times));
+                csplit_patterns.push(CsplitPattern::SkipToMatch(
+                    pattern,
+                    offset,
+                    CsplitExecutePattern::Times(1),
+                ));
             }
         } else if let Ok(argument) = std::str::from_utf8(arg)
             && let Ok(line_number) = argument
@@ -313,11 +318,38 @@ fn extract_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, Cs
             if line_number == 0 {
                 return Err(CsplitError::LineNumberIsZero(argument.to_string()));
             }
+            if line_number < previous_line_number {
+                return Err(CsplitError::LineNumberSmallerThanPrevious(
+                    line_number,
+                    previous_line_number,
+                ));
+            }
+            if line_number == previous_line_number {
+                ct_show_warning!(
+                    "line number '{}' is the same as preceding line number",
+                    line_number
+                );
+            }
+            previous_line_number = line_number;
             // 如果参数是行号，构建相应的行号模式
-            csplit_patterns.push(CsplitPattern::UpToLine(line_number, execute_n_times));
+            csplit_patterns.push(CsplitPattern::UpToLine(
+                line_number,
+                CsplitExecutePattern::Times(1),
+            ));
         } else {
             // 如果参数无法解析为有效的模式，返回错误
             return Err(CsplitError::InvalidPattern(source));
+        }
+
+        if let Some(next_item) = iter.peek()
+            && next_item.as_ref().starts_with(b"{")
+        {
+            let repeat_count = parse_repeat_count(next_item.as_ref())?;
+            iter.next();
+            csplit_patterns
+                .last_mut()
+                .expect("parsed pattern must be present")
+                .set_execute_n_times(repeat_count);
         }
     }
     // 成功解析所有参数后，返回模式向量
@@ -363,6 +395,7 @@ fn parse_repeat_count(argument: impl AsRef<[u8]>) -> Result<CsplitExecutePattern
  * @param patterns 指向CsplitPattern结构体 slice的引用，表示待验证的拆分模式。
  * @return Result<(), CsplitError> 如果所有行号都有效，则返回Ok(())；如果发现任何无效行号，则返回Err，携带相应的错误信息。
  */
+#[cfg(test)]
 fn validate_line_numbers(csplit_patterns: &[CsplitPattern]) -> Result<(), CsplitError> {
     // 过滤并映射出所有以行号为条件的拆分模式，忽略其他类型。
     csplit_patterns

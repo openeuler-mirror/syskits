@@ -1108,6 +1108,7 @@ fn df_args_init() -> Vec<Arg> {
             .short('t')
             .short_alias('F')
             .long("type")
+            .allow_hyphen_values(true)
             .value_parser(ValueParser::os_string())
             .value_name("TYPE")
             .action(ArgAction::Append)
@@ -1122,6 +1123,7 @@ fn df_args_init() -> Vec<Arg> {
             .short('x')
             .long("exclude-type")
             .action(ArgAction::Append)
+            .allow_hyphen_values(true)
             .value_parser(ValueParser::os_string())
             .value_name("TYPE")
             .use_value_delimiter(true)
@@ -5641,6 +5643,36 @@ mod tests {
                 .collect::<Vec<_>>();
 
             assert_eq!(types, ["proc", "sysfs"]);
+        }
+
+        #[test]
+        fn test_ct_app_df_type_options_accept_hyphen_values() {
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-t",
+                "-included",
+                "-F",
+                "-included-alias",
+                "-x",
+                "-excluded",
+                "--exclude-type",
+                "-excluded-long",
+            ];
+            let matches = command.try_get_matches_from(args).unwrap();
+            let included_types = matches
+                .get_many::<OsString>(DF_OPT_TYPE)
+                .unwrap()
+                .map(|value| value.to_string_lossy().into_owned())
+                .collect::<Vec<_>>();
+            let excluded_types = matches
+                .get_many::<OsString>(DF_OPT_EXCLUDE_TYPE)
+                .unwrap()
+                .map(|value| value.to_string_lossy().into_owned())
+                .collect::<Vec<_>>();
+
+            assert_eq!(included_types, ["-included", "-included-alias"]);
+            assert_eq!(excluded_types, ["-excluded", "-excluded-long"]);
         }
 
         #[test]

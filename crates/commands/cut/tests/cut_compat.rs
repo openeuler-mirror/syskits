@@ -44,6 +44,34 @@ fn run_cut_os_in_locale<S: AsRef<std::ffi::OsStr>>(
     child.wait_with_output().expect("wait for cut")
 }
 
+#[cfg(target_os = "linux")]
+fn run_cut_to_full(args: &[&str], input: &[u8]) -> Output {
+    use std::fs::File;
+
+    let mut command = Command::new(env!("CARGO_BIN_EXE_cut"));
+    command.arg0("cut");
+    let mut child = command
+        .args(args)
+        .env("LC_ALL", "C")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::from(
+            File::options()
+                .write(true)
+                .open("/dev/full")
+                .expect("/dev/full"),
+        ))
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn cut");
+    child
+        .stdin
+        .take()
+        .expect("cut stdin")
+        .write_all(input)
+        .expect("write cut stdin");
+    child.wait_with_output().expect("wait for cut")
+}
+
 #[cfg(unix)]
 #[test]
 fn input_delimiter_uses_locale_character_rules() {
@@ -219,6 +247,17 @@ fn non_utf8_file_error_uses_gnu_c_locale_quoting() {
             prefix.to_string_lossy()
         )
         .as_bytes()
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn final_stdout_flush_uses_gnu_write_error_diagnostic() {
+    let output = run_cut_to_full(&["-b1"], b"abc\n");
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        output.stderr,
+        b"cut: write error: No space left on device\n"
     );
 }
 

@@ -21,6 +21,8 @@ use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_ranges::CtRange;
 use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
+#[cfg(unix)]
+use std::ffi::CStr;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, IsTerminal, Read, Write, stdout};
@@ -206,6 +208,16 @@ fn cut_quote_path(path: &std::ffi::OsStr) -> String {
     }
 
     path.maybe_quote().to_string()
+}
+
+fn cut_io_error_text(error: &std::io::Error) -> String {
+    #[cfg(unix)]
+    if let Some(errno) = error.raw_os_error() {
+        let message = unsafe { CStr::from_ptr(libc::strerror(errno)) };
+        return message.to_string_lossy().into_owned();
+    }
+
+    error.to_string()
 }
 
 // 将给定的字符列表转换为CtRange的集合。
@@ -1239,9 +1251,14 @@ fn cut_files_by_mode(cut_mode: Result<CutMode, String>, files: Vec<OsString>) ->
         Ok(mode) => {
             let mut out = cut_stdout_writer();
             let outcome = cut_files_to_writer(files, &mode, &mut out);
-            out.flush()?;
             if !outcome.stderr_text.is_empty() {
                 eprint!("{}", outcome.stderr_text);
+            }
+            if let Err(err) = out.flush() {
+                return Err(CtSimpleError::new(
+                    1,
+                    format!("write error: {}", cut_io_error_text(&err)),
+                ));
             }
             if outcome.exit_code != 0 {
                 set_ct_exit_code(outcome.exit_code);

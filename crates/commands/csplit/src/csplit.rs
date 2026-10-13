@@ -195,13 +195,14 @@ impl CsplitOptions {
 ///
 /// # 返回值
 /// 返回一个 `Result<(), CsplitError>`，如果成功，则结果为 `Ok(())`，如果过程中发生错误，则返回相应的错误信息。
-pub fn csplit<T>(
+pub fn csplit<T, P>(
     csplit_opts: &CsplitOptions,
-    csplit_patterns: Vec<String>,
+    csplit_patterns: Vec<P>,
     input_info: T,
 ) -> Result<(), CsplitError>
 where
     T: BufRead,
+    P: AsRef<[u8]>,
 {
     #[cfg(test)]
     let _lock = acquire_test_lock();
@@ -1065,9 +1066,9 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
         .ok_or_else(|| csplit_usage_error(&usage_name, "missing operand".to_string()))?;
 
     // 获取拆分所用的模式
-    let patterns: Vec<String> = args_match
-        .get_many::<String>(opt_flags::PATTERN)
-        .map(|patterns| patterns.map(ToString::to_string).collect())
+    let patterns: Vec<Vec<u8>> = args_match
+        .get_many::<OsString>(opt_flags::PATTERN)
+        .map(|patterns| patterns.map(os_string_to_bytes).collect())
         .unwrap_or_default();
     if patterns.is_empty() {
         return Err(csplit_usage_error(
@@ -1199,9 +1200,22 @@ fn csplit_args_init() -> Vec<Arg> {
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(opt_flags::PATTERN)
             .hide(true)
+            .value_parser(clap::builder::OsStringValueParser::new())
             .action(clap::ArgAction::Append),
     ];
     args
+}
+
+fn os_string_to_bytes(value: &OsString) -> Vec<u8> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+
+        value.as_os_str().as_bytes().to_owned()
+    }
+
+    #[cfg(not(unix))]
+    value.to_string_lossy().as_bytes().to_owned()
 }
 
 fn csplit_usage_name(args: &[OsString]) -> String {
@@ -6488,9 +6502,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -6546,9 +6560,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -6603,9 +6617,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -6660,9 +6674,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -6717,9 +6731,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -6774,9 +6788,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -6831,9 +6845,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -6888,9 +6902,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -6945,9 +6959,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7002,9 +7016,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7059,9 +7073,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7116,9 +7130,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7173,9 +7187,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7230,9 +7244,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7287,9 +7301,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7344,9 +7358,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7401,9 +7415,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7458,9 +7472,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7515,9 +7529,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7572,9 +7586,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7629,9 +7643,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7686,9 +7700,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7743,9 +7757,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7800,9 +7814,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7857,9 +7871,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7914,9 +7928,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -7971,9 +7985,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8028,9 +8042,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8085,9 +8099,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8142,9 +8156,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8199,9 +8213,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8256,9 +8270,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8313,9 +8327,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8370,9 +8384,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8427,9 +8441,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8484,9 +8498,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8541,9 +8555,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8598,9 +8612,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8655,9 +8669,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8712,9 +8726,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8769,9 +8783,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8832,9 +8846,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8895,9 +8909,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -8958,9 +8972,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9021,9 +9035,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9085,9 +9099,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9149,9 +9163,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9213,9 +9227,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9270,9 +9284,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9326,9 +9340,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9388,9 +9402,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9451,9 +9465,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9514,9 +9528,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9571,9 +9585,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9630,9 +9644,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9687,9 +9701,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9744,9 +9758,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9801,9 +9815,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9858,9 +9872,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9915,9 +9929,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -9972,9 +9986,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -10029,9 +10043,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -10091,9 +10105,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -10158,9 +10172,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -10220,9 +10234,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -10281,9 +10295,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -10341,9 +10355,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -10401,9 +10415,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -10461,9 +10475,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -10521,9 +10535,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -10581,9 +10595,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -10641,9 +10655,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -10701,9 +10715,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -10761,9 +10775,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -10821,9 +10835,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -10881,9 +10895,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -10941,9 +10955,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11001,9 +11015,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11062,9 +11076,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11122,9 +11136,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11182,9 +11196,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11242,9 +11256,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11302,9 +11316,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11362,9 +11376,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11422,9 +11436,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11482,9 +11496,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11542,9 +11556,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11602,9 +11616,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11662,9 +11676,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11722,9 +11736,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11782,9 +11796,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11842,9 +11856,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11902,9 +11916,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -11962,9 +11976,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -12022,9 +12036,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -12082,9 +12096,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -12142,9 +12156,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -12202,9 +12216,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -12262,9 +12276,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -12322,9 +12336,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -12382,9 +12396,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -12442,9 +12456,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -12502,9 +12516,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -12562,9 +12576,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -12622,9 +12636,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -12688,9 +12702,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -12754,9 +12768,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -12820,9 +12834,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -12887,9 +12901,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -12953,9 +12967,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -13020,9 +13034,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -13086,9 +13100,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -13146,9 +13160,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -13205,9 +13219,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -13270,9 +13284,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -13336,9 +13350,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -13402,9 +13416,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -13462,9 +13476,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -13522,9 +13536,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -13582,9 +13596,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -13642,9 +13656,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -13702,9 +13716,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -13762,9 +13776,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -13822,9 +13836,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -13882,9 +13896,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -13942,9 +13956,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();
@@ -14007,9 +14021,9 @@ mod tests {
 
             // get the patterns to split on
             let patterns: Vec<String> = matches_patterns
-                .get_many::<String>(opt_flags::PATTERN)
+                .get_many::<OsString>(opt_flags::PATTERN)
                 .unwrap()
-                .map(|s| s.to_string())
+                .map(|s| s.to_string_lossy().into_owned())
                 .collect();
 
             let matches_options = binding.clone();

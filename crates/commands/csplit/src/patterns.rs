@@ -148,7 +148,7 @@ fn compile_regex(expression: &[u8], source: &PatternText) -> Result<RegexEngine,
     .map_err(|error| {
         CsplitError::InvalidRegularExpression(
             source.clone(),
-            gnu_regular_expression_error(&error).to_string(),
+            gnu_regular_expression_error(&error, expression).to_string(),
         )
     })
     .map(RegexEngine::Oniguruma)
@@ -221,9 +221,54 @@ fn gnu_libc_regular_expression_error(error: i32) -> &'static str {
     }
 }
 
-fn gnu_regular_expression_error(error: &OnigError) -> &'static str {
+fn unterminated_bre_bracket_has_content(expression: &[u8]) -> bool {
+    let mut index = 0;
+    let mut in_bracket_expression = false;
+    let mut has_content = false;
+
+    while index < expression.len() {
+        if !in_bracket_expression {
+            if expression[index] == b'\\' {
+                index += 2;
+            } else if expression[index] == b'[' {
+                in_bracket_expression = true;
+                has_content = false;
+                index += 1;
+                if expression.get(index) == Some(&b'^') {
+                    index += 1;
+                }
+            } else {
+                index += 1;
+            }
+            continue;
+        }
+
+        if expression[index] == b']' && has_content {
+            in_bracket_expression = false;
+            index += 1;
+            continue;
+        }
+
+        has_content = true;
+        if expression[index] == b'\\' {
+            index += 2;
+        } else {
+            index += 1;
+        }
+    }
+
+    in_bracket_expression && has_content
+}
+
+fn gnu_regular_expression_error(error: &OnigError, expression: &[u8]) -> &'static str {
     match error.code() {
         onig_sys::ONIGERR_END_PATTERN_AT_LEFT_BRACE => "Unmatched \\{",
+        onig_sys::ONIGERR_EMPTY_CHAR_CLASS => "Unmatched [, [^, [:, [., or [=",
+        onig_sys::ONIGERR_PREMATURE_END_OF_CHAR_CLASS
+            if unterminated_bre_bracket_has_content(expression) =>
+        {
+            "Unmatched [, [^, [:, [., or [="
+        }
         onig_sys::ONIGERR_UNMATCHED_CLOSE_PARENTHESIS => "Unmatched ) or \\)",
         onig_sys::ONIGERR_END_PATTERN_WITH_UNMATCHED_PARENTHESIS
         | onig_sys::ONIGERR_END_PATTERN_IN_GROUP => "Unmatched ( or \\(",

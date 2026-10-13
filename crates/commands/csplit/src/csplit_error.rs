@@ -28,27 +28,31 @@ pub enum CsplitError {
     WriteError(String, String),
     #[error("{}: {}", ._0.maybe_quote(), _1)]
     OutputCreateError(String, String),
-    #[error("{}: line number out of range", ._0.quote())]
+    #[error("{}: line number out of range", locale_quote(&._0))]
     LineOutOfRange(String),
-    #[error("{}: line number out of range on repetition {}", ._0.quote(), _1)]
+    #[error(
+        "{}: line number out of range on repetition {}",
+        locale_quote(&._0),
+        _1
+    )]
     LineOutOfRangeOnRepetition(String, u64),
-    #[error("{}: match not found", ._0.quote())]
+    #[error("{}: match not found", locale_quote(&._0))]
     MatchNotFound(String),
-    #[error("{}: match not found on repetition {}", ._0.quote(), _1)]
+    #[error("{}: match not found on repetition {}", locale_quote(&._0), _1)]
     MatchNotFoundOnRepetition(String, u64),
     #[error("0: line number must be greater than zero")]
     LineNumberIsZero,
     #[error("line number '{}' is smaller than preceding line number, {}", _0, _1)]
     LineNumberSmallerThanPrevious(usize, usize),
-    #[error("{}: invalid pattern", ._0.quote())]
+    #[error("{}: invalid pattern", locale_quote(&._0))]
     InvalidPattern(String),
-    #[error("{}: invalid regular expression: {}", ._0.quote(), _1)]
+    #[error("{}: invalid regular expression: {}", locale_quote(&._0), _1)]
     InvalidRegularExpression(String, String),
     #[error("{}: closing delimiter '{}' missing", _0, _1)]
     ClosingDelimiterMissing(String, char),
-    #[error("{}: integer expected after delimiter", ._0.quote())]
+    #[error("{}: integer expected after delimiter", locale_quote(&._0))]
     IntegerExpectedAfterDelimiter(String),
-    #[error("{}: '}}' is required in repeat count", ._0.quote())]
+    #[error("{}: '}}' is required in repeat count", locale_quote(&._0))]
     RepeatCountMissingClosingBrace(String),
     #[error("{}: integer required between '{{' and '}}'", _0)]
     RepeatCountIntegerRequired(String),
@@ -131,6 +135,9 @@ impl CTError for CsplitError {
 }
 
 mod tests_csplit {
+    #[cfg(test)]
+    use ctcore::ct_display::locale_quote;
+
     #[test]
     fn test_csplit_error_io_error() {
         use crate::csplit_error::CsplitError;
@@ -145,7 +152,10 @@ mod tests_csplit {
         use crate::csplit_error::CsplitError;
         let error = CsplitError::LineOutOfRange("file.txt".into());
 
-        assert_eq!(error.to_string(), "'file.txt': line number out of range");
+        assert_eq!(
+            error.to_string(),
+            format!("{}: line number out of range", locale_quote("file.txt"))
+        );
     }
 
     #[test]
@@ -155,7 +165,10 @@ mod tests_csplit {
 
         assert_eq!(
             error.to_string(),
-            "'file.txt': line number out of range on repetition 3"
+            format!(
+                "{}: line number out of range on repetition 3",
+                locale_quote("file.txt")
+            )
         );
     }
 
@@ -164,7 +177,10 @@ mod tests_csplit {
         use crate::csplit_error::CsplitError;
         let error = CsplitError::MatchNotFound("pattern".into());
 
-        assert_eq!(error.to_string(), "'pattern': match not found");
+        assert_eq!(
+            error.to_string(),
+            format!("{}: match not found", locale_quote("pattern"))
+        );
     }
 
     #[test]
@@ -174,7 +190,10 @@ mod tests_csplit {
 
         assert_eq!(
             error.to_string(),
-            "'pattern': match not found on repetition 2"
+            format!(
+                "{}: match not found on repetition 2",
+                locale_quote("pattern")
+            )
         );
     }
 
@@ -205,7 +224,10 @@ mod tests_csplit {
         use crate::csplit_error::CsplitError;
         let error = CsplitError::InvalidPattern("invalid".into());
 
-        assert_eq!(error.to_string(), "'invalid': invalid pattern");
+        assert_eq!(
+            error.to_string(),
+            format!("{}: invalid pattern", locale_quote("invalid"))
+        );
     }
 
     #[test]

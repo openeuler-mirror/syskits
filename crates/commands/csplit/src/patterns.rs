@@ -10,7 +10,7 @@
  */
 
 use crate::csplit_error::CsplitError;
-use ctcore::{ct_display::Quotable, ct_show_warning};
+use ctcore::{ct_display::locale_quote, ct_show_warning};
 use onig::{EncodedBytes, Regex as OnigRegex, RegexOptions, Syntax};
 use std::fmt;
 
@@ -283,7 +283,7 @@ fn parse_repeat_count(argument: &str) -> Result<CsplitExecutePattern, CsplitErro
         }
         _ => Err(CsplitError::RepeatCountIntegerRequired(format!(
             "{}}}",
-            without_closing_brace.quote()
+            locale_quote(without_closing_brace)
         ))),
     }
 }
@@ -621,7 +621,8 @@ mod tests {
         ));
         assert!(matches!(
             parse_repeat_count("{x}"),
-            Err(CsplitError::RepeatCountIntegerRequired(value)) if value == "'{x'}"
+            Err(CsplitError::RepeatCountIntegerRequired(value))
+                if value == format!("{}}}", locale_quote("{x"))
         ));
         assert!(matches!(
             parse_repeat_count("{9223372036854775807}"),

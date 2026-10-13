@@ -29,11 +29,12 @@ impl EchoIntent {
 }
 
 impl EchoCore {
-    fn run_core(intent: &EchoIntent) -> Result<(CtValue, String), CtDiagnosticError> {
+    fn run_core(intent: &EchoIntent) -> Result<(CtValue, String, Vec<u8>), CtDiagnosticError> {
         let semantic = ct_echo::echo_native_semantic(intent.argv.iter().cloned())
             .map_err(|err| CtDiagnosticError::simple(err.to_string()).with_code(err.code()))?;
         let classic_text = semantic.classic_text.clone();
-        Ok((semantic_to_value(&semantic), classic_text))
+        let classic_bytes = semantic.classic_bytes.clone();
+        Ok((semantic_to_value(&semantic), classic_text, classic_bytes))
     }
 }
 
@@ -98,10 +99,10 @@ impl DataCommand for CmdEcho {
         _ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = EchoIntent::from_call(call)?;
-        let (value, classic_text) = EchoCore::run_core(&intent)?;
+        let (value, classic_text, classic_bytes) = EchoCore::run_core(&intent)?;
         let metadata = CtPipelineMetadata {
             classic_text: Some(classic_text),
-            classic_bytes: None,
+            classic_bytes: Some(classic_bytes),
             classic_append_newline: false,
             stderr_text: None,
             exit_code: 0,
@@ -117,7 +118,7 @@ impl DataCommand for CmdEcho {
 
 #[cfg(test)]
 mod tests {
-    use super::{EchoIntent, display_columns, semantic_to_value};
+    use super::{EchoCore, EchoIntent, display_columns, semantic_to_value};
     use ctpipeline::CtValue;
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
@@ -153,6 +154,7 @@ mod tests {
             escape_mode: ct_echo::EchoEscapeMode::Literal,
             terminated_early: false,
             classic_text: "hello world\n".into(),
+            classic_bytes: b"hello world\n".to_vec(),
         });
 
         assert_eq!(
@@ -171,6 +173,21 @@ mod tests {
                 ("terminated_early".into(), CtValue::Bool(false)),
             ])
         );
+    }
+
+    #[test]
+    fn run_core_preserves_non_utf8_classic_bytes() {
+        let intent = EchoIntent {
+            argv: vec![
+                OsString::from("echo"),
+                OsString::from("-e"),
+                OsString::from("\\xFF"),
+            ],
+        };
+
+        let (_, _, classic_bytes) = EchoCore::run_core(&intent).unwrap();
+
+        assert_eq!(classic_bytes, vec![0xff, b'\n']);
     }
 
     #[test]

@@ -183,6 +183,12 @@ fn echo_is_help_or_version_request(args: &[String], posix_mode: bool) -> bool {
         )
 }
 
+fn echo_short_options(arg: &str) -> Option<&str> {
+    let options = arg.strip_prefix('-')?;
+    (!options.is_empty() && options.chars().all(|c| matches!(c, 'n' | 'e' | 'E')))
+        .then_some(options)
+}
+
 fn echo_parse_args(args_vec: &[String], posix_mode: bool) -> (bool, bool, Vec<String>) {
     let mut no_newline = false;
     let mut escaped = false;
@@ -190,15 +196,19 @@ fn echo_parse_args(args_vec: &[String], posix_mode: bool) -> (bool, bool, Vec<St
 
     if posix_mode {
         // POSIXLY_CORRECT 模式：
-        // 只有单独的 -n 作为第一个参数时才启用选项处理
-        // 此时 -E 被忽略（跳过），其他参数原样输出
+        // 只有单独的 -n 作为第一个参数时才启用选项处理。
         if args_vec.first().is_some_and(|arg| arg == "-n") {
             no_newline = true;
+            let mut parsing_options = true;
             for arg in args_vec.iter().skip(1) {
-                if arg == "-E" {
+                if parsing_options && let Some(options) = echo_short_options(arg) {
+                    if options.contains('n') {
+                        no_newline = true;
+                    }
                     continue;
                 }
                 values.push(arg.clone());
+                parsing_options = false;
             }
         } else {
             values = args_vec.to_vec();
@@ -215,10 +225,7 @@ fn echo_parse_args(args_vec: &[String], posix_mode: bool) -> (bool, bool, Vec<St
                     continue;
                 }
 
-                if let Some(rest) = arg.strip_prefix('-')
-                    && !rest.is_empty()
-                    && rest.chars().all(|c| matches!(c, 'n' | 'e' | 'E'))
-                {
+                if let Some(rest) = echo_short_options(arg) {
                     for c in rest.chars() {
                         match c {
                             'n' => no_newline = true,

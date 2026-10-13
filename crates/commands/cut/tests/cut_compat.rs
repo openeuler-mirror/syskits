@@ -276,6 +276,19 @@ fn midstream_stdout_write_failure_is_reported_once() {
 }
 
 #[test]
+fn field_mode_merges_overlapping_ranges() {
+    let implicit = run_cut(&["-d:", "-f1-2,2-3"], b"a:b:c:d\n");
+    assert!(implicit.status.success());
+    assert_eq!(implicit.stdout, b"a:b:c\n");
+    assert!(implicit.stderr.is_empty());
+
+    let explicit = run_cut(&["-d:", "-f1-2,2-3", "--output-delimiter=,"], b"a:b:c:d\n");
+    assert!(explicit.status.success());
+    assert_eq!(explicit.stdout, b"a,b,c\n");
+    assert!(explicit.stderr.is_empty());
+}
+
+#[test]
 fn character_mode_uses_locale_character_units() {
     let combining = run_cut_in_locale(&["-c2"], b"a\xcc\x81b\n", "en_US.utf8");
     assert!(combining.status.success());

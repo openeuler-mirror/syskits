@@ -410,20 +410,21 @@ fn parse_ranges(list: &str, positions: bool, complement: bool) -> Result<Vec<CtR
     }
 
     ranges.sort();
-    Ok(if complement {
-        let mut merged: Vec<CtRange> = Vec::with_capacity(ranges.len());
-        for range in ranges {
-            if let Some(last) = merged.last_mut()
-                && range.low <= last.high
-            {
-                last.high = last.high.max(range.high);
-            } else {
-                merged.push(range);
-            }
+    let mut merged: Vec<CtRange> = Vec::with_capacity(ranges.len());
+    for range in ranges {
+        if let Some(last) = merged.last_mut()
+            && range.low <= last.high
+        {
+            last.high = last.high.max(range.high);
+        } else {
+            merged.push(range);
         }
+    }
+
+    Ok(if complement {
         ctcore::ct_ranges::complement(&merged)
     } else {
-        ranges
+        merged
     })
 }
 
@@ -2970,13 +2971,11 @@ mod tests {
 
         #[test]
         fn test_parse_position_ranges_overlapping() {
-            // 测试重叠范围解析 - 应该保持原始范围不合并
+            // 重叠范围应按GNU set_fields规则归并。
             let ranges = super::parse_position_ranges("1-3,2-4", false).unwrap();
-            assert_eq!(ranges.len(), 2);
+            assert_eq!(ranges.len(), 1);
             assert_eq!(ranges[0].low, 1);
-            assert_eq!(ranges[0].high, 3);
-            assert_eq!(ranges[1].low, 2);
-            assert_eq!(ranges[1].high, 4);
+            assert_eq!(ranges[0].high, 4);
         }
 
         #[test]

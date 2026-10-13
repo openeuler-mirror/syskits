@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use crate::csplit_error::CsplitError;
+use crate::csplit_error::{CsplitError, PatternText};
 use ctcore::{ct_display::locale_quote, ct_show_warning};
 use onig::{EncodedBytes, Error as OnigError, Regex as OnigRegex, RegexOptions, Syntax};
 use std::fmt;
@@ -18,11 +18,11 @@ use std::fmt;
 pub struct CsplitRegex {
     compiled: OnigRegex,
     expression: Vec<u8>,
-    source: String,
+    source: PatternText,
 }
 
 impl CsplitRegex {
-    fn new(expression: &[u8], source: String) -> Result<Self, CsplitError> {
+    fn new(expression: &[u8], source: PatternText) -> Result<Self, CsplitError> {
         validate_bre_interval_ranges(expression, &source)?;
         let compiled = OnigRegex::with_options_and_encoding(
             EncodedBytes::ascii(expression),
@@ -63,7 +63,10 @@ fn gnu_regular_expression_error(error: &OnigError) -> &'static str {
     }
 }
 
-fn validate_bre_interval_ranges(expression: &[u8], source: &str) -> Result<(), CsplitError> {
+fn validate_bre_interval_ranges(
+    expression: &[u8],
+    source: &PatternText,
+) -> Result<(), CsplitError> {
     let bytes = expression;
     let mut index = 0;
     let mut in_bracket_expression = false;
@@ -81,7 +84,7 @@ fn validate_bre_interval_ranges(expression: &[u8], source: &str) -> Result<(), C
                     .find(|position| bytes[*position] == b'\\' && bytes[*position + 1] == b'}')
                 else {
                     return Err(CsplitError::InvalidRegularExpression(
-                        source.to_string(),
+                        source.clone(),
                         "Unmatched \\{".to_string(),
                     ));
                 };
@@ -101,7 +104,7 @@ fn validate_bre_interval_ranges(expression: &[u8], source: &str) -> Result<(), C
                     && lower > upper
                 {
                     return Err(CsplitError::InvalidRegularExpression(
-                        source.to_string(),
+                        source.clone(),
                         "Invalid content of \\{\\}".to_string(),
                     ));
                 }
@@ -151,6 +154,17 @@ impl ToString for CsplitPattern {
     fn to_string(&self) -> String {
         match self {
             Self::UpToLine(n, _) => n.to_string(),
+            Self::UpToMatch(regex, _, _) | Self::SkipToMatch(regex, _, _) => {
+                regex.source.to_lossy_string()
+            }
+        }
+    }
+}
+
+impl CsplitPattern {
+    pub fn source(&self) -> PatternText {
+        match self {
+            Self::UpToLine(n, _) => n.to_string().into(),
             Self::UpToMatch(regex, _, _) | Self::SkipToMatch(regex, _, _) => regex.source.clone(),
         }
     }
@@ -241,6 +255,7 @@ fn extract_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, Cs
 
     while let Some(arg) = iter.next() {
         let arg = arg.as_ref();
+        let source = PatternText::from(arg.to_owned());
         // 解析模式的重复执行次数
         let execute_n_times = match iter.peek() {
             None => CsplitExecutePattern::Times(1),
@@ -262,7 +277,7 @@ fn extract_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, Cs
                 .map(|position| position + 1);
             let Some(closing_delimiter) = closing_delimiter else {
                 return Err(CsplitError::ClosingDelimiterMissing(
-                    String::from_utf8_lossy(arg).into_owned(),
+                    source.to_lossy_string(),
                     delimiter as char,
                 ));
             };
@@ -279,13 +294,9 @@ fn extract_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, Cs
                 std::str::from_utf8(&offset_text)
                     .ok()
                     .and_then(|offset_text| offset_text.parse::<i64>().ok())
-                    .ok_or_else(|| {
-                        CsplitError::IntegerExpectedAfterDelimiter(
-                            String::from_utf8_lossy(arg).into_owned(),
-                        )
-                    })?
+                    .ok_or_else(|| CsplitError::IntegerExpectedAfterDelimiter(source.clone()))?
             };
-            let pattern = CsplitRegex::new(expression, String::from_utf8_lossy(arg).into_owned())?;
+            let pattern = CsplitRegex::new(expression, source)?;
             if delimiter == b'/' {
                 csplit_patterns.push(CsplitPattern::UpToMatch(pattern, offset, execute_n_times));
             } else {
@@ -302,9 +313,7 @@ fn extract_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, Cs
             csplit_patterns.push(CsplitPattern::UpToLine(line_number, execute_n_times));
         } else {
             // 如果参数无法解析为有效的模式，返回错误
-            return Err(CsplitError::InvalidPattern(
-                String::from_utf8_lossy(arg).into_owned(),
-            ));
+            return Err(CsplitError::InvalidPattern(source));
         }
     }
     // 成功解析所有参数后，返回模式向量

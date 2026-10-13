@@ -8,11 +8,59 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+use std::ffi::OsString;
 use std::io;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
 use thiserror::Error;
 
 use ctcore::ct_display::{Quotable, locale_quote};
 use ctcore::ct_error::CTError;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PatternText(Vec<u8>);
+
+impl PatternText {
+    pub fn locale_quote(&self) -> String {
+        if let Ok(text) = std::str::from_utf8(&self.0) {
+            return locale_quote(text);
+        }
+
+        #[cfg(unix)]
+        return super::locale_quote_file_operand(&OsString::from_vec(self.0.clone()));
+
+        #[cfg(not(unix))]
+        locale_quote(&String::from_utf8_lossy(&self.0))
+    }
+
+    pub fn to_lossy_string(&self) -> String {
+        String::from_utf8_lossy(&self.0).into_owned()
+    }
+}
+
+impl From<&str> for PatternText {
+    fn from(value: &str) -> Self {
+        Self(value.as_bytes().to_owned())
+    }
+}
+
+impl From<String> for PatternText {
+    fn from(value: String) -> Self {
+        Self(value.into_bytes())
+    }
+}
+
+impl From<Vec<u8>> for PatternText {
+    fn from(value: Vec<u8>) -> Self {
+        Self(value)
+    }
+}
+
+impl PartialEq<&str> for PatternText {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == other.as_bytes()
+    }
+}
 
 /// Errors thrown by the csplit command
 #[derive(Debug, Error)]
@@ -32,30 +80,30 @@ pub enum CsplitError {
     OutputCreateError(String, String),
     #[error("input disappeared")]
     InputDisappeared,
-    #[error("{}: line number out of range", locale_quote(&._0))]
-    LineOutOfRange(String),
+    #[error("{}: line number out of range", ._0.locale_quote())]
+    LineOutOfRange(PatternText),
     #[error(
         "{}: line number out of range on repetition {}",
-        locale_quote(&._0),
+        ._0.locale_quote(),
         _1
     )]
-    LineOutOfRangeOnRepetition(String, u64),
-    #[error("{}: match not found", locale_quote(&._0))]
-    MatchNotFound(String),
-    #[error("{}: match not found on repetition {}", locale_quote(&._0), _1)]
-    MatchNotFoundOnRepetition(String, u64),
+    LineOutOfRangeOnRepetition(PatternText, u64),
+    #[error("{}: match not found", ._0.locale_quote())]
+    MatchNotFound(PatternText),
+    #[error("{}: match not found on repetition {}", ._0.locale_quote(), _1)]
+    MatchNotFoundOnRepetition(PatternText, u64),
     #[error("0: line number must be greater than zero")]
     LineNumberIsZero,
     #[error("line number '{}' is smaller than preceding line number, {}", _0, _1)]
     LineNumberSmallerThanPrevious(usize, usize),
-    #[error("{}: invalid pattern", locale_quote(&._0))]
-    InvalidPattern(String),
-    #[error("{}: invalid regular expression: {}", locale_quote(&._0), _1)]
-    InvalidRegularExpression(String, String),
+    #[error("{}: invalid pattern", ._0.locale_quote())]
+    InvalidPattern(PatternText),
+    #[error("{}: invalid regular expression: {}", ._0.locale_quote(), _1)]
+    InvalidRegularExpression(PatternText, String),
     #[error("{}: closing delimiter '{}' missing", _0, _1)]
     ClosingDelimiterMissing(String, char),
-    #[error("{}: integer expected after delimiter", locale_quote(&._0))]
-    IntegerExpectedAfterDelimiter(String),
+    #[error("{}: integer expected after delimiter", ._0.locale_quote())]
+    IntegerExpectedAfterDelimiter(PatternText),
     #[error("{}: '}}' is required in repeat count", locale_quote(&._0))]
     RepeatCountMissingClosingBrace(String),
     #[error("{}: integer required between '{{' and '}}'", _0)]

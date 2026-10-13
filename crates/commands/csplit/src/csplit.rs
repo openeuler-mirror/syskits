@@ -884,6 +884,17 @@ impl SplitWriter<'_> {
             while let Some((ln, line)) = input_splitter.next() {
                 let l = read_input_line(line)?;
                 if regex.is_match(line_for_match(&l)) {
+                    // GNU computes the break line in intmax_t before consuming offset lines.
+                    let break_line_overflows = i64::try_from(ln)
+                        .ok()
+                        .and_then(|line| line.checked_add(1))
+                        .and_then(|line| line.checked_add(offset))
+                        .is_none();
+                    if break_line_overflows {
+                        self.finish_split()?;
+                        return Err(CsplitError::LineOutOfRange(pattern.clone()));
+                    }
+
                     if offset == 0 {
                         assert!(
                             input_splitter.csplit_add_line_to_buffer(ln, l).is_none(),

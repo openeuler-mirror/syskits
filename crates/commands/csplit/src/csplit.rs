@@ -1093,9 +1093,12 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
         enable_pipe_errors().map_err(|err| CtSimpleError::new(1, err.to_string()))?;
     }
 
-    let args = args.collect::<Vec<_>>();
+    let mut args = args.collect::<Vec<_>>();
     let usage_name = csplit_usage_name(&args);
-    reject_incompatible_options(&args, &usage_name)?;
+    let posixly_correct = std::env::var_os("POSIXLY_CORRECT").is_some();
+    if let Some(first_operand) = reject_incompatible_options(&args, &usage_name, posixly_correct)? {
+        args.insert(first_operand, OsString::from("--"));
+    }
 
     // 使用 clap 库解析命令行参数
     let args_match = ct_app().try_get_matches_from(args)?;
@@ -1281,7 +1284,11 @@ fn csplit_usage_error(usage_name: &str, message: String) -> Box<dyn ctcore::ct_e
     )
 }
 
-fn reject_incompatible_options(args: &[OsString], usage_name: &str) -> CTResult<()> {
+fn reject_incompatible_options(
+    args: &[OsString],
+    usage_name: &str,
+    stop_at_first_operand: bool,
+) -> CTResult<Option<usize>> {
     let mut index = 1;
 
     while index < args.len() {
@@ -1333,6 +1340,9 @@ fn reject_incompatible_options(args: &[OsString], usage_name: &str) -> CTResult<
             continue;
         }
         if !arg.starts_with('-') || arg == "-" {
+            if stop_at_first_operand {
+                return Ok(Some(index));
+            }
             index += 1;
             continue;
         }
@@ -1364,7 +1374,7 @@ fn reject_incompatible_options(args: &[OsString], usage_name: &str) -> CTResult<
         index += 1;
     }
 
-    Ok(())
+    Ok(None)
 }
 
 fn gnu_long_option_matches(name: &str) -> Vec<&'static str> {

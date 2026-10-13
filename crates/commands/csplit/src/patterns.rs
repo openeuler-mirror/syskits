@@ -300,7 +300,10 @@ fn parse_repeat_count(argument: &str) -> Result<CsplitExecutePattern, CsplitErro
         return Ok(CsplitExecutePattern::Always);
     }
 
-    match value.parse::<u64>() {
+    match value
+        .trim_start_matches(|character: char| character.is_ascii_whitespace())
+        .parse::<u64>()
+    {
         Ok(repeat_count) if repeat_count <= i64::MAX as u64 => {
             Ok(CsplitExecutePattern::Times(repeat_count + 1))
         }

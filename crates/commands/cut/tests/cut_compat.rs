@@ -43,6 +43,19 @@ fn character_mode_uses_locale_character_units() {
 }
 
 #[test]
+fn byte_no_split_mode_uses_locale_character_units() {
+    let second = run_cut_in_locale(&["-b2", "-n"], b"\xe4\xb8\xadX\n", "en_US.utf8");
+    assert!(second.status.success());
+    assert_eq!(second.stdout, b"X\n");
+    assert!(second.stderr.is_empty());
+
+    let first = run_cut_in_locale(&["-b1", "-n"], b"\xe4\xb8\xadX\n", "en_US.utf8");
+    assert!(first.status.success());
+    assert_eq!(first.stdout, b"\xe4\xb8\xad\n");
+    assert!(first.stderr.is_empty());
+}
+
+#[test]
 fn last_repeated_input_delimiter_wins() {
     let colon_last = run_cut(&["-d=", "-d:", "-f2"], b"a:b=c\n");
     assert!(colon_last.status.success());

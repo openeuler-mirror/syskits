@@ -222,6 +222,10 @@ fn cut_bytes_to_writer<R: Read, W: Write>(
     ranges: &[CtRange],
     opts: &CutOptions,
 ) -> CTResult<()> {
+    if opts.no_split_multibyte {
+        return cut_characters_to_writer(reader, out, ranges, opts);
+    }
+
     // 将行结束符选项转换为字节
     let newline_char = opts.line_ending.into();
     // 使用缓冲读取器包装输入读取器
@@ -278,28 +282,8 @@ fn cut_bytes_to_writer<R: Read, W: Write>(
                 out.write_all(out_delim)?;
             }
 
-            let mut segment_start = start;
-            let mut segment_end = end;
-
-            // 如果启用了no_split_multibyte选项，调整范围以避免分割多字节字符
-            if opts.no_split_multibyte {
-                // 尝试将字节切片转换为UTF-8字符串来检查字符边界
-                if let Ok(line_str) = std::str::from_utf8(line) {
-                    // 调整起始位置 - 向后移动到有效的UTF-8字符边界
-                    while segment_start > 0 && !line_str.is_char_boundary(segment_start) {
-                        segment_start -= 1;
-                    }
-
-                    // 调整结束位置 - 向前移动到有效的UTF-8字符边界
-                    while segment_end < line.len() && !line_str.is_char_boundary(segment_end) {
-                        segment_end += 1;
-                    }
-                }
-                // 如果输入不是有效的UTF-8，就保持原有的字节范围
-            }
-
             // 将指定范围的字节写入输出
-            out.write_all(&line[segment_start..segment_end])?;
+            out.write_all(&line[start..end])?;
         }
         // 在每行末尾写入行结束符
         out.write_all(&[newline_char])?;

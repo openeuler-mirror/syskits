@@ -95,6 +95,53 @@ pub struct CutSemantic {
 struct CutRunOutcome {
     stderr_text: String,
     exit_code: i32,
+    output_error: Option<String>,
+}
+
+struct CutOutputWriter<'a, W: Write> {
+    writer: &'a mut W,
+    error_text: Option<String>,
+}
+
+impl<'a, W: Write> CutOutputWriter<'a, W> {
+    fn new(writer: &'a mut W) -> Self {
+        Self {
+            writer,
+            error_text: None,
+        }
+    }
+
+    fn take_error_text(&mut self) -> Option<String> {
+        self.error_text.take()
+    }
+
+    fn record_error(&mut self, error: &std::io::Error) {
+        if self.error_text.is_none() {
+            self.error_text = Some(cut_io_error_text(error));
+        }
+    }
+}
+
+impl<W: Write> Write for CutOutputWriter<'_, W> {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        match self.writer.write(buffer) {
+            Ok(written) => Ok(written),
+            Err(error) => {
+                self.record_error(&error);
+                Err(error)
+            }
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self.writer.flush() {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                self.record_error(&error);
+                Err(error)
+            }
+        }
+    }
 }
 
 impl Default for CutDelimiter<'_> {
@@ -845,6 +892,7 @@ fn cut_files_to_writer<W: Write>(
     let mut stdin_read = false; // 标记是否已从标准输入读取数据
     let mut stderr_text = String::new();
     let mut exit_code = 0;
+    let mut output = CutOutputWriter::new(out);
 
     // 如果没有指定文件名，则默认读取标准输入
     if filenames.is_empty() {
@@ -861,12 +909,23 @@ fn cut_files_to_writer<W: Write>(
             // 根据模式对标准输入进行切割
             let stdin = ctcore::ct_io::stdin_reader_box();
             if let Err(err) = match mode {
-                CutMode::Bytes(ranges, opts) => cut_bytes_to_writer(stdin, out, ranges, opts),
-                CutMode::Characters(ranges, opts) => {
-                    cut_characters_to_writer(stdin, out, ranges, opts)
+                CutMode::Bytes(ranges, opts) => {
+                    cut_bytes_to_writer(stdin, &mut output, ranges, opts)
                 }
-                CutMode::Fields(ranges, opts) => cut_fields_to_writer(stdin, out, ranges, opts),
+                CutMode::Characters(ranges, opts) => {
+                    cut_characters_to_writer(stdin, &mut output, ranges, opts)
+                }
+                CutMode::Fields(ranges, opts) => {
+                    cut_fields_to_writer(stdin, &mut output, ranges, opts)
+                }
             } {
+                if let Some(output_error) = output.take_error_text() {
+                    return CutRunOutcome {
+                        stderr_text,
+                        exit_code,
+                        output_error: Some(output_error),
+                    };
+                }
                 stderr_text.push_str(&format!("cut: {err}\n"));
                 exit_code = exit_code.max(err.code());
             }
@@ -889,13 +948,24 @@ fn cut_files_to_writer<W: Write>(
             if let Err(err) = File::open(path)
                 .map_err_context(|| cut_quote_path(filename.as_os_str()))
                 .and_then(|file| match &mode {
-                    CutMode::Bytes(ranges, opts) => cut_bytes_to_writer(file, out, ranges, opts),
-                    CutMode::Fields(ranges, opts) => cut_fields_to_writer(file, out, ranges, opts),
+                    CutMode::Bytes(ranges, opts) => {
+                        cut_bytes_to_writer(file, &mut output, ranges, opts)
+                    }
+                    CutMode::Fields(ranges, opts) => {
+                        cut_fields_to_writer(file, &mut output, ranges, opts)
+                    }
                     CutMode::Characters(ranges, opts) => {
-                        cut_characters_to_writer(file, out, ranges, opts)
+                        cut_characters_to_writer(file, &mut output, ranges, opts)
                     }
                 })
             {
+                if let Some(output_error) = output.take_error_text() {
+                    return CutRunOutcome {
+                        stderr_text,
+                        exit_code,
+                        output_error: Some(output_error),
+                    };
+                }
                 stderr_text.push_str(&format!("cut: {err}\n"));
                 exit_code = exit_code.max(err.code());
             }
@@ -905,6 +975,7 @@ fn cut_files_to_writer<W: Write>(
     CutRunOutcome {
         stderr_text,
         exit_code,
+        output_error: None,
     }
 }
 
@@ -1253,6 +1324,9 @@ fn cut_files_by_mode(cut_mode: Result<CutMode, String>, files: Vec<OsString>) ->
             let outcome = cut_files_to_writer(files, &mode, &mut out);
             if !outcome.stderr_text.is_empty() {
                 eprint!("{}", outcome.stderr_text);
+            }
+            if let Some(error_text) = outcome.output_error {
+                return Err(CtSimpleError::new(1, format!("write error: {error_text}")));
             }
             if let Err(err) = out.flush() {
                 return Err(CtSimpleError::new(

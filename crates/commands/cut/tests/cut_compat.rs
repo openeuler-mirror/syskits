@@ -261,6 +261,20 @@ fn final_stdout_flush_uses_gnu_write_error_diagnostic() {
     );
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn midstream_stdout_write_failure_is_reported_once() {
+    let mut input = vec![b'x'; 64 * 1024];
+    input.push(b'\n');
+
+    let output = run_cut_to_full(&["-b1-"], &input);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        output.stderr,
+        b"cut: write error: No space left on device\n"
+    );
+}
+
 #[test]
 fn character_mode_uses_locale_character_units() {
     let combining = run_cut_in_locale(&["-c2"], b"a\xcc\x81b\n", "en_US.utf8");

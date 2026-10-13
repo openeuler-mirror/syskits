@@ -17,5 +17,12 @@ fn regexp_errors_quote_the_original_pattern() {
 
     assert_eq!(output.status.code(), Some(1));
     assert_eq!(output.stdout, b"2\n");
-    assert_eq!(output.stderr, b"csplit: '/z/1': match not found\n");
+    assert_eq!(
+        output.stderr,
+        format!(
+            "csplit: {}: match not found\n",
+            ctcore::ct_display::locale_quote("/z/1")
+        )
+        .as_bytes()
+    );
 }

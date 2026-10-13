@@ -17,6 +17,13 @@ fn dollar_anchor_keeps_carriage_return_in_the_search_text() {
 
     assert_eq!(output.status.code(), Some(1));
     assert_eq!(output.stdout, b"9\n");
-    assert_eq!(output.stderr, b"csplit: '/b$/': match not found\n");
+    assert_eq!(
+        output.stderr,
+        format!(
+            "csplit: {}: match not found\n",
+            ctcore::ct_display::locale_quote("/b$/")
+        )
+        .as_bytes()
+    );
     assert!(!temp_dir.path().join("xx00").exists());
 }

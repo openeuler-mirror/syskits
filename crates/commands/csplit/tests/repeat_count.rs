@@ -23,6 +23,7 @@ fn invalid_repeat_counts_have_gnu_diagnostics_without_panicking() {
     for (repeat_count, expected) in cases {
         let output = Command::new(env!("CARGO_BIN_EXE_csplit"))
             .arg0("csplit")
+            .env("LC_ALL", "C")
             .current_dir(temp_dir.path())
             .args(["input", "1", repeat_count])
             .output()

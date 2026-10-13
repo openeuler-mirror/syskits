@@ -34,6 +34,39 @@ fn quoted_decimal_suffix_uses_locale_grouping() {
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 #[test]
+fn suffix_precision_zeroes_are_not_locale_grouped() {
+    use std::process::Command;
+
+    if !locale_is_available("en_US.utf8") {
+        return;
+    }
+
+    let temp_dir = tempfile::tempdir().expect("create temporary directory");
+    std::fs::write(temp_dir.path().join("input"), b"a\n").expect("write input");
+
+    let output = Command::new("bash")
+        .args(["-c", "exec -a csplit \"$0\" \"$@\""])
+        .arg(env!("CARGO_BIN_EXE_csplit"))
+        .args(["-q", "-b", "%'8.6d", "input", "1"])
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "en_US.utf8")
+        .output()
+        .expect("run csplit");
+
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stdout.is_empty(), "{output:?}");
+    assert!(output.stderr.is_empty(), "{output:?}");
+    assert!(temp_dir.path().join("xx  000000").is_file());
+    assert_eq!(
+        std::fs::read(temp_dir.path().join("xx  000001")).expect("read split"),
+        b"a\n"
+    );
+    assert!(!temp_dir.path().join("xx 000,000").exists());
+    assert!(!temp_dir.path().join("xx 000,001").exists());
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[test]
 fn numeric_patterns_initialize_locale_before_formatting_suffixes() {
     use std::process::Command;
 

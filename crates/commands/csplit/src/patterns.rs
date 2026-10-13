@@ -264,6 +264,7 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
                 0
             } else {
                 offset_text
+                    .trim_start_matches(|character: char| character.is_ascii_whitespace())
                     .parse::<i64>()
                     .map_err(|_| CsplitError::IntegerExpectedAfterDelimiter(arg.to_string()))?
             };

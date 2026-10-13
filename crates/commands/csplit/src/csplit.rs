@@ -64,7 +64,7 @@ mod csplit_error;
 mod patterns;
 mod split_name;
 
-use crate::csplit_error::CsplitError;
+use crate::csplit_error::{CsplitError, PatternText};
 use crate::split_name::SplitName;
 
 #[cfg(test)]
@@ -255,17 +255,17 @@ where
     #[cfg(test)]
     let _lock = acquire_test_lock();
     for p in csplit_patterns {
-        let pattern_as_str = p.to_string();
+        let pattern = p.source();
         let is_skip = matches!(p, patterns::CsplitPattern::SkipToMatch(_, _, _));
         match p {
             patterns::CsplitPattern::UpToLine(n, ex) => {
                 let mut up_to_line = n;
                 for (_, ith) in ex.iter() {
                     split_writer.new_writer()?;
-                    match split_writer.do_to_line(&pattern_as_str, up_to_line, input_iter) {
+                    match split_writer.do_to_line(&pattern, up_to_line, input_iter) {
                         Err(CsplitError::LineOutOfRange(_)) if ith != 1 => {
                             return Err(CsplitError::LineOutOfRangeOnRepetition(
-                                pattern_as_str.to_string(),
+                                pattern.clone(),
                                 ith - 1,
                             ));
                         }
@@ -284,12 +284,7 @@ where
                         split_writer.new_writer()?;
                     }
                     match (
-                        split_writer.csplit_do_to_match(
-                            &pattern_as_str,
-                            &regex,
-                            offset,
-                            input_iter,
-                        ),
+                        split_writer.csplit_do_to_match(&pattern, &regex, offset, input_iter),
                         max,
                     ) {
                         (Err(err), None) if err.is_match_not_found() => {
@@ -298,10 +293,7 @@ where
                         }
                         (Err(err), Some(m)) if err.is_match_not_found() && m != 1 && ith != 1 => {
                             return Err(err.replace_source_preserving_deferred(
-                                CsplitError::MatchNotFoundOnRepetition(
-                                    pattern_as_str.to_string(),
-                                    ith - 1,
-                                ),
+                                CsplitError::MatchNotFoundOnRepetition(pattern.clone(), ith - 1),
                             ));
                         }
                         (Err(err), _) => return Err(err),
@@ -788,7 +780,7 @@ impl SplitWriter<'_> {
     /// [`CsplitError::LineOutOfRange`] error is returned.
     fn do_to_line<I>(
         &mut self,
-        pattern_as_str: &str,
+        pattern: &PatternText,
         n: usize,
         input_iter: &mut InputSplitter<I>,
     ) -> Result<(), CsplitError>
@@ -798,7 +790,7 @@ impl SplitWriter<'_> {
         input_iter.csplit_rewind_buffer();
         input_iter.csplit_set_size_of_buffer(1);
 
-        let mut result = Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
+        let mut result = Err(CsplitError::LineOutOfRange(pattern.clone()));
         let mut read_line = false;
         while let Some((ln, line)) = input_iter.next() {
             let l = line?;
@@ -837,7 +829,7 @@ impl SplitWriter<'_> {
     #[allow(clippy::cognitive_complexity)]
     fn csplit_do_to_match<I>(
         &mut self,
-        pattern_as_str: &str,
+        pattern: &PatternText,
         regex: &patterns::CsplitRegex,
         offset: i64,
         input_splitter: &mut InputSplitter<I>,
@@ -867,9 +859,7 @@ impl SplitWriter<'_> {
                                 Some((_, line)) => self.write_line(&line?)?,
                                 None => {
                                     self.finish_split()?;
-                                    return Err(CsplitError::LineOutOfRange(
-                                        pattern_as_str.to_string(),
-                                    ));
+                                    return Err(CsplitError::LineOutOfRange(pattern.clone()));
                                 }
                             };
                             remaining -= 1;
@@ -888,7 +878,7 @@ impl SplitWriter<'_> {
                 if regex.is_match(line_for_match(&l)) {
                     if input_splitter.csplit_buffer_len() < f_usize {
                         self.finish_split()?;
-                        return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
+                        return Err(CsplitError::LineOutOfRange(pattern.clone()));
                     }
                     for line in input_splitter.csplit_shrink_buffer_to_size() {
                         self.write_line(&line)?;
@@ -912,7 +902,7 @@ impl SplitWriter<'_> {
 
         let deferred_stdout = self.finish_split_output()?.into_iter().collect();
         Err(CsplitError::with_deferred_stdout(
-            CsplitError::MatchNotFound(pattern_as_str.to_string()),
+            CsplitError::MatchNotFound(pattern.clone()),
             deferred_stdout,
         ))
     }

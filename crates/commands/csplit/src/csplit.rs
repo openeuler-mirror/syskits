@@ -17,6 +17,8 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::{Quotable, locale_quote};
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_lines;
+#[cfg(target_os = "linux")]
+use ctcore::ct_signals::enable_pipe_errors;
 use ctcore::{Tool, ct_crash_if_err};
 use std::cmp::Ordering;
 use std::ffi::OsString;
@@ -665,6 +667,10 @@ where
 pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+
+    #[cfg(target_os = "linux")]
+    enable_pipe_errors().map_err(|err| CtSimpleError::new(1, err.to_string()))?;
+
     let args = args.collect::<Vec<_>>();
     let usage_name = csplit_usage_name(&args);
     reject_incompatible_options(&args, &usage_name)?;

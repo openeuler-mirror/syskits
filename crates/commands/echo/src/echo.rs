@@ -212,7 +212,7 @@ fn echo_is_help_or_version_request(args: &[String], posix_mode: bool) -> bool {
     !posix_mode
         && matches!(
             args,
-            [arg] if arg == "--help" || arg == "-h" || arg == "--version" || arg == "-V"
+            [arg] if arg == "--help" || arg == "--version"
         )
 }
 
@@ -354,7 +354,7 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
 
     if echo_is_help_or_version_request(&args_vec, posix_mode) {
         let mut command = ct_app();
-        if args_vec[0] == "--help" || args_vec[0] == "-h" {
+        if args_vec[0] == "--help" {
             command
                 .print_help()
                 .map_err_context(|| "could not write help to stdout".to_string())?;
@@ -379,12 +379,10 @@ pub fn ct_app() -> Command {
 
     let args = vec![
         Arg::new("help")
-            .short('h')
             .long("help")
             .help(t!("echo.clap.help"))
             .action(ArgAction::Help),
         Arg::new("version")
-            .short('V')
             .long("version")
             .help(t!("echo.clap.version"))
             .action(ArgAction::Version),
@@ -456,12 +454,18 @@ mod tests {
             &["--help".to_string()],
             false
         ));
-        assert!(echo_is_help_or_version_request(&["-h".to_string()], false));
+        assert!(!echo_is_help_or_version_request(
+            &["-h".to_string()],
+            false
+        ));
         assert!(echo_is_help_or_version_request(
             &["--version".to_string()],
             false
         ));
-        assert!(echo_is_help_or_version_request(&["-V".to_string()], false));
+        assert!(!echo_is_help_or_version_request(
+            &["-V".to_string()],
+            false
+        ));
         assert!(!echo_is_help_or_version_request(
             &["--help".to_string()],
             true
@@ -520,18 +524,9 @@ mod tests {
         }
 
         #[test]
-        fn test_echo_main_help() {
-            let args = [ctcore::ct_util_name(), "--help"];
-            let result = echo_main(args.iter().map(OsString::from));
-
-            assert!(result.is_ok());
-        }
-
-        #[test]
         fn test_echo_main_h() {
             let args = [ctcore::ct_util_name(), "-h"];
             let result = echo_main(args.iter().map(OsString::from));
-
             assert!(result.is_ok());
         }
 
@@ -629,8 +624,7 @@ mod tests {
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -649,8 +643,7 @@ mod tests {
             let command = ct_app();
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+            assert!(result.is_ok());
         }
 
         #[test]

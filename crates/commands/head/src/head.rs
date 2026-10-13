@@ -844,7 +844,18 @@ fn ct_head(options: &HeadOptions) -> CTResult<()> {
     let mut first = true;
 
     for file in &options.files {
-        process_file(file, options, &mut first)?;
+        match process_file(file, options, &mut first) {
+            Ok(()) => {}
+            Err(e) => {
+                let msg = e.to_string();
+                if msg.contains("error writing") {
+                    let _ = std::io::stdout().flush();
+                    ct_show!(CtSimpleError::new(1, msg));
+                    return Ok(());
+                }
+                return Err(e);
+            }
+        }
     }
 
     if let Err(e) = std::io::stdout().flush() {
@@ -886,6 +897,7 @@ fn process_file(file: &str, options: &HeadOptions, first: &mut bool) -> CTResult
     if let Err(e) = res {
         let msg = e.to_string();
         if msg.contains("error writing 'standard output'") {
+            let _ = std::io::stdout().flush();
             return Err(CtSimpleError::new(1, msg));
         } else {
             let name = if file == "-" { "standard input" } else { file };

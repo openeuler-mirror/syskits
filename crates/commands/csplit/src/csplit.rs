@@ -143,8 +143,8 @@ impl CsplitOptions {
         Self {
             split_name: ct_crash_if_err!(
                 1,
-                SplitName::new(
-                    matches.get_one::<String>(opt_flags::PREFIX).cloned(),
+                SplitName::new_with_prefix(
+                    matches.get_one::<OsString>(opt_flags::PREFIX).cloned(),
                     matches.get_one::<String>(opt_flags::SUFFIX_FORMAT).cloned(),
                     matches.get_one::<String>(opt_flags::DIGITS).cloned()
                 )
@@ -603,18 +603,19 @@ impl SplitWriter<'_> {
 
     fn new_writer(&mut self) -> Result<(), CsplitError> {
         self.close_current_writer()?;
-        let file_name = self.options.split_name.get(self.counter);
+        let file_path = self.options.split_name.get_path(self.counter);
+        let file_name = file_path.to_string_lossy().into_owned();
         let mut created_files = self
             .created_files
             .lock()
             .expect("csplit created file tracker poisoned");
-        let file = File::create(&file_name).map_err(|error| {
+        let file = File::create(&file_path).map_err(|error| {
             CsplitError::OutputCreateError(
                 file_name.clone(),
                 trim_os_error_suffix(error.to_string()),
             )
         })?;
-        created_files.push(PathBuf::from(&file_name));
+        created_files.push(file_path);
         drop(created_files);
         self.current_writer = Some(BufWriter::new(file));
         self.current_filename = Some(file_name);
@@ -757,7 +758,7 @@ impl SplitWriter<'_> {
     fn delete_all_splits(&self) -> io::Result<()> {
         let mut ret = Ok(());
         for ith in 0..self.counter {
-            let file_name = self.options.split_name.get(ith);
+            let file_name = self.options.split_name.get_path(ith);
             if let Err(err) = remove_file(file_name) {
                 ret = Err(err);
             }
@@ -1150,6 +1151,7 @@ fn csplit_args_init() -> Vec<Arg> {
             .short('f')
             .long(opt_flags::PREFIX)
             .value_name("PREFIX")
+            .value_parser(clap::builder::OsStringValueParser::new())
             .allow_hyphen_values(true)
             .help(t!("csplit.clap.prefix")),
         Arg::new(opt_flags::KEEP_FILES)
@@ -2703,7 +2705,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(PREFIX).unwrap(),
+                result.unwrap().get_one::<OsString>(PREFIX).unwrap(),
                 expected_result
             );
         }
@@ -2733,7 +2735,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(PREFIX).unwrap(),
+                result.unwrap().get_one::<OsString>(PREFIX).unwrap(),
                 expected_result
             );
         }
@@ -2763,7 +2765,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(PREFIX).unwrap(),
+                result.unwrap().get_one::<OsString>(PREFIX).unwrap(),
                 expected_result
             );
         }
@@ -2793,7 +2795,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(PREFIX).unwrap(),
+                result.unwrap().get_one::<OsString>(PREFIX).unwrap(),
                 expected_result
             );
         }
@@ -2834,7 +2836,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(PREFIX).unwrap(),
+                result.unwrap().get_one::<OsString>(PREFIX).unwrap(),
                 expected_result
             );
         }
@@ -2877,7 +2879,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(PREFIX).unwrap(),
+                result.unwrap().get_one::<OsString>(PREFIX).unwrap(),
                 expected_result
             );
         }
@@ -2920,7 +2922,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(PREFIX).unwrap(),
+                result.unwrap().get_one::<OsString>(PREFIX).unwrap(),
                 expected_result
             );
         }

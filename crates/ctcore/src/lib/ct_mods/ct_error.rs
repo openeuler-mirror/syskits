@@ -388,10 +388,7 @@ impl CTError for CTsageError {
     }
 
     fn usage(&self) -> bool {
-        !matches!(
-            self.error.kind(),
-            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
-        )
+        true
     }
 }
 

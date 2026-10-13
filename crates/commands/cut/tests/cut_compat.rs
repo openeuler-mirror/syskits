@@ -1,11 +1,24 @@
 use std::io::Write;
 use std::process::{Command, Output, Stdio};
 
+#[cfg(unix)]
+use std::ffi::OsString;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
+
 fn run_cut(args: &[&str], input: &[u8]) -> Output {
     run_cut_in_locale(args, input, "C")
 }
 
 fn run_cut_in_locale(args: &[&str], input: &[u8], locale: &str) -> Output {
+    run_cut_os_in_locale(args, input, locale)
+}
+
+fn run_cut_os_in_locale<S: AsRef<std::ffi::OsStr>>(
+    args: &[S],
+    input: &[u8],
+    locale: &str,
+) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_cut"))
         .args(args)
         .env("LC_ALL", locale)
@@ -22,6 +35,35 @@ fn run_cut_in_locale(args: &[&str], input: &[u8], locale: &str) -> Output {
         .write_all(input)
         .expect("write cut stdin");
     child.wait_with_output().expect("wait for cut")
+}
+
+#[cfg(unix)]
+#[test]
+fn input_delimiter_uses_locale_character_rules() {
+    let utf8_in_c = run_cut_os_in_locale(
+        &[
+            OsString::from("-d"),
+            OsString::from("\u{4e2d}"),
+            OsString::from("-f2"),
+        ],
+        b"a\xe4\xb8\xadb\n",
+        "C",
+    );
+    assert!(!utf8_in_c.status.success());
+    assert!(utf8_in_c.stdout.is_empty());
+
+    let gb18030 = run_cut_os_in_locale(
+        &[
+            OsString::from("-d"),
+            OsString::from_vec(vec![0xd6, 0xd0]),
+            OsString::from("-f2"),
+        ],
+        b"a\xd6\xd0b\xd6\xd0c\n",
+        "zh_CN.gb18030",
+    );
+    assert!(gb18030.status.success());
+    assert_eq!(gb18030.stdout, b"b\n");
+    assert!(gb18030.stderr.is_empty());
 }
 
 #[test]

@@ -28,7 +28,16 @@ use std::io::{BufReader, BufWriter, IsTerminal, Read, Write, stdout};
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use sys_locale::get_locale;
-use unicode_segmentation::UnicodeSegmentation;
+
+#[cfg(unix)]
+unsafe extern "C" {
+    fn mbrtowc(
+        pwc: *mut libc::wchar_t,
+        s: *const libc::c_char,
+        n: libc::size_t,
+        ps: *mut libc::mbstate_t,
+    ) -> libc::size_t;
+}
 
 mod matcher;
 mod searcher;
@@ -985,6 +994,11 @@ impl Tool for Cut {
  * @return `CTResult<()>`，成功执行返回 `Ok(())`，错误时返回包含错误信息的 `Err`。
  */
 pub fn cut_main(args: impl ctcore::Args) -> CTResult<()> {
+    #[cfg(unix)]
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+    }
+
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     // 将传入的参数转换为 OsString 的 Vec。
@@ -1224,6 +1238,11 @@ fn cut_rows_from_output(output: &[u8], terminator: u8) -> Vec<CutRow> {
 }
 
 pub fn cut_native_semantic(args: impl ctcore::Args) -> CTResult<CutSemantic> {
+    #[cfg(unix)]
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+    }
+
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = normalize_short_delimiter_equals(args.collect::<Vec<OsString>>());
@@ -1283,6 +1302,51 @@ pub fn cut_native_semantic(args: impl ctcore::Args) -> CTResult<CutSemantic> {
     })
 }
 
+#[cfg(unix)]
+fn cut_character_units(line: &[u8]) -> Vec<(usize, usize)> {
+    let mut units = Vec::new();
+    let mut index = 0;
+    let mut state: libc::mbstate_t = unsafe { std::mem::zeroed() };
+
+    while index < line.len() {
+        let saved_state = unsafe { std::ptr::read(&state) };
+        let mut wide_char = 0;
+        let length = unsafe {
+            mbrtowc(
+                &mut wide_char,
+                line[index..].as_ptr().cast(),
+                line.len() - index,
+                &mut state,
+            )
+        };
+        let length = if length == usize::MAX || length == usize::MAX - 1 {
+            state = saved_state;
+            1
+        } else {
+            length.max(1)
+        };
+        units.push((index, index + length));
+        index += length;
+    }
+
+    units
+}
+
+#[cfg(not(unix))]
+fn cut_character_units(line: &[u8]) -> Vec<(usize, usize)> {
+    let mut units = Vec::new();
+    let mut index = 0;
+    while index < line.len() {
+        let length = std::str::from_utf8(&line[index..])
+            .ok()
+            .and_then(|valid| valid.chars().next())
+            .map_or(1, char::len_utf8);
+        units.push((index, index + length));
+        index += length;
+    }
+    units
+}
+
 /// 从输入流中按字符位置切割数据
 fn cut_characters_to_writer<R: Read, W: Write>(
     reader: R,
@@ -1295,8 +1359,7 @@ fn cut_characters_to_writer<R: Read, W: Write>(
     let out_delim = opts.out_delimiter.unwrap_or(b"\t");
 
     let result = buf_in.for_byte_record(newline_char, |line| {
-        let line_str = String::from_utf8_lossy(line);
-        let graphemes: Vec<&str> = line_str.graphemes(true).collect();
+        let units = cut_character_units(line);
 
         let mut merged_segments = Vec::new();
         let mut current_start = None;
@@ -1304,9 +1367,9 @@ fn cut_characters_to_writer<R: Read, W: Write>(
 
         for &CtRange { low, high } in ranges {
             let start = low.saturating_sub(1);
-            let end = high.min(graphemes.len());
+            let end = high.min(units.len());
 
-            if start >= graphemes.len() {
+            if start >= units.len() {
                 continue;
             }
 
@@ -1338,8 +1401,9 @@ fn cut_characters_to_writer<R: Read, W: Write>(
             if i > 0 && opts.out_delimiter.is_some() {
                 out.write_all(out_delim)?;
             }
-            let selected = graphemes[start..end].join("");
-            out.write_all(selected.as_bytes())?;
+            let byte_start = units[start].0;
+            let byte_end = units[end - 1].1;
+            out.write_all(&line[byte_start..byte_end])?;
         }
         // 核心修复：无条件补齐换行符/终结符
         out.write_all(&[newline_char])?;

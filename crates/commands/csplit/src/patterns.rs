@@ -11,7 +11,7 @@
 
 use crate::csplit_error::CsplitError;
 use ctcore::{ct_display::locale_quote, ct_show_warning};
-use onig::{EncodedBytes, Regex as OnigRegex, RegexOptions, Syntax};
+use onig::{EncodedBytes, Error as OnigError, Regex as OnigRegex, RegexOptions, Syntax};
 use std::fmt;
 
 #[derive(Debug)]
@@ -29,7 +29,12 @@ impl CsplitRegex {
             RegexOptions::REGEX_OPTION_NONE,
             Syntax::grep(),
         )
-        .map_err(|_| CsplitError::InvalidPattern(source.clone()))?;
+        .map_err(|error| {
+            CsplitError::InvalidRegularExpression(
+                source.clone(),
+                gnu_regular_expression_error(&error).to_string(),
+            )
+        })?;
         Ok(Self {
             compiled,
             expression: expression.to_string(),
@@ -41,6 +46,20 @@ impl CsplitRegex {
         self.compiled
             .find_with_encoding(EncodedBytes::ascii(text))
             .is_some()
+    }
+}
+
+fn gnu_regular_expression_error(error: &OnigError) -> &'static str {
+    match error.code() {
+        onig_sys::ONIGERR_END_PATTERN_AT_LEFT_BRACE => "Unmatched \\{",
+        onig_sys::ONIGERR_UNMATCHED_CLOSE_PARENTHESIS => "Unmatched ) or \\)",
+        onig_sys::ONIGERR_END_PATTERN_WITH_UNMATCHED_PARENTHESIS
+        | onig_sys::ONIGERR_END_PATTERN_IN_GROUP => "Unmatched ( or \\(",
+        onig_sys::ONIGERR_INVALID_POSIX_BRACKET_TYPE => "Invalid character class name",
+        onig_sys::ONIGERR_INVALID_REPEAT_RANGE_PATTERN
+        | onig_sys::ONIGERR_TOO_BIG_NUMBER_FOR_REPEAT_RANGE
+        | onig_sys::ONIGERR_UPPER_SMALLER_THAN_LOWER_IN_REPEAT_RANGE => "Invalid content of \\{\\}",
+        _ => "Invalid regular expression",
     }
 }
 
@@ -61,7 +80,10 @@ fn validate_bre_interval_ranges(expression: &str, source: &str) -> Result<(), Cs
                 let Some(content_end) = (content_start..bytes.len().saturating_sub(1))
                     .find(|position| bytes[*position] == b'\\' && bytes[*position + 1] == b'}')
                 else {
-                    break;
+                    return Err(CsplitError::InvalidRegularExpression(
+                        source.to_string(),
+                        "Unmatched \\{".to_string(),
+                    ));
                 };
 
                 if let Some((lower, upper)) = expression[content_start..content_end].split_once(',')

@@ -20,6 +20,7 @@ rust-i18n = { workspace = true }
 clap = { workspace = true }
 thiserror = { workspace = true }
 onig = { workspace = true }
+onig_sys = { workspace = true }
 ctcore = { workspace = true, features = ["entries", "fs", "format"] }
 
 [dev-dependencies]

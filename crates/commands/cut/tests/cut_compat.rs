@@ -198,6 +198,30 @@ fn non_utf8_file_operand_is_processed() {
     assert!(output.stderr.is_empty());
 }
 
+#[cfg(unix)]
+#[test]
+fn non_utf8_file_error_uses_gnu_c_locale_quoting() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let prefix = temp_dir.path().join("missing-");
+    let filename = prefix.with_file_name(OsString::from_vec(b"missing-\xff".to_vec()));
+
+    let output = run_cut_os_in_locale(
+        &[OsString::from("-b1"), filename.as_os_str().to_os_string()],
+        b"",
+        "C",
+    );
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        format!(
+            "cut: '{}'$'\\377': No such file or directory\n",
+            prefix.to_string_lossy()
+        )
+        .as_bytes()
+    );
+}
+
 #[test]
 fn character_mode_uses_locale_character_units() {
     let combining = run_cut_in_locale(&["-c2"], b"a\xcc\x81b\n", "en_US.utf8");

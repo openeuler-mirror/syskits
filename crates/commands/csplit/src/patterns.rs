@@ -17,15 +17,15 @@ use std::fmt;
 #[derive(Debug)]
 pub struct CsplitRegex {
     compiled: OnigRegex,
-    expression: String,
+    expression: Vec<u8>,
     source: String,
 }
 
 impl CsplitRegex {
-    fn new(expression: &str, source: String) -> Result<Self, CsplitError> {
+    fn new(expression: &[u8], source: String) -> Result<Self, CsplitError> {
         validate_bre_interval_ranges(expression, &source)?;
         let compiled = OnigRegex::with_options_and_encoding(
-            EncodedBytes::ascii(expression.as_bytes()),
+            EncodedBytes::ascii(expression),
             RegexOptions::REGEX_OPTION_NONE,
             Syntax::grep(),
         )
@@ -37,7 +37,7 @@ impl CsplitRegex {
         })?;
         Ok(Self {
             compiled,
-            expression: expression.to_string(),
+            expression: expression.to_owned(),
             source,
         })
     }
@@ -63,8 +63,8 @@ fn gnu_regular_expression_error(error: &OnigError) -> &'static str {
     }
 }
 
-fn validate_bre_interval_ranges(expression: &str, source: &str) -> Result<(), CsplitError> {
-    let bytes = expression.as_bytes();
+fn validate_bre_interval_ranges(expression: &[u8], source: &str) -> Result<(), CsplitError> {
+    let bytes = expression;
     let mut index = 0;
     let mut in_bracket_expression = false;
 
@@ -86,12 +86,18 @@ fn validate_bre_interval_ranges(expression: &str, source: &str) -> Result<(), Cs
                     ));
                 };
 
-                if let Some((lower, upper)) = expression[content_start..content_end].split_once(',')
-                    && lower.bytes().all(|byte| byte.is_ascii_digit())
-                    && upper.bytes().all(|byte| byte.is_ascii_digit())
+                let interval = &bytes[content_start..content_end];
+                if let Some(comma) = interval.iter().position(|byte| *byte == b',')
+                    && let (lower, upper) = interval.split_at(comma)
+                    && let upper = &upper[1..]
+                    && lower.iter().all(u8::is_ascii_digit)
+                    && upper.iter().all(u8::is_ascii_digit)
                     && !lower.is_empty()
                     && !upper.is_empty()
-                    && let (Ok(lower), Ok(upper)) = (lower.parse::<u64>(), upper.parse::<u64>())
+                    && let (Ok(lower), Ok(upper)) = (
+                        std::str::from_utf8(lower).unwrap().parse::<u64>(),
+                        std::str::from_utf8(upper).unwrap().parse::<u64>(),
+                    )
                     && lower > upper
                 {
                     return Err(CsplitError::InvalidRegularExpression(
@@ -119,7 +125,7 @@ fn validate_bre_interval_ranges(expression: &str, source: &str) -> Result<(), Cs
 
 impl fmt::Display for CsplitRegex {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.expression.fmt(formatter)
+        formatter.write_str(&String::from_utf8_lossy(&self.expression))
     }
 }
 
@@ -210,7 +216,7 @@ impl Iterator for CsplitExecutePatternIter {
 /// due to, e.g.,:
 /// - an invalid regular expression;
 /// - an invalid number for, e.g., the offset.
-pub fn get_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> {
+pub fn get_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, CsplitError> {
     let csplit_patterns = extract_patterns(args)?;
     validate_line_numbers(&csplit_patterns)?;
     Ok(csplit_patterns)
@@ -226,7 +232,7 @@ pub fn get_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
  * @return Result<Vec<CsplitPattern>, CsplitError> 如果解析成功，返回一个包含CSplit模式的向量；
  *         如果遇到错误，返回一个包含错误信息的CsplitError。
  */
-fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> {
+fn extract_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, CsplitError> {
     // 初始化用于储存解析后模式的向量
     let mut csplit_patterns = Vec::with_capacity(args.len());
 
@@ -234,11 +240,13 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
     let mut iter = args.iter().peekable();
 
     while let Some(arg) = iter.next() {
+        let arg = arg.as_ref();
         // 解析模式的重复执行次数
         let execute_n_times = match iter.peek() {
             None => CsplitExecutePattern::Times(1),
-            Some(&next_item) if next_item.starts_with('{') => {
-                let repeat_count = parse_repeat_count(next_item)?;
+            Some(next_item) if next_item.as_ref().starts_with(b"{") => {
+                let repeat_count =
+                    parse_repeat_count(String::from_utf8_lossy(next_item.as_ref()).as_ref())?;
                 iter.next();
                 repeat_count
             }
@@ -246,15 +254,15 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
         };
 
         // 解析模式定义
-        if matches!(arg.as_bytes().first(), Some(b'/') | Some(b'%')) {
-            let delimiter = arg.as_bytes()[0];
-            let closing_delimiter = arg.as_bytes()[1..]
+        if matches!(arg.first(), Some(b'/') | Some(b'%')) {
+            let delimiter = arg[0];
+            let closing_delimiter = arg[1..]
                 .iter()
                 .rposition(|byte| *byte == delimiter)
                 .map(|position| position + 1);
             let Some(closing_delimiter) = closing_delimiter else {
                 return Err(CsplitError::ClosingDelimiterMissing(
-                    arg.to_string(),
+                    String::from_utf8_lossy(arg).into_owned(),
                     delimiter as char,
                 ));
             };
@@ -263,20 +271,30 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
             let offset = if offset_text.is_empty() {
                 0
             } else {
-                offset_text
-                    .trim_start_matches(|character: char| character.is_ascii_whitespace())
-                    .parse::<i64>()
-                    .map_err(|_| CsplitError::IntegerExpectedAfterDelimiter(arg.to_string()))?
+                let offset_text = offset_text
+                    .iter()
+                    .skip_while(|byte| byte.is_ascii_whitespace())
+                    .copied()
+                    .collect::<Vec<_>>();
+                std::str::from_utf8(&offset_text)
+                    .ok()
+                    .and_then(|offset_text| offset_text.parse::<i64>().ok())
+                    .ok_or_else(|| {
+                        CsplitError::IntegerExpectedAfterDelimiter(
+                            String::from_utf8_lossy(arg).into_owned(),
+                        )
+                    })?
             };
-            let pattern = CsplitRegex::new(expression, arg.to_string())?;
+            let pattern = CsplitRegex::new(expression, String::from_utf8_lossy(arg).into_owned())?;
             if delimiter == b'/' {
                 csplit_patterns.push(CsplitPattern::UpToMatch(pattern, offset, execute_n_times));
             } else {
                 csplit_patterns.push(CsplitPattern::SkipToMatch(pattern, offset, execute_n_times));
             }
-        } else if let Ok(line_number) = arg
-            .trim_start_matches(|character: char| character.is_ascii_whitespace())
-            .parse::<u64>()
+        } else if let Ok(argument) = std::str::from_utf8(arg)
+            && let Ok(line_number) = argument
+                .trim_start_matches(|character: char| character.is_ascii_whitespace())
+                .parse::<u64>()
             && line_number <= i64::MAX as u64
             && let Ok(line_number) = usize::try_from(line_number)
         {
@@ -284,7 +302,9 @@ fn extract_patterns(args: &[String]) -> Result<Vec<CsplitPattern>, CsplitError> 
             csplit_patterns.push(CsplitPattern::UpToLine(line_number, execute_n_times));
         } else {
             // 如果参数无法解析为有效的模式，返回错误
-            return Err(CsplitError::InvalidPattern(arg.to_string()));
+            return Err(CsplitError::InvalidPattern(
+                String::from_utf8_lossy(arg).into_owned(),
+            ));
         }
     }
     // 成功解析所有参数后，返回模式向量

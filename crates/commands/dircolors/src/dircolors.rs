@@ -171,10 +171,9 @@ fn dircolors_collect_output(
     files: Vec<&String>,
     out_format: &DircolorsOutputFmt,
 ) -> CTResult<String> {
-    if files.is_empty() {
+    let (result, had_warnings) = if files.is_empty() {
         let default_config = generate_dircolors_config();
         dircolors_parse(default_config.lines(), out_format, "<internal>")
-            .map_err(|s| CtSimpleError::new(1, s))
     } else if files.len() > 1 {
         return Err(CTsageError::new(
             1,
@@ -183,7 +182,6 @@ fn dircolors_collect_output(
     } else if files[0].eq("-") {
         let fin = BufReader::new(ctcore::ct_io::stdin_reader_box());
         dircolors_parse(fin.lines().map_while(Result::ok), out_format, files[0])
-            .map_err(|s| CtSimpleError::new(1, s))
     } else {
         let path = Path::new(files[0]);
         if path.is_dir() {
@@ -200,7 +198,6 @@ fn dircolors_collect_output(
                     out_format,
                     &path.to_string_lossy(),
                 )
-                .map_err(|s| CtSimpleError::new(1, s))
             }
             Err(e) => {
                 return Err(CtSimpleError::new(
@@ -209,7 +206,12 @@ fn dircolors_collect_output(
                 ));
             }
         }
+    };
+
+    if had_warnings {
+        ctcore::ct_error::set_ct_exit_code(1);
     }
+    Ok(result)
 }
 
 fn dircolors_out_format_check(args_match: &ArgMatches) -> DircolorsOutputFmt {
@@ -401,52 +403,42 @@ use ctcore::ct_parse_glob;
 /// # 返回值
 /// - `Result<String, String>`: 成功时返回解析后的字符串，失败时返回错误信息字符串。
 #[allow(clippy::cognitive_complexity)]
-fn dircolors_parse<T>(user_input: T, fmt: &DircolorsOutputFmt, fp: &str) -> Result<String, String>
+fn dircolors_parse<T>(user_input: T, fmt: &DircolorsOutputFmt, fp: &str) -> (String, bool)
 where
     T: IntoIterator,
     T::Item: Borrow<str>,
 {
-    // 初始化结果字符串，预设容量以减少动态扩容的消耗。
     let mut result = String::with_capacity(1790);
-    // 根据输出格式获取前缀和后缀字符串。
     let (prefix, suffix) = dircolors_get_colors_format_strings(fmt);
 
-    // 添加输出格式的前缀。
     result.push_str(&prefix);
 
-    // 获取当前环境的TERM值，作为匹配条件之一。
     let term = env::var("TERM").unwrap_or_else(|_| "none".to_owned());
     let colorterm = env::var("COLORTERM").unwrap_or_default();
 
-    // 初始化解析状态为全局（Global）。
     let mut parse_state = DircolorsParseState::Global;
+    let mut ok = true;
 
-    // 遍历输入，逐行处理。
     for (num, line) in user_input.into_iter().enumerate() {
-        let num = num + 1; // 行号从1开始计数。
+        let num = num + 1;
         let line = line.borrow().purify();
-        // 跳过空行。
         if line.is_empty() {
             continue;
         }
 
-        // 对行进行转义处理。
         let line = dircolors_escape(line);
 
-        // 分割键值对。
         let (key, value) = line.split_two();
-        // 如果值为空，则报错。
         if value.is_empty() {
-            return Err(format!(
-                // 错误信息格式遵循GNU的风格，使用双空格分隔。
+            ok = false;
+            eprintln!(
                 "{}:{}: invalid line;  missing second token",
                 fp.maybe_quote(),
                 num
-            ));
+            );
+            continue;
         }
-        // 将键转换为小写，以支持不区分大小写的匹配。
         let lower = key.to_lowercase();
-        // 处理TERM或COLORTERM匹配逻辑。
         if lower == "term" {
             if term.fnmatch(value) {
                 parse_state = DircolorsParseState::Matched;
@@ -460,15 +452,12 @@ where
                 parse_state = DircolorsParseState::Pass;
             }
         } else {
-            // 如果之前已匹配到TERM，则后续不同的TERM不会取消之前的输入。
             if parse_state == DircolorsParseState::Matched {
                 parse_state = DircolorsParseState::Continue;
             }
-            // 根据状态处理键值对。
             if parse_state != DircolorsParseState::Pass {
                 let search_key = lower.as_str();
 
-                // 根据键的前缀（.或*）和特定的键值处理逻辑。
                 if key.starts_with('.') {
                     if *fmt == DircolorsOutputFmt::Display {
                         result.push_str(format!("\x1b[{value}m*{key}\t{value}\x1b[0m\n").as_str());
@@ -482,7 +471,6 @@ where
                         result.push_str(format!("{key}={value}:").as_str());
                     }
                 } else if lower == "options" || lower == "color" || lower == "eightbit" {
-                    // 忽略特定的键，此处为 Slackware 的特有处理。
                 } else if let Some((_, s)) = CT_FILE_ATTRIBUTE_CODES
                     .iter()
                     .find(|&&(key, _)| key == search_key)
@@ -492,22 +480,27 @@ where
                     } else {
                         result.push_str(format!("{s}={value}:").as_str());
                     }
-                } else {
-                    // 如果遇到未识别的关键词，则忽略该行。
-                    continue;
+                } else if parse_state == DircolorsParseState::Matched
+                    || parse_state == DircolorsParseState::Continue
+                {
+                    ok = false;
+                    eprintln!(
+                        "{}:{}: unrecognized keyword {}",
+                        fp.maybe_quote(),
+                        num,
+                        key
+                    );
                 }
             }
         }
     }
 
-    // 如果输出格式为Display，则移除最后一个换行符。
     if fmt == &DircolorsOutputFmt::Display {
         result.pop();
     }
-    // 添加输出格式的后缀。
     result.push_str(&suffix);
 
-    Ok(result)
+    (result, ok)
 }
 
 /// Escape single quotes because they are not allowed between single quotes in shell code, and code

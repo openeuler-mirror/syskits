@@ -756,6 +756,46 @@ fn os_string_as_bytes(os_string: &OsString) -> CTResult<&[u8]> {
     Ok(bytes)
 }
 
+#[cfg(unix)]
+fn cut_input_delimiter_bytes(os_string: &OsString) -> CTResult<&[u8]> {
+    let bytes = os_string_as_bytes(os_string)?;
+    let mut state: libc::mbstate_t = unsafe { std::mem::zeroed() };
+    let mut wide_char = 0;
+    let length = unsafe {
+        mbrtowc(
+            &mut wide_char,
+            bytes.as_ptr().cast(),
+            bytes.len(),
+            &mut state,
+        )
+    };
+
+    let length = if length == usize::MAX || length == usize::MAX - 1 {
+        1
+    } else {
+        length.max(1)
+    };
+    if bytes.len() != length {
+        return Err(CtSimpleError::new(
+            1,
+            "the delimiter must be a single character",
+        ));
+    }
+    Ok(bytes)
+}
+
+#[cfg(not(unix))]
+fn cut_input_delimiter_bytes(os_string: &OsString) -> CTResult<&[u8]> {
+    let bytes = os_string_as_bytes(os_string)?;
+    if os_string.to_string_lossy().chars().count() != 1 {
+        return Err(CtSimpleError::new(
+            1,
+            "the delimiter must be a single character",
+        ));
+    }
+    Ok(bytes)
+}
+
 /**
  * 根据命令行匹配结果获取分隔符和输出分隔符。
  *
@@ -786,18 +826,7 @@ fn cut_get_delimiters(args_match: &ArgMatches) -> CTResult<(CutDelimiter<'_>, Op
                 CutDelimiter::Slice(b"\0")
             } else {
                 // 处理分隔符选项，允许单个字符，包括非 UTF-8 和非 ASCII 字符
-                let bytes = os_string_as_bytes(os_string)?;
-                if os_string.to_str().is_some_and(|s| s.chars().count() > 1)
-                    || os_string.to_str().is_none() && bytes.len() > 1
-                {
-                    // 如果分隔符不是单个字符，返回错误
-                    return Err(CtSimpleError::new(
-                        1,
-                        "the delimiter must be a single character",
-                    ));
-                } else {
-                    CutDelimiter::from(os_string)
-                }
+                CutDelimiter::Slice(cut_input_delimiter_bytes(os_string)?)
             }
         }
         None => match is_whitespace_delimited {

@@ -210,10 +210,14 @@ impl fmt::Display for DfOptionsError {
             Self::InvalidBlockSize(s) => write!(f, "invalid --block-size argument {s}"),
             // InvalidSuffix错误的输出格式化
             Self::InvalidSuffix(s) => write!(f, "invalid suffix in --block-size argument {s}"),
-            // ColumnError错误的输出格式化，具体格式化逻辑依赖于ColumnError的子类型。
             Self::ColumnError(ColumnError::MultipleColumns(s)) => write!(
                 f,
                 "option --output: field {} used more than once",
+                s.quote()
+            ),
+            Self::ColumnError(ColumnError::UnknownColumn(s)) => write!(
+                f,
+                "option --output: field {} unknown",
                 s.quote()
             ),
             // FilesystemTypeBothSelectedAndExcluded错误会在控制台打印详细信息，不会直接影响fmt输出。
@@ -261,7 +265,9 @@ impl DfOptions {
             direct: args_match.get_flag(DF_OPT_DIRECT),
             sync: args_match.get_flag(DF_OPT_SYNC),
             // 解析块大小参数，并处理可能的错误。
-            block_size: if args_match.get_flag(DF_OPT_MEGABYTES) {
+            block_size: if args_match.get_flag(DF_OPT_KILO) {
+                BlockSize::Bytes(1024)
+            } else if args_match.get_flag(DF_OPT_MEGABYTES) {
                 BlockSize::Bytes(1024 * 1024)
             } else {
                 block_size_read(args_match).map_err(|e| match e {
@@ -340,6 +346,11 @@ fn is_included(mount_info: &CtMountInfo, options: &DfOptions) -> bool {
         return false;
     }
 
+    // 忽略非绝对路径的挂载点，例如 Linux 网络命名空间中 /proc/mounts 的相对路径。
+    if !mount_info.mount_dir.starts_with('/') {
+        return false;
+    }
+
     // 如果文件系统被明确排除，则不显示。
     if let Some(ref excludes) = options.exclude {
         if excludes.contains(&mount_info.fs_type) {
@@ -384,7 +395,7 @@ fn mount_info_lt(mount_info_1: &CtMountInfo, mount_info_2: &CtMountInfo) -> bool
     if mount_info_1.mount_dir == mount_info_2.mount_dir
         && mount_info_1.dev_name != mount_info_2.dev_name
     {
-        return false;
+        return true;
     }
 
     false
@@ -550,6 +561,8 @@ where
 enum DfError {
     /// 解析命令行选项时出现问题。
     OptionsError(DfOptionsError),
+    /// 选项冲突错误。
+    ConflictError(String),
 }
 
 // 实现Error trait使得DfError可以被作为错误处理机制的一部分来使用。
@@ -559,7 +572,7 @@ impl Error for DfError {}
 impl CTError for DfError {
     // 如果错误类型为OptionsError且具体错误为ColumnError，则返回true，表示需要显示用法信息。
     fn usage(&self) -> bool {
-        matches!(self, Self::OptionsError(DfOptionsError::ColumnError(_)))
+        matches!(self, Self::OptionsError(DfOptionsError::ColumnError(_)) | Self::ConflictError(_))
     }
 }
 
@@ -569,8 +582,39 @@ impl fmt::Display for DfError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::OptionsError(e) => e.fmt(f),
+            Self::ConflictError(s) => write!(f, "{s}"),
         }
     }
+}
+
+fn validate_conflicts(args_match: &ArgMatches) -> CTResult<()> {
+    let output_active = args_match.value_source(DF_OPT_OUTPUT) == Some(ValueSource::CommandLine);
+
+    if output_active {
+        if args_match.get_flag(DF_OPT_INODES) {
+            return Err(DfError::ConflictError(
+                "options -i and --output are mutually exclusive".into(),
+            ).into());
+        }
+        if args_match.get_flag(DF_OPT_PORTABILITY) {
+            return Err(DfError::ConflictError(
+                "options -P and --output are mutually exclusive".into(),
+            ).into());
+        }
+        if args_match.get_flag(DF_OPT_PRINT_TYPE) {
+            return Err(DfError::ConflictError(
+                "options -T and --output are mutually exclusive".into(),
+            ).into());
+        }
+    }
+
+    if args_match.get_flag(DF_OPT_DIRECT) && args_match.get_flag(DF_OPT_LOCAL) {
+        return Err(DfError::ConflictError(
+            "options --direct and --local (-l) are mutually exclusive".into(),
+        ).into());
+    }
+
+    Ok(())
 }
 
 #[derive(Default)]
@@ -594,6 +638,8 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&normalize_locale(&lang_code));
     // 从args解析命令行匹配项。
     let args_match = ct_app().try_get_matches_from(args)?;
+
+    validate_conflicts(&args_match)?;
 
     // 在Windows平台上检查是否指定了不支持的-i选项。
     #[cfg(windows)]
@@ -961,7 +1007,6 @@ fn df_args_init() -> Vec<Arg> {
         Arg::new(DF_OPT_DIRECT)
             .long("direct")
             .help("show statistics for a file instead of mount point")
-            .conflicts_with(DF_OPT_LOCAL)
             .action(ArgAction::SetTrue),
         Arg::new(DF_OPT_OUTPUT)
             .long("output")
@@ -970,10 +1015,8 @@ fn df_args_init() -> Vec<Arg> {
             .num_args(0..)
             .require_equals(true)
             .use_value_delimiter(true)
-            .value_parser(OUTPUT_FIELD_LIST)
             .default_missing_values(OUTPUT_FIELD_LIST)
             .default_values(["source", "size", "used", "avail", "pcent", "target"])
-            .conflicts_with_all([DF_OPT_INODES, DF_OPT_PORTABILITY, DF_OPT_PRINT_TYPE])
             .help(
                 "use the output format defined by FIELD_LIST, \
                          or print all fields if FIELD_LIST is omitted.",
@@ -9043,11 +9086,11 @@ mod tests {
 
         #[test]
         fn test_over_mounted() {
-            // Prefer the earlier entry if the devices are different but
-            // the mount directory is the same.
+            // 对于同一挂载目录但不同设备名的覆盖挂载情形，
+            // 应优先保留后者（新的覆盖者），与 GNU coreutils 的规则一致。
             let m1 = mount_info("/dev/foo", "/", "/mnt/baz");
             let m2 = mount_info("/dev/bar", "/", "/mnt/baz");
-            assert!(!mount_info_lt(&m1, &m2));
+            assert!(mount_info_lt(&m1, &m2));
         }
     }
 

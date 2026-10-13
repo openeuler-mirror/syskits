@@ -20,23 +20,23 @@ use std::collections::BTreeMap;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::ArgAction;
 use clap::builder::ValueParser;
+use clap::ArgAction;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::FromIo;
-use ctcore::ct_fsext::CtMountInfo;
 use ctcore::ct_fsext::read_fs_list;
-use ctcore::ct_parse_size::ParseSizeError;
+use ctcore::ct_fsext::CtMountInfo;
+use ctcore::ct_parse_size::{parse_size_u64, ParseSizeError};
 use ctcore::ct_show;
 
+use clap::crate_version;
+use clap::parser::ValueSource;
 use clap::Arg;
 use clap::ArgMatches;
 use clap::Command;
-use clap::crate_version;
-use clap::parser::ValueSource;
 use ctcore::Tool;
 use std::error::Error;
 use std::ffi::OsString;
@@ -45,8 +45,8 @@ use std::path::Path;
 use sys_locale::get_locale;
 use table::TableHeaderMode;
 
-use crate::blocks::BlockSize;
 use crate::blocks::block_size_read;
+use crate::blocks::BlockSize;
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::table::Table;
@@ -771,6 +771,85 @@ fn df_block_size_option(args: &[OsString]) -> DfBlockSizeOption {
     block_size_option
 }
 
+fn validate_block_size(value: &str, option: DfBlockSizeOption) -> Result<(), DfOptionsError> {
+    match parse_size_u64(value) {
+        Ok(size) if size > 0 => Ok(()),
+        Ok(_) => Err(DfOptionsError::InvalidBlockSize(
+            option,
+            value.quote().to_string(),
+        )),
+        Err(ParseSizeError::InvalidSuffix(s)) => Err(DfOptionsError::InvalidSuffix(option, s)),
+        Err(ParseSizeError::SizeTooBig(_)) => {
+            Err(DfOptionsError::BlockSizeTooLarge(option, value.to_string()))
+        }
+        Err(ParseSizeError::ParseFailure(s)) => Err(DfOptionsError::InvalidBlockSize(option, s)),
+    }
+}
+
+fn validate_block_size_args(args: &[OsString]) -> CTResult<()> {
+    let mut index = 1;
+
+    while let Some(argument) = args.get(index).and_then(|argument| argument.to_str()) {
+        if argument == "--" {
+            break;
+        }
+
+        if let Some(long_option) = argument.strip_prefix("--") {
+            let (option, value) = long_option
+                .split_once('=')
+                .map_or((long_option, None), |(option, value)| (option, Some(value)));
+
+            if "block-size".starts_with(option) {
+                let value = match value {
+                    Some(value) => value,
+                    None => {
+                        index += 1;
+                        args.get(index)
+                            .and_then(|argument| argument.to_str())
+                            .unwrap_or_default()
+                    }
+                };
+                validate_block_size(value, DfBlockSizeOption::Long)
+                    .map_err(DfError::OptionsError)?;
+            } else if value.is_none()
+                && ("type".starts_with(option) || "exclude-type".starts_with(option))
+            {
+                index += 1;
+            }
+        } else if let Some(short_options) = argument.strip_prefix('-') {
+            let mut short_options = short_options.chars();
+            while let Some(option) = short_options.next() {
+                match option {
+                    'B' => {
+                        let value = if short_options.as_str().is_empty() {
+                            index += 1;
+                            args.get(index)
+                                .and_then(|argument| argument.to_str())
+                                .unwrap_or_default()
+                        } else {
+                            short_options.as_str()
+                        };
+                        validate_block_size(value, DfBlockSizeOption::Short)
+                            .map_err(DfError::OptionsError)?;
+                        break;
+                    }
+                    'F' | 't' | 'x' => {
+                        if short_options.as_str().is_empty() {
+                            index += 1;
+                        }
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        index += 1;
+    }
+
+    Ok(())
+}
+
 #[derive(Default)]
 pub struct Df;
 impl Tool for Df {
@@ -794,6 +873,8 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
     let args = args.collect::<Vec<OsString>>();
     let args_match = df_parse_args(args.clone())?;
 
+    validate_block_size_args(&args)?;
+
     validate_conflicts(&args_match)?;
 
     // 在Windows平台上检查是否指定了不支持的-i选项。
@@ -806,11 +887,8 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     // 从命令行匹配项中解析DfOptions。
-    let options = DfOptions::from_with_block_size_option(
-        &args_match,
-        df_block_size_option(&args),
-    )
-    .map_err(DfError::OptionsError)?;
+    let options = DfOptions::from_with_block_size_option(&args_match, df_block_size_option(&args))
+        .map_err(DfError::OptionsError)?;
 
     let filesystem_paths = get_filesystem(args_match, &options);
 
@@ -832,6 +910,8 @@ pub fn df_native_semantic(args: impl ctcore::Args) -> CTResult<DfSemantic> {
     let args = args.collect::<Vec<OsString>>();
     let args_match = df_parse_args(args.clone())?;
 
+    validate_block_size_args(&args)?;
+
     #[cfg(windows)]
     {
         if args_match.get_flag(DF_OPT_INODES) {
@@ -844,11 +924,9 @@ pub fn df_native_semantic(args: impl ctcore::Args) -> CTResult<DfSemantic> {
         }
     }
 
-    let classic_options = DfOptions::from_with_block_size_option(
-        &args_match,
-        df_block_size_option(&args),
-    )
-    .map_err(DfError::OptionsError)?;
+    let classic_options =
+        DfOptions::from_with_block_size_option(&args_match, df_block_size_option(&args))
+            .map_err(DfError::OptionsError)?;
     let selected_fields = native_selected_fields(&args_match, &classic_options);
     let filesystems = get_filesystem(args_match, &classic_options)?;
 
@@ -1254,10 +1332,10 @@ mod tests {
 
     mod tests_ct_app {
         use crate::{
-            DF_OPT_ALL, DF_OPT_BLOCKSIZE, DF_OPT_EXCLUDE_TYPE, DF_OPT_HUMAN_READABLE_BINARY,
-            DF_OPT_HUMAN_READABLE_DECIMAL, DF_OPT_INODES, DF_OPT_LOCAL, DF_OPT_NO_SYNC,
-            DF_OPT_OUTPUT, DF_OPT_PORTABILITY, DF_OPT_PRINT_TYPE, DF_OPT_SYNC, DF_OPT_TOTAL,
-            DF_OPT_TYPE, ct_app,
+            ct_app, DF_OPT_ALL, DF_OPT_BLOCKSIZE, DF_OPT_EXCLUDE_TYPE,
+            DF_OPT_HUMAN_READABLE_BINARY, DF_OPT_HUMAN_READABLE_DECIMAL, DF_OPT_INODES,
+            DF_OPT_LOCAL, DF_OPT_NO_SYNC, DF_OPT_OUTPUT, DF_OPT_PORTABILITY, DF_OPT_PRINT_TYPE,
+            DF_OPT_SYNC, DF_OPT_TOTAL, DF_OPT_TYPE,
         };
         use clap::error::ErrorKind;
         use std::ffi::OsString;
@@ -5720,13 +5798,7 @@ mod tests {
         #[test]
         fn test_ct_app_df_short_type_alias() {
             let command = ct_app();
-            let args = vec![
-                ctcore::ct_util_name(),
-                "-F",
-                "proc",
-                "-t",
-                "sysfs",
-            ];
+            let args = vec![ctcore::ct_util_name(), "-F", "proc", "-t", "sysfs"];
             let matches = command.try_get_matches_from(args).unwrap();
             let types = matches
                 .get_many::<OsString>(DF_OPT_TYPE)
@@ -9362,7 +9434,7 @@ mod tests {
     */
 
     mod is_included {
-        use crate::{DfOptions, is_included};
+        use crate::{is_included, DfOptions};
         use ctcore::ct_fsext::CtMountInfo;
 
         /// Instantiate a [`CtMountInfo`] with the given fields.
@@ -9507,7 +9579,7 @@ mod tests {
     }
 
     mod filter_mount_list {
-        use crate::{DfOptions, filter_mount_list};
+        use crate::{filter_mount_list, DfOptions};
 
         #[test]
         fn test_empty() {
@@ -9518,10 +9590,10 @@ mod tests {
     }
 
     mod tests_ct_get_filesystem {
-        use crate::DfError;
-        use crate::DfOptions;
         use crate::ct_app;
         use crate::get_all_filesystems;
+        use crate::DfError;
+        use crate::DfOptions;
 
         use crate::get_filesystem;
         use std::fs;

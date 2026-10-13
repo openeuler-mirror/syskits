@@ -4,18 +4,12 @@ use std::process::Command;
 #[test]
 fn block_size_diagnostics_preserve_the_option_spelling() {
     let cases = [
-        (
-            vec!["-B", "-V"],
-            "df: invalid -B argument '-V'\n",
-        ),
+        (vec!["-B", "-V"], "df: invalid -B argument '-V'\n"),
         (
             vec!["--block-size", "-V"],
             "df: invalid --block-size argument '-V'\n",
         ),
-        (
-            vec!["-B1V"],
-            "df: invalid suffix in -B argument '1V'\n",
-        ),
+        (vec!["-B1V"], "df: invalid suffix in -B argument '1V'\n"),
         (
             vec!["--block-size=1V"],
             "df: invalid suffix in --block-size argument '1V'\n",

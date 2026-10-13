@@ -145,7 +145,9 @@ impl CsplitOptions {
                 1,
                 SplitName::new_with_prefix(
                     matches.get_one::<OsString>(opt_flags::PREFIX).cloned(),
-                    matches.get_one::<String>(opt_flags::SUFFIX_FORMAT).cloned(),
+                    matches
+                        .get_one::<OsString>(opt_flags::SUFFIX_FORMAT)
+                        .cloned(),
                     matches
                         .get_one::<OsString>(opt_flags::DIGITS)
                         .map(|digits| {
@@ -1153,6 +1155,7 @@ fn csplit_args_init() -> Vec<Arg> {
             .short('b')
             .long(opt_flags::SUFFIX_FORMAT)
             .value_name("FORMAT")
+            .value_parser(clap::builder::OsStringValueParser::new())
             .allow_hyphen_values(true)
             .help(t!("csplit.clap.suffix_format")),
         Arg::new(opt_flags::PREFIX)
@@ -1441,7 +1444,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1471,7 +1474,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1501,7 +1504,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1531,7 +1534,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1561,7 +1564,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1591,7 +1594,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1621,7 +1624,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1651,7 +1654,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1681,7 +1684,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1711,7 +1714,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1741,7 +1744,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1771,7 +1774,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1801,7 +1804,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1831,7 +1834,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1861,7 +1864,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1891,7 +1894,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1921,7 +1924,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1951,7 +1954,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -1981,7 +1984,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2011,7 +2014,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2041,7 +2044,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2071,7 +2074,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2101,7 +2104,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2131,7 +2134,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2161,7 +2164,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2191,7 +2194,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2221,7 +2224,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2251,7 +2254,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2281,7 +2284,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2311,7 +2314,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2341,7 +2344,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2371,7 +2374,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2401,7 +2404,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2431,7 +2434,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2461,7 +2464,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2491,7 +2494,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2521,7 +2524,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2551,7 +2554,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2581,7 +2584,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2611,7 +2614,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2641,7 +2644,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }
@@ -2671,7 +2674,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(SUFFIX_FORMAT).unwrap(),
+                result.unwrap().get_one::<OsString>(SUFFIX_FORMAT).unwrap(),
                 expected_result
             );
         }

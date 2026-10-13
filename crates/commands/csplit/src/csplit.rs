@@ -663,9 +663,9 @@ impl SplitWriter<'_> {
         Ok(())
     }
 
-    fn current_write_error(&self, err: io::Error) -> CsplitError {
+    fn current_close_error(&self, err: io::Error) -> CsplitError {
         let filename = self.current_output_file_name();
-        CsplitError::WriteError(filename, trim_os_error_suffix(err.to_string()))
+        CsplitError::OutputCloseError(filename, trim_os_error_suffix(err.to_string()))
     }
 
     fn current_output_file_name(&self) -> OutputFileName {
@@ -679,7 +679,7 @@ impl SplitWriter<'_> {
         if let Some(mut current_writer) = self.current_writer.take() {
             current_writer
                 .flush()
-                .map_err(|err| self.current_write_error(err))?;
+                .map_err(|err| self.current_close_error(err))?;
         }
         Ok(())
     }

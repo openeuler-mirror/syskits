@@ -80,6 +80,12 @@ impl From<OsString> for OutputFileName {
     }
 }
 
+impl OutputFileName {
+    fn shell_quote(&self) -> String {
+        super::shell_quote_file_operand(&self.0)
+    }
+}
+
 impl fmt::Display for OutputFileName {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(filename) = self.0.to_str() {
@@ -114,8 +120,10 @@ pub enum CsplitError {
         source: Box<CsplitError>,
         diagnostics: Vec<(OutputFileName, String)>,
     },
-    #[error("{}: {}", _0, _1)]
+    #[error("write error for {}: {}", ._0.shell_quote(), _1)]
     WriteError(OutputFileName, String),
+    #[error("{}: {}", _0, _1)]
+    OutputCloseError(OutputFileName, String),
     #[error("write error: {}", _0)]
     StdoutWriteError(String),
     #[error("{}: {}", _0, _1)]

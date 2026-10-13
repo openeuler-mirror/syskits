@@ -766,10 +766,15 @@ impl SplitWriter<'_> {
         self.close_current_writer()?;
         if self.options.elide_empty_files && self.size == 0 {
             if let Some(file_path) = self.current_filename.take() {
-                match remove_file(file_path) {
+                match remove_file(&file_path) {
                     Ok(()) => {}
                     Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-                    Err(error) => return Err(error.into()),
+                    Err(error) => eprintln!(
+                        "{}: {}: {}",
+                        ctcore::ct_util_name(),
+                        OutputFileName::from(file_path.into_os_string()),
+                        trim_os_error_suffix(error.to_string())
+                    ),
                 }
             }
             self.counter = self.counter.saturating_sub(1);

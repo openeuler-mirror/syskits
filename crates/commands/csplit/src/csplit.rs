@@ -280,7 +280,7 @@ fn line_for_match(line: &[u8]) -> &[u8] {
     line.strip_suffix(b"\n").unwrap_or(line)
 }
 
-#[cfg(all(target_os = "linux", not(test)))]
+#[cfg(target_os = "linux")]
 fn delete_created_splits(created_files: &Mutex<Vec<PathBuf>>) {
     let Ok(created_files) = created_files.lock() else {
         return;
@@ -305,12 +305,14 @@ fn install_signal_cleanup(
     remove_files: bool,
 ) -> io::Result<()> {
     use signal_hook::consts::signal::{
-        SIGALRM, SIGHUP, SIGINT, SIGIO, SIGPROF, SIGQUIT, SIGTERM, SIGVTALRM, SIGXCPU, SIGXFSZ,
+        SIGALRM, SIGHUP, SIGINT, SIGIO, SIGPIPE, SIGPROF, SIGQUIT, SIGTERM, SIGVTALRM, SIGXCPU,
+        SIGXFSZ,
     };
     use signal_hook::iterator::Signals;
 
     let caught_signals = [
-        SIGALRM, SIGHUP, SIGINT, SIGIO, SIGPROF, SIGQUIT, SIGTERM, SIGVTALRM, SIGXCPU, SIGXFSZ,
+        SIGALRM, SIGHUP, SIGINT, SIGIO, SIGPIPE, SIGPROF, SIGQUIT, SIGTERM, SIGVTALRM, SIGXCPU,
+        SIGXFSZ,
     ]
     .into_iter()
     .filter(|signal| !signal_is_ignored(*signal))
@@ -455,7 +457,22 @@ impl SplitWriter<'_> {
     /// Some [`io::Error`] if the split could not be removed in case it should be elided.
     fn finish_split(&mut self) -> Result<(), CsplitError> {
         if let Some(line) = self.finish_split_output()? {
-            println!("{line}");
+            self.write_split_size(&line)?;
+        }
+        Ok(())
+    }
+
+    fn write_split_size(&self, line: &str) -> Result<(), CsplitError> {
+        let mut stdout = io::stdout().lock();
+        if let Err(error) = writeln!(stdout, "{line}") {
+            #[cfg(target_os = "linux")]
+            if error.kind() == io::ErrorKind::BrokenPipe {
+                if !self.options.keep_files {
+                    delete_created_splits(&self.created_files);
+                }
+                let _ = signal_hook::low_level::emulate_default_handler(libc::SIGPIPE);
+            }
+            return Err(CsplitError::IoError(error));
         }
         Ok(())
     }

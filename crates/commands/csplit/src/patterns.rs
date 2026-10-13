@@ -233,6 +233,18 @@ fn validate_bre_interval_ranges(
     let mut in_bracket_expression = false;
 
     while index < bytes.len() {
+        if in_bracket_expression
+            && bytes[index] == b'['
+            && let Some(marker @ (b':' | b'.' | b'=')) = bytes.get(index + 1)
+        {
+            index += 2;
+            while index + 1 < bytes.len() && (bytes[index] != *marker || bytes[index + 1] != b']') {
+                index += 1;
+            }
+            index += 2;
+            continue;
+        }
+
         match bytes[index] {
             b'\\'
                 if !in_bracket_expression

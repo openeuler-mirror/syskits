@@ -287,7 +287,6 @@ fn locale_has_non_c_character_rules() -> bool {
 fn requires_libc_regex(expression: &[u8]) -> bool {
     let mut index = 0;
     let mut in_bracket_expression = false;
-    let mut character_class_seen = false;
 
     while index < expression.len() {
         if expression[index] == b'\\' {
@@ -303,30 +302,10 @@ fn requires_libc_regex(expression: &[u8]) -> bool {
             continue;
         }
 
-        if expression[index] == b'[' {
-            match expression.get(index + 1) {
-                Some(b'.' | b'=') => return true,
-                Some(b':') => {
-                    character_class_seen = true;
-                    let class_name_start = index + 2;
-                    index += 2;
-                    while index + 1 < expression.len()
-                        && (expression[index] != b':' || expression[index + 1] != b']')
-                    {
-                        index += 1;
-                    }
-                    if index + 1 >= expression.len()
-                        || !expression[class_name_start..index]
-                            .iter()
-                            .all(u8::is_ascii_alphabetic)
-                    {
-                        return true;
-                    }
-                    index += 2;
-                    continue;
-                }
-                _ => {}
-            }
+        if expression[index] == b'['
+            && matches!(expression.get(index + 1), Some(b'.' | b'=' | b':'))
+        {
+            return true;
         }
 
         if expression[index] == b']' {
@@ -335,7 +314,7 @@ fn requires_libc_regex(expression: &[u8]) -> bool {
         index += 1;
     }
 
-    character_class_seen && in_bracket_expression
+    false
 }
 
 fn unterminated_bre_bracket_has_content(expression: &[u8]) -> bool {

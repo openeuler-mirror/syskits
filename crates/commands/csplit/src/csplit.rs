@@ -249,7 +249,9 @@ where
         .as_ref()
         .is_err_and(CsplitError::preserves_splits_on_error);
     if final_result.is_err() && !csplit_opts.keep_files && !preserve_splits {
-        let _ = split_writer.delete_all_splits();
+        let cleanup_diagnostics = split_writer.delete_all_splits();
+        return final_result
+            .map_err(|error| CsplitError::with_cleanup_diagnostics(error, cleanup_diagnostics));
     }
 
     final_result
@@ -789,18 +791,21 @@ impl SplitWriter<'_> {
 
     /// Removes all the split files that were created.
     ///
-    /// # Errors
-    ///
-    /// Returns an [`io::Error`] if there was a problem removing a split.
-    fn delete_all_splits(&self) -> io::Result<()> {
-        let mut ret = Ok(());
-        for ith in 0..self.counter {
+    /// Returns diagnostics for splits that could not be removed.
+    fn delete_all_splits(&self) -> Vec<(OutputFileName, String)> {
+        let mut diagnostics = Vec::new();
+        for ith in (0..self.counter).rev() {
             let file_name = self.options.split_name.get_path(ith);
-            if let Err(err) = remove_file(file_name) {
-                ret = Err(err);
+            if let Err(error) = remove_file(&file_name)
+                && error.kind() != io::ErrorKind::NotFound
+            {
+                diagnostics.push((
+                    OutputFileName::from(file_name.into_os_string()),
+                    trim_os_error_suffix(error.to_string()),
+                ));
             }
         }
-        ret
+        diagnostics
     }
 
     /// Split the input stream up to the line number `n`.

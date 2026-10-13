@@ -109,6 +109,11 @@ pub enum CsplitError {
         source: Box<CsplitError>,
         stdout_lines: Vec<String>,
     },
+    #[error("{source}")]
+    CleanupDiagnostics {
+        source: Box<CsplitError>,
+        diagnostics: Vec<(OutputFileName, String)>,
+    },
     #[error("{}: {}", _0, _1)]
     WriteError(OutputFileName, String),
     #[error("write error: {}", _0)]
@@ -181,6 +186,19 @@ pub enum CsplitError {
 
 impl CsplitError {
     pub fn write_diagnostic(&self, utility_name: &str) -> io::Result<()> {
+        if let Self::CleanupDiagnostics {
+            source,
+            diagnostics,
+        } = self
+        {
+            source.write_diagnostic(utility_name)?;
+            let mut stderr = io::stderr().lock();
+            for (filename, message) in diagnostics {
+                writeln!(stderr, "{utility_name}: {filename}: {message}")?;
+            }
+            return Ok(());
+        }
+
         if let Self::ClosingDelimiterMissing(pattern, delimiter) = self
             && pattern.has_non_utf8_bytes()
         {
@@ -207,6 +225,20 @@ impl CsplitError {
         }
     }
 
+    pub fn with_cleanup_diagnostics(
+        source: Self,
+        diagnostics: Vec<(OutputFileName, String)>,
+    ) -> Self {
+        if diagnostics.is_empty() {
+            source
+        } else {
+            Self::CleanupDiagnostics {
+                source: Box::new(source),
+                diagnostics,
+            }
+        }
+    }
+
     pub fn is_match_not_found(&self) -> bool {
         match self {
             Self::MatchNotFound(_) => true,
@@ -218,7 +250,9 @@ impl CsplitError {
     pub fn preserves_splits_on_error(&self) -> bool {
         match self {
             Self::InputDisappeared | Self::StdoutWriteError(_) => true,
-            Self::DeferredOutput { source, .. } => source.preserves_splits_on_error(),
+            Self::DeferredOutput { source, .. } | Self::CleanupDiagnostics { source, .. } => {
+                source.preserves_splits_on_error()
+            }
             _ => false,
         }
     }
@@ -228,6 +262,7 @@ impl CsplitError {
             Self::DeferredOutput { stdout_lines, .. } => {
                 Some(stdout_lines.iter().map(String::as_str))
             }
+            Self::CleanupDiagnostics { source, .. } => source.deferred_stdout_lines(),
             _ => None,
         }
     }

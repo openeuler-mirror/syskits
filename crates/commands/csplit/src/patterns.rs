@@ -17,9 +17,100 @@ use onig::{EncodedBytes, Error as OnigError, Regex as OnigRegex, RegexOptions, S
 use std::fmt;
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
-use std::ffi::CString;
+use std::cell::RefCell;
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
-use std::mem::MaybeUninit;
+use std::ffi::CStr;
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+use std::sync::{Mutex, OnceLock};
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+const GNU_CSPLIT_REGEX_SYNTAX: libc::c_ulong = (1 << 1) | (1 << 2) | (1 << 6) | (1 << 7) | (1 << 9);
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+static GNU_REGEX_CONFIGURATION_LOCK: Mutex<()> = Mutex::new(());
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+unsafe extern "C" {
+    fn __ctype_get_mb_cur_max() -> libc::size_t;
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+type ReSetSyntax = unsafe extern "C" fn(libc::c_ulong) -> libc::c_ulong;
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+type ReCompilePattern = unsafe extern "C" fn(
+    *const libc::c_char,
+    libc::size_t,
+    *mut libc::regex_t,
+) -> *const libc::c_char;
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+type ReSearch = unsafe extern "C" fn(
+    *mut libc::regex_t,
+    *const libc::c_char,
+    libc::regoff_t,
+    libc::regoff_t,
+    libc::regoff_t,
+    *mut libc::c_void,
+) -> libc::regoff_t;
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+struct GnuRegexApi {
+    set_syntax: ReSetSyntax,
+    compile_pattern: ReCompilePattern,
+    search: ReSearch,
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn gnu_regex_api() -> Result<&'static GnuRegexApi, String> {
+    static API: OnceLock<Result<GnuRegexApi, String>> = OnceLock::new();
+    API.get_or_init(load_gnu_regex_api)
+        .as_ref()
+        .map_err(Clone::clone)
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn load_gnu_regex_api() -> Result<GnuRegexApi, String> {
+    unsafe {
+        let handle = libc::dlopen(c"libc.so.6".as_ptr(), libc::RTLD_LAZY | libc::RTLD_LOCAL);
+        if handle.is_null() {
+            return Err(dynamic_loader_error());
+        }
+
+        let set_syntax = libc::dlsym(handle, c"re_set_syntax".as_ptr());
+        if set_syntax.is_null() {
+            return Err(dynamic_loader_error());
+        }
+        let compile_pattern = libc::dlsym(handle, c"re_compile_pattern".as_ptr());
+        if compile_pattern.is_null() {
+            return Err(dynamic_loader_error());
+        }
+        let search = libc::dlsym(handle, c"re_search".as_ptr());
+        if search.is_null() {
+            return Err(dynamic_loader_error());
+        }
+
+        Ok(GnuRegexApi {
+            set_syntax: std::mem::transmute::<*mut libc::c_void, ReSetSyntax>(set_syntax),
+            compile_pattern: std::mem::transmute::<*mut libc::c_void, ReCompilePattern>(
+                compile_pattern,
+            ),
+            search: std::mem::transmute::<*mut libc::c_void, ReSearch>(search),
+        })
+    }
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn dynamic_loader_error() -> String {
+    let error = unsafe { libc::dlerror() };
+    if error.is_null() {
+        "unable to load GNU regular expression API".to_string()
+    } else {
+        unsafe { CStr::from_ptr(error) }
+            .to_string_lossy()
+            .into_owned()
+    }
+}
 
 #[derive(Debug)]
 enum RegexEngine {
@@ -42,7 +133,8 @@ impl RegexEngine {
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 struct LibcRegex {
-    compiled: libc::regex_t,
+    compiled: RefCell<libc::regex_t>,
+    search: ReSearch,
 }
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
@@ -54,42 +146,56 @@ impl fmt::Debug for LibcRegex {
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 impl LibcRegex {
-    fn new(expression: &[u8]) -> Result<Self, i32> {
-        let expression =
-            CString::new(expression).expect("command-line patterns cannot contain NUL");
-        let mut compiled = MaybeUninit::<libc::regex_t>::zeroed();
+    fn new(expression: &[u8]) -> Result<Self, String> {
+        let api = gnu_regex_api()?;
+        let _configuration_guard = GNU_REGEX_CONFIGURATION_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut compiled = unsafe { std::mem::zeroed::<libc::regex_t>() };
 
-        // GNU csplit initializes the C library locale from the environment before compiling REs.
         unsafe {
             libc::setlocale(libc::LC_ALL, c"".as_ptr());
         }
 
-        let error = unsafe { libc::regcomp(compiled.as_mut_ptr(), expression.as_ptr(), 0) };
-        if error != 0 {
-            return Err(error);
+        let previous_syntax = unsafe { (api.set_syntax)(GNU_CSPLIT_REGEX_SYNTAX) };
+        let error = unsafe {
+            (api.compile_pattern)(expression.as_ptr().cast(), expression.len(), &mut compiled)
+        };
+        unsafe {
+            (api.set_syntax)(previous_syntax);
+        }
+
+        if !error.is_null() {
+            let message = unsafe { CStr::from_ptr(error) }
+                .to_string_lossy()
+                .into_owned();
+            unsafe {
+                libc::regfree(&mut compiled);
+            }
+            return Err(message);
         }
 
         Ok(Self {
-            compiled: unsafe { compiled.assume_init() },
+            compiled: RefCell::new(compiled),
+            search: api.search,
         })
     }
 
     fn is_match(&self, text: &[u8]) -> bool {
-        let mut bounds = libc::regmatch_t {
-            rm_so: 0,
-            rm_eo: text
-                .len()
-                .try_into()
-                .expect("input line length fits in regoff_t"),
-        };
+        let length = text
+            .len()
+            .try_into()
+            .expect("input line length fits in regoff_t");
+        let mut compiled = self.compiled.borrow_mut();
         unsafe {
-            libc::regexec(
-                &self.compiled,
+            (self.search)(
+                &mut *compiled,
                 text.as_ptr().cast(),
-                1,
-                &mut bounds,
-                libc::REG_STARTEND,
-            ) == 0
+                length,
+                0,
+                length,
+                std::ptr::null_mut(),
+            ) >= 0
         }
     }
 }
@@ -98,7 +204,7 @@ impl LibcRegex {
 impl Drop for LibcRegex {
     fn drop(&mut self) {
         unsafe {
-            libc::regfree(&mut self.compiled);
+            libc::regfree(self.compiled.get_mut());
         }
     }
 }
@@ -112,6 +218,18 @@ pub struct CsplitRegex {
 
 impl CsplitRegex {
     fn new(expression: &[u8], source: PatternText) -> Result<Self, CsplitError> {
+        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+        if should_use_libc_regex(expression) {
+            let compiled = LibcRegex::new(expression)
+                .map(RegexEngine::Libc)
+                .map_err(|error| CsplitError::InvalidRegularExpression(source.clone(), error))?;
+            return Ok(Self {
+                compiled,
+                expression: expression.to_owned(),
+                source,
+            });
+        }
+
         let expression_for_compilation = normalize_empty_bre_intervals(expression);
         validate_bre_interval_ranges(&expression_for_compilation, &source)?;
         let compiled = compile_regex(&expression_for_compilation, &source)?;
@@ -129,18 +247,6 @@ impl CsplitRegex {
 }
 
 fn compile_regex(expression: &[u8], source: &PatternText) -> Result<RegexEngine, CsplitError> {
-    #[cfg(all(target_os = "linux", target_env = "gnu"))]
-    if requires_libc_regex(expression) {
-        return LibcRegex::new(expression)
-            .map(RegexEngine::Libc)
-            .map_err(|error| {
-                CsplitError::InvalidRegularExpression(
-                    source.clone(),
-                    gnu_libc_regular_expression_error(error).to_string(),
-                )
-            });
-    }
-
     OnigRegex::with_options_and_encoding(
         EncodedBytes::ascii(expression),
         RegexOptions::REGEX_OPTION_NONE,
@@ -153,6 +259,21 @@ fn compile_regex(expression: &[u8], source: &PatternText) -> Result<RegexEngine,
         )
     })
     .map(RegexEngine::Oniguruma)
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn should_use_libc_regex(expression: &[u8]) -> bool {
+    requires_libc_regex(expression) || locale_uses_multibyte_characters()
+}
+
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn locale_uses_multibyte_characters() -> bool {
+    let _configuration_guard = GNU_REGEX_CONFIGURATION_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    unsafe {
+        !libc::setlocale(libc::LC_ALL, c"".as_ptr()).is_null() && __ctype_get_mb_cur_max() > 1
+    }
 }
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
@@ -208,19 +329,6 @@ fn requires_libc_regex(expression: &[u8]) -> bool {
     }
 
     character_class_seen && in_bracket_expression
-}
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-fn gnu_libc_regular_expression_error(error: i32) -> &'static str {
-    match error {
-        libc::REG_ECOLLATE => "Invalid collation character",
-        libc::REG_ECTYPE => "Invalid character class name",
-        libc::REG_ESUBREG => "Invalid back reference",
-        libc::REG_EBRACK => "Unmatched [, [^, [:, [., or [=",
-        libc::REG_EPAREN => "Unmatched ( or \\(",
-        libc::REG_EBRACE | libc::REG_BADBR | libc::REG_ERANGE => "Invalid content of \\{\\}",
-        _ => "Invalid regular expression",
-    }
 }
 
 fn unterminated_bre_bracket_has_content(expression: &[u8]) -> bool {

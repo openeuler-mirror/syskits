@@ -146,7 +146,14 @@ impl CsplitOptions {
                 SplitName::new_with_prefix(
                     matches.get_one::<OsString>(opt_flags::PREFIX).cloned(),
                     matches.get_one::<String>(opt_flags::SUFFIX_FORMAT).cloned(),
-                    matches.get_one::<String>(opt_flags::DIGITS).cloned()
+                    matches
+                        .get_one::<OsString>(opt_flags::DIGITS)
+                        .map(|digits| {
+                            digits
+                                .to_str()
+                                .expect("csplit_main validates the digits argument")
+                                .to_owned()
+                        })
                 )
             ),
             keep_files,
@@ -1040,14 +1047,15 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
 
     // 使用 clap 库解析命令行参数
     let args_match = ct_app().try_get_matches_from(args)?;
-    ct_crash_if_err!(
-        1,
-        split_name::parse_digits_option(
-            args_match
-                .get_one::<String>(opt_flags::DIGITS)
-                .map(String::as_str)
-        )
-    );
+    if let Some(digits) = args_match.get_one::<OsString>(opt_flags::DIGITS) {
+        let digits = digits.to_str().ok_or_else(|| {
+            CtSimpleError::new(
+                1,
+                format!("invalid number: {}", locale_quote_file_operand(digits)),
+            )
+        })?;
+        ct_crash_if_err!(1, split_name::parse_digits_option(Some(digits)));
+    }
 
     // 获取待拆分的文件名
     let filename = args_match
@@ -1167,6 +1175,7 @@ fn csplit_args_init() -> Vec<Arg> {
             .short('n')
             .long(opt_flags::DIGITS)
             .value_name("DIGITS")
+            .value_parser(clap::builder::OsStringValueParser::new())
             .allow_hyphen_values(true)
             .help(t!("csplit.clap.digits")),
         Arg::new(opt_flags::QUIET)
@@ -3092,7 +3101,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(DIGITS).unwrap(),
+                result.unwrap().get_one::<OsString>(DIGITS).unwrap(),
                 expected_result
             );
         }
@@ -3118,7 +3127,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(DIGITS).unwrap(),
+                result.unwrap().get_one::<OsString>(DIGITS).unwrap(),
                 expected_result
             );
         }
@@ -3144,7 +3153,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(DIGITS).unwrap(),
+                result.unwrap().get_one::<OsString>(DIGITS).unwrap(),
                 expected_result
             );
         }
@@ -3170,7 +3179,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(DIGITS).unwrap(),
+                result.unwrap().get_one::<OsString>(DIGITS).unwrap(),
                 expected_result
             );
         }
@@ -3196,7 +3205,7 @@ mod tests {
 
             assert!(result.is_ok());
             assert_eq!(
-                result.unwrap().get_one::<String>(DIGITS).unwrap(),
+                result.unwrap().get_one::<OsString>(DIGITS).unwrap(),
                 expected_result
             );
         }

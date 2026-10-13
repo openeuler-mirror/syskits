@@ -320,14 +320,14 @@ fn extract_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, Cs
             }
             if line_number < previous_line_number {
                 return Err(CsplitError::LineNumberSmallerThanPrevious(
-                    line_number,
+                    source,
                     previous_line_number,
                 ));
             }
             if line_number == previous_line_number {
                 ct_show_warning!(
-                    "line number '{}' is the same as preceding line number",
-                    line_number
+                    "line number {} is the same as preceding line number",
+                    source.locale_quote()
                 );
             }
             previous_line_number = line_number;
@@ -414,7 +414,10 @@ fn validate_line_numbers(csplit_patterns: &[CsplitPattern]) -> Result<(), Csplit
                 Ok(n)
             }
             // 行号必须按升序出现。
-            (n, m) if n > m => Err(CsplitError::LineNumberSmallerThanPrevious(m, n)),
+            (n, m) if n > m => Err(CsplitError::LineNumberSmallerThanPrevious(
+                m.to_string().into(),
+                n,
+            )),
             (_, m) => Ok(m),
         })?;
     Ok(())
@@ -743,7 +746,7 @@ mod tests {
     fn test_line_number_smaller_than_previous() {
         let input: Vec<String> = vec!["10".to_string(), "5".to_string()];
         match get_patterns(input.as_slice()) {
-            Err(CsplitError::LineNumberSmallerThanPrevious(5, 10)) => (),
+            Err(CsplitError::LineNumberSmallerThanPrevious(value, 10)) if value == "5" => (),
             _ => panic!("expected LineNumberSmallerThanPrevious error"),
         }
     }
@@ -752,7 +755,7 @@ mod tests {
     fn test_line_number_smaller_than_previous_separate() {
         let input: Vec<String> = vec!["10".to_string(), "/20/".to_string(), "5".to_string()];
         match get_patterns(input.as_slice()) {
-            Err(CsplitError::LineNumberSmallerThanPrevious(5, 10)) => (),
+            Err(CsplitError::LineNumberSmallerThanPrevious(value, 10)) if value == "5" => (),
             _ => panic!("expected LineNumberSmallerThanPrevious error"),
         }
     }

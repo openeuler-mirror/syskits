@@ -81,14 +81,6 @@ impl SyntaxTreeBinOp {
 
 // 关系操作符的实现
 impl SyntaxTreeRelationOp {
-    /// 评估关系操作
-    ///
-    /// # 参数
-    /// * `a` - 左操作数
-    /// * `b` - 右操作数
-    ///
-    /// # 返回值
-    /// 表示计算结果的 `ExprResult<NumOrStr>` 类型
     fn eval(
         &self,
         ast_a: &SyntaxTreeAstNode,
@@ -106,16 +98,16 @@ impl SyntaxTreeRelationOp {
                 Self::Geq => a >= b,
             }
         } else {
-            // 使用字节序比较
             let a_bytes = a.to_bytes_for_compare();
             let b_bytes = b.to_bytes_for_compare();
+            let ordering = collate_bytes(&a_bytes, &b_bytes);
             match self {
-                Self::Lt => a_bytes < b_bytes,
-                Self::Leq => a_bytes <= b_bytes,
-                Self::Eq => a_bytes == b_bytes,
-                Self::Neq => a_bytes != b_bytes,
-                Self::Gt => a_bytes > b_bytes,
-                Self::Geq => a_bytes >= b_bytes,
+                Self::Lt => ordering == std::cmp::Ordering::Less,
+                Self::Leq => ordering != std::cmp::Ordering::Greater,
+                Self::Eq => ordering == std::cmp::Ordering::Equal,
+                Self::Neq => ordering != std::cmp::Ordering::Equal,
+                Self::Gt => ordering == std::cmp::Ordering::Greater,
+                Self::Geq => ordering != std::cmp::Ordering::Less,
             }
         };
         if is_b { Ok(1.into()) } else { Ok(0.into()) }
@@ -828,6 +820,10 @@ fn logical_substr_bytes(s: &[u8], pos: usize, len: usize) -> Vec<u8> {
         }
         out
     }
+}
+
+fn collate_bytes(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
+    ctcore::ct_locale::strcoll_compare(a, b, false)
 }
 
 fn parse_integer_strict_bytes(bytes: &[u8]) -> Option<BigInt> {

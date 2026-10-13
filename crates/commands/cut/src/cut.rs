@@ -916,8 +916,8 @@ fn cut_get_delimiters(args_match: &ArgMatches) -> CTResult<(CutDelimiter<'_>, Op
             ));
         }
         Some(os_string) => {
-            if os_string == "''" || os_string.is_empty() {
-                // 将空字符串或"''"视为空分隔符
+            if os_string.is_empty() {
+                // 将空字符串视为NUL分隔符
                 CutDelimiter::Slice(b"\0")
             } else {
                 // 处理分隔符选项，允许单个字符，包括非 UTF-8 和非 ASCII 字符
@@ -933,8 +933,8 @@ fn cut_get_delimiters(args_match: &ArgMatches) -> CTResult<(CutDelimiter<'_>, Op
     let out_delim = args_match
         .get_one::<OsString>(opt_flags::OUTPUT_DELIMITER)
         .map(|os_string| {
-            // 空字符串或"''"被视为空分隔符
-            if os_string.is_empty() || os_string == "''" {
+            // 空字符串被视为NUL分隔符
+            if os_string.is_empty() {
                 b"\0"
             } else {
                 // 转换输出分隔符为字节序列

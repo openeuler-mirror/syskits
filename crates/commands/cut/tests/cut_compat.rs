@@ -269,6 +269,43 @@ fn missing_option_arguments_use_gnu_diagnostics() {
 }
 
 #[test]
+fn unexpected_long_option_arguments_use_gnu_diagnostics() {
+    let cases = [
+        (
+            vec!["--complement=value", "-b1"],
+            "cut: option '--complement' doesn't allow an argument\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--com=value", "-b1"],
+            "cut: option '--complement' doesn't allow an argument\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--only-delimited=value", "-f1"],
+            "cut: option '--only-delimited' doesn't allow an argument\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--zero-terminated=value", "-f1"],
+            "cut: option '--zero-terminated' doesn't allow an argument\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--help=value"],
+            "cut: option '--help' doesn't allow an argument\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--version=value"],
+            "cut: option '--version' doesn't allow an argument\nTry 'cut --help' for more information.\n",
+        ),
+    ];
+
+    for (args, expected_stderr) in cases {
+        let output = run_cut(&args, b"");
+        assert_eq!(output.status.code(), Some(1), "args: {args:?}");
+        assert!(output.stdout.is_empty(), "args: {args:?}");
+        assert_eq!(output.stderr, expected_stderr.as_bytes(), "args: {args:?}");
+    }
+}
+
+#[test]
 fn input_delimiter_requires_field_mode() {
     for args in [&["-d:", "-b1"][..], &["-d", "", "-c1"][..]] {
         let output = run_cut(args, b"");

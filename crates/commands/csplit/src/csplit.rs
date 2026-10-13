@@ -535,6 +535,7 @@ impl SplitWriter<'_> {
                 let l = line?;
                 if regex.is_match(line_for_match(&l)) {
                     if input_splitter.csplit_buffer_len() < f_usize {
+                        self.finish_split()?;
                         return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
                     }
                     for line in input_splitter.csplit_shrink_buffer_to_size() {

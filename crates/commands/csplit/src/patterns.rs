@@ -272,6 +272,7 @@ fn gnu_regular_expression_error(error: &OnigError, expression: &[u8]) -> &'stati
         onig_sys::ONIGERR_UNMATCHED_CLOSE_PARENTHESIS => "Unmatched ) or \\)",
         onig_sys::ONIGERR_END_PATTERN_WITH_UNMATCHED_PARENTHESIS
         | onig_sys::ONIGERR_END_PATTERN_IN_GROUP => "Unmatched ( or \\(",
+        onig_sys::ONIGERR_UNMATCHED_RANGE_SPECIFIER_IN_CHAR_CLASS => "Invalid range end",
         onig_sys::ONIGERR_INVALID_POSIX_BRACKET_TYPE => "Invalid character class name",
         onig_sys::ONIGERR_TOO_BIG_NUMBER_FOR_REPEAT_RANGE => "Regular expression too big",
         onig_sys::ONIGERR_INVALID_REPEAT_RANGE_PATTERN

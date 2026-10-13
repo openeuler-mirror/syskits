@@ -220,6 +220,55 @@ fn unknown_options_use_gnu_diagnostics() {
 }
 
 #[test]
+fn missing_option_arguments_use_gnu_diagnostics() {
+    let cases = [
+        (
+            vec!["-b"],
+            "cut: option requires an argument -- 'b'\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["-c"],
+            "cut: option requires an argument -- 'c'\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["-d"],
+            "cut: option requires an argument -- 'd'\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["-f"],
+            "cut: option requires an argument -- 'f'\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--bytes"],
+            "cut: option '--bytes' requires an argument\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--char"],
+            "cut: option '--characters' requires an argument\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--delim"],
+            "cut: option '--delimiter' requires an argument\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--f"],
+            "cut: option '--fields' requires an argument\nTry 'cut --help' for more information.\n",
+        ),
+        (
+            vec!["--out"],
+            "cut: option '--output-delimiter' requires an argument\nTry 'cut --help' for more information.\n",
+        ),
+    ];
+
+    for (args, expected_stderr) in cases {
+        let output = run_cut(&args, b"");
+        assert_eq!(output.status.code(), Some(1), "args: {args:?}");
+        assert!(output.stdout.is_empty(), "args: {args:?}");
+        assert_eq!(output.stderr, expected_stderr.as_bytes(), "args: {args:?}");
+    }
+}
+
+#[test]
 fn input_delimiter_requires_field_mode() {
     for args in [&["-d:", "-b1"][..], &["-d", "", "-c1"][..]] {
         let output = run_cut(args, b"");

@@ -1366,12 +1366,10 @@ pub fn ct_app() -> Command {
 fn cut_args_init() -> Vec<Arg> {
     let args = vec![
         Arg::new("help")
-            .short('h')
             .long("help")
             .help(t!("cut.clap.help"))
             .action(ArgAction::Help),
         Arg::new("version")
-            .short('V')
             .long("version")
             .help(t!("cut.clap.version"))
             .action(ArgAction::Version),
@@ -2055,13 +2053,13 @@ mod tests {
         }
 
         #[test]
-        fn test_cut_app_v() {
+        fn test_cut_app_short_version_is_unknown() {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), "-V"];
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
 
         #[test]
@@ -2075,13 +2073,13 @@ mod tests {
         }
 
         #[test]
-        fn test_cut_app_h() {
+        fn test_cut_app_short_help_is_unknown() {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), "-h"];
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
 
         #[test]
@@ -2514,7 +2512,7 @@ mod tests {
         }
 
         #[test]
-        fn test_cut_main_v() {
+        fn test_cut_main_short_version_is_invalid() {
             let args = [ctcore::ct_util_name(), "-V"];
             let result = cut_main(args.iter().map(OsString::from));
 
@@ -2530,7 +2528,7 @@ mod tests {
         }
 
         #[test]
-        fn test_cut_main_h() {
+        fn test_cut_main_short_help_is_invalid() {
             let args = [ctcore::ct_util_name(), "-h"];
             let result = cut_main(args.iter().map(OsString::from));
 

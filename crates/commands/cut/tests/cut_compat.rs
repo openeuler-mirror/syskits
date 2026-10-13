@@ -220,6 +220,26 @@ fn unknown_options_use_gnu_diagnostics() {
 }
 
 #[test]
+fn short_help_and_version_options_are_rejected() {
+    for (args, invalid) in [
+        (vec!["-h"], 'h'),
+        (vec!["-V"], 'V'),
+        (vec!["-nh", "-b1"], 'h'),
+        (vec!["-nV", "-b1"], 'V'),
+    ] {
+        let output = run_cut(&args, b"");
+        assert_eq!(output.status.code(), Some(1), "args: {args:?}");
+        assert!(output.stdout.is_empty(), "args: {args:?}");
+        assert_eq!(
+            output.stderr,
+            format!("cut: invalid option -- '{invalid}'\nTry 'cut --help' for more information.\n")
+                .as_bytes(),
+            "args: {args:?}"
+        );
+    }
+}
+
+#[test]
 fn missing_option_arguments_use_gnu_diagnostics() {
     let cases = [
         (

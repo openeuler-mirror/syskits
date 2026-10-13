@@ -821,6 +821,34 @@ mod test {
     }
 
     #[test]
+    fn test_unsigned_int_explicit_zero_precision_omits_zero_value() {
+        let formatter = UnsignedInt {
+            variant: UnsignedIntVariant::Decimal,
+            width: 1,
+            precision: Some(0),
+            alignment: NumberAlignment::RightSpace,
+        };
+
+        let mut buffer = Cursor::new(Vec::new());
+        formatter.fmt(&mut buffer, 0).unwrap();
+        assert_eq!(buffer.get_ref(), b" ");
+    }
+
+    #[test]
+    fn test_unsigned_int_alternate_octal_keeps_zero_with_zero_precision() {
+        let formatter = UnsignedInt {
+            variant: UnsignedIntVariant::Octal(Prefix::Yes),
+            width: 0,
+            precision: Some(0),
+            alignment: NumberAlignment::RightSpace,
+        };
+
+        let mut buffer = Cursor::new(Vec::new());
+        formatter.fmt(&mut buffer, 0).unwrap();
+        assert_eq!(buffer.get_ref(), b"0");
+    }
+
+    #[test]
     fn test_unsigned_int_try_from_spec_decimal() {
         let spec = Spec::UnsignedInt {
             variant: UnsignedIntVariant::Decimal,

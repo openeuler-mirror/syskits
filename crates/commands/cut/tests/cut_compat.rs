@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::process::{Command, Output, Stdio};
+#[cfg(unix)]
 use tempfile::TempDir;
 
 #[cfg(unix)]

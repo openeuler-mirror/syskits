@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 use std::ffi::OsString;
-use std::io;
+use std::io::{self, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
 use thiserror::Error;
@@ -35,6 +35,14 @@ impl PatternText {
 
     pub fn to_lossy_string(&self) -> String {
         String::from_utf8_lossy(&self.0).into_owned()
+    }
+
+    fn has_non_utf8_bytes(&self) -> bool {
+        std::str::from_utf8(&self.0).is_err()
+    }
+
+    fn as_bytes(&self) -> &[u8] {
+        &self.0
     }
 }
 
@@ -100,8 +108,8 @@ pub enum CsplitError {
     InvalidPattern(PatternText),
     #[error("{}: invalid regular expression: {}", ._0.locale_quote(), _1)]
     InvalidRegularExpression(PatternText, String),
-    #[error("{}: closing delimiter '{}' missing", _0, _1)]
-    ClosingDelimiterMissing(String, char),
+    #[error("{}: closing delimiter '{}' missing", ._0.to_lossy_string(), _1)]
+    ClosingDelimiterMissing(PatternText, char),
     #[error("{}: integer expected after delimiter", ._0.locale_quote())]
     IntegerExpectedAfterDelimiter(PatternText),
     #[error("{}: '}}' is required in repeat count", locale_quote(&._0))]
@@ -137,6 +145,22 @@ pub enum CsplitError {
 }
 
 impl CsplitError {
+    pub fn write_diagnostic(&self, utility_name: &str) -> io::Result<()> {
+        if let Self::ClosingDelimiterMissing(pattern, delimiter) = self
+            && pattern.has_non_utf8_bytes()
+        {
+            let mut stderr = io::stderr().lock();
+            stderr.write_all(utility_name.as_bytes())?;
+            stderr.write_all(b": ")?;
+            stderr.write_all(pattern.as_bytes())?;
+            writeln!(stderr, ": closing delimiter '{delimiter}' missing")?;
+            return Ok(());
+        }
+
+        eprintln!("{utility_name}: {self}");
+        Ok(())
+    }
+
     pub fn with_deferred_stdout(source: Self, stdout_lines: Vec<String>) -> Self {
         if stdout_lines.is_empty() {
             source

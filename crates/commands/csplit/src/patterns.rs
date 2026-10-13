@@ -277,7 +277,7 @@ fn extract_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, Cs
                 .map(|position| position + 1);
             let Some(closing_delimiter) = closing_delimiter else {
                 return Err(CsplitError::ClosingDelimiterMissing(
-                    source.to_lossy_string(),
+                    source,
                     delimiter as char,
                 ));
             };

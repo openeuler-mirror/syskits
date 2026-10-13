@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 use std::ffi::OsString;
+use std::fmt;
 use std::io::{self, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
@@ -70,6 +71,34 @@ impl PartialEq<&str> for PatternText {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct OutputFileName(OsString);
+
+impl From<OsString> for OutputFileName {
+    fn from(value: OsString) -> Self {
+        Self(value)
+    }
+}
+
+impl fmt::Display for OutputFileName {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(filename) = self.0.to_str() {
+            return write!(formatter, "{}", filename.maybe_quote());
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+
+            return formatter
+                .write_str(&super::shell_quote_non_utf8_file_operand(self.0.as_bytes()));
+        }
+
+        #[cfg(not(unix))]
+        write!(formatter, "{}", self.0.to_string_lossy().maybe_quote())
+    }
+}
+
 /// Errors thrown by the csplit command
 #[derive(Debug, Error)]
 pub enum CsplitError {
@@ -84,8 +113,8 @@ pub enum CsplitError {
     WriteError(String, String),
     #[error("write error: {}", _0)]
     StdoutWriteError(String),
-    #[error("{}: {}", ._0.maybe_quote(), _1)]
-    OutputCreateError(String, String),
+    #[error("{}: {}", _0, _1)]
+    OutputCreateError(OutputFileName, String),
     #[error("input disappeared")]
     InputDisappeared,
     #[error("{}: line number out of range", ._0.locale_quote())]

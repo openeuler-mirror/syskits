@@ -46,27 +46,27 @@ impl SplitName {
     ) -> Result<Self, CsplitError> {
         Self::new_with_prefix(
             prefix_opt_strs.map(OsString::from),
-            format_opt_strs,
+            format_opt_strs.map(OsString::from),
             n_digits_opt_strs,
         )
     }
 
     pub fn new_with_prefix(
         prefix_opt: Option<OsString>,
-        format_opt_strs: Option<String>,
+        format_opt: Option<OsString>,
         n_digits_opt_strs: Option<String>,
     ) -> Result<Self, CsplitError> {
         let prefix = prefix_opt.unwrap_or_else(|| OsString::from("xx"));
 
         let n_digits = parse_digits_option(n_digits_opt_strs.as_deref())?.unwrap_or(2);
 
-        let format_str = match format_opt_strs {
-            Some(f) => f,
-            None => format!("%0{n_digits}u"),
+        let format = match format_opt {
+            Some(format) => os_string_to_bytes(&format),
+            None => format!("%0{n_digits}u").into_bytes(),
         };
 
-        validate_suffix_format(&format_str)?;
-        let format = match Format::<UnsignedInt>::parse(format_str) {
+        validate_suffix_format(&format)?;
+        let format = match Format::<UnsignedInt>::parse(&format) {
             Ok(format) => Ok(format),
             Err(FormatError::TooManySpecs(_)) => Err(CsplitError::SuffixFormatTooManyPercents),
             Err(_) => Err(CsplitError::SuffixFormatIncorrect),
@@ -151,8 +151,8 @@ pub(crate) fn parse_digits_option(option: Option<&str>) -> Result<Option<usize>,
         .transpose()
 }
 
-fn validate_suffix_format(format: &str) -> Result<(), CsplitError> {
-    let bytes = format.as_bytes();
+fn validate_suffix_format(format: impl AsRef<[u8]>) -> Result<(), CsplitError> {
+    let bytes = format.as_ref();
     let mut position = 0;
     let mut conversion_found = false;
 

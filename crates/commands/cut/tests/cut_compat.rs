@@ -146,6 +146,23 @@ fn input_delimiter_requires_field_mode() {
 }
 
 #[test]
+fn invalid_input_delimiter_includes_help_hint() {
+    for (args, locale) in [
+        (vec!["-d", "aa", "-f1"], "C"),
+        (vec!["-d", "\u{4e2d}", "-f1"], "C"),
+    ] {
+        let output = run_cut_in_locale(&args, b"", locale);
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            output.stderr,
+            b"cut: the delimiter must be a single character\n\
+              Try 'cut --help' for more information.\n"
+        );
+    }
+}
+
+#[test]
 fn character_mode_uses_locale_character_units() {
     let combining = run_cut_in_locale(&["-c2"], b"a\xcc\x81b\n", "en_US.utf8");
     assert!(combining.status.success());

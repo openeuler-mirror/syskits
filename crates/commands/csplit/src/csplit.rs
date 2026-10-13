@@ -1092,6 +1092,11 @@ where
 }
 
 pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+    }
+
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 

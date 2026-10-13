@@ -306,6 +306,23 @@ fn unexpected_long_option_arguments_use_gnu_diagnostics() {
 }
 
 #[test]
+fn hyphen_prefixed_option_values_are_consumed() {
+    let delimiter = run_cut(&["--delimiter", "--no-such", "-f1"], b"a\tb\n");
+    assert_eq!(delimiter.status.code(), Some(1));
+    assert!(delimiter.stdout.is_empty());
+    assert_eq!(
+        delimiter.stderr,
+        b"cut: the delimiter must be a single character\n\
+          Try 'cut --help' for more information.\n"
+    );
+
+    let output_delimiter = run_cut(&["--output-delimiter", "--", "-f1,2"], b"a\tb\n");
+    assert!(output_delimiter.status.success());
+    assert_eq!(output_delimiter.stdout, b"a--b\n");
+    assert!(output_delimiter.stderr.is_empty());
+}
+
+#[test]
 fn input_delimiter_requires_field_mode() {
     for args in [&["-d:", "-b1"][..], &["-d", "", "-c1"][..]] {
         let output = run_cut(args, b"");

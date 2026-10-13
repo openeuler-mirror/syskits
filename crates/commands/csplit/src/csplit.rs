@@ -23,8 +23,10 @@ use ctcore::{Tool, ct_crash_if_err};
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::io::{self, BufReader};
-#[cfg(test)]
-use std::sync::Mutex;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+#[cfg(all(target_os = "linux", not(test)))]
+use std::thread;
 use std::{
     fs::{File, remove_file},
     io::{BufRead, BufWriter, Write},
@@ -100,6 +102,7 @@ pub struct CsplitOptions {
     quiet: bool,
     elide_empty_files: bool,
     suppress_matched: bool,
+    created_files: Arc<Mutex<Vec<PathBuf>>>,
 }
 
 impl CsplitOptions {
@@ -122,6 +125,7 @@ impl CsplitOptions {
             quiet,
             elide_empty_files,
             suppress_matched,
+            created_files: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }
@@ -276,6 +280,57 @@ fn line_for_match(line: &[u8]) -> &[u8] {
     line.strip_suffix(b"\n").unwrap_or(line)
 }
 
+#[cfg(all(target_os = "linux", not(test)))]
+fn delete_created_splits(created_files: &Mutex<Vec<PathBuf>>) {
+    let Ok(created_files) = created_files.lock() else {
+        return;
+    };
+    for file_name in created_files.iter().rev() {
+        let _ = remove_file(file_name);
+    }
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn signal_is_ignored(signal: libc::c_int) -> bool {
+    unsafe {
+        let mut action: libc::sigaction = std::mem::zeroed();
+        libc::sigaction(signal, std::ptr::null(), &mut action) == 0
+            && action.sa_sigaction == libc::SIG_IGN
+    }
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn install_signal_cleanup(
+    created_files: Arc<Mutex<Vec<PathBuf>>>,
+    remove_files: bool,
+) -> io::Result<()> {
+    use signal_hook::consts::signal::{
+        SIGALRM, SIGHUP, SIGINT, SIGIO, SIGPROF, SIGQUIT, SIGTERM, SIGVTALRM, SIGXCPU, SIGXFSZ,
+    };
+    use signal_hook::iterator::Signals;
+
+    let caught_signals = [
+        SIGALRM, SIGHUP, SIGINT, SIGIO, SIGPROF, SIGQUIT, SIGTERM, SIGVTALRM, SIGXCPU, SIGXFSZ,
+    ]
+    .into_iter()
+    .filter(|signal| !signal_is_ignored(*signal))
+    .collect::<Vec<_>>();
+    if caught_signals.is_empty() {
+        return Ok(());
+    }
+
+    let mut signals = Signals::new(caught_signals)?;
+    thread::spawn(move || {
+        if let Some(signal) = signals.forever().next() {
+            if remove_files {
+                delete_created_splits(&created_files);
+            }
+            let _ = signal_hook::low_level::emulate_default_handler(signal);
+        }
+    });
+    Ok(())
+}
+
 /// Write a portion of the input file into a split which filename is based on an incrementing
 /// counter.
 struct SplitWriter<'a> {
@@ -292,6 +347,7 @@ struct SplitWriter<'a> {
     /// flag to indicate that no content should be written to a split
     dev_null: bool,
     suppress_next_write: bool,
+    created_files: Arc<Mutex<Vec<PathBuf>>>,
 }
 
 impl SplitWriter<'_> {
@@ -304,18 +360,25 @@ impl SplitWriter<'_> {
             size: 0,
             dev_null: false,
             suppress_next_write: false,
+            created_files: Arc::clone(&options.created_files),
         }
     }
 
     fn new_writer(&mut self) -> Result<(), CsplitError> {
         self.close_current_writer()?;
         let file_name = self.options.split_name.get(self.counter);
+        let mut created_files = self
+            .created_files
+            .lock()
+            .expect("csplit created file tracker poisoned");
         let file = File::create(&file_name).map_err(|error| {
             CsplitError::OutputCreateError(
                 file_name.clone(),
                 trim_os_error_suffix(error.to_string()),
             )
         })?;
+        created_files.push(PathBuf::from(&file_name));
+        drop(created_files);
         self.current_writer = Some(BufWriter::new(file));
         self.current_filename = Some(file_name);
 
@@ -715,6 +778,10 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
 
     // 根据文件名是标准输入还是文件路径，来决定如何处理文件
     if filename == "-" {
+        #[cfg(all(target_os = "linux", not(test)))]
+        install_signal_cleanup(csplit_opts.created_files.clone(), !csplit_opts.keep_files)
+            .map_err(|err| CtSimpleError::new(1, err.to_string()))?;
+
         // 处理标准输入
         let stdin = io::stdin();
         csplit(&csplit_opts, patterns, stdin.lock()).map_err(|err| {
@@ -726,6 +793,10 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
         // 打开指定路径的文件
         let file_name = File::open(filename)
             .map_err_context(|| format!("cannot open {} for reading", filename.quote()))?;
+
+        #[cfg(all(target_os = "linux", not(test)))]
+        install_signal_cleanup(csplit_opts.created_files.clone(), !csplit_opts.keep_files)
+            .map_err(|err| CtSimpleError::new(1, err.to_string()))?;
 
         // 使用缓冲读取器读取文件，并进行拆分
         csplit(&csplit_opts, patterns, BufReader::new(file_name)).map_err(|err| {

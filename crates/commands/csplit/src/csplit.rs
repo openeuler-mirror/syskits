@@ -795,9 +795,11 @@ impl SplitWriter<'_> {
 
         let mut result = Err(CsplitError::LineOutOfRange(pattern.clone()));
         let mut read_line = false;
+        let mut last_line_number = None;
         while let Some((ln, line)) = input_iter.next() {
             let l = line?;
             read_line = true;
+            last_line_number = Some(ln + 1);
             match n.cmp(&(&ln + 1)) {
                 Ordering::Less => {
                     assert!(
@@ -826,6 +828,13 @@ impl SplitWriter<'_> {
                 return Err(CsplitError::LineOutOfRange(pattern.clone()));
             }
             return Err(CsplitError::InputDisappeared);
+        }
+
+        // GNU accepts an absent matched line immediately after the final saved line.
+        if self.options.suppress_matched
+            && last_line_number.is_some_and(|last| last.checked_add(1) == Some(n))
+        {
+            result = Ok(());
         }
 
         self.finish_split()?;

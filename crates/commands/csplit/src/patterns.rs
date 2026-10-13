@@ -310,6 +310,9 @@ fn extract_patterns<T: AsRef<[u8]>>(args: &[T]) -> Result<Vec<CsplitPattern>, Cs
             && line_number <= i64::MAX as u64
             && let Ok(line_number) = usize::try_from(line_number)
         {
+            if line_number == 0 {
+                return Err(CsplitError::LineNumberIsZero(argument.to_string()));
+            }
             // 如果参数是行号，构建相应的行号模式
             csplit_patterns.push(CsplitPattern::UpToLine(line_number, execute_n_times));
         } else {
@@ -371,7 +374,7 @@ fn validate_line_numbers(csplit_patterns: &[CsplitPattern]) -> Result<(), Csplit
         // 通过try_fold迭代验证行号，确保它们按照升序且没有重复。
         .try_fold(0, |prev_ln, &current_ln| match (prev_ln, current_ln) {
             // 行号不能为零。
-            (_, 0) => Err(CsplitError::LineNumberIsZero),
+            (_, 0) => Err(CsplitError::LineNumberIsZero("0".to_string())),
             // 相邻的行号不能相等。
             (n, m) if n == m => {
                 ct_show_warning!("line number '{}' is the same as preceding line number", n);
@@ -698,7 +701,7 @@ mod tests {
     fn test_line_number_zero() {
         let patterns = vec![CsplitPattern::UpToLine(0, CsplitExecutePattern::Times(1))];
         match validate_line_numbers(&patterns) {
-            Err(CsplitError::LineNumberIsZero) => (),
+            Err(CsplitError::LineNumberIsZero(_)) => (),
             _ => panic!("expected LineNumberIsZero error"),
         }
     }
@@ -725,7 +728,7 @@ mod tests {
     fn test_line_number_zero_separate() {
         let input: Vec<String> = vec!["10".to_string(), "/20/".to_string(), "0".to_string()];
         match get_patterns(input.as_slice()) {
-            Err(CsplitError::LineNumberIsZero) => (),
+            Err(CsplitError::LineNumberIsZero(_)) => (),
             _ => panic!("expected LineNumberIsZero error"),
         }
     }

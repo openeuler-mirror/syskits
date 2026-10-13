@@ -30,11 +30,6 @@ const GNU_CSPLIT_REGEX_SYNTAX: libc::c_ulong = (1 << 1) | (1 << 2) | (1 << 6) | 
 static GNU_REGEX_CONFIGURATION_LOCK: Mutex<()> = Mutex::new(());
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
-unsafe extern "C" {
-    fn __ctype_get_mb_cur_max() -> libc::size_t;
-}
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
 type ReSetSyntax = unsafe extern "C" fn(libc::c_ulong) -> libc::c_ulong;
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
@@ -263,16 +258,28 @@ fn compile_regex(expression: &[u8], source: &PatternText) -> Result<RegexEngine,
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 fn should_use_libc_regex(expression: &[u8]) -> bool {
-    requires_libc_regex(expression) || locale_uses_multibyte_characters()
+    requires_libc_regex(expression) || locale_has_non_c_character_rules()
 }
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
-fn locale_uses_multibyte_characters() -> bool {
+fn locale_has_non_c_character_rules() -> bool {
     let _configuration_guard = GNU_REGEX_CONFIGURATION_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     unsafe {
-        !libc::setlocale(libc::LC_ALL, c"".as_ptr()).is_null() && __ctype_get_mb_cur_max() > 1
+        if libc::setlocale(libc::LC_ALL, c"".as_ptr()).is_null() {
+            return false;
+        }
+
+        [libc::LC_CTYPE, libc::LC_COLLATE]
+            .into_iter()
+            .any(|category| {
+                let locale = libc::setlocale(category, std::ptr::null());
+                if locale.is_null() {
+                    return false;
+                }
+                !matches!(CStr::from_ptr(locale).to_bytes(), b"C" | b"POSIX")
+            })
     }
 }
 

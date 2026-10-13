@@ -14,6 +14,33 @@ extern crate rust_i18n;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
+
+#[cfg(target_os = "linux")]
+static INHERITED_SIGPIPE_IGNORED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(target_os = "linux")]
+extern "C" fn record_inherited_sigpipe_disposition() {
+    unsafe {
+        let mut action: libc::sigaction = std::mem::zeroed();
+        if libc::sigaction(libc::SIGPIPE, std::ptr::null(), &mut action) == 0
+            && action.sa_sigaction == libc::SIG_IGN
+        {
+            INHERITED_SIGPIPE_IGNORED.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+}
+
+// This runs before Rust's runtime replaces SIGPIPE with SIG_IGN.
+#[cfg(target_os = "linux")]
+#[used]
+#[unsafe(link_section = ".preinit_array")]
+static RECORD_INHERITED_SIGPIPE_DISPOSITION: extern "C" fn() = record_inherited_sigpipe_disposition;
+
+#[cfg(target_os = "linux")]
+fn inherited_sigpipe_is_ignored() -> bool {
+    INHERITED_SIGPIPE_IGNORED.load(std::sync::atomic::Ordering::Relaxed)
+}
 use ctcore::ct_display::{Quotable, locale_quote};
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_lines;
@@ -103,6 +130,7 @@ pub struct CsplitOptions {
     elide_empty_files: bool,
     suppress_matched: bool,
     created_files: Arc<Mutex<Vec<PathBuf>>>,
+    inherited_sigpipe_ignored: bool,
 }
 
 impl CsplitOptions {
@@ -126,7 +154,14 @@ impl CsplitOptions {
             elide_empty_files,
             suppress_matched,
             created_files: Arc::new(Mutex::new(Vec::new())),
+            inherited_sigpipe_ignored: false,
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn with_inherited_sigpipe_ignored(mut self, ignored: bool) -> Self {
+        self.inherited_sigpipe_ignored = ignored;
+        self
     }
 }
 
@@ -189,8 +224,10 @@ where
     };
 
     // 第三步：发生错误时的清理
-    let preserve_empty_split = matches!(&final_result, Err(CsplitError::InputDisappeared));
-    if final_result.is_err() && !csplit_opts.keep_files && !preserve_empty_split {
+    let preserve_splits = final_result
+        .as_ref()
+        .is_err_and(CsplitError::preserves_splits_on_error);
+    if final_result.is_err() && !csplit_opts.keep_files && !preserve_splits {
         let _ = split_writer.delete_all_splits();
     }
 
@@ -278,6 +315,35 @@ fn trim_os_error_suffix(message: String) -> String {
 
 fn line_for_match(line: &[u8]) -> &[u8] {
     line.strip_suffix(b"\n").unwrap_or(line)
+}
+
+#[cfg(target_os = "linux")]
+fn write_stdout_line(line: &str) -> io::Result<()> {
+    let output = format!("{line}\n");
+    let mut written = 0;
+    while written < output.len() {
+        let result = unsafe {
+            libc::write(
+                libc::STDOUT_FILENO,
+                output.as_ptr().add(written).cast(),
+                output.len() - written,
+            )
+        };
+        if result > 0 {
+            written += result as usize;
+            continue;
+        }
+        if result == 0 {
+            return Err(io::Error::from(io::ErrorKind::WriteZero));
+        }
+
+        let error = io::Error::last_os_error();
+        if error.kind() == io::ErrorKind::Interrupted {
+            continue;
+        }
+        return Err(error);
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -463,10 +529,21 @@ impl SplitWriter<'_> {
     }
 
     fn write_split_size(&self, line: &str) -> Result<(), CsplitError> {
+        #[cfg(target_os = "linux")]
+        let result = write_stdout_line(line);
+        #[cfg(not(target_os = "linux"))]
         let mut stdout = io::stdout().lock();
-        if let Err(error) = writeln!(stdout, "{line}") {
+        #[cfg(not(target_os = "linux"))]
+        let result = writeln!(stdout, "{line}");
+
+        if let Err(error) = result {
             #[cfg(target_os = "linux")]
             if error.kind() == io::ErrorKind::BrokenPipe {
+                if self.options.inherited_sigpipe_ignored {
+                    return Err(CsplitError::StdoutWriteError(trim_os_error_suffix(
+                        error.to_string(),
+                    )));
+                }
                 if !self.options.keep_files {
                     delete_created_splits(&self.created_files);
                 }
@@ -758,7 +835,11 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
     rust_i18n::set_locale(&lang_code);
 
     #[cfg(target_os = "linux")]
-    enable_pipe_errors().map_err(|err| CtSimpleError::new(1, err.to_string()))?;
+    let inherited_sigpipe_ignored = inherited_sigpipe_is_ignored();
+    #[cfg(target_os = "linux")]
+    if !inherited_sigpipe_ignored {
+        enable_pipe_errors().map_err(|err| CtSimpleError::new(1, err.to_string()))?;
+    }
 
     let args = args.collect::<Vec<_>>();
     let usage_name = csplit_usage_name(&args);
@@ -791,6 +872,10 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
             format!("missing operand after {}", locale_quote(filename)),
         ));
     }
+    #[cfg(target_os = "linux")]
+    let csplit_opts =
+        CsplitOptions::new(&args_match).with_inherited_sigpipe_ignored(inherited_sigpipe_ignored);
+    #[cfg(not(target_os = "linux"))]
     let csplit_opts = CsplitOptions::new(&args_match);
 
     // 根据文件名是标准输入还是文件路径，来决定如何处理文件

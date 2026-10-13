@@ -26,6 +26,8 @@ pub enum CsplitError {
     },
     #[error("{}: {}", _0, _1)]
     WriteError(String, String),
+    #[error("write error: {}", _0)]
+    StdoutWriteError(String),
     #[error("{}: {}", ._0.maybe_quote(), _1)]
     OutputCreateError(String, String),
     #[error("input disappeared")]
@@ -102,6 +104,14 @@ impl CsplitError {
         match self {
             Self::MatchNotFound(_) => true,
             Self::DeferredOutput { source, .. } => source.is_match_not_found(),
+            _ => false,
+        }
+    }
+
+    pub fn preserves_splits_on_error(&self) -> bool {
+        match self {
+            Self::InputDisappeared | Self::StdoutWriteError(_) => true,
+            Self::DeferredOutput { source, .. } => source.preserves_splits_on_error(),
             _ => false,
         }
     }

@@ -1220,46 +1220,50 @@ fn cut_mode_parse<'a>(
         args_match.get_one::<String>(opt_flags::CHARACTERS),
         args_match.get_one::<String>(opt_flags::FIELDS),
     ) {
-        (1, Some(byte_ranges), None, None) => parse_position_ranges(byte_ranges, is_complement).map(|ranges| {
-            CutMode::Bytes(
-                ranges,
-                CutOptions {
-                    out_delimiter,
-                    line_ending,
-                    field_opts: None,
-                    no_split_multibyte,
-                },
-            )
-        }),
-        (1, None, Some(char_ranges), None) => parse_position_ranges(char_ranges, is_complement).map(|ranges| {
-            CutMode::Characters(
-                ranges,
-                CutOptions {
-                    out_delimiter,
-                    line_ending,
-                    field_opts: None,
-                    no_split_multibyte,
-                },
-            )
-        }),
-        (1, None, None, Some(field_ranges)) => parse_field_ranges(field_ranges, is_complement).map(|ranges| {
-            CutMode::Fields(
-                ranges,
-                CutOptions {
-                    out_delimiter,
-                    line_ending,
-                    field_opts: Some(CutFieldOptions {
-                        only_delimited: is_only_delimited,
-                        delimiter,
-                    }),
-                    no_split_multibyte,
-                },
-            )
-        }),
-        (2.., _, _, _) => Err(
-            "invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)".into()
-        ),
-        _ => Err("invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)".into()),
+        (1, Some(byte_ranges), None, None) => parse_position_ranges(byte_ranges, is_complement)
+            .map(|ranges| {
+                CutMode::Bytes(
+                    ranges,
+                    CutOptions {
+                        out_delimiter,
+                        line_ending,
+                        field_opts: None,
+                        no_split_multibyte,
+                    },
+                )
+            }),
+        (1, None, Some(char_ranges), None) => parse_position_ranges(char_ranges, is_complement)
+            .map(|ranges| {
+                CutMode::Characters(
+                    ranges,
+                    CutOptions {
+                        out_delimiter,
+                        line_ending,
+                        field_opts: None,
+                        no_split_multibyte,
+                    },
+                )
+            }),
+        (1, None, None, Some(field_ranges)) => {
+            parse_field_ranges(field_ranges, is_complement).map(|ranges| {
+                CutMode::Fields(
+                    ranges,
+                    CutOptions {
+                        out_delimiter,
+                        line_ending,
+                        field_opts: Some(CutFieldOptions {
+                            only_delimited: is_only_delimited,
+                            delimiter,
+                        }),
+                        no_split_multibyte,
+                    },
+                )
+            })
+        }
+        (2.., _, _, _) => Err(cut_usage_error("only one type of list may be specified")),
+        _ => Err(cut_usage_error(
+            "you must specify a list of bytes, characters, or fields",
+        )),
     }
 }
 

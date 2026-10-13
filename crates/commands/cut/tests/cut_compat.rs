@@ -111,6 +111,27 @@ fn invalid_ranges_use_gnu_diagnostics() {
 }
 
 #[test]
+fn mode_selection_uses_gnu_diagnostics() {
+    let missing = run_cut(&[], b"");
+    assert_eq!(missing.status.code(), Some(1));
+    assert_eq!(
+        missing.stderr,
+        b"cut: you must specify a list of bytes, characters, or fields\n\
+          Try 'cut --help' for more information.\n"
+    );
+
+    for args in [&["-b1", "-b2"][..], &["-b1", "-c1"][..]] {
+        let repeated = run_cut(args, b"");
+        assert_eq!(repeated.status.code(), Some(1));
+        assert_eq!(
+            repeated.stderr,
+            b"cut: only one type of list may be specified\n\
+              Try 'cut --help' for more information.\n"
+        );
+    }
+}
+
+#[test]
 fn character_mode_uses_locale_character_units() {
     let combining = run_cut_in_locale(&["-c2"], b"a\xcc\x81b\n", "en_US.utf8");
     assert!(combining.status.success());

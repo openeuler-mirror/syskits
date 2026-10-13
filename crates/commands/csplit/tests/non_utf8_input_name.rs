@@ -74,3 +74,27 @@ fn non_utf8_input_open_error_uses_gnu_shell_quoting() {
         b"csplit: cannot open 'missing'$'\\377' for reading: No such file or directory\n"
     );
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn non_utf8_initial_input_byte_uses_gnu_shell_quoting() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    use std::process::Command;
+
+    let output = Command::new("bash")
+        .args(["-c", "exec -a csplit \"$0\" \"$@\""])
+        .arg(env!("CARGO_BIN_EXE_csplit"))
+        .arg(OsString::from_vec(vec![0xff]))
+        .arg("1")
+        .env("LC_ALL", "C")
+        .output()
+        .expect("run csplit");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty(), "{output:?}");
+    assert_eq!(
+        output.stderr,
+        b"csplit: cannot open ''$'\\377' for reading: No such file or directory\n"
+    );
+}

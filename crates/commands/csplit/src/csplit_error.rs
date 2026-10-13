@@ -110,7 +110,7 @@ pub enum CsplitError {
         stdout_lines: Vec<String>,
     },
     #[error("{}: {}", _0, _1)]
-    WriteError(String, String),
+    WriteError(OutputFileName, String),
     #[error("write error: {}", _0)]
     StdoutWriteError(String),
     #[error("{}: {}", _0, _1)]

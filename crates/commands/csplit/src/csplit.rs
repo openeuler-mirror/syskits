@@ -1084,7 +1084,7 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
         // 处理标准输入
         let stdin = io::stdin();
         csplit(&csplit_opts, patterns, stdin.lock()).map_err(|err| {
-            eprintln!("{}: {err}", ctcore::ct_util_name());
+            let _ = err.write_diagnostic(ctcore::ct_util_name());
             emit_deferred_stdout(&err, inherited_sigpipe_ignored);
             1 // 错误时返回状态码 1
         })?;
@@ -1103,7 +1103,7 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
 
         // 使用缓冲读取器读取文件，并进行拆分
         csplit(&csplit_opts, patterns, BufReader::new(file_name)).map_err(|err| {
-            eprintln!("{}: {err}", ctcore::ct_util_name());
+            let _ = err.write_diagnostic(ctcore::ct_util_name());
             emit_deferred_stdout(&err, inherited_sigpipe_ignored);
             1 // 错误时返回状态码 1
         })?;

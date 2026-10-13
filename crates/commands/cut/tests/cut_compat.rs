@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::process::{Command, Output, Stdio};
+use tempfile::TempDir;
 
 #[cfg(unix)]
 use std::ffi::OsString;
@@ -176,6 +177,25 @@ fn literal_quotes_are_not_treated_as_an_empty_delimiter() {
     assert!(output_delimiter.status.success());
     assert_eq!(output_delimiter.stdout, b"b''c\n");
     assert!(output_delimiter.stderr.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn non_utf8_file_operand_is_processed() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let filename = temp_dir
+        .path()
+        .join(OsString::from_vec(b"cut-\xff".to_vec()));
+    std::fs::write(&filename, b"abc\n").expect("write non-UTF-8 file");
+
+    let output = run_cut_os_in_locale(
+        &[OsString::from("-b1"), filename.as_os_str().to_os_string()],
+        b"",
+        "C",
+    );
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"a\n");
+    assert!(output.stderr.is_empty());
 }
 
 #[test]

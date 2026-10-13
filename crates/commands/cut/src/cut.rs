@@ -750,7 +750,7 @@ fn cut_fields_to_writer<R: Read, W: Write>(
  * @param mode 切割操作的模式，包含具体的切割规则。
  */
 fn cut_files_to_writer<W: Write>(
-    mut filenames: Vec<String>,
+    mut filenames: Vec<OsString>,
     mode: &CutMode,
     out: &mut W,
 ) -> CutRunOutcome {
@@ -760,7 +760,7 @@ fn cut_files_to_writer<W: Write>(
 
     // 如果没有指定文件名，则默认读取标准输入
     if filenames.is_empty() {
-        filenames.push("-".to_owned());
+        filenames.push(OsString::from("-"));
     }
 
     for filename in &filenames {
@@ -785,13 +785,13 @@ fn cut_files_to_writer<W: Write>(
 
             stdin_read = true; // 标记已处理标准输入
         } else {
-            let path = Path::new(&filename[..]);
+            let path = Path::new(filename);
 
             // 如果指定的路径是目录，则报错并跳过该文件
             if path.is_dir() {
                 stderr_text.push_str(&format!(
                     "cut: {}: Is a directory\n",
-                    filename.maybe_quote()
+                    filename.as_os_str().maybe_quote()
                 ));
                 exit_code = exit_code.max(1);
                 continue;
@@ -799,7 +799,7 @@ fn cut_files_to_writer<W: Write>(
 
             // 尝试打开文件，并根据模式对文件内容进行切割
             if let Err(err) = File::open(path)
-                .map_err_context(|| filename.maybe_quote().to_string())
+                .map_err_context(|| filename.as_os_str().maybe_quote().to_string())
                 .and_then(|file| match &mode {
                     CutMode::Bytes(ranges, opts) => cut_bytes_to_writer(file, out, ranges, opts),
                     CutMode::Fields(ranges, opts) => cut_fields_to_writer(file, out, ranges, opts),
@@ -1067,6 +1067,7 @@ fn cut_args_init() -> Vec<Arg> {
         Arg::new(opt_flags::FILE)
             .hide(true)
             .action(ArgAction::Append)
+            .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::FilePath),
 
         // 添加 -n 参数，与 -b 一起使用时不分割多字节字符
@@ -1147,8 +1148,8 @@ pub fn cut_main(args: impl ctcore::Args) -> CTResult<()> {
     let mode_parse = cut_mode_param_parse(&args_match, cut_mode);
 
     // 获取输入文件列表。
-    let files: Vec<String> = args_match
-        .get_many::<String>(opt_flags::FILE)
+    let files: Vec<OsString> = args_match
+        .get_many::<OsString>(opt_flags::FILE)
         .unwrap_or_default()
         .cloned()
         .collect();
@@ -1156,7 +1157,7 @@ pub fn cut_main(args: impl ctcore::Args) -> CTResult<()> {
     cut_files_by_mode(mode_parse, files)
 }
 
-fn cut_files_by_mode(cut_mode: Result<CutMode, String>, files: Vec<String>) -> CTResult<()> {
+fn cut_files_by_mode(cut_mode: Result<CutMode, String>, files: Vec<OsString>) -> CTResult<()> {
     // 根据解析的切割模式处理文件。
     match cut_mode {
         Ok(mode) => {
@@ -1388,8 +1389,8 @@ pub fn cut_native_semantic(args: impl ctcore::Args) -> CTResult<CutSemantic> {
     let mode =
         cut_mode_param_parse(&args_match, cut_mode).map_err(|err| CtSimpleError::new(1, err))?;
 
-    let files: Vec<String> = args_match
-        .get_many::<String>(opt_flags::FILE)
+    let files: Vec<OsString> = args_match
+        .get_many::<OsString>(opt_flags::FILE)
         .unwrap_or_default()
         .cloned()
         .collect();

@@ -317,6 +317,170 @@ fn line_for_match(line: &[u8]) -> &[u8] {
     line.strip_suffix(b"\n").unwrap_or(line)
 }
 
+fn locale_quote_file_operand(filename: &OsString) -> String {
+    if let Some(filename) = filename.to_str() {
+        return locale_quote(filename);
+    }
+
+    #[cfg(unix)]
+    return locale_quote_non_utf8_file_operand(filename);
+
+    #[cfg(not(unix))]
+    filename.quote().to_string()
+}
+
+#[cfg(unix)]
+fn locale_quote_non_utf8_file_operand(filename: &OsString) -> String {
+    use std::os::unix::ffi::OsStrExt;
+
+    let marker_quote = locale_quote("x");
+    let (left_quote, right_quote) = marker_quote
+        .split_once('x')
+        .expect("locale quote must surround its content");
+    let escape_apostrophe = right_quote == "'";
+    let utf8_locale = left_quote == "‘";
+    let mut escaped = String::new();
+    let mut remaining = filename.as_bytes();
+
+    while !remaining.is_empty() {
+        match std::str::from_utf8(remaining) {
+            Ok(text) => {
+                append_locale_quoted_text(&mut escaped, text, escape_apostrophe, utf8_locale);
+                break;
+            }
+            Err(error) => {
+                let valid_end = error.valid_up_to();
+                if valid_end != 0 {
+                    let (valid, rest) = remaining.split_at(valid_end);
+                    append_locale_quoted_text(
+                        &mut escaped,
+                        std::str::from_utf8(valid).expect("valid UTF-8 prefix"),
+                        escape_apostrophe,
+                        utf8_locale,
+                    );
+                    remaining = rest;
+                }
+                let byte = remaining[0];
+                use std::fmt::Write;
+                write!(escaped, "\\{byte:03o}").expect("write to string");
+                remaining = &remaining[1..];
+            }
+        }
+    }
+
+    format!("{left_quote}{escaped}{right_quote}")
+}
+
+#[cfg(unix)]
+fn append_locale_quoted_text(
+    escaped: &mut String,
+    text: &str,
+    escape_apostrophe: bool,
+    utf8_locale: bool,
+) {
+    for character in text.chars() {
+        match character {
+            '\\' => escaped.push_str("\\\\"),
+            '\'' if escape_apostrophe => escaped.push_str("\\'"),
+            '\u{0007}' => escaped.push_str("\\a"),
+            '\u{0008}' => escaped.push_str("\\b"),
+            '\t' => escaped.push_str("\\t"),
+            '\n' => escaped.push_str("\\n"),
+            '\u{000B}' => escaped.push_str("\\v"),
+            '\u{000C}' => escaped.push_str("\\f"),
+            '\r' => escaped.push_str("\\r"),
+            character if character.is_control() || (!utf8_locale && !character.is_ascii()) => {
+                use std::fmt::Write;
+                for byte in character.to_string().as_bytes() {
+                    write!(escaped, "\\{byte:03o}").expect("write to string");
+                }
+            }
+            character => escaped.push(character),
+        }
+    }
+}
+
+fn shell_quote_file_operand(filename: &OsString) -> String {
+    #[cfg(unix)]
+    if filename.to_str().is_none() {
+        use std::os::unix::ffi::OsStrExt;
+
+        return shell_quote_non_utf8_file_operand(filename.as_bytes());
+    }
+
+    filename.quote().to_string()
+}
+
+#[cfg(unix)]
+enum ShellQuoteSegment {
+    Plain,
+    Escaped,
+}
+
+#[cfg(unix)]
+fn shell_quote_non_utf8_file_operand(bytes: &[u8]) -> String {
+    let mut result = String::with_capacity(bytes.len() + 8);
+    let mut segment = None;
+
+    for &byte in bytes {
+        match byte {
+            b'\x07' => push_shell_escaped_byte(&mut result, &mut segment, "a"),
+            b'\x08' => push_shell_escaped_byte(&mut result, &mut segment, "b"),
+            b'\x09' => push_shell_escaped_byte(&mut result, &mut segment, "t"),
+            b'\x0a' => push_shell_escaped_byte(&mut result, &mut segment, "n"),
+            b'\x0b' => push_shell_escaped_byte(&mut result, &mut segment, "v"),
+            b'\x0c' => push_shell_escaped_byte(&mut result, &mut segment, "f"),
+            b'\x0d' => push_shell_escaped_byte(&mut result, &mut segment, "r"),
+            b'\x20'..=b'\x7e' => push_shell_plain_byte(&mut result, &mut segment, byte),
+            _ => {
+                let escaped = format!("{byte:03o}");
+                push_shell_escaped_byte(&mut result, &mut segment, &escaped);
+            }
+        }
+    }
+
+    match segment {
+        Some(ShellQuoteSegment::Plain) | Some(ShellQuoteSegment::Escaped) => result.push('\''),
+        None => result.push_str("''"),
+    }
+    result
+}
+
+#[cfg(unix)]
+fn push_shell_plain_byte(result: &mut String, segment: &mut Option<ShellQuoteSegment>, byte: u8) {
+    if matches!(segment, Some(ShellQuoteSegment::Escaped)) {
+        result.push('\'');
+        *segment = None;
+    }
+    if segment.is_none() {
+        result.push('\'');
+        *segment = Some(ShellQuoteSegment::Plain);
+    }
+    if byte == b'\'' {
+        result.push_str("'\\\\''");
+    } else {
+        result.push(char::from(byte));
+    }
+}
+
+#[cfg(unix)]
+fn push_shell_escaped_byte(
+    result: &mut String,
+    segment: &mut Option<ShellQuoteSegment>,
+    escaped: &str,
+) {
+    if matches!(segment, Some(ShellQuoteSegment::Plain)) {
+        result.push('\'');
+        *segment = None;
+    }
+    if segment.is_none() {
+        result.push_str("$'");
+        *segment = Some(ShellQuoteSegment::Escaped);
+    }
+    result.push('\\');
+    result.push_str(escaped);
+}
+
 #[cfg(target_os = "linux")]
 pub(crate) fn write_stdout_line(line: &str) -> io::Result<()> {
     let output = format!("{line}\n");
@@ -886,7 +1050,7 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
 
     // 获取待拆分的文件名
     let filename = args_match
-        .get_one::<String>(opt_flags::FILE)
+        .get_one::<OsString>(opt_flags::FILE)
         .ok_or_else(|| csplit_usage_error(&usage_name, "missing operand".to_string()))?;
 
     // 获取拆分所用的模式
@@ -897,7 +1061,10 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
     if patterns.is_empty() {
         return Err(csplit_usage_error(
             &usage_name,
-            format!("missing operand after {}", locale_quote(filename)),
+            format!(
+                "missing operand after {}",
+                locale_quote_file_operand(filename)
+            ),
         ));
     }
     #[cfg(target_os = "linux")]
@@ -921,8 +1088,12 @@ pub fn csplit_main(args: impl ctcore::Args) -> CTResult<i32> {
         })?;
     } else {
         // 打开指定路径的文件
-        let file_name = File::open(filename)
-            .map_err_context(|| format!("cannot open {} for reading", filename.quote()))?;
+        let file_name = File::open(filename).map_err_context(|| {
+            format!(
+                "cannot open {} for reading",
+                shell_quote_file_operand(filename)
+            )
+        })?;
 
         #[cfg(all(target_os = "linux", not(test)))]
         install_signal_cleanup(csplit_opts.created_files.clone(), !csplit_opts.keep_files)
@@ -1010,6 +1181,7 @@ fn csplit_args_init() -> Vec<Arg> {
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::FILE)
             .hide(true)
+            .value_parser(clap::builder::OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(opt_flags::PATTERN)
             .hide(true)
@@ -6296,7 +6468,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -6354,7 +6526,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -6411,7 +6583,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -6468,7 +6640,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -6525,7 +6697,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -6582,7 +6754,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -6639,7 +6811,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -6696,7 +6868,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -6753,7 +6925,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -6810,7 +6982,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -6867,7 +7039,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -6924,7 +7096,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -6981,7 +7153,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7038,7 +7210,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7095,7 +7267,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7152,7 +7324,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7209,7 +7381,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7266,7 +7438,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7323,7 +7495,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7380,7 +7552,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7437,7 +7609,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7494,7 +7666,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7551,7 +7723,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7608,7 +7780,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7665,7 +7837,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7722,7 +7894,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7779,7 +7951,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7836,7 +8008,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7893,7 +8065,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -7950,7 +8122,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8007,7 +8179,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8064,7 +8236,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8121,7 +8293,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8178,7 +8350,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8235,7 +8407,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8292,7 +8464,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8349,7 +8521,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8406,7 +8578,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8463,7 +8635,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8520,7 +8692,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8577,7 +8749,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8640,7 +8812,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8703,7 +8875,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8766,7 +8938,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8829,7 +9001,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8893,7 +9065,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -8957,7 +9129,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9021,7 +9193,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9078,7 +9250,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9134,7 +9306,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9196,7 +9368,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9259,7 +9431,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9322,7 +9494,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9379,7 +9551,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9438,7 +9610,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9495,7 +9667,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9552,7 +9724,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9609,7 +9781,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9666,7 +9838,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9723,7 +9895,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9780,7 +9952,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9837,7 +10009,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9899,7 +10071,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -9966,7 +10138,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10028,7 +10200,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10089,7 +10261,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10149,7 +10321,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10209,7 +10381,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10269,7 +10441,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10329,7 +10501,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10389,7 +10561,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10449,7 +10621,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10509,7 +10681,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10569,7 +10741,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10629,7 +10801,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10689,7 +10861,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10749,7 +10921,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10809,7 +10981,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10870,7 +11042,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10930,7 +11102,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -10990,7 +11162,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -11050,7 +11222,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -11110,7 +11282,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -11170,7 +11342,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -11230,7 +11402,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -11290,7 +11462,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -11350,7 +11522,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -11410,7 +11582,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -11470,7 +11642,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -11530,7 +11702,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -11590,7 +11762,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -11650,7 +11822,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -11710,7 +11882,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -11770,7 +11942,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -11830,7 +12002,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -11890,7 +12062,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -11950,7 +12122,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -12010,7 +12182,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -12070,7 +12242,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -12130,7 +12302,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -12190,7 +12362,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -12250,7 +12422,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -12310,7 +12482,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -12370,7 +12542,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -12430,7 +12602,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -12496,7 +12668,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -12562,7 +12734,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -12628,7 +12800,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -12695,7 +12867,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -12761,7 +12933,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -12828,7 +13000,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -12894,7 +13066,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -12954,7 +13126,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -13013,7 +13185,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -13078,7 +13250,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -13144,7 +13316,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -13210,7 +13382,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -13270,7 +13442,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -13330,7 +13502,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -13390,7 +13562,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -13450,7 +13622,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -13510,7 +13682,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -13570,7 +13742,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -13630,7 +13802,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -13690,7 +13862,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -13750,7 +13922,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 
@@ -13815,7 +13987,7 @@ mod tests {
 
             // get the file to split
             let binding = matches.expect("REASON");
-            let file_name = binding.get_one::<String>(opt_flags::FILE).unwrap();
+            let file_name = binding.get_one::<OsString>(opt_flags::FILE).unwrap();
 
             let matches_patterns = binding.clone();
 

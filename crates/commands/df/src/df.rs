@@ -617,6 +617,74 @@ fn validate_conflicts(args_match: &ArgMatches) -> CTResult<()> {
     Ok(())
 }
 
+fn df_usage_error(message: impl AsRef<str>) -> String {
+    format!(
+        "{}\nTry 'df --help' for more information.",
+        message.as_ref()
+    )
+}
+
+fn df_short_version_option_error(args: &[OsString]) -> Option<String> {
+    let mut index = 1;
+    let posixly_correct = std::env::var_os("POSIXLY_CORRECT").is_some();
+
+    while index < args.len() {
+        let argument = args[index].to_str()?;
+        if argument == "--" {
+            break;
+        }
+
+        if !argument.starts_with('-') || argument == "-" {
+            if posixly_correct {
+                break;
+            }
+            index += 1;
+            continue;
+        }
+
+        if argument.starts_with("--") {
+            index += 1;
+            continue;
+        }
+
+        let mut short_options = argument[1..].chars();
+        while let Some(option) = short_options.next() {
+            match option {
+                'V' => {
+                    return Some(format!("invalid option -- '{option}'"));
+                }
+                'B' | 'F' | 't' | 'x' => {
+                    if short_options.as_str().is_empty() {
+                        index += 1;
+                    }
+                    break;
+                }
+                'a' | 'h' | 'H' | 'i' | 'k' | 'l' | 'm' | 'P' | 'T' | 'v' => {}
+                _ => return None,
+            }
+        }
+
+        index += 1;
+    }
+
+    None
+}
+
+fn df_parse_args(args: Vec<OsString>) -> CTResult<ArgMatches> {
+    let command = ct_app();
+    match command.try_get_matches_from(args.clone()) {
+        Ok(matches) => Ok(matches),
+        Err(error) if error.kind() == clap::error::ErrorKind::UnknownArgument => {
+            if let Some(message) = df_short_version_option_error(&args) {
+                Err(CtSimpleError::new(1, df_usage_error(message)))
+            } else {
+                Err(error.into())
+            }
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
 #[derive(Default)]
 pub struct Df;
 impl Tool for Df {
@@ -637,7 +705,7 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&normalize_locale(&lang_code));
     // 从args解析命令行匹配项。
-    let args_match = ct_app().try_get_matches_from(args)?;
+    let args_match = df_parse_args(args.collect())?;
 
     validate_conflicts(&args_match)?;
 
@@ -670,7 +738,7 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn df_native_semantic(args: impl ctcore::Args) -> CTResult<DfSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&normalize_locale(&lang_code));
-    let args_match = ct_app().try_get_matches_from(args)?;
+    let args_match = df_parse_args(args.collect())?;
 
     #[cfg(windows)]
     {
@@ -937,7 +1005,6 @@ pub fn ct_app() -> Command {
 fn df_args_init() -> Vec<Arg> {
     let args = vec![
         Arg::new("version")
-            .short('V')
             .long("version")
             .help(t!("df.clap.version"))
             .action(ArgAction::Version),
@@ -1110,13 +1177,13 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_app_v() {
+        fn test_ct_app_short_version_is_unknown() {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), "-V"];
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
 
         #[test]
@@ -5715,10 +5782,13 @@ mod tests {
         }
 
         #[test]
-        fn test_df_main_v() {
+        fn test_df_main_short_version_is_invalid() {
             let args = [ctcore::ct_util_name(), "-V"];
-            let result = df_main(args.iter().map(OsString::from));
-            assert!(result.is_err());
+            let error = df_main(args.iter().map(OsString::from)).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                "invalid option -- 'V'\nTry 'df --help' for more information."
+            );
         }
 
         #[test]

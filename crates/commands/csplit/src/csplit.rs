@@ -879,6 +879,15 @@ impl SplitWriter<'_> {
                             };
                             remaining -= 1;
                         }
+
+                        // Keep the break line for output, but skip it during the next match search.
+                        if let Some((ln, line)) = input_splitter.next() {
+                            let line = line?;
+                            assert!(
+                                input_splitter.csplit_add_line_to_buffer(ln, line).is_none(),
+                                "the buffer is big enough to contain 1 line"
+                            );
+                        }
                     }
                     self.finish_split()?;
                     return Ok(());

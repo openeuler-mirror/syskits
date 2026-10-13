@@ -289,6 +289,14 @@ fn field_mode_merges_overlapping_ranges() {
 }
 
 #[test]
+fn explicit_output_delimiter_does_not_repeat_an_unterminated_last_field() {
+    let output = run_cut(&["-d:", "-f1-2,3-4", "--output-delimiter=,"], b"no:newline");
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"no,newline\n");
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
 fn character_mode_uses_locale_character_units() {
     let combining = run_cut_in_locale(&["-c2"], b"a\xcc\x81b\n", "en_US.utf8");
     assert!(combining.status.success());

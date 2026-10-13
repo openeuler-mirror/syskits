@@ -576,7 +576,7 @@ fn cut_fields_explicit_out_delim_to_writer<R: Read, W: Write, M: Matcher>(
         }
 
         // 遍历指定的字段范围，提取并输出字段
-        for &CtRange { low, high } in ranges {
+        'ranges: for &CtRange { low, high } in ranges {
             if low - fields_pos > 0 {
                 // 跳过当前范围之前不感兴趣的字段
                 low_idx = match delim_search.nth(low - fields_pos - 1) {
@@ -611,7 +611,7 @@ fn cut_fields_explicit_out_delim_to_writer<R: Read, W: Write, M: Matcher>(
                         if line[line.len() - 1] == newline_char {
                             return Ok(true);
                         }
-                        break;
+                        break 'ranges;
                     }
                 }
             }

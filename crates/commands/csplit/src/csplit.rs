@@ -283,7 +283,7 @@ where
                         max,
                     ) {
                         (Err(err), None) if err.is_match_not_found() => {
-                            err.emit_deferred_stdout();
+                            split_writer.emit_deferred_stdout(&err)?;
                             return Ok(false); // {*} 读到 EOF，告诉外层不用补充尾随文件了
                         }
                         (Err(err), Some(m)) if err.is_match_not_found() && m != 1 && ith != 1 => {
@@ -550,6 +550,15 @@ impl SplitWriter<'_> {
                 let _ = signal_hook::low_level::emulate_default_handler(libc::SIGPIPE);
             }
             return Err(CsplitError::IoError(error));
+        }
+        Ok(())
+    }
+
+    fn emit_deferred_stdout(&self, error: &CsplitError) -> Result<(), CsplitError> {
+        if let Some(lines) = error.deferred_stdout_lines() {
+            for line in lines {
+                self.write_split_size(line)?;
+            }
         }
         Ok(())
     }

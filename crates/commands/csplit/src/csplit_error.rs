@@ -116,8 +116,17 @@ impl CsplitError {
         }
     }
 
+    pub fn deferred_stdout_lines(&self) -> Option<impl Iterator<Item = &str>> {
+        match self {
+            Self::DeferredOutput { stdout_lines, .. } => {
+                Some(stdout_lines.iter().map(String::as_str))
+            }
+            _ => None,
+        }
+    }
+
     pub fn emit_deferred_stdout(&self) {
-        if let Self::DeferredOutput { stdout_lines, .. } = self {
+        if let Some(stdout_lines) = self.deferred_stdout_lines() {
             for line in stdout_lines {
                 println!("{line}");
             }

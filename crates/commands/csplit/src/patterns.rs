@@ -112,8 +112,9 @@ pub struct CsplitRegex {
 
 impl CsplitRegex {
     fn new(expression: &[u8], source: PatternText) -> Result<Self, CsplitError> {
-        validate_bre_interval_ranges(expression, &source)?;
-        let compiled = compile_regex(expression, &source)?;
+        let expression_for_compilation = normalize_empty_bre_intervals(expression);
+        validate_bre_interval_ranges(&expression_for_compilation, &source)?;
+        let compiled = compile_regex(&expression_for_compilation, &source)?;
         Ok(Self {
             compiled,
             expression: expression.to_owned(),
@@ -224,6 +225,107 @@ fn gnu_regular_expression_error(error: &OnigError) -> &'static str {
     }
 }
 
+fn normalize_empty_bre_intervals(expression: &[u8]) -> Vec<u8> {
+    let mut index = 0;
+    let mut copied = 0;
+    let mut normalized = Vec::with_capacity(expression.len() + 1);
+    let mut in_bracket_expression = false;
+
+    while index < expression.len() {
+        if in_bracket_expression
+            && expression[index] == b'['
+            && let Some(marker @ (b':' | b'.' | b'=')) = expression.get(index + 1)
+        {
+            index += 2;
+            while index + 1 < expression.len()
+                && (expression[index] != *marker || expression[index + 1] != b']')
+            {
+                index += 1;
+            }
+            index += 2;
+            continue;
+        }
+
+        if expression[index] == b'\\' {
+            let slash_start = index;
+            while expression.get(index) == Some(&b'\\') {
+                index += 1;
+            }
+            let slash_count = index - slash_start;
+
+            if !in_bracket_expression
+                && slash_count % 2 == 1
+                && expression.get(index) == Some(&b'{')
+            {
+                let content_start = index + 1;
+                if let Some((content_end, after_interval)) =
+                    find_bre_interval_closing(expression, content_start)
+                {
+                    if expression[content_start] == b','
+                        && expression[content_start + 1..content_end]
+                            .iter()
+                            .all(u8::is_ascii_digit)
+                    {
+                        if slash_start == 0 && slash_count == 1 {
+                            // GNU treats a leading \{...\} as literal text.
+                            normalized.extend_from_slice(&expression[copied..slash_start]);
+                            normalized.extend_from_slice(&expression[index..content_end]);
+                            normalized.push(b'}');
+                            copied = after_interval;
+                        } else if slash_start > 0 {
+                            // Oniguruma requires the GNU empty lower bound to be written as zero.
+                            normalized.extend_from_slice(&expression[copied..content_start]);
+                            normalized.push(b'0');
+                            copied = content_start;
+                        }
+                    }
+                    index = after_interval;
+                } else {
+                    index = expression.len();
+                }
+                continue;
+            }
+
+            if slash_count % 2 == 1 && index < expression.len() {
+                index += 1;
+            }
+            continue;
+        }
+
+        match expression[index] {
+            b'[' if !in_bracket_expression => in_bracket_expression = true,
+            b']' if in_bracket_expression => in_bracket_expression = false,
+            _ => {}
+        }
+        index += 1;
+    }
+
+    normalized.extend_from_slice(&expression[copied..]);
+    normalized
+}
+
+fn find_bre_interval_closing(bytes: &[u8], mut index: usize) -> Option<(usize, usize)> {
+    while index < bytes.len() {
+        if bytes[index] != b'\\' {
+            index += 1;
+            continue;
+        }
+
+        let slash_start = index;
+        while bytes.get(index) == Some(&b'\\') {
+            index += 1;
+        }
+        if (index - slash_start) % 2 == 1 && bytes.get(index) == Some(&b'}') {
+            return Some((index - 1, index + 1));
+        }
+        if (index - slash_start) % 2 == 1 {
+            index += 1;
+        }
+    }
+
+    None
+}
+
 fn validate_bre_interval_ranges(
     expression: &[u8],
     source: &PatternText,
@@ -259,29 +361,9 @@ fn validate_bre_interval_ranges(
                 && bytes.get(index) == Some(&b'{')
             {
                 let content_start = index + 1;
-                let mut content_end = content_start;
-                let Some(closing_backslash) = (loop {
-                    if content_end >= bytes.len() {
-                        break None;
-                    }
-                    if bytes[content_end] != b'\\' {
-                        content_end += 1;
-                        continue;
-                    }
-
-                    let closing_start = content_end;
-                    while bytes.get(content_end) == Some(&b'\\') {
-                        content_end += 1;
-                    }
-                    if (content_end - closing_start) % 2 == 1
-                        && bytes.get(content_end) == Some(&b'}')
-                    {
-                        break Some(content_end - 1);
-                    }
-                    if (content_end - closing_start) % 2 == 1 {
-                        content_end += 1;
-                    }
-                }) else {
+                let Some((closing_backslash, after_interval)) =
+                    find_bre_interval_closing(bytes, content_start)
+                else {
                     return Err(CsplitError::InvalidRegularExpression(
                         source.clone(),
                         "Unmatched \\{".to_string(),
@@ -307,7 +389,7 @@ fn validate_bre_interval_ranges(
                         "Invalid content of \\{\\}".to_string(),
                     ));
                 }
-                index = content_end + 1;
+                index = after_interval;
                 continue;
             }
 

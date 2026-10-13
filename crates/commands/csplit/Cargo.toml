@@ -26,6 +26,10 @@ ctcore = { workspace = true, features = ["entries", "fs", "format"] }
 [dev-dependencies]
 tempfile = { workspace = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = { workspace = true }
+signal-hook = { workspace = true }
+
 [[bin]]
 name = "csplit"
 path = "src/main.rs"

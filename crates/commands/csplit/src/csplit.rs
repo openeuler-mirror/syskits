@@ -221,7 +221,7 @@ where
                 (|| -> Result<(), CsplitError> {
                     split_writer.new_writer()?;
                     for (_, line) in input_iter {
-                        split_writer.write_line(&line?)?;
+                        split_writer.write_line(&read_input_line(line)?)?;
                     }
                     split_writer.finish_split()?;
                     Ok(())
@@ -231,6 +231,17 @@ where
             }
         }
         Err(e) => Err(e),
+    };
+
+    let final_result = match final_result {
+        Err(error @ CsplitError::ReadError(_)) => match split_writer.finish_split_output() {
+            Ok(stdout_line) => Err(CsplitError::with_deferred_stdout(
+                error,
+                stdout_line.into_iter().collect(),
+            )),
+            Err(error) => Err(error),
+        },
+        result => result,
     };
 
     // 第三步：发生错误时的清理
@@ -272,7 +283,9 @@ where
                         Err(err) => return Err(err),
                         Ok(()) => {
                             if split_writer.options.suppress_matched {
-                                input_iter.csplit_discard_next_line()?;
+                                input_iter
+                                    .csplit_discard_next_line()
+                                    .map_err(input_read_error)?;
                             }
                         }
                     }
@@ -303,7 +316,9 @@ where
                         (Err(err), _) => return Err(err),
                         (Ok(()), _) => {
                             if split_writer.options.suppress_matched {
-                                input_iter.csplit_discard_next_line()?;
+                                input_iter
+                                    .csplit_discard_next_line()
+                                    .map_err(input_read_error)?;
                             }
                         }
                     };
@@ -321,6 +336,14 @@ fn trim_os_error_suffix(message: String) -> String {
         }
     }
     message
+}
+
+fn input_read_error(error: io::Error) -> CsplitError {
+    CsplitError::ReadError(trim_os_error_suffix(error.to_string()))
+}
+
+fn read_input_line(line: io::Result<Vec<u8>>) -> Result<Vec<u8>, CsplitError> {
+    line.map_err(input_read_error)
 }
 
 fn line_for_match(line: &[u8]) -> &[u8] {
@@ -797,7 +820,7 @@ impl SplitWriter<'_> {
         let mut read_line = false;
         let mut last_line_number = None;
         while let Some((ln, line)) = input_iter.next() {
-            let l = line?;
+            let l = read_input_line(line)?;
             read_line = true;
             last_line_number = Some(ln + 1);
             match n.cmp(&(&ln + 1)) {
@@ -859,7 +882,7 @@ impl SplitWriter<'_> {
             input_splitter.csplit_set_size_of_buffer(1);
 
             while let Some((ln, line)) = input_splitter.next() {
-                let l = line?;
+                let l = read_input_line(line)?;
                 if regex.is_match(line_for_match(&l)) {
                     if offset == 0 {
                         assert!(
@@ -871,7 +894,7 @@ impl SplitWriter<'_> {
                         let mut remaining = offset - 1;
                         while remaining > 0 {
                             match input_splitter.next() {
-                                Some((_, line)) => self.write_line(&line?)?,
+                                Some((_, line)) => self.write_line(&read_input_line(line)?)?,
                                 None => {
                                     self.finish_split()?;
                                     return Err(CsplitError::LineOutOfRange(pattern.clone()));
@@ -882,7 +905,7 @@ impl SplitWriter<'_> {
 
                         // Keep the break line for output, but skip it during the next match search.
                         if let Some((ln, line)) = input_splitter.next() {
-                            let line = line?;
+                            let line = read_input_line(line)?;
                             assert!(
                                 input_splitter.csplit_add_line_to_buffer(ln, line).is_none(),
                                 "the buffer is big enough to contain 1 line"
@@ -898,7 +921,7 @@ impl SplitWriter<'_> {
             let f_usize = offset.unsigned_abs() as usize;
             input_splitter.csplit_set_size_of_buffer(f_usize);
             while let Some((ln, line)) = input_splitter.next() {
-                let l = line?;
+                let l = read_input_line(line)?;
                 if regex.is_match(line_for_match(&l)) {
                     if input_splitter.csplit_buffer_len() < f_usize {
                         self.finish_split()?;

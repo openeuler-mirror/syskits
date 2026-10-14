@@ -94,7 +94,7 @@ where
     current_mount_point.or_else(|| {
         mounts
             .iter()
-            .filter(|mi| path.starts_with(&mi.mount_dir))
+            .filter(|mi| path.starts_with(Path::new(&mi.mount_dir)))
             .max_by_key(|mi| mi.mount_dir.len())
     })
 }

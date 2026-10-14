@@ -458,7 +458,7 @@ impl Table {
         // 遍历每个文件系统，根据条件向表格中添加数据行。
         for filesystem in filesystems {
             // 根据选项决定是否显示当前文件系统的数据行。
-            if options.show_all_fs || filesystem.usage.blocks > 0 {
+            if options.show_all_fs || options.show_listed_fs || filesystem.usage.blocks > 0 {
                 let row = TableRow::from(filesystem);
                 let fmt = TableRowFormatter::new(&row, options, false);
                 let values = fmt.get_values();

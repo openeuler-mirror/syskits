@@ -82,6 +82,7 @@ static OUTPUT_FIELD_LIST: [&str; 12] = [
 struct DfOptions {
     show_local_fs: bool, // 是否显示所有文件系统（包含伪文件系统）。
     pub show_all_fs: bool,
+    pub show_listed_fs: bool,
     // 是否使用直接模式（显示文件而非挂载点）。
     pub direct: bool,
     human_readable: Option<BlocksHumanReadable>, // 是否以人类可读的形式显示块大小
@@ -114,6 +115,7 @@ impl Default for DfOptions {
         Self {
             show_local_fs: Default::default(),
             show_all_fs: Default::default(),
+            show_listed_fs: Default::default(),
             direct: Default::default(),
             block_size: BlockSize::default(),
             human_readable: Option::default(),
@@ -287,6 +289,7 @@ impl DfOptions {
         Ok(Self {
             show_local_fs: args_match.get_flag(DF_OPT_LOCAL),
             show_all_fs: args_match.get_flag(DF_OPT_ALL),
+            show_listed_fs: false,
             direct: args_match.get_flag(DF_OPT_DIRECT),
             sync: args_match.get_flag(DF_OPT_SYNC),
             // 解析块大小参数，并处理可能的错误。
@@ -366,13 +369,21 @@ impl DfOptions {
 ///
 /// 此函数根据包括和排除设置来决定是否显示挂载信息。
 fn is_included(mount_info: &CtMountInfo, options: &DfOptions) -> bool {
+    is_included_for_listed_path(mount_info, options, false)
+}
+
+fn is_included_for_listed_path(
+    mount_info: &CtMountInfo,
+    options: &DfOptions,
+    show_listed_fs: bool,
+) -> bool {
     // 如果指定了只显示本地文件系统，那么不显示远程文件系统。
     if mount_info.remote && options.show_local_fs {
         return false;
     }
 
-    // 除非指定了显示所有文件系统，否则不显示伪文件系统。
-    if mount_info.dummy && !options.show_all_fs {
+    // GNU df 对显式指定的路径保留伪文件系统。
+    if mount_info.dummy && !options.show_all_fs && !show_listed_fs {
         return false;
     }
 
@@ -464,6 +475,18 @@ fn filter_mount_list(v_mount_info: Vec<CtMountInfo>, options: &DfOptions) -> Vec
     final_list.into_iter().map(|(_, v)| v).collect()
 }
 
+fn filter_named_mount_list(
+    v_mount_info: Vec<CtMountInfo>,
+    options: &DfOptions,
+) -> Vec<CtMountInfo> {
+    v_mount_info
+        .into_iter()
+        .filter(|mount_info| {
+            mount_info.fs_type != "lofs" && is_included_for_listed_path(mount_info, options, true)
+        })
+        .collect()
+}
+
 /// 获取当前所有已挂载的文件系统。
 fn get_all_filesystems(option: &DfOptions) -> Result<Vec<Filesystem>, std::io::Error> {
     // 所有挂载的文件系统的列表。
@@ -493,11 +516,8 @@ where
     sync_if_requested(options);
     let full_mounts = full_mounts?;
 
-    // 过滤掉 dummy 等不合法的文件系统，用于常规信息获取
-    let mounts: Vec<CtMountInfo> = filter_mount_list(full_mounts.clone(), options)
-        .into_iter()
-        .filter(|mi| mi.fs_type != "lofs" && !mi.dummy)
-        .collect();
+    // 显式路径需要保留伪文件系统，以与 GNU df 的 show_listed_fs 规则一致。
+    let mounts = filter_named_mount_list(full_mounts.clone(), options);
 
     let mut result = vec![];
 
@@ -892,8 +912,11 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     // 从命令行匹配项中解析DfOptions。
-    let options = DfOptions::from_with_block_size_option(&args_match, df_block_size_option(&args))
-        .map_err(DfError::OptionsError)?;
+    let show_listed_fs = args_match.get_many::<String>(DF_OPT_PATHS).is_some();
+    let mut options =
+        DfOptions::from_with_block_size_option(&args_match, df_block_size_option(&args))
+            .map_err(DfError::OptionsError)?;
+    options.show_listed_fs = show_listed_fs;
 
     let filesystem_paths = get_filesystem(args_match, &options);
 
@@ -929,9 +952,11 @@ pub fn df_native_semantic(args: impl ctcore::Args) -> CTResult<DfSemantic> {
         }
     }
 
-    let classic_options =
+    let show_listed_fs = args_match.get_many::<String>(DF_OPT_PATHS).is_some();
+    let mut classic_options =
         DfOptions::from_with_block_size_option(&args_match, df_block_size_option(&args))
             .map_err(DfError::OptionsError)?;
+    classic_options.show_listed_fs = show_listed_fs;
     let selected_fields = native_selected_fields(&args_match, &classic_options);
     let filesystems = get_filesystem(args_match, &classic_options)?;
 

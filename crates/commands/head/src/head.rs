@@ -156,7 +156,28 @@ fn arg_iterate(mut args: impl ctcore::Args) -> CTResult<Box<dyn Iterator<Item = 
     let mut raw_args = args.by_ref().collect::<Vec<_>>();
     let mut parse_options = true;
 
-    for arg in raw_args.iter_mut().skip(1) {
+    for index in 1..raw_args.len() {
+        let is_last = index + 1 == raw_args.len();
+        let arg = &mut raw_args[index];
+        if parse_options && is_last {
+            let diagnostic = match arg.to_str() {
+                Some("-n") => Some("option requires an argument -- 'n'"),
+                Some("-c") => Some("option requires an argument -- 'c'"),
+                Some("--lines") => Some("option '--lines' requires an argument"),
+                Some("--bytes") => Some("option '--bytes' requires an argument"),
+                _ => None,
+            };
+            if let Some(diagnostic) = diagnostic {
+                return Err(CtSimpleError::new(
+                    1,
+                    format!(
+                        "{diagnostic}\nTry '{} --help' for more information.",
+                        ctcore::ct_help_utility_name()
+                    ),
+                ));
+            }
+        }
+
         if parse_options && arg == "--" {
             parse_options = false;
         } else if parse_options && arg == "--presume-input-pipe" {

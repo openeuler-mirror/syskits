@@ -281,7 +281,9 @@ fn block_size_from_env() -> Option<u64> {
         // 尝试获取当前环境变量的值
         if let Ok(blocks_env_size) = env::var(blocks_env_var) {
             // 尝试将环境变量的值解析为u64类型的大小
-            if let Ok(size) = parse_size_u64(&blocks_env_size) {
+            if let Ok(size) = parse_size_u64(&blocks_env_size)
+                && size > 0
+            {
                 // 如果解析成功，返回解析得到的大小
                 return Some(size);
             } else {

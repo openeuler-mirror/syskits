@@ -539,10 +539,7 @@ Examples:
   {usage_name} f - g  Output f's contents, then standard input, then g's contents.
   {usage_name}        Copy standard input to standard output.
 
-GNU coreutils online help: <https://www.gnu.org/software/coreutils/>
-Report any translation bugs to <https://translationproject.org/team/>
-Full documentation <https://www.gnu.org/software/coreutils/cat>
-or available locally via: info '(coreutils) cat invocation'"
+syskits online help: <https://www.ctyun.cn/developer>"
     )
 }
 
@@ -1488,6 +1485,8 @@ mod tests {
                 .contains("      --help        display this help and exit")
         );
         assert!(!help.to_string().contains("-h, --help"));
+        assert!(help.to_string().contains("syskits online help:"));
+        assert!(!help.to_string().contains("GNU"));
 
         let version = match cat_native_semantic(
             [OsString::from("cat"), OsString::from("--version")].into_iter(),
@@ -1497,6 +1496,7 @@ mod tests {
         };
         assert_eq!(version.code(), 0);
         assert!(version.to_string().starts_with("cat (syskits) "));
+        assert!(!version.to_string().contains("GNU"));
     }
 
     #[test]

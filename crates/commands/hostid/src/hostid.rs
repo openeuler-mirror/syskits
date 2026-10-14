@@ -63,6 +63,7 @@ pub fn ct_app() -> Command {
     Command::new(utility_name)
         .version(command_version)
         .about(application_info)
+        .override_help(hostid_help_text(utility_name))
         .override_usage(usage_description)
         .infer_long_args(true)
         .disable_help_flag(true)
@@ -74,6 +75,19 @@ pub fn ct_app() -> Command {
                 .action(ArgAction::Version),
         )
         .arg(Arg::new(OPERAND_NAME).hide(true).action(ArgAction::Append))
+}
+
+fn hostid_help_text(usage_name: &str) -> String {
+    format!(
+        "\
+Usage: {usage_name} [OPTION]
+Print the numeric identifier (in hexadecimal) for the current host.
+
+      --help        display this help and exit
+      --version     output version information and exit
+
+syskits online help: <https://www.ctyun.cn/developer>"
+    )
 }
 
 fn validate_standard_options(args: &[OsString]) -> CTResult<()> {

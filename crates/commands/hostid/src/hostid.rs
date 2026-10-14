@@ -10,11 +10,14 @@
  */
 
 extern crate rust_i18n;
+use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
+#[cfg(not(unix))]
 use ctcore::ct_display::Quotable;
+use ctcore::ct_display::locale_quote;
 use ctcore::ct_error::{CTResult, CtSimpleError, strip_errno};
 use libc::c_long;
 use std::ffi::OsString;
@@ -99,7 +102,12 @@ pub fn ct_app() -> Command {
                 .long("version")
                 .action(ArgAction::Version),
         )
-        .arg(Arg::new(OPERAND_NAME).hide(true).action(ArgAction::Append))
+        .arg(
+            Arg::new(OPERAND_NAME)
+                .hide(true)
+                .value_parser(ValueParser::os_string())
+                .action(ArgAction::Append),
+        )
 }
 
 fn hostid_help_text(usage_name: &str) -> String {
@@ -205,19 +213,102 @@ fn validate_long_option(arg: &str) -> CTResult<Option<TerminalAction>> {
 
 fn reject_extra_operand(matches: &clap::ArgMatches) -> CTResult<()> {
     if let Some(operand) = matches
-        .get_many::<String>(OPERAND_NAME)
+        .get_many::<OsString>(OPERAND_NAME)
         .and_then(|operands| operands.into_iter().next())
     {
         return Err(ctcore::ct_error::CtSimpleError::new(
             1,
             format!(
                 "extra operand {}\nTry '{} --help' for more information.",
-                operand.quote(),
+                quote_hostid_operand(operand),
                 ctcore::ct_help_utility_name()
             ),
         ));
     }
     Ok(())
+}
+
+fn quote_hostid_operand(operand: &OsString) -> String {
+    if let Some(operand) = operand.to_str() {
+        return locale_quote(operand);
+    }
+
+    #[cfg(unix)]
+    return locale_quote_non_utf8_operand(operand);
+
+    #[cfg(not(unix))]
+    operand.quote().to_string()
+}
+
+#[cfg(unix)]
+fn locale_quote_non_utf8_operand(operand: &OsString) -> String {
+    use std::os::unix::ffi::OsStrExt;
+
+    let marker_quote = locale_quote("x");
+    let (left_quote, right_quote) = marker_quote
+        .split_once('x')
+        .expect("locale quote must surround its content");
+    let escape_apostrophe = right_quote == "'";
+    let utf8_locale = left_quote == "‘";
+    let mut escaped = String::new();
+    let mut remaining = operand.as_bytes();
+
+    while !remaining.is_empty() {
+        match std::str::from_utf8(remaining) {
+            Ok(text) => {
+                append_locale_quoted_text(&mut escaped, text, escape_apostrophe, utf8_locale);
+                break;
+            }
+            Err(error) => {
+                let valid_end = error.valid_up_to();
+                if valid_end != 0 {
+                    let (valid, rest) = remaining.split_at(valid_end);
+                    append_locale_quoted_text(
+                        &mut escaped,
+                        std::str::from_utf8(valid).expect("valid UTF-8 prefix"),
+                        escape_apostrophe,
+                        utf8_locale,
+                    );
+                    remaining = rest;
+                }
+                let byte = remaining[0];
+                use std::fmt::Write;
+                write!(escaped, "\\{byte:03o}").expect("write to string");
+                remaining = &remaining[1..];
+            }
+        }
+    }
+
+    format!("{left_quote}{escaped}{right_quote}")
+}
+
+#[cfg(unix)]
+fn append_locale_quoted_text(
+    escaped: &mut String,
+    text: &str,
+    escape_apostrophe: bool,
+    utf8_locale: bool,
+) {
+    for character in text.chars() {
+        match character {
+            '\\' => escaped.push_str("\\\\"),
+            '\'' if escape_apostrophe => escaped.push_str("\\'"),
+            '\u{0007}' => escaped.push_str("\\a"),
+            '\u{0008}' => escaped.push_str("\\b"),
+            '\t' => escaped.push_str("\\t"),
+            '\n' => escaped.push_str("\\n"),
+            '\u{000B}' => escaped.push_str("\\v"),
+            '\u{000C}' => escaped.push_str("\\f"),
+            '\r' => escaped.push_str("\\r"),
+            character if character.is_control() || (!utf8_locale && !character.is_ascii()) => {
+                use std::fmt::Write;
+                for byte in character.to_string().as_bytes() {
+                    write!(escaped, "\\{byte:03o}").expect("write to string");
+                }
+            }
+            character => escaped.push(character),
+        }
+    }
 }
 
 fn hostid() -> String {

@@ -17,6 +17,18 @@ use ctcore::ct_error::{CTResult, set_ct_exit_code};
 use std::{ffi::OsString, io::Write};
 use sys_locale::get_locale;
 
+const SYSKITS_FALSE_LONG_VERSION: &str = concat!(
+    "(syskits) ",
+    env!("CARGO_PKG_VERSION"),
+    "\nCopyright (C) 2022-2025 China Telecom Cloud Technologies Co., Ltd.\n",
+    "License Mulan PSL v2: <http://license.coscl.org.cn/MulanPSL2>.\n",
+    "This is free software: you are free to change and redistribute it.\n",
+    "There is NO WARRANTY, to the extent permitted by law."
+);
+
+const SYSKITS_FALSE_AFTER_HELP: &str =
+    "syskits online help: <https://www.ctyun.cn/developer>";
+
 #[derive(Default)]
 pub struct False;
 impl Tool for False {
@@ -58,7 +70,7 @@ fn args_process(command: &mut Command, args: Vec<OsString>) -> CTResult<()> {
             clap::error::ErrorKind::DisplayHelp => command.print_help(),
             // 如果是显示版本信息的错误，则显示版本信息。
             clap::error::ErrorKind::DisplayVersion => {
-                writeln!(std::io::stdout(), "{}", command.render_version())
+                writeln!(std::io::stdout(), "{}", command.render_long_version())
             }
             // 对于其他类型的错误，不进行处理。
             _ => Ok(()),
@@ -82,8 +94,10 @@ fn args_process(command: &mut Command, args: Vec<OsString>) -> CTResult<()> {
 pub fn ct_app() -> Command {
     Command::new(ctcore::ct_util_name())
         .version(clap::crate_version!())
+        .long_version(SYSKITS_FALSE_LONG_VERSION)
         .about(t!("false.about"))
-        // We provide our own help and version options, to ensure maximum compatibility with GNU.
+        .after_help(SYSKITS_FALSE_AFTER_HELP)
+        // Keep only the exact long forms as terminal options.
         .disable_help_flag(true)
         .disable_version_flag(true)
         .arg(

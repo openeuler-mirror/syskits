@@ -156,7 +156,9 @@ macro_rules! ct_bin {
             };
 
             if let Err(e) = std::io::stdout().flush() {
-                eprintln!("Error flushing stdout: {}", e);
+                if code == 0 {
+                    eprintln!("Error flushing stdout: {}", e);
+                }
             }
 
             std::process::exit(code);

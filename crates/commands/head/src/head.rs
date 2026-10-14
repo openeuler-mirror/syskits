@@ -307,8 +307,10 @@ where
     R: Read,
 {
     let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
-    read_n_bytes_to_writer(input, n, &mut stdout, buffer)
+    let mut stdout = BufWriter::with_capacity(BUFWRITER_CAPACITY, stdout.lock());
+    let written = read_n_bytes_to_writer(input, n, &mut stdout, buffer)?;
+    stdout.flush().map_err(flush_error)?;
+    Ok(written)
 }
 
 fn read_n_lines_to_writer<W: Write>(
@@ -355,7 +357,7 @@ fn read_n_lines_to_writer<W: Write>(
             break;
         }
     }
-    writer.flush().map_err(write_error)?;
+    writer.flush().map_err(flush_error)?;
     Ok(total_written)
 }
 
@@ -366,8 +368,10 @@ fn read_n_lines(
     buffer: Option<&mut Vec<u8>>,
 ) -> std::io::Result<u64> {
     let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
-    read_n_lines_to_writer(input, n, separator, &mut stdout, buffer)
+    let mut stdout = BufWriter::with_capacity(BUFWRITER_CAPACITY, stdout.lock());
+    let written = read_n_lines_to_writer(input, n, separator, &mut stdout, buffer)?;
+    stdout.flush().map_err(flush_error)?;
+    Ok(written)
 }
 
 fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> {
@@ -448,8 +452,9 @@ fn read_but_last_n_bytes(
     buffer: Option<&mut Vec<u8>>,
 ) -> std::io::Result<()> {
     let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
-    read_but_last_n_bytes_to_writer(input, n, &mut stdout, buffer)
+    let mut stdout = BufWriter::with_capacity(BUFWRITER_CAPACITY, stdout.lock());
+    read_but_last_n_bytes_to_writer(input, n, &mut stdout, buffer)?;
+    stdout.flush().map_err(flush_error)
 }
 
 fn read_but_last_n_lines_to_writer<W: Write>(
@@ -480,8 +485,9 @@ fn read_but_last_n_lines(
     buffer: Option<&mut Vec<u8>>,
 ) -> std::io::Result<()> {
     let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
-    read_but_last_n_lines_to_writer(input, n, separator, &mut stdout, buffer)
+    let mut stdout = BufWriter::with_capacity(BUFWRITER_CAPACITY, stdout.lock());
+    read_but_last_n_lines_to_writer(input, n, separator, &mut stdout, buffer)?;
+    stdout.flush().map_err(flush_error)
 }
 
 fn write_error(e: std::io::Error) -> std::io::Error {
@@ -489,6 +495,14 @@ fn write_error(e: std::io::Error) -> std::io::Error {
         "error writing 'standard output': {}",
         strip_errno(&e)
     ))
+}
+
+fn flush_error(e: std::io::Error) -> std::io::Error {
+    std::io::Error::other(format!("write error: {}", strip_errno(&e)))
+}
+
+fn is_stdout_write_error(message: &str) -> bool {
+    message.starts_with("error writing 'standard output':") || message.starts_with("write error:")
 }
 
 fn find_nth_line_from_end<R>(input: &mut R, n: u64, separator: u8) -> std::io::Result<u64>
@@ -579,7 +593,7 @@ fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std:
         let true_size = data.len();
 
         let stdout = std::io::stdout();
-        let mut stdout_lock = stdout.lock();
+        let mut stdout_lock = BufWriter::with_capacity(BUFWRITER_CAPACITY, stdout.lock());
 
         match options.mode {
             Mode::AllButLastBytes(n) => {
@@ -620,6 +634,7 @@ fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std:
             }
             _ => unreachable!(),
         }
+        stdout_lock.flush().map_err(flush_error)?;
         return Ok(());
     }
 
@@ -858,7 +873,7 @@ fn ct_head(options: &HeadOptions) -> CTResult<()> {
             Ok(()) => {}
             Err(e) => {
                 let msg = e.to_string();
-                if msg.contains("error writing") {
+                if is_stdout_write_error(&msg) {
                     let _ = std::io::stdout().flush();
                     ct_show!(CtSimpleError::new(1, msg));
                     return Ok(());
@@ -869,11 +884,7 @@ fn ct_head(options: &HeadOptions) -> CTResult<()> {
     }
 
     if let Err(e) = std::io::stdout().flush() {
-        let msg = e.to_string();
-        return Err(CtSimpleError::new(
-            1,
-            format!("error writing 'standard output': {msg}"),
-        ));
+        return Err(CtSimpleError::new(1, flush_error(e).to_string()));
     }
 
     Ok(())
@@ -906,7 +917,7 @@ fn process_file(file: &str, options: &HeadOptions, first: &mut bool) -> CTResult
 
     if let Err(e) = res {
         let msg = e.to_string();
-        if msg.contains("error writing 'standard output'") {
+        if is_stdout_write_error(&msg) {
             let _ = std::io::stdout().flush();
             return Err(CtSimpleError::new(1, msg));
         } else {

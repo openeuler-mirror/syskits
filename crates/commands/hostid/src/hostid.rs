@@ -26,6 +26,14 @@ unsafe extern "C" {
 }
 
 const OPERAND_NAME: &str = "OPERAND";
+const SYSKITS_HOSTID_LONG_VERSION: &str = concat!(
+    "(syskits) ",
+    env!("CARGO_PKG_VERSION"),
+    "\nCopyright (C) 2022-2025 China Telecom Cloud Technologies Co., Ltd.\n\
+License Mulan PSL v2: <http://license.coscl.org.cn/MulanPSL2>.\n\
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law."
+);
 
 #[derive(Default)]
 pub struct Hostid;
@@ -61,7 +69,9 @@ pub fn ct_app() -> Command {
     let usage_description = t!("hostid.usage");
 
     Command::new(utility_name)
+        .display_name(ctcore::ct_help_utility_name())
         .version(command_version)
+        .long_version(SYSKITS_HOSTID_LONG_VERSION)
         .about(application_info)
         .override_help(hostid_help_text(utility_name))
         .override_usage(usage_description)

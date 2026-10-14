@@ -70,11 +70,6 @@ static DF_OPT_SYNC: &str = "sync";
 static DF_OPT_TYPE: &str = "type";
 static DF_OPT_PRINT_TYPE: &str = "print-type";
 static DF_OPT_EXCLUDE_TYPE: &str = "exclude-type";
-static OUTPUT_FIELD_LIST: [&str; 12] = [
-    "source", "fstype", "itotal", "iused", "iavail", "ipcent", "size", "used", "avail", "pcent",
-    "file", "target",
-];
-
 /// 控制`df`行为的参数。
 ///
 /// 多数参数用于控制显示哪些行和哪些列。`block_size`用于确定在显示字节数或i节点数时使用的单位。
@@ -1483,8 +1478,6 @@ fn df_args_init() -> Vec<Arg> {
             .num_args(0..)
             .require_equals(true)
             .use_value_delimiter(true)
-            .default_missing_values(OUTPUT_FIELD_LIST)
-            .default_values(["source", "size", "used", "avail", "pcent", "target"])
             .help(
                 "use the output format defined by FIELD_LIST, \
                          or print all fields if FIELD_LIST is omitted.",

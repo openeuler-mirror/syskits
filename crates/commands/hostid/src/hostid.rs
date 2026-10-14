@@ -10,10 +10,11 @@
  */
 
 extern crate rust_i18n;
-use clap::{Command, crate_version};
+use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
+use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTResult;
 use libc::c_long;
 use std::ffi::OsString;
@@ -23,6 +24,8 @@ use sys_locale::get_locale;
 unsafe extern "C" {
     pub unsafe fn gethostid() -> c_long;
 }
+
+const OPERAND_NAME: &str = "OPERAND";
 
 #[derive(Default)]
 pub struct Hostid;
@@ -43,7 +46,8 @@ impl Tool for Hostid {
 pub fn hostid_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    ct_app().try_get_matches_from(args)?;
+    let matches = ct_app().try_get_matches_from(args)?;
+    reject_extra_operand(&matches)?;
     hostid();
     Ok(())
 }
@@ -59,6 +63,24 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .arg(Arg::new(OPERAND_NAME).hide(true).action(ArgAction::Append))
+}
+
+fn reject_extra_operand(matches: &clap::ArgMatches) -> CTResult<()> {
+    if let Some(operand) = matches
+        .get_many::<String>(OPERAND_NAME)
+        .and_then(|operands| operands.into_iter().next())
+    {
+        return Err(ctcore::ct_error::CtSimpleError::new(
+            1,
+            format!(
+                "extra operand {}\nTry '{} --help' for more information.",
+                operand.quote(),
+                ctcore::ct_help_utility_name()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 fn hostid() {
@@ -85,7 +107,8 @@ pub struct HostidSemantic {
 pub fn hostid_native_semantic(args: impl ctcore::Args) -> CTResult<HostidSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    ct_app().try_get_matches_from(args)?;
+    let matches = ct_app().try_get_matches_from(args)?;
+    reject_extra_operand(&matches)?;
 
     let mut result: c_long = unsafe { gethostid() };
     #[allow(overflowing_literals)]

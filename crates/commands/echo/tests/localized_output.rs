@@ -4,7 +4,7 @@ use std::os::unix::process::CommandExt;
 use std::process::Command;
 
 #[test]
-fn zh_cn_help_output_matches_gnu_coreutils() {
+fn zh_cn_help_output_uses_syskits_information() {
     let output = Command::new(env!("CARGO_BIN_EXE_echo"))
         .arg0("echo")
         .arg("--help")
@@ -47,17 +47,15 @@ fn zh_cn_help_output_matches_gnu_coreutils() {
 注意：建议使用 printf(1) 替代本命令，
 因为它可以正常输出与选项相似的字符串。
 
-GNU coreutils 在线帮助：<https://www.gnu.org/software/coreutils/>
-请向 <http://translationproject.org/team/zh_CN.html> 报告任何翻译错误
-完整文档 <https://www.gnu.org/software/coreutils/echo>
-或者在本地使用：info '(coreutils) echo invocation'
+syskits 在线帮助：<https://www.ctyun.cn/developer>
 "#
         .as_bytes()
     );
+    assert!(!output.stdout.windows(3).any(|window| window == b"GNU"));
 }
 
 #[test]
-fn zh_cn_version_output_matches_gnu_coreutils() {
+fn zh_cn_version_output_uses_syskits_information() {
     let output = Command::new(env!("CARGO_BIN_EXE_echo"))
         .arg0("echo")
         .arg("--version")
@@ -70,14 +68,16 @@ fn zh_cn_version_output_matches_gnu_coreutils() {
     assert!(output.stderr.is_empty());
     assert_eq!(
         output.stdout,
-        r#"echo (GNU coreutils) 9.4
-Copyright © 2023 Free Software Foundation, Inc.
-许可证 GPLv3+：GNU 通用公共许可证第 3 版或更新版本 <https://gnu.org/licenses/gpl.html>。
+        format!(
+            r#"echo (syskits) {}
+Copyright (C) 2022-2025 China Telecom Cloud Technologies Co., Ltd.
+许可证 Mulan PSL v2：<http://license.coscl.org.cn/MulanPSL2>。
 本软件是自由软件：您可以自由修改和重新发布它。
 在法律允许的范围内，不提供任何保证。
-
-由 Brian Fox 和 Chet Ramey 编写。
-"#
+"#,
+            env!("CARGO_PKG_VERSION")
+        )
         .as_bytes()
     );
+    assert!(!output.stdout.windows(3).any(|window| window == b"GNU"));
 }

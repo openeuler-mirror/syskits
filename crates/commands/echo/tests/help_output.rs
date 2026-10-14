@@ -4,7 +4,7 @@ use std::os::unix::process::CommandExt;
 use std::process::Command;
 
 #[test]
-fn help_output_matches_gnu_coreutils() {
+fn help_output_uses_syskits_information() {
     let output = Command::new(env!("CARGO_BIN_EXE_echo"))
         .arg0("echo")
         .arg("--help")
@@ -48,10 +48,8 @@ for details about the options it supports.
 NOTE: printf(1) is a preferred alternative,
 which does not have issues outputting option-like strings.
 
-GNU coreutils online help: <https://www.gnu.org/software/coreutils/>
-Report any translation bugs to <https://translationproject.org/team/>
-Full documentation <https://www.gnu.org/software/coreutils/echo>
-or available locally via: info '(coreutils) echo invocation'
+syskits online help: <https://www.ctyun.cn/developer>
 "#
     );
+    assert!(!output.stdout.windows(3).any(|window| window == b"GNU"));
 }

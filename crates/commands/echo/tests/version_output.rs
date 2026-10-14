@@ -4,7 +4,7 @@ use std::os::unix::process::CommandExt;
 use std::process::Command;
 
 #[test]
-fn version_output_matches_gnu_coreutils() {
+fn version_output_uses_syskits_information() {
     let output = Command::new(env!("CARGO_BIN_EXE_echo"))
         .arg0("echo")
         .arg("--version")
@@ -16,13 +16,16 @@ fn version_output_matches_gnu_coreutils() {
     assert!(output.stderr.is_empty());
     assert_eq!(
         output.stdout,
-        br#"echo (GNU coreutils) 9.4
-Copyright (C) 2023 Free Software Foundation, Inc.
-License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.
+        format!(
+            r#"echo (syskits) {}
+Copyright (C) 2022-2025 China Telecom Cloud Technologies Co., Ltd.
+License Mulan PSL v2: <http://license.coscl.org.cn/MulanPSL2>.
 This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law.
-
-Written by Brian Fox and Chet Ramey.
-"#
+"#,
+            env!("CARGO_PKG_VERSION")
+        )
+        .as_bytes()
     );
+    assert!(!output.stdout.windows(3).any(|window| window == b"GNU"));
 }

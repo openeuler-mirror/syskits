@@ -700,28 +700,12 @@ impl fmt::Display for DfError {
     }
 }
 
-fn validate_conflicts(args_match: &ArgMatches) -> CTResult<()> {
-    let output_active = args_match.value_source(DF_OPT_OUTPUT) == Some(ValueSource::CommandLine);
-
-    if output_active {
-        if args_match.get_flag(DF_OPT_INODES) {
-            return Err(DfError::ConflictError(
-                "options -i and --output are mutually exclusive".into(),
-            )
-            .into());
-        }
-        if args_match.get_flag(DF_OPT_PORTABILITY) {
-            return Err(DfError::ConflictError(
-                "options -P and --output are mutually exclusive".into(),
-            )
-            .into());
-        }
-        if args_match.get_flag(DF_OPT_PRINT_TYPE) {
-            return Err(DfError::ConflictError(
-                "options -T and --output are mutually exclusive".into(),
-            )
-            .into());
-        }
+fn validate_conflicts(args: &[OsString], args_match: &ArgMatches) -> CTResult<()> {
+    if let Some(option) = output_conflict_option(args) {
+        return Err(DfError::ConflictError(format!(
+            "options -{option} and --output are mutually exclusive"
+        ))
+        .into());
     }
 
     if args_match.get_flag(DF_OPT_DIRECT) && args_match.get_flag(DF_OPT_LOCAL) {
@@ -732,6 +716,94 @@ fn validate_conflicts(args_match: &ArgMatches) -> CTResult<()> {
     }
 
     Ok(())
+}
+
+fn output_conflict_option(args: &[OsString]) -> Option<char> {
+    let mut output_active = false;
+    let mut inodes_active = false;
+    let mut portability_active = false;
+    let mut print_type_active = false;
+    let mut index = 1;
+
+    while let Some(argument) = args.get(index).and_then(|argument| argument.to_str()) {
+        if argument == "--" {
+            break;
+        }
+
+        if let Some(long_option) = argument.strip_prefix("--") {
+            let (option, has_value) = long_option
+                .split_once('=')
+                .map_or((long_option, false), |(option, _)| (option, true));
+            if "output".starts_with(option) {
+                if inodes_active {
+                    return Some('i');
+                }
+                if portability_active {
+                    return Some('P');
+                }
+                if print_type_active {
+                    return Some('T');
+                }
+                output_active = true;
+            } else if "inodes".starts_with(option) {
+                if output_active {
+                    return Some('i');
+                }
+                inodes_active = true;
+            } else if "portability".starts_with(option) {
+                if output_active {
+                    return Some('P');
+                }
+                portability_active = true;
+            } else if "print-type".starts_with(option) {
+                if output_active {
+                    return Some('T');
+                }
+                print_type_active = true;
+            } else if !has_value
+                && ("block-size".starts_with(option)
+                    || "type".starts_with(option)
+                    || "exclude-type".starts_with(option))
+            {
+                index += 1;
+            }
+        } else if let Some(short_options) = argument.strip_prefix('-') {
+            let mut short_options = short_options.chars();
+            while let Some(option) = short_options.next() {
+                match option {
+                    'i' => {
+                        if output_active {
+                            return Some('i');
+                        }
+                        inodes_active = true;
+                    }
+                    'P' => {
+                        if output_active {
+                            return Some('P');
+                        }
+                        portability_active = true;
+                    }
+                    'T' => {
+                        if output_active {
+                            return Some('T');
+                        }
+                        print_type_active = true;
+                    }
+                    'B' | 'F' | 't' | 'x' => {
+                        if short_options.as_str().is_empty() {
+                            index += 1;
+                        }
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        index += 1;
+    }
+
+    None
 }
 
 fn df_usage_error(message: impl AsRef<str>) -> String {
@@ -1089,7 +1161,7 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
 
     validate_block_size_args(&args)?;
 
-    validate_conflicts(&args_match)?;
+    validate_conflicts(&args, &args_match)?;
 
     // 在Windows平台上检查是否指定了不支持的-i选项。
     #[cfg(windows)]

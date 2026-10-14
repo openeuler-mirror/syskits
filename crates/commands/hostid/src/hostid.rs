@@ -47,7 +47,7 @@ pub fn hostid_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
-    reject_short_options(&args)?;
+    validate_standard_options(&args)?;
     let matches = ct_app().try_get_matches_from(args)?;
     reject_extra_operand(&matches)?;
     hostid();
@@ -76,7 +76,7 @@ pub fn ct_app() -> Command {
         .arg(Arg::new(OPERAND_NAME).hide(true).action(ArgAction::Append))
 }
 
-fn reject_short_options(args: &[OsString]) -> CTResult<()> {
+fn validate_standard_options(args: &[OsString]) -> CTResult<()> {
     let mut options_ended = false;
 
     for arg in args.iter().skip(1) {
@@ -88,9 +88,11 @@ fn reject_short_options(args: &[OsString]) -> CTResult<()> {
             options_ended = true;
             continue;
         }
-        if let Some(short) = arg.strip_prefix('-').filter(|short| !short.is_empty())
-            && !arg.starts_with("--")
-        {
+        if arg.starts_with("--") {
+            validate_long_option(&arg)?;
+            continue;
+        }
+        if let Some(short) = arg.strip_prefix('-').filter(|short| !short.is_empty()) {
             let invalid = short.chars().next().unwrap();
             return Err(ctcore::ct_error::CtSimpleError::new(
                 1,
@@ -103,6 +105,33 @@ fn reject_short_options(args: &[OsString]) -> CTResult<()> {
     }
 
     Ok(())
+}
+
+fn validate_long_option(arg: &str) -> CTResult<()> {
+    let long = arg.strip_prefix("--").unwrap();
+    let (name, has_value) = match long.split_once('=') {
+        Some((name, _)) => (name, true),
+        None => (long, false),
+    };
+    let matches = ["help", "version"]
+        .into_iter()
+        .filter(|option| option.starts_with(name))
+        .collect::<Vec<_>>();
+
+    let message = match matches.as_slice() {
+        [option] if has_value => format!("option '--{option}' doesn't allow an argument"),
+        [..] if !has_value && matches.len() == 1 => return Ok(()),
+        [] => format!("unrecognized option '{arg}'"),
+        _ => format!("option '{arg}' is ambiguous; possibilities: '--help' '--version'"),
+    };
+
+    Err(ctcore::ct_error::CtSimpleError::new(
+        1,
+        format!(
+            "{message}\nTry '{} --help' for more information.",
+            ctcore::ct_help_utility_name()
+        ),
+    ))
 }
 
 fn reject_extra_operand(matches: &clap::ArgMatches) -> CTResult<()> {
@@ -147,7 +176,7 @@ pub fn hostid_native_semantic(args: impl ctcore::Args) -> CTResult<HostidSemanti
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
-    reject_short_options(&args)?;
+    validate_standard_options(&args)?;
     let matches = ct_app().try_get_matches_from(args)?;
     reject_extra_operand(&matches)?;
 

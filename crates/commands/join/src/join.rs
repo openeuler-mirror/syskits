@@ -1099,7 +1099,7 @@ impl JoinSettings {
         settings.is_print_unpaired1 = print_unpaired1;
         settings.is_print_unpaired2 = print_unpaired2;
 
-        settings.is_ignore_case = matches.get_flag("i");
+        settings.is_ignore_case = matches.get_count("i") > 0;
         settings.key1 = get_field_number(&keys, &key1)?;
         settings.key2 = get_field_number(&keys, &key2)?;
         if let Some(separator_values) = matches.get_many::<OsString>("t") {
@@ -1175,11 +1175,11 @@ impl JoinSettings {
             (None, None) => CheckOrder::Default,
         };
 
-        if matches.get_flag("header") {
+        if matches.get_count("header") > 0 {
             settings.is_headers = true;
         }
 
-        settings.line_ending = CtLineEnding::from_zero_flag(matches.get_flag("z"));
+        settings.line_ending = CtLineEnding::from_zero_flag(matches.get_count("z") > 0);
 
         Ok(settings)
     }
@@ -1246,7 +1246,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
             .short('i')
             .long("ignore-case")
             .help(t!("join.clap.i"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new("j")
             .short('j')
             .action(ArgAction::Append)
@@ -1290,12 +1290,12 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
                 "treat the first line in each file as field headers, \
             print them without trying to pair them",
             )
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new("z")
             .short('z')
             .long("zero-terminated")
             .help(t!("join.clap.z"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new("file1")
             .required(true)
             .value_name("FILE1")
@@ -2070,6 +2070,19 @@ mod tests {
 
         let settings = JoinSettings::new(&matches).unwrap();
         assert!(settings.is_headers);
+
+        let matches = ct_app()
+            .try_get_matches_from(vec![
+                "join",
+                "--header",
+                "--header",
+                "file1.txt",
+                "file2.txt",
+            ])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert!(settings.is_headers);
     }
 
     #[test]
@@ -2135,6 +2148,13 @@ mod tests {
 
         let settings = JoinSettings::new(&matches).unwrap();
         assert!(settings.is_ignore_case);
+
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "-i", "-i", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert!(settings.is_ignore_case);
     }
 
     #[test]
@@ -2142,6 +2162,13 @@ mod tests {
         // 测试零终止符选项
         let matches = ct_app()
             .try_get_matches_from(vec!["join", "-z", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert_eq!(settings.line_ending, CtLineEnding::Nul);
+
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "-z", "-z", "file1.txt", "file2.txt"])
             .unwrap();
 
         let settings = JoinSettings::new(&matches).unwrap();

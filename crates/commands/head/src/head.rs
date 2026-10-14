@@ -17,7 +17,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::{Quotable, locale_quote};
-use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, strip_errno};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_lines::lines;
 use ctcore::ct_show;
@@ -910,7 +910,7 @@ fn process_file(file: &str, options: &HeadOptions, first: &mut bool) -> CTResult
             let name = if file == "-" { "standard input" } else { file };
             ct_show!(CtSimpleError::new(
                 1,
-                format!("error reading {name}: Input/output error")
+                format!("error reading {}: {}", name.quote(), strip_errno(&e))
             ));
         }
     }
@@ -1017,8 +1017,12 @@ fn render_head_open_error(name: &str, err: std::io::Error) -> String {
     format!("head: {err}\n")
 }
 
-fn render_head_read_error(name: &str) -> String {
-    format!("head: error reading {name}: Input/output error\n")
+fn render_head_read_error(name: &str, err: &std::io::Error) -> String {
+    format!(
+        "head: error reading {}: {}\n",
+        name.quote(),
+        strip_errno(err)
+    )
 }
 
 fn head_rows_from_bytes(bytes: &[u8], source_name: &str, separator: u8) -> Vec<HeadRow> {
@@ -1112,7 +1116,7 @@ fn head_semantic_from_options(options: &HeadOptions) -> HeadSemantic {
             if msg.contains("error writing 'standard output'") {
                 stderr_text.push_str(&format!("head: {msg}\n"));
             } else {
-                stderr_text.push_str(&render_head_read_error(display_name));
+                stderr_text.push_str(&render_head_read_error(display_name, &err));
             }
         } else {
             rows.extend(head_rows_from_bytes(

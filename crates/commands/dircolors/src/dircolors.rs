@@ -340,31 +340,19 @@ pub trait DircolorsStrUtils {
 }
 
 impl DircolorsStrUtils for str {
-    // 移除注释和去除首尾空白字符。
-    //
-    // 遍历字符串，找到第一个`'#'`字符，并检查其前是否有空白字符。
-    // 如果有，移除从该`'#'`字符开始的全部内容；如果没有，移除首尾的空白字符。
+    // 移除参数中的注释和去除首尾空白字符。
     fn purify(&self) -> &Self {
-        let mut line = self;
-        for (n, _) in self
-            .as_bytes()
-            .iter()
-            .enumerate()
-            .filter(|(_, c)| **c == b'#')
-        {
-            match self[..n].chars().last() {
-                Some(c) if c.is_whitespace() => {
-                    line = &self[..n - c.len_utf8()];
-                    break;
-                }
-                None => {
-                    line = &self[..0];
-                    break;
-                }
-                _ => (),
-            }
+        let line = self.trim();
+        let Some(argument_start) = line.find(char::is_whitespace) else {
+            return line;
+        };
+        let argument = &line[argument_start..];
+
+        if let Some(comment_start) = argument.find('#') {
+            return line[..argument_start + comment_start].trim();
         }
-        line.trim()
+
+        line
     }
 
     // 分割字符串至第一个空白字符，并返回两部分。

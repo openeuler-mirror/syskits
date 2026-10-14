@@ -40,6 +40,21 @@ unsafe extern "C" {
     ) -> usize;
     #[cfg(unix)]
     unsafe fn iswprint(wide_character: libc::c_uint) -> libc::c_int;
+    #[cfg(unix)]
+    unsafe fn iconv_open(
+        output_codeset: *const libc::c_char,
+        input_codeset: *const libc::c_char,
+    ) -> *mut libc::c_void;
+    #[cfg(unix)]
+    unsafe fn iconv(
+        descriptor: *mut libc::c_void,
+        input: *mut *mut libc::c_char,
+        input_bytes_left: *mut usize,
+        output: *mut *mut libc::c_char,
+        output_bytes_left: *mut usize,
+    ) -> usize;
+    #[cfg(unix)]
+    unsafe fn iconv_close(descriptor: *mut libc::c_void) -> libc::c_int;
 }
 
 const OPERAND_NAME: &str = "OPERAND";
@@ -290,21 +305,52 @@ fn raw_long_option_error(args: &[OsString], option: &[u8]) -> Box<dyn ctcore::ct
 
 #[cfg(unix)]
 fn raw_usage_error(args: &[OsString], message: &[u8]) -> Box<dyn ctcore::ct_error::CTError> {
-    use std::os::unix::ffi::OsStrExt;
-
     let program_name = args
         .first()
         .map(|arg| arg.as_os_str())
         .unwrap_or_else(|| std::ffi::OsStr::new(ctcore::ct_util_name()));
+    raw_diagnostic_error(program_name, message, true)
+}
+
+#[cfg(unix)]
+fn raw_diagnostic_error(
+    program_name: &OsStr,
+    message: &[u8],
+    include_try_help: bool,
+) -> Box<dyn ctcore::ct_error::CTError> {
+    use std::os::unix::ffi::OsStrExt;
+
     let mut diagnostic = Vec::with_capacity(program_name.as_bytes().len() + message.len() + 64);
     diagnostic.extend_from_slice(program_name.as_bytes());
     diagnostic.extend_from_slice(b": ");
     diagnostic.extend_from_slice(message);
-    diagnostic.extend_from_slice(b"\nTry '");
-    diagnostic.extend_from_slice(program_name.as_bytes());
-    diagnostic.extend_from_slice(b" --help' for more information.\n");
+    diagnostic.push(b'\n');
+    if include_try_help {
+        append_hostid_try_help(&mut diagnostic, program_name.as_bytes());
+    }
 
     Box::new(HostidRawOptionError { diagnostic })
+}
+
+#[cfg(unix)]
+fn append_hostid_try_help(diagnostic: &mut Vec<u8>, program_name: &[u8]) {
+    let (prefix, suffix) = match hostid_message_language() {
+        HostidMessageLanguage::SimplifiedChinese => (
+            encode_hostid_message("请尝试执行 \""),
+            encode_hostid_message(" --help\" 来获取更多信息。\n"),
+        ),
+        HostidMessageLanguage::TraditionalChinese => (
+            encode_hostid_message("請嘗試執行「"),
+            encode_hostid_message(" --help」取得更多訊息。\n"),
+        ),
+        HostidMessageLanguage::Other => (
+            b"Try '".to_vec(),
+            b" --help' for more information.\n".to_vec(),
+        ),
+    };
+    diagnostic.extend_from_slice(&prefix);
+    diagnostic.extend_from_slice(program_name);
+    diagnostic.extend_from_slice(&suffix);
 }
 
 fn hostid_usage_error(args: &[OsString], message: String) -> Box<dyn ctcore::ct_error::CTError> {
@@ -318,6 +364,7 @@ fn hostid_usage_error_bytes(
     #[cfg(unix)]
     if args.first().is_some_and(|arg| arg.to_str().is_none())
         || std::str::from_utf8(message).is_err()
+        || hostid_message_language() != HostidMessageLanguage::Other
     {
         return raw_usage_error(args, message);
     }
@@ -359,6 +406,13 @@ fn reject_extra_operand(matches: &clap::ArgMatches, args: &[OsString]) -> CTResu
         .get_many::<OsString>(OPERAND_NAME)
         .and_then(|operands| operands.into_iter().next())
     {
+        #[cfg(unix)]
+        let mut message = match hostid_message_language() {
+            HostidMessageLanguage::SimplifiedChinese => encode_hostid_message("多余的操作对象 "),
+            HostidMessageLanguage::TraditionalChinese => encode_hostid_message("額外的運算元 "),
+            HostidMessageLanguage::Other => b"extra operand ".to_vec(),
+        };
+        #[cfg(not(unix))]
         let mut message = b"extra operand ".to_vec();
         message.extend_from_slice(&quote_hostid_operand(operand));
         return Err(hostid_usage_error_bytes(args, &message));
@@ -475,18 +529,22 @@ fn append_octal_byte(quoted: &mut Vec<u8>, byte: u8) {
 
 #[cfg(unix)]
 fn hostid_locale_quote_marks() -> (&'static [u8], &'static [u8]) {
-    if hostid_messages_are_chinese() {
-        return (b"\"", b"\"");
+    match hostid_message_language() {
+        HostidMessageLanguage::SimplifiedChinese => return (b"\"", b"\""),
+        HostidMessageLanguage::TraditionalChinese => {
+            let codeset = hostid_codeset();
+            if codeset.eq_ignore_ascii_case(b"UTF-8") {
+                return ("「".as_bytes(), "」".as_bytes());
+            }
+            if codeset.eq_ignore_ascii_case(b"BIG5") || codeset.eq_ignore_ascii_case(b"BIG5-HKSCS")
+            {
+                return (b"\xa1\x75", b"\xa1\x76");
+            }
+        }
+        HostidMessageLanguage::Other => {}
     }
 
-    let codeset = unsafe {
-        let codeset = libc::nl_langinfo(libc::CODESET);
-        if codeset.is_null() {
-            &[][..]
-        } else {
-            CStr::from_ptr(codeset).to_bytes()
-        }
-    };
+    let codeset = hostid_codeset();
 
     if codeset.eq_ignore_ascii_case(b"UTF-8") {
         ("‘".as_bytes(), "’".as_bytes())
@@ -497,13 +555,84 @@ fn hostid_locale_quote_marks() -> (&'static [u8], &'static [u8]) {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HostidMessageLanguage {
+    SimplifiedChinese,
+    TraditionalChinese,
+    Other,
+}
+
 #[cfg(unix)]
-fn hostid_messages_are_chinese() -> bool {
-    ["LC_ALL", "LC_MESSAGES", "LANG"]
+fn hostid_message_language() -> HostidMessageLanguage {
+    let locale = ["LC_ALL", "LC_MESSAGES", "LANG"]
         .into_iter()
         .filter_map(|name| std::env::var(name).ok())
         .find(|locale| !locale.is_empty())
-        .is_some_and(|locale| locale.to_ascii_lowercase().starts_with("zh"))
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    if locale.starts_with("zh_cn") || locale.starts_with("zh_sg") {
+        HostidMessageLanguage::SimplifiedChinese
+    } else if locale.starts_with("zh_tw") || locale.starts_with("zh_hk") {
+        HostidMessageLanguage::TraditionalChinese
+    } else {
+        HostidMessageLanguage::Other
+    }
+}
+
+#[cfg(not(unix))]
+fn hostid_message_language() -> HostidMessageLanguage {
+    HostidMessageLanguage::Other
+}
+
+#[cfg(unix)]
+fn hostid_codeset() -> &'static [u8] {
+    unsafe {
+        let codeset = libc::nl_langinfo(libc::CODESET);
+        if codeset.is_null() {
+            &[]
+        } else {
+            CStr::from_ptr(codeset).to_bytes()
+        }
+    }
+}
+
+#[cfg(unix)]
+fn encode_hostid_message(message: &str) -> Vec<u8> {
+    let codeset = unsafe { libc::nl_langinfo(libc::CODESET) };
+    if codeset.is_null() || hostid_codeset().eq_ignore_ascii_case(b"UTF-8") {
+        return message.as_bytes().to_vec();
+    }
+
+    let descriptor = unsafe { iconv_open(codeset, c"UTF-8".as_ptr()) };
+    if descriptor as isize == -1 {
+        return message.as_bytes().to_vec();
+    }
+
+    let mut input_bytes_left = message.len();
+    let mut input = message.as_ptr().cast_mut().cast::<libc::c_char>();
+    let mut encoded = vec![0; message.len() * 4 + 16];
+    let mut output_bytes_left = encoded.len();
+    let mut output = encoded.as_mut_ptr().cast::<libc::c_char>();
+    let result = unsafe {
+        iconv(
+            descriptor,
+            &mut input,
+            &mut input_bytes_left,
+            &mut output,
+            &mut output_bytes_left,
+        )
+    };
+    unsafe {
+        iconv_close(descriptor);
+    }
+
+    if result == usize::MAX || input_bytes_left != 0 {
+        message.as_bytes().to_vec()
+    } else {
+        encoded.truncate(encoded.len() - output_bytes_left);
+        encoded
+    }
 }
 
 fn initialize_hostid_locale() {
@@ -546,7 +675,24 @@ fn write_hostid_output(output: &str) -> CTResult<()> {
 }
 
 fn hostid_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
-    CtSimpleError::new(1, format!("write error: {}", strip_errno(&error)))
+    let detail = strip_errno(&error);
+
+    #[cfg(unix)]
+    if hostid_message_language() != HostidMessageLanguage::Other {
+        let label = match hostid_message_language() {
+            HostidMessageLanguage::SimplifiedChinese => "写入错误: ",
+            HostidMessageLanguage::TraditionalChinese => "寫入時發生錯誤: ",
+            HostidMessageLanguage::Other => unreachable!(),
+        };
+        let mut message = encode_hostid_message(label);
+        message.extend_from_slice(detail.as_bytes());
+        let program_name = ctcore::ct_os_args()
+            .next()
+            .unwrap_or_else(|| OsString::from(ctcore::ct_util_name()));
+        return raw_diagnostic_error(&program_name, &message, false);
+    }
+
+    CtSimpleError::new(1, format!("write error: {detail}"))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

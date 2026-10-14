@@ -204,10 +204,7 @@ Print machine architecture.
       --help        display this help and exit
       --version     output version information and exit
 
-GNU coreutils online help: <https://www.gnu.org/software/coreutils/>
-Report any translation bugs to <https://translationproject.org/team/>
-Full documentation <https://www.gnu.org/software/coreutils/arch>
-or available locally via: info '(coreutils) arch invocation'"
+syskits online help: <https://www.ctyun.cn/developer>"
     )
 }
 
@@ -375,6 +372,8 @@ mod tests {
         assert!(output.starts_with("Usage: arch [OPTION]..."));
         assert!(output.contains("Print machine architecture."));
         assert!(output.contains("--help        display this help and exit"));
+        assert!(output.contains("syskits online help:"));
+        assert!(!output.contains("GNU"));
     }
 
     #[test]
@@ -389,7 +388,9 @@ mod tests {
         let mut args_iter = args.iter().map(OsString::from);
         let result = arch_main(&mut args_iter);
         assert!(result.is_ok());
-        assert!(result.unwrap().starts_with("arch (syskits) "));
+        let output = result.unwrap();
+        assert!(output.starts_with("arch (syskits) "));
+        assert!(!output.contains("GNU"));
     }
 
     #[test]

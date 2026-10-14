@@ -175,6 +175,28 @@ impl Filesystem {
         let mount_info = (*mount_info).clone();
         Self::new(mount_info, Some(file))
     }
+
+    /// Create a filesystem row by querying a file directly instead of its mount point.
+    pub(crate) fn from_direct_path<P>(path: P) -> Option<Self>
+    where
+        P: AsRef<Path>,
+    {
+        let file = path.as_ref().display().to_string();
+        let resolved_path = path.as_ref().canonicalize().ok()?;
+        let mount_dir = resolved_path.display().to_string();
+        let mount_info = CtMountInfo {
+            dev_id: String::new(),
+            dev_name: "-".to_string(),
+            fs_type: "-".to_string(),
+            mount_dir,
+            mount_option: String::new(),
+            mount_root: String::new(),
+            remote: false,
+            dummy: false,
+        };
+
+        Self::new(mount_info, Some(file))
+    }
 }
 
 #[cfg(unix)]

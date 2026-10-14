@@ -337,12 +337,6 @@ impl<'a> TableRowFormatter<'a> {
                 Column::Target => {
                     if self.is_total_row && !self.options.columns.contains(&Column::Source) {
                         "total".to_string()
-                    } else if self.options.direct {
-                        self.row
-                            .file
-                            .as_ref()
-                            .unwrap_or(&self.row.fs_mount)
-                            .to_string()
                     } else {
                         self.row.fs_mount.to_string()
                     }

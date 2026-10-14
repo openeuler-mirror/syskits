@@ -14,6 +14,16 @@ fn block_size_diagnostics_preserve_the_option_spelling() {
             vec!["--block-size=1V"],
             "df: invalid suffix in --block-size argument '1V'\n",
         ),
+        (vec!["-Be"], "df: invalid suffix in -B argument 'e'\n"),
+        (
+            vec!["--block-size=p"],
+            "df: invalid suffix in --block-size argument 'p'\n",
+        ),
+        (
+            vec!["--block-size=z"],
+            "df: invalid suffix in --block-size argument 'z'\n",
+        ),
+        (vec!["-By"], "df: invalid suffix in -B argument 'y'\n"),
         (
             vec!["-B18446744073709551616"],
             "df: -B argument '18446744073709551616' too large\n",

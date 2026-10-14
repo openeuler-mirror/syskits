@@ -197,6 +197,11 @@ pub(crate) enum BlockSize {
     ///
     /// 数量必须为正数。
     Bytes(u64),
+    /// A fixed block size requested without a numeric prefix.
+    ///
+    /// GNU df retains this suffix in each displayed value for arguments such
+    /// as `-BK`, while `-B1K` prints an unsuffixed numeric value.
+    BytesWithSuffix(u64, &'static str),
 }
 
 pub(crate) enum BlockSizeSetting {
@@ -212,7 +217,14 @@ impl BlockSize {
     /// - 返回值：关联的 u64 值。
     pub(crate) fn as_u64(&self) -> u64 {
         match *self {
-            Self::Bytes(n) => n,
+            Self::Bytes(n) | Self::BytesWithSuffix(n, _) => n,
+        }
+    }
+
+    pub(crate) fn fixed_output_suffix(&self) -> Option<&'static str> {
+        match self {
+            Self::Bytes(_) => None,
+            Self::BytesWithSuffix(_, suffix) => Some(suffix),
         }
     }
 }
@@ -271,16 +283,156 @@ pub(crate) fn human_readable_from_spec(spec: &str) -> Option<BlocksHumanReadable
         })
 }
 
-fn block_size_from_spec(spec: &str) -> Result<BlockSizeSetting, ParseSizeError> {
+pub(crate) fn block_size_from_spec(spec: &str) -> Result<BlockSizeSetting, ParseSizeError> {
     if let Some(human_readable) = human_readable_from_spec(spec) {
         return Ok(BlockSizeSetting::HumanReadable(human_readable));
     }
 
-    let bytes = parse_size_u64(spec)?;
+    let bytes = parse_df_block_size(spec)?;
     if bytes > 0 {
-        Ok(BlockSizeSetting::Fixed(BlockSize::Bytes(bytes)))
+        let block_size = fixed_output_suffix(spec).map_or(BlockSize::Bytes(bytes), |suffix| {
+            BlockSize::BytesWithSuffix(bytes, suffix)
+        });
+        Ok(BlockSizeSetting::Fixed(block_size))
     } else {
         Err(ParseSizeError::ParseFailure(spec.quote().to_string()))
+    }
+}
+
+fn parse_df_block_size(spec: &str) -> Result<u64, ParseSizeError> {
+    if numeric_prefix_is_zero(spec) {
+        return Ok(0);
+    }
+
+    let suffix = block_size_suffix(spec);
+    if !is_gnu_block_size_suffix(suffix) {
+        return Err(
+            if has_numeric_prefix(spec)
+                || suffix
+                    .as_bytes()
+                    .first()
+                    .is_some_and(|character| b"eEgGkKmMpPtTyYzZ".contains(character))
+            {
+                ParseSizeError::InvalidSuffix(spec.quote().to_string())
+            } else {
+                ParseSizeError::ParseFailure(spec.quote().to_string())
+            },
+        );
+    }
+
+    parse_size_u64(spec)
+}
+
+fn numeric_prefix_is_zero(spec: &str) -> bool {
+    let bytes = spec.as_bytes();
+    let (digits, radix) = if bytes.starts_with(b"0x") || bytes.starts_with(b"0X") {
+        (&bytes[2..], 16)
+    } else {
+        (bytes, 10)
+    };
+
+    let numeric_digits = digits
+        .iter()
+        .take_while(|character| match radix {
+            16 => character.is_ascii_hexdigit(),
+            _ => character.is_ascii_digit(),
+        })
+        .copied()
+        .collect::<Vec<_>>();
+
+    !numeric_digits.is_empty()
+        && numeric_digits.iter().all(|character| *character == b'0')
+        && has_numeric_prefix(spec)
+}
+
+fn has_numeric_prefix(spec: &str) -> bool {
+    spec.as_bytes().first().is_some_and(u8::is_ascii_digit)
+}
+
+fn block_size_suffix(spec: &str) -> &str {
+    let bytes = spec.as_bytes();
+    let prefix_length = if bytes.starts_with(b"0x") || bytes.starts_with(b"0X") {
+        2 + bytes[2..]
+            .iter()
+            .take_while(|character| character.is_ascii_hexdigit())
+            .count()
+    } else {
+        bytes
+            .iter()
+            .take_while(|character| character.is_ascii_digit())
+            .count()
+    };
+
+    &spec[prefix_length..]
+}
+
+fn is_gnu_block_size_suffix(suffix: &str) -> bool {
+    matches!(
+        suffix,
+        "" | "k"
+            | "K"
+            | "m"
+            | "M"
+            | "g"
+            | "G"
+            | "t"
+            | "T"
+            | "P"
+            | "E"
+            | "Z"
+            | "Y"
+            | "kB"
+            | "KB"
+            | "mB"
+            | "MB"
+            | "gB"
+            | "GB"
+            | "tB"
+            | "TB"
+            | "PB"
+            | "EB"
+            | "ZB"
+            | "YB"
+            | "kiB"
+            | "KiB"
+            | "miB"
+            | "MiB"
+            | "giB"
+            | "GiB"
+            | "tiB"
+            | "TiB"
+            | "PiB"
+            | "EiB"
+            | "ZiB"
+            | "YiB"
+    )
+}
+
+fn fixed_output_suffix(spec: &str) -> Option<&'static str> {
+    if has_numeric_prefix(spec) {
+        return None;
+    }
+
+    match spec {
+        "k" | "K" => Some("K"),
+        "kB" | "KB" => Some("kB"),
+        "kiB" | "KiB" => Some("KiB"),
+        "m" | "M" => Some("M"),
+        "mB" | "MB" => Some("MB"),
+        "miB" | "MiB" => Some("MiB"),
+        "g" | "G" => Some("G"),
+        "gB" | "GB" => Some("GB"),
+        "giB" | "GiB" => Some("GiB"),
+        "t" | "T" => Some("T"),
+        "tB" | "TB" => Some("TB"),
+        "tiB" | "TiB" => Some("TiB"),
+        "P" => Some("P"),
+        "PB" => Some("PB"),
+        "PiB" => Some("PiB"),
+        "E" => Some("E"),
+        "EB" => Some("EB"),
+        "EiB" => Some("EiB"),
+        _ => None,
     }
 }
 
@@ -299,12 +451,48 @@ fn block_size_from_env() -> Option<BlockSizeSetting> {
     for blocks_env_var in ["DF_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
         // 尝试获取当前环境变量的值
         if let Ok(blocks_env_size) = env::var(blocks_env_var) {
-            return block_size_from_spec(&blocks_env_size).ok();
+            return match block_size_from_spec(&blocks_env_size) {
+                Ok(setting) => Some(setting),
+                Err(error) => block_size_from_invalid_env(&blocks_env_size, error),
+            };
         }
     }
 
     // 如果所有环境变量都没有设置或设置无效，最终返回None
     None
+}
+
+fn block_size_from_invalid_env(spec: &str, error: ParseSizeError) -> Option<BlockSizeSetting> {
+    match error {
+        ParseSizeError::SizeTooBig(_) => Some(BlockSizeSetting::Fixed(BlockSize::Bytes(u64::MAX))),
+        ParseSizeError::InvalidSuffix(_) => partial_env_block_size(spec),
+        ParseSizeError::ParseFailure(_) => None,
+    }
+}
+
+// GNU df ignores human_options errors from block-size environment variables
+// and retains the successfully parsed prefix when one is available.
+fn partial_env_block_size(spec: &str) -> Option<BlockSizeSetting> {
+    for (index, _) in spec.char_indices().rev() {
+        match block_size_from_spec(&spec[..index]) {
+            Ok(BlockSizeSetting::Fixed(block_size)) => {
+                return Some(BlockSizeSetting::Fixed(BlockSize::Bytes(
+                    block_size.as_u64(),
+                )));
+            }
+            Ok(BlockSizeSetting::HumanReadable(_))
+            | Err(ParseSizeError::ParseFailure(_))
+            | Err(ParseSizeError::InvalidSuffix(_)) => {}
+            Err(ParseSizeError::SizeTooBig(_)) => {
+                return Some(BlockSizeSetting::Fixed(BlockSize::Bytes(u64::MAX)));
+            }
+        }
+    }
+
+    spec.as_bytes()
+        .first()
+        .is_some_and(|character| b"eEgGkKmMpPtTyYzZ".contains(character))
+        .then_some(BlockSizeSetting::Fixed(BlockSize::Bytes(1)))
 }
 
 /// 实现 `fmt::Display` trait 以便于 `BlockSize` 结构体可以被格式化输出。
@@ -319,12 +507,14 @@ impl fmt::Display for BlockSize {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // 根据 `BlockSize` 的具体类型，选择使用 IEC 或 SI 后缀进行大小显示
         match self {
-            Self::Bytes(n) => {
+            Self::BytesWithSuffix(_, suffix) => write!(f, "1{suffix}"),
+            Self::Bytes(_) => {
                 // 根据 `n` 的值决定使用 IEC 还是 SI 单位系统
+                let n = self.as_u64();
                 let s = if n % 1024 == 0 && n % 1000 != 0 {
-                    blocks_to_magnitude_and_suffix(*n as u128, BlocksSuffixType::Iec)
+                    blocks_to_magnitude_and_suffix(n as u128, BlocksSuffixType::Iec)
                 } else {
-                    blocks_to_magnitude_and_suffix(*n as u128, BlocksSuffixType::Si)
+                    blocks_to_magnitude_and_suffix(n as u128, BlocksSuffixType::Si)
                 };
 
                 // 使用选择好的单位系统进行输出

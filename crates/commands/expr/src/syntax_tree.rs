@@ -13,7 +13,10 @@
 
 use num_bigint::BigInt;
 use num_traits::{Signed, ToPrimitive};
-use onig::{EncodedBytes, Regex, RegexOptions, Region, SearchOptions, Syntax, SyntaxOperator};
+use onig::{
+    EncodedBytes, Regex, RegexOptions, Region, SearchOptions, Syntax, SyntaxBehavior,
+    SyntaxOperator,
+};
 
 use crate::ExprError;
 use crate::ExprResult;
@@ -198,8 +201,8 @@ impl SyntaxTreeStringOp {
                 let normalized = normalize_bre_bytes(&right)?;
                 let encoding = expr_regex_encoding();
                 let mut syntax = Syntax::posix_basic().clone();
-                // onig exposes these Oniguruma syntax bits but its bitflags 1.x wrapper
-                // does not declare them. The values come directly from that same library.
+                // onig exposes these Oniguruma syntax and behavior bits but its bitflags 1.x
+                // wrapper does not declare them. The values come directly from that same library.
                 let gnu_bre_extensions = unsafe {
                     SyntaxOperator::from_bits_unchecked(u64::from(
                         onig_sys::ONIG_SYN_OP_ESC_PLUS_ONE_INF
@@ -208,6 +211,10 @@ impl SyntaxTreeStringOp {
                     ))
                 };
                 syntax.enable_operators(gnu_bre_extensions);
+                let empty_ranges = unsafe {
+                    SyntaxBehavior::from_bits_unchecked(onig_sys::ONIG_SYN_ALLOW_EMPTY_RANGE_IN_CC)
+                };
+                syntax.enable_behavior(empty_ranges);
 
                 let re = Regex::with_options_and_encoding(
                     EncodedBytes::from_parts(&normalized, encoding),

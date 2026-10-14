@@ -1105,8 +1105,23 @@ impl JoinSettings {
             }
         }
 
-        if let Some(empty) = matches.get_one::<String>("e") {
-            settings.empty = empty.as_bytes().to_vec();
+        if let Some(empty_values) = matches.get_many::<String>("e") {
+            let mut empty_replacement = None;
+            for empty in empty_values {
+                match empty_replacement {
+                    Some(empty_replacement) if empty_replacement != empty => {
+                        return Err(CtSimpleError::new(
+                            1,
+                            "conflicting empty-field replacement strings",
+                        ));
+                    }
+                    _ => {}
+                }
+                empty_replacement = Some(empty);
+            }
+            if let Some(empty_replacement) = empty_replacement {
+                settings.empty = empty_replacement.as_bytes().to_vec();
+            }
         }
 
         let check_order_index = (matches.get_count("check-order") > 0)
@@ -1200,6 +1215,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
             .help(t!("join.clap.v")),
         Arg::new("e")
             .short('e')
+            .action(ArgAction::Append)
             .value_name("EMPTY")
             .help(t!("join.clap.e")),
         Arg::new("i")
@@ -2002,6 +2018,49 @@ mod tests {
 
         let settings = JoinSettings::new(&matches).unwrap();
         assert_eq!(settings.empty, b"EMPTY");
+
+        let matches = ct_app()
+            .try_get_matches_from(vec![
+                "join",
+                "-e",
+                "EMPTY",
+                "-e",
+                "EMPTY",
+                "file1.txt",
+                "file2.txt",
+            ])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert_eq!(settings.empty, b"EMPTY");
+
+        let matches = ct_app()
+            .try_get_matches_from(vec![
+                "join",
+                "-e",
+                "EMPTY",
+                "-e",
+                "OTHER",
+                "file1.txt",
+                "file2.txt",
+            ])
+            .unwrap();
+
+        assert!(JoinSettings::new(&matches).is_err());
+
+        let matches = ct_app()
+            .try_get_matches_from(vec![
+                "join",
+                "-e",
+                "",
+                "-e",
+                "OTHER",
+                "file1.txt",
+                "file2.txt",
+            ])
+            .unwrap();
+
+        assert!(JoinSettings::new(&matches).is_err());
     }
 
     #[test]

@@ -53,3 +53,24 @@ fn unrecognized_keywords_suppress_output_and_fail() {
         format!("dircolors: {file}:3: unrecognized keyword UNKNOWN\n")
     );
 }
+
+#[test]
+fn missing_file_reports_the_gnu_error_message() {
+    let directory = tempfile::tempdir().unwrap();
+    let missing_file = directory.path().join("missing");
+    let missing_file = missing_file.to_str().unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_dircolors"))
+        .arg0("dircolors")
+        .args(["-b", missing_file])
+        .env("LC_ALL", "C")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        format!("dircolors: {missing_file}: No such file or directory\n")
+    );
+}

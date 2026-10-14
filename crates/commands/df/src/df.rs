@@ -564,11 +564,12 @@ where
 
     for path in file_paths {
         let path_str = path.as_ref().to_string_lossy().to_string();
+        let path_metadata = std::fs::metadata(path.as_ref());
 
         // 挂载点遮蔽 (Over-mount) 探测机制
         #[cfg(unix)]
         {
-            if let Ok(meta) = std::fs::metadata(path.as_ref()) {
+            if let Ok(meta) = &path_metadata {
                 // 只有明确查询的是块设备，才进行遮蔽检测
                 if !options.direct && meta.file_type().is_block_device() {
                     let mut totally_overmounted = false;
@@ -612,17 +613,7 @@ where
             match Filesystem::from_direct_path(path.as_ref()) {
                 Some(fs) => result.push(fs),
                 None => {
-                    if path.as_ref().exists() {
-                        ct_show!(CtSimpleError::new(1, "no file systems processed"));
-                    } else {
-                        ct_show!(CtSimpleError::new(
-                            1,
-                            format!(
-                                "{}: No such file or directory",
-                                quote_path_for_diagnostic(&path_str)
-                            )
-                        ));
-                    }
+                    show_named_path_diagnostic(&path_str, &path_metadata);
                     had_diagnostic = true;
                 }
             }
@@ -637,17 +628,7 @@ where
             }
             None => {
                 // 如果找不到文件系统映射信息
-                if path.as_ref().exists() {
-                    ct_show!(CtSimpleError::new(1, "no file systems processed"));
-                } else {
-                    ct_show!(CtSimpleError::new(
-                        1,
-                        format!(
-                            "{}: No such file or directory",
-                            quote_path_for_diagnostic(&path_str)
-                        )
-                    ));
-                }
+                show_named_path_diagnostic(&path_str, &path_metadata);
                 had_diagnostic = true;
             }
         }
@@ -664,6 +645,34 @@ fn sync_if_requested(options: &DfOptions) {
             ctcore::libc::sync();
         }
     }
+}
+
+fn show_named_path_diagnostic(path: &str, metadata: &std::io::Result<std::fs::Metadata>) {
+    match metadata {
+        Ok(_) => ct_show!(CtSimpleError::new(1, "no file systems processed")),
+        Err(error) => ct_show!(CtSimpleError::new(
+            1,
+            format!(
+                "{}: {}",
+                quote_path_for_diagnostic(path),
+                path_error_message(error)
+            )
+        )),
+    }
+}
+
+fn path_error_message(error: &std::io::Error) -> String {
+    #[cfg(unix)]
+    if let Some(error_code) = error.raw_os_error() {
+        let message = unsafe {
+            std::ffi::CStr::from_ptr(ctcore::libc::strerror(error_code))
+                .to_string_lossy()
+                .into_owned()
+        };
+        return message;
+    }
+
+    error.kind().to_string()
 }
 
 // DfError定义了在执行df命令时可能遇到的错误类型。

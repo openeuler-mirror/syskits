@@ -205,6 +205,12 @@ enum DfBlockSizeOption {
     Long,
 }
 
+#[derive(Clone, Copy)]
+enum DfScaleOption {
+    Fixed,
+    HumanReadable,
+}
+
 impl DfBlockSizeOption {
     fn name(self) -> &'static str {
         match self {
@@ -796,6 +802,72 @@ fn df_block_size_option(args: &[OsString]) -> DfBlockSizeOption {
     block_size_option
 }
 
+fn last_scale_option(args: &[OsString]) -> Option<DfScaleOption> {
+    let mut result = None;
+    let mut index = 1;
+
+    while let Some(argument) = args.get(index).and_then(|argument| argument.to_str()) {
+        if argument == "--" {
+            break;
+        }
+
+        if let Some(long_option) = argument.strip_prefix("--") {
+            let option = long_option
+                .split_once('=')
+                .map_or(long_option, |(option, _)| option);
+            if "block-size".starts_with(option) {
+                result = Some(DfScaleOption::Fixed);
+                if !long_option.contains('=') {
+                    index += 1;
+                }
+            } else if "human-readable".starts_with(option) || "si".starts_with(option) {
+                result = Some(DfScaleOption::HumanReadable);
+            }
+        } else if let Some(short_options) = argument.strip_prefix('-') {
+            let mut short_options = short_options.chars();
+            while let Some(option) = short_options.next() {
+                match option {
+                    'B' => {
+                        result = Some(DfScaleOption::Fixed);
+                        if short_options.as_str().is_empty() {
+                            index += 1;
+                        }
+                        break;
+                    }
+                    'h' | 'H' => result = Some(DfScaleOption::HumanReadable),
+                    'k' | 'm' => result = Some(DfScaleOption::Fixed),
+                    'F' | 't' | 'x' => {
+                        if short_options.as_str().is_empty() {
+                            index += 1;
+                        }
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        index += 1;
+    }
+
+    result
+}
+
+fn apply_scale_option_order(args: &[OsString], args_match: &ArgMatches, options: &mut DfOptions) {
+    if !matches!(last_scale_option(args), Some(DfScaleOption::Fixed)) {
+        return;
+    }
+
+    options.human_readable = None;
+    options.header_mode = if args_match.get_flag(DF_OPT_PORTABILITY) {
+        TableHeaderMode::PosixPortability
+    } else if args_match.value_source(DF_OPT_OUTPUT) == Some(ValueSource::CommandLine) {
+        TableHeaderMode::Output
+    } else {
+        TableHeaderMode::Default
+    };
+}
+
 fn validate_block_size(value: &str, option: DfBlockSizeOption) -> Result<(), DfOptionsError> {
     match parse_size_u64(value) {
         Ok(size) if size > 0 => Ok(()),
@@ -916,6 +988,7 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
     let mut options =
         DfOptions::from_with_block_size_option(&args_match, df_block_size_option(&args))
             .map_err(DfError::OptionsError)?;
+    apply_scale_option_order(&args, &args_match, &mut options);
     options.show_listed_fs = show_listed_fs;
 
     let filesystem_paths = get_filesystem(args_match, &options);
@@ -956,6 +1029,7 @@ pub fn df_native_semantic(args: impl ctcore::Args) -> CTResult<DfSemantic> {
     let mut classic_options =
         DfOptions::from_with_block_size_option(&args_match, df_block_size_option(&args))
             .map_err(DfError::OptionsError)?;
+    apply_scale_option_order(&args, &args_match, &mut classic_options);
     classic_options.show_listed_fs = show_listed_fs;
     let selected_fields = native_selected_fields(&args_match, &classic_options);
     let filesystems = get_filesystem(args_match, &classic_options)?;

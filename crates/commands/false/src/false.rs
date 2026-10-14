@@ -13,8 +13,11 @@ use clap::{Arg, ArgAction, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, set_ct_exit_code};
-use std::{ffi::OsString, io::Write};
+use ctcore::ct_error::{CTResult, set_ct_exit_code, strip_errno};
+use std::ffi::{OsStr, OsString};
+use std::io::{self, Write};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 
 const SYSKITS_FALSE_LONG_VERSION: &str = concat!(
@@ -64,6 +67,11 @@ pub fn false_main(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 fn args_process(command: &mut Command, args: Vec<OsString>) -> CTResult<()> {
+    let program_name = args
+        .first()
+        .cloned()
+        .unwrap_or_else(|| OsString::from(ctcore::ct_util_name()));
+
     if let Err(e) = command.try_get_matches_from_mut(args) {
         let error = match e.kind() {
             // 如果是显示帮助信息的错误，则显示帮助信息。
@@ -76,18 +84,36 @@ fn args_process(command: &mut Command, args: Vec<OsString>) -> CTResult<()> {
             _ => Ok(()),
         };
 
-        // 尝试显示错误信息，如果显示失败，则将错误信息写入标准错误输出。
+        // Help and version still return false's normal exit status after write failures.
         if let Err(print_fail) = error {
-            let _ = writeln!(
-                std::io::stderr(),
-                "{}: {}",
-                ctcore::ct_util_name(),
-                print_fail
-            );
+            report_false_write_error(&program_name, print_fail);
         }
     }
 
     Ok(())
+}
+
+fn report_false_write_error(program_name: &OsStr, error: io::Error) {
+    #[cfg(target_os = "linux")]
+    let error = if ctcore::ct_stdout_was_closed() {
+        io::Error::from_raw_os_error(ctcore::libc::EBADF)
+    } else {
+        error
+    };
+
+    let detail = strip_errno(&error);
+    #[cfg(unix)]
+    let program_name = program_name.as_bytes();
+    #[cfg(not(unix))]
+    let program_name = program_name.to_string_lossy().as_bytes();
+
+    let stderr = io::stderr();
+    let mut stderr = stderr.lock();
+    let _ = stderr
+        .write_all(program_name)
+        .and_then(|_| stderr.write_all(b": write error: "))
+        .and_then(|_| stderr.write_all(detail.as_bytes()))
+        .and_then(|_| stderr.write_all(b"\n"));
 }
 
 /// 创建并配置命令行解析器实例。

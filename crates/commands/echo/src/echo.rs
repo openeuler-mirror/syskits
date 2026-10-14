@@ -23,7 +23,7 @@ use ctcore::ct_error::{CTResult, CtSimpleError, strip_errno};
 use ctcore::ct_signals::enable_pipe_errors;
 
 use ctcore::Tool;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io;
 use std::io::Write;
 use std::ops::ControlFlow;
@@ -458,53 +458,9 @@ pub fn echo_native_semantic(args: impl ctcore::Args) -> CTResult<EchoSemantic> {
     echo_native_semantic_from_args_vec(&args_vec, posix_mode)
 }
 
-fn echo_help_text(usage_name: &str) -> String {
-    if echo_uses_zh_cn_locale() {
-        return format!(
-            "\
-用法：{usage_name} [短选项]... [字符串]...
-　或：{usage_name} 长选项
-将 <字符串> 回显到标准输出。
-
-  -n             不输出末尾的换行符
-  -e             启用对反斜杠转义字符的解释
-  -E             禁用对反斜杠转义字符的解释（默认）
-      --help        显示此帮助信息并退出
-      --version     显示版本信息并退出
-
-若 -e 生效，则以下序列可被识别：
-
-  \\\\      反斜杠
-  \\a      警报（BEL 响铃字符）
-  \\b      退格
-  \\c      不再产生新的输出
-  \\e      转义字符
-  \\f      换页
-  \\n      换行
-  \\r      回车
-  \\t      水平制表符
-  \\v      垂直制表符
-  \\0NNN   值为 NNN（1 至 3 位八进制数）的字节
-  \\xHH    值为 HH（1 至 2 位十六进制数）的字节
-
-注意：您的 shell 可能内置了自己的 echo 程序版本，它通常会取代这里所描述的
-版本。请查阅您的 shell 的文档以了解内置版本所支持的选项。
-
-注意：建议使用 printf(1) 替代本命令，
-因为它可以正常输出与选项相似的字符串。
-
-GNU coreutils 在线帮助：<https://www.gnu.org/software/coreutils/>
-请向 <http://translationproject.org/team/zh_CN.html> 报告任何翻译错误
-完整文档 <https://www.gnu.org/software/coreutils/echo>
-或者在本地使用：info '(coreutils) echo invocation'
-"
-        );
-    }
-
-    format!(
-        "\
-Usage: {usage_name} [SHORT-OPTION]... [STRING]...
-  or:  {usage_name} LONG-OPTION
+const GNU_ECHO_HELP_EN_PREFIX: &str = "Usage: ";
+const GNU_ECHO_HELP_EN_BETWEEN_NAMES: &str = " [SHORT-OPTION]... [STRING]...\n  or:  ";
+const GNU_ECHO_HELP_EN_SUFFIX: &str = r#" LONG-OPTION
 Echo the STRING(s) to standard output.
 
   -n             do not output the trailing newline
@@ -515,18 +471,18 @@ Echo the STRING(s) to standard output.
 
 If -e is in effect, the following sequences are recognized:
 
-  \\\\      backslash
-  \\a      alert (BEL)
-  \\b      backspace
-  \\c      produce no further output
-  \\e      escape
-  \\f      form feed
-  \\n      new line
-  \\r      carriage return
-  \\t      horizontal tab
-  \\v      vertical tab
-  \\0NNN   byte with octal value NNN (1 to 3 digits)
-  \\xHH    byte with hexadecimal value HH (1 to 2 digits)
+  \\      backslash
+  \a      alert (BEL)
+  \b      backspace
+  \c      produce no further output
+  \e      escape
+  \f      form feed
+  \n      new line
+  \r      carriage return
+  \t      horizontal tab
+  \v      vertical tab
+  \0NNN   byte with octal value NNN (1 to 3 digits)
+  \xHH    byte with hexadecimal value HH (1 to 2 digits)
 
 NOTE: your shell may have its own version of echo, which usually supersedes
 the version described here.  Please refer to your shell's documentation
@@ -539,8 +495,74 @@ GNU coreutils online help: <https://www.gnu.org/software/coreutils/>
 Report any translation bugs to <https://translationproject.org/team/>
 Full documentation <https://www.gnu.org/software/coreutils/echo>
 or available locally via: info '(coreutils) echo invocation'
-"
-    )
+"#;
+
+const GNU_ECHO_HELP_ZH_CN_PREFIX: &str = "用法：";
+const GNU_ECHO_HELP_ZH_CN_BETWEEN_NAMES: &str = " [短选项]... [字符串]...\n　或：";
+const GNU_ECHO_HELP_ZH_CN_SUFFIX: &str = r#" 长选项
+将 <字符串> 回显到标准输出。
+
+  -n             不输出末尾的换行符
+  -e             启用对反斜杠转义字符的解释
+  -E             禁用对反斜杠转义字符的解释（默认）
+      --help        显示此帮助信息并退出
+      --version     显示版本信息并退出
+
+若 -e 生效，则以下序列可被识别：
+
+  \\      反斜杠
+  \a      警报（BEL 响铃字符）
+  \b      退格
+  \c      不再产生新的输出
+  \e      转义字符
+  \f      换页
+  \n      换行
+  \r      回车
+  \t      水平制表符
+  \v      垂直制表符
+  \0NNN   值为 NNN（1 至 3 位八进制数）的字节
+  \xHH    值为 HH（1 至 2 位十六进制数）的字节
+
+注意：您的 shell 可能内置了自己的 echo 程序版本，它通常会取代这里所描述的
+版本。请查阅您的 shell 的文档以了解内置版本所支持的选项。
+
+注意：建议使用 printf(1) 替代本命令，
+因为它可以正常输出与选项相似的字符串。
+
+GNU coreutils 在线帮助：<https://www.gnu.org/software/coreutils/>
+请向 <http://translationproject.org/team/zh_CN.html> 报告任何翻译错误
+完整文档 <https://www.gnu.org/software/coreutils/echo>
+或者在本地使用：info '(coreutils) echo invocation'
+"#;
+
+fn echo_help_text(usage_name: &OsStr) -> Vec<u8> {
+    #[cfg(unix)]
+    let usage_name = usage_name.as_bytes().to_vec();
+    #[cfg(not(unix))]
+    let usage_name = usage_name.to_string_lossy().into_owned().into_bytes();
+
+    let (prefix, between_names, suffix) = if echo_uses_zh_cn_locale() {
+        (
+            GNU_ECHO_HELP_ZH_CN_PREFIX,
+            GNU_ECHO_HELP_ZH_CN_BETWEEN_NAMES,
+            GNU_ECHO_HELP_ZH_CN_SUFFIX,
+        )
+    } else {
+        (
+            GNU_ECHO_HELP_EN_PREFIX,
+            GNU_ECHO_HELP_EN_BETWEEN_NAMES,
+            GNU_ECHO_HELP_EN_SUFFIX,
+        )
+    };
+    let mut output = Vec::with_capacity(
+        prefix.len() + between_names.len() + suffix.len() + usage_name.len() * 2,
+    );
+    output.extend_from_slice(prefix.as_bytes());
+    output.extend_from_slice(&usage_name);
+    output.extend_from_slice(between_names.as_bytes());
+    output.extend_from_slice(&usage_name);
+    output.extend_from_slice(suffix.as_bytes());
+    output
 }
 
 fn echo_uses_zh_cn_locale() -> bool {
@@ -584,10 +606,10 @@ Copyright © 2023 Free Software Foundation, Inc.
 由 Brian Fox 和 Chet Ramey 编写。
 ";
 
-fn echo_print_help_or_version(help: bool) -> io::Result<()> {
+fn echo_print_help_or_version(help: bool, usage_name: &OsStr) -> io::Result<()> {
     let mut output = Vec::new();
     if help {
-        output.extend_from_slice(echo_help_text(ctcore::ct_util_name()).as_bytes());
+        output.extend_from_slice(&echo_help_text(usage_name));
     } else {
         let version_text = if echo_uses_zh_cn_locale() {
             GNU_ECHO_VERSION_TEXT_ZH_CN
@@ -609,14 +631,20 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
         enable_pipe_errors().map_err(|error| CtSimpleError::new(1, error.to_string()))?;
     }
 
-    let args_vec = args.skip(1).collect::<Vec<_>>();
+    let args = args.collect::<Vec<_>>();
+    let fallback_program_name = OsString::from(ctcore::ct_util_name());
+    let (usage_name, args_vec) = args
+        .split_first()
+        .map(|(program, args)| (program.as_os_str(), args))
+        .unwrap_or((fallback_program_name.as_os_str(), &[]));
     let posix_mode = std::env::var("POSIXLY_CORRECT").is_ok();
 
     if !posix_mode
-        && matches!(args_vec.as_slice(), [arg] if matches!(arg.to_str(), Some("--help" | "--version")))
+        && matches!(args_vec, [arg] if matches!(arg.to_str(), Some("--help" | "--version")))
     {
         return echo_write_result(echo_print_help_or_version(
             args_vec[0].to_str() == Some("--help"),
+            usage_name,
         ));
     }
 
@@ -630,14 +658,23 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
+    let args = args.collect::<Vec<_>>();
+    let fallback_program_name = OsString::from(ctcore::ct_util_name());
+    let (usage_name, args) = args
+        .split_first()
+        .map(|(program, args)| (program.as_os_str(), args))
+        .unwrap_or((fallback_program_name.as_os_str(), &[]));
     let args_vec: Vec<String> = args
-        .skip(1)
+        .iter()
         .map(|s| s.to_string_lossy().into_owned())
         .collect();
     let posix_mode = std::env::var("POSIXLY_CORRECT").is_ok();
 
     if echo_is_help_or_version_request(&args_vec, posix_mode) {
-        return echo_write_result(echo_print_help_or_version(args_vec[0] == "--help"));
+        return echo_write_result(echo_print_help_or_version(
+            args_vec[0] == "--help",
+            usage_name,
+        ));
     }
 
     let (no_newline, escaped, values) = echo_parse_args(&args_vec, posix_mode);

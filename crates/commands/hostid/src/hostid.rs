@@ -600,15 +600,33 @@ fn hostid_message_language() -> HostidMessageLanguage {
         .into_iter()
         .filter_map(|name| std::env::var(name).ok())
         .find(|locale| !locale.is_empty())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
+        .unwrap_or_default();
+
+    if locale.eq_ignore_ascii_case("C") || locale.eq_ignore_ascii_case("POSIX") {
+        return HostidMessageLanguage::Other;
+    }
+
+    if let Ok(language) = std::env::var("LANGUAGE")
+        && !language.is_empty()
+    {
+        return language
+            .split(':')
+            .find_map(classify_hostid_message_language)
+            .unwrap_or(HostidMessageLanguage::Other);
+    }
+
+    classify_hostid_message_language(&locale).unwrap_or(HostidMessageLanguage::Other)
+}
+
+fn classify_hostid_message_language(locale: &str) -> Option<HostidMessageLanguage> {
+    let locale = locale.to_ascii_lowercase();
 
     if locale.starts_with("zh_cn") || locale.starts_with("zh_sg") {
-        HostidMessageLanguage::SimplifiedChinese
+        Some(HostidMessageLanguage::SimplifiedChinese)
     } else if locale.starts_with("zh_tw") || locale.starts_with("zh_hk") {
-        HostidMessageLanguage::TraditionalChinese
+        Some(HostidMessageLanguage::TraditionalChinese)
     } else {
-        HostidMessageLanguage::Other
+        None
     }
 }
 

@@ -94,3 +94,15 @@ fn directory_operand_reports_a_gnu_read_error() {
         format!("dircolors: {directory}: read error: Is a directory\n")
     );
 }
+
+#[test]
+fn inline_comment_is_not_part_of_the_color_value() {
+    let (output, _) = run_dircolors("DIR 01;34#comment\n");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "LS_COLORS='di=01;34:';\nexport LS_COLORS\n"
+    );
+}

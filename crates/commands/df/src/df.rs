@@ -361,7 +361,7 @@ impl DfOptions {
         let mut same_types = Vec::new();
 
         // 寻找同时在 include 和 exclude 中出现的类型。
-        for types in df_include {
+        for types in df_include.iter().rev() {
             if df_exclude.contains(types) {
                 same_types.push(types.clone());
             }

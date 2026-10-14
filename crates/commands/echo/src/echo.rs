@@ -632,8 +632,12 @@ fn echo_locale_is_zh_cn(locale: &str) -> bool {
 }
 
 fn echo_ctype_codeset() -> Option<String> {
-    let locale = echo_environment_locale(&["LC_ALL", "LC_CTYPE", "LANG"])?;
+    let locale =
+        echo_environment_locale(&["LC_ALL", "LC_CTYPE", "LANG"]).unwrap_or_else(|| "C".to_string());
     let locale_name = locale.split('@').next().unwrap_or_default();
+    if echo_is_c_locale(locale_name) {
+        return Some("ASCII//TRANSLIT".to_string());
+    }
     let codeset = locale_name
         .split_once('.')
         .map(|(_, codeset)| codeset.to_string());

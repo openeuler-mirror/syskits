@@ -43,3 +43,44 @@ fn localized_stdout_write_errors_match_gnu_coreutils() {
         }
     }
 }
+
+#[test]
+fn c_ctype_transliterates_localized_write_errors() {
+    let full = OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .expect("open /dev/full");
+    let mut gnu_command = Command::new("/usr/bin/echo");
+    let gnu = gnu_command
+        .arg0("echo")
+        .arg("value")
+        .env_remove("LC_ALL")
+        .env("LC_MESSAGES", "zh_CN.UTF-8")
+        .env("LC_CTYPE", "C")
+        .env_remove("LANG")
+        .env_remove("LANGUAGE")
+        .stdout(Stdio::from(full))
+        .output()
+        .expect("run GNU echo with /dev/full stdout");
+
+    let full = OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .expect("open /dev/full");
+    let mut syskits_command = Command::new(env!("CARGO_BIN_EXE_echo"));
+    let syskits = syskits_command
+        .arg0("echo")
+        .arg("value")
+        .env_remove("LC_ALL")
+        .env("LC_MESSAGES", "zh_CN.UTF-8")
+        .env("LC_CTYPE", "C")
+        .env_remove("LANG")
+        .env_remove("LANGUAGE")
+        .stdout(Stdio::from(full))
+        .output()
+        .expect("run syskits echo with /dev/full stdout");
+
+    assert_eq!(syskits.status.code(), gnu.status.code());
+    assert_eq!(syskits.stdout, gnu.stdout);
+    assert_eq!(syskits.stderr, gnu.stderr);
+}

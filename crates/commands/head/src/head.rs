@@ -586,6 +586,43 @@ fn is_stdout_write_error(message: &str) -> bool {
     message.starts_with("error writing 'standard output':") || message.starts_with("write error:")
 }
 
+fn head_quote(name: &OsStr) -> String {
+    if name.to_str().is_some() {
+        return name.quote().to_string();
+    }
+
+    #[cfg(unix)]
+    {
+        let mut quoted = String::new();
+        let mut in_literal = false;
+
+        for byte in name.as_bytes() {
+            if matches!(byte, b' '..=b'&' | b'('..=b'~') && *byte != b'\'' {
+                if !in_literal {
+                    quoted.push('\'');
+                    in_literal = true;
+                }
+                quoted.push(*byte as char);
+            } else {
+                if in_literal {
+                    quoted.push('\'');
+                    in_literal = false;
+                }
+                quoted.push_str(&format!("$'\\{byte:03o}'"));
+            }
+        }
+
+        if in_literal {
+            quoted.push('\'');
+        }
+        quoted
+    }
+    #[cfg(not(unix))]
+    {
+        name.quote()
+    }
+}
+
 fn find_nth_line_from_end<R>(input: &mut R, n: u64, separator: u8) -> std::io::Result<u64>
 where
     R: Read + Seek,
@@ -879,7 +916,9 @@ fn process_file<W: Write>(
     let mut input = match std::fs::File::open(file) {
         Ok(input) => input,
         Err(err) => {
-            ct_show!(err.map_err_context(|| format!("cannot open {} for reading", file.quote())));
+            ct_show!(
+                err.map_err_context(|| { format!("cannot open {} for reading", head_quote(file)) })
+            );
             *last_file_had_error = true;
             return Ok(());
         }
@@ -904,7 +943,7 @@ fn finish_file_result(
         }
         ct_show!(CtSimpleError::new(
             1,
-            format!("error reading {}: {}", name.quote(), strip_errno(&err))
+            format!("error reading {}: {}", head_quote(name), strip_errno(&err))
         ));
         *last_file_had_error = true;
     } else {
@@ -965,14 +1004,14 @@ fn handle_stdin_to_writer<W: Write>(options: &HeadOptions, writer: &mut W) -> st
 }
 
 fn render_head_open_error(name: &OsStr, err: std::io::Error) -> String {
-    let err = err.map_err_context(|| format!("cannot open {} for reading", name.quote()));
+    let err = err.map_err_context(|| format!("cannot open {} for reading", head_quote(name)));
     format!("head: {err}\n")
 }
 
 fn render_head_read_error(name: &OsStr, err: &std::io::Error) -> String {
     format!(
         "head: error reading {}: {}\n",
-        name.quote(),
+        head_quote(name),
         strip_errno(err)
     )
 }

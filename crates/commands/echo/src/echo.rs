@@ -458,17 +458,17 @@ pub fn echo_native_semantic(args: impl ctcore::Args) -> CTResult<EchoSemantic> {
     echo_native_semantic_from_args_vec(&args_vec, posix_mode)
 }
 
-fn echo_print_help_or_version(help: bool) -> CTResult<()> {
+fn echo_print_help_or_version(help: bool) -> io::Result<()> {
     let mut command = ct_app();
+    let mut output = Vec::new();
     if help {
         command
-            .print_help()
-            .map_err_context(|| "could not write help to stdout".to_string())?;
+            .write_help(&mut output)
+            .map_err(|error| io::Error::other(error.to_string()))?;
     } else {
-        print!("{}", command.render_version());
+        writeln!(output, "{}", command.render_version())?;
     }
-    println!();
-    Ok(())
+    echo_write_output(&output)
 }
 
 #[cfg(unix)]
@@ -487,7 +487,9 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
     if !posix_mode
         && matches!(args_vec.as_slice(), [arg] if matches!(arg.to_str(), Some("--help" | "--version")))
     {
-        return echo_print_help_or_version(args_vec[0].to_str() == Some("--help"));
+        return echo_write_result(echo_print_help_or_version(
+            args_vec[0].to_str() == Some("--help"),
+        ));
     }
 
     let (no_newline, escaped, values) = echo_parse_args_bytes(&args_vec, posix_mode);
@@ -507,7 +509,7 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
     let posix_mode = std::env::var("POSIXLY_CORRECT").is_ok();
 
     if echo_is_help_or_version_request(&args_vec, posix_mode) {
-        return echo_print_help_or_version(args_vec[0] == "--help");
+        return echo_write_result(echo_print_help_or_version(args_vec[0] == "--help"));
     }
 
     let (no_newline, escaped, values) = echo_parse_args(&args_vec, posix_mode);
@@ -580,11 +582,10 @@ fn echo_write_output(output: &[u8]) -> io::Result<()> {
 fn echo_write_result(result: io::Result<()>) -> CTResult<()> {
     match result {
         Ok(()) => Ok(()),
-        Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Err(CtSimpleError::new(
+        Err(error) => Err(CtSimpleError::new(
             1,
             format!("write error: {}", strip_errno(&error)),
         )),
-        Err(error) => Err(error.map_err_context(|| "could not write to stdout".to_string())),
     }
 }
 

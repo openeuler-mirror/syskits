@@ -571,6 +571,10 @@ fn echo_help_text(usage_name: &OsStr) -> Vec<u8> {
 }
 
 fn echo_uses_zh_cn_locale() -> bool {
+    if !echo_environment_locale_is_supported() {
+        return false;
+    }
+
     let message_locale = echo_environment_locale(&["LC_ALL", "LC_MESSAGES", "LANG"])
         .unwrap_or_else(|| "C".to_string());
     if echo_is_c_locale(&message_locale) {
@@ -585,6 +589,27 @@ fn echo_uses_zh_cn_locale() -> bool {
     }
 
     echo_locale_is_zh_cn(&message_locale)
+}
+
+fn echo_environment_locale_is_supported() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        let locale = unsafe {
+            libc::newlocale(
+                libc::LC_ALL_MASK,
+                b"\0".as_ptr().cast::<libc::c_char>(),
+                std::ptr::null_mut(),
+            )
+        };
+        if locale.is_null() {
+            return false;
+        }
+        unsafe {
+            libc::freelocale(locale);
+        }
+    }
+
+    true
 }
 
 fn echo_environment_locale(names: &[&str]) -> Option<String> {

@@ -48,3 +48,20 @@ fn language_is_ignored_in_the_c_locale() {
         assert_eq!(syskits.stdout, gnu.stdout, "{argument}");
     }
 }
+
+#[test]
+fn invalid_locale_falls_back_to_c_locale() {
+    for argument in ["--help", "--version"] {
+        let gnu = run_echo("/usr/bin/echo", "zh_CN.invalid", Some("zh_CN"), argument);
+        let syskits = run_echo(
+            env!("CARGO_BIN_EXE_echo"),
+            "zh_CN.invalid",
+            Some("zh_CN"),
+            argument,
+        );
+
+        assert_eq!(syskits.status.code(), gnu.status.code(), "{argument}");
+        assert_eq!(syskits.stderr, gnu.stderr, "{argument}");
+        assert_eq!(syskits.stdout, gnu.stdout, "{argument}");
+    }
+}

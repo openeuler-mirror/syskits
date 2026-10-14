@@ -79,7 +79,7 @@ pub fn hostid_main(args: impl ctcore::Args) -> CTResult<()> {
         }
         None => {}
     }
-    let matches = ct_app().try_get_matches_from(args.iter().cloned())?;
+    let matches = ct_app().try_get_matches_from(hostid_clap_args(&args))?;
     reject_extra_operand(&matches, &args)?;
     write_hostid_output(&format!("{}\n", hostid()))
 }
@@ -156,6 +156,7 @@ enum TerminalAction {
 
 fn validate_standard_options(args: &[OsString]) -> CTResult<Option<TerminalAction>> {
     let mut options_ended = false;
+    let posixly_correct = std::env::var_os("POSIXLY_CORRECT").is_some();
 
     for arg in args.iter().skip(1) {
         #[cfg(unix)]
@@ -179,6 +180,10 @@ fn validate_standard_options(args: &[OsString]) -> CTResult<Option<TerminalActio
             options_ended = true;
             continue;
         }
+        if posixly_correct && (arg == "-" || !arg.starts_with('-')) {
+            options_ended = true;
+            continue;
+        }
         if arg.starts_with("--") {
             if let Some(action) = validate_long_option(&arg, args)? {
                 return Ok(Some(action));
@@ -195,6 +200,42 @@ fn validate_standard_options(args: &[OsString]) -> CTResult<Option<TerminalActio
     }
 
     Ok(None)
+}
+
+fn hostid_clap_args(args: &[OsString]) -> Vec<OsString> {
+    if std::env::var_os("POSIXLY_CORRECT").is_none() {
+        return args.to_vec();
+    }
+
+    let mut options_ended = false;
+    let mut clap_args = Vec::with_capacity(args.len() + 1);
+
+    for (index, arg) in args.iter().enumerate() {
+        if index != 0 && !options_ended && !is_hostid_option(arg) {
+            clap_args.push(OsString::from("--"));
+            options_ended = true;
+        }
+        clap_args.push(arg.clone());
+        if index != 0 && arg == "--" {
+            options_ended = true;
+        }
+    }
+
+    clap_args
+}
+
+#[cfg(unix)]
+fn is_hostid_option(arg: &std::ffi::OsStr) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+
+    let bytes = arg.as_bytes();
+    bytes.len() > 1 && bytes[0] == b'-'
+}
+
+#[cfg(not(unix))]
+fn is_hostid_option(arg: &std::ffi::OsStr) -> bool {
+    let arg = arg.to_string_lossy();
+    arg.len() > 1 && arg.starts_with('-')
 }
 
 #[cfg(unix)]
@@ -444,7 +485,7 @@ pub fn hostid_native_semantic(args: impl ctcore::Args) -> CTResult<HostidSemanti
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
     let _ = validate_standard_options(&args)?;
-    let matches = ct_app().try_get_matches_from(args.iter().cloned())?;
+    let matches = ct_app().try_get_matches_from(hostid_clap_args(&args))?;
     reject_extra_operand(&matches, &args)?;
 
     Ok(HostidSemantic { hostid: hostid() })

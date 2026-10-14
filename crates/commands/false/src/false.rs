@@ -14,6 +14,10 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, set_ct_exit_code, strip_errno};
+#[cfg(all(target_os = "linux", not(test)))]
+use ctcore::ct_error::CtSimpleError;
+#[cfg(all(target_os = "linux", not(test)))]
+use ctcore::ct_signals::enable_pipe_errors;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write};
 #[cfg(unix)]
@@ -32,6 +36,32 @@ const SYSKITS_FALSE_LONG_VERSION: &str = concat!(
 const SYSKITS_FALSE_AFTER_HELP: &str =
     "syskits online help: <https://www.ctyun.cn/developer>";
 
+#[cfg(all(target_os = "linux", not(test)))]
+static INHERITED_SIGPIPE_IGNORED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(all(target_os = "linux", not(test)))]
+extern "C" fn record_inherited_sigpipe_disposition() {
+    unsafe {
+        let mut action: ctcore::libc::sigaction = std::mem::zeroed();
+        if ctcore::libc::sigaction(ctcore::libc::SIGPIPE, std::ptr::null(), &mut action) == 0
+            && action.sa_sigaction == ctcore::libc::SIG_IGN
+        {
+            INHERITED_SIGPIPE_IGNORED.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+#[used]
+#[unsafe(link_section = ".preinit_array")]
+static RECORD_INHERITED_SIGPIPE_DISPOSITION: extern "C" fn() = record_inherited_sigpipe_disposition;
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn inherited_sigpipe_is_ignored() -> bool {
+    INHERITED_SIGPIPE_IGNORED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 #[derive(Default)]
 pub struct False;
 impl Tool for False {
@@ -49,6 +79,11 @@ impl Tool for False {
 }
 
 pub fn false_main(args: impl ctcore::Args) -> CTResult<()> {
+    #[cfg(all(target_os = "linux", not(test)))]
+    if !inherited_sigpipe_is_ignored() {
+        enable_pipe_errors().map_err(|error| CtSimpleError::new(1, error.to_string()))?;
+    }
+
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let mut command = ct_app(); // 创建命令行解析器实例

@@ -485,7 +485,10 @@ fn read_but_last_n_lines(
 }
 
 fn write_error(e: std::io::Error) -> std::io::Error {
-    std::io::Error::other(format!("error writing 'standard output': {e}"))
+    std::io::Error::other(format!(
+        "error writing 'standard output': {}",
+        strip_errno(&e)
+    ))
 }
 
 fn find_nth_line_from_end<R>(input: &mut R, n: u64, separator: u8) -> std::io::Result<u64>

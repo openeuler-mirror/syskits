@@ -26,7 +26,7 @@ use ctcore::ct_colors::{CT_FILE_ATTRIBUTE_CODES, CT_FILE_COLORS, CT_FILE_TYPES, 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
 
-use std::ffi::OsString;
+use std::ffi::{CString, OsString};
 
 mod opt_flags {
     pub const BOURNE_SHELL: &str = "bourne-shell";
@@ -371,11 +371,8 @@ impl DircolorsStrUtils for str {
         }
     }
 
-    // 使用给定的模式字符串匹配当前字符串。
-    //
-    // 利用`ct_parse_glob`库将模式字符串转换为匹配器，然后对当前字符串进行匹配。
     fn fnmatch(&self, pat: &str) -> bool {
-        ct_parse_glob::ct_from_str(pat).unwrap().matches(self)
+        dircolors_fnmatch(pat, self)
     }
 }
 
@@ -386,8 +383,6 @@ enum DircolorsParseState {
     Continue,
     Pass,
 }
-
-use ctcore::ct_parse_glob;
 
 #[allow(clippy::cognitive_complexity)]
 /// 解析dircolors格式的输入，生成相应的配置字符串。
@@ -514,6 +509,17 @@ where
     result.push_str(&suffix);
 
     Ok((result, ok))
+}
+
+fn dircolors_fnmatch(pattern: &str, value: &str) -> bool {
+    let Ok(pattern) = CString::new(pattern) else {
+        return false;
+    };
+    let Ok(value) = CString::new(value) else {
+        return false;
+    };
+
+    unsafe { ctcore::libc::fnmatch(pattern.as_ptr(), value.as_ptr(), 0) == 0 }
 }
 
 /// Escape single quotes because they are not allowed between single quotes in shell code, and code

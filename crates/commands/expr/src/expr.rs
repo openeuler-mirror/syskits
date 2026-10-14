@@ -409,10 +409,10 @@ mod tests {
         }
 
         #[test]
-        fn test_expr_main_invalid_regex_is_normalized() {
+        fn test_expr_main_unmatched_character_class_matches_gnu() {
             let args = [ctcore::ct_util_name(), "a", ":", "["];
             let err = expr_main(args.iter().map(OsString::from)).unwrap_err();
-            assert_eq!(err.to_string(), "Invalid regular expression");
+            assert_eq!(err.to_string(), "Unmatched [, [^, [:, [., or [=");
         }
     }
 

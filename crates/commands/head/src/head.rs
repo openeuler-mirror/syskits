@@ -27,8 +27,8 @@ use sys_locale::get_locale;
 
 const BUF_SIZE: usize = 65536;
 
-/// The capacity in bytes for buffered writers.
-const BUFWRITER_CAPACITY: usize = 16_384; // 16 kilobytes
+/// GNU head writes through a block-buffered stdout stream on Linux.
+const STDOUT_BUFFER_CAPACITY: usize = 4_096;
 
 mod head_flags {
     pub const BYTES_NAME: &str = "BYTES";
@@ -329,15 +329,13 @@ where
     Ok(total_written)
 }
 
+#[cfg(test)]
 fn read_n_bytes<R>(input: R, n: u64, buffer: Option<&mut Vec<u8>>) -> std::io::Result<u64>
 where
     R: Read,
 {
-    let stdout = std::io::stdout();
-    let mut stdout = BufWriter::with_capacity(BUFWRITER_CAPACITY, stdout.lock());
-    let written = read_n_bytes_to_writer(input, n, &mut stdout, buffer)?;
-    stdout.flush().map_err(flush_error)?;
-    Ok(written)
+    let mut sink = std::io::sink();
+    read_n_bytes_to_writer(input, n, &mut sink, buffer)
 }
 
 fn read_n_lines_to_writer<W: Write>(
@@ -347,8 +345,6 @@ fn read_n_lines_to_writer<W: Write>(
     writer: &mut W,
     mut buffer: Option<&mut Vec<u8>>,
 ) -> std::io::Result<u64> {
-    let mut writer = BufWriter::with_capacity(BUFWRITER_CAPACITY, writer);
-
     let mut lines_read = 0;
     let mut total_written = 0;
 
@@ -384,21 +380,18 @@ fn read_n_lines_to_writer<W: Write>(
             break;
         }
     }
-    writer.flush().map_err(flush_error)?;
     Ok(total_written)
 }
 
+#[cfg(test)]
 fn read_n_lines(
     input: &mut impl std::io::BufRead,
     n: u64,
     separator: u8,
     buffer: Option<&mut Vec<u8>>,
 ) -> std::io::Result<u64> {
-    let stdout = std::io::stdout();
-    let mut stdout = BufWriter::with_capacity(BUFWRITER_CAPACITY, stdout.lock());
-    let written = read_n_lines_to_writer(input, n, separator, &mut stdout, buffer)?;
-    stdout.flush().map_err(flush_error)?;
-    Ok(written)
+    let mut sink = std::io::sink();
+    read_n_lines_to_writer(input, n, separator, &mut sink, buffer)
 }
 
 fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> {
@@ -473,15 +466,14 @@ fn read_but_last_n_bytes_to_writer<W: Write>(
     Ok(())
 }
 
+#[cfg(test)]
 fn read_but_last_n_bytes(
     input: &mut impl std::io::BufRead,
     n: u64,
     buffer: Option<&mut Vec<u8>>,
 ) -> std::io::Result<()> {
-    let stdout = std::io::stdout();
-    let mut stdout = BufWriter::with_capacity(BUFWRITER_CAPACITY, stdout.lock());
-    read_but_last_n_bytes_to_writer(input, n, &mut stdout, buffer)?;
-    stdout.flush().map_err(flush_error)
+    let mut sink = std::io::sink();
+    read_but_last_n_bytes_to_writer(input, n, &mut sink, buffer)
 }
 
 fn read_but_last_n_lines_to_writer<W: Write>(
@@ -505,16 +497,15 @@ fn read_but_last_n_lines_to_writer<W: Write>(
     Ok(())
 }
 
+#[cfg(test)]
 fn read_but_last_n_lines(
     input: impl std::io::BufRead,
     n: u64,
     separator: u8,
     buffer: Option<&mut Vec<u8>>,
 ) -> std::io::Result<()> {
-    let stdout = std::io::stdout();
-    let mut stdout = BufWriter::with_capacity(BUFWRITER_CAPACITY, stdout.lock());
-    read_but_last_n_lines_to_writer(input, n, separator, &mut stdout, buffer)?;
-    stdout.flush().map_err(flush_error)
+    let mut sink = std::io::sink();
+    read_but_last_n_lines_to_writer(input, n, separator, &mut sink, buffer)
 }
 
 fn write_error(e: std::io::Error) -> std::io::Error {
@@ -601,149 +592,6 @@ fn is_seekable(input: &mut std::fs::File) -> bool {
     current_pos.is_ok()
         && input.seek(SeekFrom::End(0)).is_ok()
         && input.seek(SeekFrom::Start(current_pos.unwrap())).is_ok()
-}
-
-fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
-    // 管道模拟：如果开启 presume_input_pipe，强制认为不可寻址
-    let seekable = !options.presume_input_pipe && is_seekable(input);
-
-    if !seekable {
-        return head_backwards_without_seek_file(input, options);
-    }
-
-    let st = input.metadata()?;
-
-    if st.len() <= 65536 {
-        let start_pos = input.stream_position()?;
-        let mut data = Vec::new();
-        input.read_to_end(&mut data)?;
-        let true_size = data.len();
-
-        let stdout = std::io::stdout();
-        let mut stdout_lock = BufWriter::with_capacity(BUFWRITER_CAPACITY, stdout.lock());
-
-        match options.mode {
-            Mode::AllButLastBytes(n) => {
-                let print_len = (true_size as u64).saturating_sub(n) as usize;
-                stdout_lock
-                    .write_all(&data[..print_len])
-                    .map_err(write_error)?;
-                let _ = input.seek(SeekFrom::Start(start_pos + print_len as u64));
-            }
-            Mode::AllButLastLines(n) => {
-                let separator: u8 = options.line_ending.into();
-                let mut newline_positions = Vec::new();
-                for (i, &b) in data.iter().enumerate() {
-                    if b == separator {
-                        newline_positions.push(i);
-                    }
-                }
-
-                let mut total_lines = newline_positions.len() as u64;
-                // 完美处理 GNU 边缘用例：最后一行没有换行符也算作一行
-                if !data.is_empty() && *data.last().unwrap() != separator {
-                    total_lines += 1;
-                }
-
-                let lines_to_keep = total_lines.saturating_sub(n);
-                let print_len = if lines_to_keep == 0 {
-                    0
-                } else if (lines_to_keep as usize) <= newline_positions.len() {
-                    newline_positions[(lines_to_keep - 1) as usize] + 1
-                } else {
-                    true_size
-                };
-
-                stdout_lock
-                    .write_all(&data[..print_len])
-                    .map_err(write_error)?;
-                let _ = input.seek(SeekFrom::Start(start_pos + print_len as u64));
-            }
-            _ => unreachable!(),
-        }
-        stdout_lock.flush().map_err(flush_error)?;
-        return Ok(());
-    }
-
-    head_backwards_on_seekable_file(input, options)
-}
-
-fn head_backwards_without_seek_file(
-    input: &mut std::fs::File,
-    options: &HeadOptions,
-) -> std::io::Result<()> {
-    let reader = &mut std::io::BufReader::with_capacity(BUF_SIZE, input);
-
-    match options.mode {
-        Mode::AllButLastBytes(n) => read_but_last_n_bytes(reader, n, None)?,
-        Mode::AllButLastLines(n) => {
-            read_but_last_n_lines(reader, n, options.line_ending.into(), None)?
-        }
-        _ => unreachable!(),
-    }
-
-    Ok(())
-}
-
-fn head_backwards_on_seekable_file(
-    input: &mut std::fs::File,
-    options: &HeadOptions,
-) -> std::io::Result<()> {
-    let start_pos = input.stream_position()?;
-    match options.mode {
-        Mode::AllButLastBytes(n) => {
-            let size = input.metadata()?.len();
-            if n >= size {
-                return Ok(());
-            } else {
-                let mut reader = std::io::BufReader::with_capacity(BUF_SIZE, &mut *input);
-                let written = read_n_bytes(&mut reader, size - n, None)?;
-                let _ = input.seek(SeekFrom::Start(start_pos + written));
-            }
-        }
-        Mode::AllButLastLines(n) => {
-            let target_pos = find_nth_line_from_end(input, n, options.line_ending.into())?;
-            let current_pos = input.stream_position()?;
-            if target_pos > current_pos {
-                let mut reader = std::io::BufReader::with_capacity(BUF_SIZE, &mut *input);
-                let written = read_n_bytes(&mut reader, target_pos - current_pos, None)?;
-                let _ = input.seek(SeekFrom::Start(start_pos + written));
-            }
-        }
-        _ => unreachable!(),
-    }
-    Ok(())
-}
-
-fn head_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
-    let seekable = !options.presume_input_pipe && is_seekable(input);
-    let start_pos = if seekable {
-        input.stream_position().unwrap_or(0)
-    } else {
-        0
-    };
-
-    match options.mode {
-        Mode::FirstBytes(n) => {
-            let mut reader = std::io::BufReader::with_capacity(BUF_SIZE, &mut *input);
-            let written = read_n_bytes(&mut reader, n, None)?;
-            drop(reader);
-            if seekable {
-                let _ = input.seek(SeekFrom::Start(start_pos + written));
-            }
-            Ok(())
-        }
-        Mode::FirstLines(n) => {
-            let mut reader = std::io::BufReader::with_capacity(BUF_SIZE, &mut *input);
-            let written = read_n_lines(&mut reader, n, options.line_ending.into(), None)?;
-            drop(reader);
-            if seekable {
-                let _ = input.seek(SeekFrom::Start(start_pos + written));
-            }
-            Ok(())
-        }
-        Mode::AllButLastBytes(_) | Mode::AllButLastLines(_) => head_backwards_file(input, options),
-    }
 }
 
 fn head_backwards_without_seek_file_to_writer<W: Write>(
@@ -894,9 +742,18 @@ fn head_file_to_writer<W: Write>(
 #[allow(clippy::cognitive_complexity)]
 fn ct_head(options: &HeadOptions) -> CTResult<()> {
     let mut first = true;
+    let mut last_file_had_error = false;
+    let stdout = std::io::stdout();
+    let mut writer = BufWriter::with_capacity(STDOUT_BUFFER_CAPACITY, stdout.lock());
 
     for file in &options.files {
-        match process_file(file, options, &mut first) {
+        match process_file(
+            file,
+            options,
+            &mut first,
+            &mut last_file_had_error,
+            &mut writer,
+        ) {
             Ok(()) => {}
             Err(e) => {
                 let msg = e.to_string();
@@ -910,85 +767,88 @@ fn ct_head(options: &HeadOptions) -> CTResult<()> {
         }
     }
 
-    if let Err(e) = std::io::stdout().flush() {
-        return Err(CtSimpleError::new(1, flush_error(e).to_string()));
+    if let Err(e) = writer.flush() {
+        let message = if last_file_had_error {
+            "write error".to_string()
+        } else {
+            flush_error(e).to_string()
+        };
+        return Err(CtSimpleError::new(1, message));
     }
 
     Ok(())
 }
 
 // 处理单个文件
-fn process_file(file: &str, options: &HeadOptions, first: &mut bool) -> CTResult<()> {
-    // 不要劫持 presume_input_pipe！只在 file 是 "-" 时才读取 stdin
-    let res = if file == "-" {
-        print_file_header(options, *first, "standard input");
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::io::FromRawFd;
-            let mut stdin_file =
-                std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(0) });
-            if !options.presume_input_pipe && is_seekable(&mut stdin_file) {
-                head_file(&mut stdin_file, options)
-            } else {
-                handle_stdin(options)
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            handle_stdin(options)
-        }
-    } else {
-        process_regular_file(file, options, first)
-    };
-
-    if let Err(e) = res {
-        let msg = e.to_string();
-        if is_stdout_write_error(&msg) {
-            let _ = std::io::stdout().flush();
-            return Err(CtSimpleError::new(1, msg));
-        } else {
-            let name = if file == "-" { "standard input" } else { file };
-            ct_show!(CtSimpleError::new(
-                1,
-                format!("error reading {}: {}", name.quote(), strip_errno(&e))
-            ));
-        }
-    }
-
-    if file == "-" {
-        *first = false;
-    }
-    Ok(())
-}
-
-// 处理普通文件
-fn process_regular_file(
-    name: &str,
+fn process_file<W: Write>(
+    file: &str,
     options: &HeadOptions,
     first: &mut bool,
-) -> std::io::Result<()> {
-    match std::fs::File::open(name) {
-        Ok(mut file) => {
-            print_file_header(options, *first, name);
-            *first = false;
-            head_file(&mut file, options)
-        }
-        Err(err) => {
-            ct_show!(err.map_err_context(|| format!("cannot open {} for reading", name.quote())));
-            Ok(())
-        }
+    last_file_had_error: &mut bool,
+    writer: &mut W,
+) -> CTResult<()> {
+    if file == "-" {
+        let res = (|| -> std::io::Result<()> {
+            print_file_header_to_writer(options, *first, "standard input", writer)?;
+
+            #[cfg(unix)]
+            {
+                use std::os::unix::io::FromRawFd;
+                let mut stdin_file =
+                    std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(0) });
+                if !options.presume_input_pipe && is_seekable(&mut stdin_file) {
+                    head_file_to_writer(&mut stdin_file, options, writer)
+                } else {
+                    handle_stdin_to_writer(options, writer)
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                handle_stdin_to_writer(options, writer)
+            }
+        })();
+
+        finish_file_result(res, "standard input", last_file_had_error)?;
+        *first = false;
+        return Ok(());
     }
+
+    let mut input = match std::fs::File::open(file) {
+        Ok(input) => input,
+        Err(err) => {
+            ct_show!(err.map_err_context(|| format!("cannot open {} for reading", file.quote())));
+            *last_file_had_error = true;
+            return Ok(());
+        }
+    };
+    let res = (|| -> std::io::Result<()> {
+        print_file_header_to_writer(options, *first, file, writer)?;
+        *first = false;
+        head_file_to_writer(&mut input, options, writer)
+    })();
+    finish_file_result(res, file, last_file_had_error)
 }
 
-// 打印文件头部
-fn print_file_header(options: &HeadOptions, first: bool, name: &str) {
-    if should_print_header(options) {
-        if !first {
-            println!();
+fn finish_file_result(
+    res: std::io::Result<()>,
+    name: &str,
+    last_file_had_error: &mut bool,
+) -> CTResult<()> {
+    if let Err(err) = res {
+        let message = err.to_string();
+        if is_stdout_write_error(&message) {
+            return Err(CtSimpleError::new(1, message));
         }
-        println!("==> {name} <==");
+        ct_show!(CtSimpleError::new(
+            1,
+            format!("error reading {}: {}", name.quote(), strip_errno(&err))
+        ));
+        *last_file_had_error = true;
+    } else {
+        *last_file_had_error = false;
     }
+
+    Ok(())
 }
 
 fn print_file_header_to_writer<W: Write>(
@@ -1009,25 +869,6 @@ fn print_file_header_to_writer<W: Write>(
 // 判断是否需要打印头部
 fn should_print_header(options: &HeadOptions) -> bool {
     (options.files.len() > 1 && !options.quiet) || options.verbose
-}
-
-// 处理标准输入
-fn handle_stdin(options: &HeadOptions) -> std::io::Result<()> {
-    let mut stdin = BufReader::new(ctcore::ct_io::stdin_reader_box());
-
-    match options.mode {
-        Mode::FirstBytes(n) => {
-            let _ = read_n_bytes(&mut stdin, n, None)?;
-        }
-        Mode::AllButLastBytes(n) => read_but_last_n_bytes(&mut stdin, n, None)?,
-        Mode::FirstLines(n) => {
-            let _ = read_n_lines(&mut stdin, n, options.line_ending.into(), None)?;
-        }
-        Mode::AllButLastLines(n) => {
-            read_but_last_n_lines(&mut stdin, n, options.line_ending.into(), None)?
-        }
-    }
-    Ok(())
 }
 
 fn handle_stdin_to_writer<W: Write>(options: &HeadOptions, writer: &mut W) -> std::io::Result<()> {

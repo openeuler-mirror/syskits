@@ -458,15 +458,55 @@ pub fn echo_native_semantic(args: impl ctcore::Args) -> CTResult<EchoSemantic> {
     echo_native_semantic_from_args_vec(&args_vec, posix_mode)
 }
 
+fn echo_help_text(usage_name: &str) -> String {
+    format!(
+        "\
+Usage: {usage_name} [SHORT-OPTION]... [STRING]...
+  or:  {usage_name} LONG-OPTION
+Echo the STRING(s) to standard output.
+
+  -n             do not output the trailing newline
+  -e             enable interpretation of backslash escapes
+  -E             disable interpretation of backslash escapes (default)
+      --help        display this help and exit
+      --version     output version information and exit
+
+If -e is in effect, the following sequences are recognized:
+
+  \\\\      backslash
+  \\a      alert (BEL)
+  \\b      backspace
+  \\c      produce no further output
+  \\e      escape
+  \\f      form feed
+  \\n      new line
+  \\r      carriage return
+  \\t      horizontal tab
+  \\v      vertical tab
+  \\0NNN   byte with octal value NNN (1 to 3 digits)
+  \\xHH    byte with hexadecimal value HH (1 to 2 digits)
+
+NOTE: your shell may have its own version of echo, which usually supersedes
+the version described here.  Please refer to your shell's documentation
+for details about the options it supports.
+
+NOTE: printf(1) is a preferred alternative,
+which does not have issues outputting option-like strings.
+
+GNU coreutils online help: <https://www.gnu.org/software/coreutils/>
+Report any translation bugs to <https://translationproject.org/team/>
+Full documentation <https://www.gnu.org/software/coreutils/echo>
+or available locally via: info '(coreutils) echo invocation'
+"
+    )
+}
+
 fn echo_print_help_or_version(help: bool) -> io::Result<()> {
-    let mut command = ct_app();
     let mut output = Vec::new();
     if help {
-        command
-            .write_help(&mut output)
-            .map_err(|error| io::Error::other(error.to_string()))?;
+        output.extend_from_slice(echo_help_text(ctcore::ct_util_name()).as_bytes());
     } else {
-        writeln!(output, "{}", command.render_version())?;
+        writeln!(output, "{}", ct_app().render_version())?;
     }
     echo_write_output(&output)
 }

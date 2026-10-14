@@ -229,6 +229,15 @@ impl SyntaxTreeStringOp {
                 )
                 .map_err(expr_regex_error)?;
 
+                let has_capture = re.captures_len() > 0;
+                if !expr_regex_input_is_valid(&left) {
+                    return Ok(if has_capture {
+                        SyntaxTreeNumOrStr::Str(Vec::new())
+                    } else {
+                        SyntaxTreeNumOrStr::Num(BigInt::from(0))
+                    });
+                }
+
                 let mut region = Region::new();
                 let text = EncodedBytes::from_parts(&left, encoding);
                 let matched = re.search_with_encoding(
@@ -238,8 +247,6 @@ impl SyntaxTreeStringOp {
                     SearchOptions::SEARCH_OPTION_NONE,
                     Some(&mut region),
                 );
-
-                let has_capture = re.captures_len() > 0;
                 let match_pos = matched.and_then(|_| region.pos(0));
                 let match_pos = match_pos.filter(|(start, _)| *start == 0);
 
@@ -857,6 +864,25 @@ fn expr_ctype_locale_name() -> String {
 }
 
 #[cfg(target_os = "linux")]
+fn expr_regex_input_is_valid(bytes: &[u8]) -> bool {
+    let locale = expr_ctype_locale_name();
+    let locale_name = locale.split('@').next().unwrap_or_default();
+    if matches!(locale_name, "C" | "POSIX") {
+        return true;
+    }
+
+    let Some(valid) = bytes_are_valid_in_locale(bytes) else {
+        return true;
+    };
+    valid
+}
+
+#[cfg(not(target_os = "linux"))]
+fn expr_regex_input_is_valid(bytes: &[u8]) -> bool {
+    is_single_byte_locale() || std::str::from_utf8(bytes).is_ok()
+}
+
+#[cfg(target_os = "linux")]
 fn expr_locale_environment_is_supported() -> bool {
     let locale = unsafe {
         libc::newlocale(
@@ -902,6 +928,52 @@ fn logical_char_ranges_in_locale(bytes: &[u8]) -> Option<Vec<(usize, usize)>> {
         libc::freelocale(locale);
     }
     Some(ranges)
+}
+
+#[cfg(target_os = "linux")]
+fn bytes_are_valid_in_locale(bytes: &[u8]) -> Option<bool> {
+    let locale = unsafe {
+        libc::newlocale(
+            libc::LC_ALL_MASK,
+            b"\0".as_ptr().cast::<libc::c_char>(),
+            std::ptr::null_mut(),
+        )
+    };
+    if locale.is_null() {
+        return None;
+    }
+
+    let previous = unsafe { libc::uselocale(locale) };
+    if previous.is_null() {
+        unsafe {
+            libc::freelocale(locale);
+        }
+        return None;
+    }
+
+    let mut state: libc::mbstate_t = unsafe { std::mem::zeroed() };
+    let mut start = 0;
+    let mut valid = true;
+    while start < bytes.len() {
+        let length = unsafe {
+            mbrlen(
+                bytes[start..].as_ptr().cast::<libc::c_char>(),
+                bytes.len() - start,
+                &mut state,
+            )
+        };
+        if matches!(length, usize::MAX) || length == usize::MAX - 1 {
+            valid = false;
+            break;
+        }
+        start += if length == 0 { 1 } else { length };
+    }
+
+    unsafe {
+        libc::uselocale(previous);
+        libc::freelocale(locale);
+    }
+    Some(valid)
 }
 
 #[cfg(target_os = "linux")]

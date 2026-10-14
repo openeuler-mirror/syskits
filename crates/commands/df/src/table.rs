@@ -785,6 +785,20 @@ mod tests {
     }
 
     #[test]
+    fn test_gnu_minimum_widths_for_numeric_value_columns() {
+        for column in [
+            Column::Size,
+            Column::Used,
+            Column::Avail,
+            Column::Itotal,
+            Column::Iused,
+            Column::Iavail,
+        ] {
+            assert_eq!(Column::min_width(&column), 5);
+        }
+    }
+
+    #[test]
     fn test_overmounted_filesystem_uses_unknown_values() {
         let options = DfOptions {
             show_all_fs: true,

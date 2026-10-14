@@ -37,20 +37,20 @@ use clap::builder::ValueParser;
 
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, Command, crate_version};
-use ctcore::Tool;
+use clap::{crate_version, Arg, ArgAction, Command};
 use ctcore::ct_crash_if_err;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_locale::strcoll_compare;
-use memchr::{memchr_iter, memchr3_iter, memmem};
+use ctcore::Tool;
+use memchr::{memchr3_iter, memchr_iter, memmem};
 use std::cmp::Ordering;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Split, Stdin, Write};
 use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -1093,15 +1093,15 @@ impl JoinSettings {
         if let Some(value_os) = matches.get_one::<OsString>("t") {
             settings.separator = parse_separator(value_os)?;
         }
-        if let Some(format) = matches.get_one::<String>("o") {
-            if format == "auto" {
-                settings.is_autoformat = true;
-            } else {
-                let mut specs = vec![];
-                for part in format.split([' ', ',', '\t']) {
-                    specs.push(JoinSpec::parse(part)?);
+        if let Some(formats) = matches.get_many::<String>("o") {
+            for format in formats {
+                if format == "auto" {
+                    settings.is_autoformat = true;
+                } else {
+                    for part in format.split([' ', ',', '\t']) {
+                        settings.format.push(JoinSpec::parse(part)?);
+                    }
                 }
-                settings.format = specs;
             }
         }
 
@@ -1194,6 +1194,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
             .help(t!("join.clap.j")),
         Arg::new("o")
             .short('o')
+            .action(ArgAction::Append)
             .value_name("FORMAT")
             .help(t!("join.clap.o")),
         Arg::new("t")
@@ -1390,7 +1391,7 @@ fn prepare_format(
     state2: &mut JoinState,
     settings: &JoinSettings,
 ) -> Vec<JoinSpec> {
-    if settings.is_autoformat {
+    if settings.is_autoformat && settings.format.is_empty() {
         let mut format = vec![JoinSpec::Key];
         let mut initialize = |state: &mut JoinState| {
             let max_fields = state.initialize(&settings.separator, settings.is_autoformat);
@@ -1843,6 +1844,46 @@ mod tests {
         let settings = JoinSettings::new(&matches).unwrap();
         assert!(settings.is_autoformat);
         assert!(settings.format.is_empty());
+
+        let matches = ct_app()
+            .try_get_matches_from(vec![
+                "join",
+                "-o",
+                "1.2",
+                "-o",
+                "2.2",
+                "file1.txt",
+                "file2.txt",
+            ])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert!(matches!(
+            settings.format.as_slice(),
+            [
+                JoinSpec::Field(FileNum::File1, 1),
+                JoinSpec::Field(FileNum::File2, 1)
+            ]
+        ));
+
+        let matches = ct_app()
+            .try_get_matches_from(vec![
+                "join",
+                "-o",
+                "auto",
+                "-o",
+                "1.2",
+                "file1.txt",
+                "file2.txt",
+            ])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert!(settings.is_autoformat);
+        assert!(matches!(
+            settings.format.as_slice(),
+            [JoinSpec::Field(FileNum::File1, 1)]
+        ));
     }
 
     #[test]
@@ -2187,6 +2228,41 @@ mod tests {
                 settings,
             );
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_join_exec_multiple_output_formats() {
+            let temp = tempdir().unwrap();
+            let file1_path = temp.path().join("file1.txt");
+            let file2_path = temp.path().join("file2.txt");
+
+            create_test_file(&file1_path, "a left-a\nb left-b\n").unwrap();
+            create_test_file(&file2_path, "a right-a\nb right-b\n").unwrap();
+
+            let matches = ct_app()
+                .try_get_matches_from(vec![
+                    "join",
+                    "-o",
+                    "1.2",
+                    "-o",
+                    "2.2",
+                    file1_path.to_str().unwrap(),
+                    file2_path.to_str().unwrap(),
+                ])
+                .unwrap();
+            let settings = JoinSettings::new(&matches).unwrap();
+            let mut output = Vec::new();
+
+            join_exec_to_writer(
+                file1_path.to_str().unwrap(),
+                file2_path.to_str().unwrap(),
+                settings,
+                &mut output,
+                false,
+            )
+            .unwrap();
+
+            assert_eq!(output, b"left-a right-a\nleft-b right-b\n");
         }
 
         #[test]

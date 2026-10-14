@@ -243,7 +243,7 @@ fn gnu_terminal_option_requested(args: &[OsString], terminal_option: &str) -> bo
     false
 }
 
-const GNU_HELP_TEMPLATE: &str = r#"Usage: {program} [OPTION]... GROUP FILE...
+const SYSKITS_HELP_TEMPLATE: &str = r#"Usage: {program} [OPTION]... GROUP FILE...
   or:  {program} [OPTION]... --reference=RFILE FILE...
 Change the group of each FILE to GROUP.
 With --reference, change the group of each FILE to that of RFILE.
@@ -279,27 +279,24 @@ Examples:
   {program} staff /u      Change the group of /u to "staff".
   {program} -hR staff /u  Change the group of /u and subfiles to "staff".
 
-GNU coreutils online help: <https://www.gnu.org/software/coreutils/>
-Report any translation bugs to <https://translationproject.org/team/>
-Full documentation <https://www.gnu.org/software/coreutils/chgrp>
-or available locally via: info '(coreutils) chgrp invocation'
+syskits online help: <https://www.ctyun.cn/developer>
 "#;
 
-fn gnu_help_output(program: &str) -> String {
-    GNU_HELP_TEMPLATE.replace("{program}", program)
+fn syskits_help_output(program: &str) -> String {
+    SYSKITS_HELP_TEMPLATE.replace("{program}", program)
 }
 
-const GNU_VERSION_TEMPLATE: &str = r#"{program} (GNU coreutils) 9.4
-Copyright (C) 2023 Free Software Foundation, Inc.
-License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.
+const SYSKITS_VERSION_TEMPLATE: &str = r#"{program} (syskits) {version}
+Copyright (C) 2022-2025 China Telecom Cloud Technologies Co., Ltd.
+License Mulan PSL v2: <http://license.coscl.org.cn/MulanPSL2>.
 This is free software: you are free to change and redistribute it.
 There is NO WARRANTY, to the extent permitted by law.
-
-Written by David MacKenzie and Jim Meyering.
 "#;
 
-fn gnu_version_output(program: &str) -> String {
-    GNU_VERSION_TEMPLATE.replace("{program}", program)
+fn syskits_version_output(program: &str) -> String {
+    SYSKITS_VERSION_TEMPLATE
+        .replace("{program}", program)
+        .replace("{version}", crate_version!())
 }
 
 pub fn chgrp_main(args: impl ctcore::Args) -> CTResult<()> {
@@ -309,11 +306,11 @@ pub fn chgrp_main(args: impl ctcore::Args) -> CTResult<()> {
     let command = ct_app();
     let args = normalize_posixly_correct_args(&command, args);
     if gnu_terminal_option_requested(&args, opt_flags::HELP) {
-        print!("{}", gnu_help_output(ctcore::ct_util_name()));
+        print!("{}", syskits_help_output(ctcore::ct_util_name()));
         return Ok(());
     }
     if gnu_terminal_option_requested(&args, "version") {
-        print!("{}", gnu_version_output(ctcore::ct_util_name()));
+        print!("{}", syskits_version_output(ctcore::ct_util_name()));
         return Ok(());
     }
     if let Some(message) = gnu_ambiguous_long_option_message(&args) {

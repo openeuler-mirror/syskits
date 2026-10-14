@@ -29,7 +29,7 @@ use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::FromIo;
 use ctcore::ct_fsext::CtMountInfo;
 use ctcore::ct_fsext::read_fs_list;
-use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
+use ctcore::ct_parse_size::ParseSizeError;
 use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use ctcore::ct_show;
 
@@ -46,7 +46,9 @@ use std::path::Path;
 use sys_locale::get_locale;
 use table::TableHeaderMode;
 
-use crate::blocks::{BlockSize, BlockSizeSetting, block_size_read, human_readable_from_spec};
+use crate::blocks::{
+    BlockSize, BlockSizeSetting, block_size_from_spec, block_size_read, human_readable_from_spec,
+};
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::table::Table;
@@ -1067,12 +1069,8 @@ fn validate_block_size(value: &str, option: DfBlockSizeOption) -> Result<(), DfO
         return Ok(());
     }
 
-    match parse_size_u64(value) {
-        Ok(size) if size > 0 => Ok(()),
-        Ok(_) => Err(DfOptionsError::InvalidBlockSize(
-            option,
-            value.quote().to_string(),
-        )),
+    match block_size_from_spec(value) {
+        Ok(BlockSizeSetting::Fixed(_)) | Ok(BlockSizeSetting::HumanReadable(_)) => Ok(()),
         Err(ParseSizeError::InvalidSuffix(s)) => Err(DfOptionsError::InvalidSuffix(option, s)),
         Err(ParseSizeError::SizeTooBig(_)) => {
             Err(DfOptionsError::BlockSizeTooLarge(option, value.to_string()))
@@ -6859,7 +6857,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "-Bp"];
             let result = df_main(args.iter().map(OsString::from));
 
-            assert!(result.is_ok());
+            assert!(result.is_err());
         }
 
         #[test]
@@ -6913,7 +6911,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "--block-size=p"];
             let result = df_main(args.iter().map(OsString::from));
 
-            assert!(result.is_ok());
+            assert!(result.is_err());
         }
 
         #[test]
@@ -6967,7 +6965,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "-Be"];
             let result = df_main(args.iter().map(OsString::from));
 
-            assert!(result.is_ok());
+            assert!(result.is_err());
         }
 
         #[test]
@@ -7021,7 +7019,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "--block-size=e"];
             let result = df_main(args.iter().map(OsString::from));
 
-            assert!(result.is_ok());
+            assert!(result.is_err());
         }
 
         #[test]
@@ -7077,9 +7075,11 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "-Bz"];
             let result = df_main(args.iter().map(OsString::from));
 
-            let expected_error = "-B argument 'z' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
-            assert_eq!(result.err().unwrap().to_string(), expected_error);
+            assert_eq!(
+                result.err().unwrap().to_string(),
+                "invalid suffix in -B argument 'z'"
+            );
         }
 
         #[test]
@@ -7135,9 +7135,11 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "--block-size=z"];
             let result = df_main(args.iter().map(OsString::from));
 
-            let expected_error = "--block-size argument 'z' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
-            assert_eq!(result.err().unwrap().to_string(), expected_error);
+            assert_eq!(
+                result.err().unwrap().to_string(),
+                "invalid suffix in --block-size argument 'z'"
+            );
         }
 
         #[test]
@@ -7193,9 +7195,11 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "-By"];
             let result = df_main(args.iter().map(OsString::from));
 
-            let expected_error = "-B argument 'y' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
-            assert_eq!(result.err().unwrap().to_string(), expected_error);
+            assert_eq!(
+                result.err().unwrap().to_string(),
+                "invalid suffix in -B argument 'y'"
+            );
         }
 
         #[test]
@@ -7251,9 +7255,11 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "--block-size=y"];
             let result = df_main(args.iter().map(OsString::from));
 
-            let expected_error = "--block-size argument 'y' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
-            assert_eq!(result.err().unwrap().to_string(), expected_error);
+            assert_eq!(
+                result.err().unwrap().to_string(),
+                "invalid suffix in --block-size argument 'y'"
+            );
         }
 
         #[test]
@@ -7764,7 +7770,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "-Bp", "--total"];
             let result = df_main(args.iter().map(OsString::from));
 
-            assert!(result.is_ok());
+            assert!(result.is_err());
         }
 
         #[test]
@@ -7818,7 +7824,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "--block-size=p", "--total"];
             let result = df_main(args.iter().map(OsString::from));
 
-            assert!(result.is_ok());
+            assert!(result.is_err());
         }
 
         #[test]
@@ -7872,7 +7878,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "-Be", "--total"];
             let result = df_main(args.iter().map(OsString::from));
 
-            assert!(result.is_ok());
+            assert!(result.is_err());
         }
 
         #[test]
@@ -7926,7 +7932,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "--block-size=e", "--total"];
             let result = df_main(args.iter().map(OsString::from));
 
-            assert!(result.is_ok());
+            assert!(result.is_err());
         }
 
         #[test]
@@ -7982,9 +7988,11 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "-Bz", "--total"];
             let result = df_main(args.iter().map(OsString::from));
 
-            let expected_error = "-B argument 'z' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
-            assert_eq!(result.err().unwrap().to_string(), expected_error);
+            assert_eq!(
+                result.err().unwrap().to_string(),
+                "invalid suffix in -B argument 'z'"
+            );
         }
 
         #[test]
@@ -8040,9 +8048,11 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "--block-size=z", "--total"];
             let result = df_main(args.iter().map(OsString::from));
 
-            let expected_error = "--block-size argument 'z' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
-            assert_eq!(result.err().unwrap().to_string(), expected_error);
+            assert_eq!(
+                result.err().unwrap().to_string(),
+                "invalid suffix in --block-size argument 'z'"
+            );
         }
 
         #[test]
@@ -8098,9 +8108,11 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "-By", "--total"];
             let result = df_main(args.iter().map(OsString::from));
 
-            let expected_error = "-B argument 'y' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
-            assert_eq!(result.err().unwrap().to_string(), expected_error);
+            assert_eq!(
+                result.err().unwrap().to_string(),
+                "invalid suffix in -B argument 'y'"
+            );
         }
 
         #[test]
@@ -8156,9 +8168,11 @@ mod tests {
             let args = [ctcore::ct_util_name(), df_dir, "--block-size=y", "--total"];
             let result = df_main(args.iter().map(OsString::from));
 
-            let expected_error = "--block-size argument 'y' too large"; //df: --block-size argument 'y' too large
             assert!(result.is_err());
-            assert_eq!(result.err().unwrap().to_string(), expected_error);
+            assert_eq!(
+                result.err().unwrap().to_string(),
+                "invalid suffix in --block-size argument 'y'"
+            );
         }
 
         #[test]
@@ -9924,6 +9938,7 @@ mod tests {
     mod tests_ct_get_filesystem {
         use crate::DfError;
         use crate::DfOptions;
+        use crate::DfOptionsError;
         use crate::ct_app;
         use crate::get_all_filesystems;
 
@@ -10665,14 +10680,10 @@ mod tests {
 
             let binds = args_match.unwrap();
 
-            // 从命令行匹配项中解析DfOptions。
-            let options = DfOptions::from(&binds)
-                .map_err(DfError::OptionsError)
-                .unwrap();
-
-            let filesystem_paths = get_filesystem(binds, &options);
-
-            assert!(filesystem_paths.is_ok());
+            assert!(matches!(
+                DfOptions::from(&binds),
+                Err(DfOptionsError::InvalidSuffix(_, _))
+            ));
         }
 
         #[test]
@@ -10739,14 +10750,10 @@ mod tests {
 
             let binds = args_match.unwrap();
 
-            // 从命令行匹配项中解析DfOptions。
-            let options = DfOptions::from(&binds)
-                .map_err(DfError::OptionsError)
-                .unwrap();
-
-            let filesystem_paths = get_filesystem(binds, &options);
-
-            assert!(filesystem_paths.is_ok());
+            assert!(matches!(
+                DfOptions::from(&binds),
+                Err(DfOptionsError::InvalidSuffix(_, _))
+            ));
         }
 
         #[test]
@@ -10813,14 +10820,10 @@ mod tests {
 
             let binds = args_match.unwrap();
 
-            // 从命令行匹配项中解析DfOptions。
-            let options = DfOptions::from(&binds)
-                .map_err(DfError::OptionsError)
-                .unwrap();
-
-            let filesystem_paths = get_filesystem(binds, &options);
-
-            assert!(filesystem_paths.is_ok());
+            assert!(matches!(
+                DfOptions::from(&binds),
+                Err(DfOptionsError::InvalidSuffix(_, _))
+            ));
         }
 
         #[test]
@@ -10887,14 +10890,10 @@ mod tests {
 
             let binds = args_match.unwrap();
 
-            // 从命令行匹配项中解析DfOptions。
-            let options = DfOptions::from(&binds)
-                .map_err(DfError::OptionsError)
-                .unwrap();
-
-            let filesystem_paths = get_filesystem(binds, &options);
-
-            assert!(filesystem_paths.is_ok());
+            assert!(matches!(
+                DfOptions::from(&binds),
+                Err(DfOptionsError::InvalidSuffix(_, _))
+            ));
         }
 
         // #[test]
@@ -11884,14 +11883,10 @@ mod tests {
 
             let binds = args_match.unwrap();
 
-            // 从命令行匹配项中解析DfOptions。
-            let options = DfOptions::from(&binds)
-                .map_err(DfError::OptionsError)
-                .unwrap();
-
-            let filesystem_paths = get_filesystem(binds, &options);
-
-            assert!(filesystem_paths.is_ok());
+            assert!(matches!(
+                DfOptions::from(&binds),
+                Err(DfOptionsError::InvalidSuffix(_, _))
+            ));
         }
 
         #[test]
@@ -11958,14 +11953,10 @@ mod tests {
 
             let binds = args_match.unwrap();
 
-            // 从命令行匹配项中解析DfOptions。
-            let options = DfOptions::from(&binds)
-                .map_err(DfError::OptionsError)
-                .unwrap();
-
-            let filesystem_paths = get_filesystem(binds, &options);
-
-            assert!(filesystem_paths.is_ok());
+            assert!(matches!(
+                DfOptions::from(&binds),
+                Err(DfOptionsError::InvalidSuffix(_, _))
+            ));
         }
 
         #[test]
@@ -12032,14 +12023,10 @@ mod tests {
 
             let binds = args_match.unwrap();
 
-            // 从命令行匹配项中解析DfOptions。
-            let options = DfOptions::from(&binds)
-                .map_err(DfError::OptionsError)
-                .unwrap();
-
-            let filesystem_paths = get_filesystem(binds, &options);
-
-            assert!(filesystem_paths.is_ok());
+            assert!(matches!(
+                DfOptions::from(&binds),
+                Err(DfOptionsError::InvalidSuffix(_, _))
+            ));
         }
 
         #[test]
@@ -12106,14 +12093,10 @@ mod tests {
 
             let binds = args_match.unwrap();
 
-            // 从命令行匹配项中解析DfOptions。
-            let options = DfOptions::from(&binds)
-                .map_err(DfError::OptionsError)
-                .unwrap();
-
-            let filesystem_paths = get_filesystem(binds, &options);
-
-            assert!(filesystem_paths.is_ok());
+            assert!(matches!(
+                DfOptions::from(&binds),
+                Err(DfOptionsError::InvalidSuffix(_, _))
+            ));
         }
         //
         // #[test]

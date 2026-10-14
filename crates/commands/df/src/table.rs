@@ -13,7 +13,6 @@
 //! collection of data rows ([`TableRow`]), one per filesystem.
 use unicode_width::UnicodeWidthStr;
 
-use crate::BlockSize;
 use crate::DfOptions;
 use crate::blocks::BlocksSuffixType;
 use crate::blocks::blocks_to_magnitude_and_suffix;
@@ -275,8 +274,11 @@ impl<'a> TableRowFormatter<'a> {
         if let Some(h) = self.options.human_readable {
             blocks_to_magnitude_and_suffix(size.into(), BlocksSuffixType::HumanReadable(h))
         } else {
-            let BlockSize::Bytes(d) = self.options.block_size;
-            (size as f64 / d as f64).ceil().to_string()
+            let blocks = size.div_ceil(self.options.block_size.as_u64());
+            self.options
+                .block_size
+                .fixed_output_suffix()
+                .map_or_else(|| blocks.to_string(), |suffix| format!("{blocks}{suffix}"))
         }
     }
 

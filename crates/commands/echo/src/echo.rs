@@ -770,15 +770,15 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
     if !posix_mode
         && matches!(args_vec, [arg] if matches!(arg.to_str(), Some("--help" | "--version")))
     {
-        return echo_write_result(echo_print_help_or_version(
-            args_vec[0].to_str() == Some("--help"),
+        return echo_write_result(
+            echo_print_help_or_version(args_vec[0].to_str() == Some("--help"), usage_name),
             usage_name,
-        ));
+        );
     }
 
     let (no_newline, escaped, values) = echo_parse_args_bytes(&args_vec, posix_mode);
 
-    echo_write_result(echo_execute_bytes(no_newline, escaped, &values))
+    echo_write_result(echo_execute_bytes(no_newline, escaped, &values), usage_name)
 }
 
 #[cfg(not(unix))]
@@ -799,14 +799,14 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
     let posix_mode = std::env::var("POSIXLY_CORRECT").is_ok();
 
     if echo_is_help_or_version_request(&args_vec, posix_mode) {
-        return echo_write_result(echo_print_help_or_version(
-            args_vec[0] == "--help",
+        return echo_write_result(
+            echo_print_help_or_version(args_vec[0] == "--help", usage_name),
             usage_name,
-        ));
+        );
     }
 
     let (no_newline, escaped, values) = echo_parse_args(&args_vec, posix_mode);
-    echo_write_result(echo_execute(no_newline, escaped, &values))
+    echo_write_result(echo_execute(no_newline, escaped, &values), usage_name)
 }
 
 pub fn ct_app() -> Command {
@@ -877,14 +877,37 @@ fn echo_write_output(output: &[u8]) -> io::Result<()> {
     stdout.write_all(output)
 }
 
-fn echo_write_result(result: io::Result<()>) -> CTResult<()> {
+fn echo_write_result(result: io::Result<()>, usage_name: &OsStr) -> CTResult<()> {
     match result {
         Ok(()) => Ok(()),
-        Err(error) => Err(CtSimpleError::new(
-            1,
-            format!("write error: {}", strip_errno(&error)),
-        )),
+        Err(error) => {
+            echo_report_write_error(usage_name, &error);
+            Err(CtSimpleError::new(1, ""))
+        }
     }
+}
+
+fn echo_report_write_error(usage_name: &OsStr, error: &io::Error) {
+    #[cfg(unix)]
+    let usage_name = usage_name.as_bytes().to_vec();
+    #[cfg(not(unix))]
+    let usage_name = usage_name.to_string_lossy().into_owned().into_bytes();
+
+    let write_error = if echo_uses_zh_cn_locale() {
+        "写入错误"
+    } else {
+        "write error"
+    };
+    let mut diagnostic = Vec::with_capacity(usage_name.len() + 64);
+    diagnostic.extend_from_slice(&usage_name);
+    diagnostic.extend_from_slice(b": ");
+    diagnostic.extend_from_slice(&echo_localized_text_bytes(write_error));
+    diagnostic.extend_from_slice(b": ");
+    diagnostic.extend_from_slice(strip_errno(error).as_bytes());
+    diagnostic.push(b'\n');
+
+    let stderr = io::stderr();
+    let _ = stderr.lock().write_all(&diagnostic);
 }
 
 #[cfg(test)]

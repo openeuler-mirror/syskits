@@ -150,3 +150,24 @@ fn unterminated_term_glob_uses_gnu_fnmatch_semantics() {
         "LS_COLORS='di=01;34:';\nexport LS_COLORS\n"
     );
 }
+
+#[test]
+fn non_utf8_color_values_are_preserved_in_stdout() {
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), b"DIR 01;34\xff\n").unwrap();
+    let file = file.path().to_str().unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_dircolors"))
+        .arg0("dircolors")
+        .args(["-b", file])
+        .env("LC_ALL", "C")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        output.stdout,
+        b"LS_COLORS='di=01;34\xff:';\nexport LS_COLORS\n"
+    );
+}

@@ -12,11 +12,10 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 //dircolors 命令在Linux系统中主要用于控制 ls 命令显示目录和文件时使用的颜色
-use std::borrow::Borrow;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::env;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -48,6 +47,7 @@ pub enum DircolorsOutputFmt {
 pub struct DircolorsSemantic {
     pub output_kind: String,
     pub output: String,
+    pub classic_bytes: Vec<u8>,
 }
 
 pub fn dircolors_guess_syntax() -> DircolorsOutputFmt {
@@ -68,18 +68,18 @@ pub fn dircolors_guess_syntax() -> DircolorsOutputFmt {
     }
 }
 
-fn dircolors_get_colors_format_strings(fmt: &DircolorsOutputFmt) -> (String, String) {
-    let prefix = match fmt {
-        DircolorsOutputFmt::Shell => "LS_COLORS='".to_string(),
-        DircolorsOutputFmt::CShell => "setenv LS_COLORS '".to_string(),
-        DircolorsOutputFmt::Display => String::new(),
+fn dircolors_get_colors_format_strings(fmt: &DircolorsOutputFmt) -> (&'static [u8], &'static [u8]) {
+    let prefix: &'static [u8] = match fmt {
+        DircolorsOutputFmt::Shell => b"LS_COLORS='",
+        DircolorsOutputFmt::CShell => b"setenv LS_COLORS '",
+        DircolorsOutputFmt::Display => b"",
         DircolorsOutputFmt::Unknown => unreachable!(),
     };
 
-    let suffix = match fmt {
-        DircolorsOutputFmt::Shell => "';\nexport LS_COLORS".to_string(),
-        DircolorsOutputFmt::CShell => "'".to_string(),
-        DircolorsOutputFmt::Display => String::new(),
+    let suffix: &'static [u8] = match fmt {
+        DircolorsOutputFmt::Shell => b"';\nexport LS_COLORS",
+        DircolorsOutputFmt::CShell => b"'",
+        DircolorsOutputFmt::Display => b"",
         DircolorsOutputFmt::Unknown => unreachable!(),
     };
 
@@ -97,8 +97,15 @@ fn dircolors_get_colors_format_strings(fmt: &DircolorsOutputFmt) -> (String, Str
  */
 pub fn dircolors_main(args: impl ctcore::Args) -> CTResult<()> {
     let semantic = dircolors_native_semantic(args)?;
-    if !semantic.output.is_empty() {
-        println!("{}", semantic.output);
+    if !semantic.classic_bytes.is_empty() {
+        let stdout = std::io::stdout();
+        let mut stdout = stdout.lock();
+        stdout
+            .write_all(&semantic.classic_bytes)
+            .map_err(|error| CtSimpleError::new(1, error.to_string()))?;
+        stdout
+            .write_all(b"\n")
+            .map_err(|error| CtSimpleError::new(1, error.to_string()))?;
     }
     Ok(())
 }
@@ -132,9 +139,11 @@ pub fn dircolors_native_semantic(args: impl ctcore::Args) -> CTResult<DircolorsS
             ));
         }
 
+        let classic_bytes = generate_dircolors_config().into_bytes();
         return Ok(DircolorsSemantic {
             output_kind: "database".into(),
-            output: generate_dircolors_config(),
+            output: String::from_utf8_lossy(&classic_bytes).into_owned(),
+            classic_bytes,
         });
     }
 
@@ -154,7 +163,8 @@ pub fn dircolors_native_semantic(args: impl ctcore::Args) -> CTResult<DircolorsS
     let output = dircolors_collect_output(files, &out_format)?;
     Ok(DircolorsSemantic {
         output_kind: dircolors_output_kind(&out_format).into(),
-        output,
+        output: String::from_utf8_lossy(&output).into_owned(),
+        classic_bytes: output,
     })
 }
 
@@ -170,11 +180,14 @@ fn dircolors_output_kind(fmt: &DircolorsOutputFmt) -> &'static str {
 fn dircolors_collect_output(
     files: Vec<&String>,
     out_format: &DircolorsOutputFmt,
-) -> CTResult<String> {
+) -> CTResult<Vec<u8>> {
     let (result, parse_ok) = if files.is_empty() {
         let default_config = generate_dircolors_config();
         dircolors_parse(
-            default_config.lines().map(Ok::<_, std::io::Error>),
+            default_config
+                .as_bytes()
+                .split(|byte| *byte == b'\n')
+                .map(Ok::<_, std::io::Error>),
             out_format,
             "<internal>",
         )?
@@ -185,13 +198,13 @@ fn dircolors_collect_output(
         ));
     } else if files[0].eq("-") {
         let fin = BufReader::new(ctcore::ct_io::stdin_reader_box());
-        dircolors_parse(fin.lines(), out_format, files[0])?
+        dircolors_parse(fin.split(b'\n'), out_format, files[0])?
     } else {
         let path = Path::new(files[0]);
         match File::open(path) {
             Ok(f) => {
                 let fin = BufReader::new(f);
-                dircolors_parse(fin.lines(), out_format, &path.to_string_lossy())?
+                dircolors_parse(fin.split(b'\n'), out_format, &path.to_string_lossy())?
             }
             Err(e) => {
                 return Err(CtSimpleError::new(
@@ -204,7 +217,7 @@ fn dircolors_collect_output(
 
     if !parse_ok {
         ctcore::ct_error::set_ct_exit_code(1);
-        return Ok(String::new());
+        return Ok(Vec::new());
     }
     Ok(result)
 }
@@ -315,67 +328,6 @@ fn dircolors_args_init() -> Vec<Arg> {
     args
 }
 
-/// 定义了`DircolorsStrUtils` trait，用于字符串的处理和匹配。
-pub trait DircolorsStrUtils {
-    /// 移除注释和去除空白字符。
-    ///
-    /// # 返回值
-    /// 返回处理后的字符串的引用。
-    fn purify(&self) -> &Self;
-
-    /// 类似于`split_whitespace()`，但只分割成两个组件。
-    ///
-    /// # 返回值
-    /// 返回一个元组，包含两个字符串的引用：第一个是键，第二个是值。
-    fn split_two(&self) -> (&str, &str);
-
-    /// 使用POSIX风格的模式匹配对字符串进行匹配。
-    ///
-    /// # 参数
-    /// `pattern` - 用于匹配的模式字符串。
-    ///
-    /// # 返回值
-    /// 如果字符串匹配模式，则返回`true`，否则返回`false`。
-    fn fnmatch(&self, pattern: &str) -> bool;
-}
-
-impl DircolorsStrUtils for str {
-    // 移除参数中的注释和去除首尾空白字符。
-    fn purify(&self) -> &Self {
-        let line = self.trim();
-        let Some(argument_start) = line.find(char::is_whitespace) else {
-            return line;
-        };
-        let argument = &line[argument_start..];
-
-        if let Some(comment_start) = argument.find('#') {
-            return line[..argument_start + comment_start].trim();
-        }
-
-        line
-    }
-
-    // 分割字符串至第一个空白字符，并返回两部分。
-    //
-    // 如果字符串中没有空白字符，则返回一个空字符串作为第二个元素。
-    fn split_two(&self) -> (&str, &str) {
-        if let Some(b) = self.find(char::is_whitespace) {
-            let key = &self[..b];
-            if let Some(e) = self[b..].find(|c: char| !c.is_whitespace()) {
-                (key, &self[b + e..])
-            } else {
-                (key, "")
-            }
-        } else {
-            ("", "")
-        }
-    }
-
-    fn fnmatch(&self, pat: &str) -> bool {
-        dircolors_fnmatch(pat, self)
-    }
-}
-
 #[derive(PartialEq)]
 enum DircolorsParseState {
     Global,
@@ -393,21 +345,21 @@ enum DircolorsParseState {
 /// - `fp`: 文件路径或者名称，用于在错误信息中引用。
 ///
 /// # 返回值
-/// - `Result<String, String>`: 成功时返回解析后的字符串，失败时返回错误信息字符串。
+/// - `Result<Vec<u8>, String>`: 成功时返回原始输出字节，失败时返回错误信息字符串。
 #[allow(clippy::cognitive_complexity)]
 fn dircolors_parse<T, S>(
     user_input: T,
     fmt: &DircolorsOutputFmt,
     fp: &str,
-) -> CTResult<(String, bool)>
+) -> CTResult<(Vec<u8>, bool)>
 where
     T: IntoIterator<Item = Result<S, std::io::Error>>,
-    S: Borrow<str>,
+    S: AsRef<[u8]>,
 {
-    let mut result = String::with_capacity(1790);
+    let mut result = Vec::with_capacity(1790);
     let (prefix, suffix) = dircolors_get_colors_format_strings(fmt);
 
-    result.push_str(&prefix);
+    result.extend_from_slice(prefix);
 
     let term = env::var("TERM").unwrap_or_else(|_| "none".to_owned());
     let colorterm = env::var("COLORTERM").unwrap_or_default();
@@ -427,15 +379,12 @@ where
                 ),
             )
         })?;
-        let line = line.borrow().purify();
-        if line.is_empty() {
+        let line = line.as_ref();
+        let line = line.split(|byte| *byte == b'\0').next().unwrap();
+        let Some((key, value)) = dircolors_parse_line(line) else {
             continue;
-        }
-
-        let line = dircolors_escape(line, *fmt != DircolorsOutputFmt::Display);
-
-        let (key, value) = line.split_two();
-        if value.is_empty() {
+        };
+        let Some(value) = value else {
             ok = false;
             eprintln!(
                 "{}: {}:{}: invalid line;  missing second token",
@@ -444,16 +393,18 @@ where
                 num
             );
             continue;
-        }
-        let lower = key.to_lowercase();
-        if lower == "term" {
-            if term.fnmatch(value) {
+        };
+
+        let mut lower = key.to_vec();
+        lower.make_ascii_lowercase();
+        if lower.as_slice() == b"term" {
+            if dircolors_fnmatch(value, term.as_bytes()) {
                 parse_state = DircolorsParseState::Matched;
             } else if parse_state != DircolorsParseState::Matched {
                 parse_state = DircolorsParseState::Pass;
             }
-        } else if lower == "colorterm" {
-            if colorterm.fnmatch(value) {
+        } else if lower.as_slice() == b"colorterm" {
+            if dircolors_fnmatch(value, colorterm.as_bytes()) {
                 parse_state = DircolorsParseState::Matched;
             } else if parse_state != DircolorsParseState::Matched {
                 parse_state = DircolorsParseState::Pass;
@@ -463,30 +414,19 @@ where
                 parse_state = DircolorsParseState::Continue;
             }
             if parse_state != DircolorsParseState::Pass {
-                let search_key = lower.as_str();
-
-                if key.starts_with('.') {
-                    if *fmt == DircolorsOutputFmt::Display {
-                        result.push_str(format!("\x1b[{value}m*{key}\t{value}\x1b[0m\n").as_str());
-                    } else {
-                        result.push_str(format!("*{key}={value}:").as_str());
-                    }
-                } else if key.starts_with('*') {
-                    if *fmt == DircolorsOutputFmt::Display {
-                        result.push_str(format!("\x1b[{value}m{key}\t{value}\x1b[0m\n").as_str());
-                    } else {
-                        result.push_str(format!("{key}={value}:").as_str());
-                    }
-                } else if lower == "options" || lower == "color" || lower == "eightbit" {
+                if key.starts_with(b".") {
+                    dircolors_append_entry(&mut result, Some(b'*'), key, value, fmt);
+                } else if key.starts_with(b"*") {
+                    dircolors_append_entry(&mut result, None, key, value, fmt);
+                } else if lower.as_slice() == b"options"
+                    || lower.as_slice() == b"color"
+                    || lower.as_slice() == b"eightbit"
+                {
                 } else if let Some((_, s)) = CT_FILE_ATTRIBUTE_CODES
                     .iter()
-                    .find(|&&(key, _)| key == search_key)
+                    .find(|&&(attribute, _)| attribute.as_bytes() == lower.as_slice())
                 {
-                    if *fmt == DircolorsOutputFmt::Display {
-                        result.push_str(format!("\x1b[{value}m{s}\t{value}\x1b[0m\n").as_str());
-                    } else {
-                        result.push_str(format!("{s}={value}:").as_str());
-                    }
+                    dircolors_append_entry(&mut result, None, s.as_bytes(), value, fmt);
                 } else if parse_state == DircolorsParseState::Matched
                     || parse_state == DircolorsParseState::Continue
                 {
@@ -496,7 +436,7 @@ where
                         ctcore::ct_util_name(),
                         fp.maybe_quote(),
                         num,
-                        key
+                        String::from_utf8_lossy(key)
                     );
                 }
             }
@@ -506,12 +446,62 @@ where
     if fmt == &DircolorsOutputFmt::Display {
         result.pop();
     }
-    result.push_str(&suffix);
+    result.extend_from_slice(suffix);
 
     Ok((result, ok))
 }
 
-fn dircolors_fnmatch(pattern: &str, value: &str) -> bool {
+fn dircolors_parse_line(line: &[u8]) -> Option<(&[u8], Option<&[u8]>)> {
+    let line = line.trim_ascii_start();
+    if line.is_empty() || line.starts_with(b"#") {
+        return None;
+    }
+
+    let key_end = line
+        .iter()
+        .position(|byte| byte.is_ascii_whitespace())
+        .unwrap_or(line.len());
+    let key = &line[..key_end];
+    let argument = line[key_end..].trim_ascii_start();
+    if argument.is_empty() || argument.starts_with(b"#") {
+        return Some((key, None));
+    }
+
+    let argument_end = argument
+        .iter()
+        .position(|byte| *byte == b'#')
+        .unwrap_or(argument.len());
+    let argument = argument[..argument_end].trim_ascii_end();
+    Some((key, Some(argument)))
+}
+
+fn dircolors_append_entry(
+    result: &mut Vec<u8>,
+    prefix: Option<u8>,
+    item: &[u8],
+    value: &[u8],
+    fmt: &DircolorsOutputFmt,
+) {
+    let display = *fmt == DircolorsOutputFmt::Display;
+    if display {
+        result.extend_from_slice(b"\x1b[");
+        result.extend_from_slice(value);
+        result.push(b'm');
+    }
+    if let Some(prefix) = prefix {
+        result.push(prefix);
+    }
+    result.extend_from_slice(&dircolors_escape(item, !display));
+    result.push(if display { b'\t' } else { b'=' });
+    result.extend_from_slice(&dircolors_escape(value, !display));
+    if display {
+        result.extend_from_slice(b"\x1b[0m\n");
+    } else {
+        result.push(b':');
+    }
+}
+
+fn dircolors_fnmatch(pattern: &[u8], value: &[u8]) -> bool {
     let Ok(pattern) = CString::new(pattern) else {
         return false;
     };
@@ -522,32 +512,27 @@ fn dircolors_fnmatch(pattern: &str, value: &str) -> bool {
     unsafe { ctcore::libc::fnmatch(pattern.as_ptr(), value.as_ptr(), 0) == 0 }
 }
 
-/// Escape single quotes because they are not allowed between single quotes in shell code, and code
-/// enclosed by single quotes is what is returned by `parse()`.
-///
-/// We also escape ":" to make the "quote" test pass in the GNU test suite:
-/// <https://github.com/coreutils/coreutils/blob/master/tests/misc/dircolors.pl>
-fn dircolors_escape(s: &str, escape_for_shell: bool) -> String {
+fn dircolors_escape(s: &[u8], escape_for_shell: bool) -> Vec<u8> {
     if !escape_for_shell {
-        return s.to_owned();
+        return s.to_vec();
     }
 
-    let mut result = String::new();
+    let mut result = Vec::with_capacity(s.len());
     let mut need_backslash = true;
 
-    for c in s.chars() {
+    for &c in s {
         match c {
-            '\'' => {
-                result.push_str("'\\''");
+            b'\'' => {
+                result.extend_from_slice(b"'\\''");
                 need_backslash = true;
             }
-            '\\' | '^' => {
+            b'\\' | b'^' => {
                 result.push(c);
                 need_backslash = !need_backslash;
             }
-            ':' | '=' => {
+            b':' | b'=' => {
                 if need_backslash {
-                    result.push('\\');
+                    result.push(b'\\');
                 }
                 result.push(c);
                 need_backslash = true;
@@ -719,14 +704,14 @@ mod tests {
 
     #[test]
     fn test_escape() {
-        assert_eq!("", dircolors_escape("", true));
-        assert_eq!("'\\''", dircolors_escape("'", true));
-        assert_eq!("\\:", dircolors_escape(":", true));
-        assert_eq!("\\:", dircolors_escape("\\:", true));
-        assert_eq!("\\=", dircolors_escape("=", true));
-        assert_eq!(r"\\\\\:", dircolors_escape(r"\\\\:", true));
-        assert_eq!(r"^:", dircolors_escape(r"^:", true));
-        assert_eq!("01=34:56", dircolors_escape("01=34:56", false));
+        assert_eq!(Vec::<u8>::new(), dircolors_escape(b"", true));
+        assert_eq!(b"'\\''".to_vec(), dircolors_escape(b"'", true));
+        assert_eq!(b"\\:".to_vec(), dircolors_escape(b":", true));
+        assert_eq!(b"\\:".to_vec(), dircolors_escape(b"\\:", true));
+        assert_eq!(b"\\=".to_vec(), dircolors_escape(b"=", true));
+        assert_eq!(br"\\\\\:".to_vec(), dircolors_escape(br"\\\\:", true));
+        assert_eq!(br"^:".to_vec(), dircolors_escape(br"^:", true));
+        assert_eq!(b"01=34:56".to_vec(), dircolors_escape(b"01=34:56", false));
     }
 
     mod tests_dircolors_main {

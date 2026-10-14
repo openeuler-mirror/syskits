@@ -204,11 +204,17 @@ impl SyntaxTreeStringOp {
                 // onig exposes these Oniguruma syntax and behavior bits but its bitflags 1.x
                 // wrapper does not declare them. The values come directly from that same library.
                 let gnu_bre_extensions = unsafe {
-                    SyntaxOperator::from_bits_unchecked(u64::from(
-                        onig_sys::ONIG_SYN_OP_ESC_PLUS_ONE_INF
-                            | onig_sys::ONIG_SYN_OP_ESC_QMARK_ZERO_ONE
-                            | onig_sys::ONIG_SYN_OP_ESC_VBAR_ALT,
-                    ))
+                    SyntaxOperator::from_bits_unchecked(
+                        u64::from(
+                            onig_sys::ONIG_SYN_OP_ESC_PLUS_ONE_INF
+                                | onig_sys::ONIG_SYN_OP_ESC_QMARK_ZERO_ONE
+                                | onig_sys::ONIG_SYN_OP_ESC_VBAR_ALT
+                                | onig_sys::ONIG_SYN_OP_ESC_W_WORD
+                                | onig_sys::ONIG_SYN_OP_ESC_S_WHITE_SPACE
+                                | onig_sys::ONIG_SYN_OP_ESC_LTGT_WORD_BEGIN_END
+                                | onig_sys::ONIG_SYN_OP_ESC_B_WORD_BOUND,
+                        ) | (u64::from(onig_sys::ONIG_SYN_OP2_ESC_GNU_BUF_ANCHOR) << 32),
+                    )
                 };
                 syntax.enable_operators(gnu_bre_extensions);
                 let empty_ranges = unsafe {

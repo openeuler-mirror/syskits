@@ -79,8 +79,9 @@ pub fn hostid_main(args: impl ctcore::Args) -> CTResult<()> {
         }
         None => {}
     }
+    let usage_name = hostid_usage_name(&args);
     let matches = ct_app().try_get_matches_from(args)?;
-    reject_extra_operand(&matches)?;
+    reject_extra_operand(&matches, &usage_name)?;
     write_hostid_output(&format!("{}\n", hostid()))
 }
 
@@ -156,6 +157,7 @@ enum TerminalAction {
 
 fn validate_standard_options(args: &[OsString]) -> CTResult<Option<TerminalAction>> {
     let mut options_ended = false;
+    let usage_name = hostid_usage_name(args);
 
     for arg in args.iter().skip(1) {
         #[cfg(unix)]
@@ -180,7 +182,7 @@ fn validate_standard_options(args: &[OsString]) -> CTResult<Option<TerminalActio
             continue;
         }
         if arg.starts_with("--") {
-            if let Some(action) = validate_long_option(&arg)? {
+            if let Some(action) = validate_long_option(&arg, &usage_name)? {
                 return Ok(Some(action));
             }
             continue;
@@ -191,7 +193,7 @@ fn validate_standard_options(args: &[OsString]) -> CTResult<Option<TerminalActio
                 1,
                 format!(
                     "invalid option -- '{invalid}'\nTry '{} --help' for more information.",
-                    ctcore::ct_help_utility_name()
+                    usage_name
                 ),
             ));
         }
@@ -254,13 +256,13 @@ fn raw_option_error(args: &[OsString], message: &[u8]) -> Box<dyn ctcore::ct_err
     diagnostic.extend_from_slice(b": ");
     diagnostic.extend_from_slice(message);
     diagnostic.extend_from_slice(b"\nTry '");
-    diagnostic.extend_from_slice(ctcore::ct_help_utility_name().as_bytes());
+    diagnostic.extend_from_slice(program_name.as_bytes());
     diagnostic.extend_from_slice(b" --help' for more information.\n");
 
     Box::new(HostidRawOptionError { diagnostic })
 }
 
-fn validate_long_option(arg: &str) -> CTResult<Option<TerminalAction>> {
+fn validate_long_option(arg: &str, usage_name: &str) -> CTResult<Option<TerminalAction>> {
     let long = arg.strip_prefix("--").unwrap();
     let (name, has_value) = match long.split_once('=') {
         Some((name, _)) => (name, true),
@@ -283,12 +285,12 @@ fn validate_long_option(arg: &str) -> CTResult<Option<TerminalAction>> {
         1,
         format!(
             "{message}\nTry '{} --help' for more information.",
-            ctcore::ct_help_utility_name()
+            usage_name
         ),
     ))
 }
 
-fn reject_extra_operand(matches: &clap::ArgMatches) -> CTResult<()> {
+fn reject_extra_operand(matches: &clap::ArgMatches, usage_name: &str) -> CTResult<()> {
     if let Some(operand) = matches
         .get_many::<OsString>(OPERAND_NAME)
         .and_then(|operands| operands.into_iter().next())
@@ -298,7 +300,7 @@ fn reject_extra_operand(matches: &clap::ArgMatches) -> CTResult<()> {
             format!(
                 "extra operand {}\nTry '{} --help' for more information.",
                 quote_hostid_operand(operand),
-                ctcore::ct_help_utility_name()
+                usage_name
             ),
         ));
     }
@@ -434,8 +436,9 @@ pub fn hostid_native_semantic(args: impl ctcore::Args) -> CTResult<HostidSemanti
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
     let _ = validate_standard_options(&args)?;
+    let usage_name = hostid_usage_name(&args);
     let matches = ct_app().try_get_matches_from(args)?;
-    reject_extra_operand(&matches)?;
+    reject_extra_operand(&matches, &usage_name)?;
 
     Ok(HostidSemantic { hostid: hostid() })
 }

@@ -22,7 +22,7 @@ use sys_locale::get_locale;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_colors::{CT_FILE_ATTRIBUTE_CODES, CT_FILE_COLORS, CT_FILE_TYPES, CT_TERMS};
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::{Quotable, locale_quote};
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
 
 use std::ffi::{CString, OsString};
@@ -134,7 +134,7 @@ pub fn dircolors_native_semantic(args: impl ctcore::Args) -> CTResult<DircolorsS
                 format!(
                     "extra operand {}\nfile operands cannot be combined with \
                      --print-database (-p)",
-                    files[0].quote()
+                    locale_quote(files[0])
                 ),
             ));
         }
@@ -194,7 +194,7 @@ fn dircolors_collect_output(
     } else if files.len() > 1 {
         return Err(CTsageError::new(
             1,
-            format!("extra operand {}", files[1].quote()),
+            format!("extra operand {}", locale_quote(files[1])),
         ));
     } else if files[0].eq("-") {
         let fin = BufReader::new(ctcore::ct_io::stdin_reader_box());

@@ -207,3 +207,20 @@ fn repeated_output_options_are_accepted() {
             .starts_with("# Configuration file for dircolors,")
     );
 }
+
+#[test]
+fn extra_operand_uses_utf8_locale_quote_marks() {
+    let output = Command::new(env!("CARGO_BIN_EXE_dircolors"))
+        .arg0("dircolors")
+        .args(["-b", "first", "extra"])
+        .env("LC_ALL", "C.UTF-8")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        "dircolors: extra operand \u{2018}extra\u{2019}\nTry 'dircolors --help' for more information.\n"
+    );
+}

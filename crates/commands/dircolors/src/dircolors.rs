@@ -173,7 +173,11 @@ fn dircolors_collect_output(
 ) -> CTResult<String> {
     let (result, parse_ok) = if files.is_empty() {
         let default_config = generate_dircolors_config();
-        dircolors_parse(default_config.lines(), out_format, "<internal>")
+        dircolors_parse(
+            default_config.lines().map(Ok::<_, std::io::Error>),
+            out_format,
+            "<internal>",
+        )?
     } else if files.len() > 1 {
         return Err(CTsageError::new(
             1,
@@ -181,23 +185,13 @@ fn dircolors_collect_output(
         ));
     } else if files[0].eq("-") {
         let fin = BufReader::new(ctcore::ct_io::stdin_reader_box());
-        dircolors_parse(fin.lines().map_while(Result::ok), out_format, files[0])
+        dircolors_parse(fin.lines(), out_format, files[0])?
     } else {
         let path = Path::new(files[0]);
-        if path.is_dir() {
-            return Err(CtSimpleError::new(
-                2,
-                format!("expected file, got directory {}", path.quote()),
-            ));
-        }
         match File::open(path) {
             Ok(f) => {
                 let fin = BufReader::new(f);
-                dircolors_parse(
-                    fin.lines().map_while(Result::ok),
-                    out_format,
-                    &path.to_string_lossy(),
-                )
+                dircolors_parse(fin.lines(), out_format, &path.to_string_lossy())?
             }
             Err(e) => {
                 return Err(CtSimpleError::new(
@@ -418,10 +412,14 @@ use ctcore::ct_parse_glob;
 /// # 返回值
 /// - `Result<String, String>`: 成功时返回解析后的字符串，失败时返回错误信息字符串。
 #[allow(clippy::cognitive_complexity)]
-fn dircolors_parse<T>(user_input: T, fmt: &DircolorsOutputFmt, fp: &str) -> (String, bool)
+fn dircolors_parse<T, S>(
+    user_input: T,
+    fmt: &DircolorsOutputFmt,
+    fp: &str,
+) -> CTResult<(String, bool)>
 where
-    T: IntoIterator,
-    T::Item: Borrow<str>,
+    T: IntoIterator<Item = Result<S, std::io::Error>>,
+    S: Borrow<str>,
 {
     let mut result = String::with_capacity(1790);
     let (prefix, suffix) = dircolors_get_colors_format_strings(fmt);
@@ -436,6 +434,16 @@ where
 
     for (num, line) in user_input.into_iter().enumerate() {
         let num = num + 1;
+        let line = line.map_err(|error| {
+            CtSimpleError::new(
+                1,
+                format!(
+                    "{}: read error: {}",
+                    fp.maybe_quote(),
+                    path_error_message(&error)
+                ),
+            )
+        })?;
         let line = line.borrow().purify();
         if line.is_empty() {
             continue;
@@ -517,7 +525,7 @@ where
     }
     result.push_str(&suffix);
 
-    (result, ok)
+    Ok((result, ok))
 }
 
 /// Escape single quotes because they are not allowed between single quotes in shell code, and code

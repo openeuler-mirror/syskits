@@ -74,3 +74,23 @@ fn missing_file_reports_the_gnu_error_message() {
         format!("dircolors: {missing_file}: No such file or directory\n")
     );
 }
+
+#[test]
+fn directory_operand_reports_a_gnu_read_error() {
+    let directory = tempfile::tempdir().unwrap();
+    let directory = directory.path().to_str().unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_dircolors"))
+        .arg0("dircolors")
+        .args(["-b", directory])
+        .env("LC_ALL", "C")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        format!("dircolors: {directory}: read error: Is a directory\n")
+    );
+}

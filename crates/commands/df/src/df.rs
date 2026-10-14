@@ -30,6 +30,7 @@ use ctcore::ct_error::FromIo;
 use ctcore::ct_fsext::CtMountInfo;
 use ctcore::ct_fsext::read_fs_list;
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
+use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use ctcore::ct_show;
 
 use clap::Arg;
@@ -39,7 +40,7 @@ use clap::crate_version;
 use clap::parser::ValueSource;
 use ctcore::Tool;
 use std::error::Error;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::path::Path;
 use sys_locale::get_locale;
@@ -502,6 +503,15 @@ fn quote_path_for_diagnostic(path: &str) -> String {
         byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'.' | b'-' | b'_' | b'+' | b',')
     }) {
         path.to_string()
+    } else if path.chars().any(char::is_control) {
+        escape_name(
+            OsStr::new(path),
+            &CtQuotingStyle::Shell {
+                escape: true,
+                always_quote: true,
+                show_control: false,
+            },
+        )
     } else {
         path.quote().to_string()
     }

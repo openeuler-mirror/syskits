@@ -79,9 +79,8 @@ pub fn hostid_main(args: impl ctcore::Args) -> CTResult<()> {
         }
         None => {}
     }
-    let usage_name = hostid_usage_name(&args);
-    let matches = ct_app().try_get_matches_from(args)?;
-    reject_extra_operand(&matches, &usage_name)?;
+    let matches = ct_app().try_get_matches_from(args.iter().cloned())?;
+    reject_extra_operand(&matches, &args)?;
     write_hostid_output(&format!("{}\n", hostid()))
 }
 
@@ -157,7 +156,6 @@ enum TerminalAction {
 
 fn validate_standard_options(args: &[OsString]) -> CTResult<Option<TerminalAction>> {
     let mut options_ended = false;
-    let usage_name = hostid_usage_name(args);
 
     for arg in args.iter().skip(1) {
         #[cfg(unix)]
@@ -182,19 +180,16 @@ fn validate_standard_options(args: &[OsString]) -> CTResult<Option<TerminalActio
             continue;
         }
         if arg.starts_with("--") {
-            if let Some(action) = validate_long_option(&arg, &usage_name)? {
+            if let Some(action) = validate_long_option(&arg, args)? {
                 return Ok(Some(action));
             }
             continue;
         }
         if let Some(short) = arg.strip_prefix('-').filter(|short| !short.is_empty()) {
             let invalid = short.chars().next().unwrap();
-            return Err(ctcore::ct_error::CtSimpleError::new(
-                1,
-                format!(
-                    "invalid option -- '{invalid}'\nTry '{} --help' for more information.",
-                    usage_name
-                ),
+            return Err(hostid_usage_error(
+                args,
+                format!("invalid option -- '{invalid}'"),
             ));
         }
     }
@@ -232,7 +227,7 @@ fn raw_short_option_error(args: &[OsString], invalid: u8) -> Box<dyn ctcore::ct_
     let mut message = b"invalid option -- '".to_vec();
     message.push(invalid);
     message.push(b'\'');
-    raw_option_error(args, &message)
+    raw_usage_error(args, &message)
 }
 
 #[cfg(unix)]
@@ -240,11 +235,11 @@ fn raw_long_option_error(args: &[OsString], option: &[u8]) -> Box<dyn ctcore::ct
     let mut message = b"unrecognized option '".to_vec();
     message.extend_from_slice(option);
     message.push(b'\'');
-    raw_option_error(args, &message)
+    raw_usage_error(args, &message)
 }
 
 #[cfg(unix)]
-fn raw_option_error(args: &[OsString], message: &[u8]) -> Box<dyn ctcore::ct_error::CTError> {
+fn raw_usage_error(args: &[OsString], message: &[u8]) -> Box<dyn ctcore::ct_error::CTError> {
     use std::os::unix::ffi::OsStrExt;
 
     let program_name = args
@@ -262,7 +257,22 @@ fn raw_option_error(args: &[OsString], message: &[u8]) -> Box<dyn ctcore::ct_err
     Box::new(HostidRawOptionError { diagnostic })
 }
 
-fn validate_long_option(arg: &str, usage_name: &str) -> CTResult<Option<TerminalAction>> {
+fn hostid_usage_error(args: &[OsString], message: String) -> Box<dyn ctcore::ct_error::CTError> {
+    #[cfg(unix)]
+    if args.first().is_some_and(|arg| arg.to_str().is_none()) {
+        return raw_usage_error(args, message.as_bytes());
+    }
+
+    CtSimpleError::new(
+        1,
+        format!(
+            "{message}\nTry '{} --help' for more information.",
+            hostid_usage_name(args)
+        ),
+    )
+}
+
+fn validate_long_option(arg: &str, args: &[OsString]) -> CTResult<Option<TerminalAction>> {
     let long = arg.strip_prefix("--").unwrap();
     let (name, has_value) = match long.split_once('=') {
         Some((name, _)) => (name, true),
@@ -281,27 +291,17 @@ fn validate_long_option(arg: &str, usage_name: &str) -> CTResult<Option<Terminal
         _ => format!("option '{arg}' is ambiguous; possibilities: '--help' '--version'"),
     };
 
-    Err(ctcore::ct_error::CtSimpleError::new(
-        1,
-        format!(
-            "{message}\nTry '{} --help' for more information.",
-            usage_name
-        ),
-    ))
+    Err(hostid_usage_error(args, message))
 }
 
-fn reject_extra_operand(matches: &clap::ArgMatches, usage_name: &str) -> CTResult<()> {
+fn reject_extra_operand(matches: &clap::ArgMatches, args: &[OsString]) -> CTResult<()> {
     if let Some(operand) = matches
         .get_many::<OsString>(OPERAND_NAME)
         .and_then(|operands| operands.into_iter().next())
     {
-        return Err(ctcore::ct_error::CtSimpleError::new(
-            1,
-            format!(
-                "extra operand {}\nTry '{} --help' for more information.",
-                quote_hostid_operand(operand),
-                usage_name
-            ),
+        return Err(hostid_usage_error(
+            args,
+            format!("extra operand {}", quote_hostid_operand(operand)),
         ));
     }
     Ok(())
@@ -436,9 +436,8 @@ pub fn hostid_native_semantic(args: impl ctcore::Args) -> CTResult<HostidSemanti
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
     let _ = validate_standard_options(&args)?;
-    let usage_name = hostid_usage_name(&args);
-    let matches = ct_app().try_get_matches_from(args)?;
-    reject_extra_operand(&matches, &usage_name)?;
+    let matches = ct_app().try_get_matches_from(args.iter().cloned())?;
+    reject_extra_operand(&matches, &args)?;
 
     Ok(HostidSemantic { hostid: hostid() })
 }

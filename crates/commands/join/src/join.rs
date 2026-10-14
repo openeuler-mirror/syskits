@@ -1090,8 +1090,20 @@ impl JoinSettings {
         settings.is_ignore_case = matches.get_flag("i");
         settings.key1 = get_field_number(keys, key1)?;
         settings.key2 = get_field_number(keys, key2)?;
-        if let Some(value_os) = matches.get_one::<OsString>("t") {
-            settings.separator = parse_separator(value_os)?;
+        if let Some(separator_values) = matches.get_many::<OsString>("t") {
+            let mut separator = None;
+            for value_os in separator_values {
+                match separator {
+                    Some(separator) if separator != value_os => {
+                        return Err(CtSimpleError::new(1, "incompatible tabs"));
+                    }
+                    _ => {}
+                }
+                separator = Some(value_os);
+            }
+            if let Some(separator) = separator {
+                settings.separator = parse_separator(separator)?;
+            }
         }
         if let Some(formats) = matches.get_many::<String>("o") {
             for format in formats {
@@ -1234,6 +1246,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
             .help(t!("join.clap.o")),
         Arg::new("t")
             .short('t')
+            .action(ArgAction::Append)
             .value_name("CHAR")
             .value_parser(ValueParser::os_string())
             .help("use CHAR as input and output field separator"),
@@ -1938,6 +1951,19 @@ mod tests {
 
         let settings = JoinSettings::new(&matches).unwrap();
         assert!(matches!(settings.separator, Sep::Line));
+
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "-t", ",", "-t", ",", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert!(matches!(settings.separator, Sep::Char(ref v) if v == b","));
+
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "-t", ",", "-t", ":", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        assert!(JoinSettings::new(&matches).is_err());
     }
 
     #[test]

@@ -91,8 +91,13 @@ impl Column {
                 // 从命令行参数中解析用户指定的列
                 let names = matches
                     .get_many::<String>(DF_OPT_OUTPUT)
-                    .unwrap()
-                    .map(|s| s.as_str());
+                    .into_iter()
+                    .flatten()
+                    .map(|name| name.as_str())
+                    .collect::<Vec<_>>();
+                if names.is_empty() {
+                    return Ok(Self::all_output_columns());
+                }
                 let mut seen: Vec<&str> = vec![];
                 let mut columns = vec![];
                 for name in names {
@@ -134,6 +139,23 @@ impl Column {
             // 命令行参数 -T 和 -i 与 --output 互斥，因此如果出现这些组合，命令行参数解析器应该先拒绝
             _ => unreachable!(),
         }
+    }
+
+    fn all_output_columns() -> Vec<Self> {
+        vec![
+            Self::Source,
+            Self::Fstype,
+            Self::Itotal,
+            Self::Iused,
+            Self::Iavail,
+            Self::Ipcent,
+            Self::Size,
+            Self::Used,
+            Self::Avail,
+            Self::Pcent,
+            Self::File,
+            Self::Target,
+        ]
     }
 
     /// 将列名转换为相应的枚举变体。

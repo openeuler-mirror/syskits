@@ -678,17 +678,18 @@ fn hostid_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
     let detail = strip_errno(&error);
 
     #[cfg(unix)]
-    if hostid_message_language() != HostidMessageLanguage::Other {
-        let label = match hostid_message_language() {
-            HostidMessageLanguage::SimplifiedChinese => "写入错误: ",
-            HostidMessageLanguage::TraditionalChinese => "寫入時發生錯誤: ",
-            HostidMessageLanguage::Other => unreachable!(),
+    let program_name = ctcore::ct_os_args()
+        .next()
+        .unwrap_or_else(|| OsString::from(ctcore::ct_util_name()));
+    #[cfg(unix)]
+    if hostid_message_language() != HostidMessageLanguage::Other || program_name.to_str().is_none()
+    {
+        let mut message = match hostid_message_language() {
+            HostidMessageLanguage::SimplifiedChinese => encode_hostid_message("写入错误: "),
+            HostidMessageLanguage::TraditionalChinese => encode_hostid_message("寫入時發生錯誤: "),
+            HostidMessageLanguage::Other => b"write error: ".to_vec(),
         };
-        let mut message = encode_hostid_message(label);
         message.extend_from_slice(detail.as_bytes());
-        let program_name = ctcore::ct_os_args()
-            .next()
-            .unwrap_or_else(|| OsString::from(ctcore::ct_util_name()));
         return raw_diagnostic_error(&program_name, &message, false);
     }
 

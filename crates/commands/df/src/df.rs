@@ -497,6 +497,16 @@ fn is_overmounted(mount_info: &CtMountInfo, mounts: &[CtMountInfo]) -> bool {
         })
 }
 
+fn quote_path_for_diagnostic(path: &str) -> String {
+    if path.bytes().all(|byte| {
+        byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'.' | b'-' | b'_' | b'+' | b',')
+    }) {
+        path.to_string()
+    } else {
+        path.quote().to_string()
+    }
+}
+
 /// 获取当前所有已挂载的文件系统。
 fn get_all_filesystems(option: &DfOptions) -> Result<Vec<Filesystem>, std::io::Error> {
     // 所有挂载的文件系统的列表。
@@ -614,7 +624,10 @@ where
                 } else {
                     ct_show!(CtSimpleError::new(
                         1,
-                        format!("{}: No such file or directory", path.as_ref().display())
+                        format!(
+                            "{}: No such file or directory",
+                            quote_path_for_diagnostic(&path_str)
+                        )
                     ));
                 }
                 had_diagnostic = true;
@@ -769,6 +782,53 @@ fn df_parse_args(args: Vec<OsString>) -> CTResult<ArgMatches> {
         }
         Err(error) => Err(error.into()),
     }
+}
+
+fn stop_option_parsing_for_posix(args: Vec<OsString>) -> Vec<OsString> {
+    if std::env::var_os("POSIXLY_CORRECT").is_none() {
+        return args;
+    }
+
+    let mut index = 1;
+    while let Some(argument) = args.get(index).and_then(|argument| argument.to_str()) {
+        if argument == "--" {
+            break;
+        }
+
+        if !argument.starts_with('-') || argument == "-" {
+            let mut posix_args = args[..index].to_vec();
+            posix_args.push(OsString::from("--"));
+            posix_args.extend_from_slice(&args[index..]);
+            return posix_args;
+        }
+
+        if let Some(long_option) = argument.strip_prefix("--") {
+            let (option, has_value) = long_option
+                .split_once('=')
+                .map_or((long_option, false), |(option, _)| (option, true));
+            if !has_value
+                && ("block-size".starts_with(option)
+                    || "type".starts_with(option)
+                    || "exclude-type".starts_with(option))
+            {
+                index += 1;
+            }
+        } else if let Some(short_options) = argument.strip_prefix('-') {
+            let mut short_options = short_options.chars();
+            while let Some(option) = short_options.next() {
+                if matches!(option, 'B' | 'F' | 't' | 'x') {
+                    if short_options.as_str().is_empty() {
+                        index += 1;
+                    }
+                    break;
+                }
+            }
+        }
+
+        index += 1;
+    }
+
+    args
 }
 
 fn df_block_size_option(args: &[OsString]) -> DfBlockSizeOption {
@@ -985,7 +1045,7 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&normalize_locale(&lang_code));
     // 从args解析命令行匹配项。
-    let args = args.collect::<Vec<OsString>>();
+    let args = stop_option_parsing_for_posix(args.collect::<Vec<OsString>>());
     let args_match = df_parse_args(args.clone())?;
 
     validate_block_size_args(&args)?;
@@ -1026,7 +1086,7 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn df_native_semantic(args: impl ctcore::Args) -> CTResult<DfSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&normalize_locale(&lang_code));
-    let args = args.collect::<Vec<OsString>>();
+    let args = stop_option_parsing_for_posix(args.collect::<Vec<OsString>>());
     let args_match = df_parse_args(args.clone())?;
 
     validate_block_size_args(&args)?;

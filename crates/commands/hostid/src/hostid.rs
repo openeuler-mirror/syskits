@@ -16,6 +16,8 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, strip_errno};
+#[cfg(all(target_os = "linux", not(test)))]
+use ctcore::ct_signals::enable_pipe_errors;
 use libc::c_long;
 #[cfg(unix)]
 use std::error::Error;
@@ -27,6 +29,32 @@ use std::fmt::{self, Display, Formatter};
 use std::io::{self, Write};
 use std::path::Path;
 use sys_locale::get_locale;
+
+#[cfg(all(target_os = "linux", not(test)))]
+static INHERITED_SIGPIPE_IGNORED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(all(target_os = "linux", not(test)))]
+extern "C" fn record_inherited_sigpipe_disposition() {
+    unsafe {
+        let mut action: libc::sigaction = std::mem::zeroed();
+        if libc::sigaction(libc::SIGPIPE, std::ptr::null(), &mut action) == 0
+            && action.sa_sigaction == libc::SIG_IGN
+        {
+            INHERITED_SIGPIPE_IGNORED.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+#[used]
+#[unsafe(link_section = ".preinit_array")]
+static RECORD_INHERITED_SIGPIPE_DISPOSITION: extern "C" fn() = record_inherited_sigpipe_disposition;
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn inherited_sigpipe_is_ignored() -> bool {
+    INHERITED_SIGPIPE_IGNORED.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 // currently rust libc interface doesn't include gethostid
 unsafe extern "C" {
@@ -87,6 +115,10 @@ pub fn hostid_main(args: impl ctcore::Args) -> CTResult<()> {
     initialize_hostid_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    #[cfg(all(target_os = "linux", not(test)))]
+    if !inherited_sigpipe_is_ignored() {
+        enable_pipe_errors().map_err(|error| CtSimpleError::new(1, error.to_string()))?;
+    }
     let args = args.collect::<Vec<_>>();
     match validate_standard_options(&args)? {
         Some(TerminalAction::Help) => {

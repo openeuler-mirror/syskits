@@ -1061,9 +1061,21 @@ fn parse_print_settings(matches: &clap::ArgMatches) -> CTResult<(bool, bool, boo
     Ok((print_joined, print_unpaired1, print_unpaired2))
 }
 
-fn get_and_parse_field_number(matches: &clap::ArgMatches, key: &str) -> CTResult<Option<usize>> {
-    let value = matches.get_one::<String>(key).map(|s| s.as_str());
-    parse_field_number_option(value)
+fn get_and_parse_field_numbers(
+    matches: &clap::ArgMatches,
+    key: &str,
+) -> CTResult<Vec<(usize, usize)>> {
+    let Some(values) = matches.get_many::<String>(key) else {
+        return Ok(Vec::new());
+    };
+    let indices = matches
+        .indices_of(key)
+        .expect("field option values must have command-line indices");
+
+    values
+        .zip(indices)
+        .map(|(value, index)| Ok((index, parse_field_number(value)?)))
+        .collect()
 }
 
 impl JoinSettings {
@@ -1077,9 +1089,9 @@ impl JoinSettings {
     pub fn new(matches: &clap::ArgMatches) -> CTResult<Self> {
         let mut settings = JoinSettings::default();
 
-        let keys = get_and_parse_field_number(matches, "j")?;
-        let key1 = get_and_parse_field_number(matches, "1")?;
-        let key2 = get_and_parse_field_number(matches, "2")?;
+        let keys = get_and_parse_field_numbers(matches, "j")?;
+        let key1 = get_and_parse_field_numbers(matches, "1")?;
+        let key2 = get_and_parse_field_numbers(matches, "2")?;
 
         let (print_joined, print_unpaired1, print_unpaired2) = parse_print_settings(matches)?;
 
@@ -1088,8 +1100,8 @@ impl JoinSettings {
         settings.is_print_unpaired2 = print_unpaired2;
 
         settings.is_ignore_case = matches.get_flag("i");
-        settings.key1 = get_field_number(keys, key1)?;
-        settings.key2 = get_field_number(keys, key2)?;
+        settings.key1 = get_field_number(&keys, &key1)?;
+        settings.key2 = get_field_number(&keys, &key2)?;
         if let Some(separator_values) = matches.get_many::<OsString>("t") {
             let mut separator = None;
             for value_os in separator_values {
@@ -1237,6 +1249,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
             .action(ArgAction::SetTrue),
         Arg::new("j")
             .short('j')
+            .action(ArgAction::Append)
             .value_name("FIELD")
             .help(t!("join.clap.j")),
         Arg::new("o")
@@ -1252,10 +1265,12 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
             .help("use CHAR as input and output field separator"),
         Arg::new("1")
             .short('1')
+            .action(ArgAction::Append)
             .value_name("FIELD")
             .help(t!("join.clap.1")),
         Arg::new("2")
             .short('2')
+            .action(ArgAction::Append)
             .value_name("FIELD")
             .help(t!("join.clap.2")),
         Arg::new("check-order")
@@ -1694,22 +1709,24 @@ fn finalize_join(
 ///
 /// # 返回值
 /// 返回最终确定的字段编号
-fn get_field_number(keys: Option<usize>, key: Option<usize>) -> CTResult<usize> {
-    if let Some(keys) = keys {
-        if let Some(key) = key {
-            if keys != key {
-                // Show zero-based field numbers as one-based.
+fn get_field_number(keys: &[(usize, usize)], key: &[(usize, usize)]) -> CTResult<usize> {
+    let mut fields = keys.iter().chain(key).copied().collect::<Vec<_>>();
+    fields.sort_unstable_by_key(|(index, _)| *index);
+
+    let mut join_field = None;
+    for (_, field) in fields {
+        match join_field {
+            Some(join_field) if join_field != field => {
                 return Err(CtSimpleError::new(
                     1,
-                    format!("incompatible join fields {}, {}", keys + 1, key + 1),
+                    format!("incompatible join fields {join_field}, {field}"),
                 ));
             }
+            _ => join_field = Some(field),
         }
-
-        return Ok(keys);
     }
 
-    Ok(key.unwrap_or(0))
+    Ok(join_field.unwrap_or(0))
 }
 
 /// 解析字段编号
@@ -1742,13 +1759,6 @@ fn parse_file_number(value: &str) -> CTResult<FileNum> {
             1,
             format!("invalid file number: {}", value.quote()),
         )),
-    }
-}
-
-fn parse_field_number_option(value: Option<&str>) -> CTResult<Option<usize>> {
-    match value {
-        None => Ok(None),
-        Some(val) => Ok(Some(parse_field_number(val)?)),
     }
 }
 
@@ -1858,6 +1868,33 @@ mod tests {
         let settings = JoinSettings::new(&matches).unwrap();
         assert_eq!(settings.key1, 1); // 2-1 因为是从1开始计数
         assert_eq!(settings.key2, 2); // 3-1
+
+        let matches = ct_app()
+            .try_get_matches_from(vec![
+                "join",
+                "-1",
+                "2",
+                "-1",
+                "2",
+                "-j",
+                "2",
+                "-j",
+                "2",
+                "file1.txt",
+                "file2.txt",
+            ])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert_eq!(settings.key1, 1);
+        assert_eq!(settings.key2, 1);
+
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "-1", "2", "-j", "1", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let err = JoinSettings::new(&matches).err().unwrap();
+        assert_eq!(err.to_string(), "incompatible join fields 1, 0");
     }
 
     #[test]

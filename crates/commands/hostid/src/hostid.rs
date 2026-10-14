@@ -46,6 +46,8 @@ impl Tool for Hostid {
 pub fn hostid_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = args.collect::<Vec<_>>();
+    reject_short_options(&args)?;
     let matches = ct_app().try_get_matches_from(args)?;
     reject_extra_operand(&matches)?;
     hostid();
@@ -63,7 +65,44 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .arg(Arg::new("help").long("help").action(ArgAction::Help))
+        .arg(
+            Arg::new("version")
+                .long("version")
+                .action(ArgAction::Version),
+        )
         .arg(Arg::new(OPERAND_NAME).hide(true).action(ArgAction::Append))
+}
+
+fn reject_short_options(args: &[OsString]) -> CTResult<()> {
+    let mut options_ended = false;
+
+    for arg in args.iter().skip(1) {
+        let arg = arg.to_string_lossy();
+        if options_ended {
+            continue;
+        }
+        if arg == "--" {
+            options_ended = true;
+            continue;
+        }
+        if let Some(short) = arg.strip_prefix('-').filter(|short| !short.is_empty())
+            && !arg.starts_with("--")
+        {
+            let invalid = short.chars().next().unwrap();
+            return Err(ctcore::ct_error::CtSimpleError::new(
+                1,
+                format!(
+                    "invalid option -- '{invalid}'\nTry '{} --help' for more information.",
+                    ctcore::ct_help_utility_name()
+                ),
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 fn reject_extra_operand(matches: &clap::ArgMatches) -> CTResult<()> {
@@ -107,6 +146,8 @@ pub struct HostidSemantic {
 pub fn hostid_native_semantic(args: impl ctcore::Args) -> CTResult<HostidSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = args.collect::<Vec<_>>();
+    reject_short_options(&args)?;
     let matches = ct_app().try_get_matches_from(args)?;
     reject_extra_operand(&matches)?;
 
@@ -195,9 +236,6 @@ mod tests {
         // hostid 接口: hostid [options]...
         // Print the numeric identifier (in hexadecimal) for the current host
         // Usage: target/debug/syskits hostid [options]
-        // Options:
-        //   -h, --help     Print help
-        //   -V, --version  Print version
         #[test]
         fn test_ct_app_execution_version() {
             let command = ct_app();
@@ -213,15 +251,14 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_app_execution_other_version() {
+        fn test_ct_app_rejects_short_version() {
             let command = ct_app();
 
-            // 测试用例1：有效输入
             let args = vec![ctcore::ct_util_name(), "-V"];
             let executable = command.try_get_matches_from(args);
 
             assert!(executable.is_err());
-            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
 
         #[test]

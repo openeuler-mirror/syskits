@@ -561,7 +561,7 @@ where
         {
             if let Ok(meta) = std::fs::metadata(path.as_ref()) {
                 // 只有明确查询的是块设备，才进行遮蔽检测
-                if meta.file_type().is_block_device() {
+                if !options.direct && meta.file_type().is_block_device() {
                     let mut totally_overmounted = false;
 
                     // 遍历所有该设备曾经挂载的记录
@@ -599,21 +599,20 @@ where
             }
         }
 
-        let effective_path = if options.direct {
-            path.as_ref()
-                .canonicalize()
-                // 如果指定的文件系统类型与文件的实际文件系统类型不匹配，显示错误信息。
-                .unwrap_or(path.as_ref().to_path_buf())
-        } else {
-            path.as_ref().to_path_buf()
-        };
+        if options.direct {
+            match Filesystem::from_direct_path(path.as_ref()) {
+                Some(fs) => result.push(fs),
+                None => {
+                    ct_show!(CtSimpleError::new(1, "no file systems processed"));
+                    had_diagnostic = true;
+                }
+            }
+            continue;
+        }
 
-        match Filesystem::from_path(&mounts, &effective_path) {
-            Some(mut fs) => {
-                if options.direct || is_included_for_listed_path(&fs.mount_info, options, true) {
-                    if options.direct {
-                        fs.mount_info.dev_name = "-".to_string();
-                    }
+        match Filesystem::from_path(&mounts, path.as_ref()) {
+            Some(fs) => {
+                if is_included_for_listed_path(&fs.mount_info, options, true) {
                     result.push(fs)
                 }
             }

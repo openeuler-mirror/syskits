@@ -46,8 +46,7 @@ use std::path::Path;
 use sys_locale::get_locale;
 use table::TableHeaderMode;
 
-use crate::blocks::BlockSize;
-use crate::blocks::block_size_read;
+use crate::blocks::{BlockSize, BlockSizeSetting, block_size_read, human_readable_from_spec};
 use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::table::Table;
@@ -292,6 +291,43 @@ impl DfOptions {
             }
         }
 
+        let block_size_setting = if args_match.get_flag(DF_OPT_KILO) {
+            BlockSizeSetting::Fixed(BlockSize::Bytes(1024))
+        } else if args_match.get_flag(DF_OPT_MEGABYTES) {
+            BlockSizeSetting::Fixed(BlockSize::Bytes(1024 * 1024))
+        } else {
+            block_size_read(args_match).map_err(|e| match e {
+                ParseSizeError::InvalidSuffix(s) => {
+                    DfOptionsError::InvalidSuffix(block_size_option, s)
+                }
+                ParseSizeError::SizeTooBig(_) => DfOptionsError::BlockSizeTooLarge(
+                    block_size_option,
+                    args_match
+                        .get_one::<String>(DF_OPT_BLOCKSIZE)
+                        .unwrap()
+                        .to_string(),
+                ),
+                ParseSizeError::ParseFailure(s) => {
+                    DfOptionsError::InvalidBlockSize(block_size_option, s)
+                }
+            })?
+        };
+        let (block_size, block_size_human_readable) = match block_size_setting {
+            BlockSizeSetting::Fixed(block_size) => (block_size, None),
+            BlockSizeSetting::HumanReadable(human_readable) => {
+                (BlockSize::Bytes(1), Some(human_readable))
+            }
+        };
+        let human_readable = if args_match.get_flag(DF_OPT_HUMAN_READABLE_BINARY) {
+            Some(BlocksHumanReadable::Binary)
+        } else if args_match.get_flag(DF_OPT_HUMAN_READABLE_DECIMAL) {
+            Some(BlocksHumanReadable::Decimal)
+        } else {
+            block_size_human_readable
+        };
+        let output_active =
+            args_match.value_source(DF_OPT_OUTPUT) == Some(ValueSource::CommandLine);
+
         // 解析并构造 DfOptions 实例。
         Ok(Self {
             show_local_fs: args_match.get_flag(DF_OPT_LOCAL),
@@ -299,52 +335,20 @@ impl DfOptions {
             show_listed_fs: false,
             direct: args_match.get_flag(DF_OPT_DIRECT),
             sync: args_match.get_flag(DF_OPT_SYNC),
-            // 解析块大小参数，并处理可能的错误。
-            block_size: if args_match.get_flag(DF_OPT_KILO) {
-                BlockSize::Bytes(1024)
-            } else if args_match.get_flag(DF_OPT_MEGABYTES) {
-                BlockSize::Bytes(1024 * 1024)
-            } else {
-                block_size_read(args_match).map_err(|e| match e {
-                    ParseSizeError::InvalidSuffix(s) => {
-                        DfOptionsError::InvalidSuffix(block_size_option, s)
-                    }
-                    ParseSizeError::SizeTooBig(_) => DfOptionsError::BlockSizeTooLarge(
-                        block_size_option,
-                        args_match
-                            .get_one::<String>(DF_OPT_BLOCKSIZE)
-                            .unwrap()
-                            .to_string(),
-                    ),
-                    ParseSizeError::ParseFailure(s) => {
-                        DfOptionsError::InvalidBlockSize(block_size_option, s)
-                    }
-                })?
-            },
+            block_size,
             header_mode: {
                 // 根据命令行参数确定表格头部的显示模式。
-                if args_match.get_flag(DF_OPT_HUMAN_READABLE_BINARY)
-                    || args_match.get_flag(DF_OPT_HUMAN_READABLE_DECIMAL)
-                {
+                if output_active {
+                    TableHeaderMode::Output
+                } else if human_readable.is_some() {
                     TableHeaderMode::HumanReadable
                 } else if args_match.get_flag(DF_OPT_PORTABILITY) {
                     TableHeaderMode::PosixPortability
-                } else if args_match.value_source(DF_OPT_OUTPUT) == Some(ValueSource::CommandLine) {
-                    TableHeaderMode::Output
                 } else {
                     TableHeaderMode::Default
                 }
             },
-            human_readable: {
-                // 根据命令行参数确定是否以人类可读的方式显示块大小。
-                if args_match.get_flag(DF_OPT_HUMAN_READABLE_BINARY) {
-                    Some(BlocksHumanReadable::Binary)
-                } else if args_match.get_flag(DF_OPT_HUMAN_READABLE_DECIMAL) {
-                    Some(BlocksHumanReadable::Decimal)
-                } else {
-                    None
-                }
-            },
+            human_readable,
             include: df_include,
             exclude: df_exclude,
             show_total: args_match.get_flag(DF_OPT_TOTAL),
@@ -913,7 +917,15 @@ fn last_scale_option(args: &[OsString]) -> Option<DfScaleOption> {
                 .split_once('=')
                 .map_or(long_option, |(option, _)| option);
             if "block-size".starts_with(option) {
-                result = Some(DfScaleOption::Fixed);
+                let value = long_option.split_once('=').map_or_else(
+                    || args.get(index + 1).and_then(|argument| argument.to_str()),
+                    |(_, value)| Some(value),
+                );
+                result = Some(
+                    value
+                        .and_then(human_readable_from_spec)
+                        .map_or(DfScaleOption::Fixed, |_| DfScaleOption::HumanReadable),
+                );
                 if !long_option.contains('=') {
                     index += 1;
                 }
@@ -925,7 +937,16 @@ fn last_scale_option(args: &[OsString]) -> Option<DfScaleOption> {
             while let Some(option) = short_options.next() {
                 match option {
                     'B' => {
-                        result = Some(DfScaleOption::Fixed);
+                        let value = if short_options.as_str().is_empty() {
+                            args.get(index + 1).and_then(|argument| argument.to_str())
+                        } else {
+                            Some(short_options.as_str())
+                        };
+                        result = Some(
+                            value
+                                .and_then(human_readable_from_spec)
+                                .map_or(DfScaleOption::Fixed, |_| DfScaleOption::HumanReadable),
+                        );
                         if short_options.as_str().is_empty() {
                             index += 1;
                         }
@@ -966,6 +987,10 @@ fn apply_scale_option_order(args: &[OsString], args_match: &ArgMatches, options:
 }
 
 fn validate_block_size(value: &str, option: DfBlockSizeOption) -> Result<(), DfOptionsError> {
+    if human_readable_from_spec(value).is_some() {
+        return Ok(());
+    }
+
     match parse_size_u64(value) {
         Ok(size) if size > 0 => Ok(()),
         Ok(_) => Err(DfOptionsError::InvalidBlockSize(

@@ -199,6 +199,11 @@ pub(crate) enum BlockSize {
     Bytes(u64),
 }
 
+pub(crate) enum BlockSizeSetting {
+    Fixed(BlockSize),
+    HumanReadable(BlocksHumanReadable),
+}
+
 // BlockSize 实现了 as_u64 方法，用于获取关联的 u64 值。
 impl BlockSize {
     /// 返回枚举项关联的 u64 值。
@@ -238,30 +243,44 @@ impl Default for BlockSize {
  * 则返回该值作为块大小。如果环境变量中没有设置块大小，则返回默认的块大小。
  *
  * @param args_match 命令行参数匹配结果，用于读取块大小或可移植性标志。
- * @return Result<BlockSize, ParseSizeError> 返回解析后的块大小，或者在解析过程中遇到的错误。
+ * @return Result<BlockSizeSetting, ParseSizeError> 返回解析后的块大小设置，或者在解析过程中遇到的错误。
  */
-pub(crate) fn block_size_read(args_match: &ArgMatches) -> Result<BlockSize, ParseSizeError> {
+pub(crate) fn block_size_read(args_match: &ArgMatches) -> Result<BlockSizeSetting, ParseSizeError> {
     // 尝试从命令行参数读取块大小
     if args_match.contains_id(DF_OPT_BLOCKSIZE) {
         let str = args_match.get_one::<String>(DF_OPT_BLOCKSIZE).unwrap();
-        let bytes = parse_size_u64(str)?;
-
-        // 如果解析成功且值大于0，则返回解析后的字节大小
-        if bytes > 0 {
-            Ok(BlockSize::Bytes(bytes))
-        } else {
-            // 如果解析失败或值不大于0，则返回错误
-            Err(ParseSizeError::ParseFailure(format!("{}", str.quote())))
-        }
+        block_size_from_spec(str)
         // 检查是否指定了可移植性标志
     } else if args_match.get_flag(DF_OPT_PORTABILITY) {
-        Ok(BlockSize::default())
+        Ok(BlockSizeSetting::Fixed(BlockSize::default()))
         // 尝试从环境变量读取块大小
-    } else if let Some(bytes) = block_size_from_env() {
-        Ok(BlockSize::Bytes(bytes))
+    } else if let Some(setting) = block_size_from_env() {
+        Ok(setting)
         // 如果以上条件都不满足，则返回默认块大小
     } else {
-        Ok(BlockSize::default())
+        Ok(BlockSizeSetting::Fixed(BlockSize::default()))
+    }
+}
+
+pub(crate) fn human_readable_from_spec(spec: &str) -> Option<BlocksHumanReadable> {
+    let spec = spec.strip_prefix('\'').unwrap_or(spec);
+    (!spec.is_empty() && "human-readable".starts_with(spec))
+        .then_some(BlocksHumanReadable::Binary)
+        .or_else(|| {
+            (!spec.is_empty() && "si".starts_with(spec)).then_some(BlocksHumanReadable::Decimal)
+        })
+}
+
+fn block_size_from_spec(spec: &str) -> Result<BlockSizeSetting, ParseSizeError> {
+    if let Some(human_readable) = human_readable_from_spec(spec) {
+        return Ok(BlockSizeSetting::HumanReadable(human_readable));
+    }
+
+    let bytes = parse_size_u64(spec)?;
+    if bytes > 0 {
+        Ok(BlockSizeSetting::Fixed(BlockSize::Bytes(bytes)))
+    } else {
+        Err(ParseSizeError::ParseFailure(spec.quote().to_string()))
     }
 }
 
@@ -270,26 +289,17 @@ pub(crate) fn block_size_read(args_match: &ArgMatches) -> Result<BlockSize, Pars
  *
  * 尝试读取多个环境变量来获取块大小的设置，它们的优先级从高到低分别是：
  * "DF_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"。
- * 如果找到了一个有效的值（能够被解析为u64的正数），则返回该值的Option形式；
+ * 如果找到了一个有效的值，则返回该值的Option形式；
  * 如果没有找到或找到了无法解析的值，则返回None。
  *
- * @return Option<u64> - 表示块大小的u64类型值的Option，如果没有找到有效的值则为None。
+ * @return Option<BlockSizeSetting> - 表示块大小设置的Option，如果没有找到有效的值则为None。
  */
-fn block_size_from_env() -> Option<u64> {
+fn block_size_from_env() -> Option<BlockSizeSetting> {
     // 遍历一系列环境变量名称尝试获取块大小的设置
     for blocks_env_var in ["DF_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
         // 尝试获取当前环境变量的值
         if let Ok(blocks_env_size) = env::var(blocks_env_var) {
-            // 尝试将环境变量的值解析为u64类型的大小
-            if let Ok(size) = parse_size_u64(&blocks_env_size)
-                && size > 0
-            {
-                // 如果解析成功，返回解析得到的大小
-                return Some(size);
-            } else {
-                // 如果解析失败，返回None
-                return None;
-            }
+            return block_size_from_spec(&blocks_env_size).ok();
         }
     }
 

@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
+use ctcore::ct_display::Quotable;
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 use std::ffi::OsString;
 
@@ -115,28 +116,44 @@ fn process_num_block(
 /// Parses an -c or -n argument,
 /// the bool specifies whether to read from the end
 pub fn parse_num(src: &str) -> Result<(u64, bool), ParseSizeError> {
-    let mut size_string = src.trim();
+    let mut size_string = src.trim_start();
     let mut all_but_last = false;
+    let mut error_size_string = size_string;
 
-    if let Some(c) = size_string.chars().next() {
-        if c == '+' || c == '-' {
-            // head: '+' is not documented (8.32 man pages)
-            size_string = &size_string[1..];
-            if c == '-' {
-                all_but_last = true;
-            }
-        }
-    } else {
-        return Err(ParseSizeError::ParseFailure(src.to_string()));
+    if size_string.is_empty() {
+        error_size_string = src;
+    }
+
+    if size_string.starts_with('+') {
+        size_string = &size_string[1..];
+    } else if size_string.starts_with('-') {
+        size_string = &size_string[1..];
+        all_but_last = true;
+        error_size_string = size_string;
     }
 
     // remove leading zeros so that size is interpreted as decimal, not octal
     let trimmed_string = size_string.trim_start_matches('0');
-    if trimmed_string.is_empty() {
-        Ok((0, all_but_last))
+    let parse_size_string = if trimmed_string.is_empty() {
+        size_string
     } else {
-        parse_size_u64(trimmed_string).map(|n| (n, all_but_last))
-    }
+        trimmed_string
+    };
+
+    parse_size_u64(parse_size_string)
+        .map(|n| (n, all_but_last))
+        .map_err(|err| match err {
+            ParseSizeError::InvalidSuffix(_) => {
+                ParseSizeError::InvalidSuffix(format!("{}", error_size_string.quote()))
+            }
+            ParseSizeError::ParseFailure(_) => {
+                ParseSizeError::ParseFailure(format!("{}", error_size_string.quote()))
+            }
+            ParseSizeError::SizeTooBig(_) => ParseSizeError::SizeTooBig(format!(
+                "{}: Value too large for defined data type",
+                error_size_string.quote()
+            )),
+        })
 }
 
 #[cfg(test)]
@@ -192,6 +209,24 @@ mod tests {
     fn test_parse_obsolete_no_match() {
         assert_eq!(obsolete("-k"), None);
         assert_eq!(obsolete("asd"), None);
+    }
+
+    #[test]
+    fn test_parse_num_rejects_incomplete_or_trailing_whitespace_counts() {
+        assert_eq!(
+            parse_num("+"),
+            Err(ParseSizeError::ParseFailure("'+'".to_owned()))
+        );
+        assert_eq!(
+            parse_num("-"),
+            Err(ParseSizeError::ParseFailure("''".to_owned()))
+        );
+        assert_eq!(
+            parse_num("1 "),
+            Err(ParseSizeError::InvalidSuffix("'1 '".to_owned()))
+        );
+        assert_eq!(parse_num("+010"), Ok((10, false)));
+        assert_eq!(parse_num("-010"), Ok((10, true)));
     }
 
     #[test]

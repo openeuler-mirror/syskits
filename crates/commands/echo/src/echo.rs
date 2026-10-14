@@ -31,6 +31,8 @@ use std::io::Write;
 use std::ops::ControlFlow;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
 use sys_locale::get_locale;
 
 #[cfg(all(target_os = "linux", not(test)))]
@@ -897,9 +899,43 @@ fn echo_write_output(output: &[u8]) -> io::Result<()> {
         return Err(io::Error::from_raw_os_error(libc::EBADF));
     }
 
+    #[cfg(unix)]
+    return echo_write_stdout_fd(output);
+
+    #[cfg(not(unix))]
+    {
+        let stdout = io::stdout();
+        let mut stdout = stdout.lock();
+        stdout.write_all(output)?;
+        stdout.flush()
+    }
+}
+
+#[cfg(unix)]
+fn echo_write_stdout_fd(mut output: &[u8]) -> io::Result<()> {
     let stdout = io::stdout();
-    let mut stdout = stdout.lock();
-    stdout.write_all(output)
+    let fd = stdout.as_raw_fd();
+
+    while !output.is_empty() {
+        let written = unsafe { libc::write(fd, output.as_ptr().cast(), output.len()) };
+        if written > 0 {
+            output = &output[written as usize..];
+            continue;
+        }
+        if written == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::WriteZero,
+                "failed to write complete echo output",
+            ));
+        }
+
+        let error = io::Error::last_os_error();
+        if error.kind() != io::ErrorKind::Interrupted {
+            return Err(error);
+        }
+    }
+
+    Ok(())
 }
 
 fn echo_write_result(result: io::Result<()>, usage_name: &OsStr) -> CTResult<()> {

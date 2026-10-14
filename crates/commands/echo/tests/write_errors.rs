@@ -8,6 +8,8 @@ use std::process::{Command, Stdio};
 fn stdout_write_errors_use_gnu_diagnostics_for_all_output_paths() {
     for arguments in [
         ["value"].as_slice(),
+        ["-n", "value"].as_slice(),
+        ["-n", "-e", "\\x41"].as_slice(),
         ["--help"].as_slice(),
         ["--version"].as_slice(),
     ] {

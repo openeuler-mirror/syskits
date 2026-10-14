@@ -42,18 +42,21 @@ pub fn locale_quote(text: &str) -> String {
     let (left_quote, right_quote) = locale_quote_marks();
     let normalized_locale = locale_name_for_ctype().to_ascii_uppercase();
     let utf8_locale = normalized_locale.contains("UTF-8") || normalized_locale.contains("UTF8");
-    let escaped = locale_quote_escape(text, right_quote == "'", utf8_locale);
+    let escaped = locale_quote_escape(text, right_quote, utf8_locale);
 
     format!("{left_quote}{escaped}{right_quote}")
 }
 
-fn locale_quote_escape(text: &str, escape_apostrophe: bool, utf8_locale: bool) -> String {
+fn locale_quote_escape(text: &str, right_quote: &str, utf8_locale: bool) -> String {
     let mut escaped = String::new();
 
     for character in text.chars() {
         match character {
             '\\' => escaped.push_str("\\\\"),
-            '\'' if escape_apostrophe => escaped.push_str("\\'"),
+            character if is_right_quote(character, right_quote) => {
+                escaped.push('\\');
+                escaped.push(character);
+            }
             '\u{0007}' => escaped.push_str("\\a"),
             '\u{0008}' => escaped.push_str("\\b"),
             '\t' => escaped.push_str("\\t"),
@@ -78,6 +81,11 @@ fn locale_quote_escape(text: &str, escape_apostrophe: bool, utf8_locale: bool) -
     }
 
     escaped
+}
+
+fn is_right_quote(character: char, right_quote: &str) -> bool {
+    let mut quote_characters = right_quote.chars();
+    quote_characters.next() == Some(character) && quote_characters.next().is_none()
 }
 
 /// Return the locale-sensitive opening and closing marks used by GNU diagnostics.

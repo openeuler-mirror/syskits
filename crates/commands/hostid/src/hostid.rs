@@ -327,7 +327,6 @@ fn locale_quote_non_utf8_operand(operand: &OsString) -> String {
     let (left_quote, right_quote) = marker_quote
         .split_once('x')
         .expect("locale quote must surround its content");
-    let escape_apostrophe = right_quote == "'";
     let utf8_locale = left_quote == "‘";
     let mut escaped = String::new();
     let mut remaining = operand.as_bytes();
@@ -335,7 +334,7 @@ fn locale_quote_non_utf8_operand(operand: &OsString) -> String {
     while !remaining.is_empty() {
         match std::str::from_utf8(remaining) {
             Ok(text) => {
-                append_locale_quoted_text(&mut escaped, text, escape_apostrophe, utf8_locale);
+                append_locale_quoted_text(&mut escaped, text, right_quote, utf8_locale);
                 break;
             }
             Err(error) => {
@@ -345,7 +344,7 @@ fn locale_quote_non_utf8_operand(operand: &OsString) -> String {
                     append_locale_quoted_text(
                         &mut escaped,
                         std::str::from_utf8(valid).expect("valid UTF-8 prefix"),
-                        escape_apostrophe,
+                        right_quote,
                         utf8_locale,
                     );
                     remaining = rest;
@@ -365,13 +364,16 @@ fn locale_quote_non_utf8_operand(operand: &OsString) -> String {
 fn append_locale_quoted_text(
     escaped: &mut String,
     text: &str,
-    escape_apostrophe: bool,
+    right_quote: &str,
     utf8_locale: bool,
 ) {
     for character in text.chars() {
         match character {
             '\\' => escaped.push_str("\\\\"),
-            '\'' if escape_apostrophe => escaped.push_str("\\'"),
+            character if is_hostid_right_quote(character, right_quote) => {
+                escaped.push('\\');
+                escaped.push(character);
+            }
             '\u{0007}' => escaped.push_str("\\a"),
             '\u{0008}' => escaped.push_str("\\b"),
             '\t' => escaped.push_str("\\t"),
@@ -388,6 +390,12 @@ fn append_locale_quoted_text(
             character => escaped.push(character),
         }
     }
+}
+
+#[cfg(unix)]
+fn is_hostid_right_quote(character: char, right_quote: &str) -> bool {
+    let mut quote_characters = right_quote.chars();
+    quote_characters.next() == Some(character) && quote_characters.next().is_none()
 }
 
 fn hostid() -> String {

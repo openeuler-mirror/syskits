@@ -16,7 +16,7 @@ use std::ffi::OsString;
 #[derive(PartialEq, Eq, Debug)]
 pub enum ParseError {
     Syntax(char),
-    Overflow,
+    Overflow { count_lines: bool, number: String },
 }
 
 /// Parses obsolete syntax
@@ -52,84 +52,99 @@ fn process_num_block(
     last_char: char,
     chars: &mut std::str::CharIndices,
 ) -> Option<Result<Vec<OsString>, ParseError>> {
-    match src.parse::<usize>() {
-        Ok(num) => {
-            let mut quiet = false;
-            let mut verbose = false;
-            let mut zero_terminated = false;
-            let mut count_lines = true;
-            let mut multiplier = None;
-            let mut c = last_char;
-            loop {
-                // note that here, we only match lower case 'k', 'c', and 'm'
-                match c {
-                    // we want to preserve order
-                    // this also saves us 1 heap allocation
-                    'q' => {
-                        quiet = true;
-                        verbose = false;
-                    }
-                    'v' => {
-                        verbose = true;
-                        quiet = false;
-                    }
-                    'z' => zero_terminated = true,
-                    'c' => {
-                        count_lines = false;
-                        multiplier = None;
-                    }
-                    'b' => {
-                        count_lines = false;
-                        multiplier = Some(512);
-                    }
-                    'k' => {
-                        count_lines = false;
-                        multiplier = Some(1024);
-                    }
-                    'm' => {
-                        count_lines = false;
-                        multiplier = Some(1024 * 1024);
-                    }
-                    'l' => count_lines = true,
-                    '\0' => {}
-                    _ => return Some(Err(ParseError::Syntax(c))),
-                }
-                if let Some((_, next)) = chars.next() {
-                    c = next;
-                } else {
-                    break;
-                }
+    let mut quiet = false;
+    let mut verbose = false;
+    let mut zero_terminated = false;
+    let mut count_lines = true;
+    let mut multiplier = None;
+    let mut multiplier_suffix = None;
+    let mut c = last_char;
+    loop {
+        // note that here, we only match lower case 'k', 'c', and 'm'
+        match c {
+            // we want to preserve order
+            // this also saves us 1 heap allocation
+            'q' => {
+                quiet = true;
+                verbose = false;
             }
-            let mut options = Vec::new();
-            if quiet {
-                options.push(OsString::from("-q"));
+            'v' => {
+                verbose = true;
+                quiet = false;
             }
-            if verbose {
-                options.push(OsString::from("-v"));
+            'z' => zero_terminated = true,
+            'c' => {
+                count_lines = false;
+                multiplier = None;
+                multiplier_suffix = None;
             }
-            if zero_terminated {
-                options.push(OsString::from("-z"));
+            'b' => {
+                count_lines = false;
+                multiplier = Some(512);
+                multiplier_suffix = Some(c);
             }
-            let num = if let Some(n) = multiplier {
-                let num = match num.checked_mul(n) {
-                    Some(n) => n,
-                    None => return Some(Err(ParseError::Overflow)),
-                };
-                num
-            } else {
-                num
-            };
-
-            if count_lines {
-                options.push(OsString::from("-n"));
-            } else {
-                options.push(OsString::from("-c"));
+            'k' => {
+                count_lines = false;
+                multiplier = Some(1024);
+                multiplier_suffix = Some(c);
             }
-            options.push(OsString::from(format!("{num}")));
-            Some(Ok(options))
+            'm' => {
+                count_lines = false;
+                multiplier = Some(1024 * 1024);
+                multiplier_suffix = Some(c);
+            }
+            'l' => count_lines = true,
+            '\0' => {}
+            _ => return Some(Err(ParseError::Syntax(c))),
         }
-        Err(_) => Some(Err(ParseError::Overflow)),
+        if let Some((_, next)) = chars.next() {
+            c = next;
+        } else {
+            break;
+        }
     }
+
+    let number = match multiplier_suffix {
+        Some(suffix) => format!("{src}{suffix}"),
+        None => src.to_owned(),
+    };
+    let num = match src.parse::<u64>() {
+        Ok(num) => num,
+        Err(_) => {
+            return Some(Err(ParseError::Overflow {
+                count_lines,
+                number,
+            }));
+        }
+    };
+    let num = match multiplier.and_then(|multiplier| num.checked_mul(multiplier)) {
+        Some(num) => num,
+        None if multiplier.is_some() => {
+            return Some(Err(ParseError::Overflow {
+                count_lines,
+                number,
+            }));
+        }
+        None => num,
+    };
+
+    let mut options = Vec::new();
+    if quiet {
+        options.push(OsString::from("-q"));
+    }
+    if verbose {
+        options.push(OsString::from("-v"));
+    }
+    if zero_terminated {
+        options.push(OsString::from("-z"));
+    }
+    if count_lines {
+        options.push(OsString::from("-n"));
+    } else {
+        options.push(OsString::from("-c"));
+    }
+    options.push(OsString::from(format!("{num}")));
+    Some(Ok(options))
 }
 
 /// Parses an -c or -n argument,
@@ -253,22 +268,27 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_pointer_width = "64")]
-    fn test_parse_obsolete_overflow_x64() {
+    fn test_parse_obsolete_overflow() {
         assert_eq!(
             obsolete("-1000000000000000m"),
-            Some(Err(ParseError::Overflow))
+            Some(Err(ParseError::Overflow {
+                count_lines: false,
+                number: "1000000000000000m".to_owned(),
+            }))
         );
         assert_eq!(
             obsolete("-10000000000000000000000"),
-            Some(Err(ParseError::Overflow))
+            Some(Err(ParseError::Overflow {
+                count_lines: true,
+                number: "10000000000000000000000".to_owned(),
+            }))
         );
-    }
-
-    #[test]
-    #[cfg(target_pointer_width = "32")]
-    fn test_parse_obsolete_overflow_x32() {
-        assert_eq!(obsolete("-42949672960"), Some(Err(ParseError::Overflow)));
-        assert_eq!(obsolete("-42949672k"), Some(Err(ParseError::Overflow)));
+        assert_eq!(
+            obsolete("-36028797018963968b"),
+            Some(Err(ParseError::Overflow {
+                count_lines: false,
+                number: "36028797018963968b".to_owned(),
+            }))
+        );
     }
 }

@@ -191,11 +191,15 @@ fn arg_iterate(mut args: impl ctcore::Args) -> CTResult<Box<dyn Iterator<Item = 
                             ctcore::ct_help_utility_name()
                         ),
                     )),
-                    parse::ParseError::Overflow => Err(CtSimpleError::new(
+                    parse::ParseError::Overflow {
+                        count_lines,
+                        number,
+                    } => Err(CtSimpleError::new(
                         1,
                         format!(
-                            "invalid argument: {} Value too large for defined datatype",
-                            s.quote()
+                            "invalid number of {}: {}: Value too large for defined data type",
+                            if count_lines { "lines" } else { "bytes" },
+                            number.quote()
                         ),
                     )),
                 },

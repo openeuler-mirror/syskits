@@ -968,6 +968,7 @@ fn normalize_bre_bytes(pattern: &[u8]) -> ExprResult<Vec<u8>> {
     let mut depth = 0usize;
     let mut out = Vec::with_capacity(pattern.len());
     let mut last_can_repeat = false;
+    let mut at_bre_branch_start = true;
 
     while i < pattern.len() {
         if pattern[i] == b'\\' {
@@ -981,6 +982,7 @@ fn normalize_bre_bytes(pattern: &[u8]) -> ExprResult<Vec<u8>> {
                     depth += 1;
                     out.extend_from_slice(b"\\(");
                     last_can_repeat = false;
+                    at_bre_branch_start = true;
                     i += 2;
                     continue;
                 }
@@ -991,6 +993,7 @@ fn normalize_bre_bytes(pattern: &[u8]) -> ExprResult<Vec<u8>> {
                     depth -= 1;
                     out.extend_from_slice(b"\\)");
                     last_can_repeat = true;
+                    at_bre_branch_start = false;
                     i += 2;
                     continue;
                 }
@@ -1008,12 +1011,14 @@ fn normalize_bre_bytes(pattern: &[u8]) -> ExprResult<Vec<u8>> {
                         out.extend_from_slice(b"\\}");
                         last_can_repeat = true;
                     }
+                    at_bre_branch_start = false;
                     i = next_index;
                     continue;
                 }
                 b'|' => {
                     out.extend_from_slice(b"\\|");
                     last_can_repeat = false;
+                    at_bre_branch_start = true;
                     i += 2;
                     continue;
                 }
@@ -1021,6 +1026,7 @@ fn normalize_bre_bytes(pattern: &[u8]) -> ExprResult<Vec<u8>> {
                     out.push(b'\\');
                     out.push(next);
                     last_can_repeat = true;
+                    at_bre_branch_start = false;
                     i += 2;
                     continue;
                 }
@@ -1028,9 +1034,18 @@ fn normalize_bre_bytes(pattern: &[u8]) -> ExprResult<Vec<u8>> {
         }
 
         match pattern[i] {
-            b'^' | b'$' => {
+            b'^' if at_bre_branch_start => {
                 out.push(pattern[i]);
                 last_can_repeat = false;
+            }
+            b'$' if is_bre_anchor_end(pattern, i) => {
+                out.push(pattern[i]);
+                last_can_repeat = false;
+            }
+            b'^' | b'$' => {
+                out.push(b'\\');
+                out.push(pattern[i]);
+                last_can_repeat = true;
             }
             b'*' => {
                 if last_can_repeat {
@@ -1052,6 +1067,7 @@ fn normalize_bre_bytes(pattern: &[u8]) -> ExprResult<Vec<u8>> {
                 last_can_repeat = true;
             }
         }
+        at_bre_branch_start = false;
         i += 1;
     }
 
@@ -1059,6 +1075,14 @@ fn normalize_bre_bytes(pattern: &[u8]) -> ExprResult<Vec<u8>> {
         return Err(ExprError::RegexError("Unmatched ( or \\(".to_string()));
     }
     Ok(out)
+}
+
+fn is_bre_anchor_end(pattern: &[u8], index: usize) -> bool {
+    index + 1 == pattern.len()
+        || matches!(
+            pattern.get(index + 1..index + 3),
+            Some([b'\\', b')' | b'|'])
+        )
 }
 
 fn read_bre_brace_bytes(pattern: &[u8], start: usize) -> ExprResult<(Vec<u8>, usize)> {

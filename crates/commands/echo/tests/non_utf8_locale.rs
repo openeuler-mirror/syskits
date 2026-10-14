@@ -19,6 +19,24 @@ fn run_echo(binary: &str, locale: &str, language: Option<&str>, argument: &str) 
     command.output().expect("run echo")
 }
 
+fn run_echo_with_split_locale(
+    binary: &str,
+    messages_locale: &str,
+    ctype_locale: &str,
+    argument: &str,
+) -> Output {
+    let mut command = Command::new(binary);
+    command
+        .arg0("echo")
+        .arg(argument)
+        .env_remove("LC_ALL")
+        .env("LC_MESSAGES", messages_locale)
+        .env("LC_CTYPE", ctype_locale)
+        .env_remove("LANG")
+        .env_remove("LANGUAGE");
+    command.output().expect("run echo")
+}
+
 #[test]
 fn zh_cn_legacy_encodings_match_gnu_coreutils() {
     for locale in ["zh_CN.gbk", "zh_CN.gb18030", "zh_CN.gb2312"] {
@@ -63,5 +81,29 @@ fn invalid_locale_falls_back_to_c_locale() {
         assert_eq!(syskits.status.code(), gnu.status.code(), "{argument}");
         assert_eq!(syskits.stderr, gnu.stderr, "{argument}");
         assert_eq!(syskits.stdout, gnu.stdout, "{argument}");
+    }
+}
+
+#[test]
+fn c_ctype_transliterates_localized_output() {
+    for ctype_locale in ["C", "POSIX"] {
+        for argument in ["--help", "--version"] {
+            let gnu =
+                run_echo_with_split_locale("/usr/bin/echo", "zh_CN.UTF-8", ctype_locale, argument);
+            let syskits = run_echo_with_split_locale(
+                env!("CARGO_BIN_EXE_echo"),
+                "zh_CN.UTF-8",
+                ctype_locale,
+                argument,
+            );
+
+            assert_eq!(
+                syskits.status.code(),
+                gnu.status.code(),
+                "{ctype_locale} {argument}"
+            );
+            assert_eq!(syskits.stderr, gnu.stderr, "{ctype_locale} {argument}");
+            assert_eq!(syskits.stdout, gnu.stdout, "{ctype_locale} {argument}");
+        }
     }
 }

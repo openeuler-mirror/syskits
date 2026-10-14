@@ -15,9 +15,11 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::CTResult;
+use ctcore::ct_error::{CTResult, CtSimpleError, strip_errno};
 use libc::c_long;
 use std::ffi::OsString;
+use std::io::{self, Write};
+use std::path::Path;
 use sys_locale::get_locale;
 
 // currently rust libc interface doesn't include gethostid
@@ -55,11 +57,24 @@ pub fn hostid_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
-    let _ = validate_standard_options(&args)?;
+    match validate_standard_options(&args)? {
+        Some(TerminalAction::Help) => {
+            return write_hostid_output(&format!(
+                "{}\n",
+                hostid_help_text(&hostid_usage_name(&args))
+            ));
+        }
+        Some(TerminalAction::Version) => {
+            return write_hostid_output(&format!(
+                "{}\n",
+                hostid_version_text(&hostid_program_name(&args))
+            ));
+        }
+        None => {}
+    }
     let matches = ct_app().try_get_matches_from(args)?;
     reject_extra_operand(&matches)?;
-    hostid();
-    Ok(())
+    write_hostid_output(&format!("{}\n", hostid()))
 }
 
 pub fn ct_app() -> Command {
@@ -98,6 +113,27 @@ Print the numeric identifier (in hexadecimal) for the current host.
 
 syskits online help: <https://www.ctyun.cn/developer>"
     )
+}
+
+fn hostid_version_text(program_name: &str) -> String {
+    format!("{program_name} {SYSKITS_HOSTID_LONG_VERSION}")
+}
+
+fn hostid_usage_name(args: &[OsString]) -> String {
+    args.first()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .filter(|arg| !arg.is_empty())
+        .unwrap_or_else(|| ctcore::ct_util_name().to_owned())
+}
+
+fn hostid_program_name(args: &[OsString]) -> String {
+    let usage_name = hostid_usage_name(args);
+
+    Path::new(&usage_name)
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .filter(|name| !name.is_empty())
+        .unwrap_or(usage_name)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -184,7 +220,7 @@ fn reject_extra_operand(matches: &clap::ArgMatches) -> CTResult<()> {
     Ok(())
 }
 
-fn hostid() {
+fn hostid() -> String {
     /*
      * POSIX says gethostid returns a "32-bit identifier" but is silent
      * whether it's sign-extended.  Turn off any sign-extension.  This
@@ -197,7 +233,27 @@ fn hostid() {
     let mask = 0xffff_ffff;
 
     result &= mask;
-    println!("{result:0>8x}");
+    format!("{result:0>8x}")
+}
+
+fn write_hostid_output(output: &str) -> CTResult<()> {
+    #[cfg(target_os = "linux")]
+    if ctcore::ct_stdout_was_closed() {
+        return Err(hostid_write_error(io::Error::from_raw_os_error(
+            libc::EBADF,
+        )));
+    }
+
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
+    stdout
+        .write_all(output.as_bytes())
+        .and_then(|_| stdout.flush())
+        .map_err(hostid_write_error)
+}
+
+fn hostid_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
+    CtSimpleError::new(1, format!("write error: {}", strip_errno(&error)))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -213,14 +269,7 @@ pub fn hostid_native_semantic(args: impl ctcore::Args) -> CTResult<HostidSemanti
     let matches = ct_app().try_get_matches_from(args)?;
     reject_extra_operand(&matches)?;
 
-    let mut result: c_long = unsafe { gethostid() };
-    #[allow(overflowing_literals)]
-    let mask = 0xffff_ffff;
-    result &= mask;
-
-    Ok(HostidSemantic {
-        hostid: format!("{result:0>8x}"),
-    })
+    Ok(HostidSemantic { hostid: hostid() })
 }
 
 #[cfg(test)]
@@ -255,7 +304,7 @@ mod tests {
 
             let result = hostid_main(args.iter().map(OsString::from));
 
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -263,7 +312,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), "--help"];
             let result = hostid_main(args.iter().map(OsString::from));
 
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]

@@ -501,12 +501,22 @@ or available locally via: info '(coreutils) echo invocation'
     )
 }
 
+const GNU_ECHO_VERSION_TEXT: &str = "\
+echo (GNU coreutils) 9.4
+Copyright (C) 2023 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+Written by Brian Fox and Chet Ramey.
+";
+
 fn echo_print_help_or_version(help: bool) -> io::Result<()> {
     let mut output = Vec::new();
     if help {
         output.extend_from_slice(echo_help_text(ctcore::ct_util_name()).as_bytes());
     } else {
-        writeln!(output, "{}", ct_app().render_version())?;
+        output.extend_from_slice(GNU_ECHO_VERSION_TEXT.as_bytes());
     }
     echo_write_output(&output)
 }

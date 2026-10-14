@@ -40,6 +40,9 @@ mod head_flags {
     pub const PRESUME_INPUT_PIPE: &str = "-PRESUME-INPUT-PIPE";
 }
 
+const GNU_PRESUME_INPUT_PIPE_OPTION: &str = "---presume-input-pipe";
+const INTERNAL_PRESUME_INPUT_PIPE_OPTION: &str = "--presume-input-pipe-internal";
+
 mod parse;
 mod take;
 use take::take_all_but;
@@ -86,8 +89,7 @@ pub fn ct_app() -> Command {
             .overrides_with_all([head_flags::QUIET_NAME, head_flags::VERBOSE_NAME])
             .action(ArgAction::SetTrue),
         Arg::new(head_flags::PRESUME_INPUT_PIPE)
-            .long("presume-input-pipe")
-            .alias("-presume-input-pipe")
+            .long("presume-input-pipe-internal")
             .hide(true)
             .action(ArgAction::SetTrue),
         Arg::new(head_flags::ZERO_NAME)
@@ -150,9 +152,27 @@ impl Mode {
     }
 }
 
-fn arg_iterate<'a>(
-    mut args: impl ctcore::Args + 'a,
-) -> CTResult<Box<dyn Iterator<Item = OsString> + 'a>> {
+fn arg_iterate(mut args: impl ctcore::Args) -> CTResult<Box<dyn Iterator<Item = OsString>>> {
+    let mut raw_args = args.by_ref().collect::<Vec<_>>();
+    let mut parse_options = true;
+
+    for arg in raw_args.iter_mut().skip(1) {
+        if parse_options && arg == "--" {
+            parse_options = false;
+        } else if parse_options && arg == "--presume-input-pipe" {
+            return Err(CtSimpleError::new(
+                1,
+                format!(
+                    "unrecognized option '--presume-input-pipe'\nTry '{} --help' for more information.",
+                    ctcore::ct_help_utility_name()
+                ),
+            ));
+        } else if parse_options && arg == GNU_PRESUME_INPUT_PIPE_OPTION {
+            *arg = OsString::from(INTERNAL_PRESUME_INPUT_PIPE_OPTION);
+        }
+    }
+
+    let mut args = raw_args.into_iter();
     let first = args.next().unwrap();
     if let Some(second) = args.next() {
         if let Some(s) = second.to_str() {

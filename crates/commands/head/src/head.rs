@@ -891,7 +891,7 @@ fn process_file(file: &str, options: &HeadOptions, first: &mut bool) -> CTResult
             handle_stdin(options)
         }
     } else {
-        process_regular_file(file, options, *first)
+        process_regular_file(file, options, first)
     };
 
     if let Err(e) = res {
@@ -908,15 +908,22 @@ fn process_file(file: &str, options: &HeadOptions, first: &mut bool) -> CTResult
         }
     }
 
-    *first = false;
+    if file == "-" {
+        *first = false;
+    }
     Ok(())
 }
 
 // 处理普通文件
-fn process_regular_file(name: &str, options: &HeadOptions, first: bool) -> std::io::Result<()> {
+fn process_regular_file(
+    name: &str,
+    options: &HeadOptions,
+    first: &mut bool,
+) -> std::io::Result<()> {
     match std::fs::File::open(name) {
         Ok(mut file) => {
-            print_file_header(options, first, name);
+            print_file_header(options, *first, name);
+            *first = false;
             head_file(&mut file, options)
         }
         Err(err) => {

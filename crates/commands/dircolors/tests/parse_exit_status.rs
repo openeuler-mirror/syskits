@@ -171,3 +171,39 @@ fn non_utf8_color_values_are_preserved_in_stdout() {
         b"LS_COLORS='di=01;34\xff:';\nexport LS_COLORS\n"
     );
 }
+
+#[test]
+fn repeated_output_options_are_accepted() {
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), "DIR 01;34\n").unwrap();
+    let file = file.path().to_str().unwrap();
+
+    let shell_output = Command::new(env!("CARGO_BIN_EXE_dircolors"))
+        .arg0("dircolors")
+        .args(["-b", "-b", file])
+        .env("LC_ALL", "C")
+        .output()
+        .unwrap();
+
+    assert_eq!(shell_output.status.code(), Some(0));
+    assert!(shell_output.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(shell_output.stdout).unwrap(),
+        "LS_COLORS='di=01;34:';\nexport LS_COLORS\n"
+    );
+
+    let database_output = Command::new(env!("CARGO_BIN_EXE_dircolors"))
+        .arg0("dircolors")
+        .args(["-p", "-p"])
+        .env("LC_ALL", "C")
+        .output()
+        .unwrap();
+
+    assert_eq!(database_output.status.code(), Some(0));
+    assert!(database_output.stderr.is_empty());
+    assert!(
+        String::from_utf8(database_output.stdout)
+            .unwrap()
+            .starts_with("# Configuration file for dircolors,")
+    );
+}

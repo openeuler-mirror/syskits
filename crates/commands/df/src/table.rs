@@ -25,6 +25,7 @@ use ctcore::ct_fsext::FsUsage;
 use rust_i18n::t;
 
 use std::fmt;
+use std::io::IsTerminal;
 use std::ops::AddAssign;
 
 /// A row in the filesystem usage data table.
@@ -225,6 +226,22 @@ pub(crate) struct TableRowFormatter<'a> {
     is_total_row: bool,
 }
 
+fn replace_problematic_chars(value: &str) -> String {
+    let replace_unicode_controls = std::io::stdout().is_terminal();
+
+    value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_control() || (replace_unicode_controls && character.is_control())
+            {
+                '?'
+            } else {
+                character
+            }
+        })
+        .collect()
+}
+
 impl<'a> TableRowFormatter<'a> {
     /// 创建RowFormatter实例。
     ///
@@ -339,7 +356,7 @@ impl<'a> TableRowFormatter<'a> {
                 Column::Fstype => self.row.fs_type.to_string(),
             };
 
-            strings.push(string);
+            strings.push(replace_problematic_chars(&string));
         }
 
         strings

@@ -462,9 +462,9 @@ pub fn echo_native_semantic(args: impl ctcore::Args) -> CTResult<EchoSemantic> {
     echo_native_semantic_from_args_vec(&args_vec, posix_mode)
 }
 
-const GNU_ECHO_HELP_EN_PREFIX: &str = "Usage: ";
-const GNU_ECHO_HELP_EN_BETWEEN_NAMES: &str = " [SHORT-OPTION]... [STRING]...\n  or:  ";
-const GNU_ECHO_HELP_EN_SUFFIX: &str = r#" LONG-OPTION
+const SYSKITS_ECHO_HELP_EN_PREFIX: &str = "Usage: ";
+const SYSKITS_ECHO_HELP_EN_BETWEEN_NAMES: &str = " [SHORT-OPTION]... [STRING]...\n  or:  ";
+const SYSKITS_ECHO_HELP_EN_SUFFIX: &str = r#" LONG-OPTION
 Echo the STRING(s) to standard output.
 
   -n             do not output the trailing newline
@@ -495,15 +495,12 @@ for details about the options it supports.
 NOTE: printf(1) is a preferred alternative,
 which does not have issues outputting option-like strings.
 
-GNU coreutils online help: <https://www.gnu.org/software/coreutils/>
-Report any translation bugs to <https://translationproject.org/team/>
-Full documentation <https://www.gnu.org/software/coreutils/echo>
-or available locally via: info '(coreutils) echo invocation'
+syskits online help: <https://www.ctyun.cn/developer>
 "#;
 
-const GNU_ECHO_HELP_ZH_CN_PREFIX: &str = "用法：";
-const GNU_ECHO_HELP_ZH_CN_BETWEEN_NAMES: &str = " [短选项]... [字符串]...\n　或：";
-const GNU_ECHO_HELP_ZH_CN_SUFFIX: &str = r#" 长选项
+const SYSKITS_ECHO_HELP_ZH_CN_PREFIX: &str = "用法：";
+const SYSKITS_ECHO_HELP_ZH_CN_BETWEEN_NAMES: &str = " [短选项]... [字符串]...\n　或：";
+const SYSKITS_ECHO_HELP_ZH_CN_SUFFIX: &str = r#" 长选项
 将 <字符串> 回显到标准输出。
 
   -n             不输出末尾的换行符
@@ -533,10 +530,7 @@ const GNU_ECHO_HELP_ZH_CN_SUFFIX: &str = r#" 长选项
 注意：建议使用 printf(1) 替代本命令，
 因为它可以正常输出与选项相似的字符串。
 
-GNU coreutils 在线帮助：<https://www.gnu.org/software/coreutils/>
-请向 <http://translationproject.org/team/zh_CN.html> 报告任何翻译错误
-完整文档 <https://www.gnu.org/software/coreutils/echo>
-或者在本地使用：info '(coreutils) echo invocation'
+syskits 在线帮助：<https://www.ctyun.cn/developer>
 "#;
 
 fn echo_help_text(usage_name: &OsStr) -> Vec<u8> {
@@ -547,15 +541,15 @@ fn echo_help_text(usage_name: &OsStr) -> Vec<u8> {
 
     let (prefix, between_names, suffix) = if echo_uses_zh_cn_locale() {
         (
-            GNU_ECHO_HELP_ZH_CN_PREFIX,
-            GNU_ECHO_HELP_ZH_CN_BETWEEN_NAMES,
-            GNU_ECHO_HELP_ZH_CN_SUFFIX,
+            SYSKITS_ECHO_HELP_ZH_CN_PREFIX,
+            SYSKITS_ECHO_HELP_ZH_CN_BETWEEN_NAMES,
+            SYSKITS_ECHO_HELP_ZH_CN_SUFFIX,
         )
     } else {
         (
-            GNU_ECHO_HELP_EN_PREFIX,
-            GNU_ECHO_HELP_EN_BETWEEN_NAMES,
-            GNU_ECHO_HELP_EN_SUFFIX,
+            SYSKITS_ECHO_HELP_EN_PREFIX,
+            SYSKITS_ECHO_HELP_EN_BETWEEN_NAMES,
+            SYSKITS_ECHO_HELP_EN_SUFFIX,
         )
     };
     let prefix = echo_localized_text_bytes(prefix);
@@ -654,15 +648,6 @@ fn echo_codeset_is_utf8(codeset: &str) -> bool {
     normalized.eq_ignore_ascii_case("UTF8")
 }
 
-fn echo_codeset_is_legacy_chinese(codeset: &str) -> bool {
-    let normalized = codeset
-        .chars()
-        .filter(|character| *character != '-' && *character != '_')
-        .collect::<String>();
-
-    matches!(normalized.to_ascii_uppercase().as_str(), "GBK" | "GB2312")
-}
-
 fn echo_localized_text_bytes(text: &str) -> Vec<u8> {
     #[cfg(target_os = "linux")]
     if let Some(codeset) = echo_ctype_codeset()
@@ -728,35 +713,23 @@ fn echo_transcode_utf8(input: &[u8], codeset: &str) -> Option<Vec<u8>> {
     converted
 }
 
-const GNU_ECHO_VERSION_TEXT: &str = "\
-echo (GNU coreutils) 9.4
-Copyright (C) 2023 Free Software Foundation, Inc.
-License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.
-This is free software: you are free to change and redistribute it.
-There is NO WARRANTY, to the extent permitted by law.
+const SYSKITS_ECHO_VERSION_TEXT: &str = concat!(
+    "echo (syskits) ",
+    env!("CARGO_PKG_VERSION"),
+    "\nCopyright (C) 2022-2025 China Telecom Cloud Technologies Co., Ltd.\n",
+    "License Mulan PSL v2: <http://license.coscl.org.cn/MulanPSL2>.\n",
+    "This is free software: you are free to change and redistribute it.\n",
+    "There is NO WARRANTY, to the extent permitted by law.\n"
+);
 
-Written by Brian Fox and Chet Ramey.
-";
-
-const GNU_ECHO_VERSION_TEXT_ZH_CN: &str = "\
-echo (GNU coreutils) 9.4
-Copyright © 2023 Free Software Foundation, Inc.
-许可证 GPLv3+：GNU 通用公共许可证第 3 版或更新版本 <https://gnu.org/licenses/gpl.html>。
-本软件是自由软件：您可以自由修改和重新发布它。
-在法律允许的范围内，不提供任何保证。
-
-由 Brian Fox 和 Chet Ramey 编写。
-";
-
-const GNU_ECHO_VERSION_TEXT_ZH_CN_LEGACY: &str = "\
-echo (GNU coreutils) 9.4
-Copyright (C) 2023 Free Software Foundation, Inc.
-许可证 GPLv3+：GNU 通用公共许可证第 3 版或更新版本 <https://gnu.org/licenses/gpl.html>。
-本软件是自由软件：您可以自由修改和重新发布它。
-在法律允许的范围内，不提供任何保证。
-
-由 Brian Fox 和 Chet Ramey 编写。
-";
+const SYSKITS_ECHO_VERSION_TEXT_ZH_CN: &str = concat!(
+    "echo (syskits) ",
+    env!("CARGO_PKG_VERSION"),
+    "\nCopyright (C) 2022-2025 China Telecom Cloud Technologies Co., Ltd.\n",
+    "许可证 Mulan PSL v2：<http://license.coscl.org.cn/MulanPSL2>。\n",
+    "本软件是自由软件：您可以自由修改和重新发布它。\n",
+    "在法律允许的范围内，不提供任何保证。\n"
+);
 
 fn echo_print_help_or_version(help: bool, usage_name: &OsStr) -> io::Result<()> {
     let mut output = Vec::new();
@@ -764,16 +737,9 @@ fn echo_print_help_or_version(help: bool, usage_name: &OsStr) -> io::Result<()> 
         output.extend_from_slice(&echo_help_text(usage_name));
     } else {
         let version_text = if echo_uses_zh_cn_locale() {
-            if echo_ctype_codeset()
-                .as_deref()
-                .is_some_and(echo_codeset_is_legacy_chinese)
-            {
-                GNU_ECHO_VERSION_TEXT_ZH_CN_LEGACY
-            } else {
-                GNU_ECHO_VERSION_TEXT_ZH_CN
-            }
+            SYSKITS_ECHO_VERSION_TEXT_ZH_CN
         } else {
-            GNU_ECHO_VERSION_TEXT
+            SYSKITS_ECHO_VERSION_TEXT
         };
         output.extend_from_slice(&echo_localized_text_bytes(version_text));
     }

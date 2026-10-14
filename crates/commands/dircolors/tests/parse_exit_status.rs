@@ -106,3 +106,24 @@ fn inline_comment_is_not_part_of_the_color_value() {
         "LS_COLORS='di=01;34:';\nexport LS_COLORS\n"
     );
 }
+
+#[test]
+fn print_ls_colors_does_not_escape_color_separators() {
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), "DIR 01=34:56\n").unwrap();
+    let file = file.path().to_str().unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_dircolors"))
+        .arg0("dircolors")
+        .args(["--print-ls-colors", file])
+        .env("LC_ALL", "C")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "\x1b[01=34:56mdi\t01=34:56\x1b[0m\n"
+    );
+}

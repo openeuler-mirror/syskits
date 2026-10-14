@@ -437,7 +437,7 @@ where
             continue;
         }
 
-        let line = dircolors_escape(line);
+        let line = dircolors_escape(line, *fmt != DircolorsOutputFmt::Display);
 
         let (key, value) = line.split_two();
         if value.is_empty() {
@@ -521,17 +521,36 @@ where
 ///
 /// We also escape ":" to make the "quote" test pass in the GNU test suite:
 /// <https://github.com/coreutils/coreutils/blob/master/tests/misc/dircolors.pl>
-fn dircolors_escape(s: &str) -> String {
+fn dircolors_escape(s: &str, escape_for_shell: bool) -> String {
+    if !escape_for_shell {
+        return s.to_owned();
+    }
+
     let mut result = String::new();
-    let mut previous = ' ';
+    let mut need_backslash = true;
 
     for c in s.chars() {
         match c {
-            '\'' => result.push_str("'\\''"),
-            ':' if previous != '\\' => result.push_str("\\:"),
-            _ => result.push(c),
+            '\'' => {
+                result.push_str("'\\''");
+                need_backslash = true;
+            }
+            '\\' | '^' => {
+                result.push(c);
+                need_backslash = !need_backslash;
+            }
+            ':' | '=' => {
+                if need_backslash {
+                    result.push('\\');
+                }
+                result.push(c);
+                need_backslash = true;
+            }
+            _ => {
+                result.push(c);
+                need_backslash = true;
+            }
         }
-        previous = c;
     }
 
     result
@@ -694,10 +713,14 @@ mod tests {
 
     #[test]
     fn test_escape() {
-        assert_eq!("", dircolors_escape(""));
-        assert_eq!("'\\''", dircolors_escape("'"));
-        assert_eq!("\\:", dircolors_escape(":"));
-        assert_eq!("\\:", dircolors_escape("\\:"));
+        assert_eq!("", dircolors_escape("", true));
+        assert_eq!("'\\''", dircolors_escape("'", true));
+        assert_eq!("\\:", dircolors_escape(":", true));
+        assert_eq!("\\:", dircolors_escape("\\:", true));
+        assert_eq!("\\=", dircolors_escape("=", true));
+        assert_eq!(r"\\\\\:", dircolors_escape(r"\\\\:", true));
+        assert_eq!(r"^:", dircolors_escape(r"^:", true));
+        assert_eq!("01=34:56", dircolors_escape("01=34:56", false));
     }
 
     mod tests_dircolors_main {

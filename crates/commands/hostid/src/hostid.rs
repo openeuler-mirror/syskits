@@ -596,11 +596,14 @@ enum HostidMessageLanguage {
 
 #[cfg(unix)]
 fn hostid_message_language() -> HostidMessageLanguage {
-    let locale = ["LC_ALL", "LC_MESSAGES", "LANG"]
-        .into_iter()
-        .filter_map(|name| std::env::var(name).ok())
-        .find(|locale| !locale.is_empty())
-        .unwrap_or_default();
+    let locale = unsafe {
+        let locale = libc::setlocale(libc::LC_MESSAGES, std::ptr::null());
+        if locale.is_null() {
+            String::new()
+        } else {
+            CStr::from_ptr(locale).to_string_lossy().into_owned()
+        }
+    };
 
     if locale.eq_ignore_ascii_case("C") || locale.eq_ignore_ascii_case("POSIX") {
         return HostidMessageLanguage::Other;

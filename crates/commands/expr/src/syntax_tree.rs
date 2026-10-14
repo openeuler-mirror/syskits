@@ -18,6 +18,11 @@ use onig::{EncodedBytes, Regex, RegexOptions, Region, SearchOptions, Syntax};
 use crate::ExprError;
 use crate::ExprResult;
 
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn mbrlen(input: *const libc::c_char, length: usize, state: *mut libc::mbstate_t) -> usize;
+}
+
 // 定义支持的二元操作类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyntaxTreeBinOp {
@@ -654,6 +659,7 @@ fn is_valid_utf8(bytes: &[u8]) -> bool {
     std::str::from_utf8(bytes).is_ok()
 }
 
+#[cfg(not(target_os = "linux"))]
 fn utf8_char_len(bytes: &[u8], idx: usize) -> usize {
     let b0 = bytes[idx];
     if b0 < 0x80 {
@@ -742,81 +748,127 @@ fn utf8_char_len(bytes: &[u8], idx: usize) -> usize {
 }
 
 fn logical_len_bytes(bytes: &[u8]) -> usize {
-    if is_single_byte_locale() {
-        bytes.len()
-    } else {
-        let mut i = 0;
-        let mut count = 0;
-        while i < bytes.len() {
-            count += 1;
-            i += utf8_char_len(bytes, i);
-        }
-        count
-    }
+    logical_char_ranges(bytes).len()
 }
 
 fn logical_index_bytes(haystack: &[u8], needles: &[u8]) -> usize {
     if needles.is_empty() {
         return 0;
     }
-    if is_single_byte_locale() {
-        for (idx, b) in haystack.iter().enumerate() {
-            if needles.contains(b) {
-                return idx + 1;
-            }
-        }
-        0
-    } else {
-        let mut needle_chars = Vec::new();
-        let mut j = 0;
-        while j < needles.len() {
-            let len = utf8_char_len(needles, j);
-            needle_chars.push(needles[j..j + len].to_vec());
-            j += len;
-        }
 
-        let mut idx = 0;
-        let mut i = 0;
-        while i < haystack.len() {
-            idx += 1;
-            let len = utf8_char_len(haystack, i);
-            let slice = &haystack[i..i + len];
-            if needle_chars.iter().any(|n| n.as_slice() == slice) {
-                return idx;
-            }
-            i += len;
+    let needle_chars = logical_char_ranges(needles);
+    for (index, (start, end)) in logical_char_ranges(haystack).iter().enumerate() {
+        if needle_chars.iter().any(|(needle_start, needle_end)| {
+            needles[*needle_start..*needle_end] == haystack[*start..*end]
+        }) {
+            return index + 1;
         }
-        0
     }
+
+    0
 }
 
 fn logical_substr_bytes(s: &[u8], pos: usize, len: usize) -> Vec<u8> {
     if pos == 0 || len == 0 || len == usize::MAX {
         return Vec::new();
     }
-    if is_single_byte_locale() {
-        let start = pos - 1;
-        if start >= s.len() {
-            return Vec::new();
-        }
-        let end = std::cmp::min(start.saturating_add(len), s.len());
-        s[start..end].to_vec()
-    } else {
-        let mut out = Vec::new();
-        let mut idx = 1;
-        let mut i = 0;
-        let mut remaining = len;
-        while i < s.len() && remaining > 0 {
-            let char_len = utf8_char_len(s, i);
-            if idx >= pos {
-                out.extend_from_slice(&s[i..i + char_len]);
-                remaining -= 1;
-            }
-            idx += 1;
-            i += char_len;
-        }
-        out
+
+    let chars = logical_char_ranges(s);
+    chars
+        .iter()
+        .skip(pos - 1)
+        .take(len)
+        .flat_map(|(start, end)| &s[*start..*end])
+        .copied()
+        .collect()
+}
+
+fn logical_char_ranges(bytes: &[u8]) -> Vec<(usize, usize)> {
+    #[cfg(target_os = "linux")]
+    {
+        return logical_char_ranges_in_locale(bytes).unwrap_or_else(|| byte_ranges(bytes));
     }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        if is_single_byte_locale() {
+            return byte_ranges(bytes);
+        }
+
+        let mut ranges = Vec::new();
+        let mut start = 0;
+        while start < bytes.len() {
+            let end = std::cmp::min(start + utf8_char_len(bytes, start), bytes.len());
+            ranges.push((start, end));
+            start = end;
+        }
+        ranges
+    }
+}
+
+fn byte_ranges(bytes: &[u8]) -> Vec<(usize, usize)> {
+    (0..bytes.len()).map(|index| (index, index + 1)).collect()
+}
+
+#[cfg(target_os = "linux")]
+fn logical_char_ranges_in_locale(bytes: &[u8]) -> Option<Vec<(usize, usize)>> {
+    // Match GNU's setlocale(LC_ALL, "") without changing the process locale.
+    let locale = unsafe {
+        libc::newlocale(
+            libc::LC_ALL_MASK,
+            b"\0".as_ptr().cast::<libc::c_char>(),
+            std::ptr::null_mut(),
+        )
+    };
+    if locale.is_null() {
+        return None;
+    }
+
+    let previous = unsafe { libc::uselocale(locale) };
+    if previous.is_null() {
+        unsafe {
+            libc::freelocale(locale);
+        }
+        return None;
+    }
+
+    let ranges = logical_char_ranges_in_current_locale(bytes);
+    unsafe {
+        libc::uselocale(previous);
+        libc::freelocale(locale);
+    }
+    Some(ranges)
+}
+
+#[cfg(target_os = "linux")]
+fn logical_char_ranges_in_current_locale(bytes: &[u8]) -> Vec<(usize, usize)> {
+    let mut ranges = Vec::new();
+    let mut start = 0;
+    let mut state: libc::mbstate_t = unsafe { std::mem::zeroed() };
+
+    while start < bytes.len() {
+        let length = unsafe {
+            mbrlen(
+                bytes[start..].as_ptr().cast::<libc::c_char>(),
+                bytes.len() - start,
+                &mut state,
+            )
+        };
+        let length = match length {
+            usize::MAX => {
+                state = unsafe { std::mem::zeroed() };
+                1
+            }
+            value if value == usize::MAX - 1 => bytes.len() - start,
+            0 => 1,
+            value => value,
+        };
+        let end = std::cmp::min(start.saturating_add(length), bytes.len());
+        ranges.push((start, end));
+        start = end;
+    }
+
+    ranges
 }
 
 fn expr_get_size(value: &BigInt) -> usize {

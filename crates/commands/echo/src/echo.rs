@@ -574,6 +574,11 @@ fn echo_execute_bytes(no_newline: bool, escaped: bool, free: &[&[u8]]) -> io::Re
 }
 
 fn echo_write_output(output: &[u8]) -> io::Result<()> {
+    #[cfg(target_os = "linux")]
+    if ctcore::ct_stdout_was_closed() {
+        return Err(io::Error::from_raw_os_error(libc::EBADF));
+    }
+
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
     stdout.write_all(output)

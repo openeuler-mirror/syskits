@@ -152,8 +152,46 @@ impl Mode {
     }
 }
 
+fn option_consumes_next_argument(arg: &str) -> bool {
+    matches!(arg, "-n" | "-c" | "--lines" | "--bytes")
+        || matches!(
+            arg,
+            "--l" | "--li" | "--lin" | "--line" | "--b" | "--by" | "--byt" | "--byte"
+        )
+        || (arg.starts_with('-')
+            && !arg.starts_with("--")
+            && arg.len() > 2
+            && matches!(arg.as_bytes().last(), Some(b'n' | b'c'))
+            && arg.as_bytes()[1..arg.len() - 1]
+                .iter()
+                .all(|byte| matches!(byte, b'q' | b'v' | b'z')))
+}
+
+fn apply_posix_option_order(raw_args: &mut Vec<OsString>) {
+    if std::env::var_os("POSIXLY_CORRECT").is_none() {
+        return;
+    }
+
+    let mut index = 1;
+    while index < raw_args.len() {
+        let Some(arg) = raw_args[index].to_str() else {
+            break;
+        };
+        if arg == "--" {
+            return;
+        }
+        if !arg.starts_with('-') || arg == "-" {
+            raw_args.insert(index, OsString::from("--"));
+            return;
+        }
+        index += usize::from(option_consumes_next_argument(arg));
+        index += 1;
+    }
+}
+
 fn arg_iterate(mut args: impl ctcore::Args) -> CTResult<Box<dyn Iterator<Item = OsString>>> {
     let mut raw_args = args.by_ref().collect::<Vec<_>>();
+    apply_posix_option_order(&mut raw_args);
     let mut parse_options = true;
 
     for index in 1..raw_args.len() {

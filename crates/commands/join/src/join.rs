@@ -1109,13 +1109,32 @@ impl JoinSettings {
             settings.empty = empty.as_bytes().to_vec();
         }
 
-        if matches.get_flag("nocheck-order") {
-            settings.check_order = CheckOrder::Disabled;
-        }
-
-        if matches.get_flag("check-order") {
-            settings.check_order = CheckOrder::Enabled;
-        }
+        let check_order_index = (matches.get_count("check-order") > 0)
+            .then(|| {
+                matches
+                    .indices_of("check-order")
+                    .and_then(|mut indices| indices.next_back())
+            })
+            .flatten();
+        let nocheck_order_index = (matches.get_count("nocheck-order") > 0)
+            .then(|| {
+                matches
+                    .indices_of("nocheck-order")
+                    .and_then(|mut indices| indices.next_back())
+            })
+            .flatten();
+        settings.check_order = match (check_order_index, nocheck_order_index) {
+            (Some(check_order_index), Some(nocheck_order_index)) => {
+                if check_order_index > nocheck_order_index {
+                    CheckOrder::Enabled
+                } else {
+                    CheckOrder::Disabled
+                }
+            }
+            (Some(_), None) => CheckOrder::Enabled,
+            (None, Some(_)) => CheckOrder::Disabled,
+            (None, None) => CheckOrder::Default,
+        };
 
         if matches.get_flag("header") {
             settings.is_headers = true;
@@ -1216,11 +1235,11 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
                 "check that the input is correctly sorted, \
             even if all input lines are pairable",
             )
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new("nocheck-order")
             .long("nocheck-order")
             .help(t!("join.clap.nocheck - order"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new("header")
             .long("header")
             .help(
@@ -1918,6 +1937,45 @@ mod tests {
         // 测试禁用排序检查
         let matches = ct_app()
             .try_get_matches_from(vec!["join", "--nocheck-order", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert_eq!(settings.check_order, CheckOrder::Disabled);
+
+        let matches = ct_app()
+            .try_get_matches_from(vec![
+                "join",
+                "--check-order",
+                "--nocheck-order",
+                "file1.txt",
+                "file2.txt",
+            ])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert_eq!(settings.check_order, CheckOrder::Disabled);
+
+        let matches = ct_app()
+            .try_get_matches_from(vec![
+                "join",
+                "--nocheck-order",
+                "--check-order",
+                "file1.txt",
+                "file2.txt",
+            ])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert_eq!(settings.check_order, CheckOrder::Enabled);
+
+        let matches = ct_app()
+            .try_get_matches_from(vec![
+                "join",
+                "--nocheck-order",
+                "--nocheck-order",
+                "file1.txt",
+                "file2.txt",
+            ])
             .unwrap();
 
         let settings = JoinSettings::new(&matches).unwrap();

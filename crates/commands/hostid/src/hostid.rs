@@ -20,7 +20,11 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_display::locale_quote;
 use ctcore::ct_error::{CTResult, CtSimpleError, strip_errno};
 use libc::c_long;
+#[cfg(unix)]
+use std::error::Error;
 use std::ffi::OsString;
+#[cfg(unix)]
+use std::fmt::{self, Display, Formatter};
 use std::io::{self, Write};
 use std::path::Path;
 use sys_locale::get_locale;
@@ -154,6 +158,19 @@ fn validate_standard_options(args: &[OsString]) -> CTResult<Option<TerminalActio
     let mut options_ended = false;
 
     for arg in args.iter().skip(1) {
+        #[cfg(unix)]
+        if !options_ended && arg.to_str().is_none() {
+            use std::os::unix::ffi::OsStrExt;
+
+            let bytes = arg.as_bytes();
+            if bytes.starts_with(b"--") {
+                return Err(raw_long_option_error(args, bytes));
+            }
+            if bytes.starts_with(b"-") && bytes.len() > 1 {
+                return Err(raw_short_option_error(args, bytes[1]));
+            }
+        }
+
         let arg = arg.to_string_lossy();
         if options_ended {
             continue;
@@ -181,6 +198,66 @@ fn validate_standard_options(args: &[OsString]) -> CTResult<Option<TerminalActio
     }
 
     Ok(None)
+}
+
+#[cfg(unix)]
+#[derive(Debug)]
+struct HostidRawOptionError {
+    diagnostic: Vec<u8>,
+}
+
+#[cfg(unix)]
+impl Display for HostidRawOptionError {
+    fn fmt(&self, _formatter: &mut Formatter<'_>) -> fmt::Result {
+        let stderr = io::stderr();
+        let _ = stderr.lock().write_all(&self.diagnostic);
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+impl Error for HostidRawOptionError {}
+
+#[cfg(unix)]
+impl ctcore::ct_error::CTError for HostidRawOptionError {
+    fn code(&self) -> i32 {
+        1
+    }
+}
+
+#[cfg(unix)]
+fn raw_short_option_error(args: &[OsString], invalid: u8) -> Box<dyn ctcore::ct_error::CTError> {
+    let mut message = b"invalid option -- '".to_vec();
+    message.push(invalid);
+    message.push(b'\'');
+    raw_option_error(args, &message)
+}
+
+#[cfg(unix)]
+fn raw_long_option_error(args: &[OsString], option: &[u8]) -> Box<dyn ctcore::ct_error::CTError> {
+    let mut message = b"unrecognized option '".to_vec();
+    message.extend_from_slice(option);
+    message.push(b'\'');
+    raw_option_error(args, &message)
+}
+
+#[cfg(unix)]
+fn raw_option_error(args: &[OsString], message: &[u8]) -> Box<dyn ctcore::ct_error::CTError> {
+    use std::os::unix::ffi::OsStrExt;
+
+    let program_name = args
+        .first()
+        .map(|arg| arg.as_os_str())
+        .unwrap_or_else(|| std::ffi::OsStr::new(ctcore::ct_util_name()));
+    let mut diagnostic = Vec::with_capacity(program_name.as_bytes().len() + message.len() + 64);
+    diagnostic.extend_from_slice(program_name.as_bytes());
+    diagnostic.extend_from_slice(b": ");
+    diagnostic.extend_from_slice(message);
+    diagnostic.extend_from_slice(b"\nTry '");
+    diagnostic.extend_from_slice(ctcore::ct_help_utility_name().as_bytes());
+    diagnostic.extend_from_slice(b" --help' for more information.\n");
+
+    Box::new(HostidRawOptionError { diagnostic })
 }
 
 fn validate_long_option(arg: &str) -> CTResult<Option<TerminalAction>> {

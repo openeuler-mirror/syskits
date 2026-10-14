@@ -291,6 +291,7 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .after_help(t!("dircolors.after_help"))
         .override_usage(usage_description)
+        .args_override_self(true)
         .infer_long_args(true)
         .args(&args)
 }

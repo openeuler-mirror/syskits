@@ -12,7 +12,7 @@
 // expr 是一个经典的 Linux 或 Unix 命令行工具，用于执行基本的算术和逻辑表达式计算
 
 use num_bigint::BigInt;
-use num_traits::ToPrimitive;
+use num_traits::{Signed, ToPrimitive};
 use onig::{EncodedBytes, Regex, RegexOptions, Region, SearchOptions, Syntax};
 
 use crate::ExprError;
@@ -418,20 +418,17 @@ impl SyntaxTreeAstNode {
                 pos,
                 length,
             } => {
-                // 实现字符串截取逻辑
                 let string = string.eval()?.eval_as_bytes();
                 let pos = pos
                     .eval()?
                     .eval_as_bigint()
                     .ok()
-                    .and_then(|n| n.to_usize())
-                    .unwrap_or(0);
+                    .map_or(0, |n| expr_get_size(&n));
                 let length = length
                     .eval()?
                     .eval_as_bigint()
                     .ok()
-                    .and_then(|n| n.to_usize())
-                    .unwrap_or(0);
+                    .map_or(0, |n| expr_get_size(&n));
 
                 // 检查并调整位置和长度以防止越界
                 let Some(pos) = pos.checked_sub(1) else {
@@ -794,7 +791,7 @@ fn logical_index_bytes(haystack: &[u8], needles: &[u8]) -> usize {
 }
 
 fn logical_substr_bytes(s: &[u8], pos: usize, len: usize) -> Vec<u8> {
-    if pos == 0 || len == 0 {
+    if pos == 0 || len == 0 || len == usize::MAX {
         return Vec::new();
     }
     if is_single_byte_locale() {
@@ -802,7 +799,7 @@ fn logical_substr_bytes(s: &[u8], pos: usize, len: usize) -> Vec<u8> {
         if start >= s.len() {
             return Vec::new();
         }
-        let end = std::cmp::min(start + len, s.len());
+        let end = std::cmp::min(start.saturating_add(len), s.len());
         s[start..end].to_vec()
     } else {
         let mut out = Vec::new();
@@ -819,6 +816,17 @@ fn logical_substr_bytes(s: &[u8], pos: usize, len: usize) -> Vec<u8> {
             i += char_len;
         }
         out
+    }
+}
+
+fn expr_get_size(value: &BigInt) -> usize {
+    if value.is_negative() {
+        usize::MAX
+    } else {
+        value
+            .to_usize()
+            .filter(|size| *size < usize::MAX)
+            .unwrap_or(usize::MAX - 1)
     }
 }
 

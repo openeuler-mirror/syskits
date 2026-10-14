@@ -40,6 +40,9 @@ pub(crate) struct Filesystem {
 
     /// 文件系统空间使用情况的详细信息。
     pub usage: FsUsage,
+
+    /// 全量遍历时该挂载点已被其他文件系统覆盖，统计值不可用。
+    pub usage_unknown: bool,
 }
 
 /// 根据给定的文件系统路径查找最匹配的挂载信息。
@@ -137,6 +140,7 @@ impl Filesystem {
         Some(Self {
             mount_info,
             usage,
+            usage_unknown: false,
             file,
         })
     }

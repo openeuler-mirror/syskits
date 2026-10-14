@@ -37,7 +37,7 @@ impl DircolorsCore {
     fn run_core(
         intent: &DircolorsIntent,
         input: CtPipelineData,
-    ) -> Result<(CtValue, String, String, i32), CtDiagnosticError> {
+    ) -> Result<(CtValue, String, Vec<u8>, String, i32), CtDiagnosticError> {
         let result = ctengine::run_with_optional_pipeline_stdin(
             "dircolors",
             input,
@@ -56,11 +56,22 @@ impl DircolorsCore {
                 } else {
                     format!("{}\n", semantic.output)
                 };
-                (semantic_to_value(&semantic), classic_text, String::new(), 0)
+                let mut classic_bytes = semantic.classic_bytes.clone();
+                if !classic_bytes.is_empty() {
+                    classic_bytes.push(b'\n');
+                }
+                (
+                    semantic_to_value(&semantic),
+                    classic_text,
+                    classic_bytes,
+                    String::new(),
+                    0,
+                )
             }
             Err(err) => (
                 CtValue::Record(vec![]),
                 String::new(),
+                Vec::new(),
                 render_error_text(err.as_ref()),
                 err.code(),
             ),
@@ -110,11 +121,11 @@ impl DataCommand for CmdDircolors {
         _ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = DircolorsIntent::from_call(call)?;
-        let (value, classic_text, stderr_text, exit_code) =
+        let (value, classic_text, classic_bytes, stderr_text, exit_code) =
             DircolorsCore::run_core(&intent, input)?;
         let metadata = CtPipelineMetadata {
             classic_text: Some(classic_text),
-            classic_bytes: None,
+            classic_bytes: Some(classic_bytes),
             classic_append_newline: false,
             stderr_text: if stderr_text.is_empty() {
                 None
@@ -134,8 +145,8 @@ impl DataCommand for CmdDircolors {
 
 #[cfg(test)]
 mod tests {
-    use super::{DircolorsIntent, display_columns, semantic_to_value};
-    use ctpipeline::CtValue;
+    use super::{DircolorsCore, DircolorsIntent, display_columns, semantic_to_value};
+    use ctpipeline::{CtPipelineData, CtValue};
     use ctsig::{BoundArg, DataCall};
     use std::ffi::OsString;
 
@@ -159,6 +170,7 @@ mod tests {
         let value = semantic_to_value(&ct_dircolors::DircolorsSemantic {
             output_kind: "shell".into(),
             output: "LS_COLORS='di=01;34:';\nexport LS_COLORS".into(),
+            classic_bytes: b"LS_COLORS='di=01;34:';\nexport LS_COLORS".to_vec(),
         });
 
         assert_eq!(
@@ -170,6 +182,28 @@ mod tests {
                     CtValue::String("LS_COLORS='di=01;34:';\nexport LS_COLORS".into())
                 ),
             ])
+        );
+    }
+
+    #[test]
+    fn run_core_preserves_non_utf8_classic_bytes() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), b"DIR 01;34\xff\n").unwrap();
+        let intent = DircolorsIntent {
+            argv: vec![
+                OsString::from("dircolors"),
+                OsString::from("-b"),
+                file.path().as_os_str().to_os_string(),
+            ],
+        };
+
+        let (_, _, classic_bytes, _, exit_code) =
+            DircolorsCore::run_core(&intent, CtPipelineData::Empty).unwrap();
+
+        assert_eq!(exit_code, 0);
+        assert_eq!(
+            classic_bytes,
+            b"LS_COLORS='di=01;34\xff:';\nexport LS_COLORS\n"
         );
     }
 

@@ -17,3 +17,6 @@ ct_dircolors = { path = "../../commands/dircolors" }
 ctengine = { workspace = true }
 ctpipeline = { workspace = true }
 ctsig = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

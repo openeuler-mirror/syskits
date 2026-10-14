@@ -44,3 +44,28 @@ fn direct_mode_uses_the_named_pseudo_filesystem_statistics() {
         ]
     );
 }
+
+#[test]
+fn type_filter_is_applied_after_matching_the_named_filesystem() {
+    let output = Command::new(env!("CARGO_BIN_EXE_df"))
+        .arg0("df")
+        .args(["-x", "proc", "/proc"])
+        .env("LC_ALL", "C")
+        .output()
+        .expect("run df");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stderr).expect("df stderr is UTF-8"),
+        "df: no file systems processed\n"
+    );
+}
+
+#[test]
+fn direct_mode_does_not_apply_mount_type_filters() {
+    assert_eq!(
+        run_df(&["--direct", "-x", "proc", "--output=source,file", "/proc",]),
+        vec![vec!["-".to_string(), "/proc".to_string()]]
+    );
+}

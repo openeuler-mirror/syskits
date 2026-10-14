@@ -481,15 +481,10 @@ fn filter_mount_list(v_mount_info: Vec<CtMountInfo>, options: &DfOptions) -> Vec
     final_list.into_iter().map(|(_, v)| v).collect()
 }
 
-fn filter_named_mount_list(
-    v_mount_info: Vec<CtMountInfo>,
-    options: &DfOptions,
-) -> Vec<CtMountInfo> {
+fn filter_named_mount_list(v_mount_info: Vec<CtMountInfo>) -> Vec<CtMountInfo> {
     v_mount_info
         .into_iter()
-        .filter(|mount_info| {
-            mount_info.fs_type != "lofs" && is_included_for_listed_path(mount_info, options, true)
-        })
+        .filter(|mount_info| mount_info.fs_type != "lofs" && mount_info.mount_dir.starts_with('/'))
         .collect()
 }
 
@@ -538,9 +533,10 @@ where
     let full_mounts = full_mounts?;
 
     // 显式路径需要保留伪文件系统，以与 GNU df 的 show_listed_fs 规则一致。
-    let mounts = filter_named_mount_list(full_mounts.clone(), options);
+    let mounts = filter_named_mount_list(full_mounts.clone());
 
     let mut result = vec![];
+    let mut had_diagnostic = false;
 
     if mounts.is_empty() {
         ct_show!(CtSimpleError::new(1, "no file systems processed"));
@@ -586,6 +582,7 @@ where
                             1,
                             format!("cannot access '{path_str}': over-mounted by another device")
                         ));
+                        had_diagnostic = true;
                         continue; // 跳过此设备，不抛出致命异常，对齐 GNU 行为
                     }
                 }
@@ -603,10 +600,12 @@ where
 
         match Filesystem::from_path(&mounts, &effective_path) {
             Some(mut fs) => {
-                if options.direct {
-                    fs.mount_info.dev_name = "-".to_string();
+                if options.direct || is_included_for_listed_path(&fs.mount_info, options, true) {
+                    if options.direct {
+                        fs.mount_info.dev_name = "-".to_string();
+                    }
+                    result.push(fs)
                 }
-                result.push(fs)
             }
             None => {
                 // 如果找不到文件系统映射信息
@@ -618,8 +617,12 @@ where
                         format!("{}: No such file or directory", path.as_ref().display())
                     ));
                 }
+                had_diagnostic = true;
             }
         }
+    }
+    if result.is_empty() && !had_diagnostic {
+        ct_show!(CtSimpleError::new(1, "no file systems processed"));
     }
     Ok(result)
 }

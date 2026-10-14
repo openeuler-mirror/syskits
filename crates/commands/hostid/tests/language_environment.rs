@@ -43,6 +43,9 @@ fn language_translation_priority_matches_gnu() {
         ("en_US.utf8", "zh_TW"),
         ("en_US.utf8", "zz:zh_CN"),
         ("zh_CN.utf8", "zh_TW:zh_CN"),
+        ("zh_CN.gbk", "zh_TW"),
+        ("zh_CN.gb18030", "zz:zh_TW"),
+        ("zh_TW.big5", "zh_CN"),
     ] {
         for args in [["value"].as_slice(), ["--invalid"].as_slice()] {
             let gnu = run_hostid("/usr/bin/hostid", locale, language, args);

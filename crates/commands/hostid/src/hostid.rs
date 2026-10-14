@@ -467,9 +467,9 @@ fn locale_quote_hostid_bytes(operand: &OsStr) -> Vec<u8> {
     let (left_quote, right_quote) = hostid_locale_quote_marks();
     let bytes = operand.as_bytes();
     let mut quoted = Vec::with_capacity(bytes.len() + left_quote.len() + right_quote.len());
-    quoted.extend_from_slice(left_quote);
-    append_locale_quoted_bytes(&mut quoted, bytes, right_quote);
-    quoted.extend_from_slice(right_quote);
+    quoted.extend_from_slice(&left_quote);
+    append_locale_quoted_bytes(&mut quoted, bytes, &right_quote);
+    quoted.extend_from_slice(&right_quote);
     quoted
 }
 
@@ -560,18 +560,11 @@ fn append_octal_byte(quoted: &mut Vec<u8>, byte: u8) {
 }
 
 #[cfg(unix)]
-fn hostid_locale_quote_marks() -> (&'static [u8], &'static [u8]) {
+fn hostid_locale_quote_marks() -> (Vec<u8>, Vec<u8>) {
     match hostid_message_language() {
-        HostidMessageLanguage::SimplifiedChinese => return (b"\"", b"\""),
+        HostidMessageLanguage::SimplifiedChinese => return (b"\"".to_vec(), b"\"".to_vec()),
         HostidMessageLanguage::TraditionalChinese => {
-            let codeset = hostid_codeset();
-            if codeset.eq_ignore_ascii_case(b"UTF-8") {
-                return ("「".as_bytes(), "」".as_bytes());
-            }
-            if codeset.eq_ignore_ascii_case(b"BIG5") || codeset.eq_ignore_ascii_case(b"BIG5-HKSCS")
-            {
-                return (b"\xa1\x75", b"\xa1\x76");
-            }
+            return (encode_hostid_message("「"), encode_hostid_message("」"));
         }
         HostidMessageLanguage::Other => {}
     }
@@ -579,11 +572,11 @@ fn hostid_locale_quote_marks() -> (&'static [u8], &'static [u8]) {
     let codeset = hostid_codeset();
 
     if codeset.eq_ignore_ascii_case(b"UTF-8") {
-        ("‘".as_bytes(), "’".as_bytes())
+        ("‘".as_bytes().to_vec(), "’".as_bytes().to_vec())
     } else if codeset.eq_ignore_ascii_case(b"GB18030") {
-        (b"\xa1\x07e", b"\xa1\xaf")
+        (b"\xa1\x07e".to_vec(), b"\xa1\xaf".to_vec())
     } else {
-        (b"'", b"'")
+        (b"'".to_vec(), b"'".to_vec())
     }
 }
 
@@ -667,20 +660,42 @@ fn encode_hostid_message(message: &str) -> Vec<u8> {
     let mut encoded = vec![0; message.len() * 4 + 16];
     let mut output_bytes_left = encoded.len();
     let mut output = encoded.as_mut_ptr().cast::<libc::c_char>();
-    let result = unsafe {
-        iconv(
-            descriptor,
-            &mut input,
-            &mut input_bytes_left,
-            &mut output,
-            &mut output_bytes_left,
-        )
-    };
+    while input_bytes_left != 0 {
+        let result = unsafe {
+            iconv(
+                descriptor,
+                &mut input,
+                &mut input_bytes_left,
+                &mut output,
+                &mut output_bytes_left,
+            )
+        };
+        if result != usize::MAX {
+            break;
+        }
+        if output_bytes_left == 0 {
+            input_bytes_left = message.len();
+            break;
+        }
+
+        let input_offset = message.len() - input_bytes_left;
+        let invalid_character_length = message[input_offset..]
+            .chars()
+            .next()
+            .map_or(1, char::len_utf8);
+        unsafe {
+            input = input.add(invalid_character_length);
+            output.write(b'?' as libc::c_char);
+            output = output.add(1);
+        }
+        input_bytes_left -= invalid_character_length;
+        output_bytes_left -= 1;
+    }
     unsafe {
         iconv_close(descriptor);
     }
 
-    if result == usize::MAX || input_bytes_left != 0 {
+    if input_bytes_left != 0 {
         message.as_bytes().to_vec()
     } else {
         encoded.truncate(encoded.len() - output_bytes_left);

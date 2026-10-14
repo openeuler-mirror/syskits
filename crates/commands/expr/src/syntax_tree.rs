@@ -218,7 +218,7 @@ impl SyntaxTreeStringOp {
 
                 let re = Regex::with_options_and_encoding(
                     EncodedBytes::from_parts(&normalized, encoding),
-                    RegexOptions::REGEX_OPTION_NONE,
+                    RegexOptions::REGEX_OPTION_FIND_LONGEST,
                     &syntax,
                 )
                 .map_err(|_| ExprError::RegexError("Invalid regular expression".to_string()))?;

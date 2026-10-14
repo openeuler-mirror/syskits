@@ -1478,7 +1478,6 @@ fn df_args_init() -> Vec<Arg> {
             .allow_hyphen_values(true)
             .value_parser(ValueParser::os_string())
             .value_name("TYPE")
-            .use_value_delimiter(true)
             .help("limit listing to file systems not of type TYPE"),
         Arg::new(DF_OPT_PATHS)
             .action(ArgAction::Append)
@@ -6004,6 +6003,8 @@ mod tests {
                 "-excluded",
                 "--exclude-type",
                 "-excluded-long",
+                "--exclude-type",
+                "proc,sysfs",
             ];
             let matches = command.try_get_matches_from(args).unwrap();
             let included_types = matches
@@ -6018,7 +6019,10 @@ mod tests {
                 .collect::<Vec<_>>();
 
             assert_eq!(included_types, ["-included", "-included-alias"]);
-            assert_eq!(excluded_types, ["-excluded", "-excluded-long"]);
+            assert_eq!(
+                excluded_types,
+                ["-excluded", "-excluded-long", "proc,sysfs"]
+            );
         }
 
         #[test]

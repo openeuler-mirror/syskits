@@ -424,10 +424,7 @@ Examples:
   {usage_name} -s .h include/stdio.h  -> \"stdio\"
   {usage_name} -a any/str1 any/str2   -> \"str1\" followed by \"str2\"
 
-GNU coreutils online help: <https://www.gnu.org/software/coreutils/>
-Report any translation bugs to <https://translationproject.org/team/>
-Full documentation <https://www.gnu.org/software/coreutils/basename>
-or available locally via: info '(coreutils) basename invocation'"
+syskits online help: <https://www.ctyun.cn/developer>"
     )
 }
 
@@ -693,6 +690,8 @@ mod tests {
             err.to_string()
                 .contains("      --help        display this help and exit")
         );
+        assert!(err.to_string().contains("syskits online help:"));
+        assert!(!err.to_string().contains("GNU"));
 
         let args = ["basename", "--version", "foo"];
         let err = basename_native_semantic(args.iter().map(OsString::from)).unwrap_err();
@@ -700,6 +699,7 @@ mod tests {
         assert!(!err.usage());
         assert!(err.to_string().starts_with("basename (syskits) "));
         assert!(err.to_string().contains("License Mulan PSL v2"));
+        assert!(!err.to_string().contains("GNU"));
     }
 
     #[test]

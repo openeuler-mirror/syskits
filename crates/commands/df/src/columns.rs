@@ -190,7 +190,7 @@ impl Column {
         match column {
             // 14 = "Filesystem" 的长度加 4 个空格,与 coreutils 保持一致
             Self::Source => 14,
-            Self::Used => 5,
+            Self::Size | Self::Used => 5,
             // 最短的表头长度为 4 个字符,因此我们将其作为最小宽度
             _ => 4,
         }

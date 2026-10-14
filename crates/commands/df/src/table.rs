@@ -444,15 +444,8 @@ impl Table {
             .iter()
             .enumerate()
             .map(|(i, col)| {
-                let mut min_width = Column::min_width(col);
-                if matches!(options.header_mode, TableHeaderMode::HumanReadable)
-                    && matches!(col, Column::Source)
-                {
-                    // coreutils df -h/-H uses an extra space after "Filesystem"
-                    min_width += 1;
-                }
                 let header_width = UnicodeWidthStr::width(headers[i].as_str());
-                min_width.max(header_width)
+                Column::min_width(col).max(header_width)
             })
             .collect();
 
@@ -713,6 +706,43 @@ mod tests {
         assert_eq!(
             TableHeader::get_headers(&options),
             vec!("Filesystem", "Size", "Used", "Avail", "Use%", "Mounted on")
+        );
+    }
+
+    #[test]
+    fn test_human_readable_size_column_uses_gnu_minimum_width() {
+        let options = DfOptions {
+            human_readable: Some(BlocksHumanReadable::Binary),
+            header_mode: TableHeaderMode::HumanReadable,
+            columns: vec![Column::Source, Column::Size],
+            ..Default::default()
+        };
+        let filesystem = crate::Filesystem {
+            file: None,
+            mount_info: crate::CtMountInfo {
+                dev_id: "0:0".to_string(),
+                dev_name: "123456789012345678901234".to_string(),
+                fs_type: "testfs".to_string(),
+                mount_dir: "/".to_string(),
+                mount_option: String::new(),
+                mount_root: "/".to_string(),
+                remote: false,
+                dummy: false,
+            },
+            usage: crate::table::FsUsage {
+                blocksize: 1,
+                blocks: 35 * 1024 * 1024 * 1024,
+                bfree: 0,
+                bavail: 0,
+                bavail_top_bit_set: false,
+                files: 0,
+                ffree: 0,
+            },
+        };
+
+        assert_eq!(
+            Table::new(&options, vec![filesystem]).to_string(),
+            "Filesystem                Size\n123456789012345678901234   35G"
         );
     }
 

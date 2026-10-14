@@ -23,6 +23,8 @@ use ctcore::ct_error::{CTResult, CtSimpleError, strip_errno};
 use ctcore::ct_signals::enable_pipe_errors;
 
 use ctcore::Tool;
+#[cfg(target_os = "linux")]
+use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::io;
 use std::io::Write;
@@ -554,18 +556,27 @@ fn echo_help_text(usage_name: &OsStr) -> Vec<u8> {
             GNU_ECHO_HELP_EN_SUFFIX,
         )
     };
+    let prefix = echo_localized_text_bytes(prefix);
+    let between_names = echo_localized_text_bytes(between_names);
+    let suffix = echo_localized_text_bytes(suffix);
     let mut output = Vec::with_capacity(
         prefix.len() + between_names.len() + suffix.len() + usage_name.len() * 2,
     );
-    output.extend_from_slice(prefix.as_bytes());
+    output.extend_from_slice(&prefix);
     output.extend_from_slice(&usage_name);
-    output.extend_from_slice(between_names.as_bytes());
+    output.extend_from_slice(&between_names);
     output.extend_from_slice(&usage_name);
-    output.extend_from_slice(suffix.as_bytes());
+    output.extend_from_slice(&suffix);
     output
 }
 
 fn echo_uses_zh_cn_locale() -> bool {
+    let message_locale = echo_environment_locale(&["LC_ALL", "LC_MESSAGES", "LANG"])
+        .unwrap_or_else(|| "C".to_string());
+    if echo_is_c_locale(&message_locale) {
+        return false;
+    }
+
     if let Some(language) = std::env::var("LANGUAGE")
         .ok()
         .filter(|value| !value.is_empty())
@@ -573,10 +584,17 @@ fn echo_uses_zh_cn_locale() -> bool {
         return echo_locale_is_zh_cn(language.split(':').next().unwrap_or_default());
     }
 
-    ["LC_ALL", "LC_MESSAGES", "LANG"]
+    echo_locale_is_zh_cn(&message_locale)
+}
+
+fn echo_environment_locale(names: &[&str]) -> Option<String> {
+    names
         .into_iter()
         .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
-        .is_some_and(|locale| echo_locale_is_zh_cn(&locale))
+}
+
+fn echo_is_c_locale(locale: &str) -> bool {
+    matches!(locale, "C" | "POSIX")
 }
 
 fn echo_locale_is_zh_cn(locale: &str) -> bool {
@@ -584,6 +602,99 @@ fn echo_locale_is_zh_cn(locale: &str) -> bool {
         .split(['.', '@'])
         .next()
         .is_some_and(|name| name.eq_ignore_ascii_case("zh_CN"))
+}
+
+fn echo_ctype_codeset() -> Option<String> {
+    let locale = echo_environment_locale(&["LC_ALL", "LC_CTYPE", "LANG"])?;
+    let locale_name = locale.split('@').next().unwrap_or_default();
+    let codeset = locale_name
+        .split_once('.')
+        .map(|(_, codeset)| codeset.to_string());
+
+    codeset.or_else(|| echo_locale_is_zh_cn(locale_name).then(|| "GB2312".to_string()))
+}
+
+fn echo_codeset_is_utf8(codeset: &str) -> bool {
+    let normalized = codeset
+        .chars()
+        .filter(|character| *character != '-' && *character != '_')
+        .collect::<String>();
+
+    normalized.eq_ignore_ascii_case("UTF8")
+}
+
+fn echo_codeset_is_legacy_chinese(codeset: &str) -> bool {
+    let normalized = codeset
+        .chars()
+        .filter(|character| *character != '-' && *character != '_')
+        .collect::<String>();
+
+    matches!(normalized.to_ascii_uppercase().as_str(), "GBK" | "GB2312")
+}
+
+fn echo_localized_text_bytes(text: &str) -> Vec<u8> {
+    #[cfg(target_os = "linux")]
+    if let Some(codeset) = echo_ctype_codeset()
+        && !echo_codeset_is_utf8(&codeset)
+        && let Some(output) = echo_transcode_utf8(text.as_bytes(), &codeset)
+    {
+        return output;
+    }
+
+    text.as_bytes().to_vec()
+}
+
+#[cfg(target_os = "linux")]
+fn echo_transcode_utf8(input: &[u8], codeset: &str) -> Option<Vec<u8>> {
+    let codeset = CString::new(codeset).ok()?;
+    let descriptor =
+        unsafe { libc::iconv_open(codeset.as_ptr(), b"UTF-8\0".as_ptr().cast::<libc::c_char>()) };
+    if descriptor == (-1_isize) as libc::iconv_t {
+        return None;
+    }
+
+    let mut input = input.to_vec();
+    let mut input_pointer = input.as_mut_ptr().cast::<libc::c_char>();
+    let mut input_remaining = input.len();
+    let mut output = vec![0_u8; input.len().saturating_mul(4).max(64)];
+    let mut output_length = 0;
+    let mut converted = None;
+
+    loop {
+        let mut output_pointer = unsafe {
+            output
+                .as_mut_ptr()
+                .add(output_length)
+                .cast::<libc::c_char>()
+        };
+        let mut output_remaining = output.len() - output_length;
+        let result = unsafe {
+            libc::iconv(
+                descriptor,
+                &mut input_pointer,
+                &mut input_remaining,
+                &mut output_pointer,
+                &mut output_remaining,
+            )
+        };
+        output_length = output.len() - output_remaining;
+
+        if result != usize::MAX {
+            output.truncate(output_length);
+            converted = Some(output);
+            break;
+        }
+
+        if std::io::Error::last_os_error().raw_os_error() != Some(libc::E2BIG) {
+            break;
+        }
+        output.resize(output.len().saturating_mul(2).max(64), 0);
+    }
+
+    unsafe {
+        libc::iconv_close(descriptor);
+    }
+    converted
 }
 
 const GNU_ECHO_VERSION_TEXT: &str = "\
@@ -606,17 +717,34 @@ Copyright © 2023 Free Software Foundation, Inc.
 由 Brian Fox 和 Chet Ramey 编写。
 ";
 
+const GNU_ECHO_VERSION_TEXT_ZH_CN_LEGACY: &str = "\
+echo (GNU coreutils) 9.4
+Copyright (C) 2023 Free Software Foundation, Inc.
+许可证 GPLv3+：GNU 通用公共许可证第 3 版或更新版本 <https://gnu.org/licenses/gpl.html>。
+本软件是自由软件：您可以自由修改和重新发布它。
+在法律允许的范围内，不提供任何保证。
+
+由 Brian Fox 和 Chet Ramey 编写。
+";
+
 fn echo_print_help_or_version(help: bool, usage_name: &OsStr) -> io::Result<()> {
     let mut output = Vec::new();
     if help {
         output.extend_from_slice(&echo_help_text(usage_name));
     } else {
         let version_text = if echo_uses_zh_cn_locale() {
-            GNU_ECHO_VERSION_TEXT_ZH_CN
+            if echo_ctype_codeset()
+                .as_deref()
+                .is_some_and(echo_codeset_is_legacy_chinese)
+            {
+                GNU_ECHO_VERSION_TEXT_ZH_CN_LEGACY
+            } else {
+                GNU_ECHO_VERSION_TEXT_ZH_CN
+            }
         } else {
             GNU_ECHO_VERSION_TEXT
         };
-        output.extend_from_slice(version_text.as_bytes());
+        output.extend_from_slice(&echo_localized_text_bytes(version_text));
     }
     echo_write_output(&output)
 }

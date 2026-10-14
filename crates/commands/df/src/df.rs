@@ -493,18 +493,33 @@ fn filter_named_mount_list(
         .collect()
 }
 
+fn is_overmounted(mount_info: &CtMountInfo, mounts: &[CtMountInfo]) -> bool {
+    mounts
+        .iter()
+        .rfind(|candidate| candidate.mount_dir == mount_info.mount_dir)
+        .is_some_and(|current| {
+            current.dev_name != mount_info.dev_name && !(current.remote && mount_info.remote)
+        })
+}
+
 /// 获取当前所有已挂载的文件系统。
 fn get_all_filesystems(option: &DfOptions) -> Result<Vec<Filesystem>, std::io::Error> {
     // 所有挂载的文件系统的列表。
     // 根据命令行选项排除某些文件系统。
-    let mounts = read_fs_list();
+    let all_mounts = read_fs_list();
     sync_if_requested(option);
-    let mounts: Vec<CtMountInfo> = filter_mount_list(mounts?, option);
+    let all_mounts = all_mounts?;
+    let mounts: Vec<CtMountInfo> = filter_mount_list(all_mounts.clone(), option);
 
     // 将每个`MountInfo`转换为包含挂载信息和使用信息的`Filesystem`。
     Ok(mounts
         .into_iter()
-        .filter_map(|m| Filesystem::new(m, None))
+        .filter_map(|mount_info| {
+            let usage_unknown = option.show_all_fs && is_overmounted(&mount_info, &all_mounts);
+            let mut filesystem = Filesystem::new(mount_info, None)?;
+            filesystem.usage_unknown = usage_unknown;
+            Some(filesystem)
+        })
         .filter(|fs| option.show_all_fs || fs.usage.blocks > 0)
         .collect())
 }
@@ -9487,6 +9502,34 @@ mod tests {
             let m1 = mount_info("/dev/foo", "/", "/mnt/baz");
             let m2 = mount_info("/dev/bar", "/", "/mnt/baz");
             assert!(mount_info_lt(&m1, &m2));
+        }
+    }
+
+    mod is_overmounted {
+        use crate::is_overmounted;
+        use ctcore::ct_fsext::CtMountInfo;
+
+        fn mount_info(dev_name: &str, mount_dir: &str, remote: bool) -> CtMountInfo {
+            CtMountInfo {
+                dev_id: String::new(),
+                dev_name: dev_name.to_string(),
+                fs_type: String::new(),
+                mount_dir: mount_dir.to_string(),
+                mount_option: String::new(),
+                mount_root: String::new(),
+                remote,
+                dummy: false,
+            }
+        }
+
+        #[test]
+        fn detects_an_earlier_mount_covered_by_a_later_mount() {
+            let old_mount = mount_info("systemd-1", "/proc/sys/fs/binfmt_misc", false);
+            let current_mount = mount_info("binfmt_misc", "/proc/sys/fs/binfmt_misc", false);
+            let mounts = [old_mount.clone(), current_mount.clone()];
+
+            assert!(is_overmounted(&old_mount, &mounts));
+            assert!(!is_overmounted(&current_mount, &mounts));
         }
     }
 

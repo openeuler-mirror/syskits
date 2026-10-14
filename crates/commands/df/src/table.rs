@@ -71,6 +71,9 @@ pub(crate) struct TableRow {
     ///
     /// If the filesystem has zero bytes, then this is `None`.
     inodes_usage: Option<f64>,
+
+    /// Whether the statistics came from a mount point covered by a newer mount.
+    usage_unknown: bool,
 }
 
 impl TableRow {
@@ -88,6 +91,7 @@ impl TableRow {
             inodes_used: 0,
             inodes_free: 0,
             inodes_usage: None,
+            usage_unknown: false,
         }
     }
 }
@@ -97,6 +101,10 @@ impl AddAssign for TableRow {
     ///
     /// 其中 `Row::fs_device` 字段被设置为 `"total"`，其余 `String` 类型的字段被设置为 `"-"`。
     fn add_assign(&mut self, rhs: Self) {
+        if rhs.usage_unknown {
+            return;
+        }
+
         // 计算各个数值字段的和。
         let bytes = self.bytes + rhs.bytes;
         let bytes_used = self.bytes_used + rhs.bytes_used;
@@ -130,6 +138,7 @@ impl AddAssign for TableRow {
             } else {
                 Some(inodes_used as f64 / inodes as f64)
             },
+            usage_unknown: false,
         }
     }
 }
@@ -162,6 +171,7 @@ impl From<Filesystem> for TableRow {
             ffree,
             ..
         } = fs.usage;
+        let usage_unknown = fs.usage_unknown;
 
         // 计算已使用的字节和inode，使用 `saturating_sub` 防止溢出。
         let bused = blocks.saturating_sub(bfree);
@@ -171,12 +181,12 @@ impl From<Filesystem> for TableRow {
         Self {
             file: fs.file,
             fs_device: dev_name,
-            fs_type,
+            fs_type: if usage_unknown { "-".into() } else { fs_type },
             fs_mount: mount_dir,
             bytes: blocksize * blocks,       // 总字节数
             bytes_used: blocksize * bused,   // 已用字节数
             bytes_avail: blocksize * bavail, // 可用字节数
-            bytes_usage: if blocks == 0 {
+            bytes_usage: if usage_unknown || blocks == 0 {
                 None
             } else {
                 // 计算字节使用率，考虑了某些文件系统中的保留块。
@@ -185,12 +195,13 @@ impl From<Filesystem> for TableRow {
             inodes: files as u128,
             inodes_used: fused as u128,
             inodes_free: ffree as u128,
-            inodes_usage: if files == 0 {
+            inodes_usage: if usage_unknown || files == 0 {
                 None
             } else {
                 // 计算 inode 使用率。
                 Some(fused as f64 / files as f64)
             },
+            usage_unknown,
         }
     }
 }
@@ -240,6 +251,10 @@ impl<'a> TableRowFormatter<'a> {
     /// # 返回值
     /// 返回一个表示缩放后大小的字符串。
     fn scaled_bytes(&self, size: u64) -> String {
+        if self.row.usage_unknown {
+            return "-".to_string();
+        }
+
         if let Some(h) = self.options.human_readable {
             blocks_to_magnitude_and_suffix(size.into(), BlocksSuffixType::HumanReadable(h))
         } else {
@@ -256,6 +271,10 @@ impl<'a> TableRowFormatter<'a> {
     /// # 返回值
     /// 返回一个表示缩放后inode数量的字符串。
     fn scaled_inodes(&self, size: u128) -> String {
+        if self.row.usage_unknown {
+            return "-".to_string();
+        }
+
         if let Some(h) = self.options.human_readable {
             blocks_to_magnitude_and_suffix(size, BlocksSuffixType::HumanReadable(h))
         } else {
@@ -619,6 +638,7 @@ mod tests {
                 inodes_used: 2,
                 inodes_free: 8,
                 inodes_usage: Some(0.2),
+                usage_unknown: false,
             }
         }
     }
@@ -738,11 +758,67 @@ mod tests {
                 files: 0,
                 ffree: 0,
             },
+            usage_unknown: false,
         };
 
         assert_eq!(
             Table::new(&options, vec![filesystem]).to_string(),
             "Filesystem                Size\n123456789012345678901234   35G"
+        );
+    }
+
+    #[test]
+    fn test_overmounted_filesystem_uses_unknown_values() {
+        let options = DfOptions {
+            show_all_fs: true,
+            columns: vec![
+                Column::Source,
+                Column::Fstype,
+                Column::Size,
+                Column::Used,
+                Column::Avail,
+                Column::Pcent,
+                Column::Target,
+            ],
+            ..Default::default()
+        };
+        let filesystem = crate::Filesystem {
+            file: None,
+            mount_info: crate::CtMountInfo {
+                dev_id: "0:41".to_string(),
+                dev_name: "systemd-1".to_string(),
+                fs_type: "autofs".to_string(),
+                mount_dir: "/proc/sys/fs/binfmt_misc".to_string(),
+                mount_option: String::new(),
+                mount_root: "/".to_string(),
+                remote: false,
+                dummy: true,
+            },
+            usage: crate::table::FsUsage {
+                blocksize: 4096,
+                blocks: 1,
+                bfree: 0,
+                bavail: 0,
+                bavail_top_bit_set: false,
+                files: 1,
+                ffree: 0,
+            },
+            usage_unknown: true,
+        };
+
+        let row = TableRow::from(filesystem);
+        assert_eq!(row.fs_type, "-");
+        assert_eq!(
+            TableRowFormatter::new(&row, &options, false).get_values(),
+            vec!(
+                "systemd-1",
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "/proc/sys/fs/binfmt_misc"
+            )
         );
     }
 
@@ -1005,6 +1081,7 @@ mod tests {
                 files: 999,
                 ffree: 1000000,
             },
+            usage_unknown: false,
         };
 
         let row = TableRow::from(d);
@@ -1035,6 +1112,7 @@ mod tests {
                 files: 99999999999,
                 ffree: 999999,
             },
+            usage_unknown: false,
         };
 
         let filesystems = vec![d1.clone(), d1];

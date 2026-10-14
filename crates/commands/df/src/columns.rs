@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 use crate::{DF_OPT_INODES, DF_OPT_OUTPUT, DF_OPT_PRINT_TYPE};
-use clap::{parser::ValueSource, ArgMatches};
+use clap::{ArgMatches, parser::ValueSource};
 
 /// 定义了输出表格中可能出现的列。
 ///

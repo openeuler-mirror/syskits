@@ -18,7 +18,11 @@ use ctcore::ct_error::{CTResult, set_ct_exit_code, strip_errno};
 use ctcore::ct_error::CtSimpleError;
 #[cfg(all(target_os = "linux", not(test)))]
 use ctcore::ct_signals::enable_pipe_errors;
+#[cfg(unix)]
+use ctcore::libc;
 use std::ffi::{OsStr, OsString};
+#[cfg(unix)]
+use std::ffi::CStr;
 use std::io::{self, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -84,6 +88,7 @@ pub fn false_main(args: impl ctcore::Args) -> CTResult<()> {
         enable_pipe_errors().map_err(|error| CtSimpleError::new(1, error.to_string()))?;
     }
 
+    initialize_false_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let mut command = ct_app(); // 创建命令行解析器实例
@@ -137,6 +142,11 @@ fn report_false_write_error(program_name: &OsStr, error: io::Error) {
     };
 
     let detail = strip_errno(&error);
+    let write_error = match false_message_language() {
+        FalseMessageLanguage::SimplifiedChinese => encode_false_message("写入错误"),
+        FalseMessageLanguage::TraditionalChinese => encode_false_message("寫入時發生錯誤"),
+        FalseMessageLanguage::Other => b"write error".to_vec(),
+    };
     #[cfg(unix)]
     let program_name = program_name.as_bytes();
     #[cfg(not(unix))]
@@ -146,9 +156,138 @@ fn report_false_write_error(program_name: &OsStr, error: io::Error) {
     let mut stderr = stderr.lock();
     let _ = stderr
         .write_all(program_name)
-        .and_then(|_| stderr.write_all(b": write error: "))
+        .and_then(|_| stderr.write_all(b": "))
+        .and_then(|_| stderr.write_all(&write_error))
+        .and_then(|_| stderr.write_all(b": "))
         .and_then(|_| stderr.write_all(detail.as_bytes()))
         .and_then(|_| stderr.write_all(b"\n"));
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FalseMessageLanguage {
+    SimplifiedChinese,
+    TraditionalChinese,
+    Other,
+}
+
+#[cfg(unix)]
+fn false_message_language() -> FalseMessageLanguage {
+    let locale = unsafe {
+        let locale = libc::setlocale(libc::LC_MESSAGES, std::ptr::null());
+        if locale.is_null() {
+            String::new()
+        } else {
+            CStr::from_ptr(locale).to_string_lossy().into_owned()
+        }
+    };
+
+    if locale.eq_ignore_ascii_case("C") || locale.eq_ignore_ascii_case("POSIX") {
+        return FalseMessageLanguage::Other;
+    }
+
+    if let Ok(language) = std::env::var("LANGUAGE")
+        && !language.is_empty()
+    {
+        return language
+            .split(':')
+            .find_map(classify_false_message_language)
+            .unwrap_or(FalseMessageLanguage::Other);
+    }
+
+    classify_false_message_language(&locale).unwrap_or(FalseMessageLanguage::Other)
+}
+
+fn classify_false_message_language(locale: &str) -> Option<FalseMessageLanguage> {
+    let locale = locale.to_ascii_lowercase();
+
+    if locale.starts_with("zh_cn") {
+        Some(FalseMessageLanguage::SimplifiedChinese)
+    } else if locale.starts_with("zh_tw") {
+        Some(FalseMessageLanguage::TraditionalChinese)
+    } else {
+        None
+    }
+}
+
+#[cfg(not(unix))]
+fn false_message_language() -> FalseMessageLanguage {
+    FalseMessageLanguage::Other
+}
+
+#[cfg(unix)]
+fn encode_false_message(message: &str) -> Vec<u8> {
+    let codeset = unsafe { libc::nl_langinfo(libc::CODESET) };
+    if codeset.is_null() {
+        return message.as_bytes().to_vec();
+    }
+    let codeset_bytes = unsafe { CStr::from_ptr(codeset).to_bytes() };
+    if codeset_bytes.eq_ignore_ascii_case(b"UTF-8") {
+        return message.as_bytes().to_vec();
+    }
+
+    let descriptor = unsafe { libc::iconv_open(codeset, c"UTF-8".as_ptr()) };
+    if descriptor == (-1_isize) as libc::iconv_t {
+        return message.as_bytes().to_vec();
+    }
+
+    let mut input_bytes_left = message.len();
+    let mut input = message.as_ptr().cast_mut().cast::<libc::c_char>();
+    let mut encoded = vec![0; message.len() * 4 + 16];
+    let mut output_bytes_left = encoded.len();
+    let mut output = encoded.as_mut_ptr().cast::<libc::c_char>();
+    while input_bytes_left != 0 {
+        let result = unsafe {
+            libc::iconv(
+                descriptor,
+                &mut input,
+                &mut input_bytes_left,
+                &mut output,
+                &mut output_bytes_left,
+            )
+        };
+        if result != usize::MAX {
+            break;
+        }
+        if output_bytes_left == 0 {
+            input_bytes_left = message.len();
+            break;
+        }
+
+        let input_offset = message.len() - input_bytes_left;
+        let invalid_character_length = message[input_offset..]
+            .chars()
+            .next()
+            .map_or(1, char::len_utf8);
+        unsafe {
+            input = input.add(invalid_character_length);
+            output.write(b'?' as libc::c_char);
+            output = output.add(1);
+        }
+        input_bytes_left -= invalid_character_length;
+        output_bytes_left -= 1;
+    }
+    unsafe {
+        libc::iconv_close(descriptor);
+    }
+
+    if input_bytes_left != 0 {
+        message.as_bytes().to_vec()
+    } else {
+        encoded.truncate(encoded.len() - output_bytes_left);
+        encoded
+    }
+}
+
+#[cfg(not(unix))]
+fn encode_false_message(message: &str) -> Vec<u8> {
+    message.as_bytes().to_vec()
+}
+
+fn initialize_false_locale() {
+    #[cfg(unix)]
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+    }
 }
 
 /// 创建并配置命令行解析器实例。

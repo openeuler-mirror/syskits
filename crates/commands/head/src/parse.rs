@@ -57,6 +57,7 @@ fn process_num_block(
             let mut quiet = false;
             let mut verbose = false;
             let mut zero_terminated = false;
+            let mut count_lines = true;
             let mut multiplier = None;
             let mut c = last_char;
             loop {
@@ -73,10 +74,23 @@ fn process_num_block(
                         quiet = false;
                     }
                     'z' => zero_terminated = true,
-                    'c' => multiplier = Some(1),
-                    'b' => multiplier = Some(512),
-                    'k' => multiplier = Some(1024),
-                    'm' => multiplier = Some(1024 * 1024),
+                    'c' => {
+                        count_lines = false;
+                        multiplier = None;
+                    }
+                    'b' => {
+                        count_lines = false;
+                        multiplier = Some(512);
+                    }
+                    'k' => {
+                        count_lines = false;
+                        multiplier = Some(1024);
+                    }
+                    'm' => {
+                        count_lines = false;
+                        multiplier = Some(1024 * 1024);
+                    }
+                    'l' => count_lines = true,
                     '\0' => {}
                     _ => return Some(Err(ParseError::Syntax(c))),
                 }
@@ -96,17 +110,22 @@ fn process_num_block(
             if zero_terminated {
                 options.push(OsString::from("-z"));
             }
-            if let Some(n) = multiplier {
-                options.push(OsString::from("-c"));
+            let num = if let Some(n) = multiplier {
                 let num = match num.checked_mul(n) {
                     Some(n) => n,
                     None => return Some(Err(ParseError::Overflow)),
                 };
-                options.push(OsString::from(format!("{num}")));
+                num
             } else {
+                num
+            };
+
+            if count_lines {
                 options.push(OsString::from("-n"));
-                options.push(OsString::from(format!("{num}")));
+            } else {
+                options.push(OsString::from("-c"));
             }
+            options.push(OsString::from(format!("{num}")));
             Some(Ok(options))
         }
         Err(_) => Some(Err(ParseError::Overflow)),
@@ -186,6 +205,10 @@ mod tests {
         assert_eq!(obsolete("-5m"), obsolete_result(&["-c", "5242880"]));
         assert_eq!(obsolete("-1k"), obsolete_result(&["-c", "1024"]));
         assert_eq!(obsolete("-2b"), obsolete_result(&["-c", "1024"]));
+        assert_eq!(obsolete("-1l"), obsolete_result(&["-n", "1"]));
+        assert_eq!(obsolete("-1bl"), obsolete_result(&["-n", "512"]));
+        assert_eq!(obsolete("-1lb"), obsolete_result(&["-c", "512"]));
+        assert_eq!(obsolete("-1bc"), obsolete_result(&["-c", "1"]));
         assert_eq!(obsolete("-1mmk"), obsolete_result(&["-c", "1024"]));
         assert_eq!(obsolete("-1vz"), obsolete_result(&["-v", "-z", "-n", "1"]));
         assert_eq!(

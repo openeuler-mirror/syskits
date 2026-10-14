@@ -21,8 +21,10 @@ use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, strip_errno};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_lines::lines;
 use ctcore::ct_show;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::{BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 
 const BUF_SIZE: usize = 65536;
@@ -100,6 +102,7 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(head_flags::FILES_NAME)
             .action(ArgAction::Append)
+            .value_parser(clap::builder::OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
     ];
 
@@ -175,7 +178,8 @@ fn apply_posix_option_order(raw_args: &mut Vec<OsString>) {
     let mut index = 1;
     while index < raw_args.len() {
         let Some(arg) = raw_args[index].to_str() else {
-            break;
+            raw_args.insert(index, OsString::from("--"));
+            return;
         };
         if arg == "--" {
             return;
@@ -265,7 +269,7 @@ fn arg_iterate(mut args: impl ctcore::Args) -> CTResult<Box<dyn Iterator<Item = 
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
             }
         } else {
-            Err(CtSimpleError::new(1, "bad argument encoding".to_owned()))
+            Ok(Box::new(vec![first, second].into_iter().chain(args)))
         }
     } else {
         Ok(Box::new(vec![first].into_iter()))
@@ -293,7 +297,7 @@ pub struct HeadOptions {
     pub mode: Mode,
     /// `files` 列表包含了命令要处理的文件路径。
     /// 命令将根据这个列表中的文件进行操作。
-    pub files: Vec<String>,
+    pub files: Vec<OsString>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -337,9 +341,9 @@ impl HeadOptions {
             line_ending: CtLineEnding::from_zero_flag(matches.get_flag(head_flags::ZERO_NAME)),
             presume_input_pipe: matches.get_flag(head_flags::PRESUME_INPUT_PIPE),
             mode,
-            files: match matches.get_many::<String>(head_flags::FILES_NAME) {
+            files: match matches.get_many::<OsString>(head_flags::FILES_NAME) {
                 Some(v) => v.cloned().collect(),
-                None => vec!["-".to_owned()],
+                None => vec![OsString::from("-")],
             },
         };
 
@@ -840,7 +844,7 @@ fn ct_head(options: &HeadOptions) -> CTResult<()> {
 
 // 处理单个文件
 fn process_file<W: Write>(
-    file: &str,
+    file: &OsStr,
     options: &HeadOptions,
     first: &mut bool,
     last_file_had_error: &mut bool,
@@ -848,7 +852,7 @@ fn process_file<W: Write>(
 ) -> CTResult<()> {
     if file == "-" {
         let res = (|| -> std::io::Result<()> {
-            print_file_header_to_writer(options, *first, "standard input", writer)?;
+            print_file_header_to_writer(options, *first, OsStr::new("standard input"), writer)?;
 
             #[cfg(unix)]
             {
@@ -867,7 +871,7 @@ fn process_file<W: Write>(
             }
         })();
 
-        finish_file_result(res, "standard input", last_file_had_error)?;
+        finish_file_result(res, OsStr::new("standard input"), last_file_had_error)?;
         *first = false;
         return Ok(());
     }
@@ -890,7 +894,7 @@ fn process_file<W: Write>(
 
 fn finish_file_result(
     res: std::io::Result<()>,
-    name: &str,
+    name: &OsStr,
     last_file_had_error: &mut bool,
 ) -> CTResult<()> {
     if let Err(err) = res {
@@ -913,14 +917,21 @@ fn finish_file_result(
 fn print_file_header_to_writer<W: Write>(
     options: &HeadOptions,
     first: bool,
-    name: &str,
+    name: &OsStr,
     writer: &mut W,
 ) -> std::io::Result<()> {
     if should_print_header(options) {
         if !first {
             writer.write_all(b"\n").map_err(write_error)?;
         }
-        writeln!(writer, "==> {name} <==").map_err(write_error)?;
+        writer.write_all(b"==> ").map_err(write_error)?;
+        #[cfg(unix)]
+        writer.write_all(name.as_bytes()).map_err(write_error)?;
+        #[cfg(not(unix))]
+        writer
+            .write_all(name.to_string_lossy().as_bytes())
+            .map_err(write_error)?;
+        writer.write_all(b" <==\n").map_err(write_error)?;
     }
     Ok(())
 }
@@ -953,12 +964,12 @@ fn handle_stdin_to_writer<W: Write>(options: &HeadOptions, writer: &mut W) -> st
     Ok(())
 }
 
-fn render_head_open_error(name: &str, err: std::io::Error) -> String {
+fn render_head_open_error(name: &OsStr, err: std::io::Error) -> String {
     let err = err.map_err_context(|| format!("cannot open {} for reading", name.quote()));
     format!("head: {err}\n")
 }
 
-fn render_head_read_error(name: &str, err: &std::io::Error) -> String {
+fn render_head_read_error(name: &OsStr, err: &std::io::Error) -> String {
     format!(
         "head: error reading {}: {}\n",
         name.quote(),
@@ -1009,10 +1020,11 @@ fn head_semantic_from_options(options: &HeadOptions) -> HeadSemantic {
 
     for file in &options.files {
         let display_name = if file == "-" {
-            "standard input"
+            OsStr::new("standard input")
         } else {
-            file.as_str()
+            file.as_os_str()
         };
+        let display_name_text = display_name.to_string_lossy();
         let mut file_output = Vec::new();
         let result = if file == "-" {
             let _ = print_file_header_to_writer(options, first, display_name, &mut classic_bytes);
@@ -1062,7 +1074,7 @@ fn head_semantic_from_options(options: &HeadOptions) -> HeadSemantic {
         } else {
             rows.extend(head_rows_from_bytes(
                 &file_output,
-                display_name,
+                &display_name_text,
                 options.line_ending.into(),
             ));
         }
@@ -1534,7 +1546,7 @@ mod tests {
             // 创建临时文件
             let content = "line1\nline2\nline3\nline4\n";
             let temp_file = create_temp_file(content);
-            let path = temp_file.path().to_str().unwrap().to_string();
+            let path = temp_file.path().as_os_str().to_os_string();
 
             let options = HeadOptions {
                 quiet: false,
@@ -1561,8 +1573,8 @@ mod tests {
                 presume_input_pipe: false,
                 mode: Mode::FirstLines(1),
                 files: vec![
-                    file1.path().to_str().unwrap().to_string(),
-                    file2.path().to_str().unwrap().to_string(),
+                    file1.path().as_os_str().to_os_string(),
+                    file2.path().as_os_str().to_os_string(),
                 ],
             };
 
@@ -1577,7 +1589,7 @@ mod tests {
                 line_ending: CtLineEnding::Newline,
                 presume_input_pipe: false,
                 mode: Mode::FirstLines(1),
-                files: vec!["nonexistent_file.txt".to_string()],
+                files: vec![OsString::from("nonexistent_file.txt")],
             };
 
             // 文件不存在时应该返回 Ok，但会设置错误码
@@ -1588,7 +1600,7 @@ mod tests {
         fn test_ct_head_bytes_mode() {
             let content = "Hello, World!";
             let temp_file = create_temp_file(content);
-            let path = temp_file.path().to_str().unwrap().to_string();
+            let path = temp_file.path().as_os_str().to_os_string();
 
             let options = HeadOptions {
                 quiet: false,
@@ -1614,8 +1626,8 @@ mod tests {
                 presume_input_pipe: false,
                 mode: Mode::FirstLines(1),
                 files: vec![
-                    file1.path().to_str().unwrap().to_string(),
-                    file2.path().to_str().unwrap().to_string(),
+                    file1.path().as_os_str().to_os_string(),
+                    file2.path().as_os_str().to_os_string(),
                 ],
             };
 
@@ -1808,8 +1820,10 @@ mod tests_other {
     fn test_arg_iterate_bad_encoding() {
         use std::os::unix::ffi::OsStringExt;
         let invalid = OsString::from_vec(vec![b'\x80', b'\x81']);
-        // this arises from a conversion from OsString to &str
-        assert!(arg_iterate(vec![OsString::from("head"), invalid].into_iter()).is_err());
+        let args = arg_iterate(vec![OsString::from("head"), invalid].into_iter())
+            .expect("preserve non-UTF-8 filename")
+            .collect::<Vec<_>>();
+        assert_eq!(args[1].as_encoded_bytes(), b"\x80\x81");
     }
 
     #[test]

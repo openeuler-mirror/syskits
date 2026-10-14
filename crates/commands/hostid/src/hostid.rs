@@ -15,14 +15,13 @@ use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-#[cfg(not(unix))]
-use ctcore::ct_display::Quotable;
-use ctcore::ct_display::locale_quote;
 use ctcore::ct_error::{CTResult, CtSimpleError, strip_errno};
 use libc::c_long;
 #[cfg(unix)]
 use std::error::Error;
-use std::ffi::OsString;
+#[cfg(unix)]
+use std::ffi::CStr;
+use std::ffi::{OsStr, OsString};
 #[cfg(unix)]
 use std::fmt::{self, Display, Formatter};
 use std::io::{self, Write};
@@ -32,6 +31,15 @@ use sys_locale::get_locale;
 // currently rust libc interface doesn't include gethostid
 unsafe extern "C" {
     pub unsafe fn gethostid() -> c_long;
+    #[cfg(unix)]
+    unsafe fn mbrtowc(
+        wide_character: *mut libc::wchar_t,
+        bytes: *const libc::c_char,
+        byte_count: usize,
+        state: *mut libc::mbstate_t,
+    ) -> usize;
+    #[cfg(unix)]
+    unsafe fn iswprint(wide_character: libc::c_uint) -> libc::c_int;
 }
 
 const OPERAND_NAME: &str = "OPERAND";
@@ -61,6 +69,7 @@ impl Tool for Hostid {
 }
 
 pub fn hostid_main(args: impl ctcore::Args) -> CTResult<()> {
+    initialize_hostid_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
@@ -299,11 +308,21 @@ fn raw_usage_error(args: &[OsString], message: &[u8]) -> Box<dyn ctcore::ct_erro
 }
 
 fn hostid_usage_error(args: &[OsString], message: String) -> Box<dyn ctcore::ct_error::CTError> {
+    hostid_usage_error_bytes(args, message.as_bytes())
+}
+
+fn hostid_usage_error_bytes(
+    args: &[OsString],
+    message: &[u8],
+) -> Box<dyn ctcore::ct_error::CTError> {
     #[cfg(unix)]
-    if args.first().is_some_and(|arg| arg.to_str().is_none()) {
-        return raw_usage_error(args, message.as_bytes());
+    if args.first().is_some_and(|arg| arg.to_str().is_none())
+        || std::str::from_utf8(message).is_err()
+    {
+        return raw_usage_error(args, message);
     }
 
+    let message = std::str::from_utf8(message).expect("non-Unix diagnostics must be UTF-8");
     CtSimpleError::new(
         1,
         format!(
@@ -340,103 +359,158 @@ fn reject_extra_operand(matches: &clap::ArgMatches, args: &[OsString]) -> CTResu
         .get_many::<OsString>(OPERAND_NAME)
         .and_then(|operands| operands.into_iter().next())
     {
-        return Err(hostid_usage_error(
-            args,
-            format!("extra operand {}", quote_hostid_operand(operand)),
-        ));
+        let mut message = b"extra operand ".to_vec();
+        message.extend_from_slice(&quote_hostid_operand(operand));
+        return Err(hostid_usage_error_bytes(args, &message));
     }
     Ok(())
 }
 
-fn quote_hostid_operand(operand: &OsString) -> String {
-    if let Some(operand) = operand.to_str() {
-        return locale_quote(operand);
-    }
-
+fn quote_hostid_operand(operand: &OsStr) -> Vec<u8> {
     #[cfg(unix)]
-    return locale_quote_non_utf8_operand(operand);
+    return locale_quote_hostid_bytes(operand);
 
     #[cfg(not(unix))]
-    operand.quote().to_string()
+    format!("'{operand:?}'").into_bytes()
 }
 
 #[cfg(unix)]
-fn locale_quote_non_utf8_operand(operand: &OsString) -> String {
+fn locale_quote_hostid_bytes(operand: &OsStr) -> Vec<u8> {
     use std::os::unix::ffi::OsStrExt;
 
-    let marker_quote = locale_quote("x");
-    let (left_quote, right_quote) = marker_quote
-        .split_once('x')
-        .expect("locale quote must surround its content");
-    let utf8_locale = left_quote == "‘";
-    let mut escaped = String::new();
-    let mut remaining = operand.as_bytes();
-
-    while !remaining.is_empty() {
-        match std::str::from_utf8(remaining) {
-            Ok(text) => {
-                append_locale_quoted_text(&mut escaped, text, right_quote, utf8_locale);
-                break;
-            }
-            Err(error) => {
-                let valid_end = error.valid_up_to();
-                if valid_end != 0 {
-                    let (valid, rest) = remaining.split_at(valid_end);
-                    append_locale_quoted_text(
-                        &mut escaped,
-                        std::str::from_utf8(valid).expect("valid UTF-8 prefix"),
-                        right_quote,
-                        utf8_locale,
-                    );
-                    remaining = rest;
-                }
-                let byte = remaining[0];
-                use std::fmt::Write;
-                write!(escaped, "\\{byte:03o}").expect("write to string");
-                remaining = &remaining[1..];
-            }
-        }
-    }
-
-    format!("{left_quote}{escaped}{right_quote}")
+    let (left_quote, right_quote) = hostid_locale_quote_marks();
+    let bytes = operand.as_bytes();
+    let mut quoted = Vec::with_capacity(bytes.len() + left_quote.len() + right_quote.len());
+    quoted.extend_from_slice(left_quote);
+    append_locale_quoted_bytes(&mut quoted, bytes, right_quote);
+    quoted.extend_from_slice(right_quote);
+    quoted
 }
 
 #[cfg(unix)]
-fn append_locale_quoted_text(
-    escaped: &mut String,
-    text: &str,
-    right_quote: &str,
-    utf8_locale: bool,
-) {
-    for character in text.chars() {
-        match character {
-            '\\' => escaped.push_str("\\\\"),
-            character if is_hostid_right_quote(character, right_quote) => {
-                escaped.push('\\');
-                escaped.push(character);
+fn append_locale_quoted_bytes(quoted: &mut Vec<u8>, bytes: &[u8], right_quote: &[u8]) {
+    let mut index = 0;
+
+    while index < bytes.len() {
+        if !right_quote.is_empty() && bytes[index..].starts_with(right_quote) {
+            quoted.push(b'\\');
+            quoted.extend_from_slice(right_quote);
+            index += right_quote.len();
+            continue;
+        }
+
+        let byte = bytes[index];
+        let escape = match byte {
+            b'\x07' => Some(b'a'),
+            b'\x08' => Some(b'b'),
+            b'\t' => Some(b't'),
+            b'\n' => Some(b'n'),
+            b'\x0b' => Some(b'v'),
+            b'\x0c' => Some(b'f'),
+            b'\r' => Some(b'r'),
+            b'\\' => Some(b'\\'),
+            _ => None,
+        };
+        if let Some(escape) = escape {
+            quoted.extend_from_slice(&[b'\\', escape]);
+            index += 1;
+            continue;
+        }
+        if byte.is_ascii() {
+            if byte.is_ascii_control() {
+                append_octal_byte(quoted, byte);
+            } else {
+                quoted.push(byte);
             }
-            '\u{0007}' => escaped.push_str("\\a"),
-            '\u{0008}' => escaped.push_str("\\b"),
-            '\t' => escaped.push_str("\\t"),
-            '\n' => escaped.push_str("\\n"),
-            '\u{000B}' => escaped.push_str("\\v"),
-            '\u{000C}' => escaped.push_str("\\f"),
-            '\r' => escaped.push_str("\\r"),
-            character if character.is_control() || (!utf8_locale && !character.is_ascii()) => {
-                use std::fmt::Write;
-                for byte in character.to_string().as_bytes() {
-                    write!(escaped, "\\{byte:03o}").expect("write to string");
+            index += 1;
+            continue;
+        }
+
+        let sequence_length = locale_character_length(&bytes[index..]);
+        match sequence_length {
+            Some((length, true)) => quoted.extend_from_slice(&bytes[index..index + length]),
+            Some((length, false)) => {
+                for &byte in &bytes[index..index + length] {
+                    append_octal_byte(quoted, byte);
                 }
             }
-            character => escaped.push(character),
+            None => append_octal_byte(quoted, byte),
         }
+        index += sequence_length.map_or(1, |(length, _)| length);
     }
 }
 
 #[cfg(unix)]
-fn is_hostid_right_quote(character: char, right_quote: &str) -> bool {
-    let mut quote_characters = right_quote.chars();
-    quote_characters.next() == Some(character) && quote_characters.next().is_none()
+fn locale_character_length(bytes: &[u8]) -> Option<(usize, bool)> {
+    let mut wide_character: libc::wchar_t = 0;
+    let mut state = unsafe { std::mem::zeroed::<libc::mbstate_t>() };
+    let length = unsafe {
+        mbrtowc(
+            &mut wide_character,
+            bytes.as_ptr().cast(),
+            bytes.len(),
+            &mut state,
+        )
+    };
+
+    if length == usize::MAX || length == usize::MAX - 1 || length == 0 {
+        None
+    } else {
+        Some((
+            length,
+            unsafe { iswprint(wide_character as libc::c_uint) } != 0,
+        ))
+    }
+}
+
+#[cfg(unix)]
+fn append_octal_byte(quoted: &mut Vec<u8>, byte: u8) {
+    quoted.extend_from_slice(&[
+        b'\\',
+        b'0' + (byte >> 6),
+        b'0' + ((byte >> 3) & 7),
+        b'0' + (byte & 7),
+    ]);
+}
+
+#[cfg(unix)]
+fn hostid_locale_quote_marks() -> (&'static [u8], &'static [u8]) {
+    if hostid_messages_are_chinese() {
+        return (b"\"", b"\"");
+    }
+
+    let codeset = unsafe {
+        let codeset = libc::nl_langinfo(libc::CODESET);
+        if codeset.is_null() {
+            &[][..]
+        } else {
+            CStr::from_ptr(codeset).to_bytes()
+        }
+    };
+
+    if codeset.eq_ignore_ascii_case(b"UTF-8") {
+        ("‘".as_bytes(), "’".as_bytes())
+    } else if codeset.eq_ignore_ascii_case(b"GB18030") {
+        (b"\xa1\x07e", b"\xa1\xaf")
+    } else {
+        (b"'", b"'")
+    }
+}
+
+#[cfg(unix)]
+fn hostid_messages_are_chinese() -> bool {
+    ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .into_iter()
+        .filter_map(|name| std::env::var(name).ok())
+        .find(|locale| !locale.is_empty())
+        .is_some_and(|locale| locale.to_ascii_lowercase().starts_with("zh"))
+}
+
+fn initialize_hostid_locale() {
+    #[cfg(unix)]
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+    }
 }
 
 fn hostid() -> String {
@@ -481,6 +555,7 @@ pub struct HostidSemantic {
 }
 
 pub fn hostid_native_semantic(args: impl ctcore::Args) -> CTResult<HostidSemantic> {
+    initialize_hostid_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();

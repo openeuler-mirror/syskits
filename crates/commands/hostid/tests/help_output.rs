@@ -38,6 +38,7 @@ fn help_output_uses_syskits_information() {
             ["--hel"].as_slice(),
             ["--h"].as_slice(),
             ["value", "--help"].as_slice(),
+            ["--help", "--invalid"].as_slice(),
         ] {
             let syskits = run_hostid(env!("CARGO_BIN_EXE_hostid"), program_name, args);
 

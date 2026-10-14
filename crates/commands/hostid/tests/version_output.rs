@@ -42,6 +42,7 @@ fn version_output_uses_syskits_information() {
             ["--vers"].as_slice(),
             ["--v"].as_slice(),
             ["value", "--version"].as_slice(),
+            ["--version", "--invalid"].as_slice(),
         ] {
             let syskits = run_hostid(env!("CARGO_BIN_EXE_hostid"), program_name, args);
 

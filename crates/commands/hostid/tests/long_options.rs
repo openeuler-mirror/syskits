@@ -30,6 +30,8 @@ fn long_option_diagnostics_match_gnu() {
         ["--=value"].as_slice(),
         ["---"].as_slice(),
         ["--invalid", "-h"].as_slice(),
+        ["--invalid", "--help"].as_slice(),
+        ["--invalid", "--version"].as_slice(),
         ["value", "--invalid"].as_slice(),
     ] {
         let gnu = run_hostid("/usr/bin/hostid", args);

@@ -55,7 +55,7 @@ pub fn hostid_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
-    validate_standard_options(&args)?;
+    let _ = validate_standard_options(&args)?;
     let matches = ct_app().try_get_matches_from(args)?;
     reject_extra_operand(&matches)?;
     hostid();
@@ -100,7 +100,13 @@ syskits online help: <https://www.ctyun.cn/developer>"
     )
 }
 
-fn validate_standard_options(args: &[OsString]) -> CTResult<()> {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TerminalAction {
+    Help,
+    Version,
+}
+
+fn validate_standard_options(args: &[OsString]) -> CTResult<Option<TerminalAction>> {
     let mut options_ended = false;
 
     for arg in args.iter().skip(1) {
@@ -113,7 +119,9 @@ fn validate_standard_options(args: &[OsString]) -> CTResult<()> {
             continue;
         }
         if arg.starts_with("--") {
-            validate_long_option(&arg)?;
+            if let Some(action) = validate_long_option(&arg)? {
+                return Ok(Some(action));
+            }
             continue;
         }
         if let Some(short) = arg.strip_prefix('-').filter(|short| !short.is_empty()) {
@@ -128,10 +136,10 @@ fn validate_standard_options(args: &[OsString]) -> CTResult<()> {
         }
     }
 
-    Ok(())
+    Ok(None)
 }
 
-fn validate_long_option(arg: &str) -> CTResult<()> {
+fn validate_long_option(arg: &str) -> CTResult<Option<TerminalAction>> {
     let long = arg.strip_prefix("--").unwrap();
     let (name, has_value) = match long.split_once('=') {
         Some((name, _)) => (name, true),
@@ -144,7 +152,8 @@ fn validate_long_option(arg: &str) -> CTResult<()> {
 
     let message = match matches.as_slice() {
         [option] if has_value => format!("option '--{option}' doesn't allow an argument"),
-        [..] if !has_value && matches.len() == 1 => return Ok(()),
+        ["help"] => return Ok(Some(TerminalAction::Help)),
+        ["version"] => return Ok(Some(TerminalAction::Version)),
         [] => format!("unrecognized option '{arg}'"),
         _ => format!("option '{arg}' is ambiguous; possibilities: '--help' '--version'"),
     };
@@ -200,7 +209,7 @@ pub fn hostid_native_semantic(args: impl ctcore::Args) -> CTResult<HostidSemanti
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
-    validate_standard_options(&args)?;
+    let _ = validate_standard_options(&args)?;
     let matches = ct_app().try_get_matches_from(args)?;
     reject_extra_operand(&matches)?;
 

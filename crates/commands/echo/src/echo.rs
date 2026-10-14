@@ -459,6 +459,48 @@ pub fn echo_native_semantic(args: impl ctcore::Args) -> CTResult<EchoSemantic> {
 }
 
 fn echo_help_text(usage_name: &str) -> String {
+    if echo_uses_zh_cn_locale() {
+        return format!(
+            "\
+用法：{usage_name} [短选项]... [字符串]...
+　或：{usage_name} 长选项
+将 <字符串> 回显到标准输出。
+
+  -n             不输出末尾的换行符
+  -e             启用对反斜杠转义字符的解释
+  -E             禁用对反斜杠转义字符的解释（默认）
+      --help        显示此帮助信息并退出
+      --version     显示版本信息并退出
+
+若 -e 生效，则以下序列可被识别：
+
+  \\\\      反斜杠
+  \\a      警报（BEL 响铃字符）
+  \\b      退格
+  \\c      不再产生新的输出
+  \\e      转义字符
+  \\f      换页
+  \\n      换行
+  \\r      回车
+  \\t      水平制表符
+  \\v      垂直制表符
+  \\0NNN   值为 NNN（1 至 3 位八进制数）的字节
+  \\xHH    值为 HH（1 至 2 位十六进制数）的字节
+
+注意：您的 shell 可能内置了自己的 echo 程序版本，它通常会取代这里所描述的
+版本。请查阅您的 shell 的文档以了解内置版本所支持的选项。
+
+注意：建议使用 printf(1) 替代本命令，
+因为它可以正常输出与选项相似的字符串。
+
+GNU coreutils 在线帮助：<https://www.gnu.org/software/coreutils/>
+请向 <http://translationproject.org/team/zh_CN.html> 报告任何翻译错误
+完整文档 <https://www.gnu.org/software/coreutils/echo>
+或者在本地使用：info '(coreutils) echo invocation'
+"
+        );
+    }
+
     format!(
         "\
 Usage: {usage_name} [SHORT-OPTION]... [STRING]...
@@ -501,6 +543,27 @@ or available locally via: info '(coreutils) echo invocation'
     )
 }
 
+fn echo_uses_zh_cn_locale() -> bool {
+    if let Some(language) = std::env::var("LANGUAGE")
+        .ok()
+        .filter(|value| !value.is_empty())
+    {
+        return echo_locale_is_zh_cn(language.split(':').next().unwrap_or_default());
+    }
+
+    ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .into_iter()
+        .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
+        .is_some_and(|locale| echo_locale_is_zh_cn(&locale))
+}
+
+fn echo_locale_is_zh_cn(locale: &str) -> bool {
+    locale
+        .split(['.', '@'])
+        .next()
+        .is_some_and(|name| name.eq_ignore_ascii_case("zh_CN"))
+}
+
 const GNU_ECHO_VERSION_TEXT: &str = "\
 echo (GNU coreutils) 9.4
 Copyright (C) 2023 Free Software Foundation, Inc.
@@ -511,12 +574,27 @@ There is NO WARRANTY, to the extent permitted by law.
 Written by Brian Fox and Chet Ramey.
 ";
 
+const GNU_ECHO_VERSION_TEXT_ZH_CN: &str = "\
+echo (GNU coreutils) 9.4
+Copyright © 2023 Free Software Foundation, Inc.
+许可证 GPLv3+：GNU 通用公共许可证第 3 版或更新版本 <https://gnu.org/licenses/gpl.html>。
+本软件是自由软件：您可以自由修改和重新发布它。
+在法律允许的范围内，不提供任何保证。
+
+由 Brian Fox 和 Chet Ramey 编写。
+";
+
 fn echo_print_help_or_version(help: bool) -> io::Result<()> {
     let mut output = Vec::new();
     if help {
         output.extend_from_slice(echo_help_text(ctcore::ct_util_name()).as_bytes());
     } else {
-        output.extend_from_slice(GNU_ECHO_VERSION_TEXT.as_bytes());
+        let version_text = if echo_uses_zh_cn_locale() {
+            GNU_ECHO_VERSION_TEXT_ZH_CN
+        } else {
+            GNU_ECHO_VERSION_TEXT
+        };
+        output.extend_from_slice(version_text.as_bytes());
     }
     echo_write_output(&output)
 }

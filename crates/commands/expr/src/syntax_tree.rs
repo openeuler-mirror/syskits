@@ -253,6 +253,7 @@ const PRECEDENCE: &[&[(&[u8], SyntaxTreeBinOp)]] = &[
         (b"<", SyntaxTreeBinOp::Relation(SyntaxTreeRelationOp::Lt)),
         (b"<=", SyntaxTreeBinOp::Relation(SyntaxTreeRelationOp::Leq)),
         (b"=", SyntaxTreeBinOp::Relation(SyntaxTreeRelationOp::Eq)),
+        (b"==", SyntaxTreeBinOp::Relation(SyntaxTreeRelationOp::Eq)),
         (b"!=", SyntaxTreeBinOp::Relation(SyntaxTreeRelationOp::Neq)),
         (b">=", SyntaxTreeBinOp::Relation(SyntaxTreeRelationOp::Geq)),
         (b">", SyntaxTreeBinOp::Relation(SyntaxTreeRelationOp::Gt)),

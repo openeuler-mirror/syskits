@@ -184,9 +184,12 @@ fn arg_iterate(mut args: impl ctcore::Args) -> CTResult<Box<dyn Iterator<Item = 
                     Ok(Box::new(result.into_iter()))
                 }
                 Some(Err(e)) => match e {
-                    parse::ParseError::Syntax => Err(CtSimpleError::new(
+                    parse::ParseError::Syntax(option) => Err(CtSimpleError::new(
                         1,
-                        format!("bad argument format: {}", s.quote()),
+                        format!(
+                            "invalid trailing option -- {option}\nTry '{} --help' for more information.",
+                            ctcore::ct_help_utility_name()
+                        ),
                     )),
                     parse::ParseError::Overflow => Err(CtSimpleError::new(
                         1,

@@ -15,7 +15,7 @@ use std::ffi::OsString;
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum ParseError {
-    Syntax,
+    Syntax(char),
     Overflow,
 }
 
@@ -78,7 +78,7 @@ fn process_num_block(
                     'k' => multiplier = Some(1024),
                     'm' => multiplier = Some(1024 * 1024),
                     '\0' => {}
-                    _ => return Some(Err(ParseError::Syntax)),
+                    _ => return Some(Err(ParseError::Syntax(c))),
                 }
                 if let Some((_, next)) = chars.next() {
                     c = next;
@@ -201,8 +201,8 @@ mod tests {
 
     #[test]
     fn test_parse_errors_obsolete() {
-        assert_eq!(obsolete("-5n"), Some(Err(ParseError::Syntax)));
-        assert_eq!(obsolete("-5c5"), Some(Err(ParseError::Syntax)));
+        assert_eq!(obsolete("-5n"), Some(Err(ParseError::Syntax('n'))));
+        assert_eq!(obsolete("-5c5"), Some(Err(ParseError::Syntax('5'))));
     }
 
     #[test]

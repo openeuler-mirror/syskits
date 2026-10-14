@@ -118,6 +118,9 @@ pub enum Mode {
     AllButLastBytes(u64),
 }
 
+// GNU head rejects negative byte counts that cannot be represented by Linux off_t.
+const OFF_T_MAX: u64 = i64::MAX as u64;
+
 impl Default for Mode {
     fn default() -> Self {
         Self::FirstLines(10)
@@ -238,12 +241,22 @@ pub struct HeadSemantic {
 impl HeadOptions {
     ///Construct options from matches
     pub fn get_from(matches: &clap::ArgMatches) -> Result<Self, String> {
+        let mode = Mode::from(matches)?;
+        if let Mode::AllButLastBytes(n) = &mode {
+            if *n > OFF_T_MAX {
+                return Err(format!(
+                    "invalid number of bytes: {}: Value too large for defined data type",
+                    locale_quote(&n.to_string())
+                ));
+            }
+        }
+
         let options = Self {
             quiet: matches.get_flag(head_flags::QUIET_NAME),
             verbose: matches.get_flag(head_flags::VERBOSE_NAME),
             line_ending: CtLineEnding::from_zero_flag(matches.get_flag(head_flags::ZERO_NAME)),
             presume_input_pipe: matches.get_flag(head_flags::PRESUME_INPUT_PIPE),
-            mode: Mode::from(matches)?,
+            mode,
             files: match matches.get_many::<String>(head_flags::FILES_NAME) {
                 Some(v) => v.cloned().collect(),
                 None => vec!["-".to_owned()],

@@ -50,3 +50,22 @@ fn direct_output_keeps_file_operand_and_resolves_target() {
         ["-", "-", link.as_str(), target.as_str()]
     );
 }
+
+#[test]
+fn direct_missing_path_uses_missing_file_diagnostic() {
+    let temporary_directory = tempfile::tempdir().expect("create temporary directory");
+    let path = temporary_directory.path().join("missing");
+    let output = Command::new(env!("CARGO_BIN_EXE_df"))
+        .arg0("df")
+        .args(["--direct", path.to_str().expect("path is UTF-8")])
+        .env("LC_ALL", "C")
+        .output()
+        .expect("run df");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stderr).expect("df stderr is UTF-8"),
+        format!("df: {}: No such file or directory\n", path.display())
+    );
+}

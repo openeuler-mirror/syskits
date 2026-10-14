@@ -613,7 +613,17 @@ where
             match Filesystem::from_direct_path(path.as_ref()) {
                 Some(fs) => result.push(fs),
                 None => {
-                    ct_show!(CtSimpleError::new(1, "no file systems processed"));
+                    if path.as_ref().exists() {
+                        ct_show!(CtSimpleError::new(1, "no file systems processed"));
+                    } else {
+                        ct_show!(CtSimpleError::new(
+                            1,
+                            format!(
+                                "{}: No such file or directory",
+                                quote_path_for_diagnostic(&path_str)
+                            )
+                        ));
+                    }
                     had_diagnostic = true;
                 }
             }

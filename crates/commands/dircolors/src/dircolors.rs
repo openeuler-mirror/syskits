@@ -20,11 +20,11 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 use sys_locale::get_locale;
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use ctcore::Tool;
 use ctcore::ct_colors::{CT_FILE_ATTRIBUTE_CODES, CT_FILE_COLORS, CT_FILE_TYPES, CT_TERMS};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
-use ctcore::Tool;
 
 use std::ffi::OsString;
 
@@ -202,7 +202,7 @@ fn dircolors_collect_output(
             Err(e) => {
                 return Err(CtSimpleError::new(
                     1,
-                    format!("{}: {}", path.maybe_quote(), e),
+                    format!("{}: {}", path.maybe_quote(), path_error_message(&e)),
                 ));
             }
         }
@@ -213,6 +213,20 @@ fn dircolors_collect_output(
         return Ok(String::new());
     }
     Ok(result)
+}
+
+fn path_error_message(error: &std::io::Error) -> String {
+    #[cfg(unix)]
+    if let Some(error_code) = error.raw_os_error() {
+        let message = unsafe {
+            std::ffi::CStr::from_ptr(ctcore::libc::strerror(error_code))
+                .to_string_lossy()
+                .into_owned()
+        };
+        return message;
+    }
+
+    error.kind().to_string()
 }
 
 fn dircolors_out_format_check(args_match: &ArgMatches) -> DircolorsOutputFmt {
@@ -936,9 +950,11 @@ mod tests {
             let semantic = dircolors_native_semantic(args.iter().map(OsString::from)).unwrap();
 
             assert_eq!(semantic.output_kind, "database");
-            assert!(semantic
-                .output
-                .starts_with("# Configuration file for dircolors"));
+            assert!(
+                semantic
+                    .output
+                    .starts_with("# Configuration file for dircolors")
+            );
         }
     }
 }

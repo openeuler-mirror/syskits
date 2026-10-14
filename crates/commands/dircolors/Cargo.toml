@@ -18,7 +18,7 @@ path = "src/dircolors.rs"
 sys-locale = { workspace = true }
 rust-i18n = { workspace = true }
 clap = { workspace = true }
-ctcore = { workspace = true, features = ["colors"] }
+ctcore = { workspace = true, features = ["colors", "libc"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

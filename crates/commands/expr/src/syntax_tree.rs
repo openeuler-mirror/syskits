@@ -227,7 +227,7 @@ impl SyntaxTreeStringOp {
                     RegexOptions::REGEX_OPTION_FIND_LONGEST,
                     &syntax,
                 )
-                .map_err(|_| ExprError::RegexError("Invalid regular expression".to_string()))?;
+                .map_err(expr_regex_error)?;
 
                 let mut region = Region::new();
                 let text = EncodedBytes::from_parts(&left, encoding);
@@ -1089,6 +1089,19 @@ fn is_bre_anchor_end(pattern: &[u8], index: usize) -> bool {
             pattern.get(index + 1..index + 3),
             Some([b'\\', b')' | b'|'])
         )
+}
+
+fn expr_regex_error(error: onig::Error) -> ExprError {
+    let message = match error.code() {
+        onig_sys::ONIGERR_CHAR_CLASS_VALUE_AT_END_OF_RANGE
+        | onig_sys::ONIGERR_CHAR_CLASS_VALUE_AT_START_OF_RANGE
+        | onig_sys::ONIGERR_UNMATCHED_RANGE_SPECIFIER_IN_CHAR_CLASS => "Invalid range end",
+        onig_sys::ONIGERR_END_PATTERN_AT_LEFT_BRACKET
+        | onig_sys::ONIGERR_EMPTY_CHAR_CLASS
+        | onig_sys::ONIGERR_PREMATURE_END_OF_CHAR_CLASS => "Unmatched [, [^, [:, [., or [=",
+        _ => "Invalid regular expression",
+    };
+    ExprError::RegexError(message.to_string())
 }
 
 fn read_bre_brace_bytes(pattern: &[u8], start: usize) -> ExprResult<(Vec<u8>, usize)> {

@@ -13,7 +13,7 @@
 
 use num_bigint::BigInt;
 use num_traits::{Signed, ToPrimitive};
-use onig::{EncodedBytes, Regex, RegexOptions, Region, SearchOptions, Syntax};
+use onig::{EncodedBytes, Regex, RegexOptions, Region, SearchOptions, Syntax, SyntaxOperator};
 
 use crate::ExprError;
 use crate::ExprResult;
@@ -197,11 +197,22 @@ impl SyntaxTreeStringOp {
                 let right = right.eval()?.eval_as_bytes();
                 let normalized = normalize_bre_bytes(&right)?;
                 let encoding = expr_regex_encoding();
+                let mut syntax = Syntax::posix_basic().clone();
+                // onig exposes these Oniguruma syntax bits but its bitflags 1.x wrapper
+                // does not declare them. The values come directly from that same library.
+                let gnu_bre_extensions = unsafe {
+                    SyntaxOperator::from_bits_unchecked(u64::from(
+                        onig_sys::ONIG_SYN_OP_ESC_PLUS_ONE_INF
+                            | onig_sys::ONIG_SYN_OP_ESC_QMARK_ZERO_ONE
+                            | onig_sys::ONIG_SYN_OP_ESC_VBAR_ALT,
+                    ))
+                };
+                syntax.enable_operators(gnu_bre_extensions);
 
                 let re = Regex::with_options_and_encoding(
                     EncodedBytes::from_parts(&normalized, encoding),
                     RegexOptions::REGEX_OPTION_NONE,
-                    Syntax::posix_basic(),
+                    &syntax,
                 )
                 .map_err(|_| ExprError::RegexError("Invalid regular expression".to_string()))?;
 

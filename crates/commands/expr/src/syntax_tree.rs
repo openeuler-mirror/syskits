@@ -196,23 +196,7 @@ impl SyntaxTreeStringOp {
                 let left = left.eval()?.eval_as_bytes();
                 let right = right.eval()?.eval_as_bytes();
                 let normalized = normalize_bre_bytes(&right)?;
-                let has_group = bre_has_capture_group(&normalized);
-                let single_byte = is_single_byte_locale();
-
-                if !single_byte && (!is_valid_utf8(&left) || !is_valid_utf8(&normalized)) {
-                    return Ok(if has_group {
-                        SyntaxTreeNumOrStr::Str(Vec::new())
-                    } else {
-                        SyntaxTreeNumOrStr::Num(BigInt::from(0))
-                    });
-                }
-
-                let encoding = if single_byte {
-                    // C/POSIX locale: single-byte with ASCII ctype semantics.
-                    &raw mut onig_sys::OnigEncodingASCII
-                } else {
-                    &raw mut onig_sys::OnigEncodingUTF8
-                };
+                let encoding = expr_regex_encoding();
 
                 let re = Regex::with_options_and_encoding(
                     EncodedBytes::from_parts(&normalized, encoding),
@@ -243,11 +227,7 @@ impl SyntaxTreeStringOp {
                             .unwrap_or_default();
                         Ok(SyntaxTreeNumOrStr::Str(capture))
                     } else {
-                        let match_len = if single_byte {
-                            end - start
-                        } else {
-                            logical_len_bytes(&left[start..end])
-                        };
+                        let match_len = logical_len_bytes(&left[start..end]);
                         Ok(SyntaxTreeNumOrStr::Num(BigInt::from(match_len)))
                     }
                 } else if has_capture {
@@ -640,6 +620,7 @@ pub fn is_syntax_tree_truthy(syntax_tree_str: &SyntaxTreeNumOrStr) -> bool {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn is_single_byte_locale() -> bool {
     let locale = std::env::var("LC_ALL")
         .ok()
@@ -653,10 +634,6 @@ fn is_single_byte_locale() -> bool {
 
 fn bytes_to_string_lossy(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
-}
-
-fn is_valid_utf8(bytes: &[u8]) -> bool {
-    std::str::from_utf8(bytes).is_ok()
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -811,6 +788,68 @@ fn byte_ranges(bytes: &[u8]) -> Vec<(usize, usize)> {
 }
 
 #[cfg(target_os = "linux")]
+fn expr_regex_encoding() -> *mut onig_sys::OnigEncodingType {
+    if !expr_locale_environment_is_supported() {
+        return &raw mut onig_sys::OnigEncodingASCII;
+    }
+
+    let locale = expr_ctype_locale_name();
+    let locale_name = locale.split('@').next().unwrap_or_default();
+    if matches!(locale_name, "C" | "POSIX") {
+        return &raw mut onig_sys::OnigEncodingASCII;
+    }
+
+    let codeset = locale_name
+        .split_once('.')
+        .map_or(locale_name, |(_, codeset)| codeset);
+    let normalized = codeset
+        .chars()
+        .filter(|character| *character != '-' && *character != '_')
+        .collect::<String>()
+        .to_ascii_uppercase();
+    match normalized.as_str() {
+        "GBK" | "GB18030" => &raw mut onig_sys::OnigEncodingGB18030,
+        "GB2312" | "EUCCN" => &raw mut onig_sys::OnigEncodingEUC_CN,
+        _ if locale_name.eq_ignore_ascii_case("zh_CN") => &raw mut onig_sys::OnigEncodingEUC_CN,
+        _ => &raw mut onig_sys::OnigEncodingUTF8,
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn expr_regex_encoding() -> *mut onig_sys::OnigEncodingType {
+    if is_single_byte_locale() {
+        &raw mut onig_sys::OnigEncodingASCII
+    } else {
+        &raw mut onig_sys::OnigEncodingUTF8
+    }
+}
+
+fn expr_ctype_locale_name() -> String {
+    ["LC_ALL", "LC_CTYPE", "LANG"]
+        .into_iter()
+        .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
+        .unwrap_or_else(|| "C".to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn expr_locale_environment_is_supported() -> bool {
+    let locale = unsafe {
+        libc::newlocale(
+            libc::LC_ALL_MASK,
+            b"\0".as_ptr().cast::<libc::c_char>(),
+            std::ptr::null_mut(),
+        )
+    };
+    if locale.is_null() {
+        return false;
+    }
+    unsafe {
+        libc::freelocale(locale);
+    }
+    true
+}
+
+#[cfg(target_os = "linux")]
 fn logical_char_ranges_in_locale(bytes: &[u8]) -> Option<Vec<(usize, usize)>> {
     // Match GNU's setlocale(LC_ALL, "") without changing the process locale.
     let locale = unsafe {
@@ -903,28 +942,6 @@ fn parse_integer_strict_bytes(bytes: &[u8]) -> Option<BigInt> {
     }
     let num = BigInt::parse_bytes(&bytes[start..], 10)?;
     Some(if negative { -num } else { num })
-}
-
-fn bre_has_capture_group(pattern: &[u8]) -> bool {
-    let mut i = 0;
-    while i < pattern.len() {
-        match pattern[i] {
-            b'\\' => {
-                if i + 1 < pattern.len() && pattern[i + 1] == b'(' {
-                    return true;
-                }
-                i += 2;
-            }
-            b'[' => {
-                let (_, next_index) = read_char_class_bytes(pattern, i);
-                i = next_index;
-            }
-            _ => {
-                i += 1;
-            }
-        }
-    }
-    false
 }
 
 fn normalize_bre_bytes(pattern: &[u8]) -> ExprResult<Vec<u8>> {

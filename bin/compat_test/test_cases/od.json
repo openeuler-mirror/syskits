@@ -883,6 +883,40 @@
         ]
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "od",
+      "description": "LC_ALL=C、LANG=C下执行od -t f16 -N 64；GNU接受十六字节浮点格式并完成输出；迁移原Cargo用例od_float_16_byte_format_matches_gnu",
+      "args": ["-t", "f16", "-N", "64", "binary.bin"],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": []
+      },
+      "environment": {
+        "files": [
+          {
+            "path": "binary.bin",
+            "content": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "permissions": "644",
+            "owner": null,
+            "group": null,
+            "file_type": "Regular",
+            "symlink_target": null,
+            "size": null,
+            "timestamp": null
+          }
+        ]
+      },
+      "cleanup_commands": []
     }
     ]
 }

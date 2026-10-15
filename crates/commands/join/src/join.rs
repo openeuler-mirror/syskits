@@ -40,7 +40,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{crate_version, Arg, ArgAction, Command};
 use ctcore::ct_crash_if_err;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult, CtSimpleError, FromIo};
+use ctcore::ct_error::{set_ct_exit_code, strip_errno, CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_locale::strcoll_compare;
 #[cfg(unix)]
@@ -1441,6 +1441,24 @@ struct JoinRunOutcome {
     rows: Vec<JoinRow>,
 }
 
+struct JoinStdoutWriter<W> {
+    inner: W,
+}
+
+impl<W: Write> Write for JoinStdoutWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.inner.write(buf).map_err(join_write_error)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush().map_err(join_write_error)
+    }
+}
+
+fn join_write_error(error: std::io::Error) -> std::io::Error {
+    std::io::Error::other(format!("write error: {}", strip_errno(&error)))
+}
+
 #[cfg(test)]
 fn join_exec(file1: &str, file2: &str, settings: JoinSettings) -> CTResult<()> {
     join_exec_os(OsStr::new(file1), OsStr::new(file2), settings)
@@ -1448,7 +1466,9 @@ fn join_exec(file1: &str, file2: &str, settings: JoinSettings) -> CTResult<()> {
 
 fn join_exec_os(file1: &OsStr, file2: &OsStr, settings: JoinSettings) -> CTResult<()> {
     let stdout = stdout();
-    let mut writer = BufWriter::new(stdout.lock());
+    let mut writer = JoinStdoutWriter {
+        inner: BufWriter::new(stdout.lock()),
+    };
     let outcome = join_exec_to_writer_os(file1, file2, settings, &mut writer, false)?;
     if !outcome.stderr_text.is_empty() {
         eprint!("{}", outcome.stderr_text);

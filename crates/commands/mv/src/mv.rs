@@ -1721,9 +1721,18 @@ fn mv_rename_with_fallback(
 
             // 如果不是特殊文件，执行常规的跨设备复制并删除
             #[cfg(target_os = "linux")]
-            fs::copy(from, to)
-                .and_then(|_| ct_fsxattr::ct_copy_xattrs(&from, &to))
-                .and_then(|_| fs::remove_file(from))?;
+            {
+                let times = fs::FileTimes::new()
+                    .set_accessed(symlink_metadata.accessed()?)
+                    .set_modified(symlink_metadata.modified()?);
+                fs::copy(from, to)?;
+                ct_fsxattr::ct_copy_xattrs(&from, &to)?;
+                fs::OpenOptions::new()
+                    .write(true)
+                    .open(to)?
+                    .set_times(times)?;
+                fs::remove_file(from)?;
+            }
 
             #[cfg(target_os = "windows")]
             fs::copy(from, to).and_then(|_| fs::remove_file(from))?;

@@ -89,16 +89,34 @@ impl<'a> LinkFlags<'a> {
 pub fn link_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = args.collect::<Vec<_>>();
+    let mut args = args.collect::<Vec<_>>();
     let usage_name = args
         .first()
         .map(|arg| arg.to_string_lossy().into_owned())
         .filter(|arg| !arg.is_empty())
         .unwrap_or_else(|| ctcore::ct_util_name().to_owned());
+    stop_option_parsing_for_posixly_correct(&mut args);
     reject_short_options(&args, &usage_name)?;
     let matches = ct_app().try_get_matches_from(args)?;
     let flags = LinkFlags::new(&matches, &usage_name)?;
     link_exec(&flags)
+}
+
+fn stop_option_parsing_for_posixly_correct(args: &mut Vec<OsString>) {
+    if std::env::var_os("POSIXLY_CORRECT").is_none() {
+        return;
+    }
+
+    for index in 1..args.len() {
+        let argument = args[index].to_string_lossy();
+        if argument == "--" {
+            return;
+        }
+        if argument == "-" || !argument.starts_with('-') {
+            args.insert(index, OsString::from("--"));
+            return;
+        }
+    }
 }
 
 fn link_usage_error(usage_name: &str, message: String) -> Box<dyn ctcore::ct_error::CTError> {

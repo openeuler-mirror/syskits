@@ -154,6 +154,7 @@ pub fn mv_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let mut command = ct_app();
+    let args = normalize_mv_posixly_correct_args(args.collect());
     let args_match = command
         .try_get_matches_from_mut(args)
         .map_err(mv_map_clap_error)?;
@@ -264,6 +265,75 @@ fn mv_map_clap_error(error: clap::Error) -> Box<dyn CTError> {
     }
 
     error.into()
+}
+
+fn normalize_mv_posixly_correct_args(mut args: Vec<OsString>) -> Vec<OsString> {
+    if env::var_os("POSIXLY_CORRECT").is_none() {
+        return args;
+    }
+
+    let command = ct_app();
+    let option_requires_value = |option: &Arg| {
+        option
+            .get_num_args()
+            .is_some_and(|values| values.min_values() > 0)
+    };
+    let mut index = 1;
+
+    while index < args.len() {
+        let Some(argument) = args[index].to_str() else {
+            args.insert(index, OsString::from("--"));
+            break;
+        };
+
+        if argument == "--" {
+            break;
+        }
+        if argument == "-" || !argument.starts_with('-') {
+            args.insert(index, OsString::from("--"));
+            break;
+        }
+
+        if let Some(long_option) = argument.strip_prefix("--") {
+            let option_name = long_option
+                .split_once('=')
+                .map_or(long_option, |(name, _)| name);
+            if !long_option.contains('=') {
+                let mut matching_options = command.get_arguments().filter(|option| {
+                    option
+                        .get_long()
+                        .is_some_and(|long| long.starts_with(option_name))
+                });
+                if let Some(option) = matching_options.next()
+                    && matching_options.next().is_none()
+                    && option_requires_value(option)
+                {
+                    index += 1;
+                }
+            }
+        } else if let Some(short_options) = argument.strip_prefix('-') {
+            let mut short_options = short_options.chars().peekable();
+            while let Some(short_option) = short_options.next() {
+                let Some(option) = command
+                    .get_arguments()
+                    .find(|option| option.get_short() == Some(short_option))
+                else {
+                    break;
+                };
+
+                if option_requires_value(option) {
+                    if short_options.peek().is_none() {
+                        index += 1;
+                    }
+                    break;
+                }
+            }
+        }
+
+        index += 1;
+    }
+
+    args
 }
 
 fn mv_modes_process(

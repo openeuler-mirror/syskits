@@ -43,6 +43,7 @@ use std::ffi::{CString, OsStr};
 use std::os::unix::ffi::OsStrExt;
 
 const MKDIR_DEFAULT_PERM: u32 = 0o777;
+const NEGATIVE_MODE_PREFIX: &str = "__syskits_mkdir_negative_mode__";
 
 const SYSKITS_MKDIR_LONG_VERSION: &str = concat!(
     "(syskits) ",
@@ -369,32 +370,23 @@ mod mkdir_flags {
 }
 
 #[cfg(windows)]
-fn mkdir_get_mode(
-    _arg_matches: &ArgMatches,
-    _is_mode_had_minus_prefix: bool,
-) -> Result<u32, String> {
+fn mkdir_get_mode(_arg_matches: &ArgMatches) -> Result<u32, String> {
     Ok(MKDIR_DEFAULT_PERM)
 }
 
 #[cfg(not(windows))]
-fn mkdir_get_mode(arg_matches: &ArgMatches, is_mode_had_minus_prefix: bool) -> Result<u32, String> {
+fn mkdir_get_mode(arg_matches: &ArgMatches) -> Result<u32, String> {
     // 未在 Windows 上测试
     let mut new_mode = MKDIR_DEFAULT_PERM;
 
-    if let Some(m) = arg_matches.get_one::<String>(mkdir_flags::MODE) {
+    if let Some(m) = mode_value(arg_matches) {
+        let m = m.strip_prefix(NEGATIVE_MODE_PREFIX).unwrap_or(m);
         for mode in m.split(',') {
             if mode.chars().any(|c| c.is_ascii_digit()) {
                 new_mode =
                     ct_mode::parse_numeric(new_mode, m, true).map_err(|_| mkdir_invalid_mode(m))?;
             } else {
-                let c_mode = match is_mode_had_minus_prefix {
-                    true => {
-                        // clap 解析完成，现在加回前缀
-                        format!("-{mode}")
-                    }
-                    false => mode.to_string(),
-                };
-                new_mode = ct_mode::parse_symbolic(new_mode, &c_mode, ct_mode::get_umask(), true)
+                new_mode = ct_mode::parse_symbolic(new_mode, mode, ct_mode::get_umask(), true)
                     .map_err(|_| mkdir_invalid_mode(m))?;
             }
         }
@@ -415,32 +407,39 @@ fn mkdir_strip_minus_from_mode(args: &mut [String]) -> bool {
     ct_mode::strip_minus_from_mode(args)
 }
 
-#[cfg(windows)]
-fn mkdir_strip_minus_from_mode_os(_args: &mut [OsString]) -> bool {
-    false
+fn mode_value(matches: &ArgMatches) -> Option<&String> {
+    matches
+        .get_many::<String>(mkdir_flags::MODE)
+        .and_then(|mut modes| modes.next_back())
 }
 
-#[cfg(not(windows))]
-fn mkdir_strip_minus_from_mode_os(args: &mut [OsString]) -> bool {
-    const MODE_INITIALS: &[u8] = b"rwxXstugo01234567";
-
-    for arg in args.iter_mut() {
-        if arg == "--" {
+fn normalize_negative_mode_arguments(args: &mut [OsString]) {
+    let mut index = 1;
+    while index < args.len() {
+        let Some(option) = args[index].to_str() else {
+            index += 1;
+            continue;
+        };
+        if option == "--" {
             break;
         }
 
-        let Some(value) = arg.to_str() else {
-            continue;
-        };
-        let bytes = value.as_bytes();
-
-        if bytes.len() >= 2 && bytes[0] == b'-' && MODE_INITIALS.contains(&bytes[1]) {
-            *arg = OsString::from(&value[1..]);
-            return true;
+        if short_option_requires_next_mode_argument(option)
+            || long_option_requires_next_mode_argument(option)
+        {
+            let normalized_mode = args
+                .get(index + 1)
+                .and_then(|mode| mode.to_str())
+                .filter(|mode| mode.starts_with('-'))
+                .map(|mode| OsString::from(format!("{NEGATIVE_MODE_PREFIX}{mode}")));
+            if let Some(mode) = normalized_mode {
+                args[index + 1] = mode;
+            }
+            index += 2;
+        } else {
+            index += 1;
         }
     }
-
-    false
 }
 
 #[derive(Default)]
@@ -464,10 +463,9 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&lang_code);
     let mut args = args.into_iter().collect::<Vec<_>>();
     stop_option_parsing_for_posixly_correct(&mut args);
+    normalize_negative_mode_arguments(&mut args);
 
     // 在我们能用 clap（以及以前的 getopts）解析 'args' 之前，
-    // 可能需要移除 MODE 前缀 '-'（例如 "chmod -x FILE"）。
-    let is_mode_had_minus_prefix = mkdir_strip_minus_from_mode_os(&mut args);
     validate_short_options(&args)?;
     validate_long_options(&args)?;
     let has_explicit_context = has_explicit_context_argument(&args);
@@ -495,7 +493,7 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
     let is_recursive = matches.get_flag(mkdir_flags::PARENTS);
 
     // 判断用户是否显式传递了 -m 参数
-    let specified_mode = matches.get_one::<String>(mkdir_flags::MODE).is_some();
+    let specified_mode = mode_value(&matches).is_some();
 
     let mut context = None;
     let mut set_context = matches.get_flag(mkdir_flags::CTX);
@@ -524,7 +522,7 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
         return Err(mkdir_usage_error("missing operand"));
     }
 
-    match mkdir_get_mode(&matches, is_mode_had_minus_prefix) {
+    match mkdir_get_mode(&matches) {
         Ok(mode) => mkdir_exec(
             dirs,
             is_recursive,
@@ -620,7 +618,8 @@ pub fn ct_app() -> Command {
         Arg::new(mkdir_flags::MODE)
             .short('m')
             .long(mkdir_flags::MODE)
-            .help(t!("mkdir.clap.mode")),
+            .help(t!("mkdir.clap.mode"))
+            .action(ArgAction::Append),
         Arg::new(mkdir_flags::PARENTS)
             .short('p')
             .long(mkdir_flags::PARENTS)
@@ -976,7 +975,7 @@ mod tests {
         fn test_get_mode_default() {
             let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name()]);
-            let mode = mkdir_get_mode(&matches, false).unwrap();
+            let mode = mkdir_get_mode(&matches).unwrap();
             assert_eq!(mode, !ct_mode::get_umask() & 0o0777);
         }
 
@@ -985,7 +984,7 @@ mod tests {
         fn test_get_mode_numeric() {
             let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "0755"]);
-            let mode = mkdir_get_mode(&matches, false).unwrap();
+            let mode = mkdir_get_mode(&matches).unwrap();
             assert_eq!(mode, 0o755);
         }
 
@@ -994,7 +993,7 @@ mod tests {
         fn test_get_mode_symbolic() {
             let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "u+rwx,go-w"]);
-            let mode = mkdir_get_mode(&matches, false).unwrap();
+            let mode = mkdir_get_mode(&matches).unwrap();
             assert_eq!(mode, 0o755);
         }
 
@@ -1003,7 +1002,7 @@ mod tests {
         fn test_get_mode_mixed() {
             let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "0755,u+s"]);
-            let mode = mkdir_get_mode(&matches, false);
+            let mode = mkdir_get_mode(&matches);
 
             assert!(mode.is_err());
 
@@ -1015,7 +1014,7 @@ mod tests {
         fn test_get_mode_invalid() {
             let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "invalid"]);
-            let mode = mkdir_get_mode(&matches, false);
+            let mode = mkdir_get_mode(&matches);
             assert!(mode.is_err());
         }
 
@@ -1024,7 +1023,7 @@ mod tests {
         fn test_get_mode_combined_symbolic() {
             let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "u+rwx,g-w,o+r"]);
-            let mode = mkdir_get_mode(&matches, false).unwrap();
+            let mode = mkdir_get_mode(&matches).unwrap();
             assert_eq!(mode, 0o757);
         }
 
@@ -1033,7 +1032,7 @@ mod tests {
         fn test_get_mode_empty_mode_string() {
             let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", ""]);
-            let mode = mkdir_get_mode(&matches, false);
+            let mode = mkdir_get_mode(&matches);
             assert!(mode.is_err());
         }
 
@@ -1042,7 +1041,7 @@ mod tests {
         fn test_get_mode_partial_mode_string() {
             let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "0755,"]);
-            let mode = mkdir_get_mode(&matches, false);
+            let mode = mkdir_get_mode(&matches);
 
             assert!(mode.is_err());
             assert_eq!(mode.unwrap_err(), mkdir_invalid_mode("0755,"));
@@ -1053,7 +1052,7 @@ mod tests {
         fn test_get_mode_complex_symbolic() {
             let _guard = umask_test_lock().lock().unwrap();
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "u+rw,go-rw"]);
-            let mode = mkdir_get_mode(&matches, false).unwrap();
+            let mode = mkdir_get_mode(&matches).unwrap();
             assert_eq!(mode, 0o711);
         }
 
@@ -1064,7 +1063,7 @@ mod tests {
             // Set a specific umask for the test and restore afterwards
             let original_umask = unsafe { libc::umask(0o027) };
             let matches = get_test_matches(vec![ctcore::ct_util_name()]);
-            let mode = mkdir_get_mode(&matches, false);
+            let mode = mkdir_get_mode(&matches);
             unsafe {
                 libc::umask(original_umask);
             }
@@ -1075,7 +1074,7 @@ mod tests {
         #[test]
         fn test_get_mode_default_windows() {
             let matches = get_test_matches(vec![ctcore::ct_util_name()]);
-            let mode = mkdir_get_mode(&matches, false).unwrap();
+            let mode = mkdir_get_mode(&matches).unwrap();
             assert_eq!(mode, MKDIR_DEFAULT_PERM);
         }
 
@@ -1083,7 +1082,7 @@ mod tests {
         #[test]
         fn test_get_mode_numeric_windows() {
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "0755"]);
-            let mode = mkdir_get_mode(&matches, false).unwrap();
+            let mode = mkdir_get_mode(&matches).unwrap();
             assert_eq!(mode, MKDIR_DEFAULT_PERM);
         }
 
@@ -1091,7 +1090,7 @@ mod tests {
         #[test]
         fn test_get_mode_invalid_windows() {
             let matches = get_test_matches(vec![ctcore::ct_util_name(), "-m", "invalid"]);
-            let mode = mkdir_get_mode(&matches, false);
+            let mode = mkdir_get_mode(&matches);
             assert!(mode.is_ok()); // On Windows, invalid mode should return DEFAULT_PERM
             assert_eq!(mode.unwrap(), MKDIR_DEFAULT_PERM);
         }
@@ -2561,10 +2560,7 @@ mod tests {
             assert!(matches.is_ok());
             let matches = matches.unwrap();
 
-            assert_eq!(
-                matches.get_one::<String>(mkdir_flags::MODE),
-                Some(&"0755".to_string())
-            );
+            assert_eq!(mode_value(&matches), Some(&"0755".to_string()));
             assert!(matches.get_flag(mkdir_flags::PARENTS));
             assert!(matches.get_flag(mkdir_flags::VERBOSE));
             let dirs: Vec<&OsString> = matches
@@ -2586,10 +2582,7 @@ mod tests {
             assert!(matches.is_ok());
 
             let matches = matches.unwrap();
-            assert_eq!(
-                matches.get_one::<String>(mkdir_flags::MODE),
-                Some(&"u+rwx,go-w".to_string())
-            );
+            assert_eq!(mode_value(&matches), Some(&"u+rwx,go-w".to_string()));
         }
 
         #[test]
@@ -2643,10 +2636,7 @@ mod tests {
             assert!(matches.is_ok());
             let matches = matches.unwrap();
 
-            assert_eq!(
-                matches.get_one::<String>(mkdir_flags::MODE),
-                Some(&"0755".to_string())
-            );
+            assert_eq!(mode_value(&matches), Some(&"0755".to_string()));
         }
 
         #[test]
@@ -2657,10 +2647,7 @@ mod tests {
             assert!(matches.is_ok());
             let matches = matches.unwrap();
 
-            assert_eq!(
-                matches.get_one::<String>(mkdir_flags::MODE),
-                Some(&"u+rwx,go-w".to_string())
-            );
+            assert_eq!(mode_value(&matches), Some(&"u+rwx,go-w".to_string()));
         }
 
         #[test]
@@ -2671,10 +2658,7 @@ mod tests {
             assert!(matches.is_ok());
             let matches = matches.unwrap();
 
-            assert_eq!(
-                matches.get_one::<String>(mkdir_flags::MODE),
-                Some(&"0755,u+s".to_string())
-            );
+            assert_eq!(mode_value(&matches), Some(&"0755,u+s".to_string()));
         }
 
         #[test]
@@ -2684,10 +2668,7 @@ mod tests {
             assert!(result.is_ok());
             let matches = result.unwrap();
 
-            assert_eq!(
-                matches.get_one::<String>(mkdir_flags::MODE),
-                Some(&"".to_string())
-            );
+            assert_eq!(mode_value(&matches), Some(&"".to_string()));
         }
 
         #[test]
@@ -2698,10 +2679,7 @@ mod tests {
             assert!(matches.is_ok());
             let matches = matches.unwrap();
 
-            assert_eq!(
-                matches.get_one::<String>(mkdir_flags::MODE),
-                Some(&"invalidmode".to_string())
-            );
+            assert_eq!(mode_value(&matches), Some(&"invalidmode".to_string()));
         }
 
         #[test]
@@ -2711,7 +2689,7 @@ mod tests {
             assert!(matches.is_ok());
             let matches = matches.unwrap();
 
-            assert_eq!(matches.get_one::<String>(mkdir_flags::MODE), None);
+            assert_eq!(mode_value(&matches), None);
         }
 
         #[test]
@@ -2722,10 +2700,7 @@ mod tests {
             assert!(matches.is_ok());
             let matches = matches.unwrap();
 
-            assert_eq!(
-                matches.get_one::<String>(mkdir_flags::MODE),
-                Some(&"+rwx".to_string())
-            );
+            assert_eq!(mode_value(&matches), Some(&"+rwx".to_string()));
         }
 
         #[test]
@@ -2736,10 +2711,7 @@ mod tests {
             assert!(matches.is_ok());
             let matches = matches.unwrap();
 
-            assert_eq!(
-                matches.get_one::<String>(mkdir_flags::MODE),
-                Some(&"a+r".to_string())
-            );
+            assert_eq!(mode_value(&matches), Some(&"a+r".to_string()));
         }
 
         #[test]
@@ -2750,10 +2722,7 @@ mod tests {
             assert!(matches.is_ok());
             let matches = matches.unwrap();
 
-            assert_eq!(
-                matches.get_one::<String>(mkdir_flags::MODE),
-                Some(&"0777".to_string())
-            );
+            assert_eq!(mode_value(&matches), Some(&"0777".to_string()));
         }
     }
 

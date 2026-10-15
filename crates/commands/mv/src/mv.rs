@@ -1343,6 +1343,17 @@ fn mv_rename_with_fallback(
             );
             return Err(io::Error::new(rename_error.kind(), message));
         }
+        // --no-copy must report the failed rename without entering the copy fallback.
+        if options.no_copy {
+            let message = format!(
+                "cannot move {} to {}: {}",
+                from.quote(),
+                to.quote(),
+                strip_errno(&rename_error)
+            );
+            return Err(io::Error::new(rename_error.kind(), message));
+        }
+
         // 如果启用了调试模式，说明重命名失败的原因
         if options.debug {
             let message = format!(
@@ -1356,20 +1367,6 @@ fn mv_rename_with_fallback(
                 }),
                 None => println!("mv: {message}"),
             };
-        }
-
-        // 如果启用了 no_copy 选项，在重命名失败时直接返回错误
-        if options.no_copy {
-            let error_message = if options.debug {
-                format!(
-                    "rename failed and --no-copy specified: {} to {}",
-                    from.quote(),
-                    to.quote()
-                )
-            } else {
-                format!("rename failed: {rename_error}")
-            };
-            return Err(io::Error::other(error_message));
         }
 
         // 获取原始路径的元数据，不跟随符号链接。

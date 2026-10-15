@@ -20,7 +20,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::{
     Tool,
-    ct_display::Quotable,
+    ct_display::{Quotable, locale_quote},
     ct_error::{CTResult, CtSimpleError, FromIo},
 };
 use std::{ffi::OsString, fs::hard_link, io, path::Path};
@@ -96,7 +96,7 @@ pub fn link_main(args: impl ctcore::Args) -> CTResult<()> {
         .filter(|arg| !arg.is_empty())
         .unwrap_or_else(|| ctcore::ct_util_name().to_owned());
     stop_option_parsing_for_posixly_correct(&mut args);
-    reject_short_options(&args, &usage_name)?;
+    validate_standard_options(&args, &usage_name)?;
     let matches = ct_app().try_get_matches_from(args)?;
     let flags = LinkFlags::new(&matches, &usage_name)?;
     link_exec(&flags)
@@ -126,12 +126,51 @@ fn link_usage_error(usage_name: &str, message: String) -> Box<dyn ctcore::ct_err
     )
 }
 
-fn reject_short_options(args: &[OsString], usage_name: &str) -> CTResult<()> {
+fn validate_standard_options(args: &[OsString], usage_name: &str) -> CTResult<()> {
     for arg in args.iter().skip(1) {
         let arg = arg.to_string_lossy();
         if arg == "--" {
             break;
         }
+
+        if let Some(long) = arg.strip_prefix("--") {
+            let (name, value) = long
+                .split_once('=')
+                .map_or((long, None), |(name, value)| (name, Some(value)));
+            let matches = ["help", "version"]
+                .into_iter()
+                .filter(|option| option.starts_with(name))
+                .collect::<Vec<_>>();
+
+            match matches.as_slice() {
+                [option] if value.is_some() => {
+                    return Err(link_usage_error(
+                        usage_name,
+                        format!(
+                            "option {} doesn't allow an argument",
+                            locale_quote(&format!("--{option}"))
+                        ),
+                    ));
+                }
+                [_] => return Ok(()),
+                [] => {
+                    return Err(link_usage_error(
+                        usage_name,
+                        format!("unrecognized option {}", locale_quote(&arg)),
+                    ));
+                }
+                _ => {
+                    return Err(link_usage_error(
+                        usage_name,
+                        format!(
+                            "option {} is ambiguous; possibilities: '--help' '--version'",
+                            locale_quote(&arg)
+                        ),
+                    ));
+                }
+            }
+        }
+
         if let Some(short) = arg.strip_prefix('-')
             && !short.is_empty()
             && !short.starts_with('-')

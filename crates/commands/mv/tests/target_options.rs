@@ -57,6 +57,41 @@ fn no_target_directory_rejects_extra_operand_like_gnu() {
     );
 }
 
+#[test]
+fn target_directory_metadata_diagnostics_match_gnu() {
+    use std::fs;
+
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("source");
+    let missing = directory.path().join("missing");
+    let file = directory.path().join("file");
+    fs::write(&source, b"source").unwrap();
+    fs::write(&file, b"file").unwrap();
+
+    for (target, reason) in [
+        (&missing, "No such file or directory"),
+        (&file, "Not a directory"),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_mv"))
+            .arg0("mv")
+            .env("LC_ALL", "C")
+            .arg("-t")
+            .arg(target)
+            .arg(&source)
+            .output()
+            .expect("run mv");
+
+        assert_eq!(output.status.code(), Some(1), "{}", target.display());
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            format!("mv: target directory '{}': {reason}\n", target.display()),
+            "{}",
+            target.display()
+        );
+        assert!(source.exists());
+    }
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn no_copy_cross_device_diagnostic_matches_gnu() {

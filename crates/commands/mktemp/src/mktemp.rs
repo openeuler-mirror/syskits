@@ -691,6 +691,13 @@ fn mktemp_dir(
     let prefix = prefix.as_ref();
     let suffix = suffix.as_ref();
     let template = mktemp_template_path(dir, prefix, rand, suffix);
+    let directory = if dir.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        dir
+    };
+    std::fs::metadata(directory)
+        .map_err(|error| mktemp_creation_error("directory", &template, error))?;
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
     match builder.tempdir_in(dir) {
@@ -722,6 +729,13 @@ fn mktemp_file(
     let prefix = prefix.as_ref();
     let suffix = suffix.as_ref();
     let template = mktemp_template_path(dir, prefix, rand, suffix);
+    let directory = if dir.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        dir
+    };
+    std::fs::metadata(directory)
+        .map_err(|error| mktemp_creation_error("file", &template, error))?;
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
     match builder.tempfile_in(dir) {

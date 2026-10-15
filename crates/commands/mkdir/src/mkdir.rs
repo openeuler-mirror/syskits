@@ -67,6 +67,15 @@ fn mkdir_create_error(path: &Path, err: &str) -> String {
     )
 }
 
+fn mkdir_not_a_directory_error(path: &Path) -> Box<dyn ctcore::ct_error::CTError> {
+    #[cfg(target_os = "linux")]
+    let error = io::Error::from_raw_os_error(ctcore::libc::ENOTDIR);
+    #[cfg(not(target_os = "linux"))]
+    let error = io::Error::from(io::ErrorKind::NotADirectory);
+
+    CtSimpleError::new(1, mkdir_create_error(path, &strip_errno(&error)))
+}
+
 fn mkdir_usage_error(message: impl std::fmt::Display) -> Box<dyn ctcore::ct_error::CTError> {
     CtSimpleError::new(
         1,
@@ -662,6 +671,10 @@ fn mkdir_create_dir(
 ) -> CTResult<()> {
     if path == Path::new("") {
         return Ok(());
+    }
+
+    if is_recursive && is_parent && path.exists() && !path.is_dir() {
+        return Err(mkdir_not_a_directory_error(path));
     }
 
     if path.exists() && !is_recursive {

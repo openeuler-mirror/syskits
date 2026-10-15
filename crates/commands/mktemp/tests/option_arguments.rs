@@ -62,3 +62,41 @@ fn option_arguments_starting_with_a_hyphen_are_consumed() {
             .starts_with("--suffix/tmp.")
     );
 }
+
+#[test]
+fn invalid_options_use_gnu_diagnostics() {
+    for (arguments, expected) in [
+        (
+            &["-z"][..],
+            "mktemp: invalid option -- 'z'\nTry 'mktemp --help' for more information.\n",
+        ),
+        (
+            &["-dfoo"][..],
+            "mktemp: invalid option -- 'f'\nTry 'mktemp --help' for more information.\n",
+        ),
+        (
+            &["--unknown"][..],
+            "mktemp: unrecognized option '--unknown'\nTry 'mktemp --help' for more information.\n",
+        ),
+        (
+            &["--dir=foo"][..],
+            "mktemp: option '--directory' doesn't allow an argument\nTry 'mktemp --help' for more information.\n",
+        ),
+        (
+            &["--dry=foo"][..],
+            "mktemp: option '--dry-run' doesn't allow an argument\nTry 'mktemp --help' for more information.\n",
+        ),
+        (
+            &["--quie=foo"][..],
+            "mktemp: option '--quiet' doesn't allow an argument\nTry 'mktemp --help' for more information.\n",
+        ),
+    ] {
+        let output = run_mktemp(arguments);
+        assert_eq!(output.status.code(), Some(1), "{arguments:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            expected,
+            "{arguments:?}"
+        );
+    }
+}

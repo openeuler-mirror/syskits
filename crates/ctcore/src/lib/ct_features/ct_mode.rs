@@ -37,16 +37,28 @@ pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Resul
 }
 
 pub fn parse_symbolic(
+    fperm: u32,
+    mode: &str,
+    umask: u32,
+    considering_dir: bool,
+) -> Result<u32, String> {
+    parse_symbolic_with_mode_bits(fperm, mode, umask, considering_dir).map(|(mode, _)| mode)
+}
+
+/// Parse a symbolic mode and return the resulting permissions together with
+/// the bits explicitly changed by the mode string.
+pub fn parse_symbolic_with_mode_bits(
     mut fperm: u32,
     mut mode: &str,
     umask: u32,
     considering_dir: bool,
-) -> Result<u32, String> {
+) -> Result<(u32, u32), String> {
     let (mask, pos) = parse_levels(mode);
     if pos == mode.len() {
         return Err(format!("invalid mode ({mode})"));
     }
     let respect_umask = pos == 0;
+    let mut mode_bits = 0;
     mode = &mode[pos..];
     while !mode.is_empty() {
         let (op, pos) = parse_op(mode)?;
@@ -56,20 +68,28 @@ pub fn parse_symbolic(
             srwx &= !umask;
         }
         mode = &mode[pos..];
+        let changed = srwx & mask;
         match op {
-            '+' => fperm |= srwx & mask,
-            '-' => fperm &= !(srwx & mask),
+            '+' => {
+                fperm |= changed;
+                mode_bits |= changed;
+            }
+            '-' => {
+                fperm &= !changed;
+                mode_bits |= changed;
+            }
             '=' => {
                 if considering_dir {
                     // 保留目录的setgid和setuid位
                     srwx |= fperm & (0o4000 | 0o2000);
                 }
                 fperm = (fperm & !mask) | (srwx & mask);
+                mode_bits |= mask;
             }
             _ => unreachable!(),
         }
     }
-    Ok(fperm)
+    Ok((fperm, mode_bits))
 }
 
 fn parse_levels(mode: &str) -> (u32, usize) {
@@ -297,6 +317,18 @@ mod test {
         assert_eq!(
             super::parse_symbolic(fperm, mode, umask, considering_dir),
             expected
+        );
+    }
+
+    #[test]
+    fn test_parse_symbolic_mode_bits() {
+        assert_eq!(
+            super::parse_symbolic_with_mode_bits(0o777, "o+t", 0, true),
+            Ok((0o1777, 0o1000))
+        );
+        assert_eq!(
+            super::parse_symbolic_with_mode_bits(0o1777, "g+w", 0, true),
+            Ok((0o1777, 0o0020))
         );
     }
 

@@ -366,32 +366,59 @@ mod mkdir_flags {
     pub const DIRS: &str = "dirs";
 }
 
+struct ParsedMkdirMode {
+    mode: u32,
+    mode_bits: u32,
+}
+
 #[cfg(windows)]
-fn mkdir_get_mode(_arg_matches: &ArgMatches) -> Result<u32, String> {
-    Ok(MKDIR_DEFAULT_PERM)
+fn mkdir_get_mode_details(_arg_matches: &ArgMatches) -> Result<ParsedMkdirMode, String> {
+    Ok(ParsedMkdirMode {
+        mode: MKDIR_DEFAULT_PERM,
+        mode_bits: 0o7777,
+    })
 }
 
 #[cfg(not(windows))]
-fn mkdir_get_mode(arg_matches: &ArgMatches) -> Result<u32, String> {
+fn mkdir_get_mode_details(arg_matches: &ArgMatches) -> Result<ParsedMkdirMode, String> {
     // 未在 Windows 上测试
     let mut new_mode = MKDIR_DEFAULT_PERM;
 
     if let Some(m) = mode_value(arg_matches) {
         let m = m.strip_prefix(NEGATIVE_MODE_PREFIX).unwrap_or(m);
-        for mode in m.split(',') {
-            if mode.chars().any(|c| c.is_ascii_digit()) {
-                new_mode =
-                    ct_mode::parse_numeric(new_mode, m, true).map_err(|_| mkdir_invalid_mode(m))?;
-            } else {
-                new_mode = ct_mode::parse_symbolic(new_mode, mode, ct_mode::get_umask(), true)
-                    .map_err(|_| mkdir_invalid_mode(m))?;
-            }
+        if m.chars().any(|character| character.is_ascii_digit()) {
+            new_mode =
+                ct_mode::parse_numeric(new_mode, m, true).map_err(|_| mkdir_invalid_mode(m))?;
+            return Ok(ParsedMkdirMode {
+                mode: new_mode,
+                mode_bits: 0o7777,
+            });
         }
-        Ok(new_mode)
+
+        let mut mode_bits = 0;
+        for mode in m.split(',') {
+            let (parsed_mode, parsed_mode_bits) =
+                ct_mode::parse_symbolic_with_mode_bits(new_mode, mode, ct_mode::get_umask(), true)
+                    .map_err(|_| mkdir_invalid_mode(m))?;
+            new_mode = parsed_mode;
+            mode_bits |= parsed_mode_bits;
+        }
+        Ok(ParsedMkdirMode {
+            mode: new_mode,
+            mode_bits,
+        })
     } else {
         // 如果未指定模式参数，则返回从 umask 派生的模式
-        Ok(!ct_mode::get_umask() & 0o0777)
+        Ok(ParsedMkdirMode {
+            mode: !ct_mode::get_umask() & 0o0777,
+            mode_bits: 0,
+        })
     }
+}
+
+#[cfg(test)]
+fn mkdir_get_mode(arg_matches: &ArgMatches) -> Result<u32, String> {
+    mkdir_get_mode_details(arg_matches).map(|parsed_mode| parsed_mode.mode)
 }
 
 #[cfg(all(windows, test))]
@@ -519,11 +546,12 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
         return Err(mkdir_usage_error("missing operand"));
     }
 
-    match mkdir_get_mode(&matches) {
-        Ok(mode) => mkdir_exec(
+    match mkdir_get_mode_details(&matches) {
+        Ok(parsed_mode) => mkdir_exec_with_mode_bits(
             dirs,
             is_recursive,
-            mode,
+            parsed_mode.mode,
+            parsed_mode.mode_bits,
             specified_mode,
             is_verbose,
             context,
@@ -665,6 +693,7 @@ pub fn ct_app() -> Command {
 /**
  * 创建新的目录列表
  */
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 fn mkdir_exec(
     dirs: ValuesRef<OsString>,
@@ -676,14 +705,40 @@ fn mkdir_exec(
     set_context: bool,
     warn_on_unsupported: bool,
 ) -> CTResult<()> {
+    mkdir_exec_with_mode_bits(
+        dirs,
+        is_recursive,
+        mode,
+        0o7777,
+        specified_mode,
+        is_verbose,
+        context,
+        set_context,
+        warn_on_unsupported,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn mkdir_exec_with_mode_bits(
+    dirs: ValuesRef<OsString>,
+    is_recursive: bool,
+    mode: u32,
+    mode_bits: u32,
+    specified_mode: bool,
+    is_verbose: bool,
+    context: Option<&OsString>,
+    set_context: bool,
+    warn_on_unsupported: bool,
+) -> CTResult<()> {
     for d in dirs {
         let p_buf = PathBuf::from(d);
         let p = p_buf.as_path();
 
-        ct_show_if_err!(mkdir(
+        ct_show_if_err!(mkdir_with_mode_bits(
             p,
             is_recursive,
             mode,
+            mode_bits,
             specified_mode,
             is_verbose,
             context,
@@ -710,6 +765,31 @@ pub fn mkdir(
     path: &Path,
     is_recursive: bool,
     mode: u32,
+    specified_mode: bool,
+    is_verbose: bool,
+    context: Option<&OsString>,
+    set_context: bool,
+    warn_on_unsupported: bool,
+) -> CTResult<()> {
+    mkdir_with_mode_bits(
+        path,
+        is_recursive,
+        mode,
+        0o7777,
+        specified_mode,
+        is_verbose,
+        context,
+        set_context,
+        warn_on_unsupported,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn mkdir_with_mode_bits(
+    path: &Path,
+    is_recursive: bool,
+    mode: u32,
+    mode_bits: u32,
     specified_mode: bool,
     is_verbose: bool,
     context: Option<&OsString>,
@@ -748,7 +828,7 @@ pub fn mkdir(
 
     // 只有显式指定了 -m 才覆写权限！否则保留系统生成的含有 ACL 的完美权限
     if specified_mode {
-        mkdir_chmod(path, mode)
+        mkdir_chmod_with_mode_bits(path, mode, mode_bits)
     } else {
         Ok(())
     }
@@ -756,8 +836,20 @@ pub fn mkdir(
 
 #[cfg(unix)]
 fn mkdir_chmod(path: &Path, mode: u32) -> CTResult<()> {
+    mkdir_chmod_with_mode_bits(path, mode, 0o7777)
+}
+
+#[cfg(unix)]
+fn mkdir_chmod_with_mode_bits(path: &Path, mode: u32, mode_bits: u32) -> CTResult<()> {
     use std::os::unix::fs::PermissionsExt;
 
+    // GNU mkdir initially removes group and other write bits when a sticky
+    // directory is created, then restores only bits named by MODE.
+    let mode = if mode & 0o1000 != 0 && mode_bits & 0o0022 == 0 {
+        mode & !0o0022
+    } else {
+        mode
+    };
     let mode = std::fs::Permissions::from_mode(mode);
 
     std::fs::set_permissions(path, mode)
@@ -767,6 +859,11 @@ fn mkdir_chmod(path: &Path, mode: u32) -> CTResult<()> {
 #[cfg(windows)]
 fn mkdir_chmod(_path: &Path, _mode: u32) -> CTResult<()> {
     // 在 Windows 上，chmod 仅设置只读标志，该标志甚至不适用于目录
+    Ok(())
+}
+
+#[cfg(windows)]
+fn mkdir_chmod_with_mode_bits(_path: &Path, _mode: u32, _mode_bits: u32) -> CTResult<()> {
     Ok(())
 }
 

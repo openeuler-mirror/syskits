@@ -700,7 +700,7 @@ fn mv_handle_multiple_paths(paths: &[PathBuf], opts: &MvOpts) -> CTResult<()> {
     if opts.no_target_dir {
         return Err(CTsageError::new(
             1,
-            format!("mv: extra operand {}", paths[2].quote()),
+            format!("extra operand {}", paths[2].quote()),
         ));
     }
     // 获取目标目录路径和源路径。

@@ -23,7 +23,7 @@ use ctcore::{
     ct_display::Quotable,
     ct_error::{CTResult, CtSimpleError, FromIo},
 };
-use std::{ffi::OsString, fs::hard_link, path::Path};
+use std::{ffi::OsString, fs::hard_link, io, path::Path};
 use sys_locale::get_locale;
 
 const SYSKITS_LINK_LONG_VERSION: &str = concat!(
@@ -131,13 +131,24 @@ fn reject_short_options(args: &[OsString], usage_name: &str) -> CTResult<()> {
 
 /// 执行硬链接创建操作
 fn link_exec(flags: &LinkFlags) -> CTResult<()> {
-    hard_link(flags.source_path, flags.target_path).map_err_context(|| {
-        format!(
-            "cannot create link {} to {}",
-            flags.target_path.quote(),
-            flags.source_path.quote()
-        )
-    })
+    match hard_link(flags.source_path, flags.target_path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Err(CtSimpleError::new(
+            1,
+            format!(
+                "cannot create link {} to {}: File exists",
+                flags.target_path.quote(),
+                flags.source_path.quote()
+            ),
+        )),
+        Err(error) => Err(error.map_err_context(|| {
+            format!(
+                "cannot create link {} to {}",
+                flags.target_path.quote(),
+                flags.source_path.quote()
+            )
+        })),
+    }
 }
 
 /// 创建命令行应用程序配置

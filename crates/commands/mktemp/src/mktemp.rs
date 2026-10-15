@@ -174,15 +174,20 @@ pub struct MkTempFlags {
 
 impl MkTempFlags {
     fn from(matches: &ArgMatches) -> Self {
+        let has_tmpdir_option = matches.contains_id(mktemp_flags::MKTEMP_TMPDIR)
+            || matches.contains_id(mktemp_flags::MKTEMP_P);
         let tmp_dir = matches
-            .get_many::<PathBuf>(mktemp_flags::MKTEMP_TMPDIR)
+            .get_many::<OsString>(mktemp_flags::MKTEMP_TMPDIR)
             .and_then(|mut dirs| dirs.next_back())
+            .filter(|dir| !dir.is_empty())
+            .map(PathBuf::from)
             .or_else(|| {
                 matches
-                    .get_many::<PathBuf>(mktemp_flags::MKTEMP_P)
+                    .get_many::<OsString>(mktemp_flags::MKTEMP_P)
                     .and_then(|mut dirs| dirs.next_back())
-            })
-            .cloned();
+                    .filter(|dir| !dir.is_empty())
+                    .map(PathBuf::from)
+            });
         let (tmpdir, template) = match matches.get_one::<String>(MKTEMP_ARG_TEMPLATE) {
             // 如果没有提供模板参数，则隐含 `--tmpdir`。
             None => {
@@ -197,8 +202,8 @@ impl MkTempFlags {
                         .or_else(|| Some(default_tmpdir()))
                 } else if tmp_dir.is_some() {
                     tmp_dir
-                } else if matches.contains_id(mktemp_flags::MKTEMP_TMPDIR) {
-                    // 提供了不带目录参数的 --tmpdir，使用 TMPDIR 或默认目录。
+                } else if has_tmpdir_option {
+                    // 提供了未指定目录的 -p 或 --tmpdir，使用 TMPDIR 或默认目录。
                     Some(default_tmpdir())
                 } else {
                     None
@@ -490,7 +495,7 @@ pub fn ct_app() -> Command {
             .value_name("DIR")
             .num_args(1)
             .action(ArgAction::Append)
-            .value_parser(ValueParser::path_buf())
+            .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::DirPath),
         Arg::new(mktemp_flags::MKTEMP_TMPDIR)
             .long(mktemp_flags::MKTEMP_TMPDIR)
@@ -508,7 +513,7 @@ pub fn ct_app() -> Command {
             .require_equals(true)
             .overrides_with(mktemp_flags::MKTEMP_P)
             .action(ArgAction::Append)
-            .value_parser(ValueParser::path_buf())
+            .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::DirPath),
         Arg::new(mktemp_flags::MKTEMP_T)
             .short('t')

@@ -1440,8 +1440,9 @@ fn mv_rename(
         .symlink_metadata()
         .ok()
         .map(|metadata| metadata.file_type());
-    let source_is_debug_copy_type =
-        source_file_type.is_some_and(|file_type| file_type.is_file() || file_type.is_symlink());
+    let source_is_debug_copy_type = source_file_type.is_some_and(|file_type| {
+        file_type.is_file() || file_type.is_symlink() || file_type.is_dir()
+    });
     let used_copy_fallback = mv_rename_with_fallback(
         from_path,
         final_target,
@@ -1579,7 +1580,7 @@ fn mv_rename_with_fallback(
         let file_type = symlink_metadata.file_type();
 
         // 如果启用了调试模式，说明重命名失败的原因
-        if options.debug && !file_type.is_file() && !file_type.is_symlink() {
+        if options.debug && !file_type.is_file() && !file_type.is_symlink() && !file_type.is_dir() {
             let message = format!(
                 "rename failed: {} ({}), attempting copy and remove",
                 from.quote(),
@@ -1619,14 +1620,6 @@ fn mv_rename_with_fallback(
                     rename_error
                 );
                 return Err(io::Error::other(message));
-            }
-
-            if options.debug {
-                let message = format!("copying directory {} to {}", from.quote(), to.quote());
-                match multi_progress {
-                    Some(pb) => pb.suspend(|| println!("mv: {message}")),
-                    None => println!("mv: {message}"),
-                };
             }
 
             if to.exists() {
@@ -1872,8 +1865,12 @@ fn move_dir_cross_device_with_links(
     let source_metadata = fs::metadata(src_dir)?;
 
     // 确保目标目录存在
-    if !dest_dir.exists() {
+    let created_destination = !dest_dir.exists();
+    if created_destination {
         fs::create_dir_all(dest_dir)?;
+        if options.debug {
+            println!("created directory {}", dest_dir.quote());
+        }
     }
 
     #[cfg(target_os = "linux")]
@@ -1884,7 +1881,7 @@ fn move_dir_cross_device_with_links(
         let src_path = entry.path();
         let dest_path = dest_dir.join(entry.file_name());
 
-        if options.verbose {
+        if options.verbose && !options.debug {
             println!("renamed {} -> {}", src_path.quote(), dest_path.quote());
         }
 
@@ -1896,6 +1893,10 @@ fn move_dir_cross_device_with_links(
         } else if file_type.is_symlink() {
             // 符号链接直接转移
             mv_rename_symlink_fallback(&src_path, &dest_path)?;
+            if options.debug {
+                println!("copied {} -> {}", src_path.quote(), dest_path.quote());
+                println!("removed {}", src_path.quote());
+            }
         } else {
             // 处理普通文件，并尝试追踪硬链接
             #[cfg(unix)]
@@ -1925,6 +1926,13 @@ fn move_dir_cross_device_with_links(
                     &dest_path,
                     &fs::symlink_metadata(&src_path)?,
                 )?;
+                if options.debug {
+                    println!("copied {} -> {}", src_path.quote(), dest_path.quote());
+                    println!(
+                        "copy offload: unsupported, reflink: unsupported, sparse detection: no"
+                    );
+                    println!("removed {}", src_path.quote());
+                }
             }
             #[cfg(not(target_os = "linux"))]
             {
@@ -1942,6 +1950,9 @@ fn move_dir_cross_device_with_links(
 
     // 目录内部清空后，删除原始空目录
     fs::remove_dir(src_dir)?;
+    if options.debug {
+        println!("removed directory {}", src_dir.quote());
+    }
     Ok(())
 }
 
@@ -1961,8 +1972,12 @@ fn move_dir_cross_device_with_links_with_global_map(
     let source_metadata = fs::metadata(src_dir)?;
 
     // 确保目标目录存在
-    if !dest_dir.exists() {
+    let created_destination = !dest_dir.exists();
+    if created_destination {
         fs::create_dir_all(dest_dir)?;
+        if options.debug {
+            println!("created directory {}", dest_dir.quote());
+        }
     }
 
     #[cfg(target_os = "linux")]
@@ -1973,7 +1988,7 @@ fn move_dir_cross_device_with_links_with_global_map(
         let src_path = entry.path();
         let dest_path = dest_dir.join(entry.file_name());
 
-        if options.verbose {
+        if options.verbose && !options.debug {
             println!("renamed {} -> {}", src_path.quote(), dest_path.quote());
         }
 
@@ -1990,6 +2005,10 @@ fn move_dir_cross_device_with_links_with_global_map(
         } else if file_type.is_symlink() {
             // 符号链接直接转移
             mv_rename_symlink_fallback(&src_path, &dest_path)?;
+            if options.debug {
+                println!("copied {} -> {}", src_path.quote(), dest_path.quote());
+                println!("removed {}", src_path.quote());
+            }
         } else {
             // 处理普通文件，并尝试追踪硬链接
             let metadata = fs::symlink_metadata(&src_path)?;
@@ -2017,6 +2036,13 @@ fn move_dir_cross_device_with_links_with_global_map(
                     &dest_path,
                     &fs::symlink_metadata(&src_path)?,
                 )?;
+                if options.debug {
+                    println!("copied {} -> {}", src_path.quote(), dest_path.quote());
+                    println!(
+                        "copy offload: unsupported, reflink: unsupported, sparse detection: no"
+                    );
+                    println!("removed {}", src_path.quote());
+                }
             }
             #[cfg(not(target_os = "linux"))]
             {
@@ -2034,6 +2060,9 @@ fn move_dir_cross_device_with_links_with_global_map(
 
     // 目录内部清空后，删除原始空目录
     fs::remove_dir(src_dir)?;
+    if options.debug {
+        println!("removed directory {}", src_dir.quote());
+    }
     Ok(())
 }
 

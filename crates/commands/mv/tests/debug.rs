@@ -93,3 +93,55 @@ fn debug_output_for_cross_device_symlink_matches_gnu() {
         std::path::Path::new("referent")
     );
 }
+
+#[test]
+fn debug_output_for_cross_device_directory_matches_gnu() {
+    let source_parent = tempfile::tempdir().unwrap();
+    let destination_parent = match tempfile::tempdir_in("/dev/shm") {
+        Ok(directory) => directory,
+        Err(_) => return,
+    };
+
+    if fs::metadata(source_parent.path()).unwrap().dev()
+        == fs::metadata(destination_parent.path()).unwrap().dev()
+    {
+        return;
+    }
+
+    let source = source_parent.path().join("source");
+    let source_subdirectory = source.join("subdirectory");
+    let source_file = source_subdirectory.join("file");
+    let destination = destination_parent.path().join("destination");
+    let destination_subdirectory = destination.join("subdirectory");
+    let destination_file = destination_subdirectory.join("file");
+    fs::create_dir(&source).unwrap();
+    fs::create_dir(&source_subdirectory).unwrap();
+    fs::write(&source_file, b"source").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_mv"))
+        .arg0("mv")
+        .env("LC_ALL", "C")
+        .arg("--debug")
+        .arg(&source)
+        .arg(&destination)
+        .output()
+        .expect("run mv");
+
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!(
+            "created directory '{}'\ncreated directory '{}'\ncopied '{}' -> '{}'\ncopy offload: unsupported, reflink: unsupported, sparse detection: no\nremoved '{}'\nremoved directory '{}'\nremoved directory '{}'\n",
+            destination.display(),
+            destination_subdirectory.display(),
+            source_file.display(),
+            destination_file.display(),
+            source_file.display(),
+            source_subdirectory.display(),
+            source.display(),
+        )
+    );
+    assert!(!source.exists());
+    assert_eq!(fs::read(destination_file).unwrap(), b"source");
+}

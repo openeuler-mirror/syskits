@@ -560,6 +560,39 @@ fn traversal_walk(root: &Path, traverse_symlinks: &CtTraverseSymlinks) -> WalkDi
 }
 
 impl CtOwnershipChangeExecutor {
+    fn print_verbose_failure_for_unavailable_path(&self, path: &Path) {
+        if self.verbosity.level != CtVerbosityLevel::Verbose {
+            return;
+        }
+
+        let path_str = quote_path_for_diagnostic(path);
+        let message = if self.verbosity.groups_only {
+            if let Ok(meta) = path.symlink_metadata() {
+                let old =
+                    ct_entries::gid2grp(meta.gid()).unwrap_or_else(|_| meta.gid().to_string());
+                t!(
+                    "ctcore.chgrp.failed_change",
+                    file = path_str,
+                    old = old,
+                    new = self.raw_owner
+                )
+            } else {
+                t!(
+                    "ctcore.chgrp.failed_change_without_old",
+                    file = path_str,
+                    new = self.raw_owner
+                )
+            }
+        } else {
+            t!(
+                "ctcore.chown.failed_change_without_old",
+                file = path_str,
+                new = self.raw_owner
+            )
+        };
+        println!("{message}");
+    }
+
     pub fn exec(&self) -> CTResult<()> {
         let mut ret = 0;
         for f in &self.files {
@@ -577,23 +610,7 @@ impl CtOwnershipChangeExecutor {
         let meta = match self.obtain_meta(path, self.dereference) {
             Some(m) => m,
             _ => {
-                if self.verbosity.level == CtVerbosityLevel::Verbose {
-                    let path_str = quote_path_for_diagnostic(path);
-                    let message = if self.verbosity.groups_only {
-                        t!(
-                            "ctcore.chgrp.failed_change_without_old",
-                            file = path_str,
-                            new = self.raw_owner
-                        )
-                    } else {
-                        t!(
-                            "ctcore.chown.failed_change_without_old",
-                            file = path_str,
-                            new = self.raw_owner
-                        )
-                    };
-                    println!("{message}");
-                }
+                self.print_verbose_failure_for_unavailable_path(path);
                 return 1;
             }
         };
@@ -656,6 +673,9 @@ impl CtOwnershipChangeExecutor {
                         }
                         action
                     });
+                    if let Some(path) = path {
+                        self.print_verbose_failure_for_unavailable_path(path);
+                    }
                     if !self.verbosity.force_silent
                         && self.verbosity.level != CtVerbosityLevel::Silent
                     {
@@ -697,6 +717,7 @@ impl CtOwnershipChangeExecutor {
                 Some(m) => m,
                 _ => {
                     ret = 1;
+                    self.print_verbose_failure_for_unavailable_path(path);
                     if entry.file_type().is_dir() {
                         // 指示walkdir跳过此目录，以避免walkdir尝试查询此目录的子目录时再次出现错误。
                         iterator.skip_current_dir();

@@ -801,6 +801,8 @@ fn mv_handle_two_paths(
                             } else {
                                 Err(CtSimpleError::new(1, err_str))
                             }
+                        } else if err_str.starts_with("cannot overwrite ") {
+                            Err(CtSimpleError::new(1, err_str))
                         } else if err_str.is_empty() {
                             set_ct_exit_code(1);
                             Ok(())
@@ -1148,11 +1150,12 @@ fn move_files_into_dir(
                             None => ct_show!(final_err),
                         };
                     } else {
-                        let final_err = if err_str.contains(&msg) {
-                            CtSimpleError::new(1, err_str)
-                        } else {
-                            err.map_err_context(|| msg)
-                        };
+                        let final_err =
+                            if err_str.contains(&msg) || err_str.starts_with("cannot overwrite ") {
+                                CtSimpleError::new(1, err_str)
+                            } else {
+                                err.map_err_context(|| msg)
+                            };
                         match multi_progress {
                             Some(ref pb) => pb.suspend(|| ct_show!(final_err)),
                             None => ct_show!(final_err),
@@ -1190,11 +1193,12 @@ fn move_files_into_dir(
                             None => ct_show!(final_err),
                         };
                     } else {
-                        let final_err = if err_str.contains(&msg) {
-                            CtSimpleError::new(1, err_str)
-                        } else {
-                            err.map_err_context(|| msg)
-                        };
+                        let final_err =
+                            if err_str.contains(&msg) || err_str.starts_with("cannot overwrite ") {
+                                CtSimpleError::new(1, err_str)
+                            } else {
+                                err.map_err_context(|| msg)
+                            };
                         match multi_progress {
                             Some(ref pb) => pb.suspend(|| ct_show!(final_err)),
                             None => ct_show!(final_err),
@@ -1424,7 +1428,10 @@ fn mv_rename(
         if is_empty_dir(final_target) {
             fs::remove_dir(final_target)?;
         } else {
-            return Err(io::Error::other("Directory not empty"));
+            return Err(io::Error::other(format!(
+                "cannot overwrite {}: Directory not empty",
+                to_path.quote()
+            )));
         }
     }
 
@@ -1514,6 +1521,33 @@ fn mv_rename_with_fallback(
         let is_cross_device = matches!(rename_error.raw_os_error(), Some(EXDEV));
         // 如果不是跨设备错误，直接返回
         if !is_cross_device {
+            if rename_error.kind() == io::ErrorKind::IsADirectory
+                && from
+                    .symlink_metadata()
+                    .is_ok_and(|metadata| !metadata.file_type().is_dir())
+                && to
+                    .symlink_metadata()
+                    .is_ok_and(|metadata| metadata.file_type().is_dir())
+            {
+                let message = format!(
+                    "cannot overwrite directory {} with non-directory",
+                    to.quote()
+                );
+                return Err(io::Error::new(rename_error.kind(), message));
+            }
+
+            if rename_error.kind() == io::ErrorKind::DirectoryNotEmpty
+                && from
+                    .symlink_metadata()
+                    .is_ok_and(|metadata| metadata.file_type().is_dir())
+                && to
+                    .symlink_metadata()
+                    .is_ok_and(|metadata| metadata.file_type().is_dir())
+            {
+                let message = format!("cannot overwrite {}: Directory not empty", to.quote());
+                return Err(io::Error::new(rename_error.kind(), message));
+            }
+
             let message = format!(
                 "cannot move {} to {}: {}",
                 from.quote(),

@@ -25,7 +25,12 @@ use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::prelude::PermissionsExt;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
-use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, crate_version};
+use clap::{
+    Arg, ArgAction, ArgMatches, Command,
+    builder::ValueParser,
+    crate_version,
+    error::{ContextKind, ContextValue, ErrorKind},
+};
 use rand::Rng;
 use tempfile::Builder;
 
@@ -381,7 +386,6 @@ pub fn mktemp_main(args: impl ctcore::Args) -> CTResult<()> {
     let stdout_initially_closed = ctcore::ct_stdout_is_closed();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    use clap::error::{ContextKind, ContextValue, ErrorKind};
     let args_vec: Vec<_> = args.collect();
     let matches = match ct_app().try_get_matches_from(&args_vec) {
         Ok(m) => m,
@@ -396,6 +400,9 @@ pub fn mktemp_main(args: impl ctcore::Args) -> CTResult<()> {
                 })
             {
                 return Err(CTsageError::new(1, "too many templates"));
+            }
+            if let Some(error) = invalid_option_error(&e) {
+                return Err(error);
             }
             return Err(e.into());
         }
@@ -467,6 +474,42 @@ fn missing_option_argument_error(args: &[OsString]) -> Option<Box<dyn CTError>> 
     }
 
     None
+}
+
+fn invalid_option_error(error: &clap::Error) -> Option<Box<dyn CTError>> {
+    let invalid_argument = error.context().find_map(|(kind, value)| {
+        (kind == ContextKind::InvalidArg)
+            .then_some(value)
+            .and_then(|value| match value {
+                ContextValue::String(value) => Some(value.as_str()),
+                _ => None,
+            })
+    })?;
+
+    match error.kind() {
+        ErrorKind::UnknownArgument => {
+            if let Some(option) = invalid_argument.strip_prefix("--") {
+                Some(CTsageError::new(
+                    1,
+                    format!("unrecognized option '--{option}'"),
+                ))
+            } else {
+                invalid_argument
+                    .strip_prefix('-')?
+                    .chars()
+                    .next()
+                    .map(|option| CTsageError::new(1, format!("invalid option -- '{option}'")))
+            }
+        }
+        ErrorKind::TooManyValues => match invalid_argument {
+            "--directory" | "--dry-run" | "--quiet" => Some(CTsageError::new(
+                1,
+                format!("option '{invalid_argument}' doesn't allow an argument"),
+            )),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 fn finish_mktemp_output(

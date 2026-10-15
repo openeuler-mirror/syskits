@@ -666,7 +666,7 @@ fn mkdir_create_dir(
         if path.is_dir() {
             Ok(())
         } else {
-            let msg = mkdir_create_error(path, &e.to_string());
+            let msg = mkdir_create_error(path, &strip_errno(&e));
             Err(CtSimpleError::new(1, msg))
         }
     } else {

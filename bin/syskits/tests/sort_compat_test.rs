@@ -55,3 +55,32 @@ fn sort_debug_reports_simple_byte_comparison_in_c_locale() {
         b"sort: text ordering performed using simple byte comparison\n"
     );
 }
+
+#[test]
+#[cfg(target_family = "unix")]
+fn sort_buffer_size_accepts_percent_suffix() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("data");
+    fs::write(&input, b"b\na\n").expect("write fixture");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .args([
+            "sort",
+            "--buffer-size=1%",
+            input.to_str().expect("utf8 path"),
+        ])
+        .output()
+        .expect("run syskits sort --buffer-size=1%");
+
+    assert!(
+        output.status.success(),
+        "stdout: {}, stderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"a\nb\n");
+    assert_eq!(output.stderr, b"");
+}

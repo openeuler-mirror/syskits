@@ -387,9 +387,14 @@ struct SortPrecomputed {
 impl SortGlobalConfigs {
     /// 将一个 SIZE 字符串解析为若干字节。
     /// 大小字符串包括一个整数和一个可选单位。
-    /// 单位可以是 k、K、m、M、g、G、t、T、P、E、Z、Y（1024 的幂次）或 1 的 b。
+    /// 单位可以是 k、K、m、M、g、G、t、T、P、E、Z、Y（1024 的幂次）、1 的 b，或物理内存百分比 %。
     /// 默认为 K。
     fn parse_byte_count(input: &str) -> Result<usize, ParseSizeError> {
+        let input = input.trim();
+        if let Some(size) = parse_percent_sort_size(input)? {
+            return Ok(size);
+        }
+
         // GNU sort (8.32)   valid: 1b,        k, K, m, M, g, G, t, T, P, E, Z, Y
         // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
         let size = CtParser::default()
@@ -398,7 +403,7 @@ impl SortGlobalConfigs {
             ])
             .with_default_unit("K")
             .with_b_byte_count(true)
-            .parse(input.trim())?;
+            .parse(input)?;
 
         usize::try_from(size).map_err(|_| {
             ParseSizeError::SizeTooBig(format!("Buffer size {size} does not fit in address space"))
@@ -431,6 +436,51 @@ impl SortGlobalConfigs {
             .filter(|s| matches!(s.settings.mode, SortMode::SortGeneralNumeric))
             .count();
     }
+}
+
+fn parse_percent_sort_size(input: &str) -> Result<Option<usize>, ParseSizeError> {
+    let Some(numeric) = input.strip_suffix('%') else {
+        return Ok(None);
+    };
+
+    if numeric.is_empty() {
+        return Err(ParseSizeError::ParseFailure(input.to_string()));
+    }
+    if !numeric.as_bytes().iter().all(u8::is_ascii_digit) {
+        return Err(ParseSizeError::InvalidSuffix(format!("{}", input.quote())));
+    }
+
+    let percent = numeric
+        .parse::<u128>()
+        .map_err(|_| ParseSizeError::SizeTooBig(input.to_string()))?;
+    let memory = total_physical_memory_bytes().ok_or_else(|| {
+        ParseSizeError::SizeTooBig("could not determine total physical memory".to_string())
+    })?;
+    let size = memory
+        .checked_mul(percent)
+        .and_then(|value| value.checked_div(100))
+        .ok_or_else(|| ParseSizeError::SizeTooBig(input.to_string()))?;
+
+    usize::try_from(size).map(Some).map_err(|_| {
+        ParseSizeError::SizeTooBig(format!("Buffer size {size} does not fit in address space"))
+    })
+}
+
+#[cfg(target_family = "unix")]
+fn total_physical_memory_bytes() -> Option<u128> {
+    let pages = unsafe { ctcore::libc::sysconf(ctcore::libc::_SC_PHYS_PAGES) };
+    let page_size = unsafe { ctcore::libc::sysconf(ctcore::libc::_SC_PAGESIZE) };
+
+    if pages <= 0 || page_size <= 0 {
+        return None;
+    }
+
+    (pages as u128).checked_mul(page_size as u128)
+}
+
+#[cfg(not(target_family = "unix"))]
+fn total_physical_memory_bytes() -> Option<u128> {
+    None
 }
 
 impl Default for SortGlobalConfigs {
@@ -4810,6 +4860,28 @@ mod tests {
         fn test_parse_byte_count_with_spaces() {
             assert_eq!(SortGlobalConfigs::parse_byte_count(" 1K ").unwrap(), 1024);
             // assert_eq!(GlobalSettings::parse_byte_count("1 K").unwrap(), 1024);
+        }
+
+        #[cfg(target_family = "unix")]
+        #[test]
+        fn test_parse_byte_count_percent_of_physical_memory() {
+            let total = total_physical_memory_bytes().expect("physical memory should be available");
+            let expected = usize::try_from(total / 100)
+                .expect("1 percent of physical memory should fit usize");
+
+            assert_eq!(SortGlobalConfigs::parse_byte_count("1%"), Ok(expected));
+        }
+
+        #[test]
+        fn test_parse_byte_count_percent_rejects_missing_number() {
+            assert!(matches!(
+                SortGlobalConfigs::parse_byte_count("%"),
+                Err(ParseSizeError::ParseFailure(_))
+            ));
+            assert!(matches!(
+                SortGlobalConfigs::parse_byte_count("1%%"),
+                Err(ParseSizeError::InvalidSuffix(_))
+            ));
         }
 
         #[test]

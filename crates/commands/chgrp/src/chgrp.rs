@@ -15,6 +15,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_display::{Quotable, locale_quote};
 pub use ctcore::ct_entries;
+use ctcore::ct_entries::{Group, Locate};
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_perms::{
     CtGidUidOwnerFilter, CtIfFrom, normalize_posixly_correct_args, opt_flags, ownership_change_base,

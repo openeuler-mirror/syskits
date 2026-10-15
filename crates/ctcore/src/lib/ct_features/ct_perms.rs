@@ -535,19 +535,33 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     false
 }
 
-fn metadata_failure_action(path: &Path, dereference: bool) -> &'static str {
-    if dereference && path.is_symlink() {
+fn has_dangling_symlink_metadata(path: &Path, dereference: bool, error: &IOError) -> bool {
+    dereference
+        && error.raw_os_error() == Some(libc::ENOENT)
+        && path
+            .symlink_metadata()
+            .is_ok_and(|meta| meta.file_type().is_symlink())
+}
+
+fn metadata_failure_action(path: &Path, dereference: bool, error: &IOError) -> &'static str {
+    if has_dangling_symlink_metadata(path, dereference, error) {
         "dereference"
     } else {
         "access"
     }
 }
 
-fn traversal_failure_action(path: &Path, dereference: bool) -> &'static str {
-    if path.is_dir() {
+fn traversal_failure_action(
+    path: &Path,
+    dereference: bool,
+    error: Option<&IOError>,
+) -> &'static str {
+    if error.is_some_and(|error| has_dangling_symlink_metadata(path, dereference, error)) {
+        "dereference"
+    } else if path.metadata().is_ok_and(|meta| meta.is_dir()) {
         "read directory"
     } else {
-        metadata_failure_action(path, dereference)
+        "access"
     }
 }
 
@@ -560,13 +574,13 @@ fn traversal_walk(root: &Path, traverse_symlinks: &CtTraverseSymlinks) -> WalkDi
 }
 
 impl CtOwnershipChangeExecutor {
-    fn print_verbose_failure_for_unavailable_path(&self, path: &Path) {
+    fn print_verbose_failure_for_unavailable_path(&self, path: &Path, has_link_metadata: bool) {
         if self.verbosity.level != CtVerbosityLevel::Verbose {
             return;
         }
 
         let path_str = quote_path_for_diagnostic(path);
-        let message = if self.verbosity.groups_only {
+        let message = if self.verbosity.groups_only && has_link_metadata {
             if let Ok(meta) = path.symlink_metadata() {
                 let old =
                     ct_entries::gid2grp(meta.gid()).unwrap_or_else(|_| meta.gid().to_string());
@@ -583,6 +597,12 @@ impl CtOwnershipChangeExecutor {
                     new = self.raw_owner
                 )
             }
+        } else if self.verbosity.groups_only {
+            t!(
+                "ctcore.chgrp.failed_change_without_old",
+                file = path_str,
+                new = self.raw_owner
+            )
         } else {
             t!(
                 "ctcore.chown.failed_change_without_old",
@@ -608,9 +628,12 @@ impl CtOwnershipChangeExecutor {
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
         let path = root.as_ref();
         let meta = match self.obtain_meta(path, self.dereference) {
-            Some(m) => m,
-            _ => {
-                self.print_verbose_failure_for_unavailable_path(path);
+            Ok(m) => m,
+            Err(error) => {
+                self.print_verbose_failure_for_unavailable_path(
+                    path,
+                    has_dangling_symlink_metadata(path, self.dereference, &error),
+                );
                 return 1;
             }
         };
@@ -667,14 +690,17 @@ impl CtOwnershipChangeExecutor {
                     let path = e.path();
                     let action = path.map(|path| {
                         walk_error_paths.insert(path.to_path_buf());
-                        let action = traversal_failure_action(path, self.dereference);
+                        let action = traversal_failure_action(path, self.dereference, e.io_error());
                         if action == "read directory" {
                             unreadable_directories.insert(path.to_path_buf());
                         }
                         action
                     });
                     if let Some(path) = path {
-                        self.print_verbose_failure_for_unavailable_path(path);
+                        let has_link_metadata = e.io_error().is_some_and(|error| {
+                            has_dangling_symlink_metadata(path, self.dereference, error)
+                        });
+                        self.print_verbose_failure_for_unavailable_path(path, has_link_metadata);
                     }
                     if !self.verbosity.force_silent
                         && self.verbosity.level != CtVerbosityLevel::Silent
@@ -714,10 +740,13 @@ impl CtOwnershipChangeExecutor {
                 continue;
             }
             let meta = match self.obtain_meta(path, self.dereference) {
-                Some(m) => m,
-                _ => {
+                Ok(m) => m,
+                Err(error) => {
                     ret = 1;
-                    self.print_verbose_failure_for_unavailable_path(path);
+                    self.print_verbose_failure_for_unavailable_path(
+                        path,
+                        has_dangling_symlink_metadata(path, self.dereference, &error),
+                    );
                     if entry.file_type().is_dir() {
                         // 指示walkdir跳过此目录，以避免walkdir尝试查询此目录的子目录时再次出现错误。
                         iterator.skip_current_dir();
@@ -776,7 +805,7 @@ impl CtOwnershipChangeExecutor {
         ret
     }
 
-    fn obtain_meta<P: AsRef<Path>>(&self, path: P, follow: bool) -> Option<Metadata> {
+    fn obtain_meta<P: AsRef<Path>>(&self, path: P, follow: bool) -> IOResult<Metadata> {
         let path = path.as_ref();
         let meta = if follow {
             path.metadata()
@@ -785,17 +814,18 @@ impl CtOwnershipChangeExecutor {
         };
         match meta {
             Err(e) => {
-                if !self.verbosity.force_silent {
+                if !self.verbosity.force_silent && self.verbosity.level != CtVerbosityLevel::Silent
+                {
                     ct_show_error!(
                         "cannot {} {}: {}",
-                        metadata_failure_action(path, follow),
+                        metadata_failure_action(path, follow, &e),
                         quote_path_for_diagnostic(path),
                         strip_errno(&e)
                     );
                 }
-                None
+                Err(e)
             }
-            Ok(meta) => Some(meta),
+            Ok(meta) => Ok(meta),
         }
     }
 
@@ -1062,8 +1092,8 @@ fn normalize_reference_option_argument(args: &[OsString], command: &Command) -> 
             continue;
         };
         if long_option.contains('=')
-            || find_long_option(command, long_option)
-                .is_none_or(|argument| argument.get_long() != Some(opt_flags::REFERENCE))
+            || matching_long_option(command, &args[index])
+                .is_none_or(|(argument, _)| argument.get_long() != Some(opt_flags::REFERENCE))
             || index + 1 == args.len()
             || !args[index + 1].as_os_str().as_bytes().starts_with(b"-")
         {
@@ -1390,10 +1420,21 @@ mod tests {
         let dangling = temp_dir.path().join("dangling");
         unix::fs::symlink("missing", &dangling).unwrap();
         let missing = temp_dir.path().join("missing");
+        let dangling_error = dangling.metadata().unwrap_err();
+        let missing_error = missing.metadata().unwrap_err();
 
-        assert_eq!(metadata_failure_action(&dangling, true), "dereference");
-        assert_eq!(metadata_failure_action(&dangling, false), "access");
-        assert_eq!(metadata_failure_action(&missing, true), "access");
+        assert_eq!(
+            metadata_failure_action(&dangling, true, &dangling_error),
+            "dereference"
+        );
+        assert_eq!(
+            metadata_failure_action(&dangling, false, &dangling_error),
+            "access"
+        );
+        assert_eq!(
+            metadata_failure_action(&missing, true, &missing_error),
+            "access"
+        );
     }
 
     #[cfg(unix)]
@@ -1629,8 +1670,11 @@ mod tests {
         fs::create_dir(&directory).unwrap();
         fs::write(&file, b"").unwrap();
 
-        assert_eq!(traversal_failure_action(&directory, true), "read directory");
-        assert_eq!(traversal_failure_action(&file, true), "access");
+        assert_eq!(
+            traversal_failure_action(&directory, true, None),
+            "read directory"
+        );
+        assert_eq!(traversal_failure_action(&file, true, None), "access");
     }
 
     #[test]

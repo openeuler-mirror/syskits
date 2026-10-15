@@ -500,6 +500,7 @@ fn du(
 #[derive(Debug)]
 enum DuError {
     InvalidMaxDepthArg(String),
+    SummarizeAllConflict,
     SummarizeDepthConflict(String),
     InvalidTimeStyleArg(String),
     InvalidTimeArg,
@@ -510,6 +511,9 @@ impl Display for DuError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidMaxDepthArg(s) => write!(f, "invalid maximum depth {}", s.quote()),
+            Self::SummarizeAllConflict => {
+                write!(f, "cannot both summarize and show all entries")
+            }
             Self::SummarizeDepthConflict(s) => {
                 write!(
                     f,
@@ -543,11 +547,16 @@ impl CTError for DuError {
     fn code(&self) -> i32 {
         match self {
             Self::InvalidMaxDepthArg(_)
+            | Self::SummarizeAllConflict
             | Self::SummarizeDepthConflict(_)
             | Self::InvalidTimeStyleArg(_)
             | Self::InvalidTimeArg
             | Self::InvalidGlob(_) => 1,
         }
+    }
+
+    fn usage(&self) -> bool {
+        matches!(self, Self::SummarizeAllConflict)
     }
 }
 
@@ -1015,6 +1024,8 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     // 解析是否需要汇总信息
     let is_summarize = args_match.get_flag(opt_flags::SUMMARIZE);
 
+    du_check_option_conflicts(&args_match)?;
+
     let du_max_depth = du_get_max_depth(&args_match, is_summarize)?;
 
     // 处理输入文件列表
@@ -1208,6 +1219,7 @@ pub fn du_native_semantic(args: impl ctcore::Args) -> CTResult<DuSemantic> {
     let args_match = ct_app().try_get_matches_from(args)?;
 
     let is_summarize = args_match.get_flag(opt_flags::SUMMARIZE);
+    du_check_option_conflicts(&args_match)?;
     let du_max_depth = du_get_max_depth(&args_match, is_summarize)?;
 
     let files_path = if let Some(file_from) = args_match.get_one::<String>(opt_flags::FILES0_FROM) {
@@ -1417,6 +1429,14 @@ fn du_get_max_depth(
         summarize,
     )?;
     Ok(du_max_depth)
+}
+
+fn du_check_option_conflicts(args_match: &ArgMatches) -> CTResult<()> {
+    if args_match.get_flag(opt_flags::ALL) && args_match.get_flag(opt_flags::SUMMARIZE) {
+        Err(DuError::SummarizeAllConflict.into())
+    } else {
+        Ok(())
+    }
 }
 
 fn du_get_time_secs(du_time: DuTime, du_stat: &DuStat) -> Result<u64, DuError> {
@@ -7369,6 +7389,20 @@ mod tests {
             let result = du_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_main_summarize_all_conflict() {
+            let args = [ctcore::ct_util_name(), "-s", "-a", "case"];
+            let err = du_main(args.iter().map(OsString::from))
+                .expect_err("summarize and all should conflict");
+
+            assert_eq!(err.code(), 1);
+            assert!(err.usage());
+            assert_eq!(
+                err.to_string(),
+                "cannot both summarize and show all entries"
+            );
         }
 
         #[test]

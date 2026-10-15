@@ -47,6 +47,21 @@ fn empty_tmpdir_uses_the_gnu_default_directory() {
 }
 
 #[test]
+fn empty_tmpdir_option_value_uses_the_gnu_default_directory() {
+    for args in [
+        &["-u", "-p", "", "empty-p.XXX"][..],
+        &["-u", "--tmpdir=", "empty-p.XXX"],
+        &["-u", "-t", "-p", "", "empty-p.XXX"],
+    ] {
+        let output = run_mktemp(args);
+        assert!(
+            output.starts_with("/tmp/"),
+            "expected {output:?} to start with /tmp/"
+        );
+    }
+}
+
+#[test]
 fn last_tmpdir_option_wins() {
     for (args, expected_prefix) in [
         (

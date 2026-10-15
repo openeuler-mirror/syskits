@@ -113,6 +113,8 @@ enum LnError {
     SameFile(PathBuf, PathBuf),
     /// 不允许对目录创建硬链接
     HardLinkToDirectory(PathBuf),
+    /// 目标硬链接已存在
+    HardLinkAlreadyExists(PathBuf),
 }
 
 impl Display for LnError {
@@ -123,6 +125,10 @@ impl Display for LnError {
 
             Self::HardLinkToDirectory(s) => {
                 write!(f, "{}: hard link not allowed for directory", s.display())
+            }
+
+            Self::HardLinkAlreadyExists(s) => {
+                write!(f, "failed to create hard link {}: File exists", s.quote())
             }
 
             // 源文件和目标文件是同一个文件时的错误信息
@@ -351,7 +357,7 @@ fn ln_exec(files: &[PathBuf], settings: &LnSettings) -> CTResult<()> {
         let last_file = files.last().unwrap();
 
         // 处理第三种形式：多文件链接到目录
-        if files.len() > 2 || last_file.is_dir() {
+        if files.len() > 2 || ln_target_is_dir(last_file, settings) {
             let target_dir = last_file;
             let source_files = &files[0..files.len() - 1];
             return link_files_in_dir(source_files, target_dir, settings);
@@ -388,7 +394,7 @@ fn ln_exec(files: &[PathBuf], settings: &LnSettings) -> CTResult<()> {
 #[allow(clippy::cognitive_complexity)]
 fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &LnSettings) -> CTResult<()> {
     // 验证目标是否为目录
-    if !target_dir.is_dir() {
+    if !ln_target_is_dir(target_dir, settings) {
         return Err(LnError::TargetIsDirectory(target_dir.to_owned()).into());
     }
 
@@ -423,6 +429,14 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &LnSettings
         Ok(())
     } else {
         Err(LnError::SomeLinksFailed.into())
+    }
+}
+
+fn ln_target_is_dir(path: &Path, settings: &LnSettings) -> bool {
+    if settings.is_no_dereference {
+        fs::symlink_metadata(path).map_or(false, |meta| meta.is_dir())
+    } else {
+        path.is_dir()
     }
 }
 
@@ -693,12 +707,18 @@ fn create_hard_link(source: &Path, dst: &Path, settings: &LnSettings) -> CTResul
         }
     }
 
-    fs::hard_link(&resolved_source, dst).map_err_context(|| {
-        format!(
-            "failed to create hard link {} => {}",
-            source.quote(),
-            dst.quote()
-        )
+    fs::hard_link(&resolved_source, dst).map_err(|err| {
+        if err.kind() == std::io::ErrorKind::AlreadyExists {
+            LnError::HardLinkAlreadyExists(dst.to_path_buf()).into()
+        } else {
+            err.map_err_context(|| {
+                format!(
+                    "failed to create hard link {} => {}",
+                    source.quote(),
+                    dst.quote()
+                )
+            }) as Box<dyn CTError>
+        }
     })
 }
 
@@ -967,6 +987,47 @@ mod tests {
         let _ = fs::remove_file(&target);
         let _ = fs::remove_file(&hard_target);
         let _ = fs::remove_file(temp.path().join("target.txt~"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_ln_exec_dereferences_link_name_symlink_to_dir_by_default() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source.txt");
+        fs::write(&source, "test content").unwrap();
+        let target_dir = temp.path().join("targetdir");
+        fs::create_dir(&target_dir).unwrap();
+        let dirlink = temp.path().join("dirlink");
+        std::os::unix::fs::symlink(&target_dir, &dirlink).unwrap();
+
+        let settings = LnSettings::default();
+        let files = vec![source.clone(), dirlink.clone()];
+
+        assert!(ln_exec(&files, &settings).is_ok());
+        assert!(target_dir.join("source.txt").exists());
+        assert_eq!(fs::read_link(&dirlink).unwrap(), target_dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_ln_exec_no_dereference_treats_link_name_symlink_to_dir_as_file() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source.txt");
+        fs::write(&source, "test content").unwrap();
+        let target_dir = temp.path().join("targetdir");
+        fs::create_dir(&target_dir).unwrap();
+        let dirlink = temp.path().join("dirlink");
+        std::os::unix::fs::symlink(&target_dir, &dirlink).unwrap();
+
+        let settings = LnSettings {
+            is_no_dereference: true,
+            ..LnSettings::default()
+        };
+        let files = vec![source.clone(), dirlink.clone()];
+
+        assert!(ln_exec(&files, &settings).is_err());
+        assert!(!target_dir.join("source.txt").exists());
+        assert_eq!(fs::read_link(&dirlink).unwrap(), target_dir);
     }
 
     #[test]

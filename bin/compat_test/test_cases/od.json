@@ -849,6 +849,40 @@
         ]
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "od",
+      "description": "LC_ALL=C、LANG=C下执行od -j 0ZiB -N 1；GNU接受零值二进制单位后缀并读取首字节；迁移原Cargo用例od_skip_bytes_accepts_zero_zib_suffix",
+      "args": ["-j", "0ZiB", "-N", "1", "binary.bin"],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": []
+      },
+      "environment": {
+        "files": [
+          {
+            "path": "binary.bin",
+            "content": "\u0001",
+            "permissions": "644",
+            "owner": null,
+            "group": null,
+            "file_type": "Regular",
+            "symlink_target": null,
+            "size": null,
+            "timestamp": null
+          }
+        ]
+      },
+      "cleanup_commands": []
     }
     ]
 }

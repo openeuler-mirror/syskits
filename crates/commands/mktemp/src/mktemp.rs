@@ -202,8 +202,9 @@ impl MkTempFlags {
             is_quiet: matches.get_flag(mktemp_flags::MKTEMP_QUIET),
             tmpdir,
             suffix: matches
-                .get_one::<String>(mktemp_flags::MKTEMP_SUFFIX)
-                .map(String::from),
+                .get_many::<String>(mktemp_flags::MKTEMP_SUFFIX)
+                .and_then(|mut suffixes| suffixes.next_back())
+                .cloned(),
             is_treat_as_template: matches.get_flag(mktemp_flags::MKTEMP_T),
             template,
         }
@@ -462,7 +463,8 @@ pub fn ct_app() -> Command {
                 "append SUFFIX to TEMPLATE; SUFFIX must not contain a path separator. \
                       This option is implied if TEMPLATE does not end with X.",
             )
-            .value_name("SUFFIX"),
+            .value_name("SUFFIX")
+            .action(ArgAction::Append),
         Arg::new(mktemp_flags::MKTEMP_P)
             .short('p')
             .help(t!("mktemp.clap.mktemp_p"))

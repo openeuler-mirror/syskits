@@ -160,22 +160,37 @@ pub fn mv_main(args: impl ctcore::Args) -> CTResult<()> {
         .unwrap_or_default()
         .cloned()
         .collect();
+    let target_directories: Vec<OsString> = args_match
+        .get_many::<OsString>(OPT_TARGET_DIRECTORY)
+        .unwrap_or_default()
+        .cloned()
+        .collect();
+
+    if target_directories.len() > 1 {
+        return Err(CtSimpleError::new(
+            1,
+            "multiple target directories specified",
+        ));
+    }
 
     if arg_files.is_empty() {
         return Err(CTsageError::new(1, "missing file operand"));
     }
 
-    if arg_files.len() == 1
-        && args_match
-            .get_one::<OsString>(OPT_TARGET_DIRECTORY)
-            .is_none()
-    {
+    if arg_files.len() == 1 && target_directories.is_empty() {
         return Err(CTsageError::new(
             1,
             format!(
                 "missing destination file operand after {}",
                 arg_files[0].quote()
             ),
+        ));
+    }
+
+    if args_match.get_flag(OPT_NO_TARGET_DIRECTORY) && !target_directories.is_empty() {
+        return Err(CtSimpleError::new(
+            1,
+            "cannot combine --target-directory (-t) and --no-target-directory (-T)",
         ));
     }
 
@@ -190,9 +205,7 @@ pub fn mv_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let ct_backup_suffix = ct_backup_control::determine_backup_suffix(&args_match);
 
-    let target_directory = args_match
-        .get_one::<OsString>(OPT_TARGET_DIRECTORY)
-        .map(OsString::from);
+    let target_directory = target_directories.into_iter().next();
 
     if let Some(ref maybe_dir) = target_directory {
         if !Path::new(&maybe_dir).is_dir() {
@@ -285,7 +298,8 @@ fn mv_args_init() -> Vec<Arg> {
             .help(t!("mv.clap.opt_target_directory"))
             .value_name("DIRECTORY")
             .value_hint(clap::ValueHint::DirPath)
-            .conflicts_with(OPT_NO_TARGET_DIRECTORY)
+            .action(ArgAction::Append)
+            .num_args(1)
             .value_parser(ValueParser::os_string()),
         Arg::new(OPT_NO_TARGET_DIRECTORY)
             .short('T')

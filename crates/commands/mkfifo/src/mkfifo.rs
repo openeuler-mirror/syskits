@@ -42,9 +42,54 @@ mod opt_flags {
     pub const FIFO: &str = "fifo"; // FIFO路径参数
 }
 
+fn mkfifo_usage_error(message: impl std::fmt::Display) -> Box<dyn ctcore::ct_error::CTError> {
+    CtSimpleError::new(
+        1,
+        format!(
+            "{message}\nTry '{} --help' for more information.",
+            ctcore::ct_util_name()
+        ),
+    )
+}
+
+fn validate_short_options(args: &[OsString]) -> CTResult<()> {
+    for (index, arg) in args.iter().enumerate().skip(1) {
+        if arg == "--" {
+            break;
+        }
+
+        let Some(value) = arg.to_str() else {
+            continue;
+        };
+        let Some(short_options) = value.strip_prefix('-') else {
+            continue;
+        };
+        if short_options.is_empty() || short_options.starts_with('-') {
+            continue;
+        }
+
+        for (position, option) in short_options.char_indices() {
+            match option {
+                'Z' => {}
+                'm' => {
+                    if position + 1 == short_options.len() && args.get(index + 1).is_none() {
+                        return Err(mkfifo_usage_error("option requires an argument -- 'm'"));
+                    }
+                    break;
+                }
+                _ => return Err(mkfifo_usage_error(format!("invalid option -- '{option}'"))),
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub fn mkfifo_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = args.into_iter().collect::<Vec<_>>();
+    validate_short_options(&args)?;
     let args_match = ct_app().try_get_matches_from(args)?;
 
     // 处理安全上下文(仅当用户明确指定-Z或--context时)
@@ -249,12 +294,10 @@ pub fn ct_app() -> Command {
     let usage_description = t!("mkfifo.usage");
     let args = vec![
         Arg::new("help")
-            .short('h')
             .long("help")
             .help(t!("mkfifo.clap.help"))
             .action(ArgAction::Help),
         Arg::new("version")
-            .short('V')
             .long("version")
             .help(t!("mkfifo.clap.version"))
             .action(ArgAction::Version),

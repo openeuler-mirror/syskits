@@ -1436,9 +1436,12 @@ fn mv_rename(
     }
 
     // 执行重命名操作 (使用智能计算出的 final_target)
-    let source_is_regular = from_path
+    let source_file_type = from_path
         .symlink_metadata()
-        .is_ok_and(|metadata| metadata.file_type().is_file());
+        .ok()
+        .map(|metadata| metadata.file_type());
+    let source_is_debug_copy_type =
+        source_file_type.is_some_and(|file_type| file_type.is_file() || file_type.is_symlink());
     let used_copy_fallback = mv_rename_with_fallback(
         from_path,
         final_target,
@@ -1448,7 +1451,7 @@ fn mv_rename(
     )?;
 
     // 如果设置了详细模式，输出重命名信息 (为了符合 GNU 格式，UI 打印必须保留用户最初输入的 to_path)
-    if options.verbose && !(options.debug && source_is_regular && used_copy_fallback) {
+    if options.verbose && !(options.debug && source_is_debug_copy_type && used_copy_fallback) {
         let message = match backup_path {
             Some(path) => format!(
                 "renamed {} -> {} (backup: {})",
@@ -1576,7 +1579,7 @@ fn mv_rename_with_fallback(
         let file_type = symlink_metadata.file_type();
 
         // 如果启用了调试模式，说明重命名失败的原因
-        if options.debug && !file_type.is_file() {
+        if options.debug && !file_type.is_file() && !file_type.is_symlink() {
             let message = format!(
                 "rename failed: {} ({}), attempting copy and remove",
                 from.quote(),
@@ -1594,18 +1597,19 @@ fn mv_rename_with_fallback(
 
         // 根据文件类型执行相应的备份策略。
         if file_type.is_symlink() {
-            // 如果启用了调试模式，说明正在处理符号链接
-            if options.debug && !file_type.is_file() {
-                let message = format!("copying symlink {} to {}", from.quote(), to.quote());
-                match multi_progress {
-                    Some(pb) => pb.suspend(|| {
-                        println!("mv: {message}");
-                    }),
-                    None => println!("mv: {message}"),
-                };
-            }
             // 对符号链接执行特定的重命名策略。
             mv_rename_symlink_fallback(from, to)?;
+            if options.debug {
+                let copied = format!("copied {} -> {}", from.quote(), to.quote());
+                let emit_debug = || {
+                    println!("{copied}");
+                    println!("removed {}", from.quote());
+                };
+                match multi_progress {
+                    Some(pb) => pb.suspend(emit_debug),
+                    None => emit_debug(),
+                }
+            }
         } else if file_type.is_dir() {
             if rename_error.kind() == io::ErrorKind::NotADirectory {
                 let message = format!(

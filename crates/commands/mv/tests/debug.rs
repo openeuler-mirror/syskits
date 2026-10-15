@@ -46,3 +46,50 @@ fn debug_output_for_cross_device_regular_file_matches_gnu() {
     assert!(!source.exists());
     assert_eq!(fs::read(destination).unwrap(), b"source");
 }
+
+#[test]
+fn debug_output_for_cross_device_symlink_matches_gnu() {
+    use std::os::unix::fs::symlink;
+
+    let source_dir = tempfile::tempdir().unwrap();
+    let destination_dir = match tempfile::tempdir_in("/dev/shm") {
+        Ok(directory) => directory,
+        Err(_) => return,
+    };
+
+    if fs::metadata(source_dir.path()).unwrap().dev()
+        == fs::metadata(destination_dir.path()).unwrap().dev()
+    {
+        return;
+    }
+
+    let source = source_dir.path().join("source");
+    let destination = destination_dir.path().join("destination");
+    symlink("referent", &source).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_mv"))
+        .arg0("mv")
+        .env("LC_ALL", "C")
+        .arg("--debug")
+        .arg(&source)
+        .arg(&destination)
+        .output()
+        .expect("run mv");
+
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!(
+            "copied '{}' -> '{}'\nremoved '{}'\n",
+            source.display(),
+            destination.display(),
+            source.display()
+        )
+    );
+    assert!(!source.exists());
+    assert_eq!(
+        fs::read_link(destination).unwrap(),
+        std::path::Path::new("referent")
+    );
+}

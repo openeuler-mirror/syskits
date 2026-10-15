@@ -1732,16 +1732,7 @@ fn mv_rename_with_fallback(
             // 如果不是特殊文件，执行常规的跨设备复制并删除
             #[cfg(target_os = "linux")]
             {
-                let times = fs::FileTimes::new()
-                    .set_accessed(symlink_metadata.accessed()?)
-                    .set_modified(symlink_metadata.modified()?);
-                fs::copy(from, to)?;
-                ct_fsxattr::ct_copy_xattrs(&from, &to)?;
-                fs::OpenOptions::new()
-                    .write(true)
-                    .open(to)?
-                    .set_times(times)?;
-                fs::remove_file(from)?;
+                move_regular_file_cross_device(from, to, &symlink_metadata)?;
                 if options.debug && file_type.is_file() {
                     let copied = format!("copied {} -> {}", from.quote(), to.quote());
                     let emit_debug = || {
@@ -1842,12 +1833,44 @@ fn is_empty_dir(path: &Path) -> bool {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn restore_timestamps(path: &Path, metadata: &fs::Metadata) -> io::Result<()> {
+    let times = fs::FileTimes::new()
+        .set_accessed(metadata.accessed()?)
+        .set_modified(metadata.modified()?);
+    fs::File::open(path)?.set_times(times)
+}
+
+#[cfg(target_os = "linux")]
+fn move_regular_file_cross_device(
+    source: &Path,
+    destination: &Path,
+    source_metadata: &fs::Metadata,
+) -> io::Result<()> {
+    fs::copy(source, destination)?;
+    ct_fsxattr::ct_copy_xattrs(source, destination)?;
+    restore_timestamps(destination, source_metadata)?;
+    fs::remove_file(source)
+}
+
+#[cfg(target_os = "linux")]
+fn restore_directory_metadata(
+    destination: &Path,
+    source_metadata: &fs::Metadata,
+) -> io::Result<()> {
+    fs::set_permissions(destination, source_metadata.permissions())?;
+    restore_timestamps(destination, source_metadata)
+}
+
 fn move_dir_cross_device_with_links(
     src_dir: &Path,
     dest_dir: &Path,
     options: &MvOpts,
     inode_map: &mut HashMap<u64, PathBuf>,
 ) -> io::Result<()> {
+    #[cfg(target_os = "linux")]
+    let source_metadata = fs::metadata(src_dir)?;
+
     // 确保目标目录存在
     if !dest_dir.exists() {
         fs::create_dir_all(dest_dir)?;
@@ -1877,30 +1900,31 @@ fn move_dir_cross_device_with_links(
             // 处理普通文件，并尝试追踪硬链接
             #[cfg(unix)]
             {
-                if let Ok(meta) = fs::symlink_metadata(&src_path) {
-                    let inode = meta.ino();
+                let metadata = fs::symlink_metadata(&src_path)?;
+                let inode = metadata.ino();
 
-                    // 无论当前的 nlink 是多少，必须先查表！
-                    // 因为之前移动并删除它的兄弟硬链接时，当前文件的 nlink 可能已经降为 1 了。
-                    if let Some(existing_dest) = inode_map.get(&inode) {
-                        // 发现这个 inode 之前已经被复制过了，直接在目标分区重建硬链接
-                        fs::hard_link(existing_dest, &dest_path)?;
-                        // 原文件使命达成，可以删除了
-                        fs::remove_file(&src_path)?;
-                        continue;
-                    } else if meta.nlink() > 1 {
-                        // 第一次遇到这个多链接文件，把它存入记忆表
-                        inode_map.insert(inode, dest_path.clone());
-                    }
+                // 无论当前的 nlink 是多少，必须先查表！
+                // 因为之前移动并删除它的兄弟硬链接时，当前文件的 nlink 可能已经降为 1 了。
+                if let Some(existing_dest) = inode_map.get(&inode) {
+                    // 发现这个 inode 之前已经被复制过了，直接在目标分区重建硬链接
+                    fs::hard_link(existing_dest, &dest_path)?;
+                    // 原文件使命达成，可以删除了
+                    fs::remove_file(&src_path)?;
+                    continue;
+                } else if metadata.nlink() > 1 {
+                    // 第一次遇到这个多链接文件，把它存入记忆表
+                    inode_map.insert(inode, dest_path.clone());
                 }
             }
 
             // 执行常规的复制和删除
             #[cfg(target_os = "linux")]
             {
-                fs::copy(&src_path, &dest_path)
-                    .and_then(|_| ct_fsxattr::ct_copy_xattrs(&src_path, &dest_path))
-                    .and_then(|_| fs::remove_file(&src_path))?;
+                move_regular_file_cross_device(
+                    &src_path,
+                    &dest_path,
+                    &fs::symlink_metadata(&src_path)?,
+                )?;
             }
             #[cfg(not(target_os = "linux"))]
             {
@@ -1911,7 +1935,10 @@ fn move_dir_cross_device_with_links(
 
     // 恢复目录的扩展属性
     #[cfg(target_os = "linux")]
-    let _ = ct_fsxattr::ct_apply_xattrs(dest_dir, dir_fsxattrs);
+    {
+        let _ = ct_fsxattr::ct_apply_xattrs(dest_dir, dir_fsxattrs);
+        restore_directory_metadata(dest_dir, &source_metadata)?;
+    }
 
     // 目录内部清空后，删除原始空目录
     fs::remove_dir(src_dir)?;
@@ -1929,6 +1956,9 @@ fn move_dir_cross_device_with_links_with_global_map(
     global_hardlink_map: &mut HashMap<(u64, u64), PathBuf>,
 ) -> io::Result<()> {
     use std::os::unix::fs::MetadataExt;
+
+    #[cfg(target_os = "linux")]
+    let source_metadata = fs::metadata(src_dir)?;
 
     // 确保目标目录存在
     if !dest_dir.exists() {
@@ -1962,30 +1992,31 @@ fn move_dir_cross_device_with_links_with_global_map(
             mv_rename_symlink_fallback(&src_path, &dest_path)?;
         } else {
             // 处理普通文件，并尝试追踪硬链接
-            if let Ok(meta) = fs::symlink_metadata(&src_path) {
-                let inode = meta.ino();
-                let dev = meta.dev();
-                let key = (dev, inode);
+            let metadata = fs::symlink_metadata(&src_path)?;
+            let inode = metadata.ino();
+            let dev = metadata.dev();
+            let key = (dev, inode);
 
-                // 先查全局表，检查这个 inode 是否在其他目录中已经被复制过了
-                if let Some(existing_dest) = global_hardlink_map.get(&key) {
-                    // 发现这个 inode 之前已经被复制过了，直接在目标分区重建硬链接
-                    fs::hard_link(existing_dest, &dest_path)?;
-                    // 原文件使命达成，可以删除了
-                    fs::remove_file(&src_path)?;
-                    continue;
-                } else if meta.nlink() > 1 {
-                    // 第一次遇到这个多链接文件，把它存入全局记忆表
-                    global_hardlink_map.insert(key, dest_path.clone());
-                }
+            // 先查全局表，检查这个 inode 是否在其他目录中已经被复制过了
+            if let Some(existing_dest) = global_hardlink_map.get(&key) {
+                // 发现这个 inode 之前已经被复制过了，直接在目标分区重建硬链接
+                fs::hard_link(existing_dest, &dest_path)?;
+                // 原文件使命达成，可以删除了
+                fs::remove_file(&src_path)?;
+                continue;
+            } else if metadata.nlink() > 1 {
+                // 第一次遇到这个多链接文件，把它存入全局记忆表
+                global_hardlink_map.insert(key, dest_path.clone());
             }
 
             // 执行常规的复制和删除
             #[cfg(target_os = "linux")]
             {
-                fs::copy(&src_path, &dest_path)
-                    .and_then(|_| ct_fsxattr::ct_copy_xattrs(&src_path, &dest_path))
-                    .and_then(|_| fs::remove_file(&src_path))?;
+                move_regular_file_cross_device(
+                    &src_path,
+                    &dest_path,
+                    &fs::symlink_metadata(&src_path)?,
+                )?;
             }
             #[cfg(not(target_os = "linux"))]
             {
@@ -1996,7 +2027,10 @@ fn move_dir_cross_device_with_links_with_global_map(
 
     // 恢复目录的扩展属性
     #[cfg(target_os = "linux")]
-    let _ = ct_fsxattr::ct_apply_xattrs(dest_dir, dir_fsxattrs);
+    {
+        let _ = ct_fsxattr::ct_apply_xattrs(dest_dir, dir_fsxattrs);
+        restore_directory_metadata(dest_dir, &source_metadata)?;
+    }
 
     // 目录内部清空后，删除原始空目录
     fs::remove_dir(src_dir)?;

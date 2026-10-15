@@ -435,7 +435,7 @@ fn finish_mktemp_output(
         Ok(()) => Ok(()),
         Err(e) => {
             cleanup_created_path(&path);
-            let error = e.map_err_context(|| "failed to print directory name".to_owned());
+            let error = e.map_err_context(|| "write error".to_owned());
             if suppress_output_error {
                 Err(error.code().into())
             } else {

@@ -97,3 +97,19 @@ fn last_tmpdir_option_wins() {
         );
     }
 }
+
+#[test]
+fn last_suffix_option_wins() {
+    let output = run_mktemp(&[
+        "-u",
+        "--suffix=.first",
+        "--suffix=.last",
+        "suffix-repeat.XXX",
+    ]);
+    assert!(output.starts_with("suffix-repeat."));
+    assert!(output.ends_with(".last"));
+
+    let output = run_mktemp(&["-u", "--suffix=.first", "--suffix=", "suffix-repeat.XXX"]);
+    assert!(output.starts_with("suffix-repeat."));
+    assert!(!output.ends_with(".first"));
+}

@@ -79,12 +79,17 @@ pub fn parse_symbolic_with_mode_bits(
                 mode_bits |= changed;
             }
             '=' => {
+                let unmentioned_directory_special_bits = if considering_dir {
+                    0o6000 & !changed
+                } else {
+                    0
+                };
                 if considering_dir {
                     // 保留目录的setgid和setuid位
                     srwx |= fperm & (0o4000 | 0o2000);
                 }
                 fperm = (fperm & !mask) | (srwx & mask);
-                mode_bits |= mask;
+                mode_bits |= mask & !unmentioned_directory_special_bits;
             }
             _ => unreachable!(),
         }
@@ -329,6 +334,10 @@ mod test {
         assert_eq!(
             super::parse_symbolic_with_mode_bits(0o1777, "g+w", 0, true),
             Ok((0o1777, 0o0020))
+        );
+        assert_eq!(
+            super::parse_symbolic_with_mode_bits(0o777, "g=rw", 0, true),
+            Ok((0o767, 0o0070))
         );
     }
 

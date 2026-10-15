@@ -671,12 +671,7 @@ fn mkdir_create_dir(
         }
     } else {
         if is_verbose {
-            println!(
-                "{}: {} {}",
-                ctcore::ct_util_name(),
-                t!("mkdir.verbose_created"),
-                path.quote()
-            );
+            mkdir_announce_created(path)?;
         }
         #[cfg(not(windows))]
         if is_parent {
@@ -690,6 +685,19 @@ fn mkdir_create_dir(
         }
         Ok(())
     }
+}
+
+fn mkdir_announce_created(path: &Path) -> CTResult<()> {
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
+    writeln!(
+        stdout,
+        "{}: {} {}",
+        ctcore::ct_util_name(),
+        t!("mkdir.verbose_created"),
+        path.quote()
+    )
+    .map_err(|error| CtSimpleError::new(1, format!("write error: {}", strip_errno(&error))))
 }
 
 #[cfg(target_os = "linux")]

@@ -17,11 +17,11 @@ extern crate rust_i18n;
 use clap::builder::ValueParser;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::{
+    Tool,
     ct_display::Quotable,
     ct_error::{CTResult, CtSimpleError, FromIo},
-    Tool,
 };
 use std::{ffi::OsString, fs::hard_link, path::Path};
 use sys_locale::get_locale;
@@ -84,6 +84,7 @@ pub fn link_main(args: impl ctcore::Args) -> CTResult<()> {
         .map(|arg| arg.to_string_lossy().into_owned())
         .filter(|arg| !arg.is_empty())
         .unwrap_or_else(|| ctcore::ct_util_name().to_owned());
+    reject_short_options(&args, &usage_name)?;
     let matches = ct_app().try_get_matches_from(args)?;
     let flags = LinkFlags::new(&matches, &usage_name)?;
     link_exec(&flags)
@@ -94,6 +95,27 @@ fn link_usage_error(usage_name: &str, message: String) -> Box<dyn ctcore::ct_err
         1,
         format!("{message}\nTry '{usage_name} --help' for more information."),
     )
+}
+
+fn reject_short_options(args: &[OsString], usage_name: &str) -> CTResult<()> {
+    for arg in args.iter().skip(1) {
+        let arg = arg.to_string_lossy();
+        if arg == "--" {
+            break;
+        }
+        if let Some(short) = arg.strip_prefix('-')
+            && !short.is_empty()
+            && !short.starts_with('-')
+        {
+            let option = short.chars().next().expect("short option is not empty");
+            return Err(link_usage_error(
+                usage_name,
+                format!("invalid option -- '{option}'"),
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 /// 执行硬链接创建操作
@@ -120,6 +142,14 @@ pub fn ct_app() -> Command {
         .about(t!("link.about"))
         .override_usage(t!("link.usage"))
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
+        .arg(Arg::new("help").long("help").action(ArgAction::Help))
+        .arg(
+            Arg::new("version")
+                .long("version")
+                .action(ArgAction::Version),
+        )
         .arg(arg)
 }
 
@@ -223,21 +253,21 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_app_execution_short_version() {
+        fn test_ct_app_rejects_short_version() {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), "-V"];
             let result = command.try_get_matches_from(args);
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayVersion);
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
 
         #[test]
-        fn test_ct_app_execution_short_help() {
+        fn test_ct_app_rejects_short_help() {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), "-h"];
             let result = command.try_get_matches_from(args);
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
 
         #[test]
@@ -431,6 +461,23 @@ mod tests {
                     error.to_string(),
                     format!(
                         "{message}\nTry '{} --help' for more information.",
+                        ctcore::ct_util_name()
+                    )
+                );
+            }
+        }
+
+        #[test]
+        fn test_link_main_rejects_short_options() {
+            for option in ["-h", "-V", "-abc"] {
+                let args = [ctcore::ct_util_name(), option];
+                let error = link_main(args.iter().map(OsString::from))
+                    .expect_err("short options must fail");
+                let option = option.trim_start_matches('-').chars().next().unwrap();
+                assert_eq!(
+                    error.to_string(),
+                    format!(
+                        "invalid option -- '{option}'\nTry '{} --help' for more information.",
                         ctcore::ct_util_name()
                     )
                 );

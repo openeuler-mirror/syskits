@@ -13,7 +13,7 @@ use crate::device::Device;
 use crate::{TermSize, tiocgwinsz, tiocswinsz};
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use nix::libc::c_ushort;
-use nix::sys::termios::{BaudRate, SpecialCharacterIndices, Termios, cfgetospeed};
+use nix::sys::termios::{_POSIX_VDISABLE, BaudRate, SpecialCharacterIndices, Termios, cfgetospeed};
 use nix::sys::termios::{
     ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O,
     SpecialCharacterIndices as S,
@@ -779,8 +779,7 @@ fn parse_baud_rate(s: &str) -> CTResult<BaudRate> {
 /// Parse a control character from a string
 /// 解析控制字符
 ///
-/// 控制字符可以是单个字符或以 '^' 开头的两个字符序列，其中第二个字符是字母
-/// 单个字符直接返回其 ASCII 值，'^' 开头的序列转换为相应的控制字符
+/// 控制字符可以是单个字符、以 '^' 开头的序列、`undef`/`^-`，或整数编码。
 ///
 /// # 参数
 /// - `s`: 待解析的控制字符字符串
@@ -789,20 +788,29 @@ fn parse_baud_rate(s: &str) -> CTResult<BaudRate> {
 /// - `Ok(nix::libc::cc_t)`: 成功解析后的控制字符
 /// - `Err(CtSimpleError)`: 解析失败时返回错误
 fn parse_control_char(s: &str) -> CTResult<nix::libc::cc_t> {
-    // 检查字符串长度，以确定解析方式
-    if s.len() == 1 {
-        // 如果是单个字符，直接返回其 ASCII 值
-        return Ok(s.as_bytes()[0]);
-    } else if s.len() == 2 && s.starts_with('^') {
-        // 如果是以 ^ 开头的两个字符，解析为控制字符
-        if let Some(char) = s.chars().nth(1) {
-            if char.is_ascii_alphabetic() {
-                return Ok((char as u8) & 0x1F); // 转换为控制字符
-            }
-        }
+    if s.is_empty() {
+        return Ok(0);
     }
 
-    Err(CtSimpleError::new(1, format!("invalid argument '{s}'")))
+    if s.len() == 1 {
+        return Ok(s.as_bytes()[0]);
+    }
+
+    if matches!(s, "^-" | "undef") {
+        return Ok(_POSIX_VDISABLE);
+    }
+
+    let bytes = s.as_bytes();
+    if bytes[0] == b'^' {
+        if bytes[1] == b'?' {
+            return Ok(127);
+        }
+        return Ok(bytes[1] & !0o140);
+    }
+
+    let value = parse_u32_with_base(s)?;
+    nix::libc::cc_t::try_from(value)
+        .map_err(|_| CtSimpleError::new(1, format!("invalid argument '{s}'")))
 }
 
 fn parse_u32_with_base(raw: &str) -> CTResult<u32> {
@@ -926,6 +934,21 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_control_char_encoded_values() {
+        assert_eq!(parse_control_char("0177").unwrap(), 127);
+        assert_eq!(parse_control_char("0x7f").unwrap(), 127);
+        assert_eq!(parse_control_char("127").unwrap(), 127);
+    }
+
+    #[test]
+    fn test_parse_control_char_gnu_special_forms() {
+        assert_eq!(parse_control_char("^c").unwrap(), 3);
+        assert_eq!(parse_control_char("^?").unwrap(), 127);
+        assert_eq!(parse_control_char("^-").unwrap(), _POSIX_VDISABLE);
+        assert_eq!(parse_control_char("undef").unwrap(), _POSIX_VDISABLE);
+    }
+
+    #[test]
     fn test_special_settings() {
         for entry in SPECIAL_SETTINGS {
             assert!(!entry.name.is_empty());
@@ -963,6 +986,26 @@ mod tests {
         assert!(min_setting.requires_value);
         let result = min_setting.setting.apply(&mut termios, Some("1"), &device);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_special_setting_erase_accepts_octal_value() {
+        let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+        let device = Device::Stdin(stdin());
+        let erase_setting = SPECIAL_SETTINGS
+            .iter()
+            .find(|s| s.name == "erase")
+            .expect("erase setting should exist");
+
+        let result = erase_setting
+            .setting
+            .apply(&mut termios, Some("0177"), &device);
+
+        assert!(result.is_ok());
+        assert_eq!(
+            termios.control_chars[SpecialCharacterIndices::VERASE as usize],
+            127
+        );
     }
 
     #[test]

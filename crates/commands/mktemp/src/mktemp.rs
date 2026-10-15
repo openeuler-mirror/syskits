@@ -35,6 +35,16 @@ use std::ffi::OsString;
 use sys_locale::get_locale;
 
 const MKTEMP_DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
+const SYSKITS_MKTEMP_LONG_VERSION: &str = concat!(
+    "(syskits) ",
+    env!("CARGO_PKG_VERSION"),
+    "\nCopyright (C) 2022-2025 China Telecom Cloud Technologies Co., Ltd.\n",
+    "License Mulan PSL v2: <http://license.coscl.org.cn/MulanPSL2>.\n",
+    "This is free software: you are free to change and redistribute it.\n",
+    "There is NO WARRANTY, to the extent permitted by law."
+);
+const SYSKITS_MKTEMP_AFTER_HELP: &str = "syskits online help: <https://www.ctyun.cn/developer>";
+
 mod mktemp_flags {
     pub const MKTEMP_DIRECTORY: &str = "directory";
     pub const MKTEMP_DRY_RUN: &str = "dry-run";
@@ -435,12 +445,12 @@ pub fn ct_app() -> Command {
         Arg::new("help")
             .short('h')
             .long("help")
-            .help(t!("mktemp.clap.help"))
+            .help("display this help and exit")
             .action(ArgAction::Help),
         Arg::new("version")
             .short('V')
             .long("version")
-            .help(t!("mktemp.clap.version"))
+            .help("output version information and exit")
             .action(ArgAction::Version),
         Arg::new(mktemp_flags::MKTEMP_DIRECTORY)
             .short('d')
@@ -503,12 +513,14 @@ pub fn ct_app() -> Command {
 
     Command::new(utility_name)
         .version(command_version)
+        .long_version(SYSKITS_MKTEMP_LONG_VERSION)
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
         .disable_help_flag(true)
         .disable_version_flag(true)
         .args(args)
+        .after_help(SYSKITS_MKTEMP_AFTER_HELP)
 }
 
 fn mktemp_dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> CTResult<PathBuf> {

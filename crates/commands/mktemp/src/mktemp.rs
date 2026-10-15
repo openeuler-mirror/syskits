@@ -386,6 +386,9 @@ pub fn mktemp_main(args: impl ctcore::Args) -> CTResult<()> {
     let matches = match ct_app().try_get_matches_from(&args_vec) {
         Ok(m) => m,
         Err(e) => {
+            if let Some(error) = missing_option_argument_error(&args_vec) {
+                return Err(error);
+            }
             if e.kind() == ErrorKind::TooManyValues
                 && e.context().any(|(k, val)| {
                     k == ContextKind::InvalidArg
@@ -438,6 +441,27 @@ pub fn mktemp_main(args: impl ctcore::Args) -> CTResult<()> {
     };
 
     finish_mktemp_output(res, stdout_initially_closed, is_suppress_file_err)
+}
+
+fn missing_option_argument_error(args: &[OsString]) -> Option<Box<dyn CTError>> {
+    let (last, preceding) = args.split_last()?;
+    if preceding.iter().any(|argument| argument == "--") {
+        return None;
+    }
+
+    if last == "-p" {
+        return Some(CTsageError::new(1, "option requires an argument -- 'p'"));
+    }
+
+    let option = last.to_str()?.strip_prefix("--")?;
+    if !option.is_empty() && "suffix".starts_with(option) {
+        return Some(CTsageError::new(
+            1,
+            "option '--suffix' requires an argument",
+        ));
+    }
+
+    None
 }
 
 fn finish_mktemp_output(
@@ -529,6 +553,7 @@ pub fn ct_app() -> Command {
             )
             .value_name("SUFFIX")
             .action(ArgAction::Append)
+            .allow_hyphen_values(true)
             .value_parser(ValueParser::os_string()),
         Arg::new(mktemp_flags::MKTEMP_P)
             .short('p')
@@ -536,6 +561,7 @@ pub fn ct_app() -> Command {
             .value_name("DIR")
             .num_args(1)
             .action(ArgAction::Append)
+            .allow_hyphen_values(true)
             .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::DirPath),
         Arg::new(mktemp_flags::MKTEMP_TMPDIR)

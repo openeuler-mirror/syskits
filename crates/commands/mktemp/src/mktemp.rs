@@ -165,8 +165,13 @@ pub struct MkTempFlags {
 impl MkTempFlags {
     fn from(matches: &ArgMatches) -> Self {
         let tmp_dir = matches
-            .get_one::<PathBuf>(mktemp_flags::MKTEMP_TMPDIR)
-            .or_else(|| matches.get_one::<PathBuf>(mktemp_flags::MKTEMP_P))
+            .get_many::<PathBuf>(mktemp_flags::MKTEMP_TMPDIR)
+            .and_then(|mut dirs| dirs.next_back())
+            .or_else(|| {
+                matches
+                    .get_many::<PathBuf>(mktemp_flags::MKTEMP_P)
+                    .and_then(|mut dirs| dirs.next_back())
+            })
             .cloned();
         let (tmpdir, template) = match matches.get_one::<String>(MKTEMP_ARG_TEMPLATE) {
             // 如果没有提供模板参数，则隐含 `--tmpdir`。
@@ -463,6 +468,7 @@ pub fn ct_app() -> Command {
             .help(t!("mktemp.clap.mktemp_p"))
             .value_name("DIR")
             .num_args(1)
+            .action(ArgAction::Append)
             .value_parser(ValueParser::path_buf())
             .value_hint(clap::ValueHint::DirPath),
         Arg::new(mktemp_flags::MKTEMP_TMPDIR)
@@ -480,6 +486,7 @@ pub fn ct_app() -> Command {
             // 需要等号以避免没有提供 tmpdir 时的歧义
             .require_equals(true)
             .overrides_with(mktemp_flags::MKTEMP_P)
+            .action(ArgAction::Append)
             .value_parser(ValueParser::path_buf())
             .value_hint(clap::ValueHint::DirPath),
         Arg::new(mktemp_flags::MKTEMP_T)

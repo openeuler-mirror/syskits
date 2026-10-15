@@ -45,3 +45,55 @@ fn empty_tmpdir_uses_the_gnu_default_directory() {
         );
     }
 }
+
+#[test]
+fn last_tmpdir_option_wins() {
+    for (args, expected_prefix) in [
+        (
+            &[
+                "-u",
+                "-p",
+                "/tmp/mktemp-p-first",
+                "-p",
+                "/tmp/mktemp-p-last",
+                "repeat-tmpdir.XXX",
+            ][..],
+            "/tmp/mktemp-p-last/",
+        ),
+        (
+            &[
+                "-u",
+                "--tmpdir=/tmp/mktemp-long-first",
+                "--tmpdir=/tmp/mktemp-long-last",
+                "repeat-tmpdir.XXX",
+            ][..],
+            "/tmp/mktemp-long-last/",
+        ),
+        (
+            &[
+                "-u",
+                "-p",
+                "/tmp/mktemp-p-first",
+                "--tmpdir=/tmp/mktemp-long-last",
+                "repeat-tmpdir.XXX",
+            ][..],
+            "/tmp/mktemp-long-last/",
+        ),
+        (
+            &[
+                "-u",
+                "--tmpdir=/tmp/mktemp-long-first",
+                "-p",
+                "/tmp/mktemp-p-last",
+                "repeat-tmpdir.XXX",
+            ][..],
+            "/tmp/mktemp-p-last/",
+        ),
+    ] {
+        let output = run_mktemp(args);
+        assert!(
+            output.starts_with(expected_prefix),
+            "expected {output:?} to start with {expected_prefix:?}"
+        );
+    }
+}

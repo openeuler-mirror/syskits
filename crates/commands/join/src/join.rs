@@ -49,7 +49,7 @@ use ctcore::Tool;
 use memchr::{memchr3_iter, memchr_iter, memmem};
 use std::cmp::Ordering;
 use std::error::Error;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Split, Stdin, Write};
@@ -672,7 +672,7 @@ struct JoinState<'a> {
     /// 连接键字段索引
     key: usize,
     /// 文件名
-    file_name: &'a str,
+    file_name: String,
     /// 文件编号(File1或File2)
     file_num: FileNum,
     /// 是否打印不匹配的行
@@ -703,26 +703,27 @@ impl<'a> JoinState<'a> {
     /// * `print_unpaired` - 是否打印不匹配行
     fn new(
         file_num: FileNum,
-        name: &'a str,
+        name: &OsStr,
         _stdin: &'a Stdin,
         key: usize,
         line_ending: CtLineEnding,
         print_unpaired: bool,
     ) -> CTResult<JoinState<'a>> {
         // 根据文件名创建适当的读取器
-        let file_buf = if name == "-" {
+        let file_buf = if name == OsStr::new("-") {
             // 如果是标准输入，使用 stdin
             Box::new(BufReader::new(ctcore::ct_io::stdin_reader_box())) as Box<dyn BufRead>
         } else {
             // 否则打开文件并创建缓冲读取器
-            let file = File::open(name).map_err_context(|| format!("{}", name.maybe_quote()))?;
+            let file = File::open(name)
+                .map_err_context(|| format!("{}", name.to_string_lossy().as_ref().maybe_quote()))?;
             Box::new(BufReader::new(file)) as Box<dyn BufRead>
         };
 
         // 创建并返回新的状态实例
         Ok(JoinState {
             key,
-            file_name: name,
+            file_name: name.to_string_lossy().into_owned(),
             file_num,
             print_unpaired,
             lines: file_buf.split(line_ending as u8),
@@ -1232,14 +1233,14 @@ pub fn join_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let settings = JoinSettings::new(&matches)?;
 
-    let file1 = matches.get_one::<String>("file1").unwrap();
-    let file2 = matches.get_one::<String>("file2").unwrap();
+    let file1 = matches.get_one::<OsString>("file1").unwrap();
+    let file2 = matches.get_one::<OsString>("file2").unwrap();
 
-    if file1 == "-" && file2 == "-" {
+    if file1 == OsStr::new("-") && file2 == OsStr::new("-") {
         return Err(CtSimpleError::new(1, "both files cannot be standard input"));
     }
 
-    join_exec(file1, file2, settings)
+    join_exec_os(file1, file2, settings)
 }
 
 #[derive(Default)]
@@ -1337,11 +1338,13 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
             .action(ArgAction::Count),
         Arg::new("file1")
             .required(true)
+            .value_parser(ValueParser::os_string())
             .value_name("FILE1")
             .value_hint(clap::ValueHint::FilePath)
             .hide(true),
         Arg::new("file2")
             .required(true)
+            .value_parser(ValueParser::os_string())
             .value_name("FILE2")
             .value_hint(clap::ValueHint::FilePath)
             .hide(true),
@@ -1370,10 +1373,15 @@ struct JoinRunOutcome {
     rows: Vec<JoinRow>,
 }
 
+#[cfg(test)]
 fn join_exec(file1: &str, file2: &str, settings: JoinSettings) -> CTResult<()> {
+    join_exec_os(OsStr::new(file1), OsStr::new(file2), settings)
+}
+
+fn join_exec_os(file1: &OsStr, file2: &OsStr, settings: JoinSettings) -> CTResult<()> {
     let stdout = stdout();
     let mut writer = BufWriter::new(stdout.lock());
-    let outcome = join_exec_to_writer(file1, file2, settings, &mut writer, false)?;
+    let outcome = join_exec_to_writer_os(file1, file2, settings, &mut writer, false)?;
     if !outcome.stderr_text.is_empty() {
         eprint!("{}", outcome.stderr_text);
     }
@@ -1383,9 +1391,26 @@ fn join_exec(file1: &str, file2: &str, settings: JoinSettings) -> CTResult<()> {
     Ok(())
 }
 
+#[cfg(test)]
 fn join_exec_to_writer(
     file1: &str,
     file2: &str,
+    settings: JoinSettings,
+    writer: &mut impl Write,
+    collect_rows: bool,
+) -> CTResult<JoinRunOutcome> {
+    join_exec_to_writer_os(
+        OsStr::new(file1),
+        OsStr::new(file2),
+        settings,
+        writer,
+        collect_rows,
+    )
+}
+
+fn join_exec_to_writer_os(
+    file1: &OsStr,
+    file2: &OsStr,
     mut settings: JoinSettings,
     writer: &mut impl Write,
     collect_rows: bool,
@@ -1455,8 +1480,8 @@ fn join_exec_to_writer(
 
 /// 初始化连接操作的状态
 fn init_join_states<'a>(
-    file1: &'a str,
-    file2: &'a str,
+    file1: &'a OsStr,
+    file2: &'a OsStr,
     settings: &mut JoinSettings,
     stdin: &'a Stdin,
 ) -> CTResult<(JoinState<'a>, JoinState<'a>, JoinInput)> {
@@ -1809,10 +1834,10 @@ pub fn join_native_semantic(args: impl ctcore::Args) -> CTResult<JoinSemantic> {
     let matches = ct_app().try_get_matches_from(args)?;
 
     let settings = JoinSettings::new(&matches)?;
-    let file1 = matches.get_one::<String>("file1").unwrap();
-    let file2 = matches.get_one::<String>("file2").unwrap();
+    let file1 = matches.get_one::<OsString>("file1").unwrap();
+    let file2 = matches.get_one::<OsString>("file2").unwrap();
 
-    if file1 == "-" && file2 == "-" {
+    if file1 == OsStr::new("-") && file2 == OsStr::new("-") {
         return Err(CtSimpleError::new(1, "both files cannot be standard input"));
     }
 
@@ -1830,7 +1855,7 @@ pub fn join_native_semantic(args: impl ctcore::Args) -> CTResult<JoinSemantic> {
     let separator_text = join_separator_text(&settings.separator);
 
     let mut output = Vec::new();
-    let outcome = join_exec_to_writer(file1, file2, settings, &mut output, true)?;
+    let outcome = join_exec_to_writer_os(file1, file2, settings, &mut output, true)?;
 
     Ok(JoinSemantic {
         key1,
@@ -2565,6 +2590,33 @@ mod tests {
             )
             .unwrap();
             assert_eq!(output, b"EMPTY,EMPTY\n");
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_join_exec_non_utf8_file_name() {
+            let temp = tempdir().unwrap();
+            let file1_path = temp.path().join(OsString::from_vec(b"file1-\xff".to_vec()));
+            let file2_path = temp.path().join("file2.txt");
+
+            create_test_file(&file1_path, "a left\n").unwrap();
+            create_test_file(&file2_path, "a right\n").unwrap();
+
+            let matches = ct_app()
+                .try_get_matches_from(vec![
+                    OsString::from("join"),
+                    file1_path.as_os_str().to_os_string(),
+                    file2_path.as_os_str().to_os_string(),
+                ])
+                .unwrap();
+            let settings = JoinSettings::new(&matches).unwrap();
+            let file1 = matches.get_one::<OsString>("file1").unwrap();
+            let file2 = matches.get_one::<OsString>("file2").unwrap();
+            let mut output = Vec::new();
+
+            join_exec_to_writer_os(file1, file2, settings, &mut output, false).unwrap();
+
+            assert_eq!(output, b"a left right\n");
         }
 
         #[test]

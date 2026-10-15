@@ -1414,11 +1414,7 @@ pub fn set_default_context(path: &Path) -> io::Result<()> {
 
     #[cfg(not(feature = "selinux"))]
     {
-        // 当未启用 selinux feature 时，提供警告信息
-        eprintln!(
-            "warning: failed to set security context for {}: SELinux support not enabled",
-            path.quote()
-        );
+        let _ = path;
         Ok(())
     }
 }

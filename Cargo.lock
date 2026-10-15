@@ -564,6 +564,7 @@ dependencies = [
  "ctengine",
  "ctpipeline",
  "ctsig",
+ "tempfile",
 ]
 
 [[package]]
@@ -1631,8 +1632,10 @@ version = "3.3.8"
 dependencies = [
  "clap",
  "ctcore",
+ "libc",
  "rust-i18n",
  "sys-locale 0.3.2",
+ "tempfile",
 ]
 
 [[package]]
@@ -1716,8 +1719,11 @@ version = "3.3.8"
 dependencies = [
  "clap",
  "ctcore",
- "regex",
+ "libc",
+ "onig",
+ "onig_sys",
  "rust-i18n",
+ "signal-hook",
  "sys-locale 0.2.4",
  "tempfile",
  "thiserror 1.0.69",
@@ -1730,11 +1736,11 @@ dependencies = [
  "bstr",
  "clap",
  "ctcore",
+ "libc",
  "memchr",
  "rust-i18n",
  "sys-locale 0.2.4",
  "tempfile",
- "unicode-segmentation",
 ]
 
 [[package]]
@@ -1832,6 +1838,7 @@ version = "3.3.8"
 dependencies = [
  "clap",
  "ctcore",
+ "libc",
  "rust-i18n",
  "sys-locale 0.2.4",
  "tempfile",
@@ -1868,6 +1875,7 @@ version = "3.3.8"
 dependencies = [
  "clap",
  "ctcore",
+ "libc",
  "num-bigint",
  "num-traits",
  "onig",
@@ -2128,6 +2136,7 @@ dependencies = [
  "rust-i18n",
  "selinux",
  "sys-locale 0.2.4",
+ "tempfile",
 ]
 
 [[package]]

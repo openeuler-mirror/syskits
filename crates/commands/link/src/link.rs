@@ -274,13 +274,27 @@ fn append_locale_quoted_text(
 
 fn shell_quote_path(path: &Path) -> String {
     #[cfg(unix)]
-    if path.as_os_str().to_str().is_none() {
+    {
         use std::os::unix::ffi::OsStrExt;
 
-        return shell_quote_non_utf8_file_operand(path.as_os_str().as_bytes());
+        if path.as_os_str().to_str().is_none()
+            || (!locale_uses_utf8()
+                && path
+                    .as_os_str()
+                    .as_bytes()
+                    .iter()
+                    .any(|byte| !byte.is_ascii()))
+        {
+            return shell_quote_non_utf8_file_operand(path.as_os_str().as_bytes());
+        }
     }
 
     path.quote().to_string()
+}
+
+#[cfg(unix)]
+fn locale_uses_utf8() -> bool {
+    locale_quote("x").starts_with('‘')
 }
 
 #[cfg(unix)]

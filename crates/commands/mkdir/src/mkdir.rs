@@ -371,6 +371,14 @@ struct ParsedMkdirMode {
     mode_bits: u32,
 }
 
+fn numeric_mode_bits(mode: &str, parsed_mode: u32) -> u32 {
+    if mode.starts_with(|character: char| character.is_ascii_digit()) && mode.len() < 5 {
+        (parsed_mode & 0o6000) | 0o1777
+    } else {
+        0o7777
+    }
+}
+
 #[cfg(windows)]
 fn mkdir_get_mode_details(_arg_matches: &ArgMatches) -> Result<ParsedMkdirMode, String> {
     Ok(ParsedMkdirMode {
@@ -391,7 +399,7 @@ fn mkdir_get_mode_details(arg_matches: &ArgMatches) -> Result<ParsedMkdirMode, S
                 ct_mode::parse_numeric(new_mode, m, true).map_err(|_| mkdir_invalid_mode(m))?;
             return Ok(ParsedMkdirMode {
                 mode: new_mode,
-                mode_bits: 0o7777,
+                mode_bits: numeric_mode_bits(m, new_mode),
             });
         }
 
@@ -843,12 +851,23 @@ fn mkdir_chmod(path: &Path, mode: u32) -> CTResult<()> {
 fn mkdir_chmod_with_mode_bits(path: &Path, mode: u32, mode_bits: u32) -> CTResult<()> {
     use std::os::unix::fs::PermissionsExt;
 
-    // GNU mkdir initially removes group and other write bits when a sticky
-    // directory is created, then restores only bits named by MODE.
-    let mode = if mode & 0o1000 != 0 && mode_bits & 0o0022 == 0 {
+    let current_mode = std::fs::metadata(path)
+        .map_err_context(|| format!("cannot set permissions {}", path.quote()))?
+        .permissions()
+        .mode()
+        & 0o7777;
+    // Mirror GNU mkdir_mode/dirchownmod: retain inherited bits unnamed by MODE.
+    let umask_self = ct_mode::get_umask() & !mode;
+    let mkdir_mode = if mode & 0o1000 != 0 {
         mode & !0o0022
     } else {
         mode
+    };
+    let created_mode = (mkdir_mode & !umask_self) | (current_mode & 0o6000);
+    let mode = if (created_mode ^ mode) & mode_bits != 0 {
+        mode | (created_mode & !mode_bits)
+    } else {
+        created_mode
     };
     let mode = std::fs::Permissions::from_mode(mode);
 

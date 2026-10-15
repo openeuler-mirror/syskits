@@ -43,7 +43,7 @@ fn chgrp_parse_gid_and_uid(args_match: &ArgMatches) -> CTResult<CtGidUidOwnerFil
 
     // 处理引用文件参数，如果存在的话
     let dest_gid = if let Some(file) = args_match
-        .get_many::<String>(opt_flags::REFERENCE)
+        .get_many::<OsString>(opt_flags::REFERENCE)
         .and_then(Iterator::last)
     {
         // 尝试从文件元数据中获取GID，并尝试将其转换为组名
@@ -388,6 +388,7 @@ pub fn ct_app() -> Command {
             .long(opt_flags::REFERENCE)
             .value_name("RFILE")
             .value_hint(clap::ValueHint::FilePath)
+            .value_parser(clap::builder::OsStringValueParser::new())
             .help("use RFILE's group rather than specifying GROUP values")
             .num_args(1)
             .action(ArgAction::Append),

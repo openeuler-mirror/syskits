@@ -413,7 +413,7 @@ fn ownership_change_failure_message(path: &str, groups_only: bool, error: &IOErr
 
 fn quote_path_for_diagnostic(path: &Path) -> String {
     let Some(path) = path.to_str() else {
-        return path.quote().to_string();
+        return quote_non_utf8_path_for_diagnostic(path);
     };
     if !path.chars().any(char::is_control) {
         return path.quote().to_string();
@@ -445,6 +445,56 @@ fn quote_path_for_diagnostic(path: &Path) -> String {
     quoted
 }
 
+fn quote_non_utf8_path_for_diagnostic(path: &Path) -> String {
+    let mut quoted = String::new();
+    let mut in_single_quotes = false;
+
+    for &byte in path.as_os_str().as_bytes() {
+        match byte {
+            b'\'' => {
+                if !in_single_quotes && quoted.is_empty() {
+                    quoted.push_str("''");
+                }
+                quoted.push_str("\\''");
+                in_single_quotes = true;
+            }
+            b'\x07' => push_shell_escaped_byte(&mut quoted, &mut in_single_quotes, "\\a"),
+            b'\x08' => push_shell_escaped_byte(&mut quoted, &mut in_single_quotes, "\\b"),
+            b'\t' => push_shell_escaped_byte(&mut quoted, &mut in_single_quotes, "\\t"),
+            b'\n' => push_shell_escaped_byte(&mut quoted, &mut in_single_quotes, "\\n"),
+            b'\x0B' => push_shell_escaped_byte(&mut quoted, &mut in_single_quotes, "\\v"),
+            b'\x0C' => push_shell_escaped_byte(&mut quoted, &mut in_single_quotes, "\\f"),
+            b'\r' => push_shell_escaped_byte(&mut quoted, &mut in_single_quotes, "\\r"),
+            byte if byte.is_ascii_graphic() || byte == b' ' => {
+                if !in_single_quotes {
+                    quoted.push('\'');
+                    in_single_quotes = true;
+                }
+                quoted.push(byte as char);
+            }
+            byte => {
+                let escaped = format!("\\{byte:03o}");
+                push_shell_escaped_byte(&mut quoted, &mut in_single_quotes, &escaped);
+            }
+        }
+    }
+
+    if in_single_quotes || quoted.is_empty() {
+        quoted.push('\'');
+    }
+    quoted
+}
+
+fn push_shell_escaped_byte(quoted: &mut String, in_single_quotes: &mut bool, escaped: &str) {
+    if *in_single_quotes {
+        quoted.push('\'');
+    }
+    quoted.push_str("$'");
+    quoted.push_str(escaped);
+    quoted.push('\'');
+    *in_single_quotes = false;
+}
+
 pub enum CtIfFrom {
     All,
     User(u32),
@@ -468,7 +518,7 @@ pub struct CtOwnershipChangeExecutor {
     pub traverse_symlinks: CtTraverseSymlinks,
     pub verbosity: Verbosity,
     pub filter: CtIfFrom,
-    pub files: Vec<OsString>,
+    pub files: Vec<PathBuf>,
     pub recursive: bool,
     pub preserve_root: bool,
     pub dereference: bool,
@@ -1270,9 +1320,9 @@ pub fn ownership_change_base(
         Err(error) => return Err(error.into()),
     };
 
-    let files: Vec<OsString> = matches
+    let files: Vec<PathBuf> = matches
         .get_many::<OsString>(opt_flags::ARG_FILES)
-        .map(|v| v.cloned().collect())
+        .map(|v| v.map(PathBuf::from).collect())
         .unwrap_or_default();
 
     let preserve_root = matches.get_flag(opt_flags::preserve_root::PRESERVE);
@@ -1496,7 +1546,7 @@ mod tests {
                 level: CtVerbosityLevel::Normal,
             },
             filter: CtIfFrom::All,
-            files: vec![tree.into_os_string()],
+            files: vec![tree],
             recursive: true,
             preserve_root: false,
             dereference: true,
@@ -1526,7 +1576,7 @@ mod tests {
                 level: CtVerbosityLevel::Normal,
             },
             filter: CtIfFrom::All,
-            files: vec![tree.into_os_string()],
+            files: vec![tree],
             recursive: true,
             preserve_root: false,
             dereference: true,

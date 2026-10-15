@@ -211,8 +211,21 @@ pub fn mv_main(args: impl ctcore::Args) -> CTResult<()> {
     let target_directory = target_directories.into_iter().next();
 
     if let Some(ref maybe_dir) = target_directory {
-        if !Path::new(&maybe_dir).is_dir() {
-            return Err(MvError::TargetNotADirectory(maybe_dir.quote().to_string()).into());
+        match fs::metadata(maybe_dir) {
+            Ok(metadata) if metadata.is_dir() => {}
+            Ok(_) => {
+                return Err(MvError::TargetNotADirectory(maybe_dir.quote().to_string()).into());
+            }
+            Err(error) => {
+                return Err(CtSimpleError::new(
+                    1,
+                    format!(
+                        "target directory {}: {}",
+                        maybe_dir.quote(),
+                        strip_errno(&error)
+                    ),
+                ));
+            }
         }
     }
 

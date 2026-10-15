@@ -37,7 +37,10 @@ pub enum ParseError {
     Unimplemented(String),
     BsOutOfRange(String),
     InvalidNumber(String),
+    NumberTooLarge(String),
 }
+
+const MAX_DD_NUMBER: u64 = i64::MAX as u64;
 
 /// Contains a temporary state during parsing of the arguments
 #[derive(Debug, PartialEq)]
@@ -283,6 +286,9 @@ impl Parser {
 
     fn parse_n(val: &str) -> Result<Num, ParseError> {
         let n = parse_bytes_with_opt_multiplier(val)?;
+        if n > MAX_DD_NUMBER {
+            return Err(ParseError::NumberTooLarge(val.to_string()));
+        }
         Ok(if val.contains('B') {
             Num::Bytes(n)
         } else {
@@ -460,6 +466,12 @@ impl std::fmt::Display for ParseError {
             }
             Self::InvalidNumber(arg) => {
                 write!(f, "invalid number: '{arg}'")
+            }
+            Self::NumberTooLarge(arg) => {
+                write!(
+                    f,
+                    "invalid number: '{arg}': Value too large for defined data type"
+                )
             }
         }
     }
@@ -660,7 +672,7 @@ impl Default for Parser {
 #[cfg(test)]
 mod tests {
     use crate::Num;
-    use crate::parseargs::{Parser, parse_bytes_with_opt_multiplier};
+    use crate::parseargs::{ParseError, Parser, parse_bytes_with_opt_multiplier};
     use std::matches;
     const BIG: &str = "9999999999999999999999999999999999999999999999999999999999999";
 
@@ -696,5 +708,21 @@ mod tests {
         for arg in ["1Bx8x4", "2Bx8", "2Bx8B", "2x8B"] {
             assert!(matches!(Parser::parse_n(arg), Ok(Num::Bytes(_))));
         }
+    }
+
+    #[test]
+    fn test_parse_n_rejects_values_larger_than_intmax() {
+        assert_eq!(
+            Parser::parse_n("9223372036854775808"),
+            Err(ParseError::NumberTooLarge(
+                "9223372036854775808".to_string()
+            ))
+        );
+        assert_eq!(
+            Parser::parse_n("999999999999999999999999999999999Q"),
+            Err(ParseError::NumberTooLarge(
+                "999999999999999999999999999999999Q".to_string()
+            ))
+        );
     }
 }

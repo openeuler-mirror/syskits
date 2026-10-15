@@ -1223,7 +1223,7 @@ fn calc_loop_bsize(
         Some(Num::Blocks(rmax)) => {
             let rsofar = rstat.reads_complete + rstat.reads_partial;
             let rremain = rmax - rsofar;
-            cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
+            cmp::min(ideal_bsize as u64, rremain.saturating_mul(ibs as u64)) as usize
         }
         Some(Num::Bytes(bmax)) => {
             let bmax: u128 = (*bmax).into();

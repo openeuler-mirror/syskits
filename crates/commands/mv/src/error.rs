@@ -25,7 +25,6 @@ pub enum MvError {
     NonDirectoryToDirectory(String, String),
     NotADirectory(String),
     TargetNotADirectory(String),
-    FailedToAccessNotADirectory(String),
 }
 
 impl Error for MvError {}
@@ -52,10 +51,6 @@ impl Display for MvError {
             }
             Self::NotADirectory(t) => write!(f, "target {t}: Not a directory"),
             Self::TargetNotADirectory(t) => write!(f, "target directory {t}: Not a directory"),
-
-            Self::FailedToAccessNotADirectory(t) => {
-                write!(f, "failed to access {t}: Not a directory")
-            }
         }
     }
 }
@@ -98,10 +93,6 @@ fn test_mv_error_display() {
         (
             MvError::TargetNotADirectory("target_dir".to_string()),
             "target directory target_dir: Not a directory",
-        ),
-        (
-            MvError::FailedToAccessNotADirectory("access_dir".to_string()),
-            "failed to access access_dir: Not a directory",
         ),
     ];
 

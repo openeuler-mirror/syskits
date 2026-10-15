@@ -647,22 +647,28 @@ impl CtOwnershipChangeExecutor {
         }
 
         if self.recursive {
-            self.dive_into(path) | self.change_path(path, &meta)
+            let (ret, root_unavailable) = self.dive_into(path);
+            if root_unavailable {
+                ret
+            } else {
+                ret | self.change_path(path, &meta)
+            }
         } else {
             self.change_path(path, &meta)
         }
     }
 
     #[allow(clippy::cognitive_complexity)]
-    fn dive_into<P: AsRef<Path>>(&self, root: P) -> i32 {
+    fn dive_into<P: AsRef<Path>>(&self, root: P) -> (i32, bool) {
         let root = root.as_ref();
 
         //walkdir总是解析根目录，所以我们必须自己检查
         if self.traverse_symlinks == CtTraverseSymlinks::None && root.is_symlink() {
-            return 0;
+            return (0, false);
         }
 
         let mut ret = 0;
+        let mut root_unavailable = false;
         let mut iterator = traversal_walk(root, &self.traverse_symlinks).into_iter();
         let mut unreadable_directories = HashSet::<PathBuf>::new();
         let mut deferred_directories = Vec::<(usize, PathBuf, Metadata)>::new();
@@ -691,7 +697,11 @@ impl CtOwnershipChangeExecutor {
                                     ret = 1;
                                     self.print_verbose_failure_for_unavailable_path(
                                         path,
-                                        self.has_dangling_symlink_metadata(path, &error),
+                                        has_dangling_symlink_metadata(
+                                            path,
+                                            self.dereference,
+                                            &error,
+                                        ),
                                     );
                                 }
                             }
@@ -715,6 +725,7 @@ impl CtOwnershipChangeExecutor {
                     ret = 1;
                     let path = e.path();
                     let action = path.map(|path| {
+                        root_unavailable |= path == root;
                         walk_error_paths.insert(path.to_path_buf());
                         let action = traversal_failure_action(path, self.dereference, e.io_error());
                         if action == "read directory" {
@@ -793,7 +804,7 @@ impl CtOwnershipChangeExecutor {
                         0,
                     );
                 }
-                return ret | 1;
+                return (ret | 1, root_unavailable);
             }
 
             if defer_directories && entry.file_type().is_dir() {
@@ -809,7 +820,7 @@ impl CtOwnershipChangeExecutor {
                 0,
             );
         }
-        ret
+        (ret, root_unavailable)
     }
 
     fn change_deferred_directories(

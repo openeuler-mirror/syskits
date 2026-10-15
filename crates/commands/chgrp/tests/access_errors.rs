@@ -121,3 +121,98 @@ fn chgrp_reports_recursive_unreadable_directories_like_gnu() {
         "chgrp: cannot read directory 'd/no-read': Permission denied\n"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn chgrp_force_silent_does_not_reprocess_unreadable_directories() {
+    use std::fs::{self, Permissions};
+    use std::os::unix::{fs::PermissionsExt, process::CommandExt};
+    use std::process::Command;
+    use tempfile::tempdir;
+
+    if unsafe { ctcore::libc::geteuid() } != 0 {
+        return;
+    }
+
+    let temp = tempdir().expect("create temporary directory");
+    let tree = temp.path().join("d");
+    let unreadable = tree.join("no-read");
+    fs::create_dir_all(&unreadable).expect("create tree");
+    fs::set_permissions(temp.path(), Permissions::from_mode(0o755))
+        .expect("make temporary directory searchable");
+
+    let ownership = Command::new("chown")
+        .args(["-R", "65534:65534"])
+        .arg(&tree)
+        .status()
+        .expect("make nobody own the tree");
+    assert!(ownership.success());
+    fs::set_permissions(&unreadable, Permissions::from_mode(0o011))
+        .expect("remove directory read permission");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_chgrp"))
+        .current_dir(temp.path())
+        .env("LC_ALL", "C")
+        .arg0("chgrp")
+        .uid(65534)
+        .gid(65534)
+        .args(["-Rfv", "65534", "d"])
+        .output()
+        .expect("run chgrp as nobody");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("stdout is UTF-8"),
+        "failed to change group of 'd/no-read' to 65534\n\
+         group of 'd' retained as nobody\n"
+    );
+    assert!(output.stderr.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn chgrp_does_not_process_a_recursive_unreadable_root_directory() {
+    use std::fs::{self, Permissions};
+    use std::os::unix::{fs::PermissionsExt, process::CommandExt};
+    use std::process::Command;
+    use tempfile::tempdir;
+
+    if unsafe { ctcore::libc::geteuid() } != 0 {
+        return;
+    }
+
+    let temp = tempdir().expect("create temporary directory");
+    let tree = temp.path().join("d");
+    fs::create_dir(&tree).expect("create tree");
+    fs::set_permissions(temp.path(), Permissions::from_mode(0o755))
+        .expect("make temporary directory searchable");
+
+    let ownership = Command::new("chown")
+        .args(["65534:65534"])
+        .arg(&tree)
+        .status()
+        .expect("make nobody own the tree");
+    assert!(ownership.success());
+    fs::set_permissions(&tree, Permissions::from_mode(0o011))
+        .expect("remove directory read permission");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_chgrp"))
+        .current_dir(temp.path())
+        .env("LC_ALL", "C")
+        .arg0("chgrp")
+        .uid(65534)
+        .gid(65534)
+        .args(["-Rv", "65534", "d"])
+        .output()
+        .expect("run chgrp as nobody");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("stdout is UTF-8"),
+        "failed to change group of 'd' to 65534\n"
+    );
+    assert_eq!(
+        String::from_utf8(output.stderr).expect("stderr is UTF-8"),
+        "chgrp: cannot read directory 'd': Permission denied\n"
+    );
+}

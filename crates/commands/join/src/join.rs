@@ -1112,6 +1112,60 @@ fn parse_print_settings(matches: &clap::ArgMatches) -> CTResult<(bool, bool, boo
     Ok((print_joined, print_unpaired1, print_unpaired2))
 }
 
+fn is_join_option_with_value(value: &OsString) -> bool {
+    matches!(
+        value.to_str(),
+        Some("-a" | "-v" | "-e" | "-1" | "-2" | "-j" | "-o" | "-t")
+    )
+}
+
+fn is_join_option(value: &OsString) -> bool {
+    value != "-" && value.to_str().is_some_and(|value| value.starts_with('-'))
+}
+
+fn legacy_join_field_has_argument(args: &[OsString], option_index: usize) -> bool {
+    let Some(first_operand) = args.get(option_index + 1) else {
+        return false;
+    };
+    if is_join_option(first_operand) {
+        return false;
+    }
+
+    let mut operands = 0;
+    let mut index = option_index + 1;
+    while let Some(value) = args.get(index) {
+        if value == "--" {
+            operands += args.len() - index - 1;
+            break;
+        }
+        if is_join_option_with_value(value) {
+            index += 2;
+        } else {
+            if !is_join_option(value) {
+                operands += 1;
+            }
+            index += 1;
+        }
+    }
+
+    operands >= 3
+}
+
+fn normalize_legacy_join_field_options(mut args: Vec<OsString>) -> Vec<OsString> {
+    let original_args = args.clone();
+    for (index, value) in original_args.iter().enumerate() {
+        let replacement = match value.to_str() {
+            Some("-j1") if legacy_join_field_has_argument(&original_args, index) => Some("-1"),
+            Some("-j2") if legacy_join_field_has_argument(&original_args, index) => Some("-2"),
+            _ => None,
+        };
+        if let Some(replacement) = replacement {
+            args[index] = OsString::from(replacement);
+        }
+    }
+    args
+}
+
 fn get_and_parse_field_numbers(
     matches: &clap::ArgMatches,
     key: &str,
@@ -1240,6 +1294,7 @@ pub fn join_main(args: impl ctcore::Args) -> CTResult<()> {
     initialize_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = normalize_legacy_join_field_options(args.collect());
     let matches = ct_app().try_get_matches_from(args)?;
 
     let settings = JoinSettings::new(&matches)?;
@@ -1844,6 +1899,7 @@ pub fn join_native_semantic(args: impl ctcore::Args) -> CTResult<JoinSemantic> {
     initialize_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = normalize_legacy_join_field_options(args.collect());
     let matches = ct_app().try_get_matches_from(args)?;
 
     let settings = JoinSettings::new(&matches)?;
@@ -1996,6 +2052,33 @@ mod tests {
 
         let err = JoinSettings::new(&matches).err().unwrap();
         assert_eq!(err.to_string(), "incompatible join fields 1, 0");
+    }
+
+    #[test]
+    fn test_normalize_legacy_join_field_options() {
+        let args = normalize_legacy_join_field_options(
+            ["join", "-j1", "2", "file1.txt", "file2.txt"]
+                .into_iter()
+                .map(OsString::from)
+                .collect(),
+        );
+        assert_eq!(args[1], "-1");
+
+        let args = normalize_legacy_join_field_options(
+            ["join", "-j2", "2", "file1.txt", "file2.txt"]
+                .into_iter()
+                .map(OsString::from)
+                .collect(),
+        );
+        assert_eq!(args[1], "-2");
+
+        let args = normalize_legacy_join_field_options(
+            ["join", "-j1", "file1.txt", "file2.txt"]
+                .into_iter()
+                .map(OsString::from)
+                .collect(),
+        );
+        assert_eq!(args[1], "-j1");
     }
 
     #[test]

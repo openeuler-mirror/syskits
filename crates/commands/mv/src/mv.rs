@@ -1436,7 +1436,10 @@ fn mv_rename(
     }
 
     // 执行重命名操作 (使用智能计算出的 final_target)
-    mv_rename_with_fallback(
+    let source_is_regular = from_path
+        .symlink_metadata()
+        .is_ok_and(|metadata| metadata.file_type().is_file());
+    let used_copy_fallback = mv_rename_with_fallback(
         from_path,
         final_target,
         options,
@@ -1445,7 +1448,7 @@ fn mv_rename(
     )?;
 
     // 如果设置了详细模式，输出重命名信息 (为了符合 GNU 格式，UI 打印必须保留用户最初输入的 to_path)
-    if options.verbose {
+    if options.verbose && !(options.debug && source_is_regular && used_copy_fallback) {
         let message = match backup_path {
             Some(path) => format!(
                 "renamed {} -> {} (backup: {})",
@@ -1502,7 +1505,7 @@ pub fn set_default_context(path: &Path) -> io::Result<()> {
 /// - `hardlink_map`: 可选的硬链接映射表，用于跨目录追踪硬链接关系。
 ///
 /// # 返回值
-/// 返回一个 `io::Result<()>`, 成功则为 `Ok(())`, 失败则为包含错误信息的 `Err`。
+/// 返回是否使用了跨设备复制回退路径。
 fn mv_rename_with_fallback(
     from: &Path,
     to: &Path,
@@ -1510,7 +1513,8 @@ fn mv_rename_with_fallback(
     multi_progress: Option<&MultiProgress>,
     #[cfg(unix)] hardlink_map: Option<&mut HashMap<(u64, u64), PathBuf>>,
     #[cfg(not(unix))] _hardlink_map: Option<&mut HashMap<(u64, u64), PathBuf>>,
-) -> io::Result<()> {
+) -> io::Result<bool> {
+    let mut used_copy_fallback = false;
     // 尝试直接重命名，如果失败则尝试备份方法。
     if let Err(rename_error) = fs::rename(from, to) {
         #[cfg(unix)]
@@ -1567,8 +1571,12 @@ fn mv_rename_with_fallback(
             return Err(io::Error::new(rename_error.kind(), message));
         }
 
+        // 获取原始路径的元数据，不跟随符号链接。
+        let symlink_metadata = from.symlink_metadata()?;
+        let file_type = symlink_metadata.file_type();
+
         // 如果启用了调试模式，说明重命名失败的原因
-        if options.debug {
+        if options.debug && !file_type.is_file() {
             let message = format!(
                 "rename failed: {} ({}), attempting copy and remove",
                 from.quote(),
@@ -1582,14 +1590,12 @@ fn mv_rename_with_fallback(
             };
         }
 
-        // 获取原始路径的元数据，不跟随符号链接。
-        let symlink_metadata = from.symlink_metadata()?;
-        let file_type = symlink_metadata.file_type();
+        used_copy_fallback = true;
 
         // 根据文件类型执行相应的备份策略。
         if file_type.is_symlink() {
             // 如果启用了调试模式，说明正在处理符号链接
-            if options.debug {
+            if options.debug && !file_type.is_file() {
                 let message = format!("copying symlink {} to {}", from.quote(), to.quote());
                 match multi_progress {
                     Some(pb) => pb.suspend(|| {
@@ -1650,7 +1656,7 @@ fn mv_rename_with_fallback(
             }
         } else {
             // 如果启用了调试模式，说明正在处理常规文件或特殊文件
-            if options.debug {
+            if options.debug && !file_type.is_file() {
                 let message = format!("copying file/special {} to {}", from.quote(), to.quote());
                 match multi_progress {
                     Some(pb) => pb.suspend(|| {
@@ -1715,7 +1721,7 @@ fn mv_rename_with_fallback(
 
                     // 特殊文件在目标分区重建成功后，删除原分区文件
                     fs::remove_file(from)?;
-                    return Ok(());
+                    return Ok(true);
                 }
             }
 
@@ -1732,6 +1738,20 @@ fn mv_rename_with_fallback(
                     .open(to)?
                     .set_times(times)?;
                 fs::remove_file(from)?;
+                if options.debug && file_type.is_file() {
+                    let copied = format!("copied {} -> {}", from.quote(), to.quote());
+                    let emit_debug = || {
+                        println!("{copied}");
+                        println!(
+                            "copy offload: unsupported, reflink: unsupported, sparse detection: no"
+                        );
+                        println!("removed {}", from.quote());
+                    };
+                    match multi_progress {
+                        Some(pb) => pb.suspend(emit_debug),
+                        None => emit_debug(),
+                    }
+                }
             }
 
             #[cfg(target_os = "windows")]
@@ -1742,7 +1762,7 @@ fn mv_rename_with_fallback(
         }
     }
     // 如果重命名或备份成功，则返回成功结果。
-    Ok(())
+    Ok(used_copy_fallback)
 }
 
 /// 将给定的符号链接移动到给定的目的地。在Windows上，悬挂的符号链接会返回错误。

@@ -45,3 +45,14 @@ fn target_directory_option_diagnostics_match_gnu() {
         );
     }
 }
+
+#[test]
+fn no_target_directory_rejects_extra_operand_like_gnu() {
+    let output = run_mv(&["-T", "first", "second", "third"]);
+
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        "mv: extra operand 'third'\nTry 'mv --help' for more information.\n"
+    );
+}

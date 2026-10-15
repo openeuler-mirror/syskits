@@ -41,7 +41,10 @@ fn chgrp_parse_gid_and_uid(args_match: &ArgMatches) -> CTResult<CtGidUidOwnerFil
     let mut chgrp_raw_group: String = String::new();
 
     // 处理引用文件参数，如果存在的话
-    let dest_gid = if let Some(file) = args_match.get_one::<String>(opt_flags::REFERENCE) {
+    let dest_gid = if let Some(file) = args_match
+        .get_many::<String>(opt_flags::REFERENCE)
+        .and_then(Iterator::last)
+    {
         // 尝试从文件元数据中获取GID，并尝试将其转换为组名
         fs::metadata(file)
             .map(|meta| {
@@ -231,13 +234,12 @@ fn gnu_terminal_option_requested(args: &[OsString], terminal_option: &str) -> bo
             } else if option == opt_flags::HELP || option == "version" {
                 return option == terminal_option;
             }
-        } else if let Some(short_options) = arg.strip_prefix('-') {
-            if !short_options
+        } else if let Some(short_options) = arg.strip_prefix('-')
+            && !short_options
                 .chars()
                 .all(|option| matches!(option, 'H' | 'L' | 'P' | 'R' | 'c' | 'f' | 'h' | 'v'))
-            {
-                return false;
-            }
+        {
+            return false;
         }
     }
     false
@@ -386,7 +388,8 @@ pub fn ct_app() -> Command {
             .value_name("RFILE")
             .value_hint(clap::ValueHint::FilePath)
             .help("use RFILE's group rather than specifying GROUP values")
-            .num_args(1),
+            .num_args(1)
+            .action(ArgAction::Append),
         Arg::new(opt_flags::RECURSIVE)
             .short('R')
             .long(opt_flags::RECURSIVE)

@@ -1007,6 +1007,19 @@ fn move_files_into_dir(
         let targetpath = target_directory.join(&target_name);
 
         let file_type = source_metadata.file_type();
+        if mv_opts.overwrite != MvOverwriteMode::NoClobber
+            && mv_opts.update != CtUpdateMode::ReplaceNone
+            && (are_hardlinks_to_same_file(source_path, &targetpath)
+                || are_hardlinks_or_one_way_symlink_to_same_file(source_path, &targetpath))
+        {
+            ct_show!(MvError::SameFile(
+                source_path.quote().to_string(),
+                targetpath.quote().to_string(),
+            ));
+            has_error = true;
+            continue;
+        }
+
         if file_type.is_dir()
             && !file_type.is_symlink()
             && is_duplicate_directory_source(

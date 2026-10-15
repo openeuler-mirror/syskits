@@ -8,7 +8,7 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
+use ctcore::ct_parse_size::ParseSizeError;
 
 /// 解析字节数字符串，支持多种格式和单位
 ///
@@ -30,112 +30,150 @@ use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 ///   - E: 乘以1024^6（仅64位系统）
 ///   - xB: x可以是k/m/G/T/P/E，表示乘以1000的相应次方
 pub fn od_parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
-    // 解析基数和起始位置
-    let (start, radix) = parse_radix_and_start(s);
+    let parsed = parse_number_part(s)?;
+    let multiplier = parse_suffix(s, parsed.suffix_start)?;
+    let value = parsed
+        .number
+        .checked_mul(multiplier)
+        .ok_or_else(|| ParseSizeError::SizeTooBig(s.to_string()))?;
 
-    // 如果不是特殊格式，使用标准解析
-    if radix == 10 && start == 0 {
-        return parse_size_u64(&s[start..]);
-    }
-
-    // 解析数值和单位
-    let (len, multiply) = parse_unit_suffix(s, radix)?;
-
-    // 解析数值并计算最终结果
-    calculate_final_value(&s[start..len], radix, multiply)
+    u64::try_from(value).map_err(|_| ParseSizeError::SizeTooBig(s.to_string()))
 }
 
-/// 解析数字的基数和起始位置
-fn parse_radix_and_start(s: &str) -> (usize, u32) {
-    if s.starts_with("0x") || s.starts_with("0X") {
-        (2, 16)
-    } else if s.starts_with('0') {
-        (0, 8)
-    } else {
-        (0, 10)
-    }
+#[derive(Debug, PartialEq, Eq)]
+struct ParsedNumber {
+    number: u128,
+    suffix_start: usize,
 }
 
-/// 解析单位后缀并返回相应的乘数
-fn parse_unit_suffix(s: &str, radix: u32) -> Result<(usize, u64), ParseSizeError> {
-    let mut chars = s.chars().rev();
-    let mut len = s.len();
-    let mut multiply = 1;
-
-    match chars.next() {
-        Some('b') if radix != 16 => {
-            len -= 1;
-            multiply = 512;
-            Ok((len, multiply))
-        }
-        Some('k' | 'K') => {
-            len -= 1;
-            multiply = 1024;
-            Ok((len, multiply))
-        }
-        Some('m' | 'M') => {
-            len -= 1;
-            multiply = 1024 * 1024;
-            Ok((len, multiply))
-        }
-        Some('G') => {
-            len -= 1;
-            multiply = 1024 * 1024 * 1024;
-            Ok((len, multiply))
-        }
-        #[cfg(target_pointer_width = "64")]
-        Some('T') => {
-            len -= 1;
-            multiply = 1024 * 1024 * 1024 * 1024;
-            Ok((len, multiply))
-        }
-        #[cfg(target_pointer_width = "64")]
-        Some('P') => {
-            len -= 1;
-            multiply = 1024 * 1024 * 1024 * 1024 * 1024;
-            Ok((len, multiply))
-        }
-        #[cfg(target_pointer_width = "64")]
-        Some('E') if radix != 16 => {
-            len -= 1;
-            multiply = 1024 * 1024 * 1024 * 1024 * 1024 * 1024;
-            Ok((len, multiply))
-        }
-        Some('B') if radix != 16 => parse_binary_prefix(s, &mut chars, len),
-        _ => Ok((len, multiply)),
+fn parse_number_part(s: &str) -> Result<ParsedNumber, ParseSizeError> {
+    if s.is_empty() {
+        return Err(ParseSizeError::ParseFailure(s.to_string()));
     }
+
+    let bytes = s.as_bytes();
+    let mut pos = 0;
+
+    while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
+        pos += 1;
+    }
+
+    if pos == bytes.len() {
+        return Err(ParseSizeError::ParseFailure(s.to_string()));
+    }
+
+    let skipped_whitespace = pos > 0;
+    if bytes[pos] == b'-' {
+        return Err(ParseSizeError::ParseFailure(s.to_string()));
+    }
+
+    let had_plus = bytes[pos] == b'+';
+    if had_plus {
+        pos += 1;
+        if pos == bytes.len() || !bytes[pos].is_ascii_digit() {
+            return Err(ParseSizeError::ParseFailure(s.to_string()));
+        }
+    }
+
+    if !bytes[pos].is_ascii_digit() {
+        if !skipped_whitespace && !had_plus && is_valid_first_suffix(bytes[pos]) {
+            return Ok(ParsedNumber {
+                number: 1,
+                suffix_start: pos,
+            });
+        }
+        return Err(ParseSizeError::ParseFailure(s.to_string()));
+    }
+
+    let (radix, digits_start, mut suffix_start) =
+        if bytes[pos] == b'0' && pos + 2 < bytes.len() && matches!(bytes[pos + 1], b'x' | b'X') {
+            if bytes[pos + 2].is_ascii_hexdigit() {
+                let digits_start = pos + 2;
+                let mut end = digits_start;
+                while end < bytes.len() && bytes[end].is_ascii_hexdigit() {
+                    end += 1;
+                }
+                (16, digits_start, end)
+            } else {
+                (8, pos, pos + 1)
+            }
+        } else if bytes[pos] == b'0' {
+            let digits_start = pos;
+            let mut end = digits_start;
+            while end < bytes.len() && matches!(bytes[end], b'0'..=b'7') {
+                end += 1;
+            }
+            (8, digits_start, end)
+        } else {
+            let digits_start = pos;
+            let mut end = digits_start;
+            while end < bytes.len() && bytes[end].is_ascii_digit() {
+                end += 1;
+            }
+            (10, digits_start, end)
+        };
+
+    if digits_start == suffix_start {
+        suffix_start = digits_start + 1;
+    }
+
+    let number = u128::from_str_radix(&s[digits_start..suffix_start], radix)
+        .map_err(|_| ParseSizeError::SizeTooBig(s.to_string()))?;
+
+    Ok(ParsedNumber {
+        number,
+        suffix_start,
+    })
 }
 
-/// 解析二进制前缀（kB、MB等）
-fn parse_binary_prefix(
-    s: &str,
-    chars: &mut std::iter::Rev<std::str::Chars>,
-    mut len: usize,
-) -> Result<(usize, u64), ParseSizeError> {
-    len -= 2;
-    let multiply = match chars.next() {
-        Some('k' | 'K') => 1000,
-        Some('m' | 'M') => 1000 * 1000,
-        Some('G') => 1000 * 1000 * 1000,
-        #[cfg(target_pointer_width = "64")]
-        Some('T') => 1000 * 1000 * 1000 * 1000,
-        #[cfg(target_pointer_width = "64")]
-        Some('P') => 1000 * 1000 * 1000 * 1000 * 1000,
-        #[cfg(target_pointer_width = "64")]
-        Some('E') => 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
-        _ => return Err(ParseSizeError::ParseFailure(s.to_string())),
+fn is_valid_first_suffix(c: u8) -> bool {
+    matches!(
+        c,
+        b'b' | b'E' | b'G' | b'K' | b'k' | b'M' | b'm' | b'P' | b'Q' | b'R' | b'T' | b'Y' | b'Z'
+    )
+}
+
+fn parse_suffix(s: &str, suffix_start: usize) -> Result<u128, ParseSizeError> {
+    let suffix = &s[suffix_start..];
+    let bytes = suffix.as_bytes();
+    if bytes.is_empty() {
+        return Ok(1);
+    }
+
+    if bytes[0] == b'b' {
+        return if bytes.len() == 1 {
+            Ok(512)
+        } else {
+            Err(ParseSizeError::InvalidSuffix(s.to_string()))
+        };
+    }
+
+    let exponent = match bytes[0] {
+        b'K' | b'k' => 1,
+        b'M' | b'm' => 2,
+        b'G' => 3,
+        b'T' => 4,
+        b'P' => 5,
+        b'E' => 6,
+        b'Z' => 7,
+        b'Y' => 8,
+        b'R' => 9,
+        b'Q' => 10,
+        _ => return Err(ParseSizeError::InvalidSuffix(s.to_string())),
     };
-    Ok((len, multiply))
-}
 
-/// 计算最终的字节数值
-fn calculate_final_value(s: &str, radix: u32, multiply: u64) -> Result<u64, ParseSizeError> {
-    let factor =
-        u64::from_str_radix(s, radix).map_err(|e| ParseSizeError::ParseFailure(e.to_string()))?;
+    let (base, suffix_len) = match bytes.get(1).copied() {
+        None => (1024_u128, 1),
+        Some(b'B' | b'D') => (1000_u128, 2),
+        Some(b'i') if bytes.get(2) == Some(&b'B') => (1024_u128, 3),
+        _ => return Err(ParseSizeError::InvalidSuffix(s.to_string())),
+    };
 
-    factor
-        .checked_mul(multiply)
-        .ok_or_else(|| ParseSizeError::SizeTooBig(s.to_string()))
+    if bytes.len() != suffix_len {
+        return Err(ParseSizeError::InvalidSuffix(s.to_string()));
+    }
+
+    Ok(base.pow(exponent))
 }
 
 #[cfg(test)]
@@ -177,11 +215,39 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_gnu_suffixes() {
+        assert_eq!(0, od_parse_number_of_bytes("0ZiB").unwrap());
+        assert_eq!(0, od_parse_number_of_bytes("00ZiB").unwrap());
+        assert_eq!(0, od_parse_number_of_bytes("+0ZiB").unwrap());
+        assert_eq!(0, od_parse_number_of_bytes("0x0ZiB").unwrap());
+        assert_eq!(0, od_parse_number_of_bytes("0ZB").unwrap());
+        assert_eq!(0, od_parse_number_of_bytes("0Y").unwrap());
+        assert_eq!(0, od_parse_number_of_bytes("0R").unwrap());
+        assert_eq!(0, od_parse_number_of_bytes("0Q").unwrap());
+        assert_eq!(0, od_parse_number_of_bytes("0KiB").unwrap());
+        assert_eq!(16 * 1000, od_parse_number_of_bytes("0x10KB").unwrap());
+        assert_eq!(16 * 1024, od_parse_number_of_bytes("0x10KiB").unwrap());
+        assert_eq!(1000, od_parse_number_of_bytes("KD").unwrap());
+    }
+
+    #[test]
     fn test_parse_errors() {
         // 测试错误情况
         assert!(od_parse_number_of_bytes("").is_err());
         assert!(od_parse_number_of_bytes("abc").is_err());
         assert!(od_parse_number_of_bytes("1xB").is_err());
         assert!(od_parse_number_of_bytes("0x1g").is_err());
+        assert!(matches!(
+            od_parse_number_of_bytes("0zB"),
+            Err(ParseSizeError::InvalidSuffix(_))
+        ));
+        assert!(matches!(
+            od_parse_number_of_bytes("0ziB"),
+            Err(ParseSizeError::InvalidSuffix(_))
+        ));
+        assert!(matches!(
+            od_parse_number_of_bytes("1Z"),
+            Err(ParseSizeError::SizeTooBig(_))
+        ));
     }
 }

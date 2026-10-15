@@ -369,6 +369,15 @@ fn link_exec(flags: &LinkFlags) -> CTResult<()> {
                 shell_quote_path(flags.source_path)
             ),
         )),
+        #[cfg(unix)]
+        Err(error) if error.raw_os_error() == Some(ctcore::libc::EPERM) => Err(CtSimpleError::new(
+            1,
+            format!(
+                "cannot create link {} to {}: Operation not permitted",
+                shell_quote_path(flags.target_path),
+                shell_quote_path(flags.source_path)
+            ),
+        )),
         Err(error) => Err(error.map_err_context(|| {
             format!(
                 "cannot create link {} to {}",

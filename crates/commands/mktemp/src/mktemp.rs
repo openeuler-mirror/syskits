@@ -464,7 +464,7 @@ fn finish_mktemp_output(
         if suppress_output_error {
             return Err(1.into());
         }
-        return Err(CTsageError::new(1, "write error"));
+        return Err(closed_stdout_write_error());
     }
 
     match ct_println_verbatim(&path) {
@@ -479,6 +479,15 @@ fn finish_mktemp_output(
             }
         }
     }
+}
+
+fn closed_stdout_write_error() -> Box<dyn CTError> {
+    #[cfg(target_os = "linux")]
+    let error = IoError::from_raw_os_error(ctcore::libc::EBADF);
+    #[cfg(not(target_os = "linux"))]
+    let error = IoError::from(IoErrorKind::BrokenPipe);
+
+    error.map_err_context(|| "write error".to_owned())
 }
 
 pub fn ct_app() -> Command {
@@ -2589,7 +2598,11 @@ mod tests {
             let result = finish_mktemp_output(Ok(PathBuf::from("tmp.XXXXXX")), true, false);
 
             let error = result.unwrap_err();
-            assert_eq!(error.to_string(), "write error");
+            #[cfg(target_os = "linux")]
+            assert_eq!(error.to_string(), "write error: Bad file descriptor");
+            #[cfg(not(target_os = "linux"))]
+            assert!(error.to_string().starts_with("write error:"));
+            assert!(!error.usage());
             assert_eq!(error.code(), 1);
         }
 

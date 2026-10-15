@@ -285,6 +285,26 @@ fn mv_missing_option_value_diagnostic(args: &[OsString]) -> Option<&'static str>
                 return Some("option '--target-directory' requires an argument");
             }
             "--suffix" => return Some("option '--suffix' requires an argument"),
+            _ if argument.starts_with("--") => {
+                let option_name = argument.strip_prefix("--")?;
+                let command = ct_app();
+                let mut matching_options = command
+                    .get_arguments()
+                    .filter_map(|option| option.get_long())
+                    .filter(|option| option.starts_with(option_name));
+
+                if let Some(option) = matching_options.next()
+                    && matching_options.next().is_none()
+                {
+                    match option {
+                        OPT_TARGET_DIRECTORY => {
+                            return Some("option '--target-directory' requires an argument");
+                        }
+                        "suffix" => return Some("option '--suffix' requires an argument"),
+                        _ => {}
+                    }
+                }
+            }
             _ if argument.starts_with('-') && !argument.starts_with("--") => {
                 let short_options = argument.strip_prefix('-')?;
                 if short_options.ends_with('t') {

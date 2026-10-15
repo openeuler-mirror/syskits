@@ -109,12 +109,6 @@ fn os_str_ends_with_dir_separator(value: &OsStr) -> bool {
         .is_some_and(|byte| *byte == MAIN_SEPARATOR as u8)
 }
 
-fn concat_os_strings(first: &OsStr, second: &OsStr) -> OsString {
-    let mut result = first.to_os_string();
-    result.push(second);
-    result
-}
-
 #[derive(Debug)]
 enum MkTempError {
     PersistError(PathBuf),
@@ -316,6 +310,22 @@ impl MkTempParams {
             ));
         }
 
+        // GNU 在校验连续 X 数量以及 -t 模板限制之前，先检查最后一个 X 后的后缀。
+        let suffix = if let Some(suffix) = flags.suffix.as_deref() {
+            suffix.to_os_string()
+        } else {
+            let suffix_start = template_bytes
+                .iter()
+                .rposition(|byte| *byte == b'X')
+                .map_or(template_bytes.len(), |index| index + 1);
+            os_string_from_bytes(&template_bytes[suffix_start..])
+        };
+        if os_str_contains_dir_separator(&suffix) {
+            return Err(MkTempError::SuffixContainsDirSeparator(
+                suffix.to_string_lossy().into_owned(),
+            ));
+        }
+
         // 获取模板中随机部分的起始和结束索引。
         // 例如，如果模板是 "abcXXXXyz"，那么 `i` 是 3，`j` 是 7。
         let (i, j) = if let Some(indices) = mktemp_find_last_contiguous_block_of_xs(&flags.template)
@@ -364,18 +374,6 @@ impl MkTempParams {
 
             (directory, prefix)
         };
-
-        // 将模板中的后缀与选项给出的后缀组合起来。
-        // 例如，如果命令行参数的后缀是 ".txt" 且
-        // 模板是 "XXXabc"，那么 `suffix` 是 "abc.txt"。
-        let suffix_from_flag = flags.suffix.unwrap_or_default();
-        let suffix_from_template = os_string_from_bytes(&template_bytes[j..]);
-        let suffix = concat_os_strings(&suffix_from_template, &suffix_from_flag);
-        if os_str_contains_dir_separator(&suffix) {
-            return Err(MkTempError::SuffixContainsDirSeparator(
-                suffix.to_string_lossy().into_owned(),
-            ));
-        }
 
         // 模板中的随机字符数。
         // 例如，如果模板是 "abcXXXXyz"，那么随机字符数是四个。

@@ -405,7 +405,7 @@ pub fn ct_app() -> Command {
 fn get_mode(matches: &ArgMatches) -> Result<mode_t, String> {
     match matches.get_one::<String>("mode") {
         None => Ok(MODE_RW_UGO),
-        Some(str_mode) => ctcore::ct_mode::parse_mode(str_mode)
+        Some(str_mode) => parse_mknod_mode(str_mode)
             .map_err(|e| format!("invalid mode ({e})"))
             .and_then(|mode| {
                 if mode > 0o777 {
@@ -414,6 +414,22 @@ fn get_mode(matches: &ArgMatches) -> Result<mode_t, String> {
                     Ok(mode)
                 }
             }),
+    }
+}
+
+fn parse_mknod_mode(str_mode: &str) -> Result<mode_t, String> {
+    if str_mode.contains(',') && !str_mode.chars().any(|c| c.is_ascii_digit()) {
+        let mut mode = MODE_RW_UGO as u32;
+        let umask = ctcore::ct_mode::get_umask();
+        for part in str_mode.split(',') {
+            if part.is_empty() {
+                return Err(str_mode.to_string());
+            }
+            mode = ctcore::ct_mode::parse_symbolic(mode, part, umask, false)?;
+        }
+        Ok(mode as mode_t)
+    } else {
+        ctcore::ct_mode::parse_mode(str_mode)
     }
 }
 
@@ -469,7 +485,7 @@ mod tests {
     }
 
     mod tests_mknod_main {
-        use crate::{ct_app, mknod_main};
+        use crate::{ct_app, get_mode, mknod_main};
 
         use std::ffi::OsString;
 
@@ -515,6 +531,26 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_mknod_comma_separated_symbolic_mode() {
+            let args = vec![ctcore::ct_util_name(), "--mode=u=rw,go=", "file", "p"];
+            let command = ct_app();
+            let matches = command.try_get_matches_from(args).unwrap();
+
+            assert_eq!(get_mode(&matches).unwrap(), 0o600);
+        }
+
+        #[test]
+        fn test_mknod_rejects_empty_symbolic_mode_part() {
+            for mode in ["u=rw,", ",u=rw", "u=rw,,go="] {
+                let args = vec![ctcore::ct_util_name(), "--mode", mode, "file", "p"];
+                let command = ct_app();
+                let matches = command.try_get_matches_from(args).unwrap();
+
+                assert!(get_mode(&matches).is_err());
+            }
         }
     }
 

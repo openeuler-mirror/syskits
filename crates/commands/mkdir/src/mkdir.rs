@@ -582,6 +582,14 @@ pub fn mkdir(
     let path_buf = dir_strip_dot_for_creation(path);
     let path = path_buf.as_path();
 
+    if path.as_os_str().is_empty() {
+        let error = std::fs::create_dir(path).expect_err("creating an empty path must fail");
+        return Err(CtSimpleError::new(
+            1,
+            mkdir_create_error(path, &strip_errno(&error)),
+        ));
+    }
+
     if path.exists() && path.is_dir() {
         if !is_recursive {
             let err_message = mkdir_create_error(path, "File exists");
@@ -1654,8 +1662,7 @@ mod tests {
         #[test]
         fn test_mkdir_with_empty_string() {
             let test_dir = Path::new("");
-            // 空路径现在被直接返回 Ok(())，不创建任何目录也不报错
-            assert!(mkdir(test_dir, false, 0o755, false, false, None, false, false).is_ok());
+            assert!(mkdir(test_dir, false, 0o755, false, false, None, false, false).is_err());
         }
 
         #[test]

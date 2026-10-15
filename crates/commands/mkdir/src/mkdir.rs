@@ -99,6 +99,84 @@ fn validate_short_options(args: &[OsString]) -> CTResult<()> {
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+enum LongOptionArgument {
+    None,
+    Optional,
+    Required,
+}
+
+fn validate_long_options(args: &[OsString]) -> CTResult<()> {
+    const LONG_OPTIONS: [(&str, LongOptionArgument); 6] = [
+        ("context", LongOptionArgument::Optional),
+        ("mode", LongOptionArgument::Required),
+        ("parents", LongOptionArgument::None),
+        ("verbose", LongOptionArgument::None),
+        ("help", LongOptionArgument::None),
+        ("version", LongOptionArgument::None),
+    ];
+
+    for (index, arg) in args.iter().enumerate().skip(1) {
+        if arg == "--" {
+            break;
+        }
+
+        let Some(value) = arg.to_str() else {
+            continue;
+        };
+        let Some(long_option) = value.strip_prefix("--") else {
+            continue;
+        };
+        if long_option.is_empty() {
+            break;
+        }
+
+        let (name, argument) = long_option
+            .split_once('=')
+            .map_or((long_option, None), |(name, argument)| {
+                (name, Some(argument))
+            });
+        let matches = LONG_OPTIONS
+            .iter()
+            .filter(|(option, _)| option.starts_with(name))
+            .copied()
+            .collect::<Vec<_>>();
+
+        match matches.as_slice() {
+            [] => {
+                return Err(mkdir_usage_error(format!("unrecognized option '--{name}'")));
+            }
+            [(option, option_argument)] => match option_argument {
+                LongOptionArgument::None if argument.is_some() => {
+                    return Err(mkdir_usage_error(format!(
+                        "option '--{option}' doesn't allow an argument"
+                    )));
+                }
+                LongOptionArgument::Required
+                    if argument.is_none() && args.get(index + 1).is_none() =>
+                {
+                    return Err(mkdir_usage_error(format!(
+                        "option '--{option}' requires an argument"
+                    )));
+                }
+                _ => {}
+            },
+            _ => {
+                let possibilities = matches
+                    .iter()
+                    .map(|(option, _)| format!("'--{option}'"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                return Err(mkdir_usage_error(format!(
+                    "option '--{name}' is ambiguous; possibilities: {possibilities}"
+                )));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 mod mkdir_flags {
     pub const MODE: &str = "mode";
     pub const PARENTS: &str = "parents";
@@ -206,6 +284,7 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
     // 可能需要移除 MODE 前缀 '-'（例如 "chmod -x FILE"）。
     let is_mode_had_minus_prefix = mkdir_strip_minus_from_mode_os(&mut args);
     validate_short_options(&args)?;
+    validate_long_options(&args)?;
 
     // Linux 特有的选项，未实现
     // opts.optflag("Z", "context", "set SELinux security context" +

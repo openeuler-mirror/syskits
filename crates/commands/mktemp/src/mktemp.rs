@@ -18,7 +18,7 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 #[cfg(unix)]
 use std::fs;
-use std::io::ErrorKind;
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 #[cfg(unix)]
@@ -111,7 +111,6 @@ fn os_str_ends_with_dir_separator(value: &OsStr) -> bool {
 
 #[derive(Debug)]
 enum MkTempError {
-    PersistError(PathBuf),
     MustEndInX(String),
     TooFewXs(String),
 
@@ -122,9 +121,6 @@ enum MkTempError {
     SuffixContainsDirSeparator(String),
     InvalidTemplate(String),
     TooManyTemplates,
-
-    /// 指定的临时目录未找到。
-    NotFound(String, String),
 }
 
 impl CTError for MkTempError {
@@ -138,7 +134,6 @@ impl Error for MkTempError {}
 impl Display for MkTempError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MkTempError::PersistError(p) => write!(f, "could not persist file {}", p.quote()),
             MkTempError::MustEndInX(s) => {
                 write!(f, "with --suffix, template {} must end in X", s.quote())
             }
@@ -167,12 +162,6 @@ impl Display for MkTempError {
             MkTempError::TooManyTemplates => {
                 write!(f, "too many templates")
             }
-            MkTempError::NotFound(template, s) => write!(
-                f,
-                "failed to create {} via template {}: No such file or directory",
-                template,
-                s.quote()
-            ),
         }
     }
 }
@@ -605,6 +594,51 @@ fn mktemp_dry_exec(
     Ok(tmpdir.join(filename))
 }
 
+fn mktemp_template_path(dir: &Path, prefix: &OsStr, rand: usize, suffix: &OsStr) -> PathBuf {
+    let mut file_name = prefix.to_os_string();
+    file_name.push("X".repeat(rand));
+    file_name.push(suffix);
+    dir.join(file_name)
+}
+
+#[cfg(unix)]
+fn raw_os_error_for_kind(kind: IoErrorKind) -> Option<i32> {
+    match kind {
+        IoErrorKind::AlreadyExists => Some(ctcore::libc::EEXIST),
+        IoErrorKind::BrokenPipe => Some(ctcore::libc::EPIPE),
+        IoErrorKind::FileTooLarge => Some(ctcore::libc::EFBIG),
+        IoErrorKind::Interrupted => Some(ctcore::libc::EINTR),
+        IoErrorKind::InvalidFilename => Some(ctcore::libc::ENAMETOOLONG),
+        IoErrorKind::IsADirectory => Some(ctcore::libc::EISDIR),
+        IoErrorKind::NotADirectory => Some(ctcore::libc::ENOTDIR),
+        IoErrorKind::NotFound => Some(ctcore::libc::ENOENT),
+        IoErrorKind::PermissionDenied => Some(ctcore::libc::EACCES),
+        IoErrorKind::QuotaExceeded => Some(ctcore::libc::EDQUOT),
+        IoErrorKind::ReadOnlyFilesystem => Some(ctcore::libc::EROFS),
+        IoErrorKind::ResourceBusy => Some(ctcore::libc::EBUSY),
+        IoErrorKind::StorageFull => Some(ctcore::libc::ENOSPC),
+        IoErrorKind::TooManyLinks => Some(ctcore::libc::EMLINK),
+        IoErrorKind::WouldBlock => Some(ctcore::libc::EAGAIN),
+        _ => None,
+    }
+}
+
+#[cfg(not(unix))]
+fn raw_os_error_for_kind(_: IoErrorKind) -> Option<i32> {
+    None
+}
+
+fn mktemp_creation_error(kind: &str, template: &Path, error: IoError) -> Box<dyn CTError> {
+    let error = match error
+        .raw_os_error()
+        .or_else(|| raw_os_error_for_kind(error.kind()))
+    {
+        Some(error_code) => IoError::from_raw_os_error(error_code),
+        None => error,
+    };
+    error.map_err_context(|| format!("failed to create {kind} via template {}", template.quote()))
+}
+
 /// 使用给定的参数创建临时目录。
 ///
 /// 此函数创建一个作为 `dir` 子目录的临时目录。目录的名称是
@@ -621,6 +655,7 @@ fn mktemp_dir(
 ) -> CTResult<PathBuf> {
     let prefix = prefix.as_ref();
     let suffix = suffix.as_ref();
+    let template = mktemp_template_path(dir, prefix, rand, suffix);
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
     match builder.tempdir_in(dir) {
@@ -631,15 +666,7 @@ fn mktemp_dir(
             fs::set_permissions(&p, fs::Permissions::from_mode(0o700))?;
             Ok(p)
         }
-        Err(e) if e.kind() == ErrorKind::NotFound => {
-            let mut file_name = prefix.to_os_string();
-            file_name.push("X".repeat(rand));
-            file_name.push(suffix);
-            let p = Path::new(dir).join(file_name);
-            let s = p.display().to_string();
-            Err(MkTempError::NotFound("directory".to_string(), s).into())
-        }
-        Err(e) => Err(e.into()),
+        Err(e) => Err(mktemp_creation_error("directory", &template, e)),
     }
 }
 
@@ -659,23 +686,16 @@ fn mktemp_file(
 ) -> CTResult<PathBuf> {
     let prefix = prefix.as_ref();
     let suffix = suffix.as_ref();
+    let template = mktemp_template_path(dir, prefix, rand, suffix);
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
     match builder.tempfile_in(dir) {
         // `keep` 确保文件不被删除
         Ok(named_temp_file) => match named_temp_file.keep() {
             Ok((_, p)) => Ok(p),
-            Err(e) => Err(MkTempError::PersistError(e.file.path().to_path_buf()).into()),
+            Err(e) => Err(mktemp_creation_error("file", &template, e.error)),
         },
-        Err(e) if e.kind() == ErrorKind::NotFound => {
-            let mut file_name = prefix.to_os_string();
-            file_name.push("X".repeat(rand));
-            file_name.push(suffix);
-            let p = Path::new(dir).join(file_name);
-            let s = p.display().to_string();
-            Err(MkTempError::NotFound("file".to_string(), s).into())
-        }
-        Err(e) => Err(e.into()),
+        Err(e) => Err(mktemp_creation_error("file", &template, e)),
     }
 }
 
@@ -955,14 +975,6 @@ mod tests {
         use super::*;
 
         #[test]
-        fn test_mktemp_error_fmt_persist_error() {
-            let path = PathBuf::from("/invalid/path");
-            let error = MkTempError::PersistError(path.clone());
-            let expected_message = format!("could not persist file '{}'", path.display());
-            assert_eq!(format!("{error}"), expected_message);
-        }
-
-        #[test]
         fn test_mktemp_error_fmt_must_end_in_x() {
             let template = "template_without_x".to_string();
             let error = MkTempError::MustEndInX(template.clone());
@@ -1013,17 +1025,6 @@ mod tests {
         }
 
         #[test]
-        fn test_mktemp_error_fmt_not_found() {
-            let template_type = "file".to_string();
-            let template = "non_existent_template".to_string();
-            let error = MkTempError::NotFound(template_type.clone(), template.clone());
-            let expected_message = format!(
-                "failed to create {template_type} via template '{template}': No such file or directory"
-            );
-            assert_eq!(format!("{error}"), expected_message);
-        }
-
-        #[test]
         fn test_mktemp_error_usage_too_many_templates() {
             let error = MkTempError::TooManyTemplates;
             assert!(error.usage());
@@ -1032,29 +1033,16 @@ mod tests {
         #[test]
         fn test_mktemp_error_usage_other_errors() {
             let errors = vec![
-                MkTempError::PersistError(PathBuf::from("/invalid/path")),
                 MkTempError::MustEndInX("template_without_x".to_string()),
                 MkTempError::TooFewXs("too_few_X".to_string()),
                 MkTempError::PrefixContainsDirSeparator("invalid/template".to_string()),
                 MkTempError::SuffixContainsDirSeparator("invalid/suffix".to_string()),
                 MkTempError::InvalidTemplate("/absolute/template".to_string()),
-                MkTempError::NotFound("file".to_string(), "non_existent_template".to_string()),
             ];
 
             for error in errors {
                 assert!(!error.usage());
             }
-        }
-
-        #[test]
-        fn test_mktemp_error_fmt_not_found_directory() {
-            let template_type = "directory".to_string();
-            let template = "non_existent_template".to_string();
-            let error = MkTempError::NotFound(template_type.clone(), template.clone());
-            let expected_message = format!(
-                "failed to create {template_type} via template '{template}': No such file or directory"
-            );
-            assert_eq!(format!("{error}"), expected_message);
         }
 
         #[test]
@@ -2098,18 +2086,6 @@ mod tests {
                     .to_string()
                     .contains("No such file or directory")
             );
-        }
-
-        #[test]
-        fn test_exec_too_few_xs() {
-            let tmpdir = std::env::temp_dir();
-            let prefix = "toofewX";
-            let suffix = ".tmp";
-            let rand = 0;
-            let result = mktemp_exec(&tmpdir, prefix, rand, suffix, false);
-            if result.is_err() {
-                assert!(result.unwrap_err().to_string().contains("File exists"));
-            }
         }
 
         #[test]

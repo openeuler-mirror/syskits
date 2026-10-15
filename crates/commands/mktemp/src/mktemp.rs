@@ -51,6 +51,22 @@ const TMPDIR_ENV_VAR: &str = "TMPDIR";
 #[cfg(windows)]
 const TMPDIR_ENV_VAR: &str = "TMP";
 
+fn tmpdir_from_environment() -> Option<PathBuf> {
+    env::var_os(TMPDIR_ENV_VAR)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
+
+#[cfg(unix)]
+fn default_tmpdir() -> PathBuf {
+    tmpdir_from_environment().unwrap_or_else(|| PathBuf::from("/tmp"))
+}
+
+#[cfg(windows)]
+fn default_tmpdir() -> PathBuf {
+    tmpdir_from_environment().unwrap_or_else(env::temp_dir)
+}
+
 #[derive(Debug)]
 enum MkTempError {
     PersistError(PathBuf),
@@ -155,23 +171,20 @@ impl MkTempFlags {
         let (tmpdir, template) = match matches.get_one::<String>(MKTEMP_ARG_TEMPLATE) {
             // 如果没有提供模板参数，则隐含 `--tmpdir`。
             None => {
-                let tmpdir = Some(tmp_dir.unwrap_or_else(env::temp_dir));
+                let tmpdir = Some(tmp_dir.unwrap_or_else(default_tmpdir));
                 let template = MKTEMP_DEFAULT_TEMPLATE;
                 (tmpdir, template.to_string())
             }
             Some(template) => {
-                let tmpdir = if env::var(TMPDIR_ENV_VAR).is_ok()
-                    && matches.get_flag(mktemp_flags::MKTEMP_T)
-                {
-                    env::var_os(TMPDIR_ENV_VAR).map(|t| t.into())
+                let tmpdir = if matches.get_flag(mktemp_flags::MKTEMP_T) {
+                    tmpdir_from_environment()
+                        .or(tmp_dir)
+                        .or_else(|| Some(default_tmpdir()))
                 } else if tmp_dir.is_some() {
                     tmp_dir
-                } else if matches.get_flag(mktemp_flags::MKTEMP_T)
-                    || matches.contains_id(mktemp_flags::MKTEMP_TMPDIR)
-                {
-                    // 如果提供了 --tmpdir 而没有参数，或者提供了 -t
-                    // 导出到 TMPDIR
-                    Some(env::temp_dir())
+                } else if matches.contains_id(mktemp_flags::MKTEMP_TMPDIR) {
+                    // 提供了不带目录参数的 --tmpdir，使用 TMPDIR 或默认目录。
+                    Some(default_tmpdir())
                 } else {
                     None
                 };

@@ -552,6 +552,10 @@ fn pass_name(pass_type: &PassType) -> String {
 
 /// 执行文件擦除操作
 fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
+    if settings.path_str == "-" {
+        return shred_exec_stdout(settings);
+    }
+
     // 验证文件是否存在且是普通文件
     let path = Path::new(settings.path_str);
     if !path.exists() {
@@ -568,6 +572,7 @@ fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
     }
 
     let metadata = fs::metadata(path).map_err_context(String::new)?;
+    let size = settings.size.unwrap_or(metadata.len());
 
     // 如果需要，设置文件为可写
     if settings.force {
@@ -583,80 +588,14 @@ fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
         fs::set_permissions(path, perms).map_err_context(String::new)?;
     }
 
-    // 生成擦除序列
-    let mut pass_sequence = Vec::new();
-    if metadata.len() != 0 {
-        // 根据迭代次数生成擦除序列
-        if settings.n_passes <= 3 {
-            // 少量迭代时使用随机模式
-            for _ in 0..settings.n_passes {
-                pass_sequence.push(PassType::Random);
-            }
-        } else {
-            // 多次迭代时混合使用固定模式和随机模式
-            let n_full_arrays = settings.n_passes / SHRED_PATTERNS.len();
-            let remainder = settings.n_passes % SHRED_PATTERNS.len();
-
-            // 填充完整的模式序列
-            for _ in 0..n_full_arrays {
-                for p in SHRED_PATTERNS {
-                    pass_sequence.push(PassType::Pattern(p));
-                }
-            }
-            // 添加剩余的模式
-            for pattern in SHRED_PATTERNS.into_iter().take(remainder) {
-                pass_sequence.push(PassType::Pattern(pattern));
-            }
-            // 随机打乱序列
-            let mut rng = rand::thread_rng();
-            pass_sequence.shuffle(&mut rng);
-
-            // 插入随机模式
-            let n_random = 3 + settings.n_passes / 10;
-            for i in 0..n_random {
-                pass_sequence[i * (settings.n_passes - 1) / (n_random - 1)] = PassType::Random;
-            }
-        }
-
-        // 如果需要，添加零填充
-        if settings.zero {
-            pass_sequence.push(PassType::Pattern(SHRED_PATTERNS[0]));
-        }
-    }
-
     // 执行擦除
-    let total_passes = pass_sequence.len();
     let mut file = OpenOptions::new()
         .write(true)
         .truncate(false)
         .open(path)
         .map_err_context(|| format!("{}: failed to open for writing", path.maybe_quote()))?;
 
-    let size = settings.size.unwrap_or(metadata.len());
-
-    // 执行每一次擦除
-    for (i, pass_type) in pass_sequence.into_iter().enumerate() {
-        if settings.verbose {
-            let pass_name = pass_name(&pass_type);
-            ct_show_error!(
-                "{}: pass {}/{} ({})...",
-                path.maybe_quote(),
-                i + 1,
-                total_passes,
-                pass_name
-            );
-        }
-        ct_show_if_err!(
-            shred_do_pass(
-                &mut file,
-                &pass_type,
-                settings.exact,
-                size,
-                settings.random_source
-            )
-            .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote()))
-        );
-    }
+    shred_run_passes(&mut file, settings.path_str, settings, size, true)?;
 
     // 如果需要，删除文件
     if settings.remove_method != RemoveMethod::None {
@@ -668,6 +607,180 @@ fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
         )?;
     }
     Ok(())
+}
+
+#[cfg(unix)]
+fn shred_exec_stdout(settings: &ShredSettings) -> CTResult<()> {
+    let stat = stdout_stat()?;
+    validate_stdout_fd(stat.st_mode)?;
+
+    let current_size = u64::try_from(stat.st_size).unwrap_or(0);
+    let size = settings.size.unwrap_or(current_size);
+    let stdout_is_regular = stdout_file_type(stat.st_mode) == libc::S_IFREG;
+
+    let mut file = OpenOptions::new()
+        .write(true)
+        .truncate(false)
+        .open("/proc/self/fd/1")
+        .map_err_context(|| "-: failed to open for writing".to_string())?;
+
+    shred_run_passes(&mut file, "-", settings, size, stdout_is_regular)?;
+
+    if settings.remove_method != RemoveMethod::None {
+        file.set_len(0)
+            .map_err_context(|| "-: error truncating".to_string())?;
+    }
+
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn shred_exec_stdout(_settings: &ShredSettings) -> CTResult<()> {
+    Err(CtSimpleError::new(1, "-: invalid file type"))
+}
+
+fn shred_pass_sequence(settings: &ShredSettings, target_size: u64) -> Vec<PassType> {
+    let mut pass_sequence = Vec::new();
+    if target_size == 0 {
+        return pass_sequence;
+    }
+
+    // 根据迭代次数生成擦除序列
+    if settings.n_passes <= 3 {
+        // 少量迭代时使用随机模式
+        for _ in 0..settings.n_passes {
+            pass_sequence.push(PassType::Random);
+        }
+    } else {
+        // 多次迭代时混合使用固定模式和随机模式
+        let n_full_arrays = settings.n_passes / SHRED_PATTERNS.len();
+        let remainder = settings.n_passes % SHRED_PATTERNS.len();
+
+        // 填充完整的模式序列
+        for _ in 0..n_full_arrays {
+            for p in SHRED_PATTERNS {
+                pass_sequence.push(PassType::Pattern(p));
+            }
+        }
+        // 添加剩余的模式
+        for pattern in SHRED_PATTERNS.into_iter().take(remainder) {
+            pass_sequence.push(PassType::Pattern(pattern));
+        }
+        // 随机打乱序列
+        let mut rng = rand::thread_rng();
+        pass_sequence.shuffle(&mut rng);
+
+        // 插入随机模式
+        let n_random = 3 + settings.n_passes / 10;
+        for i in 0..n_random {
+            pass_sequence[i * (settings.n_passes - 1) / (n_random - 1)] = PassType::Random;
+        }
+    }
+
+    // 如果需要，添加零填充
+    if settings.zero {
+        pass_sequence.push(PassType::Pattern(SHRED_PATTERNS[0]));
+    }
+
+    pass_sequence
+}
+
+fn shred_run_passes(
+    file: &mut File,
+    display_name: &str,
+    settings: &ShredSettings,
+    size: u64,
+    sync_data: bool,
+) -> CTResult<()> {
+    let pass_sequence = shred_pass_sequence(settings, size);
+    let total_passes = pass_sequence.len();
+
+    for (i, pass_type) in pass_sequence.into_iter().enumerate() {
+        if settings.verbose {
+            let pass_name = pass_name(&pass_type);
+            ct_show_error!(
+                "{}: pass {}/{} ({})...",
+                display_name.maybe_quote(),
+                i + 1,
+                total_passes,
+                pass_name
+            );
+        }
+        let pass_result = if sync_data {
+            shred_do_pass(
+                file,
+                &pass_type,
+                settings.exact,
+                size,
+                settings.random_source,
+            )
+        } else {
+            shred_do_pass_impl(
+                file,
+                &pass_type,
+                settings.exact,
+                size,
+                settings.random_source,
+                false,
+            )
+        };
+        ct_show_if_err!(
+            pass_result.map_err_context(|| format!(
+                "{}: File write pass failed",
+                display_name.maybe_quote()
+            ))
+        );
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn stdout_stat() -> CTResult<libc::stat> {
+    unsafe {
+        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+        if libc::fstat(libc::STDOUT_FILENO, stat.as_mut_ptr()) != 0 {
+            let err = io::Error::last_os_error();
+            return Err(CtSimpleError::new(
+                1,
+                format!("-: fstat failed: {}", strip_errno(&err)),
+            ));
+        }
+        Ok(stat.assume_init())
+    }
+}
+
+#[cfg(unix)]
+fn validate_stdout_fd(mode: libc::mode_t) -> CTResult<()> {
+    let fd_flags = unsafe { libc::fcntl(libc::STDOUT_FILENO, libc::F_GETFL) };
+    if fd_flags < 0 {
+        let err = io::Error::last_os_error();
+        return Err(CtSimpleError::new(
+            1,
+            format!("-: fcntl failed: {}", strip_errno(&err)),
+        ));
+    }
+
+    if fd_flags & libc::O_APPEND != 0 {
+        return Err(CtSimpleError::new(
+            1,
+            "-: cannot shred append-only file descriptor",
+        ));
+    }
+
+    let file_type = stdout_file_type(mode);
+    let stdout_is_tty =
+        file_type == libc::S_IFCHR && unsafe { libc::isatty(libc::STDOUT_FILENO) == 1 };
+    if stdout_is_tty || file_type == libc::S_IFIFO || file_type == libc::S_IFSOCK {
+        return Err(CtSimpleError::new(1, "-: invalid file type"));
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn stdout_file_type(mode: libc::mode_t) -> libc::mode_t {
+    mode & libc::S_IFMT
 }
 
 /// 执行单次文件覆写
@@ -687,6 +800,17 @@ fn shred_do_pass(
     exact: bool,
     file_size: u64,
     random_source: Option<&str>,
+) -> Result<(), io::Error> {
+    shred_do_pass_impl(file, pass_type, exact, file_size, random_source, true)
+}
+
+fn shred_do_pass_impl(
+    file: &mut File,
+    pass_type: &PassType,
+    exact: bool,
+    file_size: u64,
+    random_source: Option<&str>,
+    sync_data: bool,
 ) -> Result<(), io::Error> {
     // 重置文件指针到开始位置
     file.rewind()?;
@@ -708,7 +832,9 @@ fn shred_do_pass(
     }
 
     // 确保数据写入磁盘
-    file.sync_data()?;
+    if sync_data {
+        file.sync_data()?;
+    }
 
     Ok(())
 }
@@ -1126,6 +1252,24 @@ mod tests {
 
             assert!(result.is_ok(), "擦除应该成功");
             assert!(file_path.exists(), "文件应该还存在");
+        }
+
+        #[test]
+        fn test_wipe_empty_file_with_size_and_zero() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test.txt");
+            fs::write(&file_path, "").unwrap();
+
+            let mut settings = create_test_settings(file_path.to_str().unwrap());
+            settings.n_passes = 0;
+            settings.size = Some(4);
+            settings.exact = true;
+            settings.zero = true;
+
+            let result = shred_exec(&settings);
+
+            assert!(result.is_ok(), "指定大小的空文件擦除应该成功");
+            assert_eq!(fs::read(&file_path).unwrap(), vec![0; 4]);
         }
 
         #[test]

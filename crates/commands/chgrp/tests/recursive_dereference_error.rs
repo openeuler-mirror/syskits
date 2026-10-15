@@ -99,6 +99,38 @@ fn chgrp_recursive_verbose_dangling_symlink_reports_its_link_group_like_gnu() {
 
 #[cfg(unix)]
 #[test]
+fn chgrp_logical_recursive_no_dereference_changes_dangling_links_like_gnu() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+    use tempfile::tempdir;
+
+    let temp = tempdir().expect("create temporary directory");
+    let tree = temp.path().join("tree");
+    fs::create_dir(&tree).expect("create tree");
+    let dangling = tree.join("dangling");
+    symlink("missing", &dangling).expect("create dangling symlink");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_chgrp"))
+        .current_dir(temp.path())
+        .env("LC_ALL", "C")
+        .arg0("chgrp")
+        .args(["-RLhv", "0", "tree"])
+        .output()
+        .expect("run chgrp");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("stdout is UTF-8"),
+        "group of 'tree/dangling' retained as root\n\
+         group of 'tree' retained as root\n"
+    );
+    assert!(output.stderr.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
 fn chgrp_recursive_symbolic_link_loop_uses_access_diagnostics_like_gnu() {
     use std::fs;
     use std::os::unix::fs::symlink;

@@ -700,6 +700,18 @@ impl CtOwnershipChangeExecutor {
                         }
                         continue;
                     }
+                    if !self.dereference {
+                        if let (Some(path), Some(error)) = (e.path(), e.io_error()) {
+                            if error.raw_os_error() == Some(libc::ENOENT) {
+                                if let Ok(meta) = path.symlink_metadata() {
+                                    if meta.file_type().is_symlink() {
+                                        ret |= self.change_path(path, &meta);
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
                     ret = 1;
                     let path = e.path();
                     let action = path.map(|path| {

@@ -964,23 +964,22 @@ fn move_files_into_dir(
         }
 
         // 检查是否尝试将目录移动到自身
-        if let Some(canonical_target) = canonical_target_dir.as_ref() {
-            if file_type.is_dir() && !file_type.is_symlink() {
-                if let Ok(canonical_source) = source_path.canonicalize() {
-                    if canonical_target.starts_with(&canonical_source) {
-                        ct_show!(CtSimpleError::new(
-                            1,
-                            format!(
-                                "cannot move '{}' to a subdirectory of itself, '{}'",
-                                source_path.display(),
-                                targetpath.display()
-                            )
-                        ));
-                        has_error = true;
-                        continue;
-                    }
-                }
-            }
+        if let Some(canonical_target) = canonical_target_dir.as_ref()
+            && file_type.is_dir()
+            && !file_type.is_symlink()
+            && let Ok(canonical_source) = source_path.canonicalize()
+            && canonical_target.starts_with(&canonical_source)
+        {
+            ct_show!(CtSimpleError::new(
+                1,
+                format!(
+                    "cannot move '{}' to a subdirectory of itself, '{}'",
+                    source_path.display(),
+                    targetpath.display()
+                )
+            ));
+            has_error = true;
+            continue;
         }
 
         // 尝试重命名文件
@@ -1176,14 +1175,14 @@ fn mv_rename_with_hardlink_tracking(
 
             // 设置 SELinux 上下文（如果启用）
             #[cfg(target_os = "linux")]
-            if options.set_context {
-                if let Err(e) = set_default_context(to_path) {
-                    eprintln!(
-                        "warning: failed to set security context for {}: {}",
-                        to_path.quote(),
-                        e
-                    );
-                }
+            if options.set_context
+                && let Err(e) = set_default_context(to_path)
+            {
+                eprintln!(
+                    "warning: failed to set security context for {}: {}",
+                    to_path.quote(),
+                    e
+                );
             }
 
             return Ok(());
@@ -1323,14 +1322,14 @@ fn mv_rename(
 
     // 如果启用了 context 选项，设置目标文件的 SELinux 上下文
     #[cfg(target_os = "linux")]
-    if options.set_context {
-        if let Err(e) = set_default_context(final_target) {
-            eprintln!(
-                "warning: failed to set security context for {}: {}",
-                to_path.quote(),
-                e
-            );
-        }
+    if options.set_context
+        && let Err(e) = set_default_context(final_target)
+    {
+        eprintln!(
+            "warning: failed to set security context for {}: {}",
+            to_path.quote(),
+            e
+        );
     }
 
     Ok(())
@@ -1496,16 +1495,16 @@ fn mv_rename_with_fallback(
 
             // 在复制或重建之前，如果目标已经存在，必须先删除它！
             // 否则 fs::copy 会以 O_TRUNC 覆盖现有文件，违背 mv 替换 Inode 的语义。
-            if to.symlink_metadata().is_ok() {
-                if let Err(e) = fs::remove_file(to) {
-                    let err_msg = format!(
-                        "inter-device move failed: {} to {}; unable to remove target: {}",
-                        from.quote(),
-                        to.quote(),
-                        strip_errno(&e)
-                    );
-                    return Err(io::Error::new(e.kind(), err_msg));
-                }
+            if to.symlink_metadata().is_ok()
+                && let Err(e) = fs::remove_file(to)
+            {
+                let err_msg = format!(
+                    "inter-device move failed: {} to {}; unable to remove target: {}",
+                    from.quote(),
+                    to.quote(),
+                    strip_errno(&e)
+                );
+                return Err(io::Error::new(e.kind(), err_msg));
             }
 
             // 检查是否为特殊文件（FIFO, 设备节点等），如果是则必须重建而不是读取！
@@ -1576,16 +1575,16 @@ fn mv_rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     // 读取符号链接指向的路径
     let symlink_points_to_path = fs::read_link(from)?;
 
-    if to.symlink_metadata().is_ok() {
-        if let Err(e) = fs::remove_file(to) {
-            let err_msg = format!(
-                "inter-device move failed: {} to {}; unable to remove target: {}",
-                from.quote(),
-                to.quote(),
-                strip_errno(&e)
-            );
-            return Err(io::Error::new(e.kind(), err_msg));
-        }
+    if to.symlink_metadata().is_ok()
+        && let Err(e) = fs::remove_file(to)
+    {
+        let err_msg = format!(
+            "inter-device move failed: {} to {}; unable to remove target: {}",
+            from.quote(),
+            to.quote(),
+            strip_errno(&e)
+        );
+        return Err(io::Error::new(e.kind(), err_msg));
     }
 
     // 针对不同的操作系统，执行相应的重命名和删除操作
@@ -2042,7 +2041,7 @@ mod tests {
         File::create(&target).unwrap();
 
         let opts = temp_mv_opts();
-        let err = move_files_into_dir(&[file_a.clone()], &target, &opts).unwrap_err();
+        let err = move_files_into_dir(std::slice::from_ref(&file_a), &target, &opts).unwrap_err();
         assert!(format!("{err}").contains("Not a directory"));
         assert!(file_a.exists());
     }

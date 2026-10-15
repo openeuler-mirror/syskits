@@ -1264,7 +1264,6 @@ pub fn ct_app() -> Command {
             .short('a')
             .action(ArgAction::Append)
             .num_args(1)
-            .value_parser(["1", "2"])
             .value_name("FILENUM")
             .help(
                 "also print unpairable lines from file FILENUM, where
@@ -1274,7 +1273,6 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
             .short('v')
             .action(ArgAction::Append)
             .num_args(1)
-            .value_parser(["1", "2"])
             .value_name("FILENUM")
             .help(t!("join.clap.v")),
         Arg::new("e")
@@ -1793,12 +1791,12 @@ fn parse_field_number(value: &str) -> CTResult<usize> {
 }
 
 fn parse_file_number(value: &str) -> CTResult<FileNum> {
-    match value {
-        "1" => Ok(FileNum::File1),
-        "2" => Ok(FileNum::File2),
-        value => Err(CtSimpleError::new(
+    match value.parse::<i64>() {
+        Ok(1) => Ok(FileNum::File1),
+        Ok(2) => Ok(FileNum::File2),
+        _ => Err(CtSimpleError::new(
             1,
-            format!("invalid file number: {}", value.quote()),
+            format!("invalid field number: {}", value.quote()),
         )),
     }
 }
@@ -1950,6 +1948,30 @@ mod tests {
         assert!(settings.is_print_unpaired1);
         assert!(settings.is_print_unpaired2);
         assert!(!settings.is_print_joined); // -v 选项禁用连接行的打印
+
+        let matches = ct_app()
+            .try_get_matches_from(vec![
+                "join",
+                "-a",
+                "01",
+                "-v",
+                "+2",
+                "file1.txt",
+                "file2.txt",
+            ])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert!(settings.is_print_unpaired1);
+        assert!(settings.is_print_unpaired2);
+        assert!(!settings.is_print_joined);
+
+        let matches = ct_app()
+            .try_get_matches_from(vec!["join", "-a", "3", "file1.txt", "file2.txt"])
+            .unwrap();
+
+        let err = JoinSettings::new(&matches).err().unwrap();
+        assert_eq!(err.to_string(), "invalid field number: '3'");
     }
 
     #[test]

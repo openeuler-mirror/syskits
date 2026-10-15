@@ -409,7 +409,18 @@ fn write_standard_output(command: &mut Command, version: bool) -> CTResult<()> {
     }
     .and_then(|_| stdout.flush());
 
-    result.map_err(|error| CtSimpleError::new(1, format!("write error: {}", strip_errno(&error))))
+    result.map_err(mkdir_write_error)
+}
+
+fn mkdir_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
+    #[cfg(target_os = "linux")]
+    let error = if ctcore::ct_stdout_was_closed() {
+        io::Error::from_raw_os_error(ctcore::libc::EBADF)
+    } else {
+        error
+    };
+
+    CtSimpleError::new(1, format!("write error: {}", strip_errno(&error)))
 }
 
 fn map_locale_name(locale: &str) -> String {
@@ -697,7 +708,7 @@ fn mkdir_announce_created(path: &Path) -> CTResult<()> {
         t!("mkdir.verbose_created"),
         path.quote()
     )
-    .map_err(|error| CtSimpleError::new(1, format!("write error: {}", strip_errno(&error))))
+    .map_err(mkdir_write_error)
 }
 
 #[cfg(target_os = "linux")]

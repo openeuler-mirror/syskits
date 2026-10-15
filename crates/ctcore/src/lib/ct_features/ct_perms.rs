@@ -18,17 +18,16 @@ use crate::ct_show_error;
 use clap::{Arg, ArgMatches, Command, builder::OsStringValueParser};
 use libc::{gid_t, uid_t};
 use rust_i18n::t;
-use walkdir::WalkDir;
 
 use std::io::Error as IOError;
 use std::io::Result as IOResult;
 
 use std::ffi::{CString, OsString};
-use std::fs::{File, Metadata};
+use std::fs::{self, File, Metadata, ReadDir};
 use std::os::fd::{FromRawFd, IntoRawFd};
 use std::os::unix::fs::MetadataExt;
 
-use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{MAIN_SEPARATOR_STR, Path, PathBuf};
 
@@ -509,6 +508,285 @@ pub enum CtTraverseSymlinks {
     All,
 }
 
+const CT_WALK_MAX_OPEN: usize = 10;
+
+enum CtDirectoryEntries {
+    Open(ReadDir),
+    Buffered(VecDeque<IOResult<fs::DirEntry>>),
+}
+
+impl CtDirectoryEntries {
+    fn next(&mut self) -> Option<IOResult<fs::DirEntry>> {
+        match self {
+            Self::Open(entries) => entries.next(),
+            Self::Buffered(entries) => entries.pop_front(),
+        }
+    }
+}
+
+struct CtWalkFrame {
+    path: PathBuf,
+    depth: usize,
+    entries: CtDirectoryEntries,
+    directories: VecDeque<CtWalkEntry>,
+}
+
+struct CtWalkEntry {
+    path: PathBuf,
+    depth: usize,
+    is_dir: bool,
+}
+
+enum CtWalkErrorKind {
+    Access,
+    ReadDirectory,
+    Cycle,
+}
+
+struct CtWalkError {
+    path: PathBuf,
+    depth: usize,
+    error: Option<IOError>,
+    kind: CtWalkErrorKind,
+}
+
+impl CtWalkError {
+    fn access(path: PathBuf, depth: usize, error: IOError) -> Self {
+        Self {
+            path,
+            depth,
+            error: Some(error),
+            kind: CtWalkErrorKind::Access,
+        }
+    }
+
+    fn read_directory(path: PathBuf, depth: usize, error: IOError) -> Self {
+        Self {
+            path,
+            depth,
+            error: Some(error),
+            kind: CtWalkErrorKind::ReadDirectory,
+        }
+    }
+
+    fn cycle(path: PathBuf, depth: usize) -> Self {
+        Self {
+            path,
+            depth,
+            error: None,
+            kind: CtWalkErrorKind::Cycle,
+        }
+    }
+
+    fn is_directory_error(&self) -> bool {
+        matches!(self.kind, CtWalkErrorKind::ReadDirectory)
+    }
+
+    fn is_cycle(&self) -> bool {
+        matches!(self.kind, CtWalkErrorKind::Cycle)
+    }
+}
+
+/// A pre-order directory walker that retains the directory path for every
+/// filesystem operation. `walkdir` omits this context for `ReadDir::next`
+/// errors, but recursive ownership changes must report the logical path.
+struct CtPathWalker {
+    root: PathBuf,
+    follow_links: bool,
+    allow_dangling_links: bool,
+    started: bool,
+    pending_directory: Option<(PathBuf, usize)>,
+    stack: Vec<CtWalkFrame>,
+}
+
+impl CtPathWalker {
+    fn new(root: &Path, follow_links: bool, allow_dangling_links: bool) -> Self {
+        Self {
+            root: root.to_path_buf(),
+            follow_links,
+            allow_dangling_links,
+            started: false,
+            pending_directory: None,
+            stack: Vec::new(),
+        }
+    }
+
+    fn next(&mut self) -> Option<Result<CtWalkEntry, CtWalkError>> {
+        if !self.started {
+            self.started = true;
+            let root = self.root.clone();
+            match self.open_directory(root, 0) {
+                Ok(()) => {}
+                Err(error) => return Some(Err(error)),
+            }
+        }
+        if let Some((path, depth)) = self.pending_directory.take() {
+            if let Err(error) = self.open_directory(path, depth) {
+                return Some(Err(error));
+            }
+        }
+
+        loop {
+            let (directory, depth, next_entry, queued_directory) = {
+                let frame = self.stack.last_mut()?;
+                let next_entry = frame.entries.next();
+                let queued_directory = if next_entry.is_none() {
+                    frame.directories.pop_front()
+                } else {
+                    None
+                };
+                (
+                    frame.path.clone(),
+                    frame.depth,
+                    next_entry,
+                    queued_directory,
+                )
+            };
+            let entry = match next_entry {
+                None => {
+                    if let Some(entry) = queued_directory {
+                        self.pending_directory = Some((entry.path.clone(), entry.depth));
+                        return Some(Ok(entry));
+                    }
+                    self.stack.pop();
+                    continue;
+                }
+                Some(Err(error)) => {
+                    return Some(Err(CtWalkError::read_directory(directory, depth, error)));
+                }
+                Some(Ok(entry)) => entry,
+            };
+
+            let path = entry.path();
+            let entry_depth = depth + 1;
+            let file_type = match entry.file_type() {
+                Ok(file_type) => file_type,
+                Err(error) => {
+                    return Some(Err(CtWalkError::access(path, entry_depth, error)));
+                }
+            };
+
+            if file_type.is_symlink() && self.follow_links {
+                let metadata = match path.metadata() {
+                    Ok(metadata) => metadata,
+                    Err(error) => {
+                        if self.allow_dangling_links && error.raw_os_error() == Some(libc::ENOENT) {
+                            return Some(Ok(CtWalkEntry {
+                                path,
+                                depth: entry_depth,
+                                is_dir: false,
+                            }));
+                        }
+                        return Some(Err(CtWalkError::access(path, entry_depth, error)));
+                    }
+                };
+                if metadata.is_dir() {
+                    match self.points_to_ancestor(&metadata) {
+                        Ok(true) => return Some(Err(CtWalkError::cycle(path, entry_depth))),
+                        Ok(false) => {}
+                        Err(error) => return Some(Err(error)),
+                    }
+                    self.stack
+                        .last_mut()
+                        .expect("directory frame is available")
+                        .directories
+                        .push_back(CtWalkEntry {
+                            path,
+                            depth: entry_depth,
+                            is_dir: true,
+                        });
+                    continue;
+                }
+            }
+
+            if file_type.is_dir() {
+                self.stack
+                    .last_mut()
+                    .expect("directory frame is available")
+                    .directories
+                    .push_back(CtWalkEntry {
+                        path,
+                        depth: entry_depth,
+                        is_dir: true,
+                    });
+                continue;
+            }
+
+            return Some(Ok(CtWalkEntry {
+                path,
+                depth: entry_depth,
+                is_dir: false,
+            }));
+        }
+    }
+
+    fn skip_current_directory(&mut self, path: &Path) {
+        if self
+            .pending_directory
+            .as_ref()
+            .is_some_and(|(pending_path, _)| pending_path == path)
+        {
+            self.pending_directory = None;
+            return;
+        }
+        if self.stack.last().is_some_and(|frame| frame.path == path) {
+            self.stack.pop();
+        }
+    }
+
+    fn open_directory(&mut self, path: PathBuf, depth: usize) -> Result<(), CtWalkError> {
+        self.close_oldest_directory();
+        let entries = fs::read_dir(&path)
+            .map_err(|error| CtWalkError::read_directory(path.clone(), depth, error))?;
+        self.stack.push(CtWalkFrame {
+            path,
+            depth,
+            entries: CtDirectoryEntries::Open(entries),
+            directories: VecDeque::new(),
+        });
+        Ok(())
+    }
+
+    fn close_oldest_directory(&mut self) {
+        if self
+            .stack
+            .iter()
+            .filter(|frame| matches!(frame.entries, CtDirectoryEntries::Open(_)))
+            .count()
+            < CT_WALK_MAX_OPEN
+        {
+            return;
+        }
+
+        if let Some(frame) = self
+            .stack
+            .iter_mut()
+            .find(|frame| matches!(frame.entries, CtDirectoryEntries::Open(_)))
+        {
+            let CtDirectoryEntries::Open(entries) = std::mem::replace(
+                &mut frame.entries,
+                CtDirectoryEntries::Buffered(VecDeque::new()),
+            ) else {
+                unreachable!("selected an open directory stream");
+            };
+            frame.entries = CtDirectoryEntries::Buffered(entries.collect());
+        }
+    }
+
+    fn points_to_ancestor(&self, metadata: &Metadata) -> Result<bool, CtWalkError> {
+        for frame in &self.stack {
+            let ancestor = frame
+                .path
+                .metadata()
+                .map_err(|error| CtWalkError::access(frame.path.clone(), frame.depth, error))?;
+            if metadata.dev() == ancestor.dev() && metadata.ino() == ancestor.ino() {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+}
+
 pub struct CtOwnershipChangeExecutor {
     pub dest_uid: Option<u32>,
     pub dest_gid: Option<u32>,
@@ -615,14 +893,6 @@ fn traversal_failure_action(
     }
 }
 
-fn traversal_walk(root: &Path, traverse_symlinks: &CtTraverseSymlinks) -> WalkDir {
-    WalkDir::new(root)
-        .follow_links(traverse_symlinks == &CtTraverseSymlinks::All)
-        // Followed directories must be yielded before their contents so
-        // --preserve-root can reject a link to / before reading its hierarchy.
-        .contents_first(traverse_symlinks != &CtTraverseSymlinks::All)
-}
-
 impl CtOwnershipChangeExecutor {
     fn print_verbose_failure_for_unavailable_path(&self, path: &Path, has_link_metadata: bool) {
         if self.verbosity.level != CtVerbosityLevel::Verbose {
@@ -712,184 +982,144 @@ impl CtOwnershipChangeExecutor {
     fn dive_into<P: AsRef<Path>>(&self, root: P) -> (i32, bool) {
         let root = root.as_ref();
 
-        //walkdir总是解析根目录，所以我们必须自己检查
         if self.traverse_symlinks == CtTraverseSymlinks::None && root.is_symlink() {
+            return (0, false);
+        }
+        if !root.is_dir() {
             return (0, false);
         }
 
         let mut ret = 0;
         let mut root_unavailable = false;
-        let mut iterator = traversal_walk(root, &self.traverse_symlinks).into_iter();
-        let mut unreadable_directories = HashSet::<PathBuf>::new();
-        let mut deferred_directories = Vec::<(usize, PathBuf, Metadata)>::new();
-        let defer_directories = self.traverse_symlinks == CtTraverseSymlinks::All;
-        let mut walk_error_paths = HashSet::<PathBuf>::new();
-        // 我们不能使用 for 循环，因为在循环内部我们需要操作迭代器。
+        let mut pending_directories = Vec::<(usize, PathBuf, Metadata)>::new();
+        let mut iterator = CtPathWalker::new(
+            root,
+            self.traverse_symlinks == CtTraverseSymlinks::All,
+            !self.dereference,
+        );
+
         while let Some(entry) = iterator.next() {
-            if defer_directories {
-                let depth = entry
-                    .as_ref()
-                    .map_or_else(|error| error.depth(), |entry| entry.depth());
-                ret |= self.change_deferred_directories(
-                    &mut deferred_directories,
-                    &unreadable_directories,
-                    depth,
-                );
-            }
             let entry = match entry {
                 Err(e) => {
-                    // GNU FTS skips symlink-induced directory cycles.
-                    if e.loop_ancestor().is_some() {
-                        if let Some(path) = e.path() {
-                            match self.obtain_meta(path, self.dereference) {
-                                Ok(meta) => ret |= self.change_path(path, &meta),
-                                Err(error) => {
-                                    ret = 1;
-                                    self.print_verbose_failure_for_unavailable_path(
-                                        path,
-                                        has_dangling_symlink_metadata(
-                                            path,
-                                            self.dereference,
-                                            &error,
-                                        ),
-                                    );
-                                }
+                    while pending_directories
+                        .last()
+                        .is_some_and(|(depth, _, _)| *depth > e.depth)
+                    {
+                        let (_, path, meta) = pending_directories.pop().expect("checked above");
+                        ret |= self.change_path(&path, &meta);
+                    }
+                    if pending_directories
+                        .last()
+                        .is_some_and(|(depth, path, _)| *depth == e.depth && path == &e.path)
+                    {
+                        pending_directories.pop();
+                    } else {
+                        while pending_directories
+                            .last()
+                            .is_some_and(|(depth, _, _)| *depth >= e.depth)
+                        {
+                            let (_, path, meta) = pending_directories.pop().expect("checked above");
+                            ret |= self.change_path(&path, &meta);
+                        }
+                    }
+
+                    if e.is_directory_error() {
+                        iterator.skip_current_directory(&e.path);
+                    }
+                    if e.is_cycle() {
+                        match self.obtain_meta(&e.path, self.dereference) {
+                            Ok(meta) => ret |= self.change_path(&e.path, &meta),
+                            Err(error) => {
+                                ret = 1;
+                                self.print_verbose_failure_for_unavailable_path(
+                                    &e.path,
+                                    has_dangling_symlink_metadata(
+                                        &e.path,
+                                        self.dereference,
+                                        &error,
+                                    ),
+                                );
                             }
-                        } else {
-                            ret = 1;
                         }
                         continue;
                     }
-                    if !self.dereference {
-                        if let (Some(path), Some(error)) = (e.path(), e.io_error()) {
-                            if error.raw_os_error() == Some(libc::ENOENT) {
-                                if let Ok(meta) = path.symlink_metadata() {
-                                    if meta.file_type().is_symlink() {
-                                        ret |= self.change_path(path, &meta);
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-                    }
+
                     ret = 1;
-                    let path = e.path();
-                    let action = path.map(|path| {
-                        root_unavailable |= path == root;
-                        walk_error_paths.insert(path.to_path_buf());
-                        let action = traversal_failure_action(path, self.dereference, e.io_error());
-                        if action == "read directory" {
-                            unreadable_directories.insert(path.to_path_buf());
-                        }
-                        action
+                    root_unavailable |= e.path == root;
+                    let has_link_metadata = e.error.as_ref().is_some_and(|error| {
+                        has_dangling_symlink_metadata(&e.path, self.dereference, error)
                     });
-                    if let Some(path) = path {
-                        let has_link_metadata = e.io_error().is_some_and(|error| {
-                            has_dangling_symlink_metadata(path, self.dereference, error)
-                        });
-                        self.print_verbose_failure_for_unavailable_path(path, has_link_metadata);
-                    }
+                    self.print_verbose_failure_for_unavailable_path(&e.path, has_link_metadata);
                     if !self.verbosity.force_silent
                         && self.verbosity.level != CtVerbosityLevel::Silent
                     {
-                        if let Some(path) = path {
-                            ct_show_error!(
-                                "cannot {} {}: {}",
-                                action.expect("path action is available"),
-                                quote_path_for_diagnostic(path),
-                                if let Some(error) = e.io_error() {
-                                    strip_errno(error)
-                                } else {
-                                    "Too many levels of symbolic links".into()
-                                }
-                            );
+                        let error = e.error.as_ref().map_or_else(
+                            || "Too many levels of symbolic links".into(),
+                            strip_errno,
+                        );
+                        let action = if e.is_directory_error() {
+                            "read directory"
                         } else {
-                            ct_show_error!("{}", e);
-                        }
+                            traversal_failure_action(&e.path, self.dereference, e.error.as_ref())
+                        };
+                        ct_show_error!(
+                            "cannot {} {}: {}",
+                            action,
+                            quote_path_for_diagnostic(&e.path),
+                            error
+                        );
                     }
                     continue;
                 }
                 Ok(entry) => entry,
             };
-            // The root is handled by traverse after all descendants. Filtering it
-            // with min_depth breaks WalkDir's post-order output for root symlinks.
-            if entry.depth() == 0 {
-                continue;
+
+            while pending_directories
+                .last()
+                .is_some_and(|(depth, _, _)| *depth >= entry.depth)
+            {
+                let (_, path, meta) = pending_directories.pop().expect("checked above");
+                ret |= self.change_path(&path, &meta);
             }
-            let path = entry.path();
-            if walk_error_paths.remove(path) {
-                if entry.file_type().is_dir() {
-                    iterator.skip_current_dir();
-                }
-                continue;
-            }
-            if unreadable_directories.contains(path) {
-                continue;
-            }
-            let meta = match self.obtain_meta(path, self.dereference) {
+
+            let meta = match self.obtain_meta(&entry.path, self.dereference) {
                 Ok(m) => m,
                 Err(error) => {
                     ret = 1;
                     self.print_verbose_failure_for_unavailable_path(
-                        path,
-                        has_dangling_symlink_metadata(path, self.dereference, &error),
+                        &entry.path,
+                        has_dangling_symlink_metadata(&entry.path, self.dereference, &error),
                     );
-                    if entry.file_type().is_dir() {
-                        // 指示walkdir跳过此目录，以避免walkdir尝试查询此目录的子目录时再次出现错误。
-                        iterator.skip_current_dir();
+                    if entry.is_dir {
+                        iterator.skip_current_directory(&entry.path);
                     }
                     continue;
                 }
             };
 
             if self.preserve_root
-                && is_root(path, self.traverse_symlinks == CtTraverseSymlinks::All)
+                && is_root(
+                    &entry.path,
+                    self.traverse_symlinks == CtTraverseSymlinks::All,
+                )
             {
-                // Pre-order traversal lets us avoid entering a symlinked /.
-                iterator.skip_current_dir();
-                if defer_directories {
-                    ret |= self.change_deferred_directories(
-                        &mut deferred_directories,
-                        &unreadable_directories,
-                        0,
-                    );
+                while let Some((_, path, meta)) = pending_directories.pop() {
+                    ret |= self.change_path(&path, &meta);
                 }
                 return (ret | 1, root_unavailable);
             }
 
-            if defer_directories && entry.file_type().is_dir() {
-                deferred_directories.push((entry.depth(), path.to_path_buf(), meta));
-            } else {
-                ret |= self.change_path(path, &meta);
+            if entry.is_dir {
+                pending_directories.push((entry.depth, entry.path, meta));
+                continue;
             }
+
+            ret |= self.change_path(&entry.path, &meta);
         }
-        if defer_directories {
-            ret |= self.change_deferred_directories(
-                &mut deferred_directories,
-                &unreadable_directories,
-                0,
-            );
+        while let Some((_, path, meta)) = pending_directories.pop() {
+            ret |= self.change_path(&path, &meta);
         }
         (ret, root_unavailable)
-    }
-
-    fn change_deferred_directories(
-        &self,
-        deferred_directories: &mut Vec<(usize, PathBuf, Metadata)>,
-        unreadable_directories: &HashSet<PathBuf>,
-        next_depth: usize,
-    ) -> i32 {
-        let mut ret = 0;
-        while deferred_directories
-            .last()
-            .is_some_and(|(depth, _, _)| *depth >= next_depth)
-        {
-            let (_, path, meta) = deferred_directories.pop().unwrap();
-            if !unreadable_directories.contains(&path) {
-                ret |= self.change_path(&path, &meta);
-            }
-        }
-        ret
     }
 
     fn obtain_meta<P: AsRef<Path>>(&self, path: P, follow: bool) -> IOResult<Metadata> {
@@ -1587,25 +1817,28 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn test_recursive_walk_visits_directory_after_its_contents() {
+    fn test_path_walker_visits_directory_before_its_contents() {
         let temp_dir = tempdir().unwrap();
         let tree = temp_dir.path().join("tree");
         let directory = tree.join("directory");
         fs::create_dir_all(&directory).unwrap();
+        let file = tree.join("file");
+        fs::write(&file, b"").unwrap();
         let child = directory.join("child");
         fs::write(&child, b"").unwrap();
 
-        let paths: Vec<_> = traversal_walk(&tree, &CtTraverseSymlinks::None)
-            .into_iter()
-            .map(|entry| entry.unwrap().into_path())
-            .collect();
+        let mut walker = CtPathWalker::new(&tree, false, false);
+        let mut paths = Vec::new();
+        while let Some(entry) = walker.next() {
+            paths.push(entry.ok().unwrap().path);
+        }
 
-        assert_eq!(paths, vec![child, directory, tree]);
+        assert_eq!(paths, vec![file, directory, child]);
     }
 
     #[cfg(unix)]
     #[test]
-    fn test_recursive_walk_visits_followed_directory_before_its_contents() {
+    fn test_path_walker_visits_followed_directory_before_its_contents() {
         let temp_dir = tempdir().unwrap();
         let tree = temp_dir.path().join("tree");
         let target = temp_dir.path().join("target");
@@ -1616,12 +1849,13 @@ mod tests {
         fs::write(&child, b"").unwrap();
         unix::fs::symlink(&target, &link).unwrap();
 
-        let paths: Vec<_> = traversal_walk(&tree, &CtTraverseSymlinks::All)
-            .into_iter()
-            .map(|entry| entry.unwrap().into_path())
-            .collect();
+        let mut walker = CtPathWalker::new(&tree, true, false);
+        let mut paths = Vec::new();
+        while let Some(entry) = walker.next() {
+            paths.push(entry.ok().unwrap().path);
+        }
 
-        assert_eq!(paths, vec![tree, link.clone(), link.join("child")]);
+        assert_eq!(paths, vec![link.clone(), link.join("child")]);
     }
 
     #[cfg(unix)]

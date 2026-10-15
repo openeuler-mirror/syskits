@@ -43,6 +43,8 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_locale::strcoll_compare;
+#[cfg(unix)]
+use ctcore::libc;
 use ctcore::Tool;
 use memchr::{memchr3_iter, memchr_iter, memmem};
 use std::cmp::Ordering;
@@ -55,6 +57,19 @@ use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
+
+#[cfg(unix)]
+unsafe extern "C" {
+    fn mbrtowc(
+        pwc: *mut libc::wchar_t,
+        s: *const libc::c_char,
+        n: libc::size_t,
+        ps: *mut libc::mbstate_t,
+    ) -> libc::size_t;
+}
+
+#[cfg(unix)]
+const EMPTY_LOCALE: [libc::c_char; 1] = [0];
 #[derive(Debug)]
 enum JoinError {
     IOError(std::io::Error),
@@ -1028,13 +1043,39 @@ fn parse_separator(value_os: &OsString) -> CTResult<Sep> {
     } else if value == b"\\0" {
         Ok(Sep::Char(vec![0]))
     } else {
-        // 转换为字符串以正确统计 UTF-8 字符（而非字节）
-        let s = value_os.to_string_lossy();
-        if s.chars().count() == 1 {
-            Ok(Sep::Char(value.to_vec()))
-        } else {
-            Err(CtSimpleError::new(1, format!("multi-character tab {s}")))
-        }
+        #[cfg(unix)]
+        let separator_len = {
+            let mut state: libc::mbstate_t = unsafe { std::mem::zeroed() };
+            let mut wide_char = 0;
+            let len = unsafe {
+                mbrtowc(
+                    &mut wide_char,
+                    value.as_ptr().cast(),
+                    value.len(),
+                    &mut state,
+                )
+            };
+            if len == usize::MAX || len == usize::MAX - 1 {
+                1
+            } else {
+                len.max(1)
+            }
+        };
+
+        #[cfg(not(unix))]
+        let separator_len = std::str::from_utf8(value)
+            .ok()
+            .and_then(|text| text.chars().next())
+            .map_or(1, char::len_utf8);
+
+        Ok(Sep::Char(value[..separator_len].to_vec()))
+    }
+}
+
+fn initialize_locale() {
+    #[cfg(unix)]
+    unsafe {
+        libc::setlocale(libc::LC_ALL, EMPTY_LOCALE.as_ptr());
     }
 }
 
@@ -1186,6 +1227,7 @@ impl JoinSettings {
 }
 
 pub fn join_main(args: impl ctcore::Args) -> CTResult<()> {
+    initialize_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
@@ -1370,7 +1412,8 @@ fn join_exec_to_writer(
         settings.line_ending,
         match &settings.separator {
             Sep::Char(sep) => sep.clone(),
-            _ => vec![b' '],
+            Sep::Line => vec![0],
+            Sep::Whitespaces => vec![b' '],
         },
         &settings.format,
         &settings.empty,
@@ -1763,6 +1806,7 @@ fn parse_file_number(value: &str) -> CTResult<FileNum> {
 }
 
 pub fn join_native_semantic(args: impl ctcore::Args) -> CTResult<JoinSemantic> {
+    initialize_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
@@ -2470,6 +2514,76 @@ mod tests {
             .unwrap();
 
             assert_eq!(output, b"left-a right-a\nleft-b right-b\n");
+        }
+
+        #[test]
+        fn test_join_exec_separator_uses_first_character() {
+            let temp = tempdir().unwrap();
+            let file1_path = temp.path().join("file1.txt");
+            let file2_path = temp.path().join("file2.txt");
+
+            create_test_file(&file1_path, "kabL\n").unwrap();
+            create_test_file(&file2_path, "kabR\n").unwrap();
+
+            let matches = ct_app()
+                .try_get_matches_from(vec![
+                    "join",
+                    "-t",
+                    "ab",
+                    file1_path.to_str().unwrap(),
+                    file2_path.to_str().unwrap(),
+                ])
+                .unwrap();
+            let settings = JoinSettings::new(&matches).unwrap();
+            let mut output = Vec::new();
+
+            join_exec_to_writer(
+                file1_path.to_str().unwrap(),
+                file2_path.to_str().unwrap(),
+                settings,
+                &mut output,
+                false,
+            )
+            .unwrap();
+
+            assert_eq!(output, b"kabLabR\n");
+        }
+
+        #[test]
+        fn test_join_exec_empty_separator_uses_nul_output_delimiter() {
+            let temp = tempdir().unwrap();
+            let file1_path = temp.path().join("file1.txt");
+            let file2_path = temp.path().join("file2.txt");
+
+            create_test_file(&file1_path, "a\n").unwrap();
+            create_test_file(&file2_path, "a\n").unwrap();
+
+            let matches = ct_app()
+                .try_get_matches_from(vec![
+                    "join",
+                    "-t",
+                    "",
+                    "-o",
+                    "1.1",
+                    "-o",
+                    "1.2",
+                    file1_path.to_str().unwrap(),
+                    file2_path.to_str().unwrap(),
+                ])
+                .unwrap();
+            let settings = JoinSettings::new(&matches).unwrap();
+            let mut output = Vec::new();
+
+            join_exec_to_writer(
+                file1_path.to_str().unwrap(),
+                file2_path.to_str().unwrap(),
+                settings,
+                &mut output,
+                false,
+            )
+            .unwrap();
+
+            assert_eq!(output, b"a\0\n");
         }
 
         #[test]

@@ -16,7 +16,7 @@
 // 命名管道的使用通常涉及到两个或多个进程，其中一个进程将数据写入管道，另一个或多个进程从管道中读取数据。它们在文件系统中有一个名称，因此可以被多个进程引用。
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::builder::ValueParser;
@@ -41,6 +41,8 @@ mod opt_flags {
     pub const CONTEXT: &str = "context"; // 安全上下文选项
     pub const FIFO: &str = "fifo"; // FIFO路径参数
 }
+
+const NEGATIVE_MODE_PREFIX: &str = "__syskits_mkfifo_negative_mode__";
 
 fn mkfifo_usage_error(message: impl std::fmt::Display) -> Box<dyn ctcore::ct_error::CTError> {
     CtSimpleError::new(
@@ -85,10 +87,67 @@ fn validate_short_options(args: &[OsString]) -> CTResult<()> {
     Ok(())
 }
 
+fn short_option_requires_next_mode_argument(option: &str) -> bool {
+    let Some(short_options) = option.strip_prefix('-') else {
+        return false;
+    };
+    if short_options.is_empty() || short_options.starts_with('-') {
+        return false;
+    }
+
+    short_options
+        .char_indices()
+        .find_map(|(index, character)| (character == 'm').then_some(index))
+        .is_some_and(|index| index + 1 == short_options.len())
+}
+
+fn long_option_requires_next_mode_argument(option: &str) -> bool {
+    let Some(long_option) = option.strip_prefix("--") else {
+        return false;
+    };
+    !long_option.contains('=') && "mode".starts_with(long_option)
+}
+
+fn normalize_negative_mode_arguments(args: &mut [OsString]) {
+    let mut index = 1;
+    while index < args.len() {
+        let Some(option) = args[index].to_str() else {
+            index += 1;
+            continue;
+        };
+        if option == "--" {
+            break;
+        }
+
+        if short_option_requires_next_mode_argument(option)
+            || long_option_requires_next_mode_argument(option)
+        {
+            let normalized_mode = args
+                .get(index + 1)
+                .and_then(|mode| mode.to_str())
+                .filter(|mode| mode.starts_with('-'))
+                .map(|mode| OsString::from(format!("{NEGATIVE_MODE_PREFIX}{mode}")));
+            if let Some(mode) = normalized_mode {
+                args[index + 1] = mode;
+            }
+            index += 2;
+        } else {
+            index += 1;
+        }
+    }
+}
+
+fn mode_value(matches: &ArgMatches) -> Option<&String> {
+    matches
+        .get_many::<String>(opt_flags::MODE)
+        .and_then(|mut modes| modes.next_back())
+}
+
 pub fn mkfifo_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = args.into_iter().collect::<Vec<_>>();
+    let mut args = args.into_iter().collect::<Vec<_>>();
+    normalize_negative_mode_arguments(&mut args);
     validate_short_options(&args)?;
     let args_match = ct_app().try_get_matches_from(args)?;
 
@@ -107,8 +166,11 @@ pub fn mkfifo_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     // 解析文件权限模式
-    let fifo_mode = match args_match.get_one::<String>(opt_flags::MODE) {
+    let fifo_mode = match mode_value(&args_match) {
         Some(mode_str) => {
+            let mode_str = mode_str
+                .strip_prefix(NEGATIVE_MODE_PREFIX)
+                .unwrap_or(mode_str);
             let mode =
                 parse_mkfifo_mode(mode_str).map_err(|_| CtSimpleError::new(1, "invalid mode"))?;
             if mode > 0o777 {
@@ -305,7 +367,8 @@ pub fn ct_app() -> Command {
             .short('m')
             .long(opt_flags::MODE)
             .help(t!("mkfifo.clap.mode"))
-            .value_name("MODE"),
+            .value_name("MODE")
+            .action(ArgAction::Append),
         Arg::new(opt_flags::SE_LINUX_SECURITY_CONTEXT)
             .short('Z')
             .help(t!("mkfifo.clap.se_linux_security_context"))

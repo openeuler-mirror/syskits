@@ -18,6 +18,10 @@ fn missing_option_arguments_use_gnu_diagnostics() {
             "mktemp: option requires an argument -- 'p'\nTry 'mktemp --help' for more information.\n",
         ),
         (
+            &["-up"][..],
+            "mktemp: option requires an argument -- 'p'\nTry 'mktemp --help' for more information.\n",
+        ),
+        (
             &["--suffix"][..],
             "mktemp: option '--suffix' requires an argument\nTry 'mktemp --help' for more information.\n",
         ),

@@ -449,11 +449,16 @@ fn missing_option_argument_error(args: &[OsString]) -> Option<Box<dyn CTError>> 
         return None;
     }
 
-    if last == "-p" {
+    let short_options = last.to_str()?.strip_prefix('-')?;
+    if short_options.strip_suffix('p').is_some_and(|prefix| {
+        prefix
+            .bytes()
+            .all(|byte| matches!(byte, b'd' | b'q' | b't' | b'u'))
+    }) {
         return Some(CTsageError::new(1, "option requires an argument -- 'p'"));
     }
 
-    let option = last.to_str()?.strip_prefix("--")?;
+    let option = short_options.strip_prefix('-')?;
     if !option.is_empty() && "suffix".starts_with(option) {
         return Some(CTsageError::new(
             1,

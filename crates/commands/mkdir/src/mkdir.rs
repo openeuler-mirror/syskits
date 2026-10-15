@@ -336,28 +336,25 @@ fn long_option_requires_next_mode_argument(option: &str) -> bool {
     "mode".starts_with(long_option)
 }
 
-fn has_explicit_context_argument(args: &[OsString]) -> bool {
-    for arg in args.iter().skip(1) {
-        if arg == "--" {
-            break;
-        }
+fn explicit_context_argument_count(args: &[OsString]) -> usize {
+    args.iter()
+        .skip(1)
+        .take_while(|arg| *arg != "--")
+        .filter_map(|arg| arg.to_str())
+        .filter_map(|value| value.strip_prefix("--"))
+        .filter_map(|long_option| long_option.split_once('='))
+        .filter(|(name, _)| "context".starts_with(name))
+        .count()
+}
 
-        let Some(value) = arg.to_str() else {
-            continue;
-        };
-        let Some(long_option) = value.strip_prefix("--") else {
-            continue;
-        };
-        let Some((name, _)) = long_option.split_once('=') else {
-            continue;
-        };
+fn last_nonempty_context_argument(matches: &ArgMatches) -> Option<&OsString> {
+    matches
+        .get_many::<OsString>(mkdir_flags::CONTEXT)
+        .and_then(|contexts| contexts.filter(|context| !context.is_empty()).next_back())
+}
 
-        if "context".starts_with(name) {
-            return true;
-        }
-    }
-
-    false
+fn has_context_argument(matches: &ArgMatches) -> bool {
+    matches.get_many::<OsString>(mkdir_flags::CONTEXT).is_some()
 }
 
 mod mkdir_flags {
@@ -468,7 +465,7 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
     // 在我们能用 clap（以及以前的 getopts）解析 'args' 之前，
     validate_short_options(&args)?;
     validate_long_options(&args)?;
-    let has_explicit_context = has_explicit_context_argument(&args);
+    let explicit_context_argument_count = explicit_context_argument_count(&args);
 
     // Linux 特有的选项，未实现
     // opts.optflag("Z", "context", "set SELinux security context" +
@@ -497,22 +494,22 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let mut context = None;
     let mut set_context = matches.get_flag(mkdir_flags::CTX);
-    let mut warn_on_unsupported = false;
+    let warn_on_unsupported = false;
 
-    if let Some(ctx) = matches.get_one::<OsString>(mkdir_flags::CONTEXT) {
+    if has_context_argument(&matches) {
         set_context = true;
-        if !ctx.is_empty() {
-            context = Some(ctx);
-        }
-        warn_on_unsupported = has_explicit_context;
+        context = last_nonempty_context_argument(&matches);
     }
 
     #[cfg(target_os = "linux")]
-    if warn_on_unsupported && selinux::kernel_support() == selinux::KernelSupport::Unsupported {
-        eprintln!(
-            "mkdir: warning: ignoring --context; it requires an SELinux/SMACK-enabled kernel"
-        );
-        warn_on_unsupported = false;
+    if explicit_context_argument_count != 0
+        && selinux::kernel_support() == selinux::KernelSupport::Unsupported
+    {
+        for _ in 0..explicit_context_argument_count {
+            eprintln!(
+                "mkdir: warning: ignoring --context; it requires an SELinux/SMACK-enabled kernel"
+            );
+        }
     }
 
     let dirs = matches
@@ -641,6 +638,7 @@ pub fn ct_app() -> Command {
             .value_parser(ValueParser::os_string())
             .num_args(0..=1)
             .require_equals(true)
+            .action(ArgAction::Append)
             .default_missing_value(""),
         Arg::new(mkdir_flags::DIRS)
             .action(ArgAction::Append)

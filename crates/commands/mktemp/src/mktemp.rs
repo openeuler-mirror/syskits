@@ -401,12 +401,13 @@ pub fn mktemp_main(args: impl ctcore::Args) -> CTResult<()> {
         false => exec_res,
     };
 
-    finish_mktemp_output(res, stdout_initially_closed)
+    finish_mktemp_output(res, stdout_initially_closed, is_suppress_file_err)
 }
 
 fn finish_mktemp_output(
     path_res: CTResult<PathBuf>,
     stdout_initially_closed: bool,
+    suppress_output_error: bool,
 ) -> CTResult<()> {
     let path = path_res?;
 
@@ -424,6 +425,9 @@ fn finish_mktemp_output(
     // 这样参数或模板错误仍会按 GNU 行为优先返回。
     if stdout_initially_closed || ctcore::ct_stdout_was_closed() {
         cleanup_created_path(&path);
+        if suppress_output_error {
+            return Err(1.into());
+        }
         return Err(CTsageError::new(1, "write error"));
     }
 
@@ -431,7 +435,12 @@ fn finish_mktemp_output(
         Ok(()) => Ok(()),
         Err(e) => {
             cleanup_created_path(&path);
-            Err(e.map_err_context(|| "failed to print directory name".to_owned()))
+            let error = e.map_err_context(|| "failed to print directory name".to_owned());
+            if suppress_output_error {
+                Err(error.code().into())
+            } else {
+                Err(error)
+            }
         }
     }
 }
@@ -2520,6 +2529,7 @@ mod tests {
             let result = finish_mktemp_output(
                 Err(Box::new(MkTempError::TooFewXs("bad".to_string()))),
                 true,
+                false,
             );
 
             let error = result.unwrap_err();
@@ -2532,7 +2542,7 @@ mod tests {
 
         #[test]
         fn test_finish_mktemp_output_reports_write_error_for_successful_path() {
-            let result = finish_mktemp_output(Ok(PathBuf::from("tmp.XXXXXX")), true);
+            let result = finish_mktemp_output(Ok(PathBuf::from("tmp.XXXXXX")), true, false);
 
             let error = result.unwrap_err();
             assert_eq!(error.to_string(), "write error");

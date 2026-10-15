@@ -1168,11 +1168,11 @@ impl JoinSettings {
             }
         }
 
-        if let Some(empty_values) = matches.get_many::<String>("e") {
-            let mut empty_replacement = None;
+        if let Some(empty_values) = matches.get_many::<OsString>("e") {
+            let mut empty_replacement: Option<&OsString> = None;
             for empty in empty_values {
                 match empty_replacement {
-                    Some(empty_replacement) if empty_replacement != empty => {
+                    Some(empty_replacement) if empty_replacement.as_bytes() != empty.as_bytes() => {
                         return Err(CtSimpleError::new(
                             1,
                             "conflicting empty-field replacement strings",
@@ -1279,6 +1279,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
             .short('e')
             .action(ArgAction::Append)
             .value_name("EMPTY")
+            .value_parser(ValueParser::os_string())
             .help(t!("join.clap.e")),
         Arg::new("i")
             .short('i')
@@ -1857,6 +1858,8 @@ mod tests {
     use std::ffi::OsString;
     use std::fs::File;
     use std::io::Write;
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStringExt;
     use tempfile::tempdir;
 
     #[test]
@@ -2201,6 +2204,23 @@ mod tests {
             .unwrap();
 
         assert!(JoinSettings::new(&matches).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_parse_settings_empty_field_non_utf8() {
+        let matches = ct_app()
+            .try_get_matches_from(vec![
+                OsString::from("join"),
+                OsString::from("-e"),
+                OsString::from_vec(vec![0xff]),
+                OsString::from("file1.txt"),
+                OsString::from("file2.txt"),
+            ])
+            .unwrap();
+
+        let settings = JoinSettings::new(&matches).unwrap();
+        assert_eq!(settings.empty, [0xff]);
     }
 
     #[test]

@@ -177,6 +177,60 @@ fn validate_long_options(args: &[OsString]) -> CTResult<()> {
     Ok(())
 }
 
+fn stop_option_parsing_for_posixly_correct(args: &mut Vec<OsString>) {
+    if std::env::var_os("POSIXLY_CORRECT").is_none() {
+        return;
+    }
+
+    let mut index = 1;
+    while index < args.len() {
+        let Some(value) = args[index].to_str() else {
+            args.insert(index, OsString::from("--"));
+            return;
+        };
+        if value == "--" {
+            return;
+        }
+        if value == "-" || !value.starts_with('-') {
+            args.insert(index, OsString::from("--"));
+            return;
+        }
+
+        if short_option_requires_next_mode_argument(value)
+            || long_option_requires_next_mode_argument(value)
+        {
+            index += 2;
+        } else {
+            index += 1;
+        }
+    }
+}
+
+fn short_option_requires_next_mode_argument(option: &str) -> bool {
+    let Some(short_options) = option.strip_prefix('-') else {
+        return false;
+    };
+    if short_options.is_empty() || short_options.starts_with('-') {
+        return false;
+    }
+
+    short_options
+        .char_indices()
+        .find_map(|(index, character)| (character == 'm').then_some(index))
+        .is_some_and(|index| index + 1 == short_options.len())
+}
+
+fn long_option_requires_next_mode_argument(option: &str) -> bool {
+    let Some(long_option) = option.strip_prefix("--") else {
+        return false;
+    };
+    if long_option.contains('=') {
+        return false;
+    }
+
+    "mode".starts_with(long_option)
+}
+
 mod mkdir_flags {
     pub const MODE: &str = "mode";
     pub const PARENTS: &str = "parents";
@@ -279,6 +333,7 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = mkdir_locale();
     rust_i18n::set_locale(&lang_code);
     let mut args = args.into_iter().collect::<Vec<_>>();
+    stop_option_parsing_for_posixly_correct(&mut args);
 
     // 在我们能用 clap（以及以前的 getopts）解析 'args' 之前，
     // 可能需要移除 MODE 前缀 '-'（例如 "chmod -x FILE"）。

@@ -79,6 +79,14 @@ fn invalid_options_use_gnu_diagnostics() {
             "mktemp: unrecognized option '--unknown'\nTry 'mktemp --help' for more information.\n",
         ),
         (
+            &["--d"][..],
+            "mktemp: option '--d' is ambiguous; possibilities: '--directory' '--dry-run'\nTry 'mktemp --help' for more information.\n",
+        ),
+        (
+            &["--d=foo"][..],
+            "mktemp: option '--d=foo' is ambiguous; possibilities: '--directory' '--dry-run'\nTry 'mktemp --help' for more information.\n",
+        ),
+        (
             &["--dir=foo"][..],
             "mktemp: option '--directory' doesn't allow an argument\nTry 'mktemp --help' for more information.\n",
         ),
@@ -89,6 +97,14 @@ fn invalid_options_use_gnu_diagnostics() {
         (
             &["--quie=foo"][..],
             "mktemp: option '--quiet' doesn't allow an argument\nTry 'mktemp --help' for more information.\n",
+        ),
+        (
+            &["--help=foo"][..],
+            "mktemp: option '--help' doesn't allow an argument\nTry 'mktemp --help' for more information.\n",
+        ),
+        (
+            &["--version=foo"][..],
+            "mktemp: option '--version' doesn't allow an argument\nTry 'mktemp --help' for more information.\n",
         ),
     ] {
         let output = run_mktemp(arguments);

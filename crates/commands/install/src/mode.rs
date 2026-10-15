@@ -18,7 +18,14 @@ pub fn install_parse(mode_string: &str, considering_dir: bool, umask: u32) -> Re
     if mode_string.chars().any(|c| c.is_ascii_digit()) {
         ct_mode::parse_numeric(0, mode_string, considering_dir)
     } else {
-        ct_mode::parse_symbolic(0, mode_string, umask, considering_dir)
+        let mut mode = 0;
+        for part in mode_string.split(',') {
+            if part.is_empty() {
+                return Err(format!("invalid mode ({mode_string})"));
+            }
+            mode = ct_mode::parse_symbolic(mode, part, umask, considering_dir)?;
+        }
+        Ok(mode)
     }
 }
 
@@ -43,4 +50,22 @@ pub fn install_chmod(path: &Path, mode: u32) -> Result<(), ()> {
 pub fn chmod(path: &Path, mode: u32) -> Result<(), ()> {
     // chmod on Windows only sets the readonly flag, which isn't even honored on directories
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::install_parse;
+
+    #[test]
+    fn parse_symbolic_mode_list() {
+        assert_eq!(install_parse("u=rw,go=r", false, 0o022), Ok(0o644));
+        assert_eq!(install_parse("u=rw,go=r,a+x", false, 0o022), Ok(0o755));
+    }
+
+    #[test]
+    fn reject_empty_symbolic_mode_list_entry() {
+        assert!(install_parse("u=rw,", false, 0o022).is_err());
+        assert!(install_parse(",u=rw", false, 0o022).is_err());
+        assert!(install_parse("u=rw,,go=r", false, 0o022).is_err());
+    }
 }

@@ -7,6 +7,7 @@ fn invalid_short_options_use_gnu_diagnostics() {
     for (arguments, option) in [
         (vec!["-h"], 'h'),
         (vec!["-V"], 'V'),
+        (vec!["-w"], 'w'),
         (vec!["-hp"], 'h'),
         (vec!["-pH"], 'H'),
     ] {

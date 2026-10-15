@@ -134,7 +134,16 @@ fn write_standard_output(command: &mut Command, version: bool) -> CTResult<()> {
     }
     .and_then(|_| stdout.flush());
 
-    result.map_err(|error| CtSimpleError::new(1, format!("write error: {}", strip_errno(&error))))
+    result.map_err(|error| {
+        #[cfg(target_os = "linux")]
+        let error = if ctcore::ct_stdout_was_closed() {
+            io::Error::from_raw_os_error(ctcore::libc::EBADF)
+        } else {
+            error
+        };
+
+        CtSimpleError::new(1, format!("write error: {}", strip_errno(&error)))
+    })
 }
 
 fn stop_option_parsing_for_posixly_correct(args: &mut Vec<OsString>) {

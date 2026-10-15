@@ -155,9 +155,10 @@ pub fn mv_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&lang_code);
     let mut command = ct_app();
     let args = normalize_mv_posixly_correct_args(args.collect());
+    let parse_args = args.clone();
     let args_match = command
-        .try_get_matches_from_mut(args)
-        .map_err(mv_map_clap_error)?;
+        .try_get_matches_from_mut(parse_args)
+        .map_err(|error| mv_map_clap_error(error, &args))?;
 
     let arg_files: Vec<OsString> = args_match
         .get_many::<OsString>(ARG_FILES)
@@ -248,7 +249,7 @@ pub fn mv_main(args: impl ctcore::Args) -> CTResult<()> {
     mv(&arg_files[..], &opts)
 }
 
-fn mv_map_clap_error(error: clap::Error) -> Box<dyn CTError> {
+fn mv_map_clap_error(error: clap::Error, args: &[OsString]) -> Box<dyn CTError> {
     if error.kind() == ErrorKind::InvalidValue
         && error
             .get(ContextKind::InvalidArg)
@@ -264,7 +265,39 @@ fn mv_map_clap_error(error: clap::Error) -> Box<dyn CTError> {
         );
     }
 
+    if error.kind() == ErrorKind::InvalidValue
+        && let Some(message) = mv_missing_option_value_diagnostic(args)
+    {
+        return CTsageError::new(1, message);
+    }
+
     error.into()
+}
+
+fn mv_missing_option_value_diagnostic(args: &[OsString]) -> Option<&'static str> {
+    for argument in args.iter().skip(1) {
+        let argument = argument.to_str()?;
+        if argument == "--" {
+            break;
+        }
+        match argument {
+            "--target-directory" => {
+                return Some("option '--target-directory' requires an argument");
+            }
+            "--suffix" => return Some("option '--suffix' requires an argument"),
+            _ if argument.starts_with('-') && !argument.starts_with("--") => {
+                let short_options = argument.strip_prefix('-')?;
+                if short_options.ends_with('t') {
+                    return Some("option requires an argument -- 't'");
+                }
+                if short_options.ends_with('S') {
+                    return Some("option requires an argument -- 'S'");
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 fn normalize_mv_posixly_correct_args(mut args: Vec<OsString>) -> Vec<OsString> {
@@ -405,6 +438,7 @@ fn mv_args_init() -> Vec<Arg> {
             .value_hint(clap::ValueHint::DirPath)
             .action(ArgAction::Append)
             .num_args(1)
+            .allow_hyphen_values(true)
             .value_parser(ValueParser::os_string()),
         Arg::new(OPT_NO_TARGET_DIRECTORY)
             .short('T')

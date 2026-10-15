@@ -24,11 +24,19 @@ fn missing_required_option_value_diagnostics_match_gnu() {
             "mv: option '--target-directory' requires an argument\nTry 'mv --help' for more information.\n",
         ),
         (
+            &["--target-d"][..],
+            "mv: option '--target-directory' requires an argument\nTry 'mv --help' for more information.\n",
+        ),
+        (
             &["-S"][..],
             "mv: option requires an argument -- 'S'\nTry 'mv --help' for more information.\n",
         ),
         (
             &["--suffix"][..],
+            "mv: option '--suffix' requires an argument\nTry 'mv --help' for more information.\n",
+        ),
+        (
+            &["--suff"][..],
             "mv: option '--suffix' requires an argument\nTry 'mv --help' for more information.\n",
         ),
     ] {

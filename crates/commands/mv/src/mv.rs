@@ -28,6 +28,7 @@ use crate::opt_flags::OPT_STRIP_TRAILING_SLASHES;
 use crate::opt_flags::OPT_TARGET_DIRECTORY;
 use crate::opt_flags::OPT_VERBOSE;
 use clap::builder::ValueParser;
+use clap::error::{ContextKind, ErrorKind};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use ctcore::Tool;
 use ctcore::ct_backup_control::{self, source_is_target_backup};
@@ -153,7 +154,9 @@ pub fn mv_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let mut command = ct_app();
-    let args_match = command.try_get_matches_from_mut(args)?;
+    let args_match = command
+        .try_get_matches_from_mut(args)
+        .map_err(mv_map_clap_error)?;
 
     let arg_files: Vec<OsString> = args_match
         .get_many::<OsString>(ARG_FILES)
@@ -229,6 +232,25 @@ pub fn mv_main(args: impl ctcore::Args) -> CTResult<()> {
     };
 
     mv(&arg_files[..], &opts)
+}
+
+fn mv_map_clap_error(error: clap::Error) -> Box<dyn CTError> {
+    if error.kind() == ErrorKind::InvalidValue
+        && error
+            .get(ContextKind::InvalidArg)
+            .is_some_and(|argument| argument.to_string().starts_with("--update"))
+        && let Some(value) = error.get(ContextKind::InvalidValue)
+    {
+        return CTsageError::new(
+            1,
+            format!(
+                "invalid argument '{}' for '--update'\nValid arguments are:\n  - 'all'\n  - 'none'\n  - 'older'",
+                value
+            ),
+        );
+    }
+
+    error.into()
 }
 
 fn mv_modes_process(

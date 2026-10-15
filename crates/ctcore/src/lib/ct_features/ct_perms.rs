@@ -684,6 +684,20 @@ impl CtOwnershipChangeExecutor {
                 Err(e) => {
                     // GNU FTS skips symlink-induced directory cycles.
                     if e.loop_ancestor().is_some() {
+                        if let Some(path) = e.path() {
+                            match self.obtain_meta(path, self.dereference) {
+                                Ok(meta) => ret |= self.change_path(path, &meta),
+                                Err(error) => {
+                                    ret = 1;
+                                    self.print_verbose_failure_for_unavailable_path(
+                                        path,
+                                        self.has_dangling_symlink_metadata(path, &error),
+                                    );
+                                }
+                            }
+                        } else {
+                            ret = 1;
+                        }
                         continue;
                     }
                     ret = 1;

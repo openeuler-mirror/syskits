@@ -22,7 +22,10 @@ use ctcore::ct_error::{CTResult, CtSimpleError, strip_errno};
 #[cfg(not(windows))]
 use ctcore::ct_mode;
 use ctcore::ct_show_if_err;
-use ctcore::{ct_display::Quotable, ct_fs::dir_strip_dot_for_creation};
+use ctcore::{
+    ct_display::{Quotable, locale_quote},
+    ct_fs::dir_strip_dot_for_creation,
+};
 use std::ffi::OsString;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -51,6 +54,10 @@ const SYSKITS_MKDIR_LONG_VERSION: &str = concat!(
 );
 
 const SYSKITS_MKDIR_AFTER_HELP: &str = "syskits online help: <https://www.ctyun.cn/developer>";
+
+fn mkdir_invalid_mode(mode: &str) -> String {
+    format!("invalid mode {}", locale_quote(mode))
+}
 
 fn mkdir_create_error(path: &Path, err: &str) -> String {
     t!(
@@ -261,7 +268,8 @@ fn mkdir_get_mode(arg_matches: &ArgMatches, is_mode_had_minus_prefix: bool) -> R
     if let Some(m) = arg_matches.get_one::<String>(mkdir_flags::MODE) {
         for mode in m.split(',') {
             if mode.chars().any(|c| c.is_ascii_digit()) {
-                new_mode = ct_mode::parse_numeric(new_mode, m, true)?;
+                new_mode =
+                    ct_mode::parse_numeric(new_mode, m, true).map_err(|_| mkdir_invalid_mode(m))?;
             } else {
                 let c_mode = match is_mode_had_minus_prefix {
                     true => {
@@ -270,7 +278,8 @@ fn mkdir_get_mode(arg_matches: &ArgMatches, is_mode_had_minus_prefix: bool) -> R
                     }
                     false => mode.to_string(),
                 };
-                new_mode = ct_mode::parse_symbolic(new_mode, &c_mode, ct_mode::get_umask(), true)?;
+                new_mode = ct_mode::parse_symbolic(new_mode, &c_mode, ct_mode::get_umask(), true)
+                    .map_err(|_| mkdir_invalid_mode(m))?;
             }
         }
         Ok(new_mode)
@@ -868,7 +877,7 @@ mod tests {
 
             assert!(mode.is_err());
 
-            assert_eq!(mode.unwrap_err(), "invalid digit found in string");
+            assert_eq!(mode.unwrap_err(), mkdir_invalid_mode("0755,u+s"));
         }
 
         #[cfg(not(windows))]
@@ -906,7 +915,7 @@ mod tests {
             let mode = mkdir_get_mode(&matches, false);
 
             assert!(mode.is_err());
-            assert_eq!(mode.unwrap_err(), "invalid digit found in string");
+            assert_eq!(mode.unwrap_err(), mkdir_invalid_mode("0755,"));
         }
 
         #[cfg(not(windows))]

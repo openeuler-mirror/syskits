@@ -401,7 +401,7 @@ pub fn mktemp_main(args: impl ctcore::Args) -> CTResult<()> {
             {
                 return Err(CTsageError::new(1, "too many templates"));
             }
-            if let Some(error) = invalid_option_error(&e) {
+            if let Some(error) = invalid_option_error(&e, &args_vec) {
                 return Err(error);
             }
             return Err(e.into());
@@ -476,7 +476,7 @@ fn missing_option_argument_error(args: &[OsString]) -> Option<Box<dyn CTError>> 
     None
 }
 
-fn invalid_option_error(error: &clap::Error) -> Option<Box<dyn CTError>> {
+fn invalid_option_error(error: &clap::Error, args: &[OsString]) -> Option<Box<dyn CTError>> {
     let invalid_argument = error.context().find_map(|(kind, value)| {
         (kind == ContextKind::InvalidArg)
             .then_some(value)
@@ -489,6 +489,41 @@ fn invalid_option_error(error: &clap::Error) -> Option<Box<dyn CTError>> {
     match error.kind() {
         ErrorKind::UnknownArgument => {
             if let Some(option) = invalid_argument.strip_prefix("--") {
+                let candidates: Vec<_> = [
+                    "directory",
+                    "quiet",
+                    "dry-run",
+                    "suffix",
+                    "tmpdir",
+                    "help",
+                    "version",
+                ]
+                .into_iter()
+                .filter(|candidate| candidate.starts_with(option))
+                .collect();
+                if candidates.len() > 1 {
+                    let raw_option = args
+                        .iter()
+                        .filter_map(|argument| argument.to_str())
+                        .find(|argument| {
+                            argument.strip_prefix("--").is_some_and(|argument| {
+                                argument.split_once('=').map_or(argument, |(name, _)| name)
+                                    == option
+                            })
+                        })
+                        .unwrap_or(invalid_argument);
+                    let possibilities = candidates
+                        .iter()
+                        .map(|candidate| format!("'--{candidate}'"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    return Some(CTsageError::new(
+                        1,
+                        format!(
+                            "option '{raw_option}' is ambiguous; possibilities: {possibilities}"
+                        ),
+                    ));
+                }
                 Some(CTsageError::new(
                     1,
                     format!("unrecognized option '--{option}'"),
@@ -502,10 +537,12 @@ fn invalid_option_error(error: &clap::Error) -> Option<Box<dyn CTError>> {
             }
         }
         ErrorKind::TooManyValues => match invalid_argument {
-            "--directory" | "--dry-run" | "--quiet" => Some(CTsageError::new(
-                1,
-                format!("option '{invalid_argument}' doesn't allow an argument"),
-            )),
+            "--directory" | "--dry-run" | "--quiet" | "--help" | "--version" => {
+                Some(CTsageError::new(
+                    1,
+                    format!("option '{invalid_argument}' doesn't allow an argument"),
+                ))
+            }
             _ => None,
         },
         _ => None,

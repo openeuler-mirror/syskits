@@ -66,14 +66,17 @@ impl<'a> LinkFlags<'a> {
             1 => {
                 return Err(link_usage_error(
                     usage_name,
-                    format!("missing operand after {}", files[0].quote()),
+                    format!(
+                        "missing operand after {}",
+                        locale_quote_file_operand(files[0])
+                    ),
                 ));
             }
             2 => {}
             _ => {
                 return Err(link_usage_error(
                     usage_name,
-                    format!("extra operand {}", files[2].quote()),
+                    format!("extra operand {}", locale_quote_file_operand(files[2])),
                 ));
             }
         }
@@ -186,6 +189,174 @@ fn validate_standard_options(args: &[OsString], usage_name: &str) -> CTResult<()
     Ok(())
 }
 
+fn locale_quote_file_operand(filename: &OsString) -> String {
+    if let Some(filename) = filename.to_str() {
+        return locale_quote(filename);
+    }
+
+    #[cfg(unix)]
+    return locale_quote_non_utf8_file_operand(filename);
+
+    #[cfg(not(unix))]
+    filename.quote().to_string()
+}
+
+#[cfg(unix)]
+fn locale_quote_non_utf8_file_operand(filename: &OsString) -> String {
+    use std::os::unix::ffi::OsStrExt;
+
+    let marker_quote = locale_quote("x");
+    let (left_quote, right_quote) = marker_quote
+        .split_once('x')
+        .expect("locale quote must surround its content");
+    let escape_apostrophe = right_quote == "'";
+    let utf8_locale = left_quote == "‘";
+    let mut escaped = String::new();
+    let mut remaining = filename.as_bytes();
+
+    while !remaining.is_empty() {
+        match std::str::from_utf8(remaining) {
+            Ok(text) => {
+                append_locale_quoted_text(&mut escaped, text, escape_apostrophe, utf8_locale);
+                break;
+            }
+            Err(error) => {
+                let valid_end = error.valid_up_to();
+                if valid_end != 0 {
+                    let (valid, rest) = remaining.split_at(valid_end);
+                    append_locale_quoted_text(
+                        &mut escaped,
+                        std::str::from_utf8(valid).expect("valid UTF-8 prefix"),
+                        escape_apostrophe,
+                        utf8_locale,
+                    );
+                    remaining = rest;
+                }
+                let byte = remaining[0];
+                use std::fmt::Write;
+                write!(escaped, "\\{byte:03o}").expect("write to string");
+                remaining = &remaining[1..];
+            }
+        }
+    }
+
+    format!("{left_quote}{escaped}{right_quote}")
+}
+
+#[cfg(unix)]
+fn append_locale_quoted_text(
+    escaped: &mut String,
+    text: &str,
+    escape_apostrophe: bool,
+    utf8_locale: bool,
+) {
+    for character in text.chars() {
+        match character {
+            '\\' => escaped.push_str("\\\\"),
+            '\'' if escape_apostrophe => escaped.push_str("\\'"),
+            '\u{0007}' => escaped.push_str("\\a"),
+            '\u{0008}' => escaped.push_str("\\b"),
+            '\t' => escaped.push_str("\\t"),
+            '\n' => escaped.push_str("\\n"),
+            '\u{000B}' => escaped.push_str("\\v"),
+            '\u{000C}' => escaped.push_str("\\f"),
+            '\r' => escaped.push_str("\\r"),
+            character if character.is_control() || (!utf8_locale && !character.is_ascii()) => {
+                use std::fmt::Write;
+                for byte in character.to_string().as_bytes() {
+                    write!(escaped, "\\{byte:03o}").expect("write to string");
+                }
+            }
+            character => escaped.push(character),
+        }
+    }
+}
+
+fn shell_quote_path(path: &Path) -> String {
+    #[cfg(unix)]
+    if path.as_os_str().to_str().is_none() {
+        use std::os::unix::ffi::OsStrExt;
+
+        return shell_quote_non_utf8_file_operand(path.as_os_str().as_bytes());
+    }
+
+    path.quote().to_string()
+}
+
+#[cfg(unix)]
+enum ShellQuoteSegment {
+    Plain,
+    Escaped,
+}
+
+#[cfg(unix)]
+fn shell_quote_non_utf8_file_operand(bytes: &[u8]) -> String {
+    let mut result = String::with_capacity(bytes.len() + 8);
+    let mut segment = None;
+
+    if !matches!(bytes.first(), Some(b'\x20'..=b'\x7e')) {
+        result.push_str("''");
+    }
+
+    for &byte in bytes {
+        match byte {
+            b'\x07' => push_shell_escaped_byte(&mut result, &mut segment, "a"),
+            b'\x08' => push_shell_escaped_byte(&mut result, &mut segment, "b"),
+            b'\x09' => push_shell_escaped_byte(&mut result, &mut segment, "t"),
+            b'\x0a' => push_shell_escaped_byte(&mut result, &mut segment, "n"),
+            b'\x0b' => push_shell_escaped_byte(&mut result, &mut segment, "v"),
+            b'\x0c' => push_shell_escaped_byte(&mut result, &mut segment, "f"),
+            b'\x0d' => push_shell_escaped_byte(&mut result, &mut segment, "r"),
+            b'\x20'..=b'\x7e' => push_shell_plain_byte(&mut result, &mut segment, byte),
+            _ => {
+                let escaped = format!("{byte:03o}");
+                push_shell_escaped_byte(&mut result, &mut segment, &escaped);
+            }
+        }
+    }
+
+    match segment {
+        Some(ShellQuoteSegment::Plain) | Some(ShellQuoteSegment::Escaped) => result.push('\''),
+        None => result.push_str("''"),
+    }
+    result
+}
+
+#[cfg(unix)]
+fn push_shell_plain_byte(result: &mut String, segment: &mut Option<ShellQuoteSegment>, byte: u8) {
+    if matches!(segment, Some(ShellQuoteSegment::Escaped)) {
+        result.push('\'');
+        *segment = None;
+    }
+    if segment.is_none() {
+        result.push('\'');
+        *segment = Some(ShellQuoteSegment::Plain);
+    }
+    if byte == b'\'' {
+        result.push_str("'\\\\''");
+    } else {
+        result.push(char::from(byte));
+    }
+}
+
+#[cfg(unix)]
+fn push_shell_escaped_byte(
+    result: &mut String,
+    segment: &mut Option<ShellQuoteSegment>,
+    escaped: &str,
+) {
+    if matches!(segment, Some(ShellQuoteSegment::Plain)) {
+        result.push('\'');
+        *segment = None;
+    }
+    if segment.is_none() {
+        result.push_str("$'");
+        *segment = Some(ShellQuoteSegment::Escaped);
+    }
+    result.push('\\');
+    result.push_str(escaped);
+}
+
 /// 执行硬链接创建操作
 fn link_exec(flags: &LinkFlags) -> CTResult<()> {
     match hard_link(flags.source_path, flags.target_path) {
@@ -194,15 +365,15 @@ fn link_exec(flags: &LinkFlags) -> CTResult<()> {
             1,
             format!(
                 "cannot create link {} to {}: File exists",
-                flags.target_path.quote(),
-                flags.source_path.quote()
+                shell_quote_path(flags.target_path),
+                shell_quote_path(flags.source_path)
             ),
         )),
         Err(error) => Err(error.map_err_context(|| {
             format!(
                 "cannot create link {} to {}",
-                flags.target_path.quote(),
-                flags.source_path.quote()
+                shell_quote_path(flags.target_path),
+                shell_quote_path(flags.source_path)
             )
         })),
     }
@@ -533,11 +704,11 @@ mod tests {
                 (vec![ctcore::ct_util_name()], "missing operand".to_string()),
                 (
                     vec![ctcore::ct_util_name(), "file1"],
-                    format!("missing operand after {}", Path::new("file1").quote()),
+                    format!("missing operand after {}", locale_quote("file1")),
                 ),
                 (
                     vec![ctcore::ct_util_name(), "file1", "file2", "file3"],
-                    format!("extra operand {}", Path::new("file3").quote()),
+                    format!("extra operand {}", locale_quote("file3")),
                 ),
             ];
 

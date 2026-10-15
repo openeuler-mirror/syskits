@@ -606,8 +606,31 @@ fn mv_handle_two_paths(
             });
         }
     };
-    let target_metadata = target_path.symlink_metadata().ok();
     let source_is_directory = source_metadata.file_type().is_dir();
+    let target_metadata = match target_path.symlink_metadata() {
+        Ok(metadata) => Some(metadata),
+        Err(error)
+            if path_ends_with_terminator(target_path)
+                && error.kind() == io::ErrorKind::NotADirectory =>
+        {
+            return Err(MvError::CannotStatNotADirectory(target_path.quote().to_string()).into());
+        }
+        Err(error)
+            if path_ends_with_terminator(target_path)
+                && !source_is_directory
+                && error.kind() == io::ErrorKind::NotFound =>
+        {
+            return Err(CtSimpleError::new(
+                1,
+                format!(
+                    "cannot move {} to {}: Not a directory",
+                    source_path.quote(),
+                    target_path.quote()
+                ),
+            ));
+        }
+        Err(_) => None,
+    };
     let target_is_directory = target_metadata
         .as_ref()
         .is_some_and(|meta| meta.file_type().is_dir());
@@ -631,14 +654,6 @@ fn mv_handle_two_paths(
         } else {
             Err(MvError::SelfSubdirectory(source_path.display().to_string()).into())
         };
-    }
-
-    if path_ends_with_terminator(target_path)
-        && (!target_is_directory && !source_is_directory)
-        && !mv_options.no_target_dir
-        && mv_options.update != CtUpdateMode::ReplaceIfOlder
-    {
-        return Err(MvError::FailedToAccessNotADirectory(target_path.quote().to_string()).into());
     }
 
     // 如果目标是目录

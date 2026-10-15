@@ -336,9 +336,15 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 pub fn determine_backup_mode(matches: &ArgMatches) -> CTResult<CtBackupMode> {
     let has_backup_opt = matches.contains_id(arguments::OPT_BACKUP);
     let has_b_flag = matches.get_flag(arguments::OPT_BACKUP_NO_ARG);
+    let has_suffix_opt = matches
+        .try_get_one::<String>(arguments::OPT_SUFFIX)
+        .ok()
+        .flatten()
+        .is_some();
 
-    // 只要开启了备份机制（无论是 --backup 还是 -b），都应该优先尊重参数，其次尊重环境变量
-    if has_backup_opt || has_b_flag {
+    // GNU 的 -S/--suffix 和 -b/--backup 一样会启用备份，然后由 VERSION_CONTROL
+    // 决定类型。
+    if has_backup_opt || has_b_flag || has_suffix_opt {
         if let Some(method) = matches.get_one::<String>(arguments::OPT_BACKUP) {
             match_method(method, "backup type")
         } else if let Ok(method) = env::var("VERSION_CONTROL") {
@@ -512,6 +518,16 @@ mod tests {
     fn test_backup_mode_long_without_args_no_env() {
         let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
+
+        let result = determine_backup_mode(&matches).unwrap();
+
+        assert_eq!(result, CtBackupMode::ExistingBackup);
+    }
+
+    #[test]
+    fn test_backup_mode_suffix_enables_backups() {
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let matches = make_app().get_matches_from(vec!["command", "--suffix=.backup"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 

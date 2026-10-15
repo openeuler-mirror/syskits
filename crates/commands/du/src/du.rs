@@ -1441,13 +1441,74 @@ fn du_parse_time_style(option: Option<&str>) -> CTResult<&str> {
 }
 
 fn du_parse_depth(du_max_depth_str: Option<&str>, summarize: bool) -> CTResult<Option<usize>> {
-    let du_max_depth = du_max_depth_str
-        .as_ref()
-        .and_then(|s| s.parse::<usize>().ok());
-    match (du_max_depth_str, du_max_depth) {
-        (Some(s), _) if summarize => Err(DuError::SummarizeDepthConflict(s.into()).into()),
-        (Some(s), None) => Err(DuError::InvalidMaxDepthArg(s.into()).into()),
-        (Some(_), Some(_)) | (None, _) => Ok(du_max_depth),
+    match du_max_depth_str {
+        Some(s) if summarize => Err(DuError::SummarizeDepthConflict(s.into()).into()),
+        Some(s) => du_parse_depth_limit(s)
+            .ok_or_else(|| Box::new(DuError::InvalidMaxDepthArg(s.into())) as Box<dyn CTError>),
+        None => Ok(None),
+    }
+}
+
+fn du_parse_depth_limit(depth: &str) -> Option<Option<usize>> {
+    let value = du_parse_depth_number(depth)?;
+    if value < i64::MIN as i128 || value > isize::MAX as i128 {
+        return None;
+    }
+
+    if value < 0 {
+        Some(None)
+    } else {
+        Some(Some(value as usize))
+    }
+}
+
+fn du_parse_depth_number(depth: &str) -> Option<i128> {
+    let depth = depth.trim_start_matches(|c: char| c.is_ascii_whitespace());
+    let (negative, digits) = match depth.as_bytes().first() {
+        Some(b'-') => (true, &depth[1..]),
+        Some(b'+') => (false, &depth[1..]),
+        Some(_) => (false, depth),
+        None => return None,
+    };
+
+    if digits.is_empty() {
+        return None;
+    }
+
+    let (radix, digits) = if let Some(rest) = digits
+        .strip_prefix("0x")
+        .or_else(|| digits.strip_prefix("0X"))
+    {
+        if rest.is_empty() {
+            return None;
+        }
+        (16, rest)
+    } else if digits.len() > 1 && digits.starts_with('0') {
+        (8, digits)
+    } else {
+        (10, digits)
+    };
+
+    let mut value = 0i128;
+    for byte in digits.bytes() {
+        let digit = match byte {
+            b'0'..=b'9' => byte - b'0',
+            b'a'..=b'f' => byte - b'a' + 10,
+            b'A'..=b'F' => byte - b'A' + 10,
+            _ => return None,
+        };
+        if digit as u32 >= radix {
+            return None;
+        }
+        value = value
+            .checked_mul(radix as i128)?
+            .checked_add(digit as i128)?;
+    }
+
+    if negative {
+        value.checked_neg()
+    } else {
+        Some(value)
     }
 }
 
@@ -9104,6 +9165,32 @@ mod tests_fn {
         let max_depth = du_get_max_depth(&matches, summarize).unwrap();
 
         assert_eq!(max_depth.unwrap(), 5);
+    }
+
+    #[test]
+    fn test_ct_get_max_depth_negative_is_unlimited() {
+        assert_eq!(du_parse_depth(Some("-1"), false).unwrap(), None);
+        assert_eq!(du_parse_depth(Some("-2"), false).unwrap(), None);
+        assert_eq!(du_parse_depth(Some("-0"), false).unwrap(), Some(0));
+    }
+
+    #[test]
+    fn test_ct_get_max_depth_base_zero_syntax() {
+        assert_eq!(du_parse_depth(Some("+1"), false).unwrap(), Some(1));
+        assert_eq!(du_parse_depth(Some(" 1"), false).unwrap(), Some(1));
+        assert_eq!(du_parse_depth(Some("0x1"), false).unwrap(), Some(1));
+        assert_eq!(du_parse_depth(Some("010"), false).unwrap(), Some(8));
+        assert!(du_parse_depth(Some("08"), false).is_err());
+        assert!(du_parse_depth(Some("1 "), false).is_err());
+    }
+
+    #[test]
+    fn test_ct_get_max_depth_rejects_out_of_range_values() {
+        let too_large = (isize::MAX as i128 + 1).to_string();
+        let too_small = (i64::MIN as i128 - 1).to_string();
+
+        assert!(du_parse_depth(Some(&too_large), false).is_err());
+        assert!(du_parse_depth(Some(&too_small), false).is_err());
     }
 
     #[test]

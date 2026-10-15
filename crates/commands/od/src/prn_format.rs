@@ -127,6 +127,12 @@ pub static FORMAT_ITEM_F64: FormatterItemInfo = FormatterItemInfo {
     formatter: OdFormatWriter::FloatWriter(format_item_flo64),
 };
 
+pub static FORMAT_ITEM_FLD: FormatterItemInfo = FormatterItemInfo {
+    byte_size: 16,
+    print_width: 30,
+    formatter: OdFormatWriter::FloatBytesWriter(format_item_flo128),
+};
+
 pub fn format_item_flo16(f: f64) -> String {
     format!(" {}", format_flo16(f16::from_f64(f)))
 }
@@ -137,6 +143,12 @@ pub fn format_item_flo32(f: f64) -> String {
 
 pub fn format_item_flo64(f: f64) -> String {
     format!(" {}", format_flo64(f))
+}
+
+pub fn format_item_flo128(bytes: &[u8]) -> String {
+    const WIDTH: usize = 30;
+    let text = format_long_double(bytes);
+    format!("{text:>WIDTH$}")
 }
 
 fn format_flo16(f: f16) -> String {
@@ -165,6 +177,109 @@ fn format_flo32(f: f32) -> String {
 
 fn format_flo64(f: f64) -> String {
     format_float(f, 24, 17)
+}
+
+fn format_long_double(bytes: &[u8]) -> String {
+    if bytes.len() < 10 {
+        return "nan".to_string();
+    }
+
+    let mantissa = u64::from_ne_bytes(bytes[0..8].try_into().unwrap());
+    let sign_exponent = u16::from_ne_bytes(bytes[8..10].try_into().unwrap());
+    let sign = sign_exponent & 0x8000 != 0;
+    let exponent = sign_exponent & 0x7fff;
+    let integer_bit = mantissa & (1_u64 << 63) != 0;
+
+    match (exponent, mantissa) {
+        (0, 0) => {
+            if sign {
+                "-0".to_string()
+            } else {
+                "0".to_string()
+            }
+        }
+        (0x7fff, 0x8000_0000_0000_0000) => {
+            if sign {
+                "-inf".to_string()
+            } else {
+                "inf".to_string()
+            }
+        }
+        (0x7fff, _) => "nan".to_string(),
+        (_, _) if exponent != 0 && !integer_bit => "nan".to_string(),
+        _ => format_long_double_finite(sign, exponent, mantissa),
+    }
+}
+
+fn format_long_double_finite(sign: bool, exponent: u16, mantissa: u64) -> String {
+    let power = if exponent == 0 {
+        -16382 - 63
+    } else {
+        i32::from(exponent) - 16383 - 63
+    };
+    let mut value = (mantissa as f64) * 2_f64.powi(power);
+    if sign {
+        value = -value;
+    }
+
+    if value.is_finite() && value != 0.0 {
+        return format_g_like(value, 21);
+    }
+
+    if value == 0.0 {
+        if sign {
+            "-0".to_string()
+        } else {
+            "0".to_string()
+        }
+    } else if value.is_sign_negative() {
+        "-inf".to_string()
+    } else {
+        "inf".to_string()
+    }
+}
+
+fn format_g_like(value: f64, precision: usize) -> String {
+    let abs = value.abs();
+    if abs >= 1e-4 && abs < 1e21 {
+        trim_float_text(format!("{value:.precision$}"))
+    } else {
+        let text = format!("{value:.precision$e}");
+        let (mantissa, exponent) = text.split_once('e').unwrap_or((&text, ""));
+        if exponent.is_empty() {
+            trim_float_text(mantissa.to_string())
+        } else {
+            format!(
+                "{}e{}",
+                trim_float_text(mantissa.to_string()),
+                trim_exponent(exponent)
+            )
+        }
+    }
+}
+
+fn trim_float_text(mut text: String) -> String {
+    if let Some(dot) = text.find('.') {
+        while text.ends_with('0') {
+            text.pop();
+        }
+        if text.len() == dot + 1 {
+            text.pop();
+        }
+    }
+    if text == "-0" { "0".to_string() } else { text }
+}
+
+fn trim_exponent(exponent: &str) -> String {
+    let (sign, digits) = exponent
+        .strip_prefix('-')
+        .map_or(("", exponent), |digits| ("-", digits));
+    let digits = digits.trim_start_matches('0');
+    if digits.is_empty() {
+        format!("{sign}0")
+    } else {
+        format!("{sign}{digits}")
+    }
 }
 
 #[cfg(unix)]

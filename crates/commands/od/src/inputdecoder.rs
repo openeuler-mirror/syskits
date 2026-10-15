@@ -161,6 +161,20 @@ impl OdMemoryDecoder<'_> {
             _ => panic!("无效的字节大小: {byte_size}"),
         }
     }
+
+    /// 返回按指定输入字节序转换为本机字节序后的浮点原始字节。
+    pub fn read_float_bytes(&self, start: usize, byte_size: usize) -> Vec<u8> {
+        let mut bytes = self.data[start..start + byte_size].to_vec();
+        let reverse = match self.byte_order {
+            ByteOrder::Native => false,
+            ByteOrder::Little => cfg!(target_endian = "big"),
+            ByteOrder::Big => cfg!(target_endian = "little"),
+        };
+        if reverse {
+            bytes.reverse();
+        }
+        bytes
+    }
 }
 
 #[cfg(test)]

@@ -16,6 +16,7 @@ use std::fmt;
 pub enum OdFormatWriter {
     IntWriter(fn(u64) -> String),
     FloatWriter(fn(f64) -> String),
+    FloatBytesWriter(fn(&[u8]) -> String),
     MultibyteWriter(fn(&[u8]) -> String),
 }
 
@@ -37,6 +38,8 @@ impl PartialEq for OdFormatWriter {
             (IntWriter(a), IntWriter(b)) => std::ptr::fn_addr_eq(*a, *b),
             // 如果都是浮点数格式化器，比较它们的函数指针
             (FloatWriter(a), FloatWriter(b)) => std::ptr::fn_addr_eq(*a, *b),
+            // 如果都是原始字节浮点格式化器，比较它们的函数指针
+            (FloatBytesWriter(a), FloatBytesWriter(b)) => std::ptr::fn_addr_eq(*a, *b),
             // 如果都是多字节格式化器，将函数指针转换为地址后比较
             (MultibyteWriter(a), MultibyteWriter(b)) => *a as usize == *b as usize,
             // 不同类型的格式化器永远不相等
@@ -60,6 +63,11 @@ impl fmt::Debug for OdFormatWriter {
             Self::FloatWriter(ref p) => {
                 f.write_str("FloatWriter:")?; // 写入类型标识
                 fmt::Pointer::fmt(p, f) // 写入函数指针的十六进制地址
+            }
+            // 原始字节浮点格式化器：显示类型名和函数指针地址
+            Self::FloatBytesWriter(ref p) => {
+                f.write_str("FloatBytesWriter:")?;
+                fmt::Pointer::fmt(p, f)
             }
             // 多字节格式化器：显示类型名和函数指针地址
             Self::MultibyteWriter(ref p) => {
@@ -94,6 +102,12 @@ mod tests {
     fn float_fmt2(n: f64) -> String {
         format!("{n:.2}")
     }
+    fn float_bytes_fmt1(b: &[u8]) -> String {
+        b.len().to_string()
+    }
+    fn float_bytes_fmt2(b: &[u8]) -> String {
+        format!("{:02x}", b[0])
+    }
     fn mb_fmt1(b: &[u8]) -> String {
         String::from_utf8_lossy(b).to_string()
     }
@@ -113,6 +127,10 @@ mod tests {
             OdFormatWriter::FloatWriter(float_fmt1)
         );
         assert_eq!(
+            OdFormatWriter::FloatBytesWriter(float_bytes_fmt1),
+            OdFormatWriter::FloatBytesWriter(float_bytes_fmt1)
+        );
+        assert_eq!(
             OdFormatWriter::MultibyteWriter(mb_fmt1),
             OdFormatWriter::MultibyteWriter(mb_fmt1)
         );
@@ -125,6 +143,10 @@ mod tests {
         assert_ne!(
             OdFormatWriter::FloatWriter(float_fmt1),
             OdFormatWriter::FloatWriter(float_fmt2)
+        );
+        assert_ne!(
+            OdFormatWriter::FloatBytesWriter(float_bytes_fmt1),
+            OdFormatWriter::FloatBytesWriter(float_bytes_fmt2)
         );
         assert_ne!(
             OdFormatWriter::MultibyteWriter(mb_fmt1),
@@ -140,6 +162,10 @@ mod tests {
             OdFormatWriter::FloatWriter(float_fmt1),
             OdFormatWriter::MultibyteWriter(mb_fmt1)
         );
+        assert_ne!(
+            OdFormatWriter::FloatBytesWriter(float_bytes_fmt1),
+            OdFormatWriter::MultibyteWriter(mb_fmt1)
+        );
     }
 
     #[test]
@@ -150,6 +176,9 @@ mod tests {
 
         let float_writer = OdFormatWriter::FloatWriter(float_fmt1);
         assert!(format!("{float_writer:?}").starts_with("FloatWriter:0x"));
+
+        let float_bytes_writer = OdFormatWriter::FloatBytesWriter(float_bytes_fmt1);
+        assert!(format!("{float_bytes_writer:?}").starts_with("FloatBytesWriter:0x"));
 
         let mb_writer = OdFormatWriter::MultibyteWriter(mb_fmt1);
         assert!(format!("{mb_writer:?}").starts_with("MultibyteWriter:0x"));

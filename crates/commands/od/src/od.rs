@@ -723,6 +723,11 @@ fn od_format_bytes(
             let value = input_decoder.read_float(byte_pos, formatter.formatter_item_info.byte_size);
             output_text.push_str(&func(value));
         }
+        OdFormatWriter::FloatBytesWriter(func) => {
+            let value =
+                input_decoder.read_float_bytes(byte_pos, formatter.formatter_item_info.byte_size);
+            output_text.push_str(&func(&value));
+        }
         OdFormatWriter::MultibyteWriter(func) => {
             output_text.push_str(&func(input_decoder.get_full_buffer(byte_pos)));
         }
@@ -792,6 +797,7 @@ fn od_view_spec(index: usize, formatter: &SpacedFormatterItemInfo) -> String {
     let kind = match formatter.formatter_item_info.formatter {
         OdFormatWriter::IntWriter(_) => "int",
         OdFormatWriter::FloatWriter(_) => "float",
+        OdFormatWriter::FloatBytesWriter(_) => "float",
         OdFormatWriter::MultibyteWriter(_) => "multi",
     };
     if formatter.add_ascii_dump {

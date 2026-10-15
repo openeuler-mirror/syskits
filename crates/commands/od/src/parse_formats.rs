@@ -108,6 +108,7 @@ fn od_format_type(type_char: FormatType, byte_size: u8) -> Option<FormatterItemI
         (FormatType::Float, 2) => Some(FORMAT_ITEM_F16),
         (FormatType::Float, 0 | 4) => Some(FORMAT_ITEM_F32),
         (FormatType::Float, 8) => Some(FORMAT_ITEM_F64),
+        (FormatType::Float, 16) => Some(FORMAT_ITEM_FLD),
 
         _ => None,
     }
@@ -273,8 +274,12 @@ fn is_format_size_char(
             *byte_size = 8;
             Ok(true)
         }
-        // 主动捕获不受支持的 128位(L) 以及 16位半精度(H, B) 浮点数，并返回 GNU 格式的错误
-        (FormatTypeCategory::Float, Some(c @ ('L' | 'H' | 'B'))) => Err(format!(
+        (FormatTypeCategory::Float, Some('L')) => {
+            *byte_size = 16;
+            Ok(true)
+        }
+        // 主动捕获不受支持的 16位半精度(H, B) 浮点数，并返回 GNU 格式的错误
+        (FormatTypeCategory::Float, Some(c @ ('H' | 'B'))) => Err(format!(
             "this system doesn't provide a 'f{c}' floating point type"
         )),
         _ => Ok(false),

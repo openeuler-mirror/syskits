@@ -267,7 +267,9 @@ impl<'a> JoinRepr<'a> {
         writer: &mut impl Write,
         field: Option<&[u8]>,
     ) -> Result<(), std::io::Error> {
-        let content = field.unwrap_or(self.empty);
+        let content = field
+            .filter(|field| !field.is_empty())
+            .unwrap_or(self.empty);
         writer.write_all(content)
     }
 
@@ -291,9 +293,7 @@ impl<'a> JoinRepr<'a> {
                 continue;
             }
             writer.write_all(&self.separator)?; // 直接写入多字节分隔符
-            if let Some(field) = line.get_field(index) {
-                writer.write_all(field)?;
-            }
+            self.print_field(writer, line.get_field(index))?;
         }
         Ok(())
     }
@@ -318,13 +318,11 @@ impl<'a> JoinRepr<'a> {
             return Ok(());
         }
 
-        let first_content = field_getter(&self.format[0]).unwrap_or(self.empty);
-        writer.write_all(first_content)?;
+        self.print_field(writer, field_getter(&self.format[0]))?;
 
         for spec in &self.format[1..] {
             writer.write_all(&self.separator)?; // 直接写入多字节分隔符
-            let content = field_getter(spec).unwrap_or(self.empty);
-            writer.write_all(content)?;
+            self.print_field(writer, field_getter(spec))?;
         }
         Ok(())
     }
@@ -2241,7 +2239,7 @@ mod tests {
         // 测试空字符串字段
         output = Cursor::new(Vec::new());
         repr.print_field(&mut output, Some(b"")).unwrap();
-        assert_eq!(output.get_ref(), b"");
+        assert_eq!(output.get_ref(), b"EMPTY");
     }
 
     #[test]
@@ -2479,6 +2477,52 @@ mod tests {
                 settings,
             );
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_join_exec_empty_fields_use_replacement() {
+            let temp = tempdir().unwrap();
+            let file1_path = temp.path().join("file1.txt");
+            let file2_path = temp.path().join("file2.txt");
+
+            create_test_file(&file1_path, "a,\n").unwrap();
+            create_test_file(&file2_path, "a,\n").unwrap();
+
+            let mut output = Vec::new();
+            let settings = JoinSettings {
+                separator: Sep::Char(vec![b',']),
+                empty: b"EMPTY".to_vec(),
+                ..Default::default()
+            };
+            join_exec_to_writer(
+                file1_path.to_str().unwrap(),
+                file2_path.to_str().unwrap(),
+                settings,
+                &mut output,
+                false,
+            )
+            .unwrap();
+            assert_eq!(output, b"a,EMPTY,EMPTY\n");
+
+            let mut output = Vec::new();
+            let settings = JoinSettings {
+                separator: Sep::Char(vec![b',']),
+                empty: b"EMPTY".to_vec(),
+                format: vec![
+                    JoinSpec::Field(FileNum::File1, 1),
+                    JoinSpec::Field(FileNum::File2, 1),
+                ],
+                ..Default::default()
+            };
+            join_exec_to_writer(
+                file1_path.to_str().unwrap(),
+                file2_path.to_str().unwrap(),
+                settings,
+                &mut output,
+                false,
+            )
+            .unwrap();
+            assert_eq!(output, b"EMPTY,EMPTY\n");
         }
 
         #[test]

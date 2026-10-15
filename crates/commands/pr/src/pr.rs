@@ -15,7 +15,7 @@ use std::fs::{File, metadata};
 rust_i18n::i18n!("locales", fallback = "en-US");
 #[cfg(unix)]
 use std::ffi::CString;
-use std::io::{BufRead, BufReader, Error, Lines, Read, Write, stderr, stdout};
+use std::io::{BufRead, BufReader, Error, Read, Write, stderr, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 
@@ -45,6 +45,7 @@ const PR_DEFAULT_COLUMN_WIDTH: usize = 72;
 const PR_DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
 const PR_DEFAULT_COLUMN_SEPARATOR: &char = &' ';
 const PR_FF: u8 = 0x0C_u8;
+const PR_RAW_BYTE_CHAR_BASE: u32 = 0xF0000;
 // 根据locale选择时间格式
 fn get_pr_date_time_format() -> &'static str {
     if std::env::var_os("POSIXLY_CORRECT").is_some() && !hard_locale_time() {
@@ -221,8 +222,19 @@ pub struct PrSemanticRow {
 pub struct PrSemantic {
     pub rows: Vec<PrSemanticRow>,
     pub classic_text: String,
+    pub classic_bytes: Vec<u8>,
     pub stderr_text: String,
     pub exit_code: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PrInputLine {
+    text: String,
+}
+
+struct PrInputLines {
+    reader: BufReader<Box<dyn Read>>,
+    buffer: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -254,6 +266,139 @@ impl Default for PrFileLine {
             form_feeds_after: 0,
             inline_form_feed_after: false,
         }
+    }
+}
+
+impl Iterator for PrInputLines {
+    type Item = Result<PrInputLine, std::io::Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.buffer.clear();
+        match self.reader.read_until(b'\n', &mut self.buffer) {
+            Ok(0) => None,
+            Ok(_) => {
+                if self.buffer.last() == Some(&b'\n') {
+                    self.buffer.pop();
+                }
+                Some(Ok(PrInputLine {
+                    text: pr_decode_input_bytes(&self.buffer),
+                }))
+            }
+            Err(err) => Some(Err(err)),
+        }
+    }
+}
+
+fn pr_input_lines(reader: Box<dyn Read>) -> PrInputLines {
+    PrInputLines {
+        reader: BufReader::with_capacity(PR_READ_BUFFER_SIZE, reader),
+        buffer: Vec::new(),
+    }
+}
+
+fn pr_raw_byte_char(byte: u8) -> char {
+    char::from_u32(PR_RAW_BYTE_CHAR_BASE + u32::from(byte))
+        .expect("raw byte placeholder is a valid private-use scalar")
+}
+
+fn pr_raw_byte_from_char(c: char) -> Option<u8> {
+    let value = c as u32;
+    if (PR_RAW_BYTE_CHAR_BASE..=PR_RAW_BYTE_CHAR_BASE + u32::from(u8::MAX)).contains(&value) {
+        Some((value - PR_RAW_BYTE_CHAR_BASE) as u8)
+    } else {
+        None
+    }
+}
+
+fn pr_contains_raw_bytes(s: &str) -> bool {
+    s.chars().any(|c| pr_raw_byte_from_char(c).is_some())
+}
+
+fn pr_raw_byte_display_width(_byte: u8) -> usize {
+    if pr_uses_utf8_locale() { 1 } else { 0 }
+}
+
+fn pr_effective_ctype_locale() -> String {
+    ["LC_ALL", "LC_CTYPE", "LANG"]
+        .iter()
+        .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
+        .unwrap_or_else(|| "C".to_string())
+}
+
+fn pr_uses_utf8_locale() -> bool {
+    let locale = pr_effective_ctype_locale().to_ascii_uppercase();
+    locale.contains("UTF-8") || locale.contains("UTF8")
+}
+
+fn pr_decode_input_bytes(bytes: &[u8]) -> String {
+    if !pr_uses_utf8_locale() {
+        let mut text = String::with_capacity(bytes.len());
+        for &byte in bytes {
+            if byte.is_ascii() {
+                text.push(char::from(byte));
+            } else {
+                text.push(pr_raw_byte_char(byte));
+            }
+        }
+        return text;
+    }
+
+    let mut text = String::with_capacity(bytes.len());
+    let mut rest = bytes;
+    while !rest.is_empty() {
+        match std::str::from_utf8(rest) {
+            Ok(valid) => {
+                text.push_str(valid);
+                break;
+            }
+            Err(err) => {
+                let valid_up_to = err.valid_up_to();
+                if valid_up_to > 0 {
+                    text.push_str(
+                        std::str::from_utf8(&rest[..valid_up_to])
+                            .expect("valid prefix reported by Utf8Error"),
+                    );
+                }
+
+                let invalid_len = err.error_len().unwrap_or(rest.len() - valid_up_to);
+                let invalid_end = valid_up_to + invalid_len;
+                for &byte in &rest[valid_up_to..invalid_end] {
+                    text.push(pr_raw_byte_char(byte));
+                }
+                rest = &rest[invalid_end..];
+            }
+        }
+    }
+
+    text
+}
+
+fn pr_rendered_text_to_bytes(text: &str) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(text.len());
+    for c in text.chars() {
+        if let Some(byte) = pr_raw_byte_from_char(c) {
+            bytes.push(byte);
+        } else {
+            let mut buf = [0u8; 4];
+            bytes.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+        }
+    }
+    bytes
+}
+
+fn pr_write_rendered_text(out: &mut impl Write, text: &str) -> Result<(), std::io::Error> {
+    if pr_contains_raw_bytes(text) {
+        out.write_all(&pr_rendered_text_to_bytes(text))
+    } else {
+        out.write_all(text.as_bytes())
+    }
+}
+
+fn pr_semantic_text(text: &str) -> String {
+    if pr_contains_raw_bytes(text) {
+        String::from_utf8_lossy(&pr_rendered_text_to_bytes(text)).into_owned()
+    } else {
+        text.to_string()
     }
 }
 
@@ -569,6 +714,7 @@ pub fn pr_native_semantic(args: impl ctcore::Args) -> CTResult<PrSemantic> {
     let mut semantic = PrSemantic {
         rows: Vec::new(),
         classic_text: String::new(),
+        classic_bytes: Vec::new(),
         stderr_text: String::new(),
         exit_code: 0,
     };
@@ -621,13 +767,16 @@ fn pr_semantic_from_clap_error(error: clap::Error) -> PrSemantic {
         PrSemantic {
             rows: Vec::new(),
             classic_text: String::new(),
+            classic_bytes: Vec::new(),
             stderr_text: rendered,
             exit_code: 1,
         }
     } else {
+        let classic_bytes = rendered.as_bytes().to_vec();
         PrSemantic {
             rows: Vec::new(),
             classic_text: rendered,
+            classic_bytes,
             stderr_text: String::new(),
             exit_code: 0,
         }
@@ -638,7 +787,9 @@ fn pr_write_semantic_output(semantic: &PrSemantic) -> CTResult<()> {
     let mut out = stdout();
     let mut err = stderr();
 
-    if !semantic.classic_text.is_empty() {
+    if !semantic.classic_bytes.is_empty() {
+        out.write_all(&semantic.classic_bytes)?;
+    } else if !semantic.classic_text.is_empty() {
         out.write_all(semantic.classic_text.as_bytes())?;
     }
     if !semantic.stderr_text.is_empty() {
@@ -1353,35 +1504,36 @@ fn pr_open(path: &str) -> Result<Box<dyn Read>, PrError> {
 }
 
 fn pr_split_lines_if_form_feed(
-    file_content: Result<String, std::io::Error>,
+    file_content: Result<PrInputLine, std::io::Error>,
     _is_omit_pagination: bool,
 ) -> Vec<PrFileLine> {
     file_content
         .map(|content| {
             let mut lines = Vec::new();
             let mut f_occurred = 0;
-            let mut chunk = Vec::new();
+            let mut chunk = String::new();
 
-            for byte in content.as_bytes() {
-                if *byte == PR_FF {
+            for c in content.text.chars() {
+                if c == char::from(PR_FF) {
                     f_occurred += 1;
                     continue;
                 }
 
                 if f_occurred != 0 {
+                    let line_content = std::mem::take(&mut chunk);
                     lines.push(PrFileLine {
-                        line_content: Ok(String::from_utf8(std::mem::take(&mut chunk)).unwrap()),
+                        line_content: Ok(line_content),
                         form_feeds_after: f_occurred,
                         inline_form_feed_after: true,
                         ..PrFileLine::default()
                     });
                     f_occurred = 0;
                 }
-                chunk.push(*byte);
+                chunk.push(c);
             }
 
             lines.push(PrFileLine {
-                line_content: Ok(String::from_utf8(chunk).unwrap()),
+                line_content: Ok(chunk),
                 form_feeds_after: f_occurred,
                 inline_form_feed_after: f_occurred > 0,
                 ..PrFileLine::default()
@@ -1427,7 +1579,7 @@ fn pr_push_page_rows(
     let body_group_base = rows.len();
     for (index, line) in page_lines.iter().enumerate() {
         let text = match &line.line_content {
-            Ok(content) => content.clone(),
+            Ok(content) => pr_semantic_text(content),
             Err(err) => return Err(std::io::Error::new(err.kind(), err.to_string()).into()),
         };
 
@@ -1470,7 +1622,7 @@ fn pr_collect_semantic_for_path(
     path: &str,
     output_opts: &PrOutputOptions,
 ) -> Result<(), PrError> {
-    let lines = BufReader::with_capacity(PR_READ_BUFFER_SIZE, pr_open(path)?).lines();
+    let lines = pr_input_lines(pr_open(path)?);
     let pages = pr_read_stream_and_create_pages(output_opts, lines, 0);
 
     for (page_index, page_lines) in pages {
@@ -1484,6 +1636,7 @@ fn pr_collect_semantic_for_path(
         )?;
         let mut page_output = Vec::new();
         pr_output_page(&page_lines, output_opts, &mut page_output, page_number)?;
+        semantic.classic_bytes.extend_from_slice(&page_output);
         semantic
             .classic_text
             .push_str(&String::from_utf8_lossy(&page_output));
@@ -1497,19 +1650,24 @@ fn pr_handle(path: &str, output_opts: &PrOutputOptions) -> Result<i32, PrError> 
     let mut semantic = PrSemantic {
         rows: Vec::new(),
         classic_text: String::new(),
+        classic_bytes: Vec::new(),
         stderr_text: String::new(),
         exit_code: 0,
     };
     pr_collect_semantic_for_path(&mut semantic, &[path], path, output_opts)?;
     let mut out = stdout();
-    out.write_all(semantic.classic_text.as_bytes())?;
+    if !semantic.classic_bytes.is_empty() {
+        out.write_all(&semantic.classic_bytes)?;
+    } else {
+        out.write_all(semantic.classic_text.as_bytes())?;
+    }
     out.flush()?;
     Ok(0)
 }
 
 fn pr_read_stream_and_create_pages(
     output_opts: &PrOutputOptions,
-    lines: Lines<BufReader<Box<dyn Read>>>,
+    lines: PrInputLines,
     file_id: usize,
 ) -> Box<dyn Iterator<Item = (usize, Vec<PrFileLine>)>> {
     let start_page = output_opts.start_page;
@@ -1677,8 +1835,7 @@ fn pr_collect_semantic_for_merge(
         .map(|(i, path)| {
             let mut page_input_opts = output_opts.clone();
             page_input_opts.start_page = 1;
-            let lines =
-                BufReader::with_capacity(PR_READ_BUFFER_SIZE, pr_open(path).unwrap()).lines();
+            let lines = pr_input_lines(pr_open(path).unwrap());
 
             pr_read_stream_and_create_pages(&page_input_opts, lines, i).collect::<Vec<_>>()
         })
@@ -1802,6 +1959,7 @@ fn pr_collect_semantic_for_merge(
             &mut page_output,
             page_number,
         )?;
+        semantic.classic_bytes.extend_from_slice(&page_output);
         semantic
             .classic_text
             .push_str(&String::from_utf8_lossy(&page_output));
@@ -1815,12 +1973,17 @@ fn mpr_handle(paths: &[&str], output_opts: &PrOutputOptions) -> Result<i32, PrEr
     let mut semantic = PrSemantic {
         rows: Vec::new(),
         classic_text: String::new(),
+        classic_bytes: Vec::new(),
         stderr_text: String::new(),
         exit_code: 0,
     };
     pr_collect_semantic_for_merge(&mut semantic, paths, output_opts)?;
     let mut out = stdout();
-    out.write_all(semantic.classic_text.as_bytes())?;
+    if !semantic.classic_bytes.is_empty() {
+        out.write_all(&semantic.classic_bytes)?;
+    } else {
+        out.write_all(semantic.classic_text.as_bytes())?;
+    }
     out.flush()?;
     Ok(0)
 }
@@ -1860,14 +2023,14 @@ fn pr_output_page(
     let trailer_content = pr_trailer_content(output_opts);
 
     for x in header {
-        out.write_all(x.as_bytes())?;
+        pr_write_rendered_text(out, &x)?;
         out.write_all(line_separator)?;
     }
 
     let lines_written = pr_write_columns(lines, output_opts, out)?;
 
     for (index, x) in trailer_content.iter().enumerate() {
-        out.write_all(x.as_bytes())?;
+        pr_write_rendered_text(out, x)?;
         if index + 1 != trailer_content.len() {
             out.write_all(line_separator)?;
         }
@@ -2037,7 +2200,7 @@ fn pr_write_columns(
         } else {
             format!("{}{}", output_opts.offset_spaces, segment)
         };
-        out.write_all(rendered_row.as_bytes())?;
+        pr_write_rendered_text(out, &rendered_row)?;
         out.write_all(line_separator)?;
     }
 
@@ -2238,7 +2401,7 @@ fn pr_write_multicolumn_table(
                 })
                 .collect::<String>()
         };
-        out.write_all(rendered_row.as_bytes())?;
+        pr_write_rendered_text(out, &rendered_row)?;
         out.write_all(line_separator)?;
     }
 
@@ -2463,6 +2626,8 @@ fn pr_rendered_width(s: &str, tab_width: usize) -> usize {
             current_col = (current_col / tab_width + 1) * tab_width;
         } else if c == '\u{0008}' {
             current_col = current_col.saturating_sub(1);
+        } else if let Some(byte) = pr_raw_byte_from_char(c) {
+            current_col += pr_raw_byte_display_width(byte);
         } else {
             current_col += UnicodeWidthChar::width(c).unwrap_or(0);
         }
@@ -2479,6 +2644,8 @@ fn pr_take_display_width(s: &str, max_width: usize, tab_width: usize) -> String 
             (current_col / tab_width + 1) * tab_width
         } else if c == '\u{0008}' {
             current_col.saturating_sub(1)
+        } else if let Some(byte) = pr_raw_byte_from_char(c) {
+            current_col + pr_raw_byte_display_width(byte)
         } else {
             current_col + UnicodeWidthChar::width(c).unwrap_or(0)
         };
@@ -2521,6 +2688,9 @@ fn expand_tabs_to_spaces(
                 res.push(c);
                 current_col -= 1;
             }
+        } else if let Some(byte) = pr_raw_byte_from_char(c) {
+            res.push(c);
+            current_col += pr_raw_byte_display_width(byte);
         } else {
             res.push(c);
             current_col += UnicodeWidthChar::width(c).unwrap_or(0);
@@ -2582,6 +2752,8 @@ fn replace_spaces_with_tabs_by_segments(
                 current_col = (current_col / tab_width + 1) * tab_width;
             } else if c == '\u{0008}' {
                 current_col = current_col.saturating_sub(1);
+            } else if let Some(byte) = pr_raw_byte_from_char(c) {
+                current_col += pr_raw_byte_display_width(byte);
             } else {
                 current_col += UnicodeWidthChar::width(c).unwrap_or(0);
             }
@@ -2663,6 +2835,8 @@ fn render_join_lines_segments(
             res.push(c);
             if c == '\u{0008}' {
                 *logical_col = logical_col.saturating_sub(1);
+            } else if let Some(byte) = pr_raw_byte_from_char(c) {
+                *logical_col += pr_raw_byte_display_width(byte);
             } else if c != '\t' {
                 *logical_col += UnicodeWidthChar::width(c).unwrap_or(0);
             }
@@ -2765,6 +2939,10 @@ fn escape_control_chars(input: &str, show_control_chars: bool, show_nonprinting:
     }
     let mut result = String::with_capacity(input.len());
     for c in input.chars() {
+        if let Some(byte) = pr_raw_byte_from_char(c) {
+            result.push_str(&format!("\\{byte:03o}"));
+            continue;
+        }
         if c == '\t' || c == '\n' || c == '\x0C' || c == ' ' {
             result.push(c);
             continue;
@@ -2772,13 +2950,21 @@ fn escape_control_chars(input: &str, show_control_chars: bool, show_nonprinting:
         if c.is_control() {
             let cp = c as u32;
             if show_nonprinting {
-                result.push_str(&format!("\\{cp:03o}"));
+                if cp < 0x80 {
+                    result.push_str(&format!("\\{cp:03o}"));
+                } else {
+                    for byte in c.to_string().as_bytes() {
+                        result.push_str(&format!("\\{byte:03o}"));
+                    }
+                }
             } else if show_control_chars {
                 if cp < 128 {
                     result.push('^');
                     result.push((cp ^ 0x40) as u8 as char);
                 } else {
-                    result.push_str(&format!("\\{cp:03o}"));
+                    for byte in c.to_string().as_bytes() {
+                        result.push_str(&format!("\\{byte:03o}"));
+                    }
                 }
             } else {
                 result.push(c);
@@ -2902,6 +3088,13 @@ fn pr_get_columns(output_opts: &PrOutputOptions) -> usize {
     match &output_opts.column_mode_options {
         Some(col) => col.columns,
         None => 1,
+    }
+}
+
+#[cfg(test)]
+fn test_input_line(content: &str) -> PrInputLine {
+    PrInputLine {
+        text: content.to_string(),
     }
 }
 
@@ -3804,7 +3997,7 @@ mod tests {
         #[test]
         fn test_pr_split_lines_if_form_feed() {
             // 测试正常内容
-            let content = Ok("line1\nline2\nline3".to_string());
+            let content = Ok(test_input_line("line1\nline2\nline3"));
             let result = pr_split_lines_if_form_feed(content, false);
 
             assert_eq!(result.len(), 1); // 应为1个元素，因为没有换页符，所有内容在一个元素中
@@ -3814,7 +4007,7 @@ mod tests {
             );
 
             // 测试包含换页符的内容
-            let content = Ok("line1\nline2\u{000C}line3\nline4".to_string());
+            let content = Ok(test_input_line("line1\nline2\u{000C}line3\nline4"));
             let result = pr_split_lines_if_form_feed(content, false);
 
             assert_eq!(result.len(), 2); // 应为2个元素，换页符将内容分成两部分
@@ -3825,7 +4018,7 @@ mod tests {
 
         #[test]
         fn test_pr_split_lines_if_form_feed_omit_pagination_treats_ff_as_line_boundary() {
-            let content = Ok("left\u{000C}\u{000C}right".to_string());
+            let content = Ok(test_input_line("left\u{000C}\u{000C}right"));
             let result = pr_split_lines_if_form_feed(content, true);
 
             assert_eq!(result.len(), 2);
@@ -3834,12 +4027,12 @@ mod tests {
             assert_eq!(result[0].form_feeds_after, 2);
             assert_eq!(result[1].form_feeds_after, 0);
 
-            let ff_only = pr_split_lines_if_form_feed(Ok("\u{000C}".to_string()), true);
+            let ff_only = pr_split_lines_if_form_feed(Ok(test_input_line("\u{000C}")), true);
             assert_eq!(ff_only.len(), 1);
             assert_eq!(ff_only[0].line_content.as_ref().unwrap(), "");
             assert_eq!(ff_only[0].form_feeds_after, 1);
 
-            let true_blank_line = pr_split_lines_if_form_feed(Ok(String::new()), true);
+            let true_blank_line = pr_split_lines_if_form_feed(Ok(test_input_line("")), true);
             assert_eq!(true_blank_line.len(), 1);
             assert_eq!(true_blank_line[0].line_content.as_ref().unwrap(), "");
         }
@@ -3852,7 +4045,7 @@ mod tests {
 
             // 打开文件
             let reader = pr_open(file_path).unwrap();
-            let lines = BufReader::new(reader).lines();
+            let lines = pr_input_lines(reader);
 
             // 创建输出选项
             let output_opts = PrOutputOptions {
@@ -3911,7 +4104,7 @@ mod tests {
             BufReader::new(reader).read_to_string(&mut content).unwrap();
 
             // 分割含有换页符的内容
-            let file_lines = pr_split_lines_if_form_feed(Ok(content), false);
+            let file_lines = pr_split_lines_if_form_feed(Ok(test_input_line(&content)), false);
 
             // 验证结果 - 根据实际实现调整期望
             assert_eq!(file_lines.len(), 2); // 换页符将内容分成两部分
@@ -3982,8 +4175,9 @@ mod tests {
         #[test]
         fn test_pr_split_lines_if_form_feed_with_form_feeds() {
             // 测试包含换页符的内容
-            let form_feed_content =
-                Ok("line1\nline2\u{000C}line3\u{000C}\u{000C}line4".to_string());
+            let form_feed_content = Ok(test_input_line(
+                "line1\nline2\u{000C}line3\u{000C}\u{000C}line4",
+            ));
             let result = pr_split_lines_if_form_feed(form_feed_content, false);
 
             // 应该正确拆分换页符
@@ -6354,8 +6548,7 @@ mod tests {
             // 测试含有多个连续换页符的情况，验证是否正确创建了多个空页面
             let content = "line1\nline2\n\u{000C}\u{000C}line3\nline4";
             let reader = create_test_reader(content);
-            let buffer_reader = BufReader::new(reader);
-            let lines = buffer_reader.lines();
+            let lines = pr_input_lines(reader);
 
             let output_opts = PrOutputOptions {
                 number: None,
@@ -6398,7 +6591,7 @@ mod tests {
         #[test]
         fn test_omit_pagination_still_splits_multicolumn_pages_on_form_feed() {
             let reader = create_test_reader("a\nb\nc\n\u{000C}\nd\n");
-            let lines = BufReader::new(reader).lines();
+            let lines = pr_input_lines(reader);
 
             let output_opts = PrOutputOptions {
                 number: None,
@@ -6443,7 +6636,7 @@ mod tests {
         #[test]
         fn test_start_page_line_numbers_restart_on_first_printed_page() {
             let reader = create_test_reader("line1\nline2\nline3\nline4\n");
-            let lines = BufReader::new(reader).lines();
+            let lines = pr_input_lines(reader);
 
             let output_opts = PrOutputOptions {
                 number: Some(PrNumberingMode {
@@ -6526,8 +6719,7 @@ mod tests {
         fn test_form_feed_marker_line_does_not_add_blank_content_line() {
             let content = "line1\n\u{000C}\nline2\n";
             let reader = create_test_reader(content);
-            let buffer_reader = BufReader::new(reader);
-            let lines = buffer_reader.lines();
+            let lines = pr_input_lines(reader);
 
             let output_opts = PrOutputOptions {
                 number: None,
@@ -6570,8 +6762,7 @@ mod tests {
         fn test_full_page_followed_by_double_form_feed_adds_only_one_empty_page() {
             let content = "line1\nline2\n\u{000C}\u{000C}\nline3\n";
             let reader = create_test_reader(content);
-            let buffer_reader = BufReader::new(reader);
-            let lines = buffer_reader.lines();
+            let lines = pr_input_lines(reader);
 
             let output_opts = PrOutputOptions {
                 number: None,

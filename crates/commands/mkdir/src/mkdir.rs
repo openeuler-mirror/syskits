@@ -92,14 +92,42 @@ fn mkdir_get_mode(arg_matches: &ArgMatches, is_mode_had_minus_prefix: bool) -> R
     }
 }
 
-#[cfg(windows)]
+#[cfg(all(windows, test))]
 fn mkdir_strip_minus_from_mode(_args: &mut [String]) -> bool {
     false
 }
 
-#[cfg(not(windows))]
+#[cfg(all(not(windows), test))]
 fn mkdir_strip_minus_from_mode(args: &mut [String]) -> bool {
     ct_mode::strip_minus_from_mode(args)
+}
+
+#[cfg(windows)]
+fn mkdir_strip_minus_from_mode_os(_args: &mut [OsString]) -> bool {
+    false
+}
+
+#[cfg(not(windows))]
+fn mkdir_strip_minus_from_mode_os(args: &mut [OsString]) -> bool {
+    const MODE_INITIALS: &[u8] = b"rwxXstugo01234567";
+
+    for arg in args.iter_mut() {
+        if arg == "--" {
+            break;
+        }
+
+        let Some(value) = arg.to_str() else {
+            continue;
+        };
+        let bytes = value.as_bytes();
+
+        if bytes.len() >= 2 && bytes[0] == b'-' && MODE_INITIALS.contains(&bytes[1]) {
+            *arg = OsString::from(&value[1..]);
+            return true;
+        }
+    }
+
+    false
 }
 
 #[derive(Default)]
@@ -121,15 +149,11 @@ impl Tool for Mkdir {
 pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = mkdir_locale();
     rust_i18n::set_locale(&lang_code);
-    let raw_args: Vec<OsString> = args.into_iter().collect();
-    let mut args = raw_args
-        .iter()
-        .map(|arg| arg.to_string_lossy().into_owned())
-        .collect::<Vec<_>>();
+    let mut args = args.into_iter().collect::<Vec<_>>();
 
     // 在我们能用 clap（以及以前的 getopts）解析 'args' 之前，
     // 可能需要移除 MODE 前缀 '-'（例如 "chmod -x FILE"）。
-    let is_mode_had_minus_prefix = mkdir_strip_minus_from_mode(&mut args);
+    let is_mode_had_minus_prefix = mkdir_strip_minus_from_mode_os(&mut args);
 
     // Linux 特有的选项，未实现
     // opts.optflag("Z", "context", "set SELinux security context" +
@@ -200,10 +224,10 @@ fn preferred_locale_from_values<'a>(
 
 fn preferred_locale_from_env() -> Option<String> {
     for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
-        if let Ok(value) = std::env::var(key) {
-            if !value.is_empty() {
-                return Some(map_locale_name(&value));
-            }
+        if let Ok(value) = std::env::var(key)
+            && !value.is_empty()
+        {
+            return Some(map_locale_name(&value));
         }
     }
     None

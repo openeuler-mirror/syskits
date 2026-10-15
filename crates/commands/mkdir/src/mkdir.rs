@@ -252,6 +252,30 @@ fn long_option_requires_next_mode_argument(option: &str) -> bool {
     "mode".starts_with(long_option)
 }
 
+fn has_explicit_context_argument(args: &[OsString]) -> bool {
+    for arg in args.iter().skip(1) {
+        if arg == "--" {
+            break;
+        }
+
+        let Some(value) = arg.to_str() else {
+            continue;
+        };
+        let Some(long_option) = value.strip_prefix("--") else {
+            continue;
+        };
+        let Some((name, _)) = long_option.split_once('=') else {
+            continue;
+        };
+
+        if "context".starts_with(name) {
+            return true;
+        }
+    }
+
+    false
+}
+
 mod mkdir_flags {
     pub const MODE: &str = "mode";
     pub const PARENTS: &str = "parents";
@@ -363,6 +387,7 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
     let is_mode_had_minus_prefix = mkdir_strip_minus_from_mode_os(&mut args);
     validate_short_options(&args)?;
     validate_long_options(&args)?;
+    let has_explicit_context = has_explicit_context_argument(&args);
 
     // Linux 特有的选项，未实现
     // opts.optflag("Z", "context", "set SELinux security context" +
@@ -383,12 +408,6 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
         },
     };
 
-    let dirs = matches
-        .get_many::<OsString>(mkdir_flags::DIRS)
-        .unwrap_or_default();
-    if dirs.len() == 0 {
-        return Err(mkdir_usage_error("missing operand"));
-    }
     let is_verbose = matches.get_flag(mkdir_flags::VERBOSE);
     let is_recursive = matches.get_flag(mkdir_flags::PARENTS);
 
@@ -403,8 +422,23 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
         set_context = true;
         if !ctx.is_empty() {
             context = Some(ctx);
-            warn_on_unsupported = true;
         }
+        warn_on_unsupported = has_explicit_context;
+    }
+
+    #[cfg(target_os = "linux")]
+    if warn_on_unsupported && selinux::kernel_support() == selinux::KernelSupport::Unsupported {
+        eprintln!(
+            "mkdir: warning: ignoring --context; it requires an SELinux/SMACK-enabled kernel"
+        );
+        warn_on_unsupported = false;
+    }
+
+    let dirs = matches
+        .get_many::<OsString>(mkdir_flags::DIRS)
+        .unwrap_or_default();
+    if dirs.len() == 0 {
+        return Err(mkdir_usage_error("missing operand"));
     }
 
     match mkdir_get_mode(&matches, is_mode_had_minus_prefix) {

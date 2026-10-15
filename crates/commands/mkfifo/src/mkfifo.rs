@@ -29,6 +29,7 @@ use selinux::SecurityContext;
 use selinux::label::{Labeler, back_end::File as FileBackEnd};
 use std::ffi::{CString, OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
+use std::path::Path;
 use sys_locale::get_locale;
 
 // 定义了用于创建FIFO（命名管道）的命令行工具的主逻辑。
@@ -77,7 +78,7 @@ pub fn mkfifo_main(args: impl ctcore::Args) -> CTResult<()> {
     };
 
     // 解析FIFO路径列表
-    let fifo_strs: Vec<String> = match args_match.get_many::<String>(opt_flags::FIFO) {
+    let fifo_strs: Vec<OsString> = match args_match.get_many::<OsString>(opt_flags::FIFO) {
         Some(v) => v.cloned().collect(),
         None => {
             let err_message = format!(
@@ -95,12 +96,16 @@ pub fn mkfifo_main(args: impl ctcore::Args) -> CTResult<()> {
 
     for fifo in fifo_strs {
         if set_context && context.is_none() {
-            set_default_context_for_path(&fifo, fifo_mode as libc::mode_t, warn_on_unsupported)
-                .map_err(|e| CtSimpleError::new(1, e))?;
+            set_default_context_for_path(
+                Path::new(&fifo),
+                fifo_mode as libc::mode_t,
+                warn_on_unsupported,
+            )
+            .map_err(|e| CtSimpleError::new(1, e))?;
         }
 
         let result = unsafe {
-            let fifo_name = CString::new(fifo.as_bytes()).unwrap();
+            let fifo_name = os_str_to_c_string(&fifo);
             mkfifo(fifo_name.as_ptr(), fifo_mode)
         };
 
@@ -114,8 +119,7 @@ pub fn mkfifo_main(args: impl ctcore::Args) -> CTResult<()> {
         } else if specified_mode {
             // 如果指定了模式,使用lchmod确保权限正确设置(匹配GNU的lchmod行为)
             unsafe {
-                let c_path =
-                    CString::new(fifo.as_bytes()).expect("Failed to convert path to CString");
+                let c_path = os_str_to_c_string(&fifo);
                 #[cfg(target_os = "linux")]
                 let chmod_result = {
                     // Linux 没有 lchmod,但对于 FIFO 使用 chmod 是安全的
@@ -172,7 +176,7 @@ fn set_security_context_for_all(context: Option<&OsString>) -> Result<(), String
 }
 
 fn set_default_context_for_path(
-    fifo_path: &str,
+    fifo_path: &Path,
     fifo_mode: libc::mode_t,
     warn_on_unsupported: bool,
 ) -> Result<(), String> {
@@ -194,15 +198,13 @@ fn set_default_context_for_path(
     let file_access_mode =
         selinux::FileAccessMode::new(file_mode).expect("mode should be non-zero");
 
-    let path = std::path::Path::new(fifo_path);
-
     // 将相对路径转换为绝对路径
-    let abs_path = if path.is_absolute() {
-        path.to_path_buf()
+    let abs_path = if fifo_path.is_absolute() {
+        fifo_path.to_path_buf()
     } else {
         std::env::current_dir()
-            .map(|p| p.join(path))
-            .unwrap_or_else(|_| path.to_path_buf())
+            .map(|p| p.join(fifo_path))
+            .unwrap_or_else(|_| fifo_path.to_path_buf())
     };
 
     // 传入 abs_path
@@ -279,6 +281,7 @@ pub fn ct_app() -> Command {
         Arg::new(opt_flags::FIFO)
             .hide(true) // 隐藏此参数
             .action(ArgAction::Append)
+            .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::AnyPath), // 提示参数类型为路径
     ];
 

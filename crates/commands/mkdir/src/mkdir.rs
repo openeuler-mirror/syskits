@@ -48,6 +48,16 @@ fn mkdir_create_error(path: &Path, err: &str) -> String {
     )
 }
 
+fn mkdir_usage_error(message: impl std::fmt::Display) -> Box<dyn ctcore::ct_error::CTError> {
+    CtSimpleError::new(
+        1,
+        format!(
+            "{message}\nTry '{} --help' for more information.",
+            ctcore::ct_util_name()
+        ),
+    )
+}
+
 mod mkdir_flags {
     pub const MODE: &str = "mode";
     pub const PARENTS: &str = "parents";
@@ -164,7 +174,7 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
         .get_many::<OsString>(mkdir_flags::DIRS)
         .unwrap_or_default();
     if dirs.len() == 0 {
-        return Err(CtSimpleError::new(1, "missing operand"));
+        return Err(mkdir_usage_error("missing operand"));
     }
     let is_verbose = matches.get_flag(mkdir_flags::VERBOSE);
     let is_recursive = matches.get_flag(mkdir_flags::PARENTS);

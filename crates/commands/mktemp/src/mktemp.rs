@@ -14,12 +14,13 @@ use rust_i18n::t;
 use std::env;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::error::Error;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 #[cfg(unix)]
 use std::fs;
 use std::io::ErrorKind;
-use std::iter;
+#[cfg(unix)]
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
@@ -31,7 +32,6 @@ use tempfile::Builder;
 use ctcore::Tool;
 use ctcore::ct_display::{Quotable, ct_println_verbatim, locale_quote};
 use ctcore::ct_error::{CTError, CTResult, CTsageError, FromIo};
-use std::ffi::OsString;
 use sys_locale::get_locale;
 
 const MKTEMP_DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
@@ -75,6 +75,44 @@ fn default_tmpdir() -> PathBuf {
 #[cfg(windows)]
 fn default_tmpdir() -> PathBuf {
     tmpdir_from_environment().unwrap_or_else(env::temp_dir)
+}
+
+fn os_string_bytes(value: &OsStr) -> Vec<u8> {
+    #[cfg(unix)]
+    {
+        value.as_bytes().to_vec()
+    }
+    #[cfg(not(unix))]
+    {
+        value.to_string_lossy().into_owned().into_bytes()
+    }
+}
+
+fn os_string_from_bytes(bytes: &[u8]) -> OsString {
+    #[cfg(unix)]
+    {
+        OsString::from_vec(bytes.to_vec())
+    }
+    #[cfg(not(unix))]
+    {
+        OsString::from(String::from_utf8_lossy(bytes).into_owned())
+    }
+}
+
+fn os_str_contains_dir_separator(value: &OsStr) -> bool {
+    os_string_bytes(value).contains(&(MAIN_SEPARATOR as u8))
+}
+
+fn os_str_ends_with_dir_separator(value: &OsStr) -> bool {
+    os_string_bytes(value)
+        .last()
+        .is_some_and(|byte| *byte == MAIN_SEPARATOR as u8)
+}
+
+fn concat_os_strings(first: &OsStr, second: &OsStr) -> OsString {
+    let mut result = first.to_os_string();
+    result.push(second);
+    result
 }
 
 #[derive(Debug)]
@@ -163,13 +201,13 @@ pub struct MkTempFlags {
     pub tmpdir: Option<PathBuf>,
 
     /// 要附加到临时文件的后缀（如果有）。
-    pub suffix: Option<String>,
+    pub suffix: Option<OsString>,
 
     /// 是否将模板参数视为单个文件路径组件。
     pub is_treat_as_template: bool,
 
     /// 用于临时文件名称的模板。
-    pub template: String,
+    pub template: OsString,
 }
 
 impl MkTempFlags {
@@ -188,12 +226,12 @@ impl MkTempFlags {
                     .filter(|dir| !dir.is_empty())
                     .map(PathBuf::from)
             });
-        let (tmpdir, template) = match matches.get_one::<String>(MKTEMP_ARG_TEMPLATE) {
+        let (tmpdir, template) = match matches.get_one::<OsString>(MKTEMP_ARG_TEMPLATE) {
             // 如果没有提供模板参数，则隐含 `--tmpdir`。
             None => {
                 let tmpdir = Some(tmp_dir.unwrap_or_else(default_tmpdir));
                 let template = MKTEMP_DEFAULT_TEMPLATE;
-                (tmpdir, template.to_string())
+                (tmpdir, OsString::from(template))
             }
             Some(template) => {
                 let tmpdir = if matches.get_flag(mktemp_flags::MKTEMP_T) {
@@ -208,7 +246,7 @@ impl MkTempFlags {
                 } else {
                     None
                 };
-                (tmpdir, template.to_string())
+                (tmpdir, template.clone())
             }
         };
         Self {
@@ -217,7 +255,7 @@ impl MkTempFlags {
             is_quiet: matches.get_flag(mktemp_flags::MKTEMP_QUIET),
             tmpdir,
             suffix: matches
-                .get_many::<String>(mktemp_flags::MKTEMP_SUFFIX)
+                .get_many::<OsString>(mktemp_flags::MKTEMP_SUFFIX)
                 .and_then(|mut suffixes| suffixes.next_back())
                 .cloned(),
             is_treat_as_template: matches.get_flag(mktemp_flags::MKTEMP_T),
@@ -240,13 +278,13 @@ struct MkTempParams {
     directory: PathBuf,
 
     /// 临时文件的（非随机）前缀。
-    prefix: String,
+    prefix: OsString,
 
     /// 临时文件名称中的随机字符数。
     rand_num_chars: usize,
 
     /// 临时文件的（非随机）后缀。
-    suffix: String,
+    suffix: OsString,
 }
 
 /// 查找最后一个连续的 X 块的起始和结束索引。
@@ -258,17 +296,24 @@ struct MkTempParams {
 /// assert_eq!(mktemp_find_last_contiguous_block_of_xs("XXX_XXX"), Some((4, 7)));
 /// assert_eq!(mktemp_find_last_contiguous_block_of_xs("aXbXcX"), None);
 /// ```
-fn mktemp_find_last_contiguous_block_of_xs(s: &str) -> Option<(usize, usize)> {
-    let j = s.rfind("XXX")? + 3;
-    let i = s[..j].rfind(|c| c != 'X').map_or(0, |i| i + 1);
+fn mktemp_find_last_contiguous_block_of_xs(s: impl AsRef<OsStr>) -> Option<(usize, usize)> {
+    let bytes = os_string_bytes(s.as_ref());
+    let j = bytes.windows(3).rposition(|window| window == b"XXX")? + 3;
+    let i = bytes[..j]
+        .iter()
+        .rposition(|byte| *byte != b'X')
+        .map_or(0, |index| index + 1);
     Some((i, j))
 }
 
 impl MkTempParams {
     fn from(flags: MkTempFlags) -> Result<Self, MkTempError> {
         // 如果提供了后缀选项，模板参数必须以 'X' 结尾。
-        if flags.suffix.is_some() && !flags.template.ends_with('X') {
-            return Err(MkTempError::MustEndInX(flags.template));
+        let template_bytes = os_string_bytes(&flags.template);
+        if flags.suffix.is_some() && !template_bytes.ends_with(b"X") {
+            return Err(MkTempError::MustEndInX(
+                flags.template.to_string_lossy().into_owned(),
+            ));
         }
 
         // 获取模板中随机部分的起始和结束索引。
@@ -277,10 +322,10 @@ impl MkTempParams {
         {
             indices
         } else {
-            let s = match flags.suffix {
-                None => flags.template,
-                Some(s) => format!("{}{}", flags.template, s),
-            };
+            let mut s = flags.template.to_string_lossy().into_owned();
+            if let Some(suffix) = flags.suffix {
+                s.push_str(&suffix.to_string_lossy());
+            }
             return Err(MkTempError::TooFewXs(s));
         };
 
@@ -289,48 +334,47 @@ impl MkTempParams {
         // 那么 `prefix` 是 "a/b/c/d"。
         let tmpdir = flags.tmpdir;
         let prefix_from_option = tmpdir.clone().unwrap_or_default();
-        let prefix_from_template = &flags.template[..i];
-        let prefix = Path::new(&prefix_from_option)
-            .join(prefix_from_template)
-            .display()
-            .to_string();
-        if flags.is_treat_as_template && prefix_from_template.contains(MAIN_SEPARATOR) {
-            return Err(MkTempError::PrefixContainsDirSeparator(flags.template));
+        let prefix_from_template = os_string_from_bytes(&template_bytes[..i]);
+        let prefix_path = Path::new(&prefix_from_option).join(&prefix_from_template);
+        if flags.is_treat_as_template && os_str_contains_dir_separator(&prefix_from_template) {
+            return Err(MkTempError::PrefixContainsDirSeparator(
+                flags.template.to_string_lossy().into_owned(),
+            ));
         }
-        if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {
-            return Err(MkTempError::InvalidTemplate(flags.template));
+        if tmpdir.is_some() && Path::new(&prefix_from_template).is_absolute() {
+            return Err(MkTempError::InvalidTemplate(
+                flags.template.to_string_lossy().into_owned(),
+            ));
         }
 
         // 将父目录与前缀路径部分分开。
         // 例如，如果 `prefix` 是 "a/b/c/d"，那么 `directory` 是
         // "a/b/c" 是 `prefix` 被重新分配给 "d"。
-        let (dir, prefix) = if prefix.ends_with(MAIN_SEPARATOR) {
-            (prefix, String::new())
+        let (directory, prefix) = if os_str_ends_with_dir_separator(prefix_path.as_os_str()) {
+            (prefix_path, OsString::new())
         } else {
-            let path = Path::new(&prefix);
-            let dir = if let Some(d) = path.parent() {
-                d.display().to_string()
-            } else {
-                String::new()
-            };
+            let directory = prefix_path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_default();
+            let prefix = prefix_path
+                .file_name()
+                .map(OsStr::to_os_string)
+                .unwrap_or_default();
 
-            let prefix = if let Some(f) = path.file_name() {
-                f.to_str().unwrap().to_string()
-            } else {
-                String::new()
-            };
-
-            (dir, prefix)
+            (directory, prefix)
         };
 
         // 将模板中的后缀与选项给出的后缀组合起来。
         // 例如，如果命令行参数的后缀是 ".txt" 且
         // 模板是 "XXXabc"，那么 `suffix` 是 "abc.txt"。
         let suffix_from_flag = flags.suffix.unwrap_or_default();
-        let suffix_from_template = &flags.template[j..];
-        let suffix = format!("{suffix_from_template}{suffix_from_flag}");
-        if suffix.contains(MAIN_SEPARATOR) {
-            return Err(MkTempError::SuffixContainsDirSeparator(suffix));
+        let suffix_from_template = os_string_from_bytes(&template_bytes[j..]);
+        let suffix = concat_os_strings(&suffix_from_template, &suffix_from_flag);
+        if os_str_contains_dir_separator(&suffix) {
+            return Err(MkTempError::SuffixContainsDirSeparator(
+                suffix.to_string_lossy().into_owned(),
+            ));
         }
 
         // 模板中的随机字符数。
@@ -338,7 +382,7 @@ impl MkTempParams {
         let rand_num_chars = j - i;
 
         Ok(Self {
-            directory: dir.into(),
+            directory,
             prefix,
             rand_num_chars,
             suffix,
@@ -374,7 +418,7 @@ pub fn mktemp_main(args: impl ctcore::Args) -> CTResult<()> {
         // 如果设置了 POSIXLY_CORRECT，模板必须是最后一个参数。
         if matches.contains_id(MKTEMP_ARG_TEMPLATE) {
             // 提供了模板参数，检查是否是最后一个。
-            if args_vec.last().unwrap() != OsStr::new(&flags.template) {
+            if args_vec.last().unwrap() != flags.template.as_os_str() {
                 return Err(Box::new(MkTempError::TooManyTemplates));
             }
         }
@@ -488,7 +532,8 @@ pub fn ct_app() -> Command {
                       This option is implied if TEMPLATE does not end with X.",
             )
             .value_name("SUFFIX")
-            .action(ArgAction::Append),
+            .action(ArgAction::Append)
+            .value_parser(ValueParser::os_string()),
         Arg::new(mktemp_flags::MKTEMP_P)
             .short('p')
             .help(t!("mktemp.clap.mktemp_p"))
@@ -522,7 +567,9 @@ pub fn ct_app() -> Command {
                  (TMP on windows) if set) to create a filename template [deprecated]",
             )
             .action(ArgAction::SetTrue),
-        Arg::new(MKTEMP_ARG_TEMPLATE).num_args(..=1),
+        Arg::new(MKTEMP_ARG_TEMPLATE)
+            .num_args(..=1)
+            .value_parser(ValueParser::os_string()),
     ];
 
     Command::new(utility_name)
@@ -537,17 +584,15 @@ pub fn ct_app() -> Command {
         .after_help(SYSKITS_MKTEMP_AFTER_HELP)
 }
 
-fn mktemp_dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> CTResult<PathBuf> {
-    let len = prefix.len() + suffix.len() + rand;
-    let mut buffer = Vec::with_capacity(len);
-    buffer.extend(prefix.as_bytes());
-    buffer.extend(iter::repeat_n(b'X', rand));
-    buffer.extend(suffix.as_bytes());
-
-    // 随机化。
-    let bytes = &mut buffer[prefix.len()..prefix.len() + rand];
-    rand::thread_rng().fill(bytes);
-    for b in bytes {
+fn mktemp_dry_exec(
+    tmpdir: &Path,
+    prefix: impl AsRef<OsStr>,
+    rand: usize,
+    suffix: impl AsRef<OsStr>,
+) -> CTResult<PathBuf> {
+    let mut random_bytes = vec![0; rand];
+    rand::thread_rng().fill(&mut random_bytes[..]);
+    for b in &mut random_bytes {
         *b = match *b % 62 {
             v @ 0..=9 => v + b'0',
             v @ 10..=35 => v - 10 + b'a',
@@ -555,10 +600,11 @@ fn mktemp_dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> CT
             _ => unreachable!(),
         }
     }
-    // 我们保证 utf8。
-    let buf = String::from_utf8(buffer).unwrap();
-    let tmp_dir = Path::new(tmpdir).join(buf);
-    Ok(tmp_dir)
+    let random = String::from_utf8(random_bytes).expect("random name uses ASCII characters");
+    let mut filename = prefix.as_ref().to_os_string();
+    filename.push(random);
+    filename.push(suffix.as_ref());
+    Ok(tmpdir.join(filename))
 }
 
 /// 使用给定的参数创建临时目录。
@@ -569,7 +615,14 @@ fn mktemp_dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> CT
 /// # 错误
 ///
 /// 如果临时目录无法写入磁盘或给定的目录 `dir` 不存在。
-fn mktemp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> CTResult<PathBuf> {
+fn mktemp_dir(
+    dir: &Path,
+    prefix: impl AsRef<OsStr>,
+    rand: usize,
+    suffix: impl AsRef<OsStr>,
+) -> CTResult<PathBuf> {
+    let prefix = prefix.as_ref();
+    let suffix = suffix.as_ref();
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
     match builder.tempdir_in(dir) {
@@ -581,7 +634,9 @@ fn mktemp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> CTResult<P
             Ok(p)
         }
         Err(e) if e.kind() == ErrorKind::NotFound => {
-            let file_name = format!("{}{}{}", prefix, "X".repeat(rand), suffix);
+            let mut file_name = prefix.to_os_string();
+            file_name.push("X".repeat(rand));
+            file_name.push(suffix);
             let p = Path::new(dir).join(file_name);
             let s = p.display().to_string();
             Err(MkTempError::NotFound("directory".to_string(), s).into())
@@ -598,7 +653,14 @@ fn mktemp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> CTResult<P
 /// # 错误
 ///
 /// 如果文件无法写入磁盘或目录不存在。
-fn mktemp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> CTResult<PathBuf> {
+fn mktemp_file(
+    dir: &Path,
+    prefix: impl AsRef<OsStr>,
+    rand: usize,
+    suffix: impl AsRef<OsStr>,
+) -> CTResult<PathBuf> {
+    let prefix = prefix.as_ref();
+    let suffix = suffix.as_ref();
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
     match builder.tempfile_in(dir) {
@@ -608,7 +670,9 @@ fn mktemp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> CTResult<
             Err(e) => Err(MkTempError::PersistError(e.file.path().to_path_buf()).into()),
         },
         Err(e) if e.kind() == ErrorKind::NotFound => {
-            let file_name = format!("{}{}{}", prefix, "X".repeat(rand), suffix);
+            let mut file_name = prefix.to_os_string();
+            file_name.push("X".repeat(rand));
+            file_name.push(suffix);
             let p = Path::new(dir).join(file_name);
             let s = p.display().to_string();
             Err(MkTempError::NotFound("file".to_string(), s).into())
@@ -619,11 +683,13 @@ fn mktemp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> CTResult<
 
 fn mktemp_exec(
     dir: &Path,
-    prefix: &str,
+    prefix: impl AsRef<OsStr>,
     rand: usize,
-    suffix: &str,
+    suffix: impl AsRef<OsStr>,
     make_dir: bool,
 ) -> CTResult<PathBuf> {
+    let prefix = prefix.as_ref();
+    let suffix = suffix.as_ref();
     let path = if make_dir {
         mktemp_dir(dir, prefix, rand, suffix)?
     } else {
@@ -631,14 +697,13 @@ fn mktemp_exec(
     };
 
     // 获取到创建的临时文件或目录路径的最后一个组件。
-    let filename = path.file_name();
-    let filename = filename.unwrap().to_str().unwrap();
+    let filename = path.file_name().expect("temporary path has a file name");
 
     // 将目录与路径连接以获取要打印的路径。我们
     // 不能使用 `Builder` 返回的路径，因为它给出了
     // 绝对路径，我们需要返回一个与命令行上给定模板匹配的文件名
     // 它可能是相对路径。
-    let path_buf = Path::new(dir).join(filename);
+    let path_buf = dir.join(filename);
 
     Ok(path_buf)
 }
@@ -696,9 +761,9 @@ mod tests {
             is_dry_run: dry_run,
             is_quiet: quiet,
             tmpdir,
-            suffix,
+            suffix: suffix.map(OsString::from),
             is_treat_as_template: treat_as_template,
-            template: template.to_string(),
+            template: template.into(),
         }
     }
     #[cfg(test)]
@@ -721,7 +786,7 @@ mod tests {
             assert_eq!(options.tmpdir, None);
             assert_eq!(options.suffix, None);
             assert!(!options.is_treat_as_template);
-            assert_eq!(options.template, "test.XXXXXX".to_string());
+            assert_eq!(options.template, OsString::from("test.XXXXXX"));
         }
 
         #[test]
@@ -735,7 +800,7 @@ mod tests {
             assert_eq!(options.tmpdir, None);
             assert_eq!(options.suffix, None);
             assert!(!options.is_treat_as_template);
-            assert_eq!(options.template, "test.XXXXXX".to_string());
+            assert_eq!(options.template, OsString::from("test.XXXXXX"));
         }
 
         #[test]
@@ -747,9 +812,9 @@ mod tests {
             assert!(!options.is_dry_run);
             assert!(!options.is_quiet);
             assert_eq!(options.tmpdir, None);
-            assert_eq!(options.suffix, Some(".log".to_string()));
+            assert_eq!(options.suffix, Some(OsString::from(".log")));
             assert!(!options.is_treat_as_template);
-            assert_eq!(options.template, "test.XXXXXX".to_string());
+            assert_eq!(options.template, OsString::from("test.XXXXXX"));
         }
 
         #[test]
@@ -767,7 +832,7 @@ mod tests {
             assert_eq!(options.tmpdir, Some(PathBuf::from("/custom/tmpdir")));
             assert_eq!(options.suffix, None);
             assert!(!options.is_treat_as_template);
-            assert_eq!(options.template, "test.XXXXXX".to_string());
+            assert_eq!(options.template, OsString::from("test.XXXXXX"));
         }
 
         #[test]
@@ -797,7 +862,7 @@ mod tests {
                 assert_eq!(options.tmpdir, Some(env::temp_dir()));
                 assert_eq!(options.suffix, None);
                 assert!(options.is_treat_as_template);
-                assert_eq!(options.template, "test.XXXXXX".to_string());
+                assert_eq!(options.template, OsString::from("test.XXXXXX"));
             }
 
             // test_options_from_no_template
@@ -810,7 +875,7 @@ mod tests {
                 assert_eq!(options.tmpdir, Some(env::temp_dir()));
                 assert_eq!(options.suffix, None);
                 assert!(!options.is_treat_as_template);
-                assert_eq!(options.template, "tmp.XXXXXXXXXX".to_string());
+                assert_eq!(options.template, OsString::from("tmp.XXXXXXXXXX"));
             }
 
             // test_options_from_with_environment_tmpdir
@@ -824,7 +889,7 @@ mod tests {
                 assert_eq!(options.tmpdir, Some(PathBuf::from("/custom/env_tmpdir")));
                 assert_eq!(options.suffix, None);
                 assert!(options.is_treat_as_template);
-                assert_eq!(options.template, "tmp.XXXXXXXXXX".to_string());
+                assert_eq!(options.template, OsString::from("tmp.XXXXXXXXXX"));
                 unsafe { std::env::remove_var("TMPDIR") };
             }
 
@@ -867,9 +932,9 @@ mod tests {
             assert!(!options.is_dry_run);
             assert!(!options.is_quiet);
             assert_eq!(options.tmpdir, None);
-            assert_eq!(options.suffix, Some("".to_string()));
+            assert_eq!(options.suffix, Some(OsString::from("")));
             assert!(!options.is_treat_as_template);
-            assert_eq!(options.template, "test.XXXXXX".to_string());
+            assert_eq!(options.template, OsString::from("test.XXXXXX"));
         }
 
         #[test]
@@ -883,7 +948,7 @@ mod tests {
             assert_eq!(options.tmpdir, None);
             assert_eq!(options.suffix, None);
             assert!(!options.is_treat_as_template);
-            assert_eq!(options.template, "test.XXXXXX".to_string());
+            assert_eq!(options.template, OsString::from("test.XXXXXX"));
         }
     }
 
@@ -2289,9 +2354,9 @@ mod tests {
                 is_dry_run: dry_run,
                 is_quiet: quiet,
                 tmpdir,
-                suffix,
+                suffix: suffix.map(OsString::from),
                 is_treat_as_template: treat_as_template,
-                template: template.to_string(),
+                template: template.into(),
             }
         }
 

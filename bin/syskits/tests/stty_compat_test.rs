@@ -2,6 +2,8 @@
 mod linux_stty_compat {
     use nix::pty::openpty;
     use nix::sys::termios::{SetArg, SpecialCharacterIndices, tcgetattr, tcsetattr};
+    use nix::unistd::ttyname;
+    use std::ffi::OsString;
     use std::fs::File;
     use std::os::fd::{AsRawFd, FromRawFd};
     use std::process::{Command, Stdio};
@@ -46,5 +48,49 @@ mod linux_stty_compat {
             updated.control_chars[SpecialCharacterIndices::VERASE as usize],
             127
         );
+    }
+
+    #[test]
+    fn stty_save_accepts_attached_file_option_value() {
+        let pty = openpty(None, None).expect("open pty");
+        let dev = ttyname(&pty.slave).expect("get pty slave name");
+        let mut attached_file_arg = OsString::from("-F");
+        attached_file_arg.push(dev.as_os_str());
+
+        let attached = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C")
+            .env("LANG", "C")
+            .env("TZ", "UTC0")
+            .arg("stty")
+            .arg(attached_file_arg)
+            .arg("-g")
+            .stdin(Stdio::from(dup_as_file(&pty.slave)))
+            .output()
+            .expect("run syskits stty with attached -F value");
+
+        let separated = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C")
+            .env("LANG", "C")
+            .env("TZ", "UTC0")
+            .arg("stty")
+            .arg("-F")
+            .arg(&dev)
+            .arg("-g")
+            .stdin(Stdio::from(dup_as_file(&pty.slave)))
+            .output()
+            .expect("run syskits stty with separated -F value");
+
+        assert_eq!(
+            attached.status.code(),
+            Some(0),
+            "stdout: {}, stderr: {}",
+            String::from_utf8_lossy(&attached.stdout),
+            String::from_utf8_lossy(&attached.stderr)
+        );
+        assert_eq!(attached.stderr, b"");
+        assert!(!attached.stdout.is_empty());
+        assert_eq!(attached.stdout, separated.stdout);
+        assert_eq!(attached.stderr, separated.stderr);
+        assert_eq!(attached.status.code(), separated.status.code());
     }
 }

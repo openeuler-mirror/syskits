@@ -108,6 +108,36 @@ fn parse_settings(args: &[&str]) -> Vec<String> {
     cfg_settings
 }
 
+fn normalize_stty_file_short_option(args: impl ctcore::Args) -> Vec<OsString> {
+    let mut normalized = Vec::new();
+    let mut options_ended = false;
+
+    for arg in args {
+        if options_ended {
+            normalized.push(arg);
+            continue;
+        }
+
+        if arg == "--" {
+            options_ended = true;
+            normalized.push(arg);
+            continue;
+        }
+
+        if let Some(text) = arg.to_str() {
+            if text.starts_with("-F") && text.len() > 2 {
+                normalized.push(OsString::from("-F"));
+                normalized.push(OsString::from(&text[2..]));
+                continue;
+            }
+        }
+
+        normalized.push(arg);
+    }
+
+    normalized
+}
+
 impl SttyFlags {
     fn new(matches: &ArgMatches) -> CTResult<Self> {
         // 处理特别配置中的键值对逻辑，这里从命令行参数中获取设置项，然后解析这些设置项
@@ -202,6 +232,7 @@ pub fn stty_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn stty_main_with_writer<W: Write>(args: impl ctcore::Args, writer: &mut W) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = normalize_stty_file_short_option(args);
     let matches = ct_app().try_get_matches_from(args)?;
     let mut stty_opts = SttyFlags::new(&matches)?;
     stty(&mut stty_opts, writer)
@@ -1297,6 +1328,7 @@ pub fn ct_app() -> Command {
         Arg::new(stty_flags::STTY_FILE)
             .short('F')
             .long(stty_flags::STTY_FILE)
+            .num_args(1)
             .value_hint(clap::ValueHint::FilePath)
             .value_name("DEVICE")
             .help(t!("stty.clap.stty_file")),
@@ -1456,6 +1488,42 @@ mod tests {
                     .get_one::<String>(stty_flags::STTY_FILE)
                     .unwrap(),
                 "/dev/tty"
+            );
+        }
+
+        #[test]
+        fn test_ct_app_file_option_accepts_attached_short_value() {
+            let command = ct_app();
+            let args = normalize_stty_file_short_option(
+                [ctcore::ct_util_name(), "-F/dev/tty"]
+                    .iter()
+                    .map(OsString::from),
+            );
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+            assert_eq!(
+                executable
+                    .unwrap()
+                    .get_one::<String>(stty_flags::STTY_FILE)
+                    .unwrap(),
+                "/dev/tty"
+            );
+        }
+
+        #[test]
+        fn test_file_short_option_normalization_stops_after_double_dash() {
+            let args = normalize_stty_file_short_option(
+                [ctcore::ct_util_name(), "--", "-F/dev/tty"]
+                    .iter()
+                    .map(OsString::from),
+            );
+            assert_eq!(
+                args,
+                vec![
+                    OsString::from(ctcore::ct_util_name()),
+                    OsString::from("--"),
+                    OsString::from("-F/dev/tty"),
+                ]
             );
         }
 

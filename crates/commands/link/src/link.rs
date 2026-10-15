@@ -21,9 +21,14 @@ use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::{
     Tool,
     ct_display::{Quotable, locale_quote},
-    ct_error::{CTResult, CtSimpleError, FromIo},
+    ct_error::{CTResult, CtSimpleError, FromIo, strip_errno},
 };
-use std::{ffi::OsString, fs::hard_link, io, path::Path};
+use std::{
+    ffi::OsString,
+    fs::hard_link,
+    io::{self, Write},
+    path::Path,
+};
 use sys_locale::get_locale;
 
 const SYSKITS_LINK_LONG_VERSION: &str = concat!(
@@ -100,9 +105,36 @@ pub fn link_main(args: impl ctcore::Args) -> CTResult<()> {
         .unwrap_or_else(|| ctcore::ct_util_name().to_owned());
     stop_option_parsing_for_posixly_correct(&mut args);
     validate_standard_options(&args, &usage_name)?;
-    let matches = ct_app().try_get_matches_from(args)?;
+    let mut command = ct_app();
+    let matches = match command.try_get_matches_from_mut(args) {
+        Ok(matches) => matches,
+        Err(error) => match error.kind() {
+            clap::error::ErrorKind::DisplayHelp => {
+                write_standard_output(&mut command, false)?;
+                return Ok(());
+            }
+            clap::error::ErrorKind::DisplayVersion => {
+                write_standard_output(&mut command, true)?;
+                return Ok(());
+            }
+            _ => return Err(error.into()),
+        },
+    };
     let flags = LinkFlags::new(&matches, &usage_name)?;
     link_exec(&flags)
+}
+
+fn write_standard_output(command: &mut Command, version: bool) -> CTResult<()> {
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
+    let result = if version {
+        writeln!(stdout, "{}", command.render_long_version())
+    } else {
+        command.write_help(&mut stdout)
+    }
+    .and_then(|_| stdout.flush());
+
+    result.map_err(|error| CtSimpleError::new(1, format!("write error: {}", strip_errno(&error))))
 }
 
 fn stop_option_parsing_for_posixly_correct(args: &mut Vec<OsString>) {
@@ -471,9 +503,9 @@ mod tests {
         assert!(command.get_name().contains("link"));
 
         // 测试 execute 方法
-        let args = vec![OsString::from("link"), OsString::from("--help")];
+        let args = vec![OsString::from("link")];
         let result = tool.execute(&args);
-        assert!(result.is_err()); // link命令需要参数，所以不带参数应该返回错误
+        assert!(result.is_err());
     }
 
     mod ct_app_tests {
@@ -768,13 +800,6 @@ mod tests {
         #[test]
         fn test_link_main_nonexistent_source() {
             let args = [ctcore::ct_util_name(), "nonexistent.txt", "target.txt"];
-            let result = link_main(args.iter().map(OsString::from));
-            assert!(result.is_err());
-        }
-
-        #[test]
-        fn test_link_main_with_help_flag() {
-            let args = [ctcore::ct_util_name(), "--help"];
             let result = link_main(args.iter().map(OsString::from));
             assert!(result.is_err());
         }

@@ -17,11 +17,11 @@ extern crate rust_i18n;
 use clap::builder::ValueParser;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, Command};
 use ctcore::{
-    Tool,
     ct_display::Quotable,
     ct_error::{CTResult, CtSimpleError, FromIo},
+    Tool,
 };
 use std::{ffi::OsString, fs::hard_link, path::Path};
 use sys_locale::get_locale;
@@ -44,14 +44,27 @@ impl<'a> LinkFlags<'a> {
     ///
     /// # Returns
     /// * `CTResult<Self>` - 成功则返回 LinkFlags 实例，失败则返回错误
-    fn new(matches: &'a clap::ArgMatches) -> CTResult<Self> {
+    fn new(matches: &'a clap::ArgMatches, usage_name: &str) -> CTResult<Self> {
         let files: Vec<_> = matches
             .get_many::<OsString>(link_flags::FILES)
             .unwrap_or_default()
             .collect();
 
-        if files.len() != 2 {
-            return Err(CtSimpleError::new(1, "wrong number of arguments"));
+        match files.len() {
+            0 => return Err(link_usage_error(usage_name, "missing operand".to_string())),
+            1 => {
+                return Err(link_usage_error(
+                    usage_name,
+                    format!("missing operand after {}", files[0].quote()),
+                ));
+            }
+            2 => {}
+            _ => {
+                return Err(link_usage_error(
+                    usage_name,
+                    format!("extra operand {}", files[2].quote()),
+                ));
+            }
         }
 
         Ok(Self {
@@ -65,9 +78,22 @@ impl<'a> LinkFlags<'a> {
 pub fn link_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = args.collect::<Vec<_>>();
+    let usage_name = args
+        .first()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .filter(|arg| !arg.is_empty())
+        .unwrap_or_else(|| ctcore::ct_util_name().to_owned());
     let matches = ct_app().try_get_matches_from(args)?;
-    let flags = LinkFlags::new(&matches)?;
+    let flags = LinkFlags::new(&matches, &usage_name)?;
     link_exec(&flags)
+}
+
+fn link_usage_error(usage_name: &str, message: String) -> Box<dyn ctcore::ct_error::CTError> {
+    CtSimpleError::new(
+        1,
+        format!("{message}\nTry '{usage_name} --help' for more information."),
+    )
 }
 
 /// 执行硬链接创建操作
@@ -85,8 +111,7 @@ fn link_exec(flags: &LinkFlags) -> CTResult<()> {
 pub fn ct_app() -> Command {
     let arg = Arg::new(link_flags::FILES)
         .hide(true)
-        .required(true)
-        .num_args(2)
+        .action(ArgAction::Append)
         .value_hint(clap::ValueHint::AnyPath)
         .value_parser(ValueParser::os_string());
 
@@ -186,11 +211,7 @@ mod tests {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name()];
             let result = command.try_get_matches_from(args);
-            assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().kind(),
-                ErrorKind::MissingRequiredArgument
-            );
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -229,7 +250,7 @@ mod tests {
                 "extra.txt",
             ];
             let result = command.try_get_matches_from(args);
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
     }
 
@@ -387,6 +408,33 @@ mod tests {
             let args = [ctcore::ct_util_name(), "single_file.txt"];
             let result = link_main(args.iter().map(OsString::from));
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_link_main_operand_diagnostics() {
+            let cases = [
+                (vec![ctcore::ct_util_name()], "missing operand".to_string()),
+                (
+                    vec![ctcore::ct_util_name(), "file1"],
+                    format!("missing operand after {}", Path::new("file1").quote()),
+                ),
+                (
+                    vec![ctcore::ct_util_name(), "file1", "file2", "file3"],
+                    format!("extra operand {}", Path::new("file3").quote()),
+                ),
+            ];
+
+            for (args, message) in cases {
+                let error = link_main(args.iter().map(OsString::from))
+                    .expect_err("invalid operand count must fail");
+                assert_eq!(
+                    error.to_string(),
+                    format!(
+                        "{message}\nTry '{} --help' for more information.",
+                        ctcore::ct_util_name()
+                    )
+                );
+            }
         }
 
         #[test]

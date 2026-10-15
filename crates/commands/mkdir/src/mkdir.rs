@@ -18,12 +18,13 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 #[cfg(not(windows))]
 use ctcore::ct_error::FromIo;
-use ctcore::ct_error::{CTResult, CtSimpleError};
+use ctcore::ct_error::{CTResult, CtSimpleError, strip_errno};
 #[cfg(not(windows))]
 use ctcore::ct_mode;
 use ctcore::ct_show_if_err;
 use ctcore::{ct_display::Quotable, ct_fs::dir_strip_dot_for_creation};
 use std::ffi::OsString;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
@@ -39,6 +40,17 @@ use std::ffi::{CString, OsStr};
 use std::os::unix::ffi::OsStrExt;
 
 const MKDIR_DEFAULT_PERM: u32 = 0o777;
+
+const SYSKITS_MKDIR_LONG_VERSION: &str = concat!(
+    "(syskits) ",
+    env!("CARGO_PKG_VERSION"),
+    "\nCopyright (C) 2022-2025 China Telecom Cloud Technologies Co., Ltd.\n",
+    "License Mulan PSL v2: <http://license.coscl.org.cn/MulanPSL2>.\n",
+    "This is free software: you are free to change and redistribute it.\n",
+    "There is NO WARRANTY, to the extent permitted by law."
+);
+
+const SYSKITS_MKDIR_AFTER_HELP: &str = "syskits online help: <https://www.ctyun.cn/developer>";
 
 fn mkdir_create_error(path: &Path, err: &str) -> String {
     t!(
@@ -198,7 +210,21 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
     // Linux 特有的选项，未实现
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    let matches = ct_app().try_get_matches_from(args)?;
+    let mut command = ct_app();
+    let matches = match command.try_get_matches_from_mut(args) {
+        Ok(matches) => matches,
+        Err(error) => match error.kind() {
+            clap::error::ErrorKind::DisplayHelp => {
+                write_standard_output(&mut command, false)?;
+                return Ok(());
+            }
+            clap::error::ErrorKind::DisplayVersion => {
+                write_standard_output(&mut command, true)?;
+                return Ok(());
+            }
+            _ => return Err(error.into()),
+        },
+    };
 
     let dirs = matches
         .get_many::<OsString>(mkdir_flags::DIRS)
@@ -237,6 +263,19 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
         ),
         Err(f) => Err(CtSimpleError::new(1, f)),
     }
+}
+
+fn write_standard_output(command: &mut Command, version: bool) -> CTResult<()> {
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
+    let result = if version {
+        writeln!(stdout, "{}", command.render_long_version())
+    } else {
+        command.write_help(&mut stdout)
+    }
+    .and_then(|_| stdout.flush());
+
+    result.map_err(|error| CtSimpleError::new(1, format!("write error: {}", strip_errno(&error))))
 }
 
 fn map_locale_name(locale: &str) -> String {
@@ -328,13 +367,17 @@ pub fn ct_app() -> Command {
 
     Command::new(utility_name)
         .version(command_version)
+        .long_version(SYSKITS_MKDIR_LONG_VERSION)
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
         .disable_help_flag(true)
         .disable_version_flag(true)
         .args(args)
-        .after_help(t!("mkdir.after_help"))
+        .after_help(format!(
+            "{}\n\n{SYSKITS_MKDIR_AFTER_HELP}",
+            t!("mkdir.after_help")
+        ))
 }
 
 /**
@@ -598,7 +641,7 @@ mod tests_tool_implementation {
 
         // 测试 execute 方法
         let args = vec![OsString::from("mkdir"), OsString::from("--help")];
-        assert!(tool.execute(&args).is_err()); // --help参数通常会返回错误
+        assert!(tool.execute(&args).is_ok());
     }
 }
 
@@ -1863,7 +1906,7 @@ mod tests {
         fn test_ct_main_execution_version() {
             let args = [ctcore::ct_util_name(), "--version"];
             let result = mkdir_main(args.iter().map(OsString::from));
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -1877,7 +1920,7 @@ mod tests {
         fn test_ct_main_execution_help() {
             let args = [ctcore::ct_util_name(), "--help"];
             let result = mkdir_main(args.iter().map(OsString::from));
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]

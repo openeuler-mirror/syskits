@@ -70,6 +70,17 @@ unsafe extern "C" {
 
 #[cfg(unix)]
 const EMPTY_LOCALE: [libc::c_char; 1] = [0];
+
+const SYSKITS_JOIN_LONG_VERSION: &str = concat!(
+    "(syskits) ",
+    env!("CARGO_PKG_VERSION"),
+    "\nCopyright (C) 2022-2025 China Telecom Cloud Technologies Co., Ltd.\n",
+    "License Mulan PSL v2: <http://license.coscl.org.cn/MulanPSL2>.\n",
+    "This is free software: you are free to change and redistribute it.\n",
+    "There is NO WARRANTY, to the extent permitted by law."
+);
+
+const SYSKITS_JOIN_AFTER_HELP: &str = "syskits online help: <https://www.ctyun.cn/developer>";
 #[derive(Debug)]
 enum JoinError {
     IOError(std::io::Error),
@@ -1352,8 +1363,10 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
 
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
+        .long_version(SYSKITS_JOIN_LONG_VERSION)
         .about(t!("join.about"))
         .override_usage(t!("join.usage"))
+        .after_help(SYSKITS_JOIN_AFTER_HELP)
         .infer_long_args(true)
         .args(args)
 }
@@ -1902,6 +1915,26 @@ mod tests {
         let args = vec![OsString::from("join"), OsString::from("--version")];
         assert!(tool.execute(&args).is_err());
     }
+
+    #[test]
+    fn test_help_and_version_include_syskits_identity() {
+        let version = ct_app()
+            .try_get_matches_from(vec!["join", "--version"])
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(version.contains("(syskits)"));
+        assert!(!version.contains("GNU"));
+
+        let help = ct_app()
+            .try_get_matches_from(vec!["join", "--help"])
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(help.contains("syskits online help:"));
+        assert!(!help.contains("GNU"));
+    }
+
     #[test]
     fn test_parse_settings_basic() {
         // 创建基本的命令行参数

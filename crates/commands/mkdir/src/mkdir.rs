@@ -58,6 +58,35 @@ fn mkdir_usage_error(message: impl std::fmt::Display) -> Box<dyn ctcore::ct_erro
     )
 }
 
+fn validate_short_options(args: &[OsString]) -> CTResult<()> {
+    for arg in args.iter().skip(1) {
+        if arg == "--" {
+            break;
+        }
+
+        let Some(value) = arg.to_str() else {
+            continue;
+        };
+        let Some(short_options) = value.strip_prefix('-') else {
+            continue;
+        };
+        if short_options.is_empty() || short_options.starts_with('-') {
+            continue;
+        }
+
+        for option in short_options.chars() {
+            match option {
+                'p' | 'v' | 'Z' => {}
+                // The rest of this argument, or the next argument, is MODE.
+                'm' => break,
+                _ => return Err(mkdir_usage_error(format!("invalid option -- '{option}'"))),
+            }
+        }
+    }
+
+    Ok(())
+}
+
 mod mkdir_flags {
     pub const MODE: &str = "mode";
     pub const PARENTS: &str = "parents";
@@ -164,6 +193,7 @@ pub fn mkdir_main(args: impl ctcore::Args) -> CTResult<()> {
     // 在我们能用 clap（以及以前的 getopts）解析 'args' 之前，
     // 可能需要移除 MODE 前缀 '-'（例如 "chmod -x FILE"）。
     let is_mode_had_minus_prefix = mkdir_strip_minus_from_mode_os(&mut args);
+    validate_short_options(&args)?;
 
     // Linux 特有的选项，未实现
     // opts.optflag("Z", "context", "set SELinux security context" +
@@ -256,12 +286,10 @@ pub fn ct_app() -> Command {
     let usage_description = t!("mkdir.usage");
     let args = vec![
         Arg::new("help")
-            .short('h')
             .long("help")
             .help(t!("mkdir.clap.help"))
             .action(ArgAction::Help),
         Arg::new("version")
-            .short('V')
             .long("version")
             .help(t!("mkdir.clap.version"))
             .action(ArgAction::Version),
@@ -1997,8 +2025,8 @@ mod tests {
         //   -m, --mode <mode>  set file mode (not implemented on windows)
         //   -p, --parents      make parent directories as needed
         //   -v, --verbose      print a message for each printed directory
-        //   -h, --help         Print help
-        //   -V, --version      Print version
+        //       --help         Print help
+        //       --version      Print version
         //
         //   Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.
 
@@ -2020,7 +2048,7 @@ mod tests {
             let executable = command.try_get_matches_from(args);
 
             assert!(executable.is_err());
-            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
 
         #[test]
@@ -2040,7 +2068,7 @@ mod tests {
             let help_args = vec![ctcore::ct_util_name(), "-h"];
             let result = command.try_get_matches_from(help_args);
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+            assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
 
         #[test]

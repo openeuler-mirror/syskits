@@ -71,7 +71,7 @@ fn mkdir_usage_error(message: impl std::fmt::Display) -> Box<dyn ctcore::ct_erro
 }
 
 fn validate_short_options(args: &[OsString]) -> CTResult<()> {
-    for arg in args.iter().skip(1) {
+    for (index, arg) in args.iter().enumerate().skip(1) {
         if arg == "--" {
             break;
         }
@@ -86,11 +86,16 @@ fn validate_short_options(args: &[OsString]) -> CTResult<()> {
             continue;
         }
 
-        for option in short_options.chars() {
+        for (position, option) in short_options.char_indices() {
             match option {
                 'p' | 'v' | 'Z' => {}
                 // The rest of this argument, or the next argument, is MODE.
-                'm' => break,
+                'm' => {
+                    if position + 1 == short_options.len() && args.get(index + 1).is_none() {
+                        return Err(mkdir_usage_error("option requires an argument -- 'm'"));
+                    }
+                    break;
+                }
                 _ => return Err(mkdir_usage_error(format!("invalid option -- '{option}'"))),
             }
         }

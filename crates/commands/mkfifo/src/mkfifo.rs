@@ -43,6 +43,15 @@ mod opt_flags {
 }
 
 const NEGATIVE_MODE_PREFIX: &str = "__syskits_mkfifo_negative_mode__";
+const SYSKITS_MKFIFO_LONG_VERSION: &str = concat!(
+    "(syskits) ",
+    env!("CARGO_PKG_VERSION"),
+    "\nCopyright (C) 2022-2025 China Telecom Cloud Technologies Co., Ltd.\n",
+    "License Mulan PSL v2: <http://license.coscl.org.cn/MulanPSL2>.\n",
+    "This is free software: you are free to change and redistribute it.\n",
+    "There is NO WARRANTY, to the extent permitted by law."
+);
+const SYSKITS_MKFIFO_AFTER_HELP: &str = "syskits online help: <https://www.ctyun.cn/developer>";
 
 fn mkfifo_usage_error(message: impl std::fmt::Display) -> Box<dyn ctcore::ct_error::CTError> {
     CtSimpleError::new(
@@ -393,12 +402,14 @@ pub fn ct_app() -> Command {
 
     Command::new(utility_name)
         .version(command_version)
+        .long_version(SYSKITS_MKFIFO_LONG_VERSION)
         .override_usage(usage_description)
         .about(application_info)
         .infer_long_args(true)
         .disable_help_flag(true)
         .disable_version_flag(true)
         .args(&args)
+        .after_help(SYSKITS_MKFIFO_AFTER_HELP)
 }
 
 #[derive(Default)]

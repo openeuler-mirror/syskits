@@ -28,7 +28,7 @@ use crate::opt_flags::OPT_STRIP_TRAILING_SLASHES;
 use crate::opt_flags::OPT_TARGET_DIRECTORY;
 use crate::opt_flags::OPT_VERBOSE;
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use ctcore::Tool;
 use ctcore::ct_backup_control::{self, source_is_target_backup};
 use ctcore::ct_display::Quotable;
@@ -242,7 +242,7 @@ fn mv_modes_process(
 
 pub fn ct_app() -> Command {
     let utility_name = ctcore::ct_util_name();
-    let command_version = crate_version!();
+    let command_version = concat!(env!("CARGO_PKG_VERSION"), " (syskits)");
     let application_info = t!("mv.about");
     let usage_description = t!("mv.usage");
     let after_help = format!(
@@ -314,10 +314,7 @@ fn mv_args_init() -> Vec<Arg> {
         Arg::new(OPT_PROGRESS)
             .short('g')
             .long(OPT_PROGRESS)
-            .help(
-                "Display a progress bar. \n\
-                Note: this feature is not supported by GNU coreutils.",
-            )
+            .help("Display a progress bar.")
             .action(ArgAction::SetTrue),
         Arg::new(OPT_CONTEXT)
             .short('Z')

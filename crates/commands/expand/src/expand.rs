@@ -78,7 +78,7 @@ const UTF8_BOM: [u8; 3] = [0xEF, 0xBB, 0xBF];
 
 /// The mode to use when replacing tabs beyond the last one specified in
 /// the `--tabs` argument.
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 enum RemainingMode {
     None,
     Slash,
@@ -272,15 +272,7 @@ impl ExpandOptions {
         let is_uflag = !args_match.get_flag(opt_flags::NO_UTF8);
 
         // 预计算制表符扩展所需的最长空格数，以避免处理过程中重复分配。
-        let nspaces = tabstops
-            .iter()
-            .scan(0, |pr, &it| {
-                let ret = Some(it - *pr);
-                *pr = it;
-                ret
-            })
-            .max()
-            .unwrap(); // 我们保证 `tabstops` 至少有一个元素。
+        let nspaces = expand_max_tabstop_width(&tabstops, &remaining_mode);
         let tspaces = " ".repeat(nspaces);
 
         // 收集要处理的文件列表。如果没有指定文件，则默认使用标准输入。
@@ -298,6 +290,35 @@ impl ExpandOptions {
             remaining_mode,
         })
     }
+}
+
+fn expand_max_tabstop_width(tabstops: &[usize], remaining_mode: &RemainingMode) -> usize {
+    let fixed_tabstops_len = match remaining_mode {
+        RemainingMode::None => tabstops.len(),
+        RemainingMode::Slash | RemainingMode::Plus => tabstops.len().saturating_sub(1),
+    };
+
+    let mut previous = 0usize;
+    let mut max_width = 0usize;
+    for &tabstop in &tabstops[..fixed_tabstops_len] {
+        max_width = max_width.max(tabstop - previous);
+        previous = tabstop;
+    }
+
+    match remaining_mode {
+        RemainingMode::None => {
+            if tabstops.len() > 1 {
+                max_width = max_width.max(1);
+            }
+        }
+        RemainingMode::Slash | RemainingMode::Plus => {
+            if let Some(&step) = tabstops.last() {
+                max_width = max_width.max(step);
+            }
+        }
+    }
+
+    max_width.max(1)
 }
 
 pub fn expand_main(args: impl ctcore::Args) -> CTResult<()> {
@@ -404,73 +425,93 @@ fn expand_tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ExpandP
     // 初始化制表位列表和剩余模式
     let mut numbers = vec![];
     let mut remaining_mode = RemainingMode::None;
-    let mut is_specifier_already_used = false;
+    let mut used_specifier = None;
 
     // 解析每个由空格或逗号分隔的单词
     for word in str.split(is_space_or_comma) {
-        let bytes = word.as_bytes();
-        for index in 0..bytes.len() {
-            match bytes[index] {
-                b'+' => remaining_mode = RemainingMode::Plus,
-                b'/' => remaining_mode = RemainingMode::Slash,
-                _ => {
-                    // 从字节序列解析数字
-                    let s = from_utf8(&bytes[index..]).unwrap();
-                    match s.parse::<usize>() {
-                        Ok(num) => {
-                            // 检查制表位大小是否为正，是否递增
-                            if num == 0 {
-                                return Err(ExpandParseError::TabSizeCannotBeZero);
-                            }
-                            if let Some(last_stop) = numbers.last() {
-                                if *last_stop >= num {
-                                    return Err(ExpandParseError::TabSizesMustBeAscending);
-                                }
-                            }
+        if word.is_empty() {
+            continue;
+        }
 
-                            // 检查是否已使用修饰符，以及是否只能与最后一个值一起使用
-                            if is_specifier_already_used {
-                                let specifier = if remaining_mode == RemainingMode::Slash {
-                                    "/".to_string()
-                                } else {
-                                    "+".to_string()
-                                };
-                                return Err(ExpandParseError::SpecifierOnlyAllowedWithLastValue(
-                                    specifier,
-                                ));
-                            } else if remaining_mode != RemainingMode::None {
-                                is_specifier_already_used = true;
-                            }
+        let mut number = word;
+        match word.as_bytes()[0] {
+            b'+' => {
+                remaining_mode = RemainingMode::Plus;
+                number = &word[1..];
+            }
+            b'/' => {
+                remaining_mode = RemainingMode::Slash;
+                number = &word[1..];
+            }
+            _ => {}
+        }
 
-                            // 将制表位添加到列表中
-                            numbers.push(num);
-                            break;
-                        }
-                        Err(e) => {
-                            // 处理解析错误，如数值过大或字符非法
-                            if *e.kind() == IntErrorKind::PosOverflow {
-                                return Err(ExpandParseError::TabSizeTooLarge(s.to_string()));
-                            }
+        if number.is_empty() {
+            continue;
+        }
 
-                            let s = s.trim_start_matches(char::is_numeric);
-                            if s.starts_with('/') || s.starts_with('+') {
-                                return Err(ExpandParseError::SpecifierNotAtStartOfNumber(
-                                    s[0..1].to_string(),
-                                    s.to_string(),
-                                ));
-                            } else {
-                                return Err(ExpandParseError::InvalidCharacter(s.to_string()));
-                            }
-                        }
-                    }
+        let num = match number.parse::<usize>() {
+            Ok(num) => num,
+            Err(e) => {
+                // 处理解析错误，如数值过大或字符非法
+                if *e.kind() == IntErrorKind::PosOverflow {
+                    return Err(ExpandParseError::TabSizeTooLarge(number.to_string()));
+                }
+
+                let invalid_suffix = number.trim_start_matches(char::is_numeric);
+                if invalid_suffix.starts_with('/') || invalid_suffix.starts_with('+') {
+                    return Err(ExpandParseError::SpecifierNotAtStartOfNumber(
+                        invalid_suffix[0..1].to_string(),
+                        invalid_suffix.to_string(),
+                    ));
+                } else {
+                    return Err(ExpandParseError::InvalidCharacter(
+                        invalid_suffix.to_string(),
+                    ));
                 }
             }
+        };
+
+        let is_remaining_step = remaining_mode != RemainingMode::None;
+
+        if num == 0 {
+            if is_remaining_step {
+                continue;
+            }
+            return Err(ExpandParseError::TabSizeCannotBeZero);
         }
+
+        // 检查是否已使用修饰符，以及是否只能与最后一个值一起使用
+        if let Some(specifier) = used_specifier {
+            return Err(ExpandParseError::SpecifierOnlyAllowedWithLastValue(
+                match specifier {
+                    RemainingMode::Slash => "/",
+                    RemainingMode::Plus => "+",
+                    RemainingMode::None => unreachable!(),
+                }
+                .to_string(),
+            ));
+        }
+
+        if is_remaining_step {
+            used_specifier = Some(remaining_mode);
+        } else if let Some(last_stop) = numbers.last() {
+            if *last_stop >= num {
+                return Err(ExpandParseError::TabSizesMustBeAscending);
+            }
+        }
+
+        // 将制表位添加到列表中。对于 /N 和 +N，最后一个值表示后续步长。
+        numbers.push(num);
     }
 
     // 如果未解析任何数字，则使用默认制表位
     if numbers.is_empty() {
         numbers = vec![DEFAULT_TABSTOP];
+    }
+
+    if used_specifier.is_none() {
+        remaining_mode = RemainingMode::None;
     }
 
     // 如果制表位数量小于2，则重置剩余模式为 None
@@ -1270,6 +1311,30 @@ mod tests {
                     "+16".to_string()
                 ))
             );
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_slash_remaining_step() {
+            let result = expand_tabstops_parse("3,7,/4");
+            assert_eq!(result, Ok((RemainingMode::Slash, vec![3, 7, 4])));
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_plus_remaining_step() {
+            let result = expand_tabstops_parse("3,7,+4");
+            assert_eq!(result, Ok((RemainingMode::Plus, vec![3, 7, 4])));
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_zero_remaining_step_without_replacement() {
+            let result = expand_tabstops_parse("3,7,/0");
+            assert_eq!(result, Ok((RemainingMode::None, vec![3, 7])));
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_zero_remaining_step_can_be_replaced() {
+            let result = expand_tabstops_parse("3,/0,7");
+            assert_eq!(result, Ok((RemainingMode::Slash, vec![3, 7])));
         }
 
         #[test]

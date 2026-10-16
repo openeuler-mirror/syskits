@@ -155,6 +155,17 @@ fn fold_bytes_spaces_do_not_apply_multibyte_carriage_return_compensation() {
 }
 
 #[test]
+fn fold_accepts_repeated_spaces_option() {
+    assert_fold_bytes(
+        "repeated spaces option",
+        &["fold", "-s", "-s", "-w", "2"],
+        "C",
+        b"abcd",
+        b"ab\ncd",
+    );
+}
+
+#[test]
 fn fold_uses_locale_encoding_like_gnu() {
     assert_fold_bytes(
         "C locale byte mode",

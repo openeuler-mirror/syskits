@@ -1804,6 +1804,14 @@ fn cp_apply_explicit_selinux_context(
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+fn is_permission_xattr(attr_name: &std::ffi::OsStr) -> bool {
+    matches!(
+        attr_name.as_bytes(),
+        b"system.posix_acl_access" | b"system.posix_acl_default" | b"system.nfs4_acl"
+    )
+}
+
 pub(crate) fn copy_attributes_with_deref(
     source_path: &Path,
     dest_path: &Path,
@@ -1951,6 +1959,10 @@ pub(crate) fn copy_attributes_with_deref(
                 attr.selinux_context.is_some() || matches!(attr.context, CpPreserve::No { .. });
 
             for attr_name in xattrs {
+                if is_permission_xattr(attr_name.as_os_str()) {
+                    continue;
+                }
+
                 if skip_selinux && attr_name.to_string_lossy() == "security.selinux" {
                     continue; // 拦截内鬼！
                 }

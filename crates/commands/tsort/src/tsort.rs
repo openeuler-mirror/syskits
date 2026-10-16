@@ -61,6 +61,25 @@ enum TsortOutputEvent {
     Stderr(Range<usize>),
 }
 
+#[cfg(target_os = "linux")]
+fn terminate_with_sigpipe() -> ! {
+    // Rust ignores SIGPIPE by default. GNU tsort inherits the default action,
+    // so restore it only after tsort has observed EPIPE and raise the signal.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        libc::raise(libc::SIGPIPE);
+        libc::_exit(128 + libc::SIGPIPE);
+    }
+}
+
+fn write_tsort_output(writer: &mut impl Write, bytes: &[u8]) -> std::io::Result<()> {
+    match writer.write_all(bytes) {
+        #[cfg(target_os = "linux")]
+        Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => terminate_with_sigpipe(),
+        result => result,
+    }
+}
+
 pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
     let outcome = tsort_run(args)?;
     let stdout = std::io::stdout();
@@ -71,10 +90,10 @@ pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
     for event in &outcome.output_events {
         match event {
             TsortOutputEvent::Stdout(range) => {
-                stdout.write_all(&outcome.classic_bytes[range.clone()])?;
+                write_tsort_output(&mut stdout, &outcome.classic_bytes[range.clone()])?;
             }
             TsortOutputEvent::Stderr(range) => {
-                stderr.write_all(&outcome.stderr_bytes[range.clone()])?;
+                write_tsort_output(&mut stderr, &outcome.stderr_bytes[range.clone()])?;
             }
         }
     }

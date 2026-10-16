@@ -212,7 +212,7 @@ fn render_sum_classic(
         (5usize, format!("{checksum:05}"))
     };
 
-    let mut output = format!("{checksum} {blocks:width$}", width = width).into_bytes();
+    let mut output = format!("{checksum} {blocks:width$}").into_bytes();
     if let Some(file) = file {
         output.push(b' ');
         append_os_str(&mut output, file);

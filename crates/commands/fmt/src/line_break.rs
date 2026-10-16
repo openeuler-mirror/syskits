@@ -48,8 +48,8 @@ pub fn fmt_break_lines<W: ?Sized + Write>(
     fmt_opts: &FmtConfigs,
     out_stream: &mut W,
 ) -> std::io::Result<()> {
-    // 仅在非 quick/mail/split-only 场景走 coreutils 风格 DP。
-    if !fmt_opts.is_quick && !para_graph.mail_header && !fmt_opts.is_split_only {
+    // Split-only changes paragraph collection, not the line-breaking algorithm.
+    if !fmt_opts.is_quick && !para_graph.mail_header {
         return fmt_break_coreutils_paragraph(para_graph, fmt_opts, out_stream);
     }
 

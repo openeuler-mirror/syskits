@@ -22,6 +22,8 @@ use crate::units::NumfmtSuffix;
 use crate::units::NumfmtUnit;
 use crate::units::Result;
 
+const NUMFMT_MAX_UNSCALED_DIGITS: usize = 18;
+
 /// 遍历一行的字段，其中每个字段都是一个连续的非空格序列。
 /// 非空格的连续序列，可选择以一个或多个前导空格字符作为前缀。
 /// 白字符。字段以 `(prefix, field)`的元组形式返回。
@@ -344,6 +346,62 @@ fn numfmt_round_with_precision(n: f64, round_method: NumfmtRoundMethod, precisio
     round_method.round(p * n) / p
 }
 
+fn numfmt_decimal_exponent(mut value: f64) -> usize {
+    let mut exponent = 0usize;
+    while value.abs() >= 10.0 {
+        value /= 10.0;
+        exponent += 1;
+    }
+    exponent
+}
+
+fn numfmt_format_diagnostic_value(value: f64) -> String {
+    if value == 0.0 {
+        return "0".to_string();
+    }
+
+    let scientific = format!("{value:.5e}");
+    let (mantissa, exponent) = scientific.split_once('e').unwrap();
+    let exponent = exponent.parse::<i32>().unwrap();
+
+    if (-4..6).contains(&exponent) {
+        let decimal_places = (5 - exponent).max(0) as usize;
+        let fixed = format!("{value:.decimal_places$}");
+        return if fixed.contains('.') {
+            fixed
+                .trim_end_matches('0')
+                .trim_end_matches('.')
+                .to_string()
+        } else {
+            fixed
+        };
+    }
+
+    let mantissa = mantissa.trim_end_matches('0').trim_end_matches('.');
+    format!("{mantissa}e{exponent:+03}")
+}
+
+fn numfmt_validate_unscaled_output(value: f64, unit: &NumfmtUnit, precision: usize) -> Result<()> {
+    if *unit != NumfmtUnit::None || !value.is_finite() {
+        return Ok(());
+    }
+
+    if numfmt_decimal_exponent(value).saturating_add(precision) <= NUMFMT_MAX_UNSCALED_DIGITS {
+        return Ok(());
+    }
+
+    let value = numfmt_format_diagnostic_value(value);
+    if precision == 0 {
+        Err(format!(
+            "value too large to be printed: '{value}' (consider using --to)"
+        ))
+    } else {
+        Err(format!(
+            "value/precision too large to be printed: '{value}/{precision}' (consider using --to)"
+        ))
+    }
+}
+
 fn numfmt_consider_suffix(
     n: f64,
     u: &NumfmtUnit,
@@ -404,6 +462,7 @@ fn numfmt_transform_to(
     precision: usize,
 ) -> Result<String> {
     let value = s / (opts.to_unit as f64);
+    numfmt_validate_unscaled_output(value, &opts.to, precision)?;
     let (i2, suffix) = numfmt_consider_suffix(value, &opts.to, round_method, precision)?;
     Ok(match suffix {
         None if opts.to != NumfmtUnit::None => {
@@ -520,6 +579,11 @@ fn numfmt_format_unscaled_decimal_exact(
         .number
         .parse::<BigDecimal>()
         .map_err(|_| format!("invalid number: {}", source.quote()))?;
+    let approximate = parsed
+        .number
+        .parse::<f64>()
+        .map_err(|_| format!("invalid number: {}", source.quote()))?;
+    numfmt_validate_unscaled_output(approximate, &options.transform.to, precision as usize)?;
 
     Ok(Some(
         number
@@ -1866,6 +1930,34 @@ mod tests {
             let large_value =
                 numfmt_transform_to(1e12, &opts, NumfmtRoundMethod::Nearest, 0).unwrap();
             assert_eq!(large_value, "1000000000000");
+        }
+
+        #[test]
+        fn test_unscaled_output_digit_limit() {
+            let mut opts = setup_transform_options();
+
+            assert_eq!(
+                numfmt_transform_to(1e18, &opts, NumfmtRoundMethod::Nearest, 0).unwrap(),
+                "1000000000000000000"
+            );
+            assert_eq!(
+                numfmt_transform_to(1e19, &opts, NumfmtRoundMethod::Nearest, 0).unwrap_err(),
+                "value too large to be printed: '1e+19' (consider using --to)"
+            );
+            assert_eq!(
+                numfmt_transform_to(1e18, &opts, NumfmtRoundMethod::Nearest, 1).unwrap_err(),
+                "value/precision too large to be printed: '1e+18/1' (consider using --to)"
+            );
+            assert_eq!(
+                numfmt_transform_to(1e17, &opts, NumfmtRoundMethod::Nearest, 2).unwrap_err(),
+                "value/precision too large to be printed: '1e+17/2' (consider using --to)"
+            );
+
+            opts.to_unit = 10;
+            assert_eq!(
+                numfmt_transform_to(1e19, &opts, NumfmtRoundMethod::Nearest, 0).unwrap(),
+                "1000000000000000000"
+            );
         }
 
         #[test]

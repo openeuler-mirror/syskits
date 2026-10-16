@@ -188,6 +188,22 @@ mod native_semantic_tests {
     }
 
     #[test]
+    fn numfmt_native_semantic_rejects_oversized_unscaled_output() {
+        let args = ["numfmt", "--from=auto", "100R"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 2);
+        assert_eq!(semantic.classic_text, "");
+        assert_eq!(
+            semantic.stderr_text,
+            "numfmt: value too large to be printed: '1e+29' (consider using --to)\n"
+        );
+        assert_eq!(semantic.rows.len(), 1);
+        assert_eq!(semantic.rows[0].status, "partial-error");
+    }
+
+    #[test]
     fn numfmt_native_semantic_uses_last_repeated_round_option() {
         let args = ["numfmt", "--round=up", "--round=down", "--to-unit=10", "15"];
 

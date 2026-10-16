@@ -28,11 +28,11 @@
 //! - 处理方式：逐行读取和处理
 //!
 //! 2. 字节模式（Byte Mode，-b选项）
-//! - 计算方式：按UTF-8字节长度计算，每个字符的increment = 字符的字节长度
+//! - 计算方式：按当前locale编码后的字节长度计算
 //! - 关键特性：完全按照GNU fold.c的multibyte_text函数实现
 //! - 换行符处理：C/POSIX单字节locale下结束当前行；多字节locale下按普通字节计数
-//! - 中文字符：一个中文字符通常占3个字节
-//! - Emoji字符：通常占4个字节
+//! - UTF-8中文字符：一个中文字符通常占3个字节
+//! - UTF-8 Emoji字符：通常占4个字节
 //! - ASCII字符：每个字符占1个字节
 //! - 换行时机：当column + 字符字节长度 > 宽度时换行
 //! - 处理方式：字符流处理，读取整个文件到内存buffer
@@ -98,9 +98,23 @@ use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::path::Path;
 use sys_locale::get_locale;
-use unicode_width::UnicodeWidthChar;
 
 const FOLD_TAB_WIDTH: usize = 8; // 制表符宽度
+
+unsafe extern "C" {
+    fn mbrtowc(
+        wide_char: *mut libc::wchar_t,
+        bytes: *const libc::c_char,
+        byte_count: usize,
+        state: *mut libc::mbstate_t,
+    ) -> usize;
+    fn wcwidth(wide_char: libc::wchar_t) -> libc::c_int;
+}
+
+#[cfg(target_env = "gnu")]
+unsafe extern "C" {
+    fn __ctype_get_mb_cur_max() -> usize;
+}
 
 // 支持的语言环境
 rust_i18n::i18n!("locales", fallback = "en");
@@ -138,6 +152,7 @@ pub enum FoldMode {
     Characters,
 }
 
+#[cfg(not(target_env = "gnu"))]
 fn fold_locale_is_utf8() -> bool {
     std::env::var("LC_ALL")
         .ok()
@@ -154,6 +169,77 @@ fn fold_locale_is_utf8() -> bool {
         })
 }
 
+fn fold_locale_is_single_byte() -> bool {
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+    }
+
+    #[cfg(target_env = "gnu")]
+    unsafe {
+        __ctype_get_mb_cur_max() <= 1
+    }
+
+    #[cfg(not(target_env = "gnu"))]
+    {
+        !fold_locale_is_utf8()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FoldDecodedChar {
+    wide_char: libc::wchar_t,
+    byte_len: usize,
+}
+
+fn fold_decode_next(
+    bytes: &[u8],
+    state: &mut libc::mbstate_t,
+    single_byte_locale: bool,
+    conversion_failed: &mut bool,
+) -> FoldDecodedChar {
+    if single_byte_locale {
+        return FoldDecodedChar {
+            wide_char: libc::wchar_t::from(bytes[0]),
+            byte_len: 1,
+        };
+    }
+
+    let saved_state = *state;
+    let mut wide_char = 0;
+    let byte_len = unsafe {
+        mbrtowc(
+            &mut wide_char,
+            bytes.as_ptr().cast::<libc::c_char>(),
+            bytes.len(),
+            state,
+        )
+    };
+
+    match byte_len {
+        value if value == usize::MAX || value == usize::MAX - 1 => {
+            *conversion_failed = true;
+            *state = saved_state;
+            FoldDecodedChar {
+                wide_char: libc::wchar_t::from(bytes[0]),
+                byte_len: 1,
+            }
+        }
+        0 => FoldDecodedChar {
+            wide_char: 0,
+            byte_len: 1,
+        },
+        byte_len => FoldDecodedChar {
+            wide_char,
+            byte_len,
+        },
+    }
+}
+
+fn fold_character_width(wide_char: libc::wchar_t) -> usize {
+    let width = unsafe { wcwidth(wide_char) };
+    usize::try_from(width).unwrap_or(0)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FoldRow {
     pub row_index: usize,
@@ -167,6 +253,7 @@ pub struct FoldSemantic {
     pub break_spaces: bool,
     pub rows: Vec<FoldRow>,
     pub classic_text: String,
+    pub classic_bytes: Vec<u8>,
     pub stderr_text: String,
     pub exit_code: i32,
 }
@@ -205,7 +292,14 @@ fn fold_file_generic<T: Read, W: Write>(
     width: usize,
     mode: CountMode,
 ) -> CTResult<()> {
-    fold_file_multibyte_unified(writer, file, is_spaces, width, mode, !fold_locale_is_utf8())
+    fold_file_multibyte_unified(
+        writer,
+        file,
+        is_spaces,
+        width,
+        mode,
+        fold_locale_is_single_byte(),
+    )
 }
 
 /// 统一的文本折叠函数 - 完全按照GNU fold.c的fold_multibyte_text函数实现
@@ -231,27 +325,28 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
     let mut is_bs_following_last_blank = false;
     let mut bs_following_last_blank_num = 0;
     let mut is_cr_after_last_blank = false;
+    let mut conversion_failed = false;
+    let mut conversion_state = unsafe { std::mem::zeroed::<libc::mbstate_t>() };
+    let uses_column_rules =
+        mode == CountMode::Columns || (single_byte_locale && mode == CountMode::Characters);
     let mut i = 0;
     while i < buffer.len() {
-        // 获取当前字符及其字节长度 - mbrtowc逻辑
         let start_pos = i;
-        let (ch, mblength, convfail) = match std::str::from_utf8(&buffer[i..]) {
-            Ok(s) => {
-                if let Some(ch) = s.chars().next() {
-                    (ch, ch.len_utf8(), false)
-                } else {
-                    ('\0', 1, false)
-                }
-            }
-            Err(_) => {
-                // 无效UTF-8字节，按单字节处理
-                (buffer[i] as char, 1, true)
-            }
-        };
+        let decoded = fold_decode_next(
+            &buffer[i..],
+            &mut conversion_state,
+            single_byte_locale,
+            &mut conversion_failed,
+        );
+        let wide_char = decoded.wide_char;
+        let mblength = decoded.byte_len;
+        let convfail = conversion_failed;
 
         // GNU fold_text handles newlines before counting in single-byte locales,
         // while fold_multibyte_text only does so in column mode.
-        if ch == '\n' && (single_byte_locale || mode == CountMode::Columns) {
+        if wide_char == libc::wchar_t::from(b'\n')
+            && (single_byte_locale || (mode == CountMode::Columns && !convfail))
+        {
             writer.write_all(&output)?;
             writer.write_all(b"\n")?;
             column = 0;
@@ -269,43 +364,26 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
 
         // rescan循环
         loop {
-            // 计算increment - 完全按照GNU fold.c的逻辑
-            let increment = match mode {
-                CountMode::Bytes => mblength, // 字节模式：increment = mblength
-                CountMode::Characters => 1,   // 字符模式：increment = 1
-                CountMode::Columns => {
-                    // 列模式：复杂的列宽度计算
-                    match ch {
-                        '\r' => {
-                            // 回车符：重置到行首
-                            if column > 0 { column } else { 0 }
-                        }
-                        '\t' => {
-                            // 制表符：到下一个8的倍数位置
-                            FOLD_TAB_WIDTH - column % FOLD_TAB_WIDTH
-                        }
-                        '\x08' => {
-                            // 退格符：向后退一个位置
-                            if column > 0 { 1 } else { 0 } // 这里用1表示要减去1
-                        }
-                        _ => {
-                            // GNU single-byte fold counts all non-special bytes as one column.
-                            if convfail
-                                || (single_byte_locale && ((ch as u32) < 0x20 || ch == '\x7f'))
-                            {
-                                1
-                            } else {
-                                ch.width().unwrap_or(0)
-                            }
-                        }
+            let increment = if mode == CountMode::Bytes {
+                mblength
+            } else if !uses_column_rules || convfail {
+                1
+            } else {
+                match wide_char {
+                    value if value == libc::wchar_t::from(b'\r') => column,
+                    value if value == libc::wchar_t::from(b'\t') => {
+                        FOLD_TAB_WIDTH - column % FOLD_TAB_WIDTH
                     }
+                    value if value == libc::wchar_t::from(b'\x08') => usize::from(column > 0),
+                    _ if single_byte_locale => 1,
+                    _ => fold_character_width(wide_char),
                 }
             };
 
             // 列模式下特殊字符的位置更新需要特殊处理
-            if mode == CountMode::Columns {
-                match ch {
-                    '\r' => {
+            if uses_column_rules && !convfail {
+                match wide_char {
+                    value if value == libc::wchar_t::from(b'\r') => {
                         column = 0;
                         output.extend_from_slice(&buffer[start_pos..start_pos + mblength]);
                         if is_blank_seen && !convfail {
@@ -314,7 +392,7 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
                         is_bs_following_last_blank = false;
                         break;
                     }
-                    '\x08' => {
+                    value if value == libc::wchar_t::from(b'\x08') => {
                         if column > 0 {
                             column = column.saturating_sub(1);
                         }
@@ -385,18 +463,19 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
             output.extend_from_slice(&buffer[start_pos..start_pos + mblength]);
             column += increment;
 
-            if is_blank_seen && !convfail && ch == '\r' {
+            if is_blank_seen && !convfail && wide_char == libc::wchar_t::from(b'\r') {
                 is_cr_after_last_blank = true;
             }
 
-            if is_bs_following_last_blank && !convfail && ch == '\x08' {
+            if is_bs_following_last_blank && !convfail && wide_char == libc::wchar_t::from(b'\x08')
+            {
                 bs_following_last_blank_num += 1;
             } else {
                 is_bs_following_last_blank = false;
             }
 
             // 记录空格位置
-            if is_spaces && ch.is_ascii_whitespace() {
+            if is_spaces && !convfail && matches!(wide_char, 0x09..=0x0d | 0x20) {
                 last_blank_pos = Some(output.len() - 1);
                 last_blank_column = column;
                 last_blank_increment = increment;
@@ -661,6 +740,7 @@ pub fn fold_native_semantic(args: impl ctcore::Args) -> CTResult<FoldSemantic> {
                     break_spaces: false,
                     rows: Vec::new(),
                     classic_text: String::new(),
+                    classic_bytes: Vec::new(),
                     stderr_text: String::new(),
                     exit_code: 2,
                 });
@@ -672,7 +752,7 @@ pub fn fold_native_semantic(args: impl ctcore::Args) -> CTResult<FoldSemantic> {
     let flags = fold_flags_from_matches(&matches, obs_width)?;
     let mut classic_output = Vec::new();
     let outcome = fold_with_writer(&mut classic_output, &flags)?;
-    let classic_text = String::from_utf8(classic_output).expect("fold output should be utf-8");
+    let classic_text = String::from_utf8_lossy(&classic_output).into_owned();
 
     Ok(FoldSemantic {
         mode: fold_mode(&flags),
@@ -680,6 +760,7 @@ pub fn fold_native_semantic(args: impl ctcore::Args) -> CTResult<FoldSemantic> {
         break_spaces: flags.spaces,
         rows: fold_rows_from_output(&classic_text),
         classic_text,
+        classic_bytes: classic_output,
         stderr_text: outcome.stderr_text,
         exit_code: outcome.exit_code,
     })
@@ -1005,6 +1086,10 @@ mod tests {
 
         #[test]
         fn test_ct_main_characters_functionality() {
+            if fold_locale_is_single_byte() {
+                return;
+            }
+
             // 测试-c选项的字符计数功能
             let mut writer = Vec::new();
 
@@ -1367,6 +1452,20 @@ mod tests {
             temp_file
         }
 
+        #[test]
+        fn fold_native_semantic_preserves_non_utf8_output() {
+            let mut temp_file = NamedTempFile::new().expect("create temp file");
+            temp_file.write_all(b"\xff").expect("write temp file");
+            let path = temp_file.path().to_string_lossy().into_owned();
+
+            let semantic =
+                fold_native_semantic(["fold".to_string(), path].into_iter().map(OsString::from))
+                    .expect("fold semantic");
+
+            assert_eq!(semantic.classic_bytes, b"\xff");
+            assert_eq!(semantic.classic_text, "\u{fffd}");
+        }
+
         fn fold_bytes(content: &str, width: usize, single_byte_locale: bool) -> String {
             let mut writer = Vec::new();
             fold_file_multibyte_unified(
@@ -1607,6 +1706,10 @@ mod tests {
 
         #[test]
         fn test_fold_single_file_characterwise_no_spaces() -> CTResult<()> {
+            if fold_locale_is_single_byte() {
+                return Ok(());
+            }
+
             // 测试字符计数模式：中文字符每个算作1个字符
             let content = "这是测试中文字符串abc";
             let temp_file = write_temp_file(content);
@@ -1631,6 +1734,10 @@ mod tests {
 
         #[test]
         fn test_fold_single_file_characterwise_spaces() -> CTResult<()> {
+            if fold_locale_is_single_byte() {
+                return Ok(());
+            }
+
             // 测试字符计数模式配合空格断行
             let content = "这是 测试 中文字符 串";
             let temp_file = write_temp_file(content);
@@ -1657,6 +1764,10 @@ mod tests {
 
         #[test]
         fn test_fold_bytewise_utf8_character_boundaries() -> CTResult<()> {
+            if fold_locale_is_single_byte() {
+                return Ok(());
+            }
+
             // 测试字节模式正确处理UTF-8字符边界
             let content = "中文测试abc";
             let temp_file = write_temp_file(content);
@@ -1681,6 +1792,10 @@ mod tests {
 
         #[test]
         fn test_fold_mixed_ascii_utf8_characters() -> CTResult<()> {
+            if fold_locale_is_single_byte() {
+                return Ok(());
+            }
+
             // 测试混合ASCII和UTF-8字符的字符计数模式
             let content = "Hello世界123测试";
             let temp_file = write_temp_file(content);
@@ -1705,6 +1820,10 @@ mod tests {
 
         #[test]
         fn test_fold_characterwise_vs_bytewise_difference() -> CTResult<()> {
+            if fold_locale_is_single_byte() {
+                return Ok(());
+            }
+
             // 演示字符模式和字节模式的区别
             let content = "测试中文abc";
             let temp_file1 = write_temp_file(content);
@@ -1747,6 +1866,10 @@ mod tests {
 
         #[test]
         fn test_fold_characters_vs_bytes_vs_columns() -> CTResult<()> {
+            if fold_locale_is_single_byte() {
+                return Ok(());
+            }
+
             // 综合测试三种模式的区别：字符模式、字节模式、列模式
             let content = "中文测试abc";
             let temp_file = write_temp_file(content);
@@ -1839,6 +1962,10 @@ mod tests {
 
         #[test]
         fn test_fold_characters_with_emoji() -> CTResult<()> {
+            if fold_locale_is_single_byte() {
+                return Ok(());
+            }
+
             // 测试字符模式对emoji的处理
             let content = "😀😃😄😁😆😅"; // 6个emoji字符
             let temp_file = write_temp_file(content);
@@ -1883,6 +2010,10 @@ mod tests {
 
         #[test]
         fn test_fold_byte_mode_chinese_newline_in_multibyte_locale() {
+            if fold_locale_is_single_byte() {
+                return;
+            }
+
             let content = "容\n第二行";
 
             assert_eq!(fold_bytes(content, 8, false), "容\n第\n二行");
@@ -1906,6 +2037,10 @@ mod tests {
 
         #[test]
         fn test_fold_byte_vs_character_mode_difference() -> CTResult<()> {
+            if fold_locale_is_single_byte() {
+                return Ok(());
+            }
+
             // 测试字节模式与字符模式在中文处理上的差异
             let content = "测试abc";
             let temp_file_bytes = write_temp_file(content);

@@ -11,7 +11,6 @@
 
 use std::io::Write;
 use std::{cmp, mem};
-use unicode_width::UnicodeWidthChar;
 
 use crate::FmtConfigs;
 use crate::para_split::{FmtParaWords, FmtParagraph, FmtWordInfo};
@@ -119,11 +118,7 @@ fn core_is_ws(c: char) -> bool {
 }
 
 fn core_char_width(c: char) -> usize {
-    if (c as usize) < 0xA0 {
-        1
-    } else {
-        UnicodeWidthChar::width(c).unwrap_or(1)
-    }
+    c.len_utf8()
 }
 
 fn core_is_open(c: char) -> bool {

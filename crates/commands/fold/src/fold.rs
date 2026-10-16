@@ -138,6 +138,22 @@ pub enum FoldMode {
     Characters,
 }
 
+fn fold_locale_is_utf8() -> bool {
+    std::env::var("LC_ALL")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            std::env::var("LC_CTYPE")
+                .ok()
+                .filter(|value| !value.is_empty())
+        })
+        .or_else(|| std::env::var("LANG").ok().filter(|value| !value.is_empty()))
+        .is_some_and(|locale| {
+            let locale = locale.to_ascii_lowercase();
+            locale.contains("utf-8") || locale.contains("utf8")
+        })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FoldRow {
     pub row_index: usize,
@@ -209,22 +225,23 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
     let mut output = Vec::new();
     let mut last_blank_pos = None;
     let mut last_blank_column = 0;
+    let single_byte_locale = !fold_locale_is_utf8();
 
     let mut i = 0;
     while i < buffer.len() {
         // 获取当前字符及其字节长度 - mbrtowc逻辑
         let start_pos = i;
-        let (ch, mblength) = match std::str::from_utf8(&buffer[i..]) {
+        let (ch, mblength, convfail) = match std::str::from_utf8(&buffer[i..]) {
             Ok(s) => {
                 if let Some(ch) = s.chars().next() {
-                    (ch, ch.len_utf8())
+                    (ch, ch.len_utf8(), false)
                 } else {
-                    ('\0', 1)
+                    ('\0', 1, false)
                 }
             }
             Err(_) => {
                 // 无效UTF-8字节，按单字节处理
-                (buffer[i] as char, 1)
+                (buffer[i] as char, 1, true)
             }
         };
 
@@ -262,8 +279,14 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
                             if column > 0 { 1 } else { 0 } // 这里用1表示要减去1
                         }
                         _ => {
-                            // 其他字符：使用Unicode显示宽度
-                            ch.width().unwrap_or(0)
+                            // GNU single-byte fold counts all non-special bytes as one column.
+                            if convfail
+                                || (single_byte_locale && ((ch as u32) < 0x20 || ch == '\x7f'))
+                            {
+                                1
+                            } else {
+                                ch.width().unwrap_or(0)
+                            }
                         }
                     }
                 }

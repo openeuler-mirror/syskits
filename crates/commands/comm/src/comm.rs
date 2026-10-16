@@ -269,8 +269,7 @@ fn comm_with_writer<W: std::io::Write>(
         if ord == Ordering::Less {
             seen_unpairable = true;
             if !opts.get_flag(opt_flags::COLUMN_1) {
-                // 安全写入并转换错误
-                write!(out, "{}", String::from_utf8_lossy(ra))
+                out.write_all(ra)
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
                 rows.push(comm_row("left", ra, a.line_ending, true, false));
             }
@@ -323,7 +322,9 @@ fn comm_with_writer<W: std::io::Write>(
         } else if ord == Ordering::Greater {
             seen_unpairable = true;
             if !opts.get_flag(opt_flags::COLUMN_2) {
-                write!(out, "{delim_col_2}{}", String::from_utf8_lossy(rb))
+                write!(out, "{delim_col_2}")
+                    .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+                out.write_all(rb)
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
                 rows.push(comm_row("right", rb, b.line_ending, false, true));
             }
@@ -375,7 +376,9 @@ fn comm_with_writer<W: std::io::Write>(
             total_col_2 += 1;
         } else if ord == Ordering::Equal {
             if !opts.get_flag(opt_flags::COLUMN_3) {
-                write!(out, "{delim_col_3}{}", String::from_utf8_lossy(ra))
+                write!(out, "{delim_col_3}")
+                    .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+                out.write_all(ra)
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
                 rows.push(comm_row("both", ra, a.line_ending, true, true));
             }

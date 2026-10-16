@@ -34,6 +34,8 @@ fn shred_verbose_pass_counter_has_single_space() {
 struct FileState {
     mode: u32,
     ctime: i64,
+    len: u64,
+    blocks: u64,
     contents: Vec<u8>,
 }
 
@@ -43,6 +45,8 @@ fn file_state(path: &std::path::Path) -> FileState {
     FileState {
         mode: metadata.permissions().mode() & 0o7777,
         ctime: metadata.ctime(),
+        len: metadata.len(),
+        blocks: metadata.blocks(),
         contents: fs::read(path).expect("read file"),
     }
 }
@@ -100,4 +104,45 @@ fn shred_force_zero_iterations_does_not_change_metadata_unnecessarily() {
     assert_eq!(syskits_after.mode, core_after.mode);
     assert_eq!(syskits_after.contents, syskits_before.contents);
     assert_eq!(core_after.contents, core_before.contents);
+}
+
+#[cfg(unix)]
+#[test]
+fn shred_default_rounds_to_filesystem_block_size() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let core_file = temp_dir.path().join("core.bin");
+    let syskits_file = temp_dir.path().join("syskits.bin");
+    fs::write(&core_file, b"0123456789abcdef").expect("write GNU fixture");
+    fs::write(&syskits_file, b"0123456789abcdef").expect("write syskits fixture");
+
+    let core = Command::new("/usr/bin/shred")
+        .args([
+            "-n",
+            "1",
+            "--random-source=/dev/zero",
+            core_file.to_str().expect("utf8 path"),
+        ])
+        .output()
+        .expect("run GNU shred");
+    let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "shred",
+            "-n",
+            "1",
+            "--random-source=/dev/zero",
+            syskits_file.to_str().expect("utf8 path"),
+        ])
+        .output()
+        .expect("run syskits shred");
+
+    let core_after = file_state(&core_file);
+    let syskits_after = file_state(&syskits_file);
+
+    assert_eq!(syskits.status.code(), core.status.code());
+    assert_eq!(syskits.stdout, core.stdout);
+    assert_eq!(syskits.stderr, core.stderr);
+    assert_eq!(syskits_after.mode, core_after.mode);
+    assert_eq!(syskits_after.len, core_after.len);
+    assert_eq!(syskits_after.blocks, core_after.blocks);
+    assert_eq!(syskits_after.contents, core_after.contents);
 }

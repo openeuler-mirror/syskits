@@ -91,7 +91,7 @@ extern crate rust_i18n;
 use clap::error::ErrorKind;
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_error::{CTResult, CtSimpleError, set_ct_exit_code, strip_errno};
 use rust_i18n::t;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -271,6 +271,10 @@ struct FoldRunOutcome {
     exit_code: i32,
 }
 
+struct FoldFileOutcome {
+    read_error: Option<std::io::Error>,
+}
+
 fn fold_mode(flags: &FoldFlags) -> FoldMode {
     if flags.bytes {
         FoldMode::Bytes
@@ -299,7 +303,7 @@ fn fold_file_generic<T: Read, W: Write>(
     is_spaces: bool,
     width: usize,
     mode: CountMode,
-) -> CTResult<()> {
+) -> CTResult<FoldFileOutcome> {
     fold_file_multibyte_unified(
         writer,
         file,
@@ -319,10 +323,11 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
     width: usize,
     mode: CountMode,
     single_byte_locale: bool,
-) -> CTResult<()> {
+) -> CTResult<FoldFileOutcome> {
     let mut buffer = Vec::with_capacity(FOLD_READ_BUFFER_SIZE + FOLD_MB_LEN_MAX);
     let mut buffer_pos = 0;
     let mut eof = false;
+    let mut read_error = None;
     let mut column = 0;
     let mut output = Vec::new();
     let mut last_blank_pos = None;
@@ -356,9 +361,12 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
                 let bytes_read = loop {
                     match file.read(&mut buffer[old_len..]) {
                         Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
-                        result => {
-                            break result.map_err_context(|| "failed to read input".to_string())?;
+                        Err(error) => {
+                            read_error = Some(error);
+                            eof = true;
+                            break 0;
                         }
+                        Ok(bytes_read) => break bytes_read,
                     }
                 };
                 buffer.truncate(old_len + bytes_read);
@@ -537,7 +545,7 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
         writer.write_all(&output)?;
     }
 
-    Ok(())
+    Ok(FoldFileOutcome { read_error })
 }
 
 /// 主折叠函数，用于处理命令行参数并输出结果
@@ -753,6 +761,7 @@ fn fold<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResult<()> {
 
 fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResult<FoldRunOutcome> {
     let mut stderr_text = String::new();
+    let mut exit_code = 0;
 
     for filename in &fold_flags.files {
         let input: Box<dyn Read> = if filename == OsStr::new("-") {
@@ -788,12 +797,16 @@ fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResul
             CountMode::Columns
         };
 
-        // 使用统一的折叠函数
-        fold_file_generic(writer, buffer, spaces, width, mode)?;
+        let outcome = fold_file_generic(writer, buffer, spaces, width, mode)?;
+        if let Some(error) = outcome.read_error {
+            let filename = filename.to_string_lossy();
+            stderr_text.push_str(&format!("fold: {filename}: {}\n", strip_errno(&error)));
+            exit_code = 1;
+        }
     }
     Ok(FoldRunOutcome {
         stderr_text,
-        exit_code: 0,
+        exit_code,
     })
 }
 
@@ -1600,6 +1613,23 @@ mod tests {
             }
         }
 
+        #[derive(Default)]
+        struct ErrorAfterDataReader {
+            returned_data: bool,
+        }
+
+        impl Read for ErrorAfterDataReader {
+            fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+                if self.returned_data {
+                    Err(io::Error::other("simulated read error"))
+                } else {
+                    buffer[..3].copy_from_slice(b"abc");
+                    self.returned_data = true;
+                    Ok(3)
+                }
+            }
+        }
+
         /// 写入临时文件的辅助函数
         fn write_temp_file(content: &str) -> NamedTempFile {
             let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
@@ -1704,6 +1734,26 @@ mod tests {
             expected.push(b'\n');
             expected.extend_from_slice("界b".as_bytes());
             assert_eq!(writer, expected);
+            Ok(())
+        }
+
+        #[test]
+        fn fold_flushes_buffered_output_before_reporting_read_error() -> CTResult<()> {
+            let mut writer = Vec::new();
+            let outcome = fold_file_multibyte_unified(
+                &mut writer,
+                BufReader::new(ErrorAfterDataReader::default()),
+                false,
+                2,
+                CountMode::Columns,
+                true,
+            )?;
+
+            assert_eq!(writer, b"ab\nc");
+            assert_eq!(
+                outcome.read_error.expect("read should fail").to_string(),
+                "simulated read error"
+            );
             Ok(())
         }
 

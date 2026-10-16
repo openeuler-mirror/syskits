@@ -193,3 +193,29 @@ fn fold_streams_output_before_stdin_eof() {
     assert_eq!(thread_first_byte, b'x');
     assert_eq!(remaining_output.len(), 39_998);
 }
+
+#[cfg(unix)]
+#[test]
+fn fold_continues_after_input_read_error() {
+    let temp_dir = tempfile::tempdir().expect("create temp directory");
+    let good_file = temp_dir.path().join("good.txt");
+    std::fs::write(&good_file, b"content after read error\n").expect("write good input");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["fold", "-w", "100"])
+        .arg(temp_dir.path())
+        .arg(&good_file)
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("run syskits fold");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"content after read error\n");
+    assert_eq!(
+        String::from_utf8(output.stderr).expect("utf8 stderr"),
+        format!("fold: {}: Is a directory\n", temp_dir.path().display())
+    );
+}

@@ -91,7 +91,7 @@ fn sum_open(name: &str) -> CTResult<Box<dyn Read>> {
             let path = &Path::new(name);
             if path.is_dir() {
                 let err_message = format!("{}: Is a directory", name.maybe_quote());
-                return Err(CtSimpleError::new(2, err_message));
+                return Err(CtSimpleError::new(1, err_message));
             };
             // 消除警告，因为我们想要错误信息
             if path.metadata().is_err() {
@@ -558,6 +558,7 @@ mod tests {
             // 验证错误信息
             if let Err(error) = result {
                 assert_eq!(error.to_string(), format!("{dir_path}: Is a directory"));
+                assert_eq!(error.code(), 1);
             }
         }
 
@@ -920,7 +921,7 @@ mod tests {
         }
 
         #[test]
-        fn sum_native_semantic_preserves_partial_output_and_last_error_code() {
+        fn sum_native_semantic_preserves_partial_output_and_reports_failure() {
             let dir = TempDir::new().unwrap();
             let path = dir.path().join("sample.txt");
             fs::write(&path, "abc").unwrap();
@@ -932,7 +933,24 @@ mod tests {
             assert_eq!(semantic.rows.len(), 1);
             assert_eq!(semantic.classic_text, format!("16556     1 {path}\n"));
             assert_eq!(semantic.stderr_text, "sum: .: Is a directory\n");
-            assert_eq!(semantic.exit_code, 2);
+            assert_eq!(semantic.exit_code, 1);
+        }
+
+        #[test]
+        fn sum_native_semantic_directory_operand_exits_with_failure() {
+            let dir = TempDir::new().unwrap();
+            let path = dir.path().display().to_string();
+
+            let args = [ctcore::ct_util_name(), path.as_str()];
+            let semantic = sum_native_semantic(args.iter().map(OsString::from)).unwrap();
+
+            assert!(semantic.rows.is_empty());
+            assert_eq!(semantic.classic_text, "");
+            assert_eq!(
+                semantic.stderr_text,
+                format!("sum: {path}: Is a directory\n")
+            );
+            assert_eq!(semantic.exit_code, 1);
         }
     }
 }

@@ -336,6 +336,23 @@ mod native_semantic_tests {
         );
         assert_eq!(semantic.stderr_text, "numfmt: invalid number: 'hello'\n");
     }
+
+    #[test]
+    fn numfmt_native_semantic_delimiter_preserves_trailing_field_blank() {
+        let args = ["numfmt", "-d,", "--invalid=warn", "123 ,x"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.classic_text, "123 ,x\n");
+        assert_eq!(
+            semantic.stderr_text,
+            "numfmt: rejecting suffix in input: '123 ' (consider using --from)\n"
+        );
+        assert_eq!(semantic.rows.len(), 1);
+        assert_eq!(semantic.rows[0].status, "passthrough");
+        assert_eq!(semantic.rows[0].output, "123 ,x");
+    }
 }
 
 fn numfmt_invalid_mode_name(mode: &NumfmtInvalidModes) -> &'static str {

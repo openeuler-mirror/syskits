@@ -923,6 +923,23 @@ fn parse_width(s: &str) -> Result<u16, LsError> {
     }
 }
 
+fn stdout_terminal_width() -> Option<u16> {
+    if !stdout().is_terminal() {
+        return None;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::fd::AsRawFd;
+
+        terminal_size::terminal_size_using_fd(stdout().as_raw_fd()).map(|(width, _)| width.0)
+    }
+    #[cfg(not(unix))]
+    {
+        terminal_size::terminal_size().map(|(width, _)| width.0)
+    }
+}
+
 impl LsConfig {
     pub fn from(options: &clap::ArgMatches) -> CTResult<Self> {
         let get_last = |flag: &str| -> usize {
@@ -1107,8 +1124,8 @@ impl LsConfig {
 
         let width = match options.get_one::<String>(ls_flags::LS_WIDTH) {
             Some(x) => parse_width(x)?,
-            None => match terminal_size::terminal_size() {
-                Some((width, _)) => width.0,
+            None => match stdout_terminal_width() {
+                Some(width) => width,
                 None => match std::env::var_os("COLUMNS") {
                     Some(columns) => match columns.to_str().and_then(|s| s.parse().ok()) {
                         Some(columns) => columns,
@@ -3258,7 +3275,7 @@ fn grid_required_width(widths: &[usize]) -> usize {
 fn grid_columns_that_fit(cells: &[Cell], width: usize, direction: Direction) -> usize {
     for columns in (1..=cells.len()).rev() {
         let widths = grid_column_widths(cells, columns, direction);
-        if grid_required_width(&widths) <= width {
+        if grid_required_width(&widths) < width {
             return columns;
         }
     }
@@ -4635,6 +4652,22 @@ mod tests {
         assert!(LsConfig::from(&matches).is_ok());
     }
 
+    #[test]
+    fn columns_env_is_used_when_stdout_is_not_terminal() {
+        if stdout().is_terminal() {
+            return;
+        }
+
+        let _env_lock = lock_env();
+        let _columns = EnvVarGuard::set("COLUMNS", "10");
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-C"])
+            .unwrap();
+        let config = LsConfig::from(&matches).expect("ls config");
+
+        assert_eq!(config.width, 10);
+    }
+
     struct EnvVarGuard {
         name: &'static str,
         previous: Option<OsString>,
@@ -4794,7 +4827,7 @@ mod tests {
         ];
 
         assert_eq!(grid_columns_that_fit(&cells, 25, Direction::TopToBottom), 2);
-        assert_eq!(grid_columns_that_fit(&cells, 26, Direction::TopToBottom), 3);
+        assert_eq!(grid_columns_that_fit(&cells, 26, Direction::TopToBottom), 2);
         assert_eq!(grid_columns_that_fit(&cells, 27, Direction::TopToBottom), 3);
         assert_eq!(
             render_grid(&cells, 27, Direction::TopToBottom),
@@ -4803,7 +4836,7 @@ mod tests {
     }
 
     #[test]
-    fn grid_exact_terminal_width_still_fits() {
+    fn grid_exact_terminal_width_uses_fewer_columns() {
         let cells = [
             Cell {
                 contents: "a".into(),
@@ -4815,8 +4848,34 @@ mod tests {
             },
         ];
 
-        assert_eq!(grid_columns_that_fit(&cells, 4, Direction::LeftToRight), 2);
-        assert_eq!(render_grid(&cells, 4, Direction::LeftToRight), "a  b\n");
+        assert_eq!(grid_columns_that_fit(&cells, 4, Direction::LeftToRight), 1);
+        assert_eq!(grid_columns_that_fit(&cells, 5, Direction::LeftToRight), 2);
+        assert_eq!(render_grid(&cells, 4, Direction::LeftToRight), "a\nb\n");
+        assert_eq!(render_grid(&cells, 5, Direction::LeftToRight), "a  b\n");
+    }
+
+    #[test]
+    fn grid_exact_dir_width_matches_gnu_strict_fit() {
+        let cells = [
+            Cell {
+                contents: "..".into(),
+                width: 2,
+            },
+            Cell {
+                contents: ".".into(),
+                width: 1,
+            },
+            Cell {
+                contents: "sub".into(),
+                width: 3,
+            },
+        ];
+
+        assert_eq!(grid_columns_that_fit(&cells, 10, Direction::TopToBottom), 2);
+        assert_eq!(
+            render_grid(&cells, 10, Direction::TopToBottom),
+            "..  sub\n.\n"
+        );
     }
 
     #[test]

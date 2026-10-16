@@ -1,8 +1,30 @@
 use std::fs;
 use std::os::unix::ffi::OsStrExt;
-use std::process::Command;
+use std::process::{Command, Output};
 
 use tempfile::TempDir;
+
+fn assert_same_output(case: &str, gnu: Output, syskits: Output) {
+    assert_eq!(
+        syskits.status.code(),
+        gnu.status.code(),
+        "{case}: GNU stderr: {}, syskits stderr: {}",
+        String::from_utf8_lossy(&gnu.stderr),
+        String::from_utf8_lossy(&syskits.stderr)
+    );
+    assert_eq!(
+        syskits.stdout, gnu.stdout,
+        "{case}: GNU stdout: {:02x?}, syskits stdout: {:02x?}",
+        gnu.stdout, syskits.stdout
+    );
+    assert_eq!(
+        syskits.stderr,
+        gnu.stderr,
+        "{case}: GNU stderr: {}, syskits stderr: {}",
+        String::from_utf8_lossy(&gnu.stderr),
+        String::from_utf8_lossy(&syskits.stderr)
+    );
+}
 
 #[cfg(target_os = "linux")]
 fn set_selinux_xattr(path: &std::path::Path, value: &[u8]) -> bool {
@@ -50,4 +72,35 @@ fn dir_long_shows_selinux_context_marker_from_xattr() {
         .next()
         .expect("long listing mode field");
     assert_eq!(mode, "-rw-r--r--.");
+}
+
+#[test]
+fn dir_f_color_strictly_fits_columns_like_gnu() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let tree = temp_dir.path().join("tree");
+    fs::create_dir_all(tree.join("sub")).expect("create fixture");
+    let tree_arg = tree.to_str().expect("utf8 path");
+
+    let gnu = Command::new("/usr/bin/dir")
+        .env("COLUMNS", "10")
+        .env("LC_ALL", "C")
+        .env("TERM", "xterm")
+        .env("LS_COLORS", "di=01;34")
+        .args(["-f", "--color=always", "--sort=size", tree_arg])
+        .output()
+        .expect("run GNU dir");
+    let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("COLUMNS", "10")
+        .env("LC_ALL", "C")
+        .env("TERM", "xterm")
+        .env("LS_COLORS", "di=01;34")
+        .args(["dir", "-f", "--color=always", "--sort=size", tree_arg])
+        .output()
+        .expect("run syskits dir");
+
+    assert_same_output(
+        "dir -f --color=always --sort=size narrow columns",
+        gnu,
+        syskits,
+    );
 }

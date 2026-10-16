@@ -86,7 +86,26 @@ mod opt_flags {
 }
 
 // TODO: Support Z & Y (currently limited by size of u64)
-const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2), ('K', 1)];
+const DU_IEC_BASES: [u128; 7] = [
+    1,
+    1_024,
+    1_048_576,
+    1_073_741_824,
+    1_099_511_627_776,
+    1_125_899_906_842_624,
+    1_152_921_504_606_846_976,
+];
+const DU_SI_BASES: [u128; 7] = [
+    1,
+    1_000,
+    1_000_000,
+    1_000_000_000,
+    1_000_000_000_000,
+    1_000_000_000_000_000,
+    1_000_000_000_000_000_000,
+];
+const DU_IEC_SUFFIXES: [&str; 7] = ["", "K", "M", "G", "T", "P", "E"];
+const DU_SI_SUFFIXES: [&str; 7] = ["", "k", "M", "G", "T", "P", "E"];
 
 struct DuTraversalOptions {
     all: bool,
@@ -156,6 +175,10 @@ enum DuTime {
 enum DuSizeFormat {
     Human(u64),
     BlockSize(u64),
+    BlockSizeWithSuffix {
+        block_size: u64,
+        suffix: &'static str,
+    },
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -357,14 +380,15 @@ fn get_file_info(file_path: &Path) -> Option<DuFileInfo> {
     result
 }
 
+#[cfg(test)]
 fn du_read_block_size(option: Option<&str>) -> CTResult<u64> {
     if let Some(s) = option {
-        parse_size_u64(s)
+        du_parse_block_size_value(s)
             .map_err(|e| CtSimpleError::new(1, format_error_message(&e, s, opt_flags::BLOCK_SIZE)))
     } else {
         for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
             if let Ok(env_size) = env::var(env_var) {
-                if let Ok(v) = parse_size_u64(&env_size) {
+                if let Ok(v) = du_parse_block_size_value(&env_size) {
                     return Ok(v);
                 }
             }
@@ -374,6 +398,83 @@ fn du_read_block_size(option: Option<&str>) -> CTResult<u64> {
         } else {
             Ok(1024)
         }
+    }
+}
+
+fn du_parse_block_size_value(s: &str) -> Result<u64, ParseSizeError> {
+    let block_size = parse_size_u64(s)?;
+    if block_size == 0 {
+        Err(ParseSizeError::ParseFailure(format!("{}", s.quote())))
+    } else {
+        Ok(block_size)
+    }
+}
+
+fn du_read_block_size_format(option: Option<&str>) -> CTResult<DuSizeFormat> {
+    if let Some(s) = option {
+        du_parse_block_size_format(s)
+            .map_err(|e| CtSimpleError::new(1, format_error_message(&e, s, opt_flags::BLOCK_SIZE)))
+    } else {
+        for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
+            if let Ok(env_size) = env::var(env_var) {
+                if let Ok(size_format) = du_parse_block_size_format(&env_size) {
+                    return Ok(size_format);
+                }
+            }
+        }
+        Ok(DuSizeFormat::BlockSize(
+            if env::var("POSIXLY_CORRECT").is_ok() {
+                512
+            } else {
+                1024
+            },
+        ))
+    }
+}
+
+fn du_parse_block_size_format(s: &str) -> Result<DuSizeFormat, ParseSizeError> {
+    match s {
+        "human-readable" => return Ok(DuSizeFormat::Human(1024)),
+        "si" => return Ok(DuSizeFormat::Human(1000)),
+        _ => {}
+    }
+
+    let block_size = du_parse_block_size_value(s)?;
+    if let Some(suffix) = du_block_size_output_suffix(s) {
+        Ok(DuSizeFormat::BlockSizeWithSuffix { block_size, suffix })
+    } else {
+        Ok(DuSizeFormat::BlockSize(block_size))
+    }
+}
+
+fn du_block_size_output_suffix(s: &str) -> Option<&'static str> {
+    if s.as_bytes()
+        .first()
+        .is_none_or(|byte| byte.is_ascii_digit())
+    {
+        return None;
+    }
+
+    match s {
+        "K" | "k" => Some("K"),
+        "KB" | "kB" => Some("kB"),
+        "KiB" | "kiB" => Some("KiB"),
+        "M" | "m" => Some("M"),
+        "MB" | "mB" => Some("MB"),
+        "MiB" | "miB" => Some("MiB"),
+        "G" | "g" => Some("G"),
+        "GB" | "gB" => Some("GB"),
+        "GiB" | "giB" => Some("GiB"),
+        "T" | "t" => Some("T"),
+        "TB" | "tB" => Some("TB"),
+        "TiB" | "tiB" => Some("TiB"),
+        "P" | "p" => Some("P"),
+        "PB" | "pB" => Some("PB"),
+        "PiB" | "piB" => Some("PiB"),
+        "E" | "e" => Some("E"),
+        "EB" | "eB" => Some("EB"),
+        "EiB" | "eiB" => Some("EiB"),
+        _ => None,
     }
 }
 
@@ -827,47 +928,20 @@ impl DuStatPrinter {
         // 因为 --inodes 同样需要支持 -h 和 --si 的人类可读格式
 
         match self.size_format {
-            DuSizeFormat::Human(multiplier) => {
-                // 如果大小为0，直接返回"0"
-                if size == 0 {
-                    return "0".to_string();
-                }
-                // 遍历单位列表，找到最合适的单位进行转换
-                for &(unit, power) in &UNITS {
-                    let limit = multiplier.pow(power);
-                    // 如果当前大小超过这个单位的上限，就使用这个单位进行转换
-                    if size >= limit {
-                        let print_unit = if multiplier == 1000 && unit == 'K' {
-                            'k'
-                        } else {
-                            unit
-                        };
-
-                        // GNU du 规则 1：为了避免低估空间，Human Readable 强制向上取整
-                        let val = (size as f64) / (limit as f64);
-                        let val_ceiled = (val * 10.0).ceil() / 10.0;
-
-                        // GNU du 规则 2：如果数值 >= 10，不再保留小数位
-                        if val_ceiled >= 10.0 {
-                            return format!("{val_ceiled:.0}{print_unit}");
-                        } else {
-                            return format!("{val_ceiled:.1}{print_unit}");
-                        }
-                    }
-                }
-                // 如果没有超过任何已知单位的上限
-                if self.inodes {
-                    size.to_string() // inode 模式下不加 'B' 后缀
-                } else {
-                    format!("{size}B")
-                }
-            }
+            DuSizeFormat::Human(multiplier) => du_human_readable(size, multiplier),
             DuSizeFormat::BlockSize(block_size) => {
                 // 根据块大小格式化选项，将大小转换为对应的块数
                 if self.inodes {
                     size.to_string() // inode 模式下不受 block_size 除法影响
                 } else {
                     du_div_ceil(size, block_size).to_string()
+                }
+            }
+            DuSizeFormat::BlockSizeWithSuffix { block_size, suffix } => {
+                if self.inodes {
+                    size.to_string()
+                } else {
+                    format!("{}{}", du_div_ceil(size, block_size), suffix)
                 }
             }
         }
@@ -940,6 +1014,49 @@ fn du_format_local_time_strftime(_seconds: u64, _fmt: &str) -> Option<String> {
 pub fn du_div_ceil(val_1: u64, val_2: u64) -> u64 {
     // 加上除数减1，然后除以除数，是为了向上取整。
     val_1.div_ceil(val_2)
+}
+
+fn du_human_readable(size: u64, multiplier: u64) -> String {
+    let (bases, suffixes) = if multiplier == 1000 {
+        (&DU_SI_BASES, &DU_SI_SUFFIXES)
+    } else {
+        (&DU_IEC_BASES, &DU_IEC_SUFFIXES)
+    };
+    du_to_magnitude_and_suffix(size as u128, bases, suffixes)
+}
+
+fn du_to_magnitude_and_suffix(n: u128, bases: &[u128], suffixes: &[&'static str]) -> String {
+    let mut magnitude = 0usize;
+    while magnitude + 1 < bases.len() && bases[magnitude + 1] - bases[magnitude] < n {
+        magnitude += 1;
+    }
+
+    let quotient = n / bases[magnitude];
+    let remainder = n % bases[magnitude];
+    let suffix = suffixes[magnitude];
+
+    if remainder == 0 {
+        if magnitude > 0 && quotient < 10 {
+            format!("{quotient}.0{suffix}")
+        } else {
+            format!("{quotient}{suffix}")
+        }
+    } else {
+        let tenth = bases[magnitude] / 10;
+        let tenths_place = remainder / tenth;
+        if remainder % tenth == 0 {
+            format!("{quotient}.{tenths_place}{suffix}")
+        } else if tenths_place + 1 == 10 || quotient >= 10 {
+            let rounded = quotient + 1;
+            if magnitude > 0 && rounded < 10 {
+                format!("{rounded}.0{suffix}")
+            } else {
+                format!("{rounded}{suffix}")
+            }
+        } else {
+            format!("{}.{}{}", quotient, tenths_place + 1, suffix)
+        }
+    }
 }
 
 /**
@@ -1406,11 +1523,11 @@ fn du_get_size_format(args_match: &ArgMatches) -> Result<DuSizeFormat, Box<dyn C
     } else if args_match.get_flag(opt_flags::BLOCK_SIZE_1M) {
         DuSizeFormat::BlockSize(1024 * 1024)
     } else {
-        DuSizeFormat::BlockSize(du_read_block_size(
+        du_read_block_size_format(
             args_match
                 .get_one::<String>(opt_flags::BLOCK_SIZE)
                 .map(AsRef::as_ref),
-        )?)
+        )?
     };
     Ok(size_format)
 }

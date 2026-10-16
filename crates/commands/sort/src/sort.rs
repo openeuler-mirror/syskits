@@ -29,6 +29,7 @@ use std::str::Utf8Error;
 use std::sync::{Arc, Mutex};
 
 use clap::builder::ValueParser;
+use clap::error::{ContextKind, ErrorKind as ClapErrorKind};
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use md5::{Digest as _, Md5};
 use rand::{Rng, thread_rng};
@@ -1286,11 +1287,11 @@ pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
             // 并非所有 clap "错误 "都是因为参数解析失败。
             // "--版本 "也会导致返回错误，但我们不应打印到 stderr
             // 在这种情况下，我们不应该打印到 stderr，也不应该以非零的退出代码返回（我们应该打印到 stdout 并返回 0）。
-            // 这个逻辑类似于 clap 中的代码，但在真正失败的情况下，我们的退出代码是 2（clap 返回 1）。
-            // （clap 返回 1）。
+            // GNU sort 通常以 2 报告参数解析错误，但 XARGMATCH 处理的无效
+            // --sort 枚举值经 usage(EXIT_FAILURE) 退出，因此该特例返回 1。
             e.print().unwrap();
             if e.use_stderr() {
-                set_ct_exit_code(2);
+                set_ct_exit_code(sort_clap_error_exit_code(&e));
             }
             return Ok(());
         }
@@ -1306,6 +1307,18 @@ pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
     tmp_dir.wait_if_signal();
     result
     // Ok(())
+}
+
+fn sort_clap_error_exit_code(error: &clap::Error) -> i32 {
+    let invalid_sort_value = error.kind() == ClapErrorKind::InvalidValue
+        && error
+            .get(ContextKind::InvalidArg)
+            .is_some_and(|arg| arg.to_string().starts_with("--sort"))
+        && error
+            .get(ContextKind::InvalidValue)
+            .is_some_and(|value| !value.to_string().is_empty());
+
+    if invalid_sort_value { 1 } else { 2 }
 }
 
 fn sort_validate_inputs(files: &[OsString], output: &SortOutput) -> CTResult<()> {
@@ -1476,7 +1489,7 @@ fn sort_handle_settings(
 
     settings.is_dictionary_order = matches.get_flag(sort_flags::SORT_DICTIONARY_ORDER);
     settings.is_ignore_non_printing = matches.get_flag(sort_flags::SORT_IGNORE_NONPRINTING);
-    settings.threads = sort_get_settings_threads(&matches);
+    settings.threads = sort_get_settings_threads(&matches)?;
     settings.buffer_size = sort_get_settings_buffer_size(&matches)?;
 
     let tmp_dir = TmpDirWrapper::new(
@@ -1637,17 +1650,19 @@ fn sort_get_settings_compress_prog(matches: &ArgMatches) -> Option<String> {
         .map(String::from)
 }
 
-fn sort_get_settings_threads(matches: &ArgMatches) -> String {
+fn sort_get_settings_threads(matches: &ArgMatches) -> CTResult<String> {
     if matches.contains_id(sort_flags::SORT_PARALLEL) {
-        // "0" is default - threads = num of cores
         let threads = matches
             .get_one::<String>(sort_flags::SORT_PARALLEL)
             .map(String::from)
             .unwrap_or_else(|| "0".to_string());
+        if threads == "0" {
+            return Err(CtSimpleError::new(2, "number in parallel must be nonzero"));
+        }
         unsafe { env::set_var("RAYON_NUM_THREADS", &threads) };
-        threads
+        Ok(threads)
     } else {
-        String::new()
+        Ok(String::new())
     }
 }
 
@@ -9246,7 +9261,19 @@ mod tests {
             let result = command.try_get_matches_from(input_args);
 
             assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+            let error = result.unwrap_err();
+            assert_eq!(error.kind(), ErrorKind::InvalidValue);
+            assert_eq!(sort_clap_error_exit_code(&error), 2);
+        }
+
+        #[test]
+        fn test_ct_app_invalid_sort_value_uses_exit_code_one() {
+            let error = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "--sort=bad"])
+                .unwrap_err();
+
+            assert_eq!(error.kind(), ErrorKind::InvalidValue);
+            assert_eq!(sort_clap_error_exit_code(&error), 1);
         }
 
         #[test]
@@ -10394,6 +10421,17 @@ mod tests {
 
             assert!(result.is_ok());
             assert!(result.unwrap().contains_id(sort_flags::SORT_PARALLEL));
+        }
+
+        #[test]
+        fn test_sort_get_settings_threads_rejects_zero() {
+            let matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "--parallel=0"])
+                .unwrap();
+
+            let error = sort_get_settings_threads(&matches).unwrap_err();
+            assert_eq!(error.code(), 2);
+            assert_eq!(error.to_string(), "number in parallel must be nonzero");
         }
 
         #[test]

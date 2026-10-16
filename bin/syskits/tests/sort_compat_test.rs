@@ -151,3 +151,42 @@ fn sort_random_source_matches_gnu_seeded_md5_order() {
     assert_eq!(output.stdout, b"a\nb\nf\nd\ne\nc\n");
     assert_eq!(output.stderr, b"");
 }
+
+#[test]
+fn sort_invalid_sort_and_zero_parallel_exit_codes_match_gnu() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("input");
+    fs::write(&input, b"x\n").expect("write input");
+    let path = input.to_str().expect("utf8 path");
+
+    for (args, expected) in [(["--sort=bad", path], 1), (["--parallel=0", path], 2)] {
+        let gnu = Command::new("/usr/bin/sort")
+            .env("LC_ALL", "C")
+            .args(args)
+            .output()
+            .expect("run GNU sort");
+        let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C")
+            .arg("sort")
+            .args(args)
+            .output()
+            .expect("run syskits sort");
+
+        assert_eq!(gnu.status.code(), Some(expected), "{}", args[0]);
+        assert_eq!(syskits.status.code(), gnu.status.code(), "{}", args[0]);
+
+        if args[0] == "--parallel=0" {
+            assert_eq!(gnu.stdout, b"");
+            assert_eq!(syskits.stdout, gnu.stdout);
+            assert!(
+                gnu.stderr
+                    .ends_with(b": number in parallel must be nonzero\n")
+            );
+            assert!(
+                syskits
+                    .stderr
+                    .ends_with(b": number in parallel must be nonzero\n")
+            );
+        }
+    }
+}

@@ -1321,48 +1321,60 @@ fn parse_start_end_page(
         None => (1, None),
     };
 
-    let invalid_pages_map = |i: String| {
-        let unparsed_value = arg_matches.get_one::<String>(pr_flags::PR_PAGES).unwrap();
-        i.parse::<usize>().map_err(|_e| {
-            PrError::EncounteredErrorsNoHelp(format!(
-                "invalid --pages argument {}",
-                unparsed_value.quote()
-            ))
-        })
-    };
-
-    let res = arg_matches
-        .get_one::<String>(pr_flags::PR_PAGES)
-        .map(|i| {
-            let x: Vec<_> = i.split(':').collect();
-            x[0].to_string()
-        })
-        .map(invalid_pages_map);
-    let start_page = match res {
-        Some(res) => res?,
-        None => start_page_in_plus_option,
-    };
-
-    let res = arg_matches
-        .get_one::<String>(pr_flags::PR_PAGES)
-        .filter(|i| i.contains(':'))
-        .map(|i| {
-            let x: Vec<_> = i.split(':').collect();
-            x[1].to_string()
-        })
-        .map(invalid_pages_map);
-    let end_page = match res {
-        Some(res) => Some(res?),
-        None => end_page_in_plus_option,
-    };
-
-    if let Some(end_page) = end_page {
-        if start_page > end_page {
-            return Err(PrError::EncounteredErrorsNoHelp(format!(
-                "invalid --pages argument '{start_page}:{end_page}'"
-            )));
-        }
+    if let Some(pages) = arg_matches.get_one::<String>(pr_flags::PR_PAGES) {
+        return parse_pages_range(pages);
     }
+
+    let start_page = start_page_in_plus_option;
+    let end_page = end_page_in_plus_option;
+
+    if let Some(end_page) = end_page
+        && start_page > end_page
+    {
+        return Err(PrError::EncounteredErrorsNoHelp(format!(
+            "invalid --pages argument '{start_page}:{end_page}'"
+        )));
+    }
+
+    Ok((start_page, end_page))
+}
+
+fn parse_pages_range(pages: &str) -> Result<(usize, Option<usize>), PrError> {
+    let invalid_argument =
+        || PrError::EncounteredErrorsNoHelp(format!("invalid --pages argument {}", pages.quote()));
+    let invalid_range =
+        || PrError::EncounteredErrorsNoHelp(format!("invalid page range {}", pages.quote()));
+
+    if pages.matches(':').count() > 1 {
+        return Err(PrError::EncounteredErrorsNoHelp(format!(
+            "invalid suffix in --pages argument {}",
+            pages.quote()
+        )));
+    }
+
+    let (start_raw, end_raw) = match pages.split_once(':') {
+        Some((start, end)) => (start, Some(end)),
+        None => (pages, None),
+    };
+
+    let start_page = start_raw
+        .parse::<usize>()
+        .map_err(|_e| invalid_argument())?;
+    if start_page == 0 {
+        return Err(invalid_range());
+    }
+
+    let end_page = match end_raw {
+        Some(end_raw) => {
+            let end_page = end_raw.parse::<usize>().map_err(|_e| invalid_argument())?;
+            if end_page < start_page {
+                return Err(invalid_range());
+            }
+            Some(end_page)
+        }
+        None => None,
+    };
+
     Ok((start_page, end_page))
 }
 
@@ -6027,6 +6039,17 @@ mod tests {
                         "--date-format=-- Date/Time --",
                         "-h",
                         "x",
+                        "--pages=0",
+                        "/dev/null",
+                    ][..],
+                    "pr: invalid page range '0'\n",
+                ),
+                (
+                    &[
+                        "pr",
+                        "--date-format=-- Date/Time --",
+                        "-h",
+                        "x",
                         "-0",
                         "/dev/null",
                     ][..],
@@ -6352,7 +6375,7 @@ mod tests {
             assert!(result.is_err());
             match result {
                 Err(PrError::EncounteredErrorsNoHelp(msg)) => {
-                    assert!(msg.contains("invalid --pages argument '5:3'"));
+                    assert!(msg.contains("invalid page range '5:3'"));
                 }
                 _ => panic!("Expected PrError::EncounteredErrorsNoHelp, got a different error"),
             }
@@ -7316,7 +7339,7 @@ mod tests {
             let err = result.unwrap_err();
             match err {
                 PrError::EncounteredErrorsNoHelp(msg) => {
-                    assert!(msg.contains("invalid --pages argument '10:5'"));
+                    assert!(msg.contains("invalid page range '10:5'"));
                 }
                 _ => panic!("Expected PrError::EncounteredErrorsNoHelp"),
             }

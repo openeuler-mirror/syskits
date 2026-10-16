@@ -19,6 +19,31 @@ fn run_pr_with_non_utf8_input(args: &[&str]) -> std::process::Output {
 }
 
 #[test]
+fn pr_pages_zero_is_rejected_without_reading_stdin() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .args(["pr", "--pages=0"])
+        .stdin(Stdio::piped())
+        .output()
+        .expect("run syskits pr --pages=0");
+
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "stdout: {}, stderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        "pr: invalid page range '0'\n"
+    );
+}
+
+#[test]
 fn pr_number_lines_invalid_argument_exits_without_reading_stdin() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .env("LC_ALL", "C.UTF-8")

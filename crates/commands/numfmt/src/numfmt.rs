@@ -237,6 +237,31 @@ mod native_semantic_tests {
     }
 
     #[test]
+    fn numfmt_native_semantic_warns_when_format_padding_overrides_padding() {
+        let args = ["numfmt", "--debug", "--padding=10", "--format=%5f", "1"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.classic_text, "    1\n");
+        assert_eq!(
+            semantic.stderr_text,
+            "numfmt: --format padding overriding --padding\n"
+        );
+    }
+
+    #[test]
+    fn numfmt_native_semantic_does_not_warn_for_format_zero_padding() {
+        let args = ["numfmt", "--debug", "--padding=10", "--format=%05f", "1"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.classic_text, "     00001\n");
+        assert_eq!(semantic.stderr_text, "");
+    }
+
+    #[test]
     fn numfmt_native_semantic_uses_last_repeated_round_option() {
         let args = ["numfmt", "--round=up", "--round=down", "--to-unit=10", "15"];
 
@@ -980,6 +1005,16 @@ fn has_conversion_option(matches: &ArgMatches, options: &NumfmtConfigs, grouping
         || matches.value_source(numfmt_flags::NUMFMT_DELIMITER) == Some(ValueSource::CommandLine)
 }
 
+fn format_padding_overrides_padding(options: &NumfmtConfigs) -> bool {
+    let Some(format_padding) = options.format.padding else {
+        return false;
+    };
+
+    options.padding != 0
+        && format_padding != 0
+        && !(options.format.is_zero_padding && format_padding > 0)
+}
+
 fn init_numfmt_locale() -> bool {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -1238,6 +1273,10 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
         ct_show_error!("no conversion option specified");
     }
 
+    if debug && format_padding_overrides_padding(&options) {
+        ct_show_error!("--format padding overriding --padding");
+    }
+
     if debug && grouping && is_c_locale() {
         ct_show_error!("grouping has no effect in this locale");
     }
@@ -1305,6 +1344,12 @@ pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemanti
         semantic
             .stderr_text
             .push_str(&numfmt_prefixed_stderr("no conversion option specified"));
+    }
+
+    if debug && format_padding_overrides_padding(&options) {
+        semantic.stderr_text.push_str(&numfmt_prefixed_stderr(
+            "--format padding overriding --padding",
+        ));
     }
 
     if debug && grouping && is_c_locale() {

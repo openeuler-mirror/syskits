@@ -1396,6 +1396,16 @@ mod tests {
     }
 
     #[test]
+    fn dd_main_rejects_zero_block_size_without_panic() {
+        let args = [OsString::from("dd"), OsString::from("bs=0")];
+        let err =
+            dd_main(args.iter().cloned()).expect_err("bs=0 should be rejected before copy starts");
+
+        assert_eq!(err.code(), 1);
+        assert_eq!(err.to_string(), "invalid number: '0'");
+    }
+
+    #[test]
     fn bsize_test_primes() {
         let (n, m) = (7901, 7919);
         let res = calc_bsize(n, m);

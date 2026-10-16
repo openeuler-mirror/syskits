@@ -297,7 +297,11 @@ impl Parser {
     }
 
     fn parse_bytes(arg: &str, val: &str) -> Result<usize, ParseError> {
-        parse_bytes_with_opt_multiplier(val)?
+        let bytes = parse_bytes_with_opt_multiplier(val)?;
+        if bytes == 0 {
+            return Err(ParseError::InvalidNumber(val.to_string()));
+        }
+        bytes
             .try_into()
             .map_err(|_| ParseError::BsOutOfRange(arg.to_string()))
     }

@@ -175,6 +175,19 @@ mod native_semantic_tests {
     }
 
     #[test]
+    fn numfmt_native_semantic_applies_to_unit_before_suffix_selection() {
+        let args = ["numfmt", "--to=si", "--to-unit=3", "1000"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.stderr_text, "");
+        assert_eq!(semantic.classic_text, "334\n");
+        assert_eq!(semantic.rows.len(), 1);
+        assert_eq!(semantic.rows[0].output, "334");
+    }
+
+    #[test]
     fn numfmt_native_semantic_uses_last_repeated_round_option() {
         let args = ["numfmt", "--round=up", "--round=down", "--to-unit=10", "15"];
 

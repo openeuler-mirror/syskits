@@ -403,9 +403,12 @@ fn numfmt_transform_to(
     round_method: NumfmtRoundMethod,
     precision: usize,
 ) -> Result<String> {
-    let (i2, suffix) = numfmt_consider_suffix(s, &opts.to, round_method, precision)?;
-    let i2 = i2 / (opts.to_unit as f64);
+    let value = s / (opts.to_unit as f64);
+    let (i2, suffix) = numfmt_consider_suffix(value, &opts.to, round_method, precision)?;
     Ok(match suffix {
+        None if opts.to != NumfmtUnit::None => {
+            format!("{i2:.precision$}")
+        }
         None => {
             format!(
                 "{:.precision$}",
@@ -1749,7 +1752,33 @@ mod tests {
             opts.to_unit = 1000; // Converting to kilounits
             let result =
                 numfmt_transform_to(1234.5678, &opts, NumfmtRoundMethod::Nearest, 2).unwrap();
-            assert_eq!(result, "0.00K");
+            assert_eq!(result, "1.23");
+        }
+
+        #[test]
+        fn test_to_unit_applied_before_suffix_selection() {
+            let mut opts = setup_transform_options();
+            opts.to = NumfmtUnit::Si;
+            opts.to_unit = 3;
+
+            assert_eq!(
+                numfmt_transform_to(1000.0, &opts, NumfmtRoundMethod::FromZero, 0).unwrap(),
+                "334"
+            );
+            assert_eq!(
+                numfmt_transform_to(3000.0, &opts, NumfmtRoundMethod::FromZero, 0).unwrap(),
+                "1.0K"
+            );
+
+            opts.to_unit = 1000;
+            assert_eq!(
+                numfmt_transform_to(999.0, &opts, NumfmtRoundMethod::Down, 0).unwrap(),
+                "1"
+            );
+            assert_eq!(
+                numfmt_transform_to(1024.0, &opts, NumfmtRoundMethod::Up, 0).unwrap(),
+                "1"
+            );
         }
 
         #[test]
@@ -1804,7 +1833,7 @@ mod tests {
                 to_unit: 1000,
             };
             let result = numfmt_transform_to(2048.0, &opts, NumfmtRoundMethod::Nearest, 1).unwrap();
-            assert_eq!(result, "0.0K");
+            assert_eq!(result, "2.0");
         }
 
         #[test]
@@ -1816,7 +1845,7 @@ mod tests {
                 to_unit: 1000,
             };
             let result = numfmt_transform_to(2048.0, &opts, NumfmtRoundMethod::Nearest, 1).unwrap();
-            assert_eq!(result, "0.0K");
+            assert_eq!(result, "2.0");
         }
 
         #[test]

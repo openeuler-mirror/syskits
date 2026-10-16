@@ -27,7 +27,7 @@ use crate::errors::*;
 use crate::flags::*;
 use crate::format::{
     numfmt_format_and_print, numfmt_format_and_print_abort, numfmt_format_line,
-    numfmt_format_line_abort,
+    numfmt_format_line_abort, numfmt_precision_loss_inputs,
 };
 use crate::units::{NumfmtUnit, Result};
 use ctcore::Tool;
@@ -220,6 +220,21 @@ mod native_semantic_tests {
     }
 
     #[test]
+    fn numfmt_native_semantic_warns_about_large_debug_input() {
+        let args = ["numfmt", "--debug", "1234567890123456789"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.classic_text, "1234567890123456789\n");
+        assert_eq!(
+            semantic.stderr_text,
+            "numfmt: no conversion option specified\n\
+             numfmt: large input value '1234567890123456789': possible precision loss\n"
+        );
+    }
+
+    #[test]
     fn numfmt_native_semantic_uses_last_repeated_round_option() {
         let args = ["numfmt", "--round=up", "--round=down", "--to-unit=10", "15"];
 
@@ -318,6 +333,33 @@ fn numfmt_prefixed_stderr(message: &str) -> String {
     format!("numfmt: {message}\n")
 }
 
+fn numfmt_precision_loss_message(input: &str) -> String {
+    format!(
+        "large input value {}: possible precision loss",
+        input.quote()
+    )
+}
+
+fn numfmt_show_precision_loss_warnings(input_line: &str, options: &NumfmtConfigs) {
+    for input in numfmt_precision_loss_inputs(input_line, options) {
+        ct_show_error!("{}", numfmt_precision_loss_message(&input));
+    }
+}
+
+fn numfmt_append_precision_loss_warnings(
+    semantic: &mut NumfmtSemantic,
+    input_line: &str,
+    options: &NumfmtConfigs,
+) {
+    for input in numfmt_precision_loss_inputs(input_line, options) {
+        semantic
+            .stderr_text
+            .push_str(&numfmt_prefixed_stderr(&numfmt_precision_loss_message(
+                &input,
+            )));
+    }
+}
+
 fn trim_numfmt_line_ending(rendered: &str, zero_terminated: bool) -> String {
     if zero_terminated {
         rendered.strip_suffix('\0').unwrap_or(rendered).to_string()
@@ -373,7 +415,12 @@ fn numfmt_process_semantic_line(
     source: &str,
     input_line: &str,
     has_line_ending: bool,
+    debug: bool,
 ) -> CTResult<bool> {
+    if debug {
+        numfmt_append_precision_loss_warnings(semantic, input_line, options);
+    }
+
     if options.invalid == NumfmtInvalidModes::Abort {
         match numfmt_format_line_abort(input_line, options) {
             Ok(rendered) => {
@@ -464,9 +511,18 @@ fn numfmt_collect_args_semantic<'a>(
     args: impl Iterator<Item = &'a str>,
     numfmt_configs: &NumfmtConfigs,
     semantic: &mut NumfmtSemantic,
+    debug: bool,
 ) -> CTResult<()> {
     for (index, value) in args.enumerate() {
-        if !numfmt_process_semantic_line(semantic, numfmt_configs, index + 1, "arg", value, true)? {
+        if !numfmt_process_semantic_line(
+            semantic,
+            numfmt_configs,
+            index + 1,
+            "arg",
+            value,
+            true,
+            debug,
+        )? {
             break;
         }
     }
@@ -477,6 +533,7 @@ fn numfmt_collect_buffer_semantic<R>(
     input: R,
     numfmt_configs: &NumfmtConfigs,
     semantic: &mut NumfmtSemantic,
+    debug: bool,
 ) -> CTResult<()>
 where
     R: BufRead,
@@ -504,6 +561,7 @@ where
                         "stdin",
                         &line,
                         true,
+                        debug,
                     )? {
                         break;
                     }
@@ -556,6 +614,7 @@ where
                 "stdin",
                 &line,
                 has_newline,
+                debug,
             )? {
                 break;
             }
@@ -569,14 +628,15 @@ where
 fn numfmt_handle_args<'a>(
     args: impl Iterator<Item = &'a str>,
     numfmt_configs: &NumfmtConfigs,
+    debug: bool,
 ) -> CTResult<()> {
     for l in args {
-        numfmt_format_and_handle_validation(l, numfmt_configs)?;
+        numfmt_format_and_handle_validation(l, numfmt_configs, debug)?;
     }
     Ok(())
 }
 
-fn numfmt_handle_buffer<R>(input: R, numfmt_configs: &NumfmtConfigs) -> CTResult<()>
+fn numfmt_handle_buffer<R>(input: R, numfmt_configs: &NumfmtConfigs, debug: bool) -> CTResult<()>
 where
     R: BufRead,
 {
@@ -589,7 +649,7 @@ where
                         print!("{line}\0");
                         Ok(())
                     } else {
-                        numfmt_format_and_handle_validation(&line, numfmt_configs)
+                        numfmt_format_and_handle_validation(&line, numfmt_configs, debug)
                     }
                 }
                 Err(err) => return Err(Box::new(NumfmtError::NumfmtIoError(err.to_string()))),
@@ -628,6 +688,7 @@ where
                     line.as_ref(),
                     numfmt_configs,
                     has_newline,
+                    debug,
                 )?;
             }
             idx += 1;
@@ -640,7 +701,12 @@ fn numfmt_format_and_handle_validation_with_line_ending(
     input_line: &str,
     numfmt_configs: &NumfmtConfigs,
     has_line_ending: bool,
+    debug: bool,
 ) -> CTResult<()> {
+    if debug {
+        numfmt_show_precision_loss_warnings(input_line, numfmt_configs);
+    }
+
     let handled_line = if numfmt_configs.invalid == NumfmtInvalidModes::Abort {
         numfmt_format_and_print_abort(input_line, numfmt_configs)
     } else {
@@ -674,8 +740,9 @@ fn numfmt_format_and_handle_validation_with_line_ending(
 fn numfmt_format_and_handle_validation(
     input_line: &str,
     numfmt_configs: &NumfmtConfigs,
+    debug: bool,
 ) -> CTResult<()> {
-    numfmt_format_and_handle_validation_with_line_ending(input_line, numfmt_configs, true)
+    numfmt_format_and_handle_validation_with_line_ending(input_line, numfmt_configs, true, debug)
 }
 
 fn numfmt_parse_unit(unit: &str) -> Result<NumfmtUnit> {
@@ -1060,10 +1127,10 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     let result = match matches.get_many::<String>(numfmt_flags::NUMFMT_NUMBER) {
-        Some(values) => numfmt_handle_args(values.map(|s| s.as_str()), &options),
+        Some(values) => numfmt_handle_args(values.map(|s| s.as_str()), &options, debug),
         None => {
             let mut locked_stdin = std::io::BufReader::new(ctcore::ct_io::stdin_reader_box());
-            numfmt_handle_buffer(&mut locked_stdin, &options)
+            numfmt_handle_buffer(&mut locked_stdin, &options, debug)
         }
     };
 
@@ -1131,12 +1198,15 @@ pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemanti
     }
 
     match matches.get_many::<String>(numfmt_flags::NUMFMT_NUMBER) {
-        Some(values) => {
-            numfmt_collect_args_semantic(values.map(|s| s.as_str()), &options, &mut semantic)?
-        }
+        Some(values) => numfmt_collect_args_semantic(
+            values.map(|s| s.as_str()),
+            &options,
+            &mut semantic,
+            debug,
+        )?,
         None => {
             let mut locked_stdin = std::io::BufReader::new(ctcore::ct_io::stdin_reader_box());
-            numfmt_collect_buffer_semantic(&mut locked_stdin, &options, &mut semantic)?
+            numfmt_collect_buffer_semantic(&mut locked_stdin, &options, &mut semantic, debug)?
         }
     };
 
@@ -1363,11 +1433,11 @@ mod tests {
             let mut numfmt_configs = get_valid_options();
             numfmt_configs.invalid = NumfmtInvalidModes::Abort;
 
-            let result = numfmt_format_and_handle_validation(input_line, &numfmt_configs);
+            let result = numfmt_format_and_handle_validation(input_line, &numfmt_configs, false);
             assert!(result.is_ok());
 
             let input_line = "abc";
-            let result2 = numfmt_format_and_handle_validation(input_line, &numfmt_configs);
+            let result2 = numfmt_format_and_handle_validation(input_line, &numfmt_configs, false);
             let expected_result2 = "invalid number: 'abc'".to_string();
             assert!(result2.is_err());
             assert_eq!(result2.unwrap_err().to_string(), expected_result2);
@@ -1379,11 +1449,11 @@ mod tests {
             let mut numfmt_configs = get_valid_options();
             numfmt_configs.invalid = NumfmtInvalidModes::Fail;
 
-            let result = numfmt_format_and_handle_validation(input_line, &numfmt_configs);
+            let result = numfmt_format_and_handle_validation(input_line, &numfmt_configs, false);
             assert!(result.is_ok());
 
             let input_line = "abc";
-            let result2 = numfmt_format_and_handle_validation(input_line, &numfmt_configs);
+            let result2 = numfmt_format_and_handle_validation(input_line, &numfmt_configs, false);
             let _expected_result2 = "invalid suffix in input: 'abc'".to_string();
             assert!(result2.is_ok());
         }
@@ -1394,11 +1464,11 @@ mod tests {
             let mut numfmt_configs = get_valid_options();
             numfmt_configs.invalid = NumfmtInvalidModes::Warn;
 
-            let result = numfmt_format_and_handle_validation(input_line, &numfmt_configs);
+            let result = numfmt_format_and_handle_validation(input_line, &numfmt_configs, false);
             assert!(result.is_ok());
 
             let input_line = "abc";
-            let result2 = numfmt_format_and_handle_validation(input_line, &numfmt_configs);
+            let result2 = numfmt_format_and_handle_validation(input_line, &numfmt_configs, false);
             let _expected_result2 = "invalid suffix in input: 'abc'".to_string();
             assert!(result2.is_ok());
         }
@@ -1409,11 +1479,11 @@ mod tests {
             let mut numfmt_configs = get_valid_options();
             numfmt_configs.invalid = NumfmtInvalidModes::Ignore;
 
-            let result = numfmt_format_and_handle_validation(input_line, &numfmt_configs);
+            let result = numfmt_format_and_handle_validation(input_line, &numfmt_configs, false);
             assert!(result.is_ok());
 
             let input_line = "abc";
-            let result2 = numfmt_format_and_handle_validation(input_line, &numfmt_configs);
+            let result2 = numfmt_format_and_handle_validation(input_line, &numfmt_configs, false);
             assert!(result2.is_ok());
         }
     }
@@ -9381,8 +9451,9 @@ mod tests {
         #[test]
         fn broken_buffer_returns_io_error() {
             let mock_buffer = MockBuffer {};
-            let result = numfmt_handle_buffer(BufReader::new(mock_buffer), &get_valid_options())
-                .expect_err("returned Ok after receiving IO error");
+            let result =
+                numfmt_handle_buffer(BufReader::new(mock_buffer), &get_valid_options(), false)
+                    .expect_err("returned Ok after receiving IO error");
             let result_debug = format!("{result:?}");
             let result_display = format!("{result}");
             assert_eq!(result_debug, "NumfmtIoError(\"broken pipe\")");
@@ -9395,7 +9466,7 @@ mod tests {
             let mock_buffer = MockBuffer {};
             let mut options = get_valid_options();
             options.header = 0;
-            let result = numfmt_handle_buffer(BufReader::new(mock_buffer), &options)
+            let result = numfmt_handle_buffer(BufReader::new(mock_buffer), &options, false)
                 .expect_err("returned Ok after receiving IO error");
             let result_debug = format!("{result:?}");
             let result_display = format!("{result}");
@@ -9407,9 +9478,12 @@ mod tests {
         #[test]
         fn non_numeric_returns_formatting_error() {
             let input_value = b"135\nhello";
-            let result =
-                numfmt_handle_buffer(BufReader::new(&input_value[..]), &get_valid_options())
-                    .expect_err("returned Ok after receiving improperly formatted input");
+            let result = numfmt_handle_buffer(
+                BufReader::new(&input_value[..]),
+                &get_valid_options(),
+                false,
+            )
+            .expect_err("returned Ok after receiving improperly formatted input");
             let result_debug = format!("{result:?}");
             let result_display = format!("{result}");
             assert_eq!(
@@ -9423,8 +9497,11 @@ mod tests {
         #[test]
         fn valid_input_returns_ok() {
             let input_value = b"165\n100\n300\n500";
-            let result =
-                numfmt_handle_buffer(BufReader::new(&input_value[..]), &get_valid_options());
+            let result = numfmt_handle_buffer(
+                BufReader::new(&input_value[..]),
+                &get_valid_options(),
+                false,
+            );
             assert!(result.is_ok(), "did not return Ok for valid input");
         }
 
@@ -9433,7 +9510,7 @@ mod tests {
             let input_value = b"5\n4Q\n";
             let mut options = get_valid_options();
             options.invalid = NumfmtInvalidModes::Warn;
-            let result = numfmt_handle_buffer(BufReader::new(&input_value[..]), &options);
+            let result = numfmt_handle_buffer(BufReader::new(&input_value[..]), &options, false);
             assert!(result.is_ok(), "did not return Ok for invalid input");
         }
 
@@ -9442,7 +9519,7 @@ mod tests {
             let input_value = b"5\n4Q\n";
             let mut options = get_valid_options();
             options.invalid = NumfmtInvalidModes::Ignore;
-            let result = numfmt_handle_buffer(BufReader::new(&input_value[..]), &options);
+            let result = numfmt_handle_buffer(BufReader::new(&input_value[..]), &options, false);
             assert!(result.is_ok(), "did not return Ok for invalid input");
         }
 
@@ -9451,7 +9528,7 @@ mod tests {
             let input_value = b"5\n4Q\n";
             let mut options = get_valid_options();
             options.invalid = NumfmtInvalidModes::Fail;
-            numfmt_handle_buffer(BufReader::new(&input_value[..]), &options).unwrap();
+            numfmt_handle_buffer(BufReader::new(&input_value[..]), &options, false).unwrap();
             assert_eq!(
                 get_ct_exit_code(),
                 2,
@@ -9464,7 +9541,7 @@ mod tests {
             let input_value = b"5\n4Q\n";
             let mut options = get_valid_options();
             options.invalid = NumfmtInvalidModes::Abort;
-            let result = numfmt_handle_buffer(BufReader::new(&input_value[..]), &options);
+            let result = numfmt_handle_buffer(BufReader::new(&input_value[..]), &options, false);
             assert!(result.is_err(), "did not return err for invalid input");
         }
     }
@@ -9478,7 +9555,7 @@ mod tests {
             let input_value = ["5", "4Q"].into_iter();
             let mut options = get_valid_options();
             options.invalid = NumfmtInvalidModes::Fail;
-            numfmt_handle_args(input_value, &options).unwrap();
+            numfmt_handle_args(input_value, &options, false).unwrap();
             assert_eq!(
                 get_ct_exit_code(),
                 2,
@@ -9491,7 +9568,7 @@ mod tests {
             let input_value = ["5", "4Q"].into_iter();
             let mut options = get_valid_options();
             options.invalid = NumfmtInvalidModes::Warn;
-            let result = numfmt_handle_args(input_value, &options);
+            let result = numfmt_handle_args(input_value, &options, false);
             assert!(result.is_ok(), "did not return ok for invalid input");
         }
     }

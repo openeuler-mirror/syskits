@@ -57,6 +57,41 @@ fn sort_debug_reports_simple_byte_comparison_in_c_locale() {
 }
 
 #[test]
+fn sort_debug_reports_numeric_decimal_point_note() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("fields");
+    fs::write(&input, b"x 10\ny 2\nz 1\n").expect("write fixture");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .args([
+            "sort",
+            "--debug",
+            "-k",
+            "2,2n",
+            input.to_str().expect("utf8 path"),
+        ])
+        .output()
+        .expect("run syskits sort --debug -k 2,2n");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.stdout,
+        b"z 1\n  _\n___\ny 2\n  _\n___\nx 10\n  __\n____\n"
+    );
+    assert_eq!(
+        output.stderr,
+        b"sort: text ordering performed using simple byte comparison\nsort: note numbers use '.' as a decimal point in this locale\n"
+    );
+}
+
+#[test]
 #[cfg(target_family = "unix")]
 fn sort_buffer_size_accepts_percent_suffix() {
     let temp_dir = TempDir::new().expect("tempdir");

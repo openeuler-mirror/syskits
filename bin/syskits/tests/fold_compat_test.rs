@@ -1,5 +1,40 @@
 use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::{Command, Output, Stdio};
+
+fn run_fold_with_stdin(args: &[&str], locale: &str, input: &[u8]) -> Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(args)
+        .env("LC_ALL", locale)
+        .env("LANG", locale)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run syskits fold");
+
+    {
+        let mut stdin = child.stdin.take().expect("stdin");
+        stdin.write_all(input).expect("write stdin");
+    }
+
+    child.wait_with_output().expect("wait for syskits fold")
+}
+
+fn assert_fold_bytes(case: &str, args: &[&str], locale: &str, input: &[u8], expected: &[u8]) {
+    let output = run_fold_with_stdin(args, locale, input);
+
+    assert!(
+        output.status.success(),
+        "{case}: stderr={:?}",
+        output.stderr
+    );
+    assert_eq!(output.stdout, expected, "{case}");
+    assert!(
+        output.stderr.is_empty(),
+        "{case}: stderr={:?}",
+        output.stderr
+    );
+}
 
 #[test]
 fn fold_width_zero_is_rejected() {
@@ -81,4 +116,29 @@ fn fold_spaces_handles_carriage_return_after_blank() {
     assert!(output.status.success());
     assert_eq!(output.stdout, b"a\n \n\r\xe7\x95\x8c");
     assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn fold_uses_locale_encoding_like_gnu() {
+    assert_fold_bytes(
+        "C locale byte mode",
+        &["fold", "-b", "-w", "2"],
+        "C",
+        b"\xe7\x95\x8cx\n",
+        b"\xe7\x95\n\x8cx\n",
+    );
+    assert_fold_bytes(
+        "UTF-8 conversion failure",
+        &["fold", "-w", "2"],
+        "C.UTF-8",
+        b"\xc3\xa9a\xffb\n",
+        b"\xc3\xa9a\n\xffb\n\n",
+    );
+    assert_fold_bytes(
+        "EUC-JP character mode",
+        &["fold", "-c", "-w", "1"],
+        "ja_JP.eucjp",
+        b"\xa4\xa2\xa4\xa2",
+        b"\xa4\xa2\n\xa4\xa2",
+    );
 }

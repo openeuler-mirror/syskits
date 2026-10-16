@@ -37,7 +37,7 @@ impl FoldCore {
     fn run_core(
         intent: &FoldIntent,
         input: CtPipelineData,
-    ) -> Result<(CtValue, String, String, i32), CtDiagnosticError> {
+    ) -> Result<(CtValue, String, Vec<u8>, String, i32), CtDiagnosticError> {
         let result = ctengine::run_with_optional_pipeline_stdin(
             "fold",
             input,
@@ -49,12 +49,14 @@ impl FoldCore {
             Ok(semantic) => (
                 semantic_to_value(&semantic),
                 semantic.classic_text,
+                semantic.classic_bytes,
                 semantic.stderr_text,
                 semantic.exit_code,
             ),
             Err(err) => (
                 CtValue::List(Vec::new()),
                 String::new(),
+                Vec::new(),
                 render_error_text(err.as_ref()),
                 err.code(),
             ),
@@ -127,12 +129,13 @@ impl DataCommand for CmdFold {
         _ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = FoldIntent::from_call(call)?;
-        let (value, classic_text, stderr_text, exit_code) = FoldCore::run_core(&intent, input)?;
+        let (value, classic_text, classic_bytes, stderr_text, exit_code) =
+            FoldCore::run_core(&intent, input)?;
         Ok(CtPipelineData::Value(
             value,
             CtPipelineMetadata {
                 classic_text: Some(classic_text),
-                classic_bytes: None,
+                classic_bytes: Some(classic_bytes),
                 classic_append_newline: false,
                 stderr_text: if stderr_text.is_empty() {
                     None
@@ -195,6 +198,7 @@ mod tests {
                 },
             ],
             classic_text: "abcd\nefgh\n".into(),
+            classic_bytes: b"abcd\nefgh\n".to_vec(),
             stderr_text: String::new(),
             exit_code: 0,
         });

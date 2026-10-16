@@ -238,6 +238,10 @@ impl<W: Write> PasteContext<W> {
         }
 
         let delimiter = self.delimiters[delim_count % self.delimiters.len()];
+        if delimiter == '\0' {
+            return 0;
+        }
+
         let mut buf = [0; 4];
         let ch = delimiter.encode_utf8(&mut buf);
         let delim_length = ch.len();
@@ -305,6 +309,7 @@ impl<W: Write> PasteContext<W> {
 
 fn paste_unescape(s: &str) -> String {
     s.replace("\\\\", "\u{FFFF}")
+        .replace("\\0", "\0")
         .replace("\\n", "\n")
         .replace("\\t", "\t")
         .replace("\u{FFFF}", "\\")
@@ -898,6 +903,13 @@ mod tests {
         assert_eq!(paste_unescape("\\\\"), "\\");
         assert_eq!(paste_unescape("\\\\n"), "\\n");
         assert_eq!(paste_unescape("a\\\\nb"), "a\\nb");
+    }
+
+    #[test]
+    fn test_paste_unescape_empty_delimiter() {
+        assert_eq!(paste_unescape("\\0"), "\0");
+        assert_eq!(paste_unescape("\\0,"), "\0,");
+        assert_eq!(paste_unescape("\\\\0"), "\\0");
     }
 
     // Helper function for creating test files

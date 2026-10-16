@@ -26,6 +26,7 @@ pub struct Settings<T> {
     pub flag: T,
     pub is_show: bool,
     pub is_sane: bool,
+    pub sane_value: Option<bool>,
     pub group: Option<T>,
 }
 
@@ -43,6 +44,7 @@ impl<T> Settings<T> {
             flag,
             is_show: true,
             is_sane: false,
+            sane_value: Some(false),
             group: None,
         }
     }
@@ -53,6 +55,7 @@ impl<T> Settings<T> {
             flag,
             is_show: true,
             is_sane: false,
+            sane_value: Some(false),
             group: Some(group),
         }
     }
@@ -64,39 +67,49 @@ impl<T> Settings<T> {
 
     pub const fn sane(mut self) -> Self {
         self.is_sane = true;
+        self.sane_value = Some(true);
+        self
+    }
+
+    pub const fn preserve_in_sane(mut self) -> Self {
+        self.sane_value = None;
         self
     }
 }
 
 pub const CONTROL_SETTINGS: &[Settings<C>] = &[
-    Settings::new("parenb", C::PARENB),
-    Settings::new("parodd", C::PARODD),
-    Settings::new("cmspar", C::CMSPAR),
-    Settings::new_grouped("cs5", C::CS5, C::CSIZE),
-    Settings::new_grouped("cs6", C::CS6, C::CSIZE),
-    Settings::new_grouped("cs7", C::CS7, C::CSIZE),
-    Settings::new_grouped("cs8", C::CS8, C::CSIZE).sane(),
-    Settings::new("hupcl", C::HUPCL).sane(),
-    Settings::new("hup", C::HUPCL).hidden(),
-    Settings::new("cstopb", C::CSTOPB),
+    Settings::new("parenb", C::PARENB).preserve_in_sane(),
+    Settings::new("parodd", C::PARODD).preserve_in_sane(),
+    Settings::new("cmspar", C::CMSPAR).preserve_in_sane(),
+    Settings::new_grouped("cs5", C::CS5, C::CSIZE).preserve_in_sane(),
+    Settings::new_grouped("cs6", C::CS6, C::CSIZE).preserve_in_sane(),
+    Settings::new_grouped("cs7", C::CS7, C::CSIZE).preserve_in_sane(),
+    Settings::new_grouped("cs8", C::CS8, C::CSIZE)
+        .sane()
+        .preserve_in_sane(),
+    Settings::new("hupcl", C::HUPCL).sane().preserve_in_sane(),
+    Settings::new("hup", C::HUPCL).hidden().preserve_in_sane(),
+    Settings::new("cstopb", C::CSTOPB).preserve_in_sane(),
     Settings::new("cread", C::CREAD).sane(),
-    Settings::new("clocal", C::CLOCAL),
-    Settings::new("crtscts", C::CRTSCTS),
+    Settings::new("clocal", C::CLOCAL).preserve_in_sane(),
+    Settings::new("crtscts", C::CRTSCTS).preserve_in_sane(),
 ];
 
 pub const INPUT_SETTINGS: &[Settings<I>] = &[
     Settings::new("ignbrk", I::IGNBRK),
     Settings::new("brkint", I::BRKINT).sane(),
-    Settings::new("ignpar", I::IGNPAR),
-    Settings::new("parmrk", I::PARMRK),
-    Settings::new("inpck", I::INPCK),
-    Settings::new("istrip", I::ISTRIP),
+    Settings::new("ignpar", I::IGNPAR).preserve_in_sane(),
+    Settings::new("parmrk", I::PARMRK).preserve_in_sane(),
+    Settings::new("inpck", I::INPCK).preserve_in_sane(),
+    Settings::new("istrip", I::ISTRIP).preserve_in_sane(),
     Settings::new("inlcr", I::INLCR),
     Settings::new("igncr", I::IGNCR),
     Settings::new("icrnl", I::ICRNL).sane(),
-    Settings::new("ixon", I::IXON).sane(),
+    Settings::new("ixon", I::IXON).sane().preserve_in_sane(),
     Settings::new("ixoff", I::IXOFF),
-    Settings::new("tandem", I::IXOFF).hidden(),
+    Settings::new("tandem", I::IXOFF)
+        .hidden()
+        .preserve_in_sane(),
     #[cfg(any(target_os = "linux", target_os = "android"))]
     Settings::new("iuclc", I::from_bits_retain(crate::IUCLC_RAW_BIT)),
     Settings::new("ixany", I::IXANY),
@@ -138,7 +151,9 @@ pub const LOCAL_SETTINGS: &[Settings<L>] = &[
     Settings::new("iexten", L::IEXTEN).sane(),
     Settings::new("echo", L::ECHO).sane(),
     Settings::new("echoe", L::ECHOE).sane(),
-    Settings::new("crterase", L::ECHOE).hidden().sane(),
+    Settings::new("crterase", L::ECHOE)
+        .hidden()
+        .preserve_in_sane(),
     Settings::new("echok", L::ECHOK).sane(),
     Settings::new("echonl", L::ECHONL),
     Settings::new("noflsh", L::NOFLSH),
@@ -146,11 +161,17 @@ pub const LOCAL_SETTINGS: &[Settings<L>] = &[
     Settings::new("xcase", L::from_bits_retain(crate::XCASE_RAW_BIT)),
     Settings::new("tostop", L::TOSTOP),
     Settings::new("echoprt", L::ECHOPRT),
-    Settings::new("prterase", L::ECHOPRT).hidden(),
+    Settings::new("prterase", L::ECHOPRT)
+        .hidden()
+        .preserve_in_sane(),
     Settings::new("echoctl", L::ECHOCTL).sane(),
-    Settings::new("ctlecho", L::ECHOCTL).sane().hidden(),
+    Settings::new("ctlecho", L::ECHOCTL)
+        .hidden()
+        .preserve_in_sane(),
     Settings::new("echoke", L::ECHOKE).sane(),
-    Settings::new("crtkill", L::ECHOKE).sane().hidden(),
+    Settings::new("crtkill", L::ECHOKE)
+        .hidden()
+        .preserve_in_sane(),
     Settings::new("flusho", L::FLUSHO),
     Settings::new("extproc", L::EXTPROC),
 ];
@@ -882,12 +903,14 @@ mod tests {
             flag: ControlFlags::CREAD,
             is_show: true,
             is_sane: false,
+            sane_value: Some(false),
             group: None,
         };
 
         assert_eq!(settings.name, "test");
         assert!(settings.is_show);
         assert!(!settings.is_sane);
+        assert_eq!(settings.sane_value, Some(false));
         assert!(settings.group.is_none());
     }
 

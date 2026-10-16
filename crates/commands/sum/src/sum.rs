@@ -22,12 +22,11 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTError, CTResult, FromIo};
 use ctcore::ct_show;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Read};
-use std::path::Path;
 use sys_locale::get_locale;
 
 // 这个可以被 usize::div_ceil 替代，一旦它稳定下来。
@@ -94,17 +93,7 @@ fn sum_open(name: &str) -> CTResult<Box<dyn Read>> {
     match name {
         "-" => Ok(ctcore::ct_io::stdin_reader_box()),
         _ => {
-            let path = &Path::new(name);
-            if path.is_dir() {
-                let err_message = format!("{}: Is a directory", name.maybe_quote());
-                return Err(CtSimpleError::new(1, err_message));
-            };
-            // 消除警告，因为我们想要错误信息
-            if path.metadata().is_err() {
-                let err_message = format!("{}: No such file or directory", name.maybe_quote());
-                return Err(CtSimpleError::new(1, err_message));
-            };
-            let f = File::open(path).map_err_context(String::new)?;
+            let f = File::open(name).map_err_context(|| name.maybe_quote().to_string())?;
             Ok(Box::new(f) as Box<dyn Read>)
         }
     }
@@ -619,20 +608,15 @@ mod tests {
         }
 
         #[test]
-        fn test_open_directory() {
+        fn test_read_directory_fails() {
             // 创建一个临时目录
             let dir = tempdir().unwrap();
             let dir_path = dir.path().to_str().unwrap();
 
-            // 测试打开目录
-            let result = sum_open(dir_path);
-            assert!(result.is_err());
-
-            // 验证错误信息
-            if let Err(error) = result {
-                assert_eq!(error.to_string(), format!("{dir_path}: Is a directory"));
-                assert_eq!(error.code(), 1);
-            }
+            // GNU sum opens the directory and reports the subsequent read error.
+            let reader = sum_open(dir_path).unwrap();
+            let error = sum_bsd(reader).unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::IsADirectory);
         }
 
         #[test]
@@ -694,8 +678,8 @@ mod tests {
 
         #[test]
         fn test_open_file_no_permissions() {
-            if ctcore::ct_process::geteuid() != 0 {
-                println!("Skipping test_open_file_no_permissions: requires root privileges");
+            if ctcore::ct_process::geteuid() == 0 {
+                println!("Skipping test_open_file_no_permissions: root bypasses file permissions");
                 return;
             }
             // 创建一个临时文件，并移除所有权限
@@ -705,11 +689,24 @@ mod tests {
 
             // 尝试打开没有权限的文件
             let result = sum_open(file_path);
-            assert!(result.is_ok());
+            assert!(result.is_err());
 
             // 验证错误信息
             if let Err(error) = result {
                 assert!(error.to_string().contains("Permission denied"));
+            }
+        }
+
+        #[test]
+        fn test_open_preserves_non_not_found_error() {
+            let file = NamedTempFile::new().unwrap();
+            let child = file.path().join("child");
+            let child = child.to_str().unwrap();
+
+            let result = sum_open(child);
+            assert!(result.is_err());
+            if let Err(error) = result {
+                assert_eq!(error.to_string(), format!("{child}: Not a directory"));
             }
         }
 

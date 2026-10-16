@@ -204,6 +204,22 @@ mod native_semantic_tests {
     }
 
     #[test]
+    fn numfmt_native_semantic_rejects_overflowing_unit_size() {
+        let args = ["numfmt", "--from-unit=18446744073709551615K", "1"];
+
+        let error = match numfmt_native_semantic(args.iter().map(OsString::from)) {
+            Ok(_) => panic!("overflowing unit size should be rejected"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code(), 1);
+        assert_eq!(
+            error.to_string(),
+            "invalid unit size: '18446744073709551615K'"
+        );
+    }
+
+    #[test]
     fn numfmt_native_semantic_uses_last_repeated_round_option() {
         let args = ["numfmt", "--round=up", "--round=down", "--to-unit=10", "15"];
 
@@ -686,7 +702,9 @@ fn numfmt_parse_unit_size(unit: &str) -> Result<usize> {
             }
 
             if let Ok(n) = number.parse::<usize>() {
-                return Ok(n * multiplier);
+                if let Some(unit_size) = n.checked_mul(multiplier) {
+                    return Ok(unit_size);
+                }
             }
         }
     }
@@ -9499,7 +9517,13 @@ mod tests {
             assert_eq!(1024, numfmt_parse_unit_size("Ki").unwrap());
             assert_eq!(2000, numfmt_parse_unit_size("2K").unwrap());
             assert_eq!(2048, numfmt_parse_unit_size("2Ki").unwrap());
+            assert_eq!(
+                18_446_744_073_709_551_000,
+                numfmt_parse_unit_size("18446744073709551K").unwrap()
+            );
             assert!(numfmt_parse_unit_size("0K").is_err());
+            assert!(numfmt_parse_unit_size("18446744073709551615K").is_err());
+            assert!(numfmt_parse_unit_size("18014398509481984Ki").is_err());
         }
 
         #[test]

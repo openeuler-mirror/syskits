@@ -154,6 +154,7 @@ impl HashsumFlags {
         let is_strict = matches.get_flag(hashsum_flags::STRICT);
         let is_warn_explicit = matches.get_flag(hashsum_flags::WARN);
         let is_ignore_missing = matches.get_flag(hashsum_flags::IGNORE_MISSING);
+        let is_zero = matches.get_flag(hashsum_flags::ZERO);
 
         if !is_check {
             for (is_present, option_name) in [
@@ -174,12 +175,18 @@ impl HashsumFlags {
             }
         }
 
+        if is_check && is_zero {
+            return Err(CTsageError::new(
+                1,
+                "the --zero option is not supported when verifying checksums",
+            ));
+        }
+
         let is_status = is_status_explicit;
         // quiet 模式在明确指定或 status 模式下激活
         let is_quiet = is_quiet_explicit || is_status;
         // status 模式下禁用警告
         let is_warn = is_warn_explicit && !is_status;
-        let is_zero = matches.get_flag(hashsum_flags::ZERO);
 
         Ok(Self {
             algoname,

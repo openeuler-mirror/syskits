@@ -175,6 +175,35 @@ mod native_semantic_tests {
     }
 
     #[test]
+    fn numfmt_native_semantic_rejects_bare_negative_operand_as_option() {
+        let args = ["numfmt", "-12.5"];
+
+        let error = match numfmt_native_semantic(args.iter().map(OsString::from)) {
+            Ok(_) => panic!("bare negative operand should be parsed as an invalid option"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code(), 1);
+        assert_eq!(
+            error.to_string(),
+            "invalid option -- '1'\nTry 'numfmt --help' for more information."
+        );
+    }
+
+    #[test]
+    fn numfmt_native_semantic_accepts_negative_operand_after_double_dash() {
+        let args = ["numfmt", "--", "-12.5"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.stderr_text, "");
+        assert_eq!(semantic.classic_text, "-12.5\n");
+        assert_eq!(semantic.rows.len(), 1);
+        assert_eq!(semantic.rows[0].output, "-12.5");
+    }
+
+    #[test]
     fn numfmt_native_semantic_warn_mode_keeps_passthrough_rows() {
         let args = ["numfmt", "--invalid=warn", "hello"];
 
@@ -871,15 +900,37 @@ fn parse_round(arg_matches: &ArgMatches) -> NumfmtRoundMethod {
     }
 }
 
+fn numfmt_unknown_argument_message(args: &[OsString]) -> String {
+    let unknown = args
+        .iter()
+        .skip(1)
+        .filter_map(|arg| arg.to_str())
+        .find(|arg| arg.starts_with('-') && *arg != "-");
+
+    match unknown {
+        Some(arg) if arg.starts_with("--") => {
+            format!(
+                "unrecognized option '{}'\nTry 'numfmt --help' for more information.",
+                arg
+            )
+        }
+        Some(arg) => {
+            let option = arg.trim_start_matches('-').chars().next().unwrap_or('-');
+            format!("invalid option -- '{option}'\nTry 'numfmt --help' for more information.")
+        }
+        None => "unrecognized option\nTry 'numfmt --help' for more information.".to_string(),
+    }
+}
+
 pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let normalized_args = normalize_numfmt_args(args);
-    let matches = match ct_app().try_get_matches_from(normalized_args) {
+    let matches = match ct_app().try_get_matches_from(normalized_args.clone()) {
         Ok(matches) => matches,
         Err(err) if err.kind() == ErrorKind::UnknownArgument => {
             return Err(Box::new(NumfmtError::NumfmtIllegalArgument(
-                "unrecognized option\nTry 'numfmt --help' for more information.".to_string(),
+                numfmt_unknown_argument_message(&normalized_args),
             )));
         }
         Err(err) => return Err(err.into()),
@@ -927,11 +978,11 @@ pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemanti
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let normalized_args = normalize_numfmt_args(args);
-    let matches = match ct_app().try_get_matches_from(normalized_args) {
+    let matches = match ct_app().try_get_matches_from(normalized_args.clone()) {
         Ok(matches) => matches,
         Err(err) if err.kind() == ErrorKind::UnknownArgument => {
             return Err(Box::new(NumfmtError::NumfmtIllegalArgument(
-                "unrecognized option\nTry 'numfmt --help' for more information.".to_string(),
+                numfmt_unknown_argument_message(&normalized_args),
             )));
         }
         Err(err) => return Err(err.into()),
@@ -997,6 +1048,7 @@ pub fn ct_app() -> Command {
             .short('d')
             .long(numfmt_flags::NUMFMT_DELIMITER)
             .value_name("X")
+            .allow_hyphen_values(true)
             .help(t!("numfmt.clap.numfmt_delimiter")),
         Arg::new(numfmt_flags::NUMFMT_FIELD)
             .long(numfmt_flags::NUMFMT_FIELD)
@@ -1017,22 +1069,26 @@ pub fn ct_app() -> Command {
             .long(numfmt_flags::NUMFMT_FROM)
             .help(t!("numfmt.clap.numfmt_from"))
             .value_name("UNIT")
+            .allow_hyphen_values(true)
             .default_value(numfmt_flags::NUMFMT_FROM_DEFAULT),
         Arg::new(numfmt_flags::NUMFMT_FROM_UNIT)
             .long(numfmt_flags::NUMFMT_FROM_UNIT)
             .help(t!("numfmt.clap.numfmt_from_unit"))
             .value_name("N")
+            .allow_hyphen_values(true)
             .default_value(numfmt_flags::NUMFMT_FROM_UNIT_DEFAULT),
         Arg::new(numfmt_flags::NUMFMT_TO)
             .long(numfmt_flags::NUMFMT_TO)
             .help(t!("numfmt.clap.numfmt_to"))
             .value_name("UNIT")
+            .allow_hyphen_values(true)
             .default_value(numfmt_flags::NUMFMT_TO_DEFAULT)
             .overrides_with(numfmt_flags::NUMFMT_TO),
         Arg::new(numfmt_flags::NUMFMT_TO_UNIT)
             .long(numfmt_flags::NUMFMT_TO_UNIT)
             .help(t!("numfmt.clap.numfmt_to_unit"))
             .value_name("N")
+            .allow_hyphen_values(true)
             .default_value(numfmt_flags::NUMFMT_TO_UNIT_DEFAULT),
         Arg::new(numfmt_flags::NUMFMT_PADDING)
             .long(numfmt_flags::NUMFMT_PADDING)
@@ -1042,6 +1098,7 @@ pub fn ct_app() -> Command {
                      ignored if the output is wider than N; the default is \
                      to automatically pad if a whitespace is found",
             )
+            .allow_hyphen_values(true)
             .value_name("N"),
         Arg::new(numfmt_flags::NUMFMT_HEADER)
             .long(numfmt_flags::NUMFMT_HEADER)
@@ -1061,6 +1118,7 @@ pub fn ct_app() -> Command {
             .long(numfmt_flags::NUMFMT_ROUND)
             .help(t!("numfmt.clap.numfmt_round"))
             .value_name("METHOD")
+            .allow_hyphen_values(true)
             .default_value("from-zero")
             .value_parser(["up", "down", "from-zero", "towards-zero", "nearest"])
             .overrides_with(numfmt_flags::NUMFMT_ROUND),
@@ -1070,11 +1128,13 @@ pub fn ct_app() -> Command {
                 "print SUFFIX after each formatted number, and accept \
                     inputs optionally ending with SUFFIX",
             )
+            .allow_hyphen_values(true)
             .value_name("SUFFIX"),
         Arg::new(numfmt_flags::NUMFMT_INVALID)
             .long(numfmt_flags::NUMFMT_INVALID)
             .help(t!("numfmt.clap.numfmt_invalid"))
             .default_value("abort")
+            .allow_hyphen_values(true)
             .value_parser(["abort", "fail", "warn", "ignore"])
             .value_name("INVALID"),
         Arg::new(numfmt_flags::NUMFMT_ZERO_TERMINATED)
@@ -1091,7 +1151,6 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .about(application_info)
         .infer_long_args(true)
-        .allow_negative_numbers(true)
         .args(args)
         .after_help(t!("numfmt.after_help"))
 }
@@ -8227,12 +8286,13 @@ mod tests {
         fn test_parse_options_header_long_negitive_1() {
             let command = ct_app();
             let cmd_args = vec![ctcore::ct_util_name(), "--header", "-1"];
-            let result = command.try_get_matches_from(cmd_args).unwrap();
+            let result = command.try_get_matches_from(cmd_args);
 
-            let options = numfmt_parse_options(&result);
-            let expected_value = "invalid header value '-1'";
-            assert!(options.is_err());
-            assert_eq!(options.unwrap_err(), expected_value);
+            assert!(result.is_err());
+            assert_eq!(
+                result.unwrap_err().kind(),
+                clap::error::ErrorKind::UnknownArgument
+            );
         }
 
         #[test]
@@ -15952,10 +16012,10 @@ mod tests {
             let command = ct_app();
             let cmd_args = vec![ctcore::ct_util_name(), "--header", "-1"];
             let result = command.try_get_matches_from(cmd_args);
-            assert!(result.is_ok());
+            assert!(result.is_err());
             assert_eq!(
-                result.unwrap().get_one::<String>("header"),
-                Some(&"-1".to_string())
+                result.unwrap_err().kind(),
+                clap::error::ErrorKind::UnknownArgument
             );
         }
 

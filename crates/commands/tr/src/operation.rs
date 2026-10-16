@@ -197,8 +197,7 @@ impl Sequence {
                     .chain(33..=47)
                     .chain(58..=64)
                     .chain(91..=96)
-                    .chain(123..=126)
-                    .chain(std::iter::once(32)), // space
+                    .chain(123..=126),
             ),
             Self::Lower => Box::new(b'a'..=b'z'),
             Self::Print => Box::new(
@@ -209,7 +208,8 @@ impl Sequence {
                     .chain(33..=47)
                     .chain(58..=64)
                     .chain(91..=96)
-                    .chain(123..=126),
+                    .chain(123..=126)
+                    .chain(std::iter::once(32)), // space
             ),
             Self::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
             Self::Space => Box::new(unicodes::SPACES.iter().cloned()),

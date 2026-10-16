@@ -231,6 +231,17 @@ fn numfmt_parse_implicit_precision(s: &str) -> usize {
     }
 }
 
+fn numfmt_parse_input_precision(s: &str) -> Result<usize> {
+    let parsed = numfmt_parse_number_parts(s)?;
+
+    // GNU resets the input precision only when it consumes a scale suffix.
+    Ok(if parsed.suffix.is_some() {
+        0
+    } else {
+        numfmt_parse_implicit_precision(parsed.number)
+    })
+}
+
 fn numfmt_remove_suffix(i: f64, s: Option<NumfmtSuffix>, u: &NumfmtUnit) -> Result<f64> {
     match (s, u) {
         (Some((raw_suffix, false)), &NumfmtUnit::Auto)
@@ -280,13 +291,10 @@ fn numfmt_transform_from(s: &str, numfmt_opts: &NumfmtTransformOptions) -> Resul
     let i = i * (numfmt_opts.from_unit as f64);
 
     numfmt_remove_suffix(i, suffix, &numfmt_opts.from).map(|number| {
-        // 如果用户没有提供 --from 参数，GNU numfmt 不会对数值进行四舍五入。
-        if numfmt_opts.from == NumfmtUnit::None {
-            if number == -0.0 { 0.0 } else { number }
-        } else if number < 0.0 {
-            -number.abs().ceil()
+        if numfmt_opts.from == NumfmtUnit::None && number == -0.0 {
+            0.0
         } else {
-            number.ceil()
+            number
         }
     })
 }
@@ -648,10 +656,8 @@ fn numfmt_format_string(
 
     let precision = if let Some(p) = numfmt_configs.format.precision {
         p
-    } else if numfmt_configs.transform.from == NumfmtUnit::None
-        && numfmt_configs.transform.to == NumfmtUnit::None
-    {
-        numfmt_parse_implicit_precision(source_without_suffix)
+    } else if numfmt_configs.transform.to == NumfmtUnit::None {
+        numfmt_parse_input_precision(source_without_suffix)?
     } else {
         0
     };
@@ -1349,6 +1355,19 @@ mod tests {
                 to_unit: 1,
             };
             assert_eq!(numfmt_transform_from("100K", &opts).unwrap(), 100000.0);
+        }
+
+        #[test]
+        fn test_from_scaling_does_not_round() {
+            let opts = NumfmtTransformOptions {
+                from: NumfmtUnit::Si,
+                from_unit: 1,
+                to: NumfmtUnit::None,
+                to_unit: 1,
+            };
+
+            assert_eq!(numfmt_transform_from("1.1", &opts).unwrap(), 1.1);
+            assert_eq!(numfmt_transform_from("0.0001K", &opts).unwrap(), 0.1);
         }
 
         #[test]

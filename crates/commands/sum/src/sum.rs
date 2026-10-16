@@ -23,7 +23,6 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
-use ctcore::ct_show;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, Read, Write};
@@ -89,6 +88,11 @@ fn sum_sysv(mut r: Box<dyn Read>) -> io::Result<(usize, u16)> {
 
 fn sum_read_error(name: &OsStr, error: io::Error) -> Box<dyn CTError> {
     error.map_err_context(|| name.maybe_quote().to_string())
+}
+
+fn sum_show_error(error: &dyn CTError) {
+    ctcore::ct_error::set_ct_exit_code(error.code());
+    let _ = writeln!(io::stderr(), "{}: {}", ctcore::ct_util_name(), error);
 }
 
 fn sum_open(name: impl AsRef<OsStr>) -> CTResult<Box<dyn Read>> {
@@ -322,7 +326,7 @@ fn sum_main_with_writer(args: impl ctcore::Args, stdout: &mut impl Write) -> CTR
         let reader = match sum_open(file) {
             Ok(f) => f,
             Err(error) => {
-                ct_show!(error);
+                sum_show_error(error.as_ref());
                 continue;
             }
         };
@@ -333,7 +337,8 @@ fn sum_main_with_writer(args: impl ctcore::Args, stdout: &mut impl Write) -> CTR
         let (blocks, sum) = match result {
             Ok(result) => result,
             Err(error) => {
-                ct_show!(sum_read_error(file.as_os_str(), error));
+                let error = sum_read_error(file.as_os_str(), error);
+                sum_show_error(error.as_ref());
                 continue;
             }
         };

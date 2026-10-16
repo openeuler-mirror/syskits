@@ -1,3 +1,7 @@
+#[cfg(target_os = "linux")]
+use std::fs::File;
+#[cfg(target_os = "linux")]
+use std::process::Stdio;
 use std::process::{Command, Output};
 
 fn run_gnu(args: &[&str], posixly_correct: Option<&str>) -> Output {
@@ -45,4 +49,35 @@ fn sum_without_posixly_correct_still_permutes_options() {
     assert_eq!(syskits.status.code(), gnu.status.code());
     assert_eq!(syskits.stdout, gnu.stdout);
     assert_eq!(syskits.stderr, gnu.stderr);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn sum_missing_file_with_full_stderr_exits_failure_without_panicking() {
+    let missing = "/__syskits_sum_missing_stderr_compat__";
+    let gnu_stderr = File::options()
+        .write(true)
+        .open("/dev/full")
+        .expect("open /dev/full for GNU sum");
+    let syskits_stderr = File::options()
+        .write(true)
+        .open("/dev/full")
+        .expect("open /dev/full for syskits sum");
+
+    let gnu = Command::new("/usr/bin/sum")
+        .arg(missing)
+        .env("LC_ALL", "C")
+        .stderr(Stdio::from(gnu_stderr))
+        .status()
+        .expect("run GNU sum");
+    let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .arg("sum")
+        .arg(missing)
+        .env("LC_ALL", "C")
+        .stderr(Stdio::from(syskits_stderr))
+        .status()
+        .expect("run syskits sum");
+
+    assert_eq!(gnu.code(), Some(1));
+    assert_eq!(syskits.code(), gnu.code());
 }

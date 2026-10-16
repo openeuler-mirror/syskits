@@ -296,7 +296,8 @@
       "args": ["-p", "a", "b"],
       "setup_commands": [
         "printf 'test\n' > a",
-        "touch -t 202001010101.01 a"
+        "touch -a -d '2000-01-01 UTC' a",
+        "touch -m -d '2020-01-01 UTC' a"
       ],
       "expectation": {
         "execution": {
@@ -306,7 +307,11 @@
         },
         "verifications": [
           {
-            "command": "test \"$(stat -c %Y a)\" = \"$(stat -c %Y b)\"",
+            "command": "test \"$(stat -c %X b)\" = \"946684800\"",
+            "expected_exit": 0
+          },
+          {
+            "command": "test \"$(stat -c %Y b)\" = \"1577836800\"",
             "expected_exit": 0
           }
         ]

@@ -2033,16 +2033,20 @@ pub(crate) fn copy_attributes_with_deref(
     })?;
 
     cp_handle_preserve(&attr.timestamps, || -> CopyResult<()> {
-        let atime = FileTime::from_last_access_time(&sour_metadata);
-        let mtime = FileTime::from_last_modification_time(&sour_metadata);
-        if dest_path.is_symlink() {
-            filetime::set_symlink_file_times(dest_path, atime, mtime)?;
-        } else {
-            filetime::set_file_times(dest_path, atime, mtime)?;
-        }
-        Ok(())
+        preserve_timestamps_from_metadata(dest_path, &sour_metadata)
     })?;
 
+    Ok(())
+}
+
+fn preserve_timestamps_from_metadata(dest_path: &Path, sour_metadata: &Metadata) -> CopyResult<()> {
+    let atime = FileTime::from_last_access_time(sour_metadata);
+    let mtime = FileTime::from_last_modification_time(sour_metadata);
+    if dest_path.is_symlink() {
+        filetime::set_symlink_file_times(dest_path, atime, mtime)?;
+    } else {
+        filetime::set_file_times(dest_path, atime, mtime)?;
+    }
     Ok(())
 }
 
@@ -2387,7 +2391,7 @@ fn cp_handle_copy_mode(
     dest_path: &Path,
     cp_opts: &CpOptions,
     cp_str: &str,
-    sour_metadata: Metadata,
+    sour_metadata: &Metadata,
     symlinked_files: &mut HashSet<CtFileInformation>,
     source_in_command_line: bool,
 ) -> CopyResult<Option<CopyDebug>> {
@@ -2710,7 +2714,7 @@ fn copy_file(
         dest_path,
         cp_opts,
         &context,
-        source_metadata,
+        &source_metadata,
         symlinked_files,
         source_in_command_line,
     )?;
@@ -2755,6 +2759,9 @@ fn copy_file(
             }
         }
         return Err(e);
+    }
+    if matches!(cp_opts.attributes.timestamps, CpPreserve::Yes { .. }) {
+        preserve_timestamps_from_metadata(dest_path, &source_metadata)?;
     }
 
     copied_files.insert(

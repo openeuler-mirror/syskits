@@ -49,7 +49,7 @@ use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, Read, Seek, Write};
 #[cfg(unix)]
-use std::os::unix::prelude::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
@@ -571,10 +571,9 @@ fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
         ));
     }
 
-    let metadata = fs::metadata(path).map_err_context(String::new)?;
-    let size = settings.size.unwrap_or(metadata.len());
-
     // 执行擦除
+    let metadata = fs::metadata(path).map_err_context(String::new)?;
+    let size = shred_target_size(settings, &metadata);
     let mut file = shred_open_for_writing(path, &metadata, settings.force)?;
 
     shred_run_passes(&mut file, settings.path_str, settings, size, true)?;
@@ -589,6 +588,38 @@ fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
         )?;
     }
     Ok(())
+}
+
+fn shred_target_size(settings: &ShredSettings, metadata: &fs::Metadata) -> u64 {
+    let size = settings.size.unwrap_or(metadata.len());
+    if settings.size.is_none() && !settings.exact {
+        round_up_to_block_size(size, shred_file_system_block_size(metadata))
+    } else {
+        size
+    }
+}
+
+#[cfg(unix)]
+fn shred_file_system_block_size(metadata: &fs::Metadata) -> u64 {
+    metadata.blksize().max(1)
+}
+
+#[cfg(not(unix))]
+fn shred_file_system_block_size(_metadata: &fs::Metadata) -> u64 {
+    SHRED_BLOCK_SIZE as u64
+}
+
+fn round_up_to_block_size(size: u64, block_size: u64) -> u64 {
+    if size == 0 {
+        return 0;
+    }
+
+    let remainder = size % block_size;
+    if remainder == 0 {
+        size
+    } else {
+        size.saturating_add(block_size - remainder)
+    }
 }
 
 fn shred_open_for_writing(path: &Path, metadata: &fs::Metadata, force: bool) -> CTResult<File> {
@@ -806,17 +837,17 @@ fn stdout_file_type(mode: libc::mode_t) -> libc::mode_t {
 fn shred_do_pass(
     file: &mut File,
     pass_type: &PassType,
-    exact: bool,
+    _exact: bool,
     file_size: u64,
     random_source: Option<&str>,
 ) -> Result<(), io::Error> {
-    shred_do_pass_impl(file, pass_type, exact, file_size, random_source, true)
+    shred_do_pass_impl(file, pass_type, _exact, file_size, random_source, true)
 }
 
 fn shred_do_pass_impl(
     file: &mut File,
     pass_type: &PassType,
-    exact: bool,
+    _exact: bool,
     file_size: u64,
     random_source: Option<&str>,
     sync_data: bool,
@@ -835,8 +866,7 @@ fn shred_do_pass_impl(
     // 处理剩余字节
     let bytes_left = (file_size % SHRED_BLOCK_SIZE as u64) as usize;
     if bytes_left > 0 {
-        let size = if exact { bytes_left } else { SHRED_BLOCK_SIZE };
-        let block = writer.bytes_for_pass(size)?;
+        let block = writer.bytes_for_pass(bytes_left)?;
         file.write_all(block)?;
     }
 

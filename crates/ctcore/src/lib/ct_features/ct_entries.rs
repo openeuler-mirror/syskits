@@ -181,6 +181,27 @@ unsafe fn cstr2bytes(ptr: *const c_char) -> Option<Vec<u8>> {
 }
 
 impl CtPasswd {
+    /// Locate a passwd entry by user name only.
+    ///
+    /// Unlike `Locate<&str>`, this follows `getpwnam` semantics and does not
+    /// treat numeric strings as UIDs.
+    pub fn locate_name(name: &str) -> IOResult<Self> {
+        let _guard = PW_LOCK.lock();
+        // SAFETY: We hold PW_LOCK.
+        unsafe {
+            let cstring = CString::new(name).unwrap();
+            let data = getpwnam(cstring.as_ptr());
+            if !data.is_null() {
+                Ok(Self::from_raw(ptr::read(data as *const _)))
+            } else {
+                Err(IOError::new(
+                    ErrorKind::NotFound,
+                    format!("Not found: {}", name),
+                ))
+            }
+        }
+    }
+
     /// SAFETY: All the pointed-to strings must be valid and not change while
     /// the function runs. That means PW_LOCK must be held.
     unsafe fn from_raw(raw: passwd) -> Self {

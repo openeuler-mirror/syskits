@@ -8,6 +8,8 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+use std::ffi::CStr;
+
 use ctcore::ct_display::Quotable;
 
 use crate::flags::{NumfmtConfigs, NumfmtRoundMethod, NumfmtTransformOptions};
@@ -477,6 +479,12 @@ fn numfmt_finish_format_string(
     numfmt_configs: &NumfmtConfigs,
     implicit_padding: Option<isize>,
 ) -> String {
+    let number = if numfmt_configs.format.is_grouping {
+        numfmt_group_number_thousands(&number)
+    } else {
+        number
+    };
+
     let number_with_suffix = match &numfmt_configs.suffix {
         Some(suffix) => format!("{number}{suffix}"),
         None => number,
@@ -488,6 +496,143 @@ fn numfmt_finish_format_string(
         "{}{}{}",
         numfmt_configs.format.prefix, padded_number, numfmt_configs.format.suffix
     )
+}
+
+fn numfmt_group_number_thousands(number: &str) -> String {
+    let Some((sep, grouping)) = numfmt_locale_thousands_grouping() else {
+        return number.to_string();
+    };
+
+    numfmt_group_number_thousands_with(number, &sep, &grouping)
+}
+
+fn numfmt_group_number_thousands_with(number: &str, sep: &str, grouping: &[u8]) -> String {
+    if sep.is_empty() || grouping.is_empty() {
+        return number.to_string();
+    }
+
+    let (num_with_no_exp, exp) = match number.find(['e', 'E', 'p', 'P']) {
+        Some(idx) => (&number[..idx], &number[idx..]),
+        None => (number, ""),
+    };
+
+    let (sign, rest) = match num_with_no_exp.as_bytes().first().copied() {
+        Some(b'+') | Some(b'-') | Some(b' ') => (&num_with_no_exp[..1], &num_with_no_exp[1..]),
+        _ => ("", num_with_no_exp),
+    };
+
+    if rest.starts_with("0x") || rest.starts_with("0X") || rest.is_empty() {
+        return number.to_string();
+    }
+
+    let (int_part, frac_part) = match rest.find('.') {
+        Some(dot_idx) => (&rest[..dot_idx], &rest[dot_idx..]),
+        None => (rest, ""),
+    };
+
+    if int_part.len() <= 3 || !int_part.bytes().all(|c| c.is_ascii_digit()) {
+        return number.to_string();
+    }
+
+    let grouped = numfmt_apply_locale_grouping(int_part, sep, grouping);
+    if grouped == int_part {
+        return number.to_string();
+    }
+
+    let mut output =
+        String::with_capacity(sign.len() + grouped.len() + frac_part.len() + exp.len());
+    output.push_str(sign);
+    output.push_str(&grouped);
+    output.push_str(frac_part);
+    output.push_str(exp);
+    output
+}
+
+fn numfmt_locale_thousands_grouping() -> Option<(String, Vec<u8>)> {
+    unsafe {
+        let lc = ctcore::libc::localeconv();
+        if lc.is_null() {
+            return None;
+        }
+
+        let sep_ptr = (*lc).thousands_sep;
+        let grouping_ptr = (*lc).grouping;
+        if sep_ptr.is_null() || grouping_ptr.is_null() {
+            return None;
+        }
+
+        let sep = CStr::from_ptr(sep_ptr).to_bytes();
+        if sep.is_empty() {
+            return None;
+        }
+
+        let mut grouping = Vec::new();
+        for idx in 0..16 {
+            let g = *grouping_ptr.add(idx) as u8;
+            if g == 0 {
+                if grouping.is_empty() {
+                    return None;
+                }
+                grouping.push(0);
+                break;
+            }
+
+            if g == u8::MAX || g == 127 {
+                break;
+            }
+
+            grouping.push(g);
+        }
+
+        if grouping.is_empty() {
+            return None;
+        }
+
+        Some((String::from_utf8_lossy(sep).into_owned(), grouping))
+    }
+}
+
+fn numfmt_apply_locale_grouping(int_part: &str, sep: &str, grouping: &[u8]) -> String {
+    let mut groups = Vec::new();
+    let mut end = int_part.len();
+    let mut grouping_idx = 0usize;
+    let mut last_size = 0usize;
+    let mut repeat_last = false;
+
+    while end > 0 {
+        let size = if repeat_last {
+            last_size
+        } else if let Some(&g) = grouping.get(grouping_idx) {
+            if g == 0 {
+                repeat_last = true;
+                last_size
+            } else {
+                let new_size = g as usize;
+                last_size = new_size;
+                if grouping_idx + 1 < grouping.len() {
+                    grouping_idx += 1;
+                }
+                new_size
+            }
+        } else {
+            last_size
+        };
+
+        if size == 0 {
+            break;
+        }
+
+        let start = end.saturating_sub(size);
+        groups.push(&int_part[start..end]);
+        end = start;
+    }
+
+    if groups.is_empty() || end > 0 {
+        groups.push(&int_part[..end]);
+    }
+
+    groups.reverse();
+    groups.join(sep)
 }
 
 fn numfmt_format_string(
@@ -866,6 +1011,30 @@ mod tests {
             invalid: NumfmtInvalidModes::Abort,
             zero_terminated: false,
         }
+    }
+
+    #[test]
+    fn test_numfmt_group_number_thousands_with_standard_grouping() {
+        assert_eq!(
+            numfmt_group_number_thousands_with("123456789", ",", &[3, 0]),
+            "123,456,789"
+        );
+        assert_eq!(
+            numfmt_group_number_thousands_with("-1234567.89", ",", &[3, 0]),
+            "-1,234,567.89"
+        );
+        assert_eq!(
+            numfmt_group_number_thousands_with("1234567e+08", ",", &[3, 0]),
+            "1,234,567e+08"
+        );
+    }
+
+    #[test]
+    fn test_numfmt_group_number_thousands_with_non_repeating_grouping() {
+        assert_eq!(
+            numfmt_group_number_thousands_with("123456789", ",", &[3, 2]),
+            "12,34,56,789"
+        );
     }
 
     #[cfg(test)]

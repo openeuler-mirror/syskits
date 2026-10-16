@@ -711,8 +711,15 @@ fn has_conversion_option(matches: &ArgMatches, options: &NumfmtConfigs, grouping
         || matches.value_source(numfmt_flags::NUMFMT_DELIMITER) == Some(ValueSource::CommandLine)
 }
 
+fn init_numfmt_locale() -> bool {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    unsafe { !ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr()).is_null() }
+}
+
 fn is_c_locale() -> bool {
-    for key in ["LC_ALL", "LANG", "LANGUAGE"] {
+    for key in ["LC_ALL", "LC_NUMERIC", "LANG", "LANGUAGE"] {
         let Ok(v) = std::env::var(key) else {
             continue;
         };
@@ -726,7 +733,7 @@ fn is_c_locale() -> bool {
 
 fn numfmt_parse_options(arg_matches: &ArgMatches) -> Result<NumfmtConfigs> {
     let transform = parse_transform(arg_matches)?;
-    let format = parse_format(arg_matches)?;
+    let mut format = parse_format(arg_matches)?;
     let grouping = arg_matches.get_flag(numfmt_flags::NUMFMT_GROUPING);
 
     if grouping
@@ -737,6 +744,10 @@ fn numfmt_parse_options(arg_matches: &ArgMatches) -> Result<NumfmtConfigs> {
 
     if (grouping || format.is_grouping) && transform.to != NumfmtUnit::None {
         return Err("grouping cannot be combined with --to".to_string());
+    }
+
+    if grouping {
+        format.is_grouping = true;
     }
 
     Ok(NumfmtConfigs {
@@ -927,8 +938,7 @@ fn numfmt_unknown_argument_message(args: &[OsString]) -> String {
 }
 
 pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    let locale_ok = init_numfmt_locale();
     let normalized_args = normalize_numfmt_args(args);
     let matches = match ct_app().try_get_matches_from(normalized_args.clone()) {
         Ok(matches) => matches,
@@ -949,6 +959,10 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
 
     if debug && has_command_line_numbers && options.header > 0 {
         ct_show_error!("--header ignored with command-line input");
+    }
+
+    if debug && !locale_ok {
+        ct_show_error!("failed to set locale");
     }
 
     if debug && !has_conversion_option(&matches, &options, grouping) {
@@ -980,8 +994,7 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemantic> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    let locale_ok = init_numfmt_locale();
     let normalized_args = normalize_numfmt_args(args);
     let matches = match ct_app().try_get_matches_from(normalized_args.clone()) {
         Ok(matches) => matches,
@@ -1011,6 +1024,12 @@ pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemanti
         semantic.stderr_text.push_str(&numfmt_prefixed_stderr(
             "--header ignored with command-line input",
         ));
+    }
+
+    if debug && !locale_ok {
+        semantic
+            .stderr_text
+            .push_str(&numfmt_prefixed_stderr("failed to set locale"));
     }
 
     if debug && !has_conversion_option(&matches, &options, grouping) {
@@ -1186,8 +1205,8 @@ mod tests {
     // use super::*;
     use super::{
         CtRange, Numfmt, NumfmtConfigs, NumfmtFormatOptions, NumfmtInvalidModes, NumfmtRoundMethod,
-        NumfmtTransformOptions, NumfmtUnit, numfmt_handle_args, numfmt_handle_buffer,
-        numfmt_parse_unit_size, numfmt_parse_unit_size_suffix,
+        NumfmtTransformOptions, NumfmtUnit, ct_app, numfmt_handle_args, numfmt_handle_buffer,
+        numfmt_parse_options, numfmt_parse_unit_size, numfmt_parse_unit_size_suffix,
     };
     use ctcore::Tool;
     use ctcore::ct_error::get_ct_exit_code;
@@ -1236,6 +1255,17 @@ mod tests {
             invalid: NumfmtInvalidModes::Abort,
             zero_terminated: false,
         }
+    }
+
+    #[test]
+    fn test_parse_options_grouping_sets_format_grouping() {
+        let command = ct_app();
+
+        let cmd_args = vec![ctcore::ct_util_name(), "--grouping"];
+        let result = command.try_get_matches_from(cmd_args).unwrap();
+        let options = numfmt_parse_options(&result).unwrap();
+
+        assert!(options.format.is_grouping);
     }
 
     mod format_and_handle_validation_tests {

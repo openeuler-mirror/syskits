@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use ctcore::{
     ct_display::Quotable,
-    ct_entries::{CtPasswd, Locate, get_groups_gnu, gid2grp},
+    ct_entries::{CtPasswd, get_groups_gnu, gid2grp},
     ct_error::{CTError, CTResult},
 };
 use rust_i18n::t;
@@ -128,7 +128,7 @@ fn groups_collect_for_users(users: Vec<String>) -> CTResult<GroupsSemantic> {
         entries.push(GroupsEntry { user: None, groups });
     } else {
         for user in users {
-            match CtPasswd::locate(user.as_str()) {
+            match CtPasswd::locate_name(user.as_str()) {
                 Ok(passwd) => {
                     let groups = passwd
                         .belongs_to()
@@ -285,6 +285,26 @@ mod tests {
             assert!(!result.entries[0].groups.is_empty());
             assert!(result.entries[0].groups.iter().any(|group| group == "root"));
             assert_eq!(result.classic_text, format!("{}\n", result.entries[0]));
+        }
+
+        #[test]
+        fn test_groups_numeric_argument_is_username_not_uid() {
+            let root = ctcore::ct_entries::CtPasswd::locate_name("root").expect("root user");
+            let numeric_name = root.uid.to_string();
+            if ctcore::ct_entries::CtPasswd::locate_name(&numeric_name).is_ok() {
+                return;
+            }
+
+            let args = [ctcore::ct_util_name(), numeric_name.as_str()];
+            let result = groups_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+            assert_eq!(result.exit_code, 1);
+            assert!(result.entries.is_empty());
+            assert_eq!(
+                result.stderr_text,
+                format!("groups: '{}': no such user\n", numeric_name)
+            );
+            assert!(result.classic_text.is_empty());
         }
     }
 

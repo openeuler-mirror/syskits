@@ -123,6 +123,27 @@ fn input_files(matches: &ArgMatches) -> (Vec<String>, bool) {
     }
 }
 
+fn sum_is_sysv(matches: &ArgMatches) -> bool {
+    let has_bsd = matches.get_flag(sum_flags::SUM_BSD_COMPATIBLE);
+    let has_sysv = matches.get_flag(sum_flags::SUM_SYSTEM_V_COMPATIBLE);
+
+    match (has_bsd, has_sysv) {
+        (true, false) => return false,
+        (false, true) => return true,
+        (false, false) => return false,
+        (true, true) => {}
+    }
+
+    let bsd_index = matches
+        .indices_of(sum_flags::SUM_BSD_COMPATIBLE)
+        .and_then(|mut indices| indices.next_back());
+    let sysv_index = matches
+        .indices_of(sum_flags::SUM_SYSTEM_V_COMPATIBLE)
+        .and_then(|mut indices| indices.next_back());
+
+    matches!((bsd_index, sysv_index), (Some(bsd), Some(sysv)) if sysv > bsd)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SumRow {
     pub algorithm: String,
@@ -158,7 +179,7 @@ pub fn sum_native_semantic(args: impl ctcore::Args) -> CTResult<SumSemantic> {
     let matches = ct_app().try_get_matches_from(args)?;
     let (files, is_print_names) = input_files(&matches);
 
-    let is_sysv = matches.get_flag(sum_flags::SUM_SYSTEM_V_COMPATIBLE);
+    let is_sysv = sum_is_sysv(&matches);
     let algorithm = if is_sysv { "sysv" } else { "bsd" }.to_string();
 
     let mut rows = Vec::new();
@@ -236,7 +257,7 @@ pub fn sum_main(args: impl ctcore::Args) -> CTResult<()> {
     let matches = ct_app().try_get_matches_from(args)?;
     let (files, is_print_names) = input_files(&matches);
 
-    let is_sysv = matches.get_flag(sum_flags::SUM_SYSTEM_V_COMPATIBLE);
+    let is_sysv = sum_is_sysv(&matches);
     let width = match is_sysv {
         true => 1,
         false => 5,
@@ -287,12 +308,14 @@ pub fn ct_app() -> Command {
         Arg::new(sum_flags::SUM_BSD_COMPATIBLE)
             .short('r')
             .help(t!("sum.clap.sum_bsd_compatible"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(sum_flags::SUM_BSD_COMPATIBLE),
         Arg::new(sum_flags::SUM_SYSTEM_V_COMPATIBLE)
             .short('s')
             .long(sum_flags::SUM_SYSTEM_V_COMPATIBLE)
             .help(t!("sum.clap.sum_system_v_compatible"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(sum_flags::SUM_SYSTEM_V_COMPATIBLE),
     ];
 
     Command::new(utility_name)
@@ -831,6 +854,14 @@ mod tests {
 
         use super::*;
 
+        fn parses_as_sysv(options: &[&str]) -> bool {
+            let args = std::iter::once(ctcore::ct_util_name())
+                .chain(options.iter().copied())
+                .collect::<Vec<_>>();
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            sum_is_sysv(&matches)
+        }
+
         // sum 接口: sum [OPTION]... [FILE]...
         //
         // Options:
@@ -937,6 +968,17 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--sysv", filename];
             let result = command.try_get_matches_from(args);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_last_algorithm_option_wins() {
+            assert!(!parses_as_sysv(&["-s", "-r"]));
+            assert!(parses_as_sysv(&["-r", "-s"]));
+            assert!(!parses_as_sysv(&["-sr"]));
+            assert!(parses_as_sysv(&["-rs"]));
+            assert!(!parses_as_sysv(&["--sysv", "-r"]));
+            assert!(parses_as_sysv(&["-r", "--sysv"]));
+            assert!(!parses_as_sysv(&["-s", "-s", "-r", "-r"]));
         }
     }
 

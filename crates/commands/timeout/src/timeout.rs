@@ -123,7 +123,10 @@ struct TimeoutFlags {
 impl TimeoutFlags {
     // 根据提供的命令行参数创建一个新的CTimeout实例
     fn new(timeout_flags: &clap::ArgMatches) -> CTResult<Self> {
-        let signal = match timeout_flags.get_one::<String>(timeout_flags::TIMEOUT_SIGNAL) {
+        let signal = match timeout_flags
+            .get_many::<String>(timeout_flags::TIMEOUT_SIGNAL)
+            .and_then(|signals| signals.last())
+        {
             Some(signal_) => {
                 let signal_result = get_ct_signal_by_name_or_value(signal_);
                 match signal_result {
@@ -235,6 +238,7 @@ pub fn ct_app() -> Command {
             .short('s')
             .long(timeout_flags::TIMEOUT_SIGNAL)
             .value_name("SIGNAL")
+            .action(ArgAction::Append)
             .help(
                 "specify the signal to be sent on timeout; SIGNAL may be a name like \
                 'HUP' or a number; see 'kill -l' for a list of signals",
@@ -611,6 +615,24 @@ mod tests {
             assert_eq!(
                 flags.signal,
                 get_ct_signal_by_name_or_value("KILL").unwrap()
+            );
+        }
+
+        #[test]
+        fn test_flags_repeated_signal_uses_last_value() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-s",
+                "HUP",
+                "--signal=TERM",
+                "5s",
+                "yes",
+            ];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = TimeoutFlags::new(&matches).unwrap();
+            assert_eq!(
+                flags.signal,
+                get_ct_signal_by_name_or_value("TERM").unwrap()
             );
         }
 

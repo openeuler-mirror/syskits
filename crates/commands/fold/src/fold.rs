@@ -91,7 +91,7 @@ extern crate rust_i18n;
 use clap::error::ErrorKind;
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, FromIo, set_ct_exit_code};
+use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use rust_i18n::t;
 use std::ffi::OsString;
 use std::fs::File;
@@ -374,25 +374,55 @@ pub fn fold_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<
         }
     };
 
-    let flags = fold_flags_from_matches(&matches, obs_width);
+    let flags = fold_flags_from_matches(&matches, obs_width)?;
     fold(writer, &flags)
 }
 
-fn fold_flags_from_matches(matches: &clap::ArgMatches, obs_width: Option<String>) -> FoldFlags {
-    FoldFlags {
+fn fold_flags_from_matches(
+    matches: &clap::ArgMatches,
+    obs_width: Option<String>,
+) -> CTResult<FoldFlags> {
+    let width_arg = match matches.get_one::<String>(fold_flags::FOLD_WIDTH) {
+        Some(v) => Some(v.as_str()),
+        None => obs_width.as_deref(),
+    };
+    let width = parse_fold_width(width_arg)?;
+
+    Ok(FoldFlags {
         bytes: matches.get_flag(fold_flags::FOLD_BYTES),
         characters: matches.get_flag(fold_flags::FOLD_CHARACTERS),
         spaces: matches.get_flag(fold_flags::FOLD_SPACES),
-        width: match matches.get_one::<String>(fold_flags::FOLD_WIDTH) {
-            Some(v) => Some(v.clone()),
-            None => obs_width,
-        }
-        .and_then(|inp_width| inp_width.parse::<usize>().ok())
-        .unwrap_or(80),
+        width,
         files: match matches.get_many::<String>(fold_flags::FOLD_FILE) {
             Some(v) => v.cloned().collect(),
             None => vec!["-".to_owned()],
         },
+    })
+}
+
+fn parse_fold_width(width: Option<&str>) -> CTResult<usize> {
+    let Some(width) = width else {
+        return Ok(80);
+    };
+
+    match width.parse::<usize>() {
+        Ok(0) => Err(CtSimpleError::new(
+            1,
+            format!("invalid number of columns: '{width}': Numerical result out of range"),
+        )),
+        Ok(width) => Ok(width),
+        Err(_) if !width.is_empty() && width.chars().all(|c| c.is_ascii_digit()) => {
+            Err(CtSimpleError::new(
+                1,
+                format!(
+                    "invalid number of columns: '{width}': Value too large for defined data type"
+                ),
+            ))
+        }
+        Err(_) => Err(CtSimpleError::new(
+            1,
+            format!("invalid number of columns: '{width}'"),
+        )),
     }
 }
 
@@ -567,7 +597,7 @@ pub fn fold_native_semantic(args: impl ctcore::Args) -> CTResult<FoldSemantic> {
         }
     };
 
-    let flags = fold_flags_from_matches(&matches, obs_width);
+    let flags = fold_flags_from_matches(&matches, obs_width)?;
     let mut classic_output = Vec::new();
     let outcome = fold_with_writer(&mut classic_output, &flags)?;
     let classic_text = String::from_utf8(classic_output).expect("fold output should be utf-8");

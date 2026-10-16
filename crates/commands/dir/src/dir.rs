@@ -74,6 +74,13 @@ fn dir_default_format_style(matches: &ArgMatches) -> bool {
 fn dir_config_from_matches(matches: &ArgMatches) -> CTResult<LsConfig> {
     let mut config = LsConfig::from(matches)?;
 
+    match &mut config.quoting_style {
+        CtQuotingStyle::Shell { show_control, .. } | CtQuotingStyle::Literal { show_control } => {
+            *show_control = !matches.get_flag(ls_flags::LS_HIDE_CONTROL_CHARS);
+        }
+        CtQuotingStyle::C { .. } => {}
+    }
+
     if dir_default_quoting_style(matches) {
         config.quoting_style = CtQuotingStyle::C {
             quotes: CtQuotes::None,
@@ -505,6 +512,36 @@ mod tests {
             config.quoting_style,
             CtQuotingStyle::C {
                 quotes: CtQuotes::None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_dir_shell_quoting_control_character_visibility() {
+        let matches = ct_app().get_matches_from(["dir", "--quoting-style=shell", "."]);
+        let config = dir_config_from_matches(&matches).expect("dir config");
+        assert_eq!(
+            config.quoting_style,
+            CtQuotingStyle::Shell {
+                escape: false,
+                always_quote: false,
+                show_control: true,
+            }
+        );
+
+        let matches = ct_app().get_matches_from([
+            "dir",
+            "--quoting-style=shell",
+            "--hide-control-chars",
+            ".",
+        ]);
+        let config = dir_config_from_matches(&matches).expect("dir config");
+        assert_eq!(
+            config.quoting_style,
+            CtQuotingStyle::Shell {
+                escape: false,
+                always_quote: false,
+                show_control: false,
             }
         );
     }

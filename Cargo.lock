@@ -2241,6 +2241,7 @@ dependencies = [
 name = "ct_numfmt"
 version = "3.3.8"
 dependencies = [
+ "bigdecimal",
  "clap",
  "ctcore",
  "rust-i18n",

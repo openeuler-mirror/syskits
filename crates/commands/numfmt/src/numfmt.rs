@@ -137,6 +137,18 @@ mod native_semantic_tests {
     }
 
     #[test]
+    fn numfmt_native_semantic_preserves_unscaled_decimal_rounding_boundary() {
+        let args = ["numfmt", "1.10", "1.11", "9.90"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.stderr_text, "");
+        assert_eq!(semantic.classic_text, "1.10\n1.11\n9.90\n");
+        assert_eq!(semantic.rows.len(), 3);
+    }
+
+    #[test]
     fn numfmt_native_semantic_uses_last_repeated_to_option() {
         let args = ["numfmt", "--to=si", "--to=iec", "2048"];
 

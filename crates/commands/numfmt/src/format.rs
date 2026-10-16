@@ -10,6 +10,7 @@
  */
 use std::ffi::CStr;
 
+use bigdecimal::{BigDecimal, RoundingMode};
 use ctcore::ct_display::Quotable;
 
 use crate::flags::{NumfmtConfigs, NumfmtRoundMethod, NumfmtTransformOptions};
@@ -482,6 +483,47 @@ fn numfmt_format_unscaled_integer_exact(
     Ok(numfmt_normalize_exact_integer(parsed.number))
 }
 
+fn numfmt_decimal_rounding_mode(method: NumfmtRoundMethod) -> RoundingMode {
+    match method {
+        NumfmtRoundMethod::Up => RoundingMode::Ceiling,
+        NumfmtRoundMethod::Down => RoundingMode::Floor,
+        NumfmtRoundMethod::FromZero => RoundingMode::Up,
+        NumfmtRoundMethod::TowardsZero => RoundingMode::Down,
+        NumfmtRoundMethod::Nearest => RoundingMode::HalfUp,
+    }
+}
+
+fn numfmt_format_unscaled_decimal_exact(
+    source: &str,
+    options: &NumfmtConfigs,
+    precision: usize,
+) -> Result<Option<String>> {
+    if options.transform.to != NumfmtUnit::None
+        || options.transform.from_unit != 1
+        || options.transform.to_unit != 1
+    {
+        return Ok(None);
+    }
+
+    let parsed = numfmt_parse_number_parts(source)?;
+    if parsed.suffix.is_some() || !parsed.number.contains('.') {
+        return Ok(None);
+    }
+
+    let precision = i64::try_from(precision)
+        .map_err(|_| "value/precision too large to be printed".to_string())?;
+    let number = parsed
+        .number
+        .parse::<BigDecimal>()
+        .map_err(|_| format!("invalid number: {}", source.quote()))?;
+
+    Ok(Some(
+        number
+            .with_scale_round(precision, numfmt_decimal_rounding_mode(options.round))
+            .to_plain_string(),
+    ))
+}
+
 fn numfmt_finish_format_string(
     number: String,
     numfmt_configs: &NumfmtConfigs,
@@ -664,6 +706,16 @@ fn numfmt_format_string(
 
     if let Some(number) =
         numfmt_format_unscaled_integer_exact(source_without_suffix, numfmt_configs, precision)?
+    {
+        return Ok(numfmt_finish_format_string(
+            number,
+            numfmt_configs,
+            implicit_padding,
+        ));
+    }
+
+    if let Some(number) =
+        numfmt_format_unscaled_decimal_exact(source_without_suffix, numfmt_configs, precision)?
     {
         return Ok(numfmt_finish_format_string(
             number,
@@ -1867,6 +1919,36 @@ mod tests {
     mod format_string_tests {
         use super::*;
         use crate::NumfmtFormatOptions;
+
+        #[test]
+        fn test_format_string_unscaled_decimal_rounding_methods() {
+            let mut config = setup_default_config();
+            config.transform.from = NumfmtUnit::None;
+            config.transform.to = NumfmtUnit::None;
+            config.format.precision = Some(1);
+
+            let cases = [
+                (NumfmtRoundMethod::Up, "1.11", "1.2"),
+                (NumfmtRoundMethod::Up, "-1.11", "-1.1"),
+                (NumfmtRoundMethod::Down, "1.19", "1.1"),
+                (NumfmtRoundMethod::Down, "-1.11", "-1.2"),
+                (NumfmtRoundMethod::FromZero, "1.11", "1.2"),
+                (NumfmtRoundMethod::FromZero, "-1.11", "-1.2"),
+                (NumfmtRoundMethod::TowardsZero, "1.19", "1.1"),
+                (NumfmtRoundMethod::TowardsZero, "-1.19", "-1.1"),
+                (NumfmtRoundMethod::Nearest, "1.15", "1.2"),
+                (NumfmtRoundMethod::Nearest, "-1.15", "-1.2"),
+            ];
+
+            for (round, input, expected) in cases {
+                config.round = round;
+                assert_eq!(
+                    numfmt_format_string(input, &config, None).unwrap(),
+                    expected
+                );
+            }
+        }
+
         #[test]
         fn test_format_string_basic() {
             let config = setup_default_config();

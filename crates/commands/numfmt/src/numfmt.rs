@@ -578,98 +578,53 @@ fn numfmt_collect_buffer_semantic<R>(
 where
     R: BufRead,
 {
-    if numfmt_configs.zero_terminated {
-        let mut input = input;
-        let mut bytes = Vec::new();
-        let mut index = 0usize;
-
-        loop {
-            bytes.clear();
-            let bytes_read = input
-                .read_until(0, &mut bytes)
-                .map_err(|err| NumfmtError::NumfmtIoError(err.to_string()))?;
-            if bytes_read == 0 {
-                break;
-            }
-
-            let has_line_ending = bytes.last() == Some(&0);
-            if has_line_ending {
-                bytes.pop();
-            }
-            let line = String::from_utf8_lossy(&bytes).to_string();
-
-            if index < numfmt_configs.header {
-                numfmt_push_row(
-                    semantic,
-                    numfmt_configs,
-                    index + 1,
-                    "stdin",
-                    &line,
-                    numfmt_passthrough_text(&line, true, has_line_ending),
-                    "header",
-                    None,
-                );
-            } else if !numfmt_process_semantic_line(
-                semantic,
-                numfmt_configs,
-                index + 1,
-                "stdin",
-                &line,
-                has_line_ending,
-                debug,
-            )? {
-                break;
-            }
-            index += 1;
-        }
+    let mut input = input;
+    let mut bytes = Vec::new();
+    let mut index = 0usize;
+    let line_delimiter = if numfmt_configs.zero_terminated {
+        0
     } else {
-        let mut input = input;
-        let mut line = String::new();
-        let mut index = 0usize;
+        b'\n'
+    };
 
-        loop {
-            line.clear();
-            let bytes = input
-                .read_line(&mut line)
-                .map_err(|err| NumfmtError::NumfmtIoError(err.to_string()))?;
-            if bytes == 0 {
-                break;
-            }
+    loop {
+        bytes.clear();
+        let bytes_read = input
+            .read_until(line_delimiter, &mut bytes)
+            .map_err(|err| NumfmtError::NumfmtIoError(err.to_string()))?;
+        if bytes_read == 0 {
+            break;
+        }
 
-            let has_newline = line.ends_with('\n');
-            if has_newline {
-                line.pop();
-            }
+        let has_line_ending = bytes.last() == Some(&line_delimiter);
+        if has_line_ending {
+            bytes.pop();
+        }
+        let line = String::from_utf8_lossy(numfmt_c_string_bytes(&bytes)).to_string();
 
-            if index < numfmt_configs.header {
-                let rendered = if has_newline {
-                    format!("{line}\n")
-                } else {
-                    line.clone()
-                };
-                numfmt_push_row(
-                    semantic,
-                    numfmt_configs,
-                    index + 1,
-                    "stdin",
-                    &line,
-                    rendered,
-                    "header",
-                    None,
-                );
-            } else if !numfmt_process_semantic_line(
+        if index < numfmt_configs.header {
+            numfmt_push_row(
                 semantic,
                 numfmt_configs,
                 index + 1,
                 "stdin",
                 &line,
-                has_newline,
-                debug,
-            )? {
-                break;
-            }
-            index += 1;
+                numfmt_passthrough_text(&line, numfmt_configs.zero_terminated, has_line_ending),
+                "header",
+                None,
+            );
+        } else if !numfmt_process_semantic_line(
+            semantic,
+            numfmt_configs,
+            index + 1,
+            "stdin",
+            &line,
+            has_line_ending,
+            debug,
+        )? {
+            break;
         }
+        index += 1;
     }
 
     Ok(())
@@ -686,77 +641,158 @@ fn numfmt_handle_args<'a>(
     Ok(())
 }
 
+fn numfmt_c_string_bytes(input: &[u8]) -> &[u8] {
+    input
+        .iter()
+        .position(|&byte| byte == 0)
+        .map_or(input, |end| &input[..end])
+}
+
+fn numfmt_quote_bytes(input: &[u8]) -> String {
+    let mut quoted = String::from("'");
+    for &byte in input {
+        match byte {
+            b'\x07' => quoted.push_str("\\a"),
+            b'\x08' => quoted.push_str("\\b"),
+            b'\t' => quoted.push_str("\\t"),
+            b'\n' => quoted.push_str("\\n"),
+            b'\x0b' => quoted.push_str("\\v"),
+            b'\x0c' => quoted.push_str("\\f"),
+            b'\r' => quoted.push_str("\\r"),
+            b'\\' => quoted.push_str("\\\\"),
+            b'\'' => quoted.push_str("\\'"),
+            b' '..=b'~' => quoted.push(char::from(byte)),
+            _ => quoted.push_str(&format!("\\{byte:03o}")),
+        }
+    }
+    quoted.push('\'');
+    quoted
+}
+
+fn numfmt_has_byte_numeric_prefix(input: &[u8]) -> bool {
+    let input = input.strip_prefix(b"-").unwrap_or(input);
+    input.first().is_some_and(u8::is_ascii_digit)
+        || input
+            .strip_prefix(b".")
+            .and_then(|rest| rest.first())
+            .is_some_and(u8::is_ascii_digit)
+}
+
+fn numfmt_invalid_bytes_message(input: &[u8]) -> String {
+    let input = &input[input
+        .iter()
+        .take_while(|&&byte| matches!(byte, b' ' | b'\t'))
+        .count()..];
+    let quoted = numfmt_quote_bytes(input);
+    if numfmt_has_byte_numeric_prefix(input) {
+        format!("invalid suffix in input: {quoted}")
+    } else {
+        format!("invalid number: {quoted}")
+    }
+}
+
+fn numfmt_write_record_bytes<W: Write>(
+    output: &mut W,
+    input: &[u8],
+    zero_terminated: bool,
+    has_line_ending: bool,
+) -> CTResult<()> {
+    output
+        .write_all(input)
+        .and_then(|()| {
+            if has_line_ending {
+                output.write_all(&[if zero_terminated { 0 } else { b'\n' }])
+            } else {
+                Ok(())
+            }
+        })
+        .map_err(|err| Box::new(NumfmtError::NumfmtIoError(err.to_string())) as _)
+}
+
+fn numfmt_handle_invalid_bytes<W: Write>(
+    output: &mut W,
+    input: &[u8],
+    numfmt_configs: &NumfmtConfigs,
+    has_line_ending: bool,
+) -> CTResult<()> {
+    let error_msg = numfmt_invalid_bytes_message(input);
+    match numfmt_configs.invalid {
+        NumfmtInvalidModes::Abort => {
+            return Err(Box::new(NumfmtError::NumfmtFormattingError(error_msg)));
+        }
+        NumfmtInvalidModes::Fail => {
+            ct_show!(NumfmtError::NumfmtFormattingError(error_msg));
+        }
+        NumfmtInvalidModes::Warn => {
+            ct_show_error!("{}", error_msg);
+        }
+        NumfmtInvalidModes::Ignore => {}
+    }
+
+    numfmt_write_record_bytes(
+        output,
+        input,
+        numfmt_configs.zero_terminated,
+        has_line_ending,
+    )
+}
+
 fn numfmt_handle_buffer<R>(input: R, numfmt_configs: &NumfmtConfigs, debug: bool) -> CTResult<()>
 where
     R: BufRead,
 {
-    if numfmt_configs.zero_terminated {
-        let mut input = input;
-        let mut bytes = Vec::new();
-        let mut idx = 0usize;
+    let mut input = input;
+    let mut bytes = Vec::new();
+    let mut idx = 0usize;
+    let line_delimiter = if numfmt_configs.zero_terminated {
+        0
+    } else {
+        b'\n'
+    };
 
-        loop {
-            bytes.clear();
-            let bytes_read = input
-                .read_until(0, &mut bytes)
-                .map_err(|err| NumfmtError::NumfmtIoError(err.to_string()))?;
-            if bytes_read == 0 {
-                break;
-            }
+    loop {
+        bytes.clear();
+        let bytes_read = input
+            .read_until(line_delimiter, &mut bytes)
+            .map_err(|err| NumfmtError::NumfmtIoError(err.to_string()))?;
+        if bytes_read == 0 {
+            break;
+        }
 
-            let has_line_ending = bytes.last() == Some(&0);
-            if has_line_ending {
-                bytes.pop();
-            }
-            let line = String::from_utf8_lossy(&bytes);
+        let has_line_ending = bytes.last() == Some(&line_delimiter);
+        if has_line_ending {
+            bytes.pop();
+        }
+        let record = numfmt_c_string_bytes(&bytes);
 
-            if idx < numfmt_configs.header {
-                print!("{}", numfmt_passthrough_text(&line, true, has_line_ending));
-            } else {
-                numfmt_format_and_handle_validation_with_line_ending(
-                    &line,
+        if idx < numfmt_configs.header {
+            let stdout = std::io::stdout();
+            numfmt_write_record_bytes(
+                &mut stdout.lock(),
+                record,
+                numfmt_configs.zero_terminated,
+                has_line_ending,
+            )?;
+        } else {
+            match std::str::from_utf8(record) {
+                Ok(line) => numfmt_format_and_handle_validation_with_line_ending(
+                    line,
                     numfmt_configs,
                     has_line_ending,
                     debug,
-                )?;
-            }
-            idx += 1;
-        }
-    } else {
-        let mut input = input;
-        let mut line = String::new();
-        let mut idx = 0usize;
-
-        loop {
-            line.clear();
-            let bytes = input
-                .read_line(&mut line)
-                .map_err(|err| NumfmtError::NumfmtIoError(err.to_string()))?;
-            if bytes == 0 {
-                break;
-            }
-
-            let has_newline = line.ends_with('\n');
-            if has_newline {
-                line.pop();
-            }
-
-            if idx < numfmt_configs.header {
-                if has_newline {
-                    println!("{line}");
-                } else {
-                    print!("{line}");
+                )?,
+                Err(_) => {
+                    let stdout = std::io::stdout();
+                    numfmt_handle_invalid_bytes(
+                        &mut stdout.lock(),
+                        record,
+                        numfmt_configs,
+                        has_line_ending,
+                    )?;
                 }
-            } else {
-                numfmt_format_and_handle_validation_with_line_ending(
-                    line.as_ref(),
-                    numfmt_configs,
-                    has_newline,
-                    debug,
-                )?;
             }
-            idx += 1;
         }
+        idx += 1;
     }
     Ok(())
 }
@@ -1429,7 +1465,8 @@ mod tests {
     use super::{
         CtRange, Numfmt, NumfmtConfigs, NumfmtFormatOptions, NumfmtInvalidModes, NumfmtRoundMethod,
         NumfmtTransformOptions, NumfmtUnit, ct_app, numfmt_handle_args, numfmt_handle_buffer,
-        numfmt_parse_options, numfmt_parse_unit_size, numfmt_parse_unit_size_suffix,
+        numfmt_handle_invalid_bytes, numfmt_parse_options, numfmt_parse_unit_size,
+        numfmt_parse_unit_size_suffix,
     };
     use ctcore::Tool;
     use ctcore::ct_error::get_ct_exit_code;
@@ -9622,6 +9659,33 @@ mod tests {
                 .expect_err("carriage return should remain part of the input field");
 
             assert_eq!(error.to_string(), "invalid suffix in input: '123\\r'");
+        }
+
+        #[test]
+        fn invalid_utf8_is_written_without_replacement() {
+            let mut options = get_valid_options();
+            options.invalid = NumfmtInvalidModes::Ignore;
+            options.zero_terminated = false;
+            let mut output = Vec::new();
+
+            numfmt_handle_invalid_bytes(&mut output, b"1\xff", &options, true).unwrap();
+            assert_eq!(output, b"1\xff\n");
+
+            options.zero_terminated = true;
+            output.clear();
+            numfmt_handle_invalid_bytes(&mut output, b"1\xff", &options, true).unwrap();
+            assert_eq!(output, b"1\xff\0");
+        }
+
+        #[test]
+        fn invalid_utf8_buffer_abort_uses_byte_escaped_diagnostic() {
+            let mut options = get_valid_options();
+            options.header = 0;
+
+            let error = numfmt_handle_buffer(BufReader::new(&b"1\xff\n"[..]), &options, false)
+                .expect_err("invalid UTF-8 should be rejected in abort mode");
+
+            assert_eq!(error.to_string(), "invalid suffix in input: '1\\377'");
         }
     }
 

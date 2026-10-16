@@ -500,7 +500,9 @@
       "command": "od",
       "description": "Address radix hexadecimal with -A x",
       "args": ["-A", "x", "-c"],
-      "setup_commands": ["echo 'test' > /tmp/test_od_addr_hex.txt"],
+      "setup_commands": [
+        "dd if=/dev/zero of=/tmp/test_od_addr_hex.txt bs=2048 count=1 status=none"
+      ],
       "expectation": {
         "execution": {
           "exit_code": 0,

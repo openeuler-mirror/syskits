@@ -100,6 +100,7 @@ use std::path::Path;
 use sys_locale::get_locale;
 
 const FOLD_TAB_WIDTH: usize = 8; // 制表符宽度
+const FOLD_MAX_WIDTH: usize = usize::MAX - FOLD_TAB_WIDTH - 1;
 const FOLD_READ_BUFFER_SIZE: usize = 8 * 1024;
 // GNU uses MB_LEN_MAX and falls back to 16 when the platform value is unusable.
 const FOLD_MB_LEN_MAX: usize = 16;
@@ -617,20 +618,22 @@ fn parse_fold_width(width: Option<&str>) -> CTResult<usize> {
     let Some(width) = width else {
         return Ok(80);
     };
+    let value_too_large = || {
+        CtSimpleError::new(
+            1,
+            format!("invalid number of columns: '{width}': Value too large for defined data type"),
+        )
+    };
 
     match width.parse::<usize>() {
         Ok(0) => Err(CtSimpleError::new(
             1,
             format!("invalid number of columns: '{width}': Numerical result out of range"),
         )),
-        Ok(width) => Ok(width),
+        Ok(width) if width <= FOLD_MAX_WIDTH => Ok(width),
+        Ok(_) => Err(value_too_large()),
         Err(_) if !width.is_empty() && width.chars().all(|c| c.is_ascii_digit()) => {
-            Err(CtSimpleError::new(
-                1,
-                format!(
-                    "invalid number of columns: '{width}': Value too large for defined data type"
-                ),
-            ))
+            Err(value_too_large())
         }
         Err(_) => Err(CtSimpleError::new(
             1,

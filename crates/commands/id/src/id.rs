@@ -293,6 +293,20 @@ fn id_row_classic_text(
     text
 }
 
+fn id_group_list_for_current_process(rgid: u32, egid: u32, groups: Vec<u32>) -> Vec<u32> {
+    let mut result = Vec::with_capacity(groups.len() + usize::from(rgid != egid) + 1);
+    result.push(rgid);
+    if egid != rgid {
+        result.push(egid);
+    }
+    result.extend(
+        groups
+            .into_iter()
+            .filter(|group| *group != rgid && *group != egid),
+    );
+    result
+}
+
 fn id_build_rows(
     users: &[String],
     state: &mut IdState,
@@ -333,6 +347,12 @@ fn id_build_rows(
         let egid = getegid();
         let groups = if let Some(passwd) = possible_pw.as_ref() {
             passwd.belongs_to()
+        } else if state.is_gsflag {
+            id_group_list_for_current_process(
+                getgid(),
+                egid,
+                ct_entries::get_groups_gnu(Some(egid)).unwrap_or_default(),
+            )
         } else {
             ct_entries::get_groups_gnu(Some(gid)).unwrap_or_default()
         };
@@ -481,6 +501,8 @@ fn id_handle_users<W: Write>(
             None
         };
 
+        let process_rgid = getgid();
+        let process_egid = getegid();
         let (uid, gid) = possible_pw.as_ref().map(|p| (p.uid, p.gid)).unwrap_or((
             if id_state.is_rflag {
                 getuid()
@@ -488,9 +510,9 @@ fn id_handle_users<W: Write>(
                 geteuid()
             },
             if id_state.is_rflag {
-                getgid()
+                process_rgid
             } else {
-                getegid()
+                process_egid
             },
         ));
 
@@ -498,7 +520,7 @@ fn id_handle_users<W: Write>(
             uid,
             gid,
             euid: geteuid(),
-            egid: getegid(),
+            egid: process_egid,
         });
 
         if id_state.is_gflag {
@@ -531,6 +553,12 @@ fn id_handle_users<W: Write>(
 
         let groups = if id_state.is_user_specified {
             possible_pw.as_ref().map(|p| p.belongs_to()).unwrap()
+        } else if id_state.is_gsflag {
+            id_group_list_for_current_process(
+                process_rgid,
+                process_egid,
+                ct_entries::get_groups_gnu(Some(process_egid)).unwrap(),
+            )
         } else {
             ct_entries::get_groups_gnu(Some(gid)).unwrap()
         };
@@ -767,6 +795,18 @@ mod tests {
         // 测试 execute 方法
         let args = vec![OsString::from("id")];
         assert!(tool.execute(&args).is_ok());
+    }
+
+    #[test]
+    fn test_group_list_for_current_process_includes_real_and_effective_gids() {
+        assert_eq!(
+            id_group_list_for_current_process(65534, 0, vec![0, 10, 20, 65534]),
+            vec![65534, 0, 10, 20]
+        );
+        assert_eq!(
+            id_group_list_for_current_process(1000, 1000, vec![1000, 10, 20]),
+            vec![1000, 10, 20]
+        );
     }
 
     #[cfg(test)]

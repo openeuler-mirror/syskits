@@ -166,6 +166,18 @@ fn fold_accepts_repeated_spaces_option() {
 }
 
 #[test]
+fn fold_reports_conflicting_count_modes() {
+    let output = run_fold_with_stdin(&["fold", "-b", "-c"], "C", b"");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"fold: only one way of folding may be specified\nTry 'fold --help' for more information.\n"
+    );
+}
+
+#[test]
 fn fold_uses_locale_encoding_like_gnu() {
     assert_fold_bytes(
         "C locale byte mode",

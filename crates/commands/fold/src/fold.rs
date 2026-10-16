@@ -103,6 +103,8 @@ const FOLD_TAB_WIDTH: usize = 8; // 制表符宽度
 const FOLD_READ_BUFFER_SIZE: usize = 8 * 1024;
 // GNU uses MB_LEN_MAX and falls back to 16 when the platform value is unusable.
 const FOLD_MB_LEN_MAX: usize = 16;
+const FOLD_MODE_CONFLICT_MESSAGE: &str =
+    "only one way of folding may be specified\nTry 'fold --help' for more information.";
 
 unsafe extern "C" {
     fn mbrtowc(
@@ -570,8 +572,7 @@ pub fn fold_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<
         Ok(m) => m,
         Err(e) => {
             if e.kind() == ErrorKind::ArgumentConflict {
-                set_ct_exit_code(2); // 检查是否是参数冲突错误，如果是则返回退出码2
-                return Ok(());
+                return Err(CtSimpleError::new(2, FOLD_MODE_CONFLICT_MESSAGE));
             }
             return Err(e.into());
         }
@@ -903,10 +904,7 @@ mod tests {
         use super::*;
         use std::ffi::OsString;
         use std::fs::File;
-        use std::sync::Mutex;
         use tempfile::tempdir;
-
-        static EXIT_CODE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
         #[test]
         fn test_ctmain_version() {
@@ -1168,50 +1166,24 @@ mod tests {
 
         #[test]
         fn test_ct_main_mutually_exclusive_b_c_exit_code() {
-            // 测试互斥选项-b和-c返回退出码2
-            use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
-            let _guard = EXIT_CODE_TEST_LOCK
-                .lock()
-                .expect("failed to lock exit code test mutex");
-
-            // 重置退出码
-            set_ct_exit_code(0);
-
             let mut writer = Vec::new();
             let args = [ctcore::ct_util_name(), "-b", "-c", "/etc/passwd"];
             let result = fold_main(&mut writer, args.iter().map(OsString::from));
 
-            // 应该返回Ok()，因为我们设置了exit_code并返回Ok
-            assert!(result.is_ok());
-            // 检查退出码应该是2
-            assert_eq!(get_ct_exit_code(), 2);
-
-            // 重置退出码
-            set_ct_exit_code(0);
+            let error = result.expect_err("-b and -c should conflict");
+            assert_eq!(error.code(), 2);
+            assert_eq!(error.to_string(), FOLD_MODE_CONFLICT_MESSAGE);
         }
 
         #[test]
         fn test_ct_main_mutually_exclusive_c_b_exit_code() {
-            // 测试互斥选项-c和-b返回退出码2（顺序相反）
-            use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
-            let _guard = EXIT_CODE_TEST_LOCK
-                .lock()
-                .expect("failed to lock exit code test mutex");
-
-            // 重置退出码
-            set_ct_exit_code(0);
-
             let mut writer = Vec::new();
             let args = [ctcore::ct_util_name(), "-c", "-b", "/etc/passwd"];
             let result = fold_main(&mut writer, args.iter().map(OsString::from));
 
-            // 应该返回Ok()，因为我们设置了exit_code并返回Ok
-            assert!(result.is_ok());
-            // 检查退出码应该是2
-            assert_eq!(get_ct_exit_code(), 2);
-
-            // 重置退出码
-            set_ct_exit_code(0);
+            let error = result.expect_err("-c and -b should conflict");
+            assert_eq!(error.code(), 2);
+            assert_eq!(error.to_string(), FOLD_MODE_CONFLICT_MESSAGE);
         }
 
         #[test]

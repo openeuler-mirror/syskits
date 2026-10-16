@@ -177,6 +177,17 @@ struct DuStat {
 }
 
 impl DuStat {
+    fn merge_time_from(&mut self, other: &Self) {
+        self.accessed = self.accessed.max(other.accessed);
+        self.modified = self.modified.max(other.modified);
+        self.created = match (self.created, other.created) {
+            (Some(current), Some(other)) => Some(current.max(other)),
+            (Some(current), None) => Some(current),
+            (None, Some(other)) => Some(other),
+            (None, None) => None,
+        };
+    }
+
     /**
      * 创建一个新的DuStat实例。
      *
@@ -462,6 +473,7 @@ fn du(
                                     state.size += this_stat.size;
                                     state.blocks += this_stat.blocks;
                                     state.inodes += this_stat.inodes;
+                                    state.merge_time_from(&this_stat);
                                 }
                                 // 发送统计结果
                                 du_print_tx.send(Ok(StatPrintInfo {
@@ -473,6 +485,7 @@ fn du(
                                 state.size += this_stat.size;
                                 state.blocks += this_stat.blocks;
                                 state.inodes += 1;
+                                state.merge_time_from(&this_stat);
                                 // 如果选项为统计所有文件，发送该文件的统计信息
                                 if du_opts.all {
                                     du_print_tx.send(Ok(StatPrintInfo {

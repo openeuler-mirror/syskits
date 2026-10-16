@@ -23,6 +23,7 @@ use crate::units::NumfmtUnit;
 use crate::units::Result;
 
 const NUMFMT_MAX_UNSCALED_DIGITS: usize = 18;
+const NUMFMT_MAX_ACCEPTABLE_DIGITS: usize = 33;
 
 /// 遍历一行的字段，其中每个字段都是一个连续的非空格序列。
 /// 非空格的连续序列，可选择以一个或多个前导空格字符作为前缀。
@@ -300,6 +301,75 @@ fn numfmt_transform_from(s: &str, numfmt_opts: &NumfmtTransformOptions) -> Resul
             number
         }
     })
+}
+
+fn numfmt_significant_digits(digits: &str) -> usize {
+    digits.trim_start_matches('0').len()
+}
+
+fn numfmt_number_may_lose_precision(number: &str) -> bool {
+    let unsigned = number.strip_prefix(['-', '+']).unwrap_or(number);
+    let (integer, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+    let integer_digits = numfmt_significant_digits(integer);
+    let fraction_digits = numfmt_significant_digits(fraction);
+
+    integer_digits <= NUMFMT_MAX_ACCEPTABLE_DIGITS
+        && fraction_digits <= NUMFMT_MAX_ACCEPTABLE_DIGITS
+        && (integer_digits > NUMFMT_MAX_UNSCALED_DIGITS
+            || fraction_digits > NUMFMT_MAX_UNSCALED_DIGITS)
+}
+
+fn numfmt_precision_loss_input(source: &str, options: &NumfmtConfigs) -> Option<String> {
+    let source_without_suffix = match &options.suffix {
+        Some(suffix) if source.len() > suffix.len() => {
+            source.strip_suffix(suffix).unwrap_or(source)
+        }
+        _ => source,
+    };
+    let input = source_without_suffix.trim_start();
+
+    // GNU only reports precision loss after the complete number, including its
+    // scale suffix, has been accepted by the input parser.
+    numfmt_transform_from(input, &options.transform).ok()?;
+    let parsed = numfmt_parse_number_parts(input).ok()?;
+
+    numfmt_number_may_lose_precision(parsed.number).then(|| input.to_string())
+}
+
+pub(crate) fn numfmt_precision_loss_inputs(
+    input_line: &str,
+    options: &NumfmtConfigs,
+) -> Vec<String> {
+    let mut inputs = Vec::new();
+    let mut check_field = |field: &str| {
+        if let Some(input) = numfmt_precision_loss_input(field, options) {
+            inputs.push(input);
+        }
+    };
+
+    if let Some(delimiter) = &options.delimiter {
+        if delimiter.is_empty() {
+            if ctcore::ct_ranges::contain(&options.fields, 1) {
+                check_field(input_line.trim_start());
+            }
+        } else {
+            for (index, field) in (1..).zip(input_line.split(delimiter)) {
+                if ctcore::ct_ranges::contain(&options.fields, index) {
+                    check_field(field.trim_start());
+                }
+            }
+        }
+    } else {
+        for (index, (_, field)) in (1..).zip(NumfmtWhitespaceSplitter {
+            s: Some(input_line),
+        }) {
+            if ctcore::ct_ranges::contain(&options.fields, index) {
+                check_field(field);
+            }
+        }
+    }
+
+    inputs
 }
 
 /// 用分子除以分母，四舍五入。
@@ -1304,6 +1374,25 @@ mod tests {
         fn test_multiple_decimal_points() {
             // 实际上这不是一个合法的浮点数表示，但测试可以用来看看函数怎样处理这种输入
             assert_eq!(numfmt_parse_implicit_precision("100.12.34"), 2);
+        }
+    }
+    #[cfg(test)]
+    mod precision_loss_tests {
+        use super::numfmt_number_may_lose_precision;
+
+        #[test]
+        fn detects_gnu_long_double_precision_boundary() {
+            assert!(!numfmt_number_may_lose_precision("999999999999999999"));
+            assert!(numfmt_number_may_lose_precision("1000000000000000000"));
+            assert!(numfmt_number_may_lose_precision("0001234567890123456789"));
+            assert!(!numfmt_number_may_lose_precision("0000000000000000000000"));
+            assert!(numfmt_number_may_lose_precision("0.1234567890123456789"));
+            assert!(!numfmt_number_may_lose_precision(
+                "123456789012345678.123456789012345678"
+            ));
+            assert!(!numfmt_number_may_lose_precision(
+                "1234567890123456789012345678901234"
+            ));
         }
     }
     #[cfg(test)]

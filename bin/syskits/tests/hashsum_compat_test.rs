@@ -71,6 +71,58 @@ fn sha256sum_zero_check_is_rejected() {
 }
 
 #[test]
+fn sha256sum_binary_text_mode_flags_follow_last_option() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let testfile = temp_dir.path().join("text.txt");
+    std::fs::write(&testfile, "alpha\nbeta\ngamma\n").expect("write testfile");
+
+    for flags in [
+        &["-b", "-t"][..],
+        &["-t", "-b"][..],
+        &["-b", "-b"][..],
+        &["-t", "-t"][..],
+        &["-b", "-t", "-b"][..],
+        &["-t", "-b", "-t"][..],
+    ] {
+        let gnu = Command::new("/usr/bin/sha256sum")
+            .env("LC_ALL", "C")
+            .args(flags)
+            .arg(&testfile)
+            .output()
+            .expect("run GNU sha256sum");
+        let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C")
+            .arg("sha256sum")
+            .args(flags)
+            .arg(&testfile)
+            .output()
+            .expect("run syskits sha256sum");
+
+        assert_eq!(
+            syskits.status.code(),
+            gnu.status.code(),
+            "flags: {flags:?}, GNU stderr: {}, syskits stderr: {}",
+            String::from_utf8_lossy(&gnu.stderr),
+            String::from_utf8_lossy(&syskits.stderr)
+        );
+        assert_eq!(
+            syskits.stdout,
+            gnu.stdout,
+            "flags: {flags:?}, GNU stdout: {}, syskits stdout: {}",
+            String::from_utf8_lossy(&gnu.stdout),
+            String::from_utf8_lossy(&syskits.stdout)
+        );
+        assert_eq!(
+            syskits.stderr,
+            gnu.stderr,
+            "flags: {flags:?}, GNU stderr: {}, syskits stderr: {}",
+            String::from_utf8_lossy(&gnu.stderr),
+            String::from_utf8_lossy(&syskits.stderr)
+        );
+    }
+}
+
+#[test]
 fn b2sum_check_missing_file_reports_only_unreadable_warning() {
     let temp_dir = TempDir::new().expect("tempdir");
     let missing = temp_dir.path().join("missing");

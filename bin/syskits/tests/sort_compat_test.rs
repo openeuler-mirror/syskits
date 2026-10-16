@@ -84,3 +84,35 @@ fn sort_buffer_size_accepts_percent_suffix() {
     assert_eq!(output.stdout, b"a\nb\n");
     assert_eq!(output.stderr, b"");
 }
+
+#[test]
+fn sort_random_source_matches_gnu_seeded_md5_order() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("data");
+    let random = temp_dir.path().join("random.bin");
+    fs::write(&input, b"a\nb\nc\nd\ne\nf\n").expect("write input");
+    fs::write(&random, vec![0_u8; 4096]).expect("write random source");
+    let random_source_arg = format!("--random-source={}", random.display());
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .args([
+            "sort",
+            "-R",
+            random_source_arg.as_str(),
+            input.to_str().expect("utf8 path"),
+        ])
+        .output()
+        .expect("run syskits sort -R --random-source");
+
+    assert!(
+        output.status.success(),
+        "stdout: {}, stderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"a\nb\nf\nd\ne\nc\n");
+    assert_eq!(output.stderr, b"");
+}

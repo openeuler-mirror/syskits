@@ -1410,6 +1410,36 @@
             "cleanup_commands": [
                 "rm -f f1 f2 f2~"
             ]
+        },
+        {
+            "command": "cp",
+            "description": "Default copy keeps source mode filtered by umask",
+            "args": [
+                "input.bin",
+                "output.bin"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%a' output.bin",
+                        "expected_exit": 0,
+                        "expected_stdout": "640\n"
+                    }
+                ]
+            },
+            "setup_commands": [
+                "printf 'source-data\\n' > input.bin",
+                "chmod 640 input.bin",
+                "umask 022"
+            ],
+            "cleanup_commands": [
+                "rm -f input.bin output.bin"
+            ]
         }
     ]
 }

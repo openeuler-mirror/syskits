@@ -212,3 +212,32 @@ fn pr_reads_file_with_non_utf8_name() {
     assert_eq!(output.stdout, b"raw\n");
     assert!(output.stderr.is_empty());
 }
+
+#[test]
+fn pr_form_feed_keeps_default_body_length() {
+    let input = (1..=57)
+        .map(|number| format!("{number}\n"))
+        .collect::<String>();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["pr", "-F", "-h", "H", "-D", ""])
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run syskits pr");
+
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(input.as_bytes())
+        .expect("write input");
+    let output = child.wait_with_output().expect("wait for syskits pr");
+    let first_page = output.stdout.split(|byte| *byte == b'\x0c').next().unwrap();
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(first_page.iter().filter(|byte| **byte == b'\n').count(), 61);
+    assert!(output.stderr.is_empty());
+}

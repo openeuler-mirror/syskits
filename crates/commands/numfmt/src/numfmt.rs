@@ -162,6 +162,19 @@ mod native_semantic_tests {
     }
 
     #[test]
+    fn numfmt_native_semantic_selects_suffix_after_rounding() {
+        let args = ["numfmt", "--to=si", "--round=down", "999.1"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.stderr_text, "");
+        assert_eq!(semantic.classic_text, "999\n");
+        assert_eq!(semantic.rows.len(), 1);
+        assert_eq!(semantic.rows[0].output, "999");
+    }
+
+    #[test]
     fn numfmt_native_semantic_uses_last_repeated_round_option() {
         let args = ["numfmt", "--round=up", "--round=down", "--to-unit=10", "15"];
 

@@ -366,34 +366,35 @@ fn numfmt_consider_suffix(
         NumfmtUnit::None => return Ok((n, None)),
     };
 
-    if n_abs <= bases[1] - 1.0 {
-        return Ok((n, None));
+    let mut power = 0usize;
+    while power + 1 < bases.len() && n_abs >= bases[power + 1] {
+        power += 1;
     }
 
-    let mut i = 1usize;
-    while i + 1 < bases.len() && n_abs >= bases[i + 1] {
-        i += 1;
-    }
-
-    if i > raw_suffixes.len() {
+    if power > raw_suffixes.len() {
         return Err("Number is too big and unsupported".to_string());
     }
 
-    let v = if precision > 0 {
-        numfmt_round_with_precision(n / bases[i], round_method, precision)
+    let mut v = if precision > 0 {
+        numfmt_round_with_precision(n / bases[power], round_method, precision)
     } else {
-        numfmt_div_round(n, bases[i], round_method)
+        numfmt_div_round(n, bases[power], round_method)
     };
 
-    // 检查四舍五入是否将我们推入下一个基数
+    // GNU chooses the initial power before rounding, then promotes only if
+    // rounding crosses the next unit boundary.
     if v.abs() >= bases[1] {
-        if i >= raw_suffixes.len() {
+        if power >= raw_suffixes.len() {
             return Err("Number is too big and unsupported".to_string());
         }
-        Ok((v / bases[1], Some((raw_suffixes[i], is_with_i))))
-    } else {
-        Ok((v, Some((raw_suffixes[i - 1], is_with_i))))
+        v /= bases[1];
+        power += 1;
     }
+
+    let suffix = power
+        .checked_sub(1)
+        .map(|index| (raw_suffixes[index], is_with_i));
+    Ok((v, suffix))
 }
 
 fn numfmt_transform_to(
@@ -1627,6 +1628,37 @@ mod tests {
             let edge_case =
                 numfmt_consider_suffix(999_999.999, &unit, NumfmtRoundMethod::Nearest, 0).unwrap();
             assert_eq!(edge_case, (1.0, Some((M, false))));
+        }
+
+        #[test]
+        fn test_first_suffix_selected_after_rounding() {
+            let si = setup_si_options();
+            assert_eq!(
+                numfmt_consider_suffix(999.1, &si, NumfmtRoundMethod::Down, 0).unwrap(),
+                (999.0, None)
+            );
+            assert_eq!(
+                numfmt_consider_suffix(999.1, &si, NumfmtRoundMethod::Nearest, 0).unwrap(),
+                (999.0, None)
+            );
+            assert_eq!(
+                numfmt_consider_suffix(999.1, &si, NumfmtRoundMethod::Up, 0).unwrap(),
+                (1.0, Some((K, false)))
+            );
+            assert_eq!(
+                numfmt_consider_suffix(-999.1, &si, NumfmtRoundMethod::Up, 0).unwrap(),
+                (-999.0, None)
+            );
+
+            let iec = setup_iec_options(false);
+            assert_eq!(
+                numfmt_consider_suffix(1023.1, &iec, NumfmtRoundMethod::Down, 0).unwrap(),
+                (1023.0, None)
+            );
+            assert_eq!(
+                numfmt_consider_suffix(1023.9, &iec, NumfmtRoundMethod::Nearest, 0).unwrap(),
+                (1.0, Some((K, false)))
+            );
         }
 
         #[test]

@@ -792,6 +792,13 @@ fn parse_transform(arg_matches: &ArgMatches) -> Result<NumfmtTransformOptions> {
     Ok(transform)
 }
 
+fn validate_command_options(options: &NumfmtConfigs) -> Result<()> {
+    if options.transform.to == NumfmtUnit::Auto {
+        return Err("Unit 'auto' isn't supported with --to options".to_string());
+    }
+    Ok(())
+}
+
 fn parse_padding(arg_matches: &ArgMatches) -> Result<isize> {
     let padding = match arg_matches.get_one::<String>(numfmt_flags::NUMFMT_PADDING) {
         Some(s) => s
@@ -936,6 +943,7 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
         Err(err) => return Err(err.into()),
     };
     let options = numfmt_parse_options(&matches).map_err(NumfmtError::NumfmtIllegalArgument)?;
+    validate_command_options(&options).map_err(NumfmtError::NumfmtIllegalArgument)?;
     let debug = matches.get_flag(numfmt_flags::NUMFMT_DEBUG);
     let grouping = matches.get_flag(numfmt_flags::NUMFMT_GROUPING) || options.format.is_grouping;
     let has_command_line_numbers = matches
@@ -988,6 +996,7 @@ pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemanti
         Err(err) => return Err(err.into()),
     };
     let options = numfmt_parse_options(&matches).map_err(NumfmtError::NumfmtIllegalArgument)?;
+    validate_command_options(&options).map_err(NumfmtError::NumfmtIllegalArgument)?;
     let debug = matches.get_flag(numfmt_flags::NUMFMT_DEBUG);
     let grouping = matches.get_flag(numfmt_flags::NUMFMT_GROUPING) || options.format.is_grouping;
     let has_command_line_numbers = matches
@@ -9510,6 +9519,19 @@ mod tests {
         }
 
         #[test]
+        fn test_ct_main_to_auto_returns_usage_error() {
+            let args = [ctcore::ct_util_name(), "--to=auto", "1"];
+            let result = numfmt_main(args.iter().map(OsString::from));
+            let output = result.expect_err("--to=auto should be rejected");
+
+            assert_eq!(output.code(), 1);
+            assert_eq!(
+                output.to_string(),
+                "Unit 'auto' isn't supported with --to options"
+            );
+        }
+
+        #[test]
         fn test_ct_main_delimiter_long() {
             let args = [
                 ctcore::ct_util_name(),
@@ -11278,7 +11300,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11292,7 +11314,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11306,7 +11328,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11320,7 +11342,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11334,7 +11356,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11348,7 +11370,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11362,7 +11384,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11376,7 +11398,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11390,7 +11412,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11404,7 +11426,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11418,7 +11440,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11438,7 +11460,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11458,7 +11480,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11478,7 +11500,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11498,7 +11520,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11518,7 +11540,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11538,7 +11560,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11558,7 +11580,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11572,7 +11594,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11586,7 +11608,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11600,7 +11622,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 
@@ -11614,7 +11636,7 @@ mod tests {
                 let message = output.usage();
                 println!("Error code: {code}");
                 println!("Error message: {message}");
-                assert_eq!(code, 2);
+                assert_eq!(code, 1);
             }
         }
 

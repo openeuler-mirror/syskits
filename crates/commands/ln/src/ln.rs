@@ -434,7 +434,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &LnSettings
 
 fn ln_target_is_dir(path: &Path, settings: &LnSettings) -> bool {
     if settings.is_no_dereference {
-        fs::symlink_metadata(path).map_or(false, |meta| meta.is_dir())
+        fs::symlink_metadata(path).is_ok_and(|meta| meta.is_dir())
     } else {
         path.is_dir()
     }

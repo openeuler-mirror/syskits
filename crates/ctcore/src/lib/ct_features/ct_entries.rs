@@ -196,7 +196,7 @@ impl CtPasswd {
             } else {
                 Err(IOError::new(
                     ErrorKind::NotFound,
-                    format!("Not found: {}", name),
+                    format!("Not found: {name}"),
                 ))
             }
         }

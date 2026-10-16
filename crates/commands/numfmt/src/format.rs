@@ -9,10 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 use std::borrow::Cow;
-use std::ffi::CStr;
+use std::ffi::{CStr, OsStr};
 
 use bigdecimal::{BigDecimal, RoundingMode};
-use ctcore::ct_display::Quotable;
+use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
 
 use crate::flags::{NumfmtConfigs, NumfmtRoundMethod, NumfmtTransformOptions};
 use crate::units::DisplayableSuffix;
@@ -25,6 +25,13 @@ use crate::units::Result;
 
 const NUMFMT_MAX_UNSCALED_DIGITS: usize = 18;
 const NUMFMT_MAX_ACCEPTABLE_DIGITS: usize = 33;
+const NUMFMT_DIAGNOSTIC_QUOTING_STYLE: &CtQuotingStyle = &CtQuotingStyle::C {
+    quotes: CtQuotes::Single,
+};
+
+fn numfmt_quote(text: &str) -> String {
+    escape_name(OsStr::new(text), NUMFMT_DIAGNOSTIC_QUOTING_STYLE)
+}
 
 fn numfmt_locale_decimal_point() -> String {
     unsafe {
@@ -42,9 +49,9 @@ fn numfmt_locale_decimal_point() -> String {
     }
 }
 
-/// 遍历一行的字段，其中每个字段都是一个连续的非空格序列。
-/// 非空格的连续序列，可选择以一个或多个前导空格字符作为前缀。
-/// 白字符。字段以 `(prefix, field)`的元组形式返回。
+/// 遍历一行的字段，其中每个字段都是一个连续的非分隔符序列，
+/// 可选择以一个或多个前导分隔符作为前缀。字段以 `(prefix, field)`
+/// 的元组形式返回。
 ///
 /// # Examples:
 ///
@@ -78,6 +85,14 @@ pub struct NumfmtAbortRenderError {
     pub error: String,
 }
 
+fn numfmt_is_blank(ch: char) -> bool {
+    matches!(ch, ' ' | '\t')
+}
+
+fn numfmt_is_field_separator(ch: char) -> bool {
+    numfmt_is_blank(ch) || ch == '\n'
+}
+
 impl<'a> Iterator for NumfmtWhitespaceSplitter<'a> {
     type Item = (&'a str, &'a str);
 
@@ -87,13 +102,13 @@ impl<'a> Iterator for NumfmtWhitespaceSplitter<'a> {
 
         let (prefix, field_tmp) = haystack.split_at(
             haystack
-                .find(|c: char| !c.is_whitespace())
+                .find(|c: char| !numfmt_is_field_separator(c))
                 .unwrap_or(haystack.len()),
         );
 
         let (field, rest) = field_tmp.split_at(
             field_tmp
-                .find(char::is_whitespace)
+                .find(numfmt_is_field_separator)
                 .unwrap_or(field_tmp.len()),
         );
 
@@ -184,7 +199,7 @@ fn numfmt_parse_number_parts(s: &str) -> Result<NumfmtParsedNumber<'_>> {
         return Err("invalid number: ''".to_string());
     }
 
-    let s = s.trim();
+    let s = s.trim_matches(numfmt_is_blank);
     if s.is_empty() {
         return Err("invalid number: ''".to_string());
     }
@@ -193,19 +208,19 @@ fn numfmt_parse_number_parts(s: &str) -> Result<NumfmtParsedNumber<'_>> {
         Some(v) => v,
         None => {
             if s.starts_with("..") {
-                return Err(format!("invalid suffix in input: {}", s.quote()));
+                return Err(format!("invalid suffix in input: {}", numfmt_quote(s)));
             }
-            return Err(format!("invalid number: {}", s.quote()));
+            return Err(format!("invalid number: {}", numfmt_quote(s)));
         }
     };
 
     if invalid_fraction {
-        return Err(format!("invalid number: {}", s.quote()));
+        return Err(format!("invalid number: {}", numfmt_quote(s)));
     }
 
     let number = &s[..num_end];
 
-    let rest = s[num_end..].trim_start();
+    let rest = s[num_end..].trim_start_matches(numfmt_is_blank);
     if rest.is_empty() {
         return Ok(NumfmtParsedNumber {
             number,
@@ -224,7 +239,7 @@ fn numfmt_parse_number_parts(s: &str) -> Result<NumfmtParsedNumber<'_>> {
         Some('Y') => NumfmtRawSuffix::Y,
         Some('R') => NumfmtRawSuffix::R,
         Some('Q') => NumfmtRawSuffix::Q,
-        _ => return Err(format!("invalid suffix in input: {}", s.quote())),
+        _ => return Err(format!("invalid suffix in input: {}", numfmt_quote(s))),
     };
 
     let mut suffix_len = 1usize;
@@ -234,12 +249,12 @@ fn numfmt_parse_number_parts(s: &str) -> Result<NumfmtParsedNumber<'_>> {
         suffix_len = 2;
     }
 
-    let trailing = rest[suffix_len..].trim();
+    let trailing = rest[suffix_len..].trim_matches(numfmt_is_blank);
     if !trailing.is_empty() {
         return Err(format!(
             "invalid suffix in input {}: {}",
-            s.quote(),
-            trailing.quote()
+            numfmt_quote(s),
+            numfmt_quote(trailing)
         ));
     }
 
@@ -253,7 +268,7 @@ fn numfmt_parse_suffix(s: &str) -> Result<(f64, Option<NumfmtSuffix>)> {
     let parsed = numfmt_parse_number_parts(s)?;
     let number = numfmt_normalize_decimal_point(parsed.number)
         .parse::<f64>()
-        .map_err(|_| format!("invalid number: {}", s.quote()))?;
+        .map_err(|_| format!("invalid number: {}", numfmt_quote(s)))?;
 
     Ok((number, parsed.suffix))
 }
@@ -706,10 +721,10 @@ fn numfmt_format_unscaled_decimal_exact(
         .map_err(|_| "value/precision too large to be printed".to_string())?;
     let number = normalized
         .parse::<BigDecimal>()
-        .map_err(|_| format!("invalid number: {}", source.quote()))?;
+        .map_err(|_| format!("invalid number: {}", numfmt_quote(source)))?;
     let approximate = normalized
         .parse::<f64>()
-        .map_err(|_| format!("invalid number: {}", source.quote()))?;
+        .map_err(|_| format!("invalid number: {}", numfmt_quote(source)))?;
     numfmt_validate_unscaled_output(approximate, &options.transform.to, precision as usize)?;
 
     Ok(Some(
@@ -988,13 +1003,13 @@ fn numfmt_delimited_trailing_blank_error(
     if numfmt_configs.transform.from == NumfmtUnit::None {
         Some(format!(
             "rejecting suffix in input: {} (consider using --from)",
-            source_without_suffix.quote()
+            numfmt_quote(source_without_suffix)
         ))
     } else {
         Some(format!(
             "invalid suffix in input {}: {}",
-            source_without_suffix.quote(),
-            source_without_suffix[without_trailing_blanks.len()..].quote()
+            numfmt_quote(source_without_suffix),
+            numfmt_quote(&source_without_suffix[without_trailing_blanks.len()..])
         ))
     }
 }

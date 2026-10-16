@@ -639,9 +639,6 @@ where
             let has_newline = line.ends_with('\n');
             if has_newline {
                 line.pop();
-                if line.ends_with('\r') {
-                    line.pop();
-                }
             }
 
             if index < numfmt_configs.header {
@@ -742,9 +739,6 @@ where
             let has_newline = line.ends_with('\n');
             if has_newline {
                 line.pop();
-                if line.ends_with('\r') {
-                    line.pop();
-                }
             }
 
             if idx < numfmt_configs.header {
@@ -9616,6 +9610,18 @@ mod tests {
             options.invalid = NumfmtInvalidModes::Abort;
             let result = numfmt_handle_buffer(BufReader::new(&input_value[..]), &options, false);
             assert!(result.is_err(), "did not return err for invalid input");
+        }
+
+        #[test]
+        fn cr_before_newline_is_an_invalid_suffix() {
+            let input_value = b"123\r\n";
+            let mut options = get_valid_options();
+            options.header = 0;
+
+            let error = numfmt_handle_buffer(BufReader::new(&input_value[..]), &options, false)
+                .expect_err("carriage return should remain part of the input field");
+
+            assert_eq!(error.to_string(), "invalid suffix in input: '123\\r'");
         }
     }
 

@@ -119,6 +119,32 @@ impl Default for HashsumFlags {
     }
 }
 
+fn hashsum_last_mode_arg(matches: &ArgMatches) -> Option<bool> {
+    let has_binary = matches.get_flag(hashsum_flags::BINARY);
+    let has_text = matches.get_flag(hashsum_flags::TEXT);
+
+    match (has_binary, has_text) {
+        (true, false) => return Some(true),
+        (false, true) => return Some(false),
+        (false, false) => return None,
+        (true, true) => {}
+    }
+
+    let binary_index = matches
+        .indices_of(hashsum_flags::BINARY)
+        .and_then(|mut indices| indices.next_back());
+    let text_index = matches
+        .indices_of(hashsum_flags::TEXT)
+        .and_then(|mut indices| indices.next_back());
+
+    match (binary_index, text_index) {
+        (Some(binary), Some(text)) => Some(binary > text),
+        (Some(_), None) => Some(true),
+        (None, Some(_)) => Some(false),
+        (None, None) => None,
+    }
+}
+
 impl HashsumFlags {
     /// 从命令行参数创建新的 HashsumFlags 实例
     ///
@@ -131,17 +157,8 @@ impl HashsumFlags {
     fn new(matches: ArgMatches, program: &str) -> CTResult<Self> {
         let (algoname, digest, output_bits) = detect_algo(program, &matches)?;
 
-        // 确定二进制模式：
-        // 1. 如果明确指定了二进制模式，则使用二进制模式
-        // 2. 如果明确指定了文本模式，则使用文本模式
-        // 3. 否则，在 Windows 上默认为二进制模式，在其他系统上默认为文本模式
-        let is_binary = if matches.get_flag(hashsum_flags::BINARY) {
-            true
-        } else if matches.get_flag(hashsum_flags::TEXT) {
-            false
-        } else {
-            !cfg!(not(windows))
-        };
+        // GNU digest tools accept repeated -b/-t and let the last one win.
+        let is_binary = hashsum_last_mode_arg(&matches).unwrap_or(cfg!(windows));
 
         let is_check = matches.get_flag(hashsum_flags::CHECK);
         let is_tag = matches.get_flag(hashsum_flags::TAG);
@@ -1441,7 +1458,8 @@ fn create_common_command() -> Command {
             .short('b')
             .long(hashsum_flags::BINARY)
             .help(BINARY_HELP)
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(hashsum_flags::BINARY),
         Arg::new(hashsum_flags::CHECK)
             .short('c')
             .long(hashsum_flags::CHECK)
@@ -1457,8 +1475,8 @@ fn create_common_command() -> Command {
             .short('t')
             .long(hashsum_flags::TEXT)
             .help(TEXT_HELP)
-            .conflicts_with(hashsum_flags::BINARY)
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(hashsum_flags::TEXT),
         Arg::new(hashsum_flags::QUIET)
             .short('q')
             .long(hashsum_flags::QUIET)

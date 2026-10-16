@@ -56,3 +56,29 @@ fn fold_bytes_reset_width_after_newline_in_c_locale() {
     assert_eq!(output.stdout, b"a\n12345678\n90\n");
     assert!(output.stderr.is_empty());
 }
+
+#[test]
+fn fold_spaces_handles_carriage_return_after_blank() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["fold", "-s", "-w", "1"])
+        .env("LC_ALL", "C.UTF-8")
+        .env("LANG", "C.UTF-8")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run syskits fold");
+
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin")
+        .write_all(b"a \r\xe7\x95\x8c")
+        .expect("write stdin");
+
+    let output = child.wait_with_output().expect("wait for syskits fold");
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"a\n \n\r\xe7\x95\x8c");
+    assert!(output.stderr.is_empty());
+}

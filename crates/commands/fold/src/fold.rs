@@ -660,7 +660,8 @@ pub fn ct_app() -> Command {
             .long(fold_flags::FOLD_SPACES)
             .short('s')
             .help(t!("fold.clap.fold_spaces"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(fold_flags::FOLD_SPACES),
         Arg::new(fold_flags::FOLD_WIDTH)
             .long(fold_flags::FOLD_WIDTH)
             .short('w')

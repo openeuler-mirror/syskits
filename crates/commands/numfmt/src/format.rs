@@ -399,10 +399,39 @@ fn numfmt_nul_delimited_first_field(input: &str) -> &str {
     input.split_once('\0').map_or(input, |(field, _)| field)
 }
 
-pub(crate) fn numfmt_passthrough_input<'a>(input: &'a str, options: &NumfmtConfigs) -> &'a str {
+fn numfmt_push_unselected_whitespace_field(
+    out: &mut String,
+    field_number: usize,
+    prefix: &str,
+    field: &str,
+) {
+    if field_number > 1 {
+        out.push(' ');
+        out.push_str(&prefix[1..]);
+    } else {
+        out.push_str(prefix);
+    }
+    out.push_str(field);
+}
+
+fn numfmt_normalize_whitespace_separators(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for (field_number, (prefix, field)) in (1..).zip(NumfmtWhitespaceSplitter { s: Some(input) }) {
+        numfmt_push_unselected_whitespace_field(&mut out, field_number, prefix, field);
+    }
+    out
+}
+
+pub(crate) fn numfmt_passthrough_input<'a>(
+    input: &'a str,
+    options: &NumfmtConfigs,
+) -> Cow<'a, str> {
     match &options.delimiter {
-        Some(delimiter) if delimiter.is_empty() => numfmt_nul_delimited_first_field(input),
-        _ => input,
+        Some(delimiter) if delimiter.is_empty() => {
+            Cow::Borrowed(numfmt_nul_delimited_first_field(input))
+        }
+        Some(_) => Cow::Borrowed(input),
+        None => Cow::Owned(numfmt_normalize_whitespace_separators(input)),
     }
 }
 
@@ -1152,18 +1181,7 @@ fn numfmt_format_line_whitespace(s: &str, numfmt_configs: &NumfmtConfigs) -> Res
             )?);
         } else {
             // 打印未选择的字段，不进行转换
-            if numfmt_configs.zero_terminated {
-                for ch in prefix.chars() {
-                    if ch.is_whitespace() {
-                        out.push(' ');
-                    } else {
-                        out.push(ch);
-                    }
-                }
-            } else {
-                out.push_str(prefix);
-            }
-            out.push_str(field);
+            numfmt_push_unselected_whitespace_field(&mut out, n, prefix, field);
         }
     }
 
@@ -1271,18 +1289,8 @@ fn numfmt_format_line_whitespace_abort(
                     });
                 }
             }
-        } else if numfmt_configs.zero_terminated {
-            for ch in prefix.chars() {
-                if ch.is_whitespace() {
-                    out.push(' ');
-                } else {
-                    out.push(ch);
-                }
-            }
-            out.push_str(field);
         } else {
-            out.push_str(prefix);
-            out.push_str(field);
+            numfmt_push_unselected_whitespace_field(&mut out, n, prefix, field);
         }
     }
 
@@ -1533,6 +1541,22 @@ mod tests {
         assert_eq!(error.partial_output, "");
         assert_eq!(error.error, expected);
         assert!(numfmt_precision_loss_inputs("1234567890123456789 ,x", &config).is_empty());
+    }
+
+    #[test]
+    fn test_default_delimiter_normalizes_first_separator_byte() {
+        let mut config = setup_default_config();
+        config.transform.from = NumfmtUnit::None;
+        config.transform.to = NumfmtUnit::None;
+        config.fields = vec![ctcore::ct_ranges::CtRange { low: 1, high: 1 }];
+
+        assert_eq!(numfmt_format_line("1\t2", &config).unwrap(), "1 2\n");
+        assert_eq!(numfmt_format_line_abort("1\t2", &config).unwrap(), "1 2\n");
+        assert_eq!(numfmt_format_line("1\t\t2", &config).unwrap(), "1 \t2\n");
+        assert_eq!(numfmt_passthrough_input("x\t2", &config), "x 2");
+
+        config.zero_terminated = true;
+        assert_eq!(numfmt_format_line("1\t2", &config).unwrap(), "1 2\0");
     }
 
     #[cfg(test)]

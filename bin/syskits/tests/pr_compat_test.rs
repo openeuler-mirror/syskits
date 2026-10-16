@@ -166,3 +166,24 @@ fn pr_accepts_readable_special_file() {
     assert!(output.stdout.is_empty());
     assert!(output.stderr.is_empty());
 }
+
+#[test]
+fn pr_continues_after_file_open_failure() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let missing = dir.path().join("missing");
+    let good = dir.path().join("good");
+    std::fs::write(&good, b"good\n").expect("write input");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["pr", "-r", "-t"])
+        .arg(&missing)
+        .arg(&good)
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .output()
+        .expect("run syskits pr");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"good\n");
+    assert!(output.stderr.is_empty());
+}

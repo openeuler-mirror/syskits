@@ -41,6 +41,36 @@ fn b2sum_verify_only_options_fail_outside_check_mode() {
 }
 
 #[test]
+fn sha256sum_zero_check_is_rejected() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let sums = temp_dir.path().join("sums");
+    std::fs::write(&sums, "").expect("write checksum manifest");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args([
+            "sha256sum",
+            "--zero",
+            "--check",
+            sums.to_str().expect("utf8 path"),
+        ])
+        .output()
+        .expect("run syskits sha256sum");
+
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty(), "stdout should be empty");
+
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    assert!(
+        stderr.contains("sha256sum: the --zero option is not supported when verifying checksums\n"),
+        "stderr: {stderr:?}"
+    );
+    assert!(
+        stderr.contains("Try 'sha256sum --help' for more information.\n"),
+        "stderr: {stderr:?}"
+    );
+}
+
+#[test]
 fn b2sum_check_missing_file_reports_only_unreadable_warning() {
     let temp_dir = TempDir::new().expect("tempdir");
     let missing = temp_dir.path().join("missing");

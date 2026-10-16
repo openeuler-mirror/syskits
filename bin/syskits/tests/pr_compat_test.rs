@@ -151,3 +151,18 @@ fn pr_streams_output_before_stdin_eof() {
     output.extend_from_slice(&remaining_output);
     assert_eq!(output, input);
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn pr_accepts_readable_special_file() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["pr", "-t", "/dev/null"])
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .output()
+        .expect("run syskits pr");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+}

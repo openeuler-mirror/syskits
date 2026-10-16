@@ -1532,18 +1532,9 @@ fn pr_open(path: &str) -> Result<Box<dyn Read>, PrError> {
             let path_string = path.to_string();
             match i.file_type() {
                 #[cfg(unix)]
-                ft if ft.is_block_device() => Err(PrError::UnknownFiletype(path_string)),
-                #[cfg(unix)]
-                ft if ft.is_char_device() => Err(PrError::UnknownFiletype(path_string)),
-                #[cfg(unix)]
-                ft if ft.is_fifo() => Err(PrError::UnknownFiletype(path_string)),
-                #[cfg(unix)]
                 ft if ft.is_socket() => Err(PrError::IsSocket(path_string)),
                 ft if ft.is_dir() => Err(PrError::IsDirectory(path_string)),
-                ft if ft.is_file() || ft.is_symlink() => {
-                    Ok(Box::new(File::open(path).context(path)?) as Box<dyn Read>)
-                }
-                _ => Err(PrError::UnknownFiletype(path_string)),
+                _ => Ok(Box::new(File::open(path).context(path)?) as Box<dyn Read>),
             }
         })
         .unwrap_or_else(|_| Err(PrError::NotExists(path.to_string())))

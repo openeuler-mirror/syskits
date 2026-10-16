@@ -526,8 +526,9 @@ fn numfmt_process_semantic_line(
                 NumfmtInvalidModes::Ignore | NumfmtInvalidModes::Abort => {}
             }
 
+            let passthrough = numfmt_passthrough_input(input_line, options);
             let rendered = numfmt_passthrough_text(
-                numfmt_passthrough_input(input_line, options),
+                passthrough.as_ref(),
                 options.zero_terminated,
                 has_line_ending,
             );

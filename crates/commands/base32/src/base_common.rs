@@ -88,14 +88,7 @@ impl BaseConfig {
 
         let cols = options
             .get_one::<String>(opt_flags::BASE_WRAP)
-            .map(|num| {
-                num.parse::<usize>().map_err(|_| {
-                    CtSimpleError::new(
-                        BASE_CMD_PARSE_ERROR,
-                        format!("invalid wrap size: {}", num.quote()),
-                    )
-                })
-            })
+            .map(|num| parse_wrap_cols(num))
             .transpose()?;
 
         Ok(Self {
@@ -105,6 +98,37 @@ impl BaseConfig {
             base_to_read: f,
         })
     }
+}
+
+fn parse_wrap_cols(num: &str) -> CTResult<usize> {
+    let digits = num.strip_prefix('+').unwrap_or(num);
+    if digits.is_empty() || num.starts_with('-') || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(invalid_wrap_size(num));
+    }
+
+    let mut value = 0u128;
+    for digit in digits.bytes() {
+        value = match value
+            .checked_mul(10)
+            .and_then(|n| n.checked_add(u128::from(digit - b'0')))
+        {
+            Some(n) => n,
+            None => return Ok(0),
+        };
+    }
+
+    if value > isize::MAX as u128 {
+        Ok(0)
+    } else {
+        Ok(value as usize)
+    }
+}
+
+fn invalid_wrap_size(num: &str) -> Box<dyn CTError> {
+    CtSimpleError::new(
+        BASE_CMD_PARSE_ERROR,
+        format!("invalid wrap size: {}", num.quote()),
+    )
 }
 
 pub fn base_parsing_command_args(
@@ -530,6 +554,42 @@ mod test {
     fn base_delete_file(filename: &str) -> io::Result<()> {
         fs::remove_file(filename)?;
         Ok(())
+    }
+
+    #[test]
+    fn test_parse_wrap_cols_accepts_huge_positive_as_no_wrap() {
+        assert_eq!(parse_wrap_cols("184467440737095516160").unwrap(), 0);
+        assert_eq!(
+            parse_wrap_cols(&(isize::MAX as u128 + 1).to_string()).unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn test_parse_wrap_cols_regular_values() {
+        assert_eq!(parse_wrap_cols("0").unwrap(), 0);
+        assert_eq!(parse_wrap_cols("76").unwrap(), 76);
+        assert_eq!(parse_wrap_cols("+76").unwrap(), 76);
+        assert_eq!(
+            parse_wrap_cols(&isize::MAX.to_string()).unwrap(),
+            isize::MAX as usize
+        );
+    }
+
+    #[test]
+    fn test_parse_wrap_cols_rejects_invalid_or_negative_values() {
+        assert_eq!(
+            parse_wrap_cols("-1").unwrap_err().to_string(),
+            "invalid wrap size: '-1'"
+        );
+        assert_eq!(
+            parse_wrap_cols("123x").unwrap_err().to_string(),
+            "invalid wrap size: '123x'"
+        );
+        assert_eq!(
+            parse_wrap_cols("").unwrap_err().to_string(),
+            "invalid wrap size: ''"
+        );
     }
 
     struct FailRead {

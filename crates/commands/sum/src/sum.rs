@@ -22,7 +22,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, FromIo};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_show;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -268,6 +268,12 @@ impl Tool for Sum {
 }
 
 pub fn sum_main(args: impl ctcore::Args) -> CTResult<()> {
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
+    sum_main_with_writer(args, &mut stdout)
+}
+
+fn sum_main_with_writer(args: impl ctcore::Args, stdout: &mut impl Write) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
@@ -275,8 +281,7 @@ pub fn sum_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let is_sysv = sum_is_sysv(&matches);
     let algorithm = if is_sysv { "sysv" } else { "bsd" };
-    let stdout = io::stdout();
-    let mut stdout = stdout.lock();
+    let mut write_failed = false;
 
     for file in &files {
         let reader = match sum_open(file) {
@@ -304,11 +309,19 @@ pub fn sum_main(args: impl ctcore::Args) -> CTResult<()> {
             blocks,
             is_print_names.then_some(file.as_os_str()),
         );
-        stdout
-            .write_all(&output)
-            .expect("failed printing to stdout");
+        if !write_failed && stdout.write_all(&output).is_err() {
+            write_failed = true;
+        }
     }
-    Ok(())
+
+    if !write_failed && stdout.flush().is_err() {
+        write_failed = true;
+    }
+    if write_failed {
+        Err(CtSimpleError::new(1, "write error"))
+    } else {
+        Ok(())
+    }
 }
 
 pub fn ct_app() -> Command {
@@ -1120,6 +1133,73 @@ mod tests {
 
             let output = render_sum_classic("bsd", 66, 1, Some(file.as_os_str()));
             assert_eq!(output, b"00066     1 input-\xff\n");
+        }
+    }
+
+    #[cfg(test)]
+    mod output_error_tests {
+        use super::*;
+        use tempfile::TempDir;
+
+        struct WriteFailWriter;
+
+        impl Write for WriteFailWriter {
+            fn write(&mut self, _buffer: &[u8]) -> io::Result<usize> {
+                Err(io::Error::other("simulated write error"))
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        #[derive(Default)]
+        struct FlushFailWriter {
+            output: Vec<u8>,
+        }
+
+        impl Write for FlushFailWriter {
+            fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+                self.output.extend_from_slice(buffer);
+                Ok(buffer.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Err(io::Error::other("simulated flush error"))
+            }
+        }
+
+        fn input_args() -> (TempDir, Vec<OsString>) {
+            let dir = TempDir::new().unwrap();
+            let path = dir.path().join("input");
+            std::fs::write(&path, b"A").unwrap();
+            (
+                dir,
+                vec![
+                    OsString::from(ctcore::ct_util_name()),
+                    path.into_os_string(),
+                ],
+            )
+        }
+
+        #[test]
+        fn reports_stdout_write_error() {
+            let (_dir, args) = input_args();
+            let error = sum_main_with_writer(args.into_iter(), &mut WriteFailWriter).unwrap_err();
+
+            assert_eq!(error.to_string(), "write error");
+            assert_eq!(error.code(), 1);
+        }
+
+        #[test]
+        fn reports_stdout_flush_error() {
+            let (_dir, args) = input_args();
+            let mut writer = FlushFailWriter::default();
+            let error = sum_main_with_writer(args.into_iter(), &mut writer).unwrap_err();
+
+            assert!(!writer.output.is_empty());
+            assert_eq!(error.to_string(), "write error");
+            assert_eq!(error.code(), 1);
         }
     }
 }

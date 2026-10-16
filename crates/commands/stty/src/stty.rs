@@ -705,6 +705,7 @@ fn stty_print_flags<T: TermiosFlag, W: Write>(
         flag,
         is_show,
         is_sane,
+        sane_value: _,
         group,
     } in flags
     {
@@ -836,15 +837,18 @@ fn set_local_raw_bit(termios: &mut Termios, bit: tcflag_t, enabled: bool) {
 fn apply_sane_flags<T: TermiosFlag>(termios: &mut Termios, flags: &[Settings<T>]) {
     for Settings {
         flag,
-        is_sane,
+        sane_value,
         group,
         ..
     } in flags
     {
+        let Some(sane_value) = *sane_value else {
+            continue;
+        };
         if let Some(group) = group {
             group.apply(termios, false);
         }
-        flag.apply(termios, *is_sane);
+        flag.apply(termios, sane_value);
     }
 }
 
@@ -1169,8 +1173,6 @@ fn stty_apply_combination_setting(
                 termios.control_chars[SpecialCharacterIndices::VERASE as usize] = 127;
                 termios.control_chars[SpecialCharacterIndices::VKILL as usize] = 21;
                 I::IXANY.apply(termios, false);
-                O::TABDLY.apply(termios, false);
-                O::TAB3.apply(termios, true);
                 L::ECHOE.apply(termios, true);
                 L::ECHOCTL.apply(termios, true);
                 L::ECHOKE.apply(termios, true);
@@ -2004,6 +2006,46 @@ mod tests {
                 stty_apply_setting(&mut termios, "-dec", &device),
                 Ok(ControlFlow::Break(false))
             ));
+        }
+
+        #[test]
+        fn test_sane_preserves_hupcl() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            termios.control_flags.insert(C::HUPCL);
+
+            apply_sane_mode(&mut termios);
+
+            assert!(termios.control_flags.contains(C::HUPCL));
+
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+
+            apply_sane_mode(&mut termios);
+
+            assert!(!termios.control_flags.contains(C::HUPCL));
+        }
+
+        #[test]
+        fn test_dec_does_not_change_output_flags() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            let device = Device::Stdin(stdin());
+            let before = termios.output_flags.bits();
+
+            assert!(matches!(
+                stty_apply_setting(&mut termios, "dec", &device),
+                Ok(ControlFlow::Break(true))
+            ));
+
+            assert_eq!(termios.output_flags.bits(), before);
+
+            termios.output_flags.insert(O::TAB3);
+            let before = termios.output_flags.bits();
+
+            assert!(matches!(
+                stty_apply_setting(&mut termios, "dec", &device),
+                Ok(ControlFlow::Break(true))
+            ));
+
+            assert_eq!(termios.output_flags.bits(), before);
         }
 
         #[test]

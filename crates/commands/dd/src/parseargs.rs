@@ -503,6 +503,36 @@ fn parse_bytes_only(s: &str) -> Result<u64, ParseError> {
         .map_err(|_| ParseError::MultiplierStringParseFailure(s.to_string()))
 }
 
+const DD_SIZE_SUFFIX_ALLOW_LIST: &[&str] = &[
+    "", "B", "b", "K", "k", "KB", "kB", "KiB", "kiB", "M", "MB", "MiB", "G", "GB", "GiB", "T",
+    "TB", "TiB", "P", "PB", "PiB", "E", "EB", "EiB", "Z", "ZB", "ZiB", "Y", "YB", "YiB", "R", "RB",
+    "RiB", "Q", "QB", "QiB",
+];
+
+fn parse_bytes_only_or_one(full: &str, s: &str) -> Result<u64, ParseError> {
+    if s.is_empty() {
+        Ok(1)
+    } else if s.chars().all(|c| c.is_ascii_digit()) {
+        parse_bytes_only(s).map_err(|_| ParseError::InvalidNumber(full.to_string()))
+    } else {
+        Err(ParseError::InvalidNumber(full.to_string()))
+    }
+}
+
+fn parse_legacy_suffix(
+    full: &str,
+    s: &str,
+    suffix: char,
+    multiplier: u64,
+) -> Option<Result<u64, ParseError>> {
+    let without_byte_suffix = s.strip_suffix('B').unwrap_or(s);
+    let number = without_byte_suffix.strip_suffix(suffix)?;
+    Some(parse_bytes_only_or_one(full, number).and_then(|num| {
+        num.checked_mul(multiplier)
+            .ok_or_else(|| ParseError::MultiplierStringOverflow(full.to_string()))
+    }))
+}
+
 /// Parse a number of bytes from the given string, assuming no `'x'` characters.
 ///
 /// The `'x'` character means "multiply the number before the `'x'` by
@@ -533,24 +563,50 @@ fn parse_bytes_only(s: &str) -> Result<u64, ParseError> {
 fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
     let parser = SizeParser {
         capital_b_bytes: true,
-        no_empty_numeric: true,
+        no_empty_numeric: false,
+        allow_list: Some(DD_SIZE_SUFFIX_ALLOW_LIST),
         ..Default::default()
     };
-    let (num, multiplier) = match (s.find('c'), s.rfind('w'), s.rfind('b')) {
-        (None, None, None) => match parser.parse_u64(s) {
-            Ok(n) => (n, 1),
-            Err(ParseSizeError::SizeTooBig(_)) => (u64::MAX, 1),
-            Err(ParseSizeError::InvalidSuffix(_) | ParseSizeError::ParseFailure(_)) => {
-                return Err(ParseError::InvalidNumber(full.to_string()));
-            }
-        },
-        (Some(i), None, None) => (parse_bytes_only(&s[..i])?, 1),
-        (None, Some(i), None) => (parse_bytes_only(&s[..i])?, 2),
-        (None, None, Some(i)) => (parse_bytes_only(&s[..i])?, 512),
-        _ => return Err(ParseError::MultiplierStringParseFailure(full.to_string())),
-    };
-    num.checked_mul(multiplier)
-        .ok_or_else(|| ParseError::MultiplierStringOverflow(full.to_string()))
+
+    if s == "B" {
+        return Err(ParseError::InvalidNumber(full.to_string()));
+    }
+
+    if let Some(result) = parse_legacy_suffix(full, s, 'c', 1) {
+        return result;
+    }
+    if let Some(result) = parse_legacy_suffix(full, s, 'w', 2) {
+        return result;
+    }
+    if let Some(result) = parse_legacy_suffix(full, s, 'b', 512) {
+        return result;
+    }
+
+    match parser.parse_u64(s) {
+        Ok(n) => Ok(n),
+        Err(ParseSizeError::SizeTooBig(_)) => Ok(u64::MAX),
+        Err(ParseSizeError::InvalidSuffix(_) | ParseSizeError::ParseFailure(_)) => {
+            Err(ParseError::InvalidNumber(full.to_string()))
+        }
+    }
+}
+
+fn parse_bytes_with_opt_multiplier_inner(full: &str, s: &str) -> Result<u64, ParseError> {
+    if let Some((left, right)) = s.split_once('x') {
+        let left = parse_bytes_no_x(full, left)?;
+        let right = parse_bytes_with_opt_multiplier_inner(full, right)?;
+        let result = left
+            .checked_mul(right)
+            .ok_or_else(|| ParseError::InvalidNumber(full.to_string()))?;
+
+        if result == 0 && s.starts_with("0x") {
+            show_zero_multiplier_warning();
+        }
+
+        Ok(result)
+    } else {
+        parse_bytes_no_x(full, s)
+    }
 }
 
 /// Parse byte and multiplier like 512, 5KiB, or 1G.
@@ -569,24 +625,7 @@ pub fn parse_bytes_with_opt_multiplier(s: &str) -> Result<u64, ParseError> {
     //     4096
     //
 
-    // Split on the 'x' characters. Each component will be parsed
-    // individually, then multiplied together.
-    let parts: Vec<&str> = s.split('x').collect();
-    if parts.len() == 1 {
-        parse_bytes_no_x(s, parts[0])
-    } else {
-        let mut total: u64 = 1;
-        for part in parts {
-            if part == "0" {
-                show_zero_multiplier_warning();
-            }
-            let num = parse_bytes_no_x(s, part)?;
-            total = total
-                .checked_mul(num)
-                .ok_or_else(|| ParseError::InvalidNumber(s.to_string()))?;
-        }
-        Ok(total)
-    }
+    parse_bytes_with_opt_multiplier_inner(s, s)
 }
 
 fn get_ctable(
@@ -704,6 +743,30 @@ mod tests {
             2 * 2 * (3 * 2) // (1 * 2) * (2 * 1) * (3 * 2)
         );
     }
+
+    #[test]
+    fn test_parse_bytes_with_opt_multiplier_allows_suffix_only_factors() {
+        assert_eq!(parse_bytes_with_opt_multiplier("M").unwrap(), 1024 * 1024);
+        assert_eq!(parse_bytes_with_opt_multiplier("MB").unwrap(), 1000 * 1000);
+        assert_eq!(parse_bytes_with_opt_multiplier("c").unwrap(), 1);
+        assert_eq!(parse_bytes_with_opt_multiplier("w").unwrap(), 2);
+        assert_eq!(parse_bytes_with_opt_multiplier("b").unwrap(), 512);
+        assert_eq!(parse_bytes_with_opt_multiplier("0xM").unwrap(), 0);
+        assert_eq!(Parser::parse_n("0xM"), Ok(Num::Blocks(0)));
+    }
+
+    #[test]
+    fn test_parse_bytes_with_opt_multiplier_rejects_b_without_number() {
+        assert_eq!(
+            parse_bytes_with_opt_multiplier("B"),
+            Err(ParseError::InvalidNumber("B".to_string()))
+        );
+        assert_eq!(
+            parse_bytes_with_opt_multiplier("0xB"),
+            Err(ParseError::InvalidNumber("0xB".to_string()))
+        );
+    }
+
     #[test]
     fn test_parse_n() {
         for arg in ["1x8x4", "1c", "123b", "123w"] {

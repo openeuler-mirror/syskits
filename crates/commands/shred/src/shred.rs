@@ -574,26 +574,8 @@ fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
     let metadata = fs::metadata(path).map_err_context(String::new)?;
     let size = settings.size.unwrap_or(metadata.len());
 
-    // 如果需要，设置文件为可写
-    if settings.force {
-        let mut perms = metadata.permissions();
-        #[cfg(unix)]
-        {
-            if (perms.mode() & (S_IWUSR)) == 0 {
-                perms.set_mode(S_IWUSR);
-            }
-        }
-        #[cfg(not(unix))]
-        perms.set_readonly(false);
-        fs::set_permissions(path, perms).map_err_context(String::new)?;
-    }
-
     // 执行擦除
-    let mut file = OpenOptions::new()
-        .write(true)
-        .truncate(false)
-        .open(path)
-        .map_err_context(|| format!("{}: failed to open for writing", path.maybe_quote()))?;
+    let mut file = shred_open_for_writing(path, &metadata, settings.force)?;
 
     shred_run_passes(&mut file, settings.path_str, settings, size, true)?;
 
@@ -607,6 +589,33 @@ fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
         )?;
     }
     Ok(())
+}
+
+fn shred_open_for_writing(path: &Path, metadata: &fs::Metadata, force: bool) -> CTResult<File> {
+    match OpenOptions::new().write(true).truncate(false).open(path) {
+        Ok(file) => Ok(file),
+        Err(err) if force && err.kind() == io::ErrorKind::PermissionDenied => {
+            shred_force_writable(path, metadata)?;
+            OpenOptions::new()
+                .write(true)
+                .truncate(false)
+                .open(path)
+                .map_err_context(|| format!("{}: failed to open for writing", path.maybe_quote()))
+        }
+        Err(err) => Err(err)
+            .map_err_context(|| format!("{}: failed to open for writing", path.maybe_quote())),
+    }
+}
+
+fn shred_force_writable(path: &Path, metadata: &fs::Metadata) -> CTResult<()> {
+    let mut perms = metadata.permissions();
+    #[cfg(unix)]
+    {
+        perms.set_mode(S_IWUSR);
+    }
+    #[cfg(not(unix))]
+    perms.set_readonly(false);
+    fs::set_permissions(path, perms).map_err_context(String::new)
 }
 
 #[cfg(unix)]

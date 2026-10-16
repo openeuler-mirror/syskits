@@ -781,6 +781,18 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
         match cmd_result {
             Ok(()) => {}
             Err(PrError::Output(error)) => return Err(error.into()),
+            Err(
+                error @ (PrError::Input(_, _)
+                | PrError::UnknownFiletype(_)
+                | PrError::IsDirectory(_)
+                | PrError::IsSocket(_)
+                | PrError::NotExists(_)),
+            ) => {
+                semantic
+                    .stderr_text
+                    .push_str(&pr_error_text(&matches, &error));
+                semantic.exit_code = 1;
+            }
             Err(error) => {
                 semantic.stderr_text = pr_error_text(&matches, &error);
                 semantic.exit_code = 1;

@@ -93,7 +93,7 @@ use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use rust_i18n::t;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::path::Path;
@@ -135,7 +135,7 @@ struct FoldFlags {
     characters: bool,
     spaces: bool,
     width: usize,
-    files: Vec<String>,
+    files: Vec<OsString>,
 }
 
 /// 字符计数模式
@@ -518,11 +518,7 @@ pub fn fold_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    // 将OsString参数转换为String
-    let string_args: Vec<String> = args.collect_lossy();
-
-    let (args, obs_width) = handle_obsolete(&string_args[..]);
-    let matches = match ct_app().try_get_matches_from(args) {
+    let (matches, obs_width) = match fold_arg_matches(args) {
         Ok(m) => m,
         Err(e) => {
             if e.kind() == ErrorKind::ArgumentConflict {
@@ -552,11 +548,20 @@ fn fold_flags_from_matches(
         characters: matches.get_flag(fold_flags::FOLD_CHARACTERS),
         spaces: matches.get_flag(fold_flags::FOLD_SPACES),
         width,
-        files: match matches.get_many::<String>(fold_flags::FOLD_FILE) {
+        files: match matches.get_many::<OsString>(fold_flags::FOLD_FILE) {
             Some(v) => v.cloned().collect(),
-            None => vec!["-".to_owned()],
+            None => vec![OsString::from("-")],
         },
     })
+}
+
+fn fold_arg_matches(
+    args: impl ctcore::Args,
+) -> Result<(clap::ArgMatches, Option<String>), clap::Error> {
+    let os_args: Vec<OsString> = args.collect();
+    let (args, obs_width) = handle_obsolete(&os_args);
+    let matches = ct_app().try_get_matches_from(args)?;
+    Ok((matches, obs_width))
 }
 
 fn parse_fold_width(width: Option<&str>) -> CTResult<usize> {
@@ -613,11 +618,13 @@ pub fn ct_app() -> Command {
             .short('w')
             .help(t!("fold.clap.fold_width"))
             .value_name("WIDTH")
+            .value_parser(clap::builder::StringValueParser::new())
             .allow_hyphen_values(true)
             .overrides_with(fold_flags::FOLD_WIDTH),
         Arg::new(fold_flags::FOLD_FILE)
             .hide(true)
             .action(ArgAction::Append)
+            .value_parser(clap::builder::OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
     ];
 
@@ -642,7 +649,7 @@ pub fn ct_app() -> Command {
 ///
 /// - 一个包含处理后参数的向量。
 /// - 一个可选的字符串，表示最后一个过时参数的值。
-fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
+fn handle_obsolete(args: &[OsString]) -> (Vec<OsString>, Option<String>) {
     let mut result = Vec::with_capacity(args.len());
     let mut obsolete = None;
     let mut after_end_of_options = false;
@@ -653,14 +660,14 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
             continue;
         }
 
-        if arg == "--" {
+        if arg == OsStr::new("--") {
             after_end_of_options = true;
             result.push(arg.clone());
             continue;
         }
 
         if let Some(width) = obsolete_width_arg(arg) {
-            result.push(format!("-w{width}"));
+            result.push(OsString::from(format!("-w{width}")));
             obsolete = Some(width.to_owned());
         } else {
             result.push(arg.clone());
@@ -670,7 +677,8 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     (result, obsolete)
 }
 
-fn obsolete_width_arg(arg: &str) -> Option<&str> {
+fn obsolete_width_arg(arg: &OsStr) -> Option<&str> {
+    let arg = arg.to_str()?;
     if arg.starts_with("--") {
         return None;
     }
@@ -711,8 +719,7 @@ fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResul
     let mut stderr_text = String::new();
 
     for filename in &fold_flags.files {
-        let filename: &str = filename;
-        let input: Box<dyn Read> = if filename == "-" {
+        let input: Box<dyn Read> = if filename == OsStr::new("-") {
             // 如果文件名是`-`，则从标准输入读取内容
             ctcore::ct_io::stdin_reader_box()
         } else {
@@ -725,6 +732,7 @@ fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResul
                         std::io::ErrorKind::PermissionDenied => "Permission denied".to_string(),
                         _ => e.to_string(),
                     };
+                    let filename = filename.to_string_lossy();
                     stderr_text.push_str(&format!("fold: {filename}: {error_msg}\n"));
                     continue;
                 }
@@ -756,9 +764,8 @@ fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResul
 pub fn fold_native_semantic(args: impl ctcore::Args) -> CTResult<FoldSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let string_args: Vec<String> = args.collect_lossy();
-
-    let (args, obs_width) = handle_obsolete(&string_args[..]);
+    let os_args: Vec<OsString> = args.collect();
+    let (args, obs_width) = handle_obsolete(&os_args);
     let matches = match ct_app().try_get_matches_from(args) {
         Ok(m) => m,
         Err(e) => {
@@ -1010,15 +1017,15 @@ mod tests {
             let temp_file = tempfile::NamedTempFile::new().unwrap();
             std::fs::write(temp_file.path(), content).unwrap();
 
-            let args = [
-                "fold".to_string(),
-                "--width".to_string(),
-                "10".to_string(),
-                temp_file.path().to_string_lossy().to_string(),
+            let args = vec![
+                OsString::from("fold"),
+                OsString::from("--width"),
+                OsString::from("10"),
+                temp_file.path().as_os_str().to_os_string(),
             ];
 
             let mut writer = Vec::new();
-            let result = fold_main(&mut writer, args.iter().map(std::ffi::OsString::from));
+            let result = fold_main(&mut writer, args.into_iter());
 
             assert!(result.is_ok());
             let output = String::from_utf8(writer).unwrap();
@@ -1030,15 +1037,15 @@ mod tests {
             let temp_file = tempfile::NamedTempFile::new().unwrap();
             std::fs::write(temp_file.path(), "123456789\n").unwrap();
 
-            let args = [
-                "fold".to_string(),
-                "-w8".to_string(),
-                "-3".to_string(),
-                temp_file.path().to_string_lossy().to_string(),
+            let args = vec![
+                OsString::from("fold"),
+                OsString::from("-w8"),
+                OsString::from("-3"),
+                temp_file.path().as_os_str().to_os_string(),
             ];
 
             let mut writer = Vec::new();
-            let result = fold_main(&mut writer, args.iter().map(std::ffi::OsString::from));
+            let result = fold_main(&mut writer, args.into_iter());
 
             assert!(result.is_ok());
             assert_eq!(String::from_utf8(writer).unwrap(), "123\n456\n789\n");
@@ -1049,15 +1056,15 @@ mod tests {
             let temp_file = tempfile::NamedTempFile::new().unwrap();
             std::fs::write(temp_file.path(), "123456789\n").unwrap();
 
-            let args = [
-                "fold".to_string(),
-                "-3".to_string(),
-                "-w8".to_string(),
-                temp_file.path().to_string_lossy().to_string(),
+            let args = vec![
+                OsString::from("fold"),
+                OsString::from("-3"),
+                OsString::from("-w8"),
+                temp_file.path().as_os_str().to_os_string(),
             ];
 
             let mut writer = Vec::new();
-            let result = fold_main(&mut writer, args.iter().map(std::ffi::OsString::from));
+            let result = fold_main(&mut writer, args.into_iter());
 
             assert!(result.is_ok());
             assert_eq!(String::from_utf8(writer).unwrap(), "12345678\n9\n");
@@ -1070,14 +1077,14 @@ mod tests {
             let temp_file = tempfile::NamedTempFile::new().unwrap();
             std::fs::write(temp_file.path(), content).unwrap();
 
-            let args = [
-                "fold".to_string(),
-                "-c".to_string(),
-                temp_file.path().to_string_lossy().to_string(),
+            let args = vec![
+                OsString::from("fold"),
+                OsString::from("-c"),
+                temp_file.path().as_os_str().to_os_string(),
             ];
 
             let mut writer = Vec::new();
-            let result = fold_main(&mut writer, args.iter().map(std::ffi::OsString::from));
+            let result = fold_main(&mut writer, args.into_iter());
 
             assert!(result.is_ok());
             let output = String::from_utf8(writer).unwrap();
@@ -1091,14 +1098,14 @@ mod tests {
             let temp_file = tempfile::NamedTempFile::new().unwrap();
             std::fs::write(temp_file.path(), content).unwrap();
 
-            let args = [
-                "fold".to_string(),
-                "--characters".to_string(),
-                temp_file.path().to_string_lossy().to_string(),
+            let args = vec![
+                OsString::from("fold"),
+                OsString::from("--characters"),
+                temp_file.path().as_os_str().to_os_string(),
             ];
 
             let mut writer = Vec::new();
-            let result = fold_main(&mut writer, args.iter().map(std::ffi::OsString::from));
+            let result = fold_main(&mut writer, args.into_iter());
 
             assert!(result.is_ok());
             let output = String::from_utf8(writer).unwrap();
@@ -1393,150 +1400,112 @@ mod tests {
             测试用例 4：参数列表中包含以连字符开头但不后跟数字的参数（例如，"-foo"）
         */
         use super::*;
+
+        fn os_args(args: &[&str]) -> Vec<OsString> {
+            args.iter().map(OsString::from).collect()
+        }
+
         #[test]
         fn handle_obsolete_with_obsolete_parameter_removes_and_returns_value() {
-            let args = vec!["foo".to_string(), "-1".to_string(), "bar".to_string()];
+            let args = os_args(&["foo", "-1", "bar"]);
             let (result, obsolete) = handle_obsolete(&args);
-            assert_eq!(
-                result,
-                vec!["foo".to_string(), "-w1".to_string(), "bar".to_string()]
-            );
+            assert_eq!(result, os_args(&["foo", "-w1", "bar"]));
             assert_eq!(obsolete, Some("1".to_string()));
         }
 
         #[test]
         fn handle_obsolete_with_multiple_obsolete_parameters_removes_first_and_returns_value() {
-            let args = vec![
-                "foo".to_string(),
-                "-1".to_string(),
-                "-2".to_string(),
-                "bar".to_string(),
-            ];
+            let args = os_args(&["foo", "-1", "-2", "bar"]);
             let (result, obsolete) = handle_obsolete(&args);
-            assert_eq!(
-                result,
-                vec![
-                    "foo".to_string(),
-                    "-w1".to_string(),
-                    "-w2".to_string(),
-                    "bar".to_string()
-                ]
-            );
+            assert_eq!(result, os_args(&["foo", "-w1", "-w2", "bar"]));
             assert_eq!(obsolete, Some("2".to_string()));
         }
 
         #[test]
         fn handle_obsolete_without_obsolete_parameters_returns_original_list_and_none() {
-            let args = vec!["foo".to_string(), "bar".to_string()];
+            let args = os_args(&["foo", "bar"]);
             let (result, obsolete) = handle_obsolete(&args);
-            assert_eq!(result, vec!["foo".to_string(), "bar".to_string()]);
+            assert_eq!(result, os_args(&["foo", "bar"]));
             assert_eq!(obsolete, None);
         }
 
         #[test]
         fn handle_obsolete_with_non_numeric_parameter_returns_original_list_and_none() {
-            let args = vec!["foo".to_string(), "-foo".to_string(), "bar".to_string()];
+            let args = os_args(&["foo", "-foo", "bar"]);
             let (result, obsolete) = handle_obsolete(&args);
-            assert_eq!(
-                result,
-                vec!["foo".to_string(), "-foo".to_string(), "bar".to_string()]
-            );
+            assert_eq!(result, os_args(&["foo", "-foo", "bar"]));
             assert_eq!(obsolete, None);
         }
 
         #[test]
         fn handle_obsolete_with_empty_args_returns_empty_list_and_none() {
-            let args: Vec<String> = vec![];
+            let args: Vec<OsString> = vec![];
             let (result, obsolete) = handle_obsolete(&args);
-            assert_eq!(result, Vec::<String>::new());
+            assert_eq!(result, Vec::<OsString>::new());
             assert_eq!(obsolete, None);
         }
 
         #[test]
         fn handle_obsolete_with_only_obsolete_parameters_removes_all_and_returns_first_value() {
-            let args = vec!["-1".to_string(), "-2".to_string(), "-3".to_string()];
+            let args = os_args(&["-1", "-2", "-3"]);
             let (result, obsolete) = handle_obsolete(&args);
-            assert_eq!(
-                result,
-                vec!["-w1".to_string(), "-w2".to_string(), "-w3".to_string()]
-            );
+            assert_eq!(result, os_args(&["-w1", "-w2", "-w3"]));
             assert_eq!(obsolete, Some("3".to_string()));
         }
 
         #[test]
         fn handle_obsolete_with_obsolete_parameter_at_beginning_removes_and_returns_value() {
-            let args = vec!["-1".to_string(), "foo".to_string(), "bar".to_string()];
+            let args = os_args(&["-1", "foo", "bar"]);
             let (result, obsolete) = handle_obsolete(&args);
-            assert_eq!(
-                result,
-                vec!["-w1".to_string(), "foo".to_string(), "bar".to_string()]
-            );
+            assert_eq!(result, os_args(&["-w1", "foo", "bar"]));
             assert_eq!(obsolete, Some("1".to_string()));
         }
 
         #[test]
         fn handle_obsolete_with_obsolete_parameter_in_middle_removes_and_returns_value() {
-            let args = vec!["foo".to_string(), "-2".to_string(), "bar".to_string()];
+            let args = os_args(&["foo", "-2", "bar"]);
             let (result, obsolete) = handle_obsolete(&args);
-            assert_eq!(
-                result,
-                vec!["foo".to_string(), "-w2".to_string(), "bar".to_string()]
-            );
+            assert_eq!(result, os_args(&["foo", "-w2", "bar"]));
             assert_eq!(obsolete, Some("2".to_string()));
         }
 
         #[test]
         fn handle_obsolete_with_obsolete_parameter_at_end_removes_and_returns_value() {
-            let args = vec!["foo".to_string(), "bar".to_string(), "-3".to_string()];
+            let args = os_args(&["foo", "bar", "-3"]);
             let (result, obsolete) = handle_obsolete(&args);
-            assert_eq!(
-                result,
-                vec!["foo".to_string(), "bar".to_string(), "-w3".to_string()]
-            );
+            assert_eq!(result, os_args(&["foo", "bar", "-w3"]));
             assert_eq!(obsolete, Some("3".to_string()));
         }
 
         #[test]
         fn handle_obsolete_with_double_dash_parameter_does_not_remove() {
-            let args = vec!["foo".to_string(), "--2".to_string(), "bar".to_string()];
+            let args = os_args(&["foo", "--2", "bar"]);
             let (result, obsolete) = handle_obsolete(&args);
-            assert_eq!(
-                result,
-                vec!["foo".to_string(), "--2".to_string(), "bar".to_string()]
-            );
+            assert_eq!(result, os_args(&["foo", "--2", "bar"]));
             assert_eq!(obsolete, None);
         }
 
         #[test]
         fn handle_obsolete_after_end_of_options_stays_file_operand() {
-            let args = vec!["fold".to_string(), "--".to_string(), "-3".to_string()];
+            let args = os_args(&["fold", "--", "-3"]);
             let (result, obsolete) = handle_obsolete(&args);
-            assert_eq!(
-                result,
-                vec!["fold".to_string(), "--".to_string(), "-3".to_string()]
-            );
+            assert_eq!(result, os_args(&["fold", "--", "-3"]));
             assert_eq!(obsolete, None);
         }
 
         #[test]
         fn handle_obsolete_with_negative_number_parameter_removes_and_returns_value() {
-            let args = vec!["foo".to_string(), "-123".to_string(), "bar".to_string()];
+            let args = os_args(&["foo", "-123", "bar"]);
             let (result, obsolete) = handle_obsolete(&args);
-            assert_eq!(
-                result,
-                vec!["foo".to_string(), "-w123".to_string(), "bar".to_string()]
-            );
+            assert_eq!(result, os_args(&["foo", "-w123", "bar"]));
             assert_eq!(obsolete, Some("123".to_string()));
         }
 
         #[test]
         fn handle_obsolete_with_leading_or_trailing_spaces_does_not_remove() {
-            let args = vec!["foo".to_string(), " -1 ".to_string(), "bar".to_string()];
+            let args = os_args(&["foo", " -1 ", "bar"]);
             let (result, obsolete) = handle_obsolete(&args);
-            assert_eq!(
-                result,
-                vec!["foo".to_string(), " -1 ".to_string(), "bar".to_string()]
-            );
+            assert_eq!(result, os_args(&["foo", " -1 ", "bar"]));
             assert_eq!(obsolete, None);
         }
     }
@@ -1559,14 +1528,34 @@ mod tests {
         fn fold_native_semantic_preserves_non_utf8_output() {
             let mut temp_file = NamedTempFile::new().expect("create temp file");
             temp_file.write_all(b"\xff").expect("write temp file");
-            let path = temp_file.path().to_string_lossy().into_owned();
+            let path = temp_file.path().as_os_str().to_os_string();
 
-            let semantic =
-                fold_native_semantic(["fold".to_string(), path].into_iter().map(OsString::from))
-                    .expect("fold semantic");
+            let semantic = fold_native_semantic([OsString::from("fold"), path].into_iter())
+                .expect("fold semantic");
 
             assert_eq!(semantic.classic_bytes, b"\xff");
             assert_eq!(semantic.classic_text, "\u{fffd}");
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_fold_opens_non_utf8_filename() -> CTResult<()> {
+            use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+            let temp_dir = tempfile::tempdir().expect("create temp dir");
+            let mut path_bytes = temp_dir.path().as_os_str().as_bytes().to_vec();
+            path_bytes.push(b'/');
+            path_bytes.push(0xff);
+            let path = OsString::from_vec(path_bytes);
+
+            std::fs::write(Path::new(&path), b"invalid-name-content\n")
+                .expect("write non-UTF-8 filename");
+
+            let mut writer = Vec::new();
+            fold_main(&mut writer, [OsString::from("fold"), path].into_iter())?;
+
+            assert_eq!(writer, b"invalid-name-content\n");
+            Ok(())
         }
 
         fn fold_bytes(content: &str, width: usize, single_byte_locale: bool) -> String {
@@ -1610,7 +1599,7 @@ mod tests {
                 characters: false,
                 spaces: false,
                 width: 20,
-                files: vec!["nonexistent_file.txt".to_string()],
+                files: vec![OsString::from("nonexistent_file.txt")],
             };
 
             let mut writer = Vec::new();
@@ -1634,7 +1623,7 @@ mod tests {
                 characters: false,
                 spaces: false,
                 width: 20,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
+                files: vec![temp_file.path().as_os_str().to_os_string()],
             };
 
             let mut writer = Vec::new();
@@ -1666,7 +1655,7 @@ mod tests {
                 characters: false,
                 spaces: false,
                 width: 5,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
+                files: vec![temp_file.path().as_os_str().to_os_string()],
             };
 
             // 创建一个内存 writer
@@ -1694,7 +1683,7 @@ mod tests {
                 characters: false,
                 spaces: true,
                 width: 6,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
+                files: vec![temp_file.path().as_os_str().to_os_string()],
             };
 
             let mut writer = Vec::new();
@@ -1722,7 +1711,7 @@ mod tests {
                 characters: false,
                 spaces: true,
                 width: 6,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
+                files: vec![temp_file.path().as_os_str().to_os_string()],
             };
 
             let mut writer = Vec::new();
@@ -1746,7 +1735,7 @@ mod tests {
                 characters: false,
                 spaces: false,
                 width: 6,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
+                files: vec![temp_file.path().as_os_str().to_os_string()],
             };
 
             let mut writer = Vec::new();
@@ -1776,8 +1765,8 @@ mod tests {
                 spaces: false,
                 width: 10,
                 files: vec![
-                    temp_file1.path().to_string_lossy().to_string(),
-                    temp_file2.path().to_string_lossy().to_string(),
+                    temp_file1.path().as_os_str().to_os_string(),
+                    temp_file2.path().as_os_str().to_os_string(),
                 ],
             };
 
@@ -1800,7 +1789,7 @@ mod tests {
                 characters: false,
                 spaces: false,
                 width: 10,
-                files: vec!["this_file_does_not_exist.xyz".to_owned()],
+                files: vec![OsString::from("this_file_does_not_exist.xyz")],
             };
 
             let mut writer = BufWriter::new(Vec::new());
@@ -1813,7 +1802,7 @@ mod tests {
         fn fold_files_file_not_found_returns_ok() {
             let mut output = Vec::new();
             let fold_flags = FoldFlags {
-                files: vec!["nonexistent.txt".to_string()],
+                files: vec![OsString::from("nonexistent.txt")],
                 bytes: false,
                 characters: false,
                 spaces: true,
@@ -1842,7 +1831,7 @@ mod tests {
                 characters: true,
                 spaces: false,
                 width: 8,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
+                files: vec![temp_file.path().as_os_str().to_os_string()],
             };
 
             let mut writer = Vec::new();
@@ -1870,7 +1859,7 @@ mod tests {
                 characters: true,
                 spaces: true,
                 width: 6,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
+                files: vec![temp_file.path().as_os_str().to_os_string()],
             };
 
             let mut writer = Vec::new();
@@ -1900,7 +1889,7 @@ mod tests {
                 characters: false,
                 spaces: false,
                 width: 10, // 10字节：每个中文字符3字节，"中文测"=9字节，"试"会在下一行
-                files: vec![temp_file.path().to_string_lossy().to_string()],
+                files: vec![temp_file.path().as_os_str().to_os_string()],
             };
 
             let mut writer = Vec::new();
@@ -1928,7 +1917,7 @@ mod tests {
                 characters: true,
                 spaces: false,
                 width: 8,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
+                files: vec![temp_file.path().as_os_str().to_os_string()],
             };
 
             let mut writer = Vec::new();
@@ -1958,7 +1947,7 @@ mod tests {
                 characters: true,
                 spaces: false,
                 width: 6,
-                files: vec![temp_file1.path().to_string_lossy().to_string()],
+                files: vec![temp_file1.path().as_os_str().to_os_string()],
             };
 
             let mut char_writer = Vec::new();
@@ -1971,7 +1960,7 @@ mod tests {
                 characters: false,
                 spaces: false,
                 width: 6,
-                files: vec![temp_file2.path().to_string_lossy().to_string()],
+                files: vec![temp_file2.path().as_os_str().to_os_string()],
             };
 
             let mut byte_writer = Vec::new();
@@ -2003,7 +1992,7 @@ mod tests {
                 characters: true,
                 spaces: false,
                 width: 5,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
+                files: vec![temp_file.path().as_os_str().to_os_string()],
             };
 
             // 字节模式
@@ -2012,7 +2001,7 @@ mod tests {
                 characters: false,
                 spaces: false,
                 width: 5,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
+                files: vec![temp_file.path().as_os_str().to_os_string()],
             };
 
             // 列模式（默认）
@@ -2021,7 +2010,7 @@ mod tests {
                 characters: false,
                 spaces: false,
                 width: 5,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
+                files: vec![temp_file.path().as_os_str().to_os_string()],
             };
 
             let mut writer_chars = Vec::new();
@@ -2066,7 +2055,7 @@ mod tests {
                 characters: true,
                 spaces: false,
                 width: 10,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
+                files: vec![temp_file.path().as_os_str().to_os_string()],
             };
 
             let mut writer = Vec::new();
@@ -2098,7 +2087,7 @@ mod tests {
                 characters: true,
                 spaces: false,
                 width: 3,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
+                files: vec![temp_file.path().as_os_str().to_os_string()],
             };
 
             let mut writer = Vec::new();
@@ -2175,7 +2164,7 @@ mod tests {
                 characters: false,
                 spaces: false,
                 width: 6,
-                files: vec![temp_file_bytes.path().to_string_lossy().to_string()],
+                files: vec![temp_file_bytes.path().as_os_str().to_os_string()],
             };
 
             let mut writer_bytes = Vec::new();
@@ -2188,7 +2177,7 @@ mod tests {
                 characters: true,
                 spaces: false,
                 width: 6,
-                files: vec![temp_file_chars.path().to_string_lossy().to_string()],
+                files: vec![temp_file_chars.path().as_os_str().to_os_string()],
             };
 
             let mut writer_chars = Vec::new();

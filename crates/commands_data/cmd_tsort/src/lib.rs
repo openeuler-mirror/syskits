@@ -37,7 +37,7 @@ impl TsortCore {
     fn run_core(
         intent: &TsortIntent,
         input: CtPipelineData,
-    ) -> Result<(CtValue, String, String, i32), CtDiagnosticError> {
+    ) -> Result<(CtValue, String, Vec<u8>, String, i32), CtDiagnosticError> {
         let result = ctengine::run_with_optional_pipeline_stdin(
             "tsort",
             input,
@@ -49,12 +49,14 @@ impl TsortCore {
             Ok(semantic) => (
                 semantic_to_value(&semantic),
                 semantic.classic_text,
+                semantic.classic_bytes,
                 semantic.stderr_text,
                 semantic.exit_code,
             ),
             Err(err) => (
                 CtValue::List(Vec::new()),
                 String::new(),
+                Vec::new(),
                 render_error_text(err.as_ref()),
                 err.code(),
             ),
@@ -111,12 +113,17 @@ impl DataCommand for CmdTsort {
         _ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = TsortIntent::from_call(call)?;
-        let (value, classic_text, stderr_text, exit_code) = TsortCore::run_core(&intent, input)?;
+        let (value, classic_text, classic_bytes, stderr_text, exit_code) =
+            TsortCore::run_core(&intent, input)?;
         Ok(CtPipelineData::Value(
             value,
             CtPipelineMetadata {
                 classic_text: Some(classic_text),
-                classic_bytes: None,
+                classic_bytes: if classic_bytes.is_empty() {
+                    None
+                } else {
+                    Some(classic_bytes)
+                },
                 classic_append_newline: false,
                 stderr_text: if stderr_text.is_empty() {
                     None
@@ -168,6 +175,7 @@ mod tests {
                 },
             ],
             classic_text: "a\nb\n".into(),
+            classic_bytes: b"a\nb\n".to_vec(),
             stderr_text: "tsort: cycle\n".into(),
             exit_code: 1,
         });

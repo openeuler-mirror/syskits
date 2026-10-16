@@ -226,6 +226,11 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
     let mut output = Vec::new();
     let mut last_blank_pos = None;
     let mut last_blank_column = 0;
+    let mut last_blank_increment = 0;
+    let mut is_blank_seen = false;
+    let mut is_bs_following_last_blank = false;
+    let mut bs_following_last_blank_num = 0;
+    let mut is_cr_after_last_blank = false;
     let mut i = 0;
     while i < buffer.len() {
         // 获取当前字符及其字节长度 - mbrtowc逻辑
@@ -253,6 +258,11 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
             output.clear();
             last_blank_pos = None;
             last_blank_column = 0;
+            last_blank_increment = 0;
+            is_blank_seen = false;
+            is_bs_following_last_blank = false;
+            bs_following_last_blank_num = 0;
+            is_cr_after_last_blank = false;
             i += mblength;
             continue;
         }
@@ -298,6 +308,10 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
                     '\r' => {
                         column = 0;
                         output.extend_from_slice(&buffer[start_pos..start_pos + mblength]);
+                        if is_blank_seen && !convfail {
+                            is_cr_after_last_blank = true;
+                        }
+                        is_bs_following_last_blank = false;
                         break;
                     }
                     '\x08' => {
@@ -305,6 +319,11 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
                             column = column.saturating_sub(1);
                         }
                         output.extend_from_slice(&buffer[start_pos..start_pos + mblength]);
+                        if is_bs_following_last_blank && !convfail {
+                            bs_following_last_blank_num += 1;
+                        } else {
+                            is_bs_following_last_blank = false;
+                        }
                         break;
                     }
                     _ => {}
@@ -323,9 +342,22 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
                     let remaining = output[blank_pos + 1..].to_vec();
                     output = remaining;
 
-                    column -= last_blank_column;
+                    let column_adjustment = if is_cr_after_last_blank {
+                        last_blank_increment
+                    } else {
+                        bs_following_last_blank_num
+                    };
+                    // GNU performs this expression with size_t arithmetic.
+                    column = column
+                        .wrapping_sub(last_blank_column)
+                        .wrapping_add(column_adjustment);
                     last_blank_pos = None;
                     last_blank_column = 0;
+                    last_blank_increment = 0;
+                    is_blank_seen = false;
+                    is_bs_following_last_blank = false;
+                    bs_following_last_blank_num = 0;
+                    is_cr_after_last_blank = false;
 
                     continue;
                 }
@@ -338,6 +370,11 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
                     output.clear();
                     last_blank_pos = None;
                     last_blank_column = 0;
+                    last_blank_increment = 0;
+                    is_blank_seen = false;
+                    is_bs_following_last_blank = false;
+                    bs_following_last_blank_num = 0;
+                    is_cr_after_last_blank = false;
 
                     // 重新处理当前字符（继续rescan循环）
                     continue;
@@ -348,10 +385,25 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
             output.extend_from_slice(&buffer[start_pos..start_pos + mblength]);
             column += increment;
 
+            if is_blank_seen && !convfail && ch == '\r' {
+                is_cr_after_last_blank = true;
+            }
+
+            if is_bs_following_last_blank && !convfail && ch == '\x08' {
+                bs_following_last_blank_num += 1;
+            } else {
+                is_bs_following_last_blank = false;
+            }
+
             // 记录空格位置
             if is_spaces && ch.is_ascii_whitespace() {
                 last_blank_pos = Some(output.len() - 1);
                 last_blank_column = column;
+                last_blank_increment = increment;
+                is_blank_seen = true;
+                is_bs_following_last_blank = true;
+                bs_following_last_blank_num = 0;
+                is_cr_after_last_blank = false;
             }
 
             break; // 退出rescan循环

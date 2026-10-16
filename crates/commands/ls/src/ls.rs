@@ -175,6 +175,7 @@ const LS_DEFAULT_TERM_WIDTH: u16 = 80;
 const LS_POSIXLY_CORRELS_BLOCK_SIZE: u64 = 512;
 const LS_DEFAULT_BLOCK_SIZE: u64 = 1024;
 const LS_DEFAULT_FILE_SIZE_BLOCK_SIZE: u64 = 1;
+const LS_DEFAULT_TAB_SIZE: usize = 8;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LsSemanticRow {
@@ -226,6 +227,7 @@ enum LsError {
     LsIOErrorContext(std::io::Error, PathBuf, bool),
     LsBlockSizeParseError(String),
     LsDiredAndZeroAreIncompatible,
+    LsInvalidTabSize(String),
     LsAlreadyListedError(PathBuf),
     LsTimeStyleParseError(String, Vec<String>),
 }
@@ -239,6 +241,7 @@ impl CTError for LsError {
             Self::LsIOErrorContext(_, _, true) => 2,
             Self::LsBlockSizeParseError(_) => 2,
             Self::LsDiredAndZeroAreIncompatible => 2,
+            Self::LsInvalidTabSize(_) => 2,
             Self::LsAlreadyListedError(_) => 2,
             Self::LsTimeStyleParseError(_, _) => 2,
         }
@@ -269,6 +272,9 @@ impl Display for LsError {
             }
             LsError::LsInvalidLineWidth(s) => {
                 write!(formatter, "invalid line width: {}", s.quote())
+            }
+            LsError::LsInvalidTabSize(s) => {
+                write!(formatter, "invalid tab size: {}", s.quote())
             }
             LsError::LsIOError(e) => write!(formatter, "general io error: {e}"),
             LsError::LsIOErrorContext(e, p, _) => {
@@ -532,6 +538,7 @@ pub struct LsConfig {
     #[allow(dead_code)]
     block_size: u64,
     width: u16,
+    tab_size: usize,
     // Dir 和 vdir 需要访问该字段
     pub quoting_style: CtQuotingStyle,
     indicator_style: LsIndicatorStyle,
@@ -923,6 +930,41 @@ fn parse_width(s: &str) -> Result<u16, LsError> {
     }
 }
 
+fn parse_base_zero_usize(s: &str) -> Option<usize> {
+    let digits = s.strip_prefix('+').unwrap_or(s);
+    if digits.is_empty() {
+        return None;
+    }
+
+    let (radix, digits) = if let Some(hex) = digits
+        .strip_prefix("0x")
+        .or_else(|| digits.strip_prefix("0X"))
+    {
+        (16, hex)
+    } else if digits.len() > 1 && digits.starts_with('0') {
+        (8, &digits[1..])
+    } else {
+        (10, digits)
+    };
+
+    if digits.is_empty() {
+        return None;
+    }
+
+    usize::from_str_radix(digits, radix).ok()
+}
+
+fn parse_tab_size(s: &str) -> Result<usize, LsError> {
+    parse_base_zero_usize(s).ok_or_else(|| LsError::LsInvalidTabSize(s.into()))
+}
+
+fn format_uses_tab_size(format: &LsFormat) -> bool {
+    matches!(
+        format,
+        LsFormat::Columns | LsFormat::Across | LsFormat::Commas
+    )
+}
+
 fn stdout_terminal_width() -> Option<u16> {
     if !stdout().is_terminal() {
         return None;
@@ -1140,6 +1182,28 @@ impl LsConfig {
                     None => LS_DEFAULT_TERM_WIDTH,
                 },
             },
+        };
+        let tab_size = match options.get_one::<String>(ls_flags::format::LS_TAB_SIZE) {
+            Some(tab_size) => match options.value_source(ls_flags::format::LS_TAB_SIZE) {
+                Some(clap::parser::ValueSource::EnvVariable) => {
+                    if !format_uses_tab_size(&format) {
+                        LS_DEFAULT_TAB_SIZE
+                    } else {
+                        match parse_base_zero_usize(tab_size) {
+                            Some(tab_size) => tab_size,
+                            None => {
+                                ct_show_error!(
+                                    "ignoring invalid tab size in environment variable TABSIZE: {}",
+                                    tab_size.quote()
+                                );
+                                LS_DEFAULT_TAB_SIZE
+                            }
+                        }
+                    }
+                }
+                _ => parse_tab_size(tab_size)?,
+            },
+            None => LS_DEFAULT_TAB_SIZE,
         };
 
         #[allow(clippy::needless_bool)]
@@ -1365,6 +1429,7 @@ impl LsConfig {
             file_size_block_size,
             block_size,
             width,
+            tab_size,
             quoting_style,
             indicator_style: ls_indicator_style,
             time_style: ls_time_style,
@@ -3065,6 +3130,7 @@ fn display_grid_by_format_other_type<W: Write>(
             display_grid(
                 names,
                 config.width,
+                config.tab_size,
                 Direction::TopToBottom,
                 out,
                 quoted,
@@ -3075,6 +3141,7 @@ fn display_grid_by_format_other_type<W: Write>(
             display_grid(
                 names,
                 config.width,
+                config.tab_size,
                 Direction::LeftToRight,
                 out,
                 quoted,
@@ -3319,6 +3386,7 @@ fn render_grid(cells: &[Cell], width: usize, direction: Direction) -> String {
 fn display_grid<W: Write>(
     names: impl Iterator<Item = Cell>,
     width: u16,
+    tab_size: usize,
     direction: Direction,
     output: &mut W,
     quoted: bool,
@@ -3357,7 +3425,7 @@ fn display_grid<W: Write>(
         write!(
             output,
             "{}",
-            format_grid_output(&rendered, 8, quoted || preserve_padding_spaces)
+            format_grid_output(&rendered, tab_size, quoted || preserve_padding_spaces)
         )?;
     }
     Ok(())
@@ -4668,6 +4736,51 @@ mod tests {
         assert_eq!(config.width, 10);
     }
 
+    #[test]
+    fn invalid_tab_size_exits_with_usage_error() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--tabsize=bad", "."])
+            .unwrap();
+        let err = match LsConfig::from(&matches) {
+            Ok(_) => panic!("invalid tab size should fail"),
+            Err(err) => err,
+        };
+
+        assert_eq!(err.code(), 2);
+        assert!(err.to_string().contains("invalid tab size"));
+        assert!(err.to_string().contains("bad"));
+    }
+
+    #[test]
+    fn tab_size_uses_base_zero_parsing() {
+        let hex_matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--tabsize=0x10", "."])
+            .unwrap();
+        let hex_config = LsConfig::from(&hex_matches).expect("hex tab size");
+        assert_eq!(hex_config.tab_size, 16);
+
+        let invalid_octal_matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--tabsize=08", "."])
+            .unwrap();
+        let err = match LsConfig::from(&invalid_octal_matches) {
+            Ok(_) => panic!("invalid octal tab size should fail"),
+            Err(err) => err,
+        };
+        assert_eq!(err.code(), 2);
+    }
+
+    #[test]
+    fn invalid_tabsize_env_warns_and_uses_default() {
+        let _env_lock = lock_env();
+        let _tabsize = EnvVarGuard::set("TABSIZE", "bad");
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-C", "."])
+            .unwrap();
+        let config = LsConfig::from(&matches).expect("invalid TABSIZE env is non-fatal");
+
+        assert_eq!(config.tab_size, LS_DEFAULT_TAB_SIZE);
+    }
+
     struct EnvVarGuard {
         name: &'static str,
         previous: Option<OsString>,
@@ -4909,6 +5022,7 @@ mod tests {
         display_grid(
             cells.into_iter(),
             10,
+            8,
             Direction::TopToBottom,
             &mut output,
             true,
@@ -4951,6 +5065,7 @@ mod tests {
         display_grid(
             cells.into_iter(),
             20,
+            8,
             Direction::LeftToRight,
             &mut output,
             false,

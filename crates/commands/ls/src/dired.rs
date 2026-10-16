@@ -384,6 +384,7 @@ mod tests {
             file_size_block_size: 512,
             block_size: 4096,
             width: 80,
+            tab_size: crate::LS_DEFAULT_TAB_SIZE,
             quoting_style: CtQuotingStyle::Shell {
                 escape: true,
                 always_quote: true,

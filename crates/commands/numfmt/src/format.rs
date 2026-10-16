@@ -366,6 +366,12 @@ fn numfmt_precision_loss_input(source: &str, options: &NumfmtConfigs) -> Option<
     };
     let input = source_without_suffix.trim_start();
 
+    if options.delimiter.is_some()
+        && numfmt_delimited_trailing_blank_error(input, options).is_some()
+    {
+        return None;
+    }
+
     // GNU only reports precision loss after the complete number, including its
     // scale suffix, has been accepted by the input parser.
     numfmt_transform_from(input, &options.transform).ok()?;
@@ -963,6 +969,48 @@ fn numfmt_format_string(
     ))
 }
 
+fn numfmt_delimited_trailing_blank_error(
+    source: &str,
+    numfmt_configs: &NumfmtConfigs,
+) -> Option<String> {
+    let source_without_suffix = match &numfmt_configs.suffix {
+        Some(suffix) => source.strip_suffix(suffix).unwrap_or(source),
+        None => source,
+    };
+    let without_trailing_blanks = source_without_suffix.trim_end_matches([' ', '\t']);
+
+    if without_trailing_blanks.len() == source_without_suffix.len()
+        || numfmt_parse_number_parts(source_without_suffix).is_err()
+    {
+        return None;
+    }
+
+    if numfmt_configs.transform.from == NumfmtUnit::None {
+        Some(format!(
+            "rejecting suffix in input: {} (consider using --from)",
+            source_without_suffix.quote()
+        ))
+    } else {
+        Some(format!(
+            "invalid suffix in input {}: {}",
+            source_without_suffix.quote(),
+            source_without_suffix[without_trailing_blanks.len()..].quote()
+        ))
+    }
+}
+
+fn numfmt_format_delimited_field(field: &str, numfmt_configs: &NumfmtConfigs) -> Result<String> {
+    let source = field.trim_start();
+
+    // With an explicit delimiter, GNU keeps trailing blanks inside the field
+    // and lets end-pointer validation reject them.
+    if let Some(error) = numfmt_delimited_trailing_blank_error(source, numfmt_configs) {
+        return Err(error);
+    }
+
+    numfmt_format_string(source, numfmt_configs, None)
+}
+
 fn pad_string(value: String, width: isize, fill: char) -> String {
     if width == 0 {
         return value;
@@ -1022,7 +1070,7 @@ fn numfmt_format_line_delimited(s: &str, options: &NumfmtConfigs) -> Result<Stri
     if delimiter.is_empty() {
         let field = numfmt_nul_delimited_first_field(s);
         if ctcore::ct_ranges::contain(&options.fields, 1) {
-            out.push_str(&numfmt_format_string(field.trim_start(), options, None)?);
+            out.push_str(&numfmt_format_delimited_field(field, options)?);
         } else {
             out.push_str(field);
         }
@@ -1036,7 +1084,7 @@ fn numfmt_format_line_delimited(s: &str, options: &NumfmtConfigs) -> Result<Stri
             }
 
             if is_field_selected {
-                out.push_str(&numfmt_format_string(field.trim_start(), options, None)?);
+                out.push_str(&numfmt_format_delimited_field(field, options)?);
             } else {
                 // 打印未选择的字段，不进行转换
                 out.push_str(field);
@@ -1129,7 +1177,7 @@ fn numfmt_format_line_delimited_abort(
     if delimiter.is_empty() {
         let field = numfmt_nul_delimited_first_field(s);
         if ctcore::ct_ranges::contain(&options.fields, 1) {
-            match numfmt_format_string(field.trim_start(), options, None) {
+            match numfmt_format_delimited_field(field, options) {
                 Ok(rendered) => out.push_str(&rendered),
                 Err(error) => {
                     return Err(NumfmtAbortRenderError {
@@ -1150,7 +1198,7 @@ fn numfmt_format_line_delimited_abort(
             }
 
             if is_field_selected {
-                match numfmt_format_string(field.trim_start(), options, None) {
+                match numfmt_format_delimited_field(field, options) {
                     Ok(rendered) => out.push_str(&rendered),
                     Err(error) => {
                         return Err(NumfmtAbortRenderError {
@@ -1453,6 +1501,23 @@ mod tests {
 
         config.fields = vec![ctcore::ct_ranges::CtRange { low: 2, high: 2 }];
         assert_eq!(numfmt_format_line("12\u{0}34", &config).unwrap(), "12\n");
+    }
+
+    #[test]
+    fn test_delimited_field_rejects_trailing_blank() {
+        let mut config = setup_default_config();
+        config.transform.from = NumfmtUnit::None;
+        config.transform.to = NumfmtUnit::None;
+        config.delimiter = Some(",".to_string());
+        config.fields = vec![ctcore::ct_ranges::CtRange { low: 1, high: 1 }];
+
+        let expected = "rejecting suffix in input: '123 ' (consider using --from)";
+        assert_eq!(numfmt_format_line("123 ,x", &config).unwrap_err(), expected);
+
+        let error = numfmt_format_line_abort("123 ,x", &config).unwrap_err();
+        assert_eq!(error.partial_output, "");
+        assert_eq!(error.error, expected);
+        assert!(numfmt_precision_loss_inputs("1234567890123456789 ,x", &config).is_empty());
     }
 
     #[cfg(test)]

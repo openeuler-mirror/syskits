@@ -26,8 +26,9 @@ use sys_locale::get_locale;
 use crate::errors::*;
 use crate::flags::*;
 use crate::format::{
-    numfmt_format_and_print, numfmt_format_and_print_abort, numfmt_format_line,
-    numfmt_format_line_abort, numfmt_precision_loss_inputs,
+    numfmt_format_and_print_abort_with_line_ending, numfmt_format_and_print_with_line_ending,
+    numfmt_format_line_abort_with_line_ending, numfmt_format_line_with_line_ending,
+    numfmt_precision_loss_inputs,
 };
 use crate::units::{NumfmtUnit, Result};
 use ctcore::Tool;
@@ -390,10 +391,12 @@ fn numfmt_passthrough_text(
     zero_terminated: bool,
     has_line_ending: bool,
 ) -> String {
-    if zero_terminated {
-        format!("{input_line}\0")
-    } else if has_line_ending {
-        format!("{input_line}\n")
+    if has_line_ending {
+        if zero_terminated {
+            format!("{input_line}\0")
+        } else {
+            format!("{input_line}\n")
+        }
     } else {
         input_line.to_string()
     }
@@ -439,7 +442,7 @@ fn numfmt_process_semantic_line(
     }
 
     if options.invalid == NumfmtInvalidModes::Abort {
-        match numfmt_format_line_abort(input_line, options) {
+        match numfmt_format_line_abort_with_line_ending(input_line, options, has_line_ending) {
             Ok(rendered) => {
                 numfmt_push_row(
                     semantic,
@@ -477,7 +480,7 @@ fn numfmt_process_semantic_line(
         }
     }
 
-    match numfmt_format_line(input_line, options) {
+    match numfmt_format_line_with_line_ending(input_line, options, has_line_ending) {
         Ok(rendered) => {
             numfmt_push_row(
                 semantic,
@@ -556,35 +559,48 @@ where
     R: BufRead,
 {
     if numfmt_configs.zero_terminated {
-        for (index, line_result) in input.split(0).enumerate() {
-            match line_result {
-                Ok(bytes) => {
-                    let line = String::from_utf8_lossy(&bytes).to_string();
-                    if index < numfmt_configs.header {
-                        numfmt_push_row(
-                            semantic,
-                            numfmt_configs,
-                            index + 1,
-                            "stdin",
-                            &line,
-                            format!("{line}\0"),
-                            "header",
-                            None,
-                        );
-                    } else if !numfmt_process_semantic_line(
-                        semantic,
-                        numfmt_configs,
-                        index + 1,
-                        "stdin",
-                        &line,
-                        true,
-                        debug,
-                    )? {
-                        break;
-                    }
-                }
-                Err(err) => return Err(Box::new(NumfmtError::NumfmtIoError(err.to_string()))),
+        let mut input = input;
+        let mut bytes = Vec::new();
+        let mut index = 0usize;
+
+        loop {
+            bytes.clear();
+            let bytes_read = input
+                .read_until(0, &mut bytes)
+                .map_err(|err| NumfmtError::NumfmtIoError(err.to_string()))?;
+            if bytes_read == 0 {
+                break;
             }
+
+            let has_line_ending = bytes.last() == Some(&0);
+            if has_line_ending {
+                bytes.pop();
+            }
+            let line = String::from_utf8_lossy(&bytes).to_string();
+
+            if index < numfmt_configs.header {
+                numfmt_push_row(
+                    semantic,
+                    numfmt_configs,
+                    index + 1,
+                    "stdin",
+                    &line,
+                    numfmt_passthrough_text(&line, true, has_line_ending),
+                    "header",
+                    None,
+                );
+            } else if !numfmt_process_semantic_line(
+                semantic,
+                numfmt_configs,
+                index + 1,
+                "stdin",
+                &line,
+                has_line_ending,
+                debug,
+            )? {
+                break;
+            }
+            index += 1;
         }
     } else {
         let mut input = input;
@@ -658,19 +674,36 @@ where
     R: BufRead,
 {
     if numfmt_configs.zero_terminated {
-        for (idx, line_result) in input.split(0).enumerate() {
-            match line_result {
-                Ok(bytes) => {
-                    let line = String::from_utf8_lossy(&bytes);
-                    if idx < numfmt_configs.header {
-                        print!("{line}\0");
-                        Ok(())
-                    } else {
-                        numfmt_format_and_handle_validation(&line, numfmt_configs, debug)
-                    }
-                }
-                Err(err) => return Err(Box::new(NumfmtError::NumfmtIoError(err.to_string()))),
-            }?;
+        let mut input = input;
+        let mut bytes = Vec::new();
+        let mut idx = 0usize;
+
+        loop {
+            bytes.clear();
+            let bytes_read = input
+                .read_until(0, &mut bytes)
+                .map_err(|err| NumfmtError::NumfmtIoError(err.to_string()))?;
+            if bytes_read == 0 {
+                break;
+            }
+
+            let has_line_ending = bytes.last() == Some(&0);
+            if has_line_ending {
+                bytes.pop();
+            }
+            let line = String::from_utf8_lossy(&bytes);
+
+            if idx < numfmt_configs.header {
+                print!("{}", numfmt_passthrough_text(&line, true, has_line_ending));
+            } else {
+                numfmt_format_and_handle_validation_with_line_ending(
+                    &line,
+                    numfmt_configs,
+                    has_line_ending,
+                    debug,
+                )?;
+            }
+            idx += 1;
         }
     } else {
         let mut input = input;
@@ -725,9 +758,9 @@ fn numfmt_format_and_handle_validation_with_line_ending(
     }
 
     let handled_line = if numfmt_configs.invalid == NumfmtInvalidModes::Abort {
-        numfmt_format_and_print_abort(input_line, numfmt_configs)
+        numfmt_format_and_print_abort_with_line_ending(input_line, numfmt_configs, has_line_ending)
     } else {
-        numfmt_format_and_print(input_line, numfmt_configs)
+        numfmt_format_and_print_with_line_ending(input_line, numfmt_configs, has_line_ending)
     };
     if let Err(error_msg) = handled_line {
         match numfmt_configs.invalid {
@@ -742,10 +775,12 @@ fn numfmt_format_and_handle_validation_with_line_ending(
             }
             NumfmtInvalidModes::Ignore => {}
         };
-        if numfmt_configs.zero_terminated {
-            print!("{input_line}\0");
-        } else if has_line_ending {
-            println!("{input_line}");
+        if has_line_ending {
+            if numfmt_configs.zero_terminated {
+                print!("{input_line}\0");
+            } else {
+                println!("{input_line}");
+            }
         } else {
             print!("{input_line}");
         }

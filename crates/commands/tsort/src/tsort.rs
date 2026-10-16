@@ -18,7 +18,7 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, set_ct_exit_code, strip_errno};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -266,7 +266,7 @@ type TsortNode = Vec<u8>;
 
 #[derive(Default)]
 struct TSortGraph {
-    in_edges: BTreeMap<TsortNode, BTreeSet<TsortNode>>,
+    indegrees: BTreeMap<TsortNode, usize>,
     out_edges: BTreeMap<TsortNode, Vec<TsortNode>>,
 }
 
@@ -276,7 +276,7 @@ impl TSortGraph {
     }
 
     fn init_node(&mut self, n: TsortNode) {
-        self.in_edges.entry(n.clone()).or_default();
+        self.indegrees.entry(n.clone()).or_default();
         self.out_edges.entry(n).or_default();
     }
 
@@ -285,11 +285,8 @@ impl TSortGraph {
         self.init_node(to.clone());
 
         if from != to {
-            let in_set = self.in_edges.get_mut(&to).unwrap();
-            if !in_set.contains(&from) {
-                in_set.insert(from.clone());
-                self.out_edges.get_mut(&from).unwrap().push(to);
-            }
+            *self.indegrees.get_mut(&to).unwrap() += 1;
+            self.out_edges.get_mut(&from).unwrap().push(to);
         }
     }
 
@@ -303,20 +300,20 @@ impl TSortGraph {
 
         // 1. 初始化扫描 (GNU walk_tree scan_zeros)
         // BTreeMap 默认迭代顺序是 key 的升序 (Alphabetical)，这与 C 语言 walk_tree 一致
-        for (node, preds) in &self.in_edges {
-            if preds.is_empty() {
+        for (node, indegree) in &self.indegrees {
+            if *indegree == 0 {
                 queue.push_back(node.clone());
             }
         }
 
-        while !self.in_edges.is_empty() {
+        while !self.indegrees.is_empty() {
             if queue.is_empty() {
                 found_cycle = true;
                 if let Some(freed_node) =
                     self.detect_and_break_cycle(filename, &mut stderr_text, &mut output_events)
                 {
-                    if let Some(preds) = self.in_edges.get(&freed_node) {
-                        if preds.is_empty() {
+                    if let Some(indegree) = self.indegrees.get(&freed_node) {
+                        if *indegree == 0 {
                             queue.push_back(freed_node);
                         }
                     }
@@ -338,15 +335,15 @@ impl TSortGraph {
                 if let Some(succs) = self.out_edges.remove(&n) {
                     // 模拟 C 语言 successor 链表的 LIFO 行为，必须反向遍历
                     for succ in succs.into_iter().rev() {
-                        if let Some(preds) = self.in_edges.get_mut(&succ) {
-                            preds.remove(&n);
-                            if preds.is_empty() {
+                        if let Some(indegree) = self.indegrees.get_mut(&succ) {
+                            *indegree -= 1;
+                            if *indegree == 0 {
                                 queue.push_back(succ);
                             }
                         }
                     }
                 }
-                self.in_edges.remove(&n);
+                self.indegrees.remove(&n);
             }
         }
 
@@ -367,7 +364,7 @@ impl TSortGraph {
         stderr_text: &mut String,
         output_events: &mut Vec<TsortOutputEvent>,
     ) -> Option<TsortNode> {
-        let candidates: Vec<TsortNode> = self.in_edges.keys().cloned().collect();
+        let candidates: Vec<TsortNode> = self.indegrees.keys().cloned().collect();
 
         // 对应 GNU 代码中的 static struct item *loop
         let mut cursor: Option<TsortNode> = None;
@@ -384,7 +381,7 @@ impl TSortGraph {
                 // 如果当前没有 cursor，找第一个有入度的节点作为起点
                 if cursor.is_none() {
                     // 检查 k 是否有入度 (count > 0)
-                    if self.in_edges.get(k).map(|s| !s.is_empty()).unwrap_or(false) {
+                    if self.indegrees.get(k).copied().unwrap_or(0) > 0 {
                         cursor = Some(k.clone());
                     }
                     continue;
@@ -431,11 +428,11 @@ impl TSortGraph {
                             if loop_node == *k {
                                 // 此时 loop_node 就是 k。
                                 // GNU 在这里移除 relation: s = *p (即 k -> curr 的边)
-                                if let Some(preds) = self.in_edges.get_mut(curr) {
-                                    preds.remove(k);
+                                if let Some(indegree) = self.indegrees.get_mut(curr) {
+                                    *indegree -= 1;
                                 }
                                 if let Some(succs) = self.out_edges.get_mut(k) {
-                                    if let Some(pos) = succs.iter().position(|x| x == curr) {
+                                    if let Some(pos) = succs.iter().rposition(|x| x == curr) {
                                         succs.remove(pos);
                                     }
                                 }
@@ -513,8 +510,8 @@ mod tests {
             graph.init_node(s("A"));
 
             // 直接检查内部 BTreeMap 是否包含键
-            assert!(graph.in_edges.contains_key(&s("A")));
-            assert!(!graph.in_edges.contains_key(&s("B")));
+            assert!(graph.indegrees.contains_key(&s("A")));
+            assert!(!graph.indegrees.contains_key(&s("B")));
 
             // 检查出度表是否初始化
             assert!(graph.out_edges.contains_key(&s("A")));
@@ -526,14 +523,14 @@ mod tests {
             graph.add_edge(s("A"), s("B"));
 
             // 验证节点存在
-            assert!(graph.in_edges.contains_key(&s("A")));
-            assert!(graph.in_edges.contains_key(&s("B")));
+            assert!(graph.indegrees.contains_key(&s("A")));
+            assert!(graph.indegrees.contains_key(&s("B")));
 
             // 验证边存在 (A -> B)
             // A 的出度包含 B
             assert!(graph.out_edges.get(&s("A")).unwrap().contains(&s("B")));
-            // B 的入度包含 A
-            assert!(graph.in_edges.get(&s("B")).unwrap().contains(&s("A")));
+            // B 的入度为 1
+            assert_eq!(graph.indegrees.get(&s("B")), Some(&1));
 
             // 验证反向边不存在
             assert!(!graph.out_edges.get(&s("B")).unwrap().contains(&s("A")));
@@ -544,8 +541,8 @@ mod tests {
             let mut graph = TSortGraph::new();
             graph.init_node(s("A"));
 
-            assert!(graph.in_edges.contains_key(&s("A")));
-            assert!(graph.in_edges.get(&s("A")).unwrap().is_empty()); // 新初始化的节点入度为0
+            assert!(graph.indegrees.contains_key(&s("A")));
+            assert_eq!(graph.indegrees.get(&s("A")), Some(&0));
             assert!(graph.out_edges.get(&s("A")).unwrap().is_empty());
         }
 
@@ -574,7 +571,7 @@ mod tests {
                 vec!["A", "B", "C"]
             );
             assert!(
-                graph.in_edges.is_empty(),
+                graph.indegrees.is_empty(),
                 "Graph should be empty after successful sort"
             );
         }
@@ -604,7 +601,7 @@ mod tests {
             assert!(outcome.stderr_text.contains("input contains a loop"));
 
             // 即便有环，现在的逻辑也会打破它并输出所有节点，所以最终图也应该是空的
-            assert!(graph.in_edges.is_empty());
+            assert!(graph.indegrees.is_empty());
         }
 
         #[test]
@@ -616,7 +613,7 @@ mod tests {
 
             let outcome = graph.tsort_exe("test");
             assert_eq!(outcome.exit_code, 0);
-            assert!(graph.in_edges.is_empty());
+            assert!(graph.indegrees.is_empty());
         }
 
         #[test]
@@ -629,7 +626,7 @@ mod tests {
 
             let outcome = graph.tsort_exe("test");
             assert_eq!(outcome.exit_code, 0);
-            assert!(graph.in_edges.is_empty());
+            assert!(graph.indegrees.is_empty());
         }
 
         #[test]
@@ -639,7 +636,7 @@ mod tests {
 
             let outcome = graph.tsort_exe("test");
             assert_eq!(outcome.exit_code, 0);
-            assert!(graph.in_edges.is_empty());
+            assert!(graph.indegrees.is_empty());
         }
 
         #[test]
@@ -649,9 +646,9 @@ mod tests {
             graph.add_edge(s("A"), s("B")); // 重复添加
             graph.add_edge(s("B"), s("C"));
 
-            // 验证内部状态：A 的出度应该只有 1 个 B，不应该重复
-            assert_eq!(graph.out_edges.get(&s("A")).unwrap().len(), 1);
-            assert_eq!(graph.in_edges.get(&s("B")).unwrap().len(), 1);
+            // GNU 会保留每条重复关系并分别计算入度。
+            assert_eq!(graph.out_edges.get(&s("A")).unwrap().len(), 2);
+            assert_eq!(graph.indegrees.get(&s("B")), Some(&2));
 
             let outcome = graph.tsort_exe("test");
             assert_eq!(outcome.exit_code, 0);
@@ -666,8 +663,8 @@ mod tests {
             graph.add_edge(s("A"), s("A"));
 
             // 验证：节点存在，但没有自环边
-            assert!(graph.in_edges.contains_key(&s("A")));
-            assert!(graph.in_edges.get(&s("A")).unwrap().is_empty());
+            assert!(graph.indegrees.contains_key(&s("A")));
+            assert_eq!(graph.indegrees.get(&s("A")), Some(&0));
 
             let outcome = graph.tsort_exe("test");
             assert_eq!(outcome.exit_code, 0); // 自环不视为错误

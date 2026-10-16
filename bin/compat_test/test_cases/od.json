@@ -917,6 +917,142 @@
         ]
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "od",
+      "description": "LC_ALL=C、LANG=C下执行od --width=0；GNU与syskits均因非正宽度触发SIGABRT（退出码134）；迁移原Cargo用例od_nonpositive_attached_width_aborts_like_gnu",
+      "args": ["--width=0", "binary.bin"],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 134,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": []
+      },
+      "environment": {
+        "files": [
+          {
+            "path": "binary.bin",
+            "content": "\u0001\u0002\u0003\u0004",
+            "permissions": "644",
+            "owner": null,
+            "group": null,
+            "file_type": "Regular",
+            "symlink_target": null,
+            "size": null,
+            "timestamp": null
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "od",
+      "description": "LC_ALL=C、LANG=C下执行od --width=-1；GNU与syskits均因非正宽度触发SIGABRT（退出码134）；迁移原Cargo用例od_nonpositive_attached_width_aborts_like_gnu",
+      "args": ["--width=-1", "binary.bin"],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 134,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": []
+      },
+      "environment": {
+        "files": [
+          {
+            "path": "binary.bin",
+            "content": "\u0001\u0002\u0003\u0004",
+            "permissions": "644",
+            "owner": null,
+            "group": null,
+            "file_type": "Regular",
+            "symlink_target": null,
+            "size": null,
+            "timestamp": null
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "od",
+      "description": "LC_ALL=C、LANG=C下执行od -w0；GNU与syskits均因非正宽度触发SIGABRT（退出码134）；迁移原Cargo用例od_nonpositive_attached_width_aborts_like_gnu",
+      "args": ["-w0", "binary.bin"],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 134,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": []
+      },
+      "environment": {
+        "files": [
+          {
+            "path": "binary.bin",
+            "content": "\u0001\u0002\u0003\u0004",
+            "permissions": "644",
+            "owner": null,
+            "group": null,
+            "file_type": "Regular",
+            "symlink_target": null,
+            "size": null,
+            "timestamp": null
+          }
+        ]
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "od",
+      "description": "LC_ALL=C、LANG=C下执行od -w-1；GNU与syskits均因非正宽度触发SIGABRT（退出码134）；迁移原Cargo用例od_nonpositive_attached_width_aborts_like_gnu",
+      "args": ["-w-1", "binary.bin"],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 134,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verifications": []
+      },
+      "environment": {
+        "files": [
+          {
+            "path": "binary.bin",
+            "content": "\u0001\u0002\u0003\u0004",
+            "permissions": "644",
+            "owner": null,
+            "group": null,
+            "file_type": "Regular",
+            "symlink_target": null,
+            "size": null,
+            "timestamp": null
+          }
+        ]
+      },
+      "cleanup_commands": []
     }
     ]
 }

@@ -228,17 +228,30 @@ impl OdSettings {
             None => Ok(16),
             Some(s) => {
                 if matches.value_source(od_options::OD_WIDTH) == Some(ValueSource::CommandLine) {
-                    od_parse_number_of_bytes(s)
-                        .map_err(|e| {
-                            CtSimpleError::new(
-                                1,
-                                od_format_error_message(&e, s, od_options::OD_WIDTH),
-                            )
-                        })
-                        .and_then(|n| {
-                            usize::try_from(n)
-                                .map_err(|_| CtSimpleError::new(1, format!("'{s}' is too large")))
-                        })
+                    match od_parse_width_value(s) {
+                        Ok(OdWidthValue::Positive(width)) => Ok(width),
+                        Ok(OdWidthValue::NonPositive) => std::process::abort(),
+                        Err(OdWidthParseError::Invalid) => Err(CtSimpleError::new(
+                            1,
+                            format!("invalid --{} argument {}", od_options::OD_WIDTH, s.quote()),
+                        )),
+                        Err(OdWidthParseError::InvalidSuffix) => Err(CtSimpleError::new(
+                            1,
+                            format!(
+                                "invalid suffix in --{} argument {}",
+                                od_options::OD_WIDTH,
+                                s.quote()
+                            ),
+                        )),
+                        Err(OdWidthParseError::TooLarge) => Err(CtSimpleError::new(
+                            1,
+                            format!(
+                                "--{} argument {} too large",
+                                od_options::OD_WIDTH,
+                                s.quote()
+                            ),
+                        )),
+                    }
                 } else {
                     Ok(16)
                 }
@@ -272,6 +285,78 @@ impl OdSettings {
             },
         }
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum OdWidthValue {
+    Positive(usize),
+    NonPositive,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum OdWidthParseError {
+    Invalid,
+    InvalidSuffix,
+    TooLarge,
+}
+
+fn od_parse_width_value(s: &str) -> Result<OdWidthValue, OdWidthParseError> {
+    let bytes = s.as_bytes();
+    let mut pos = 0;
+
+    while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
+        pos += 1;
+    }
+
+    if pos == bytes.len() {
+        return Err(OdWidthParseError::Invalid);
+    }
+
+    let is_negative = match bytes[pos] {
+        b'-' => {
+            pos += 1;
+            true
+        }
+        b'+' => {
+            pos += 1;
+            false
+        }
+        _ => false,
+    };
+
+    if pos == bytes.len() || !bytes[pos].is_ascii_digit() {
+        return Err(OdWidthParseError::Invalid);
+    }
+
+    let digits_start = pos;
+    while pos < bytes.len() && bytes[pos].is_ascii_digit() {
+        pos += 1;
+    }
+
+    if pos != bytes.len() {
+        return Err(OdWidthParseError::InvalidSuffix);
+    }
+
+    let value = s[digits_start..pos]
+        .parse::<u128>()
+        .map_err(|_| OdWidthParseError::TooLarge)?;
+    let limit = if is_negative {
+        i64::MAX as u128 + 1
+    } else {
+        i64::MAX as u128
+    };
+
+    if value > limit {
+        return Err(OdWidthParseError::TooLarge);
+    }
+
+    if is_negative || value == 0 {
+        return Ok(OdWidthValue::NonPositive);
+    }
+
+    usize::try_from(value)
+        .map(OdWidthValue::Positive)
+        .map_err(|_| OdWidthParseError::TooLarge)
 }
 
 pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
@@ -1123,6 +1208,42 @@ mod tests {
 
     mod od_settings_tests {
         use super::*;
+
+        #[test]
+        fn test_parse_width_value_matches_gnu_decimal_rules() {
+            assert_eq!(od_parse_width_value("1"), Ok(OdWidthValue::Positive(1)));
+            assert_eq!(od_parse_width_value("+1"), Ok(OdWidthValue::Positive(1)));
+            assert_eq!(od_parse_width_value("010"), Ok(OdWidthValue::Positive(10)));
+            assert_eq!(od_parse_width_value(" 1"), Ok(OdWidthValue::Positive(1)));
+            assert_eq!(od_parse_width_value("0"), Ok(OdWidthValue::NonPositive));
+            assert_eq!(od_parse_width_value("-1"), Ok(OdWidthValue::NonPositive));
+            assert_eq!(od_parse_width_value("+0"), Ok(OdWidthValue::NonPositive));
+            assert_eq!(od_parse_width_value("abc"), Err(OdWidthParseError::Invalid));
+            assert_eq!(
+                od_parse_width_value("-abc"),
+                Err(OdWidthParseError::Invalid)
+            );
+            assert_eq!(
+                od_parse_width_value("0K"),
+                Err(OdWidthParseError::InvalidSuffix)
+            );
+            assert_eq!(
+                od_parse_width_value("0x0"),
+                Err(OdWidthParseError::InvalidSuffix)
+            );
+            assert_eq!(
+                od_parse_width_value("1 "),
+                Err(OdWidthParseError::InvalidSuffix)
+            );
+            assert_eq!(
+                od_parse_width_value("9223372036854775808"),
+                Err(OdWidthParseError::TooLarge)
+            );
+            assert_eq!(
+                od_parse_width_value("-9223372036854775809"),
+                Err(OdWidthParseError::TooLarge)
+            );
+        }
 
         #[test]
         fn test_new_with_defaults() {

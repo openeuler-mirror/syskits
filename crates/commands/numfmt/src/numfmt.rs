@@ -303,6 +303,23 @@ mod native_semantic_tests {
     }
 
     #[test]
+    fn numfmt_native_semantic_rejects_leading_plus() {
+        let args = ["numfmt", "+1"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 2);
+        assert_eq!(semantic.classic_text, "");
+        assert_eq!(semantic.stderr_text, "numfmt: invalid number: '+1'\n");
+        assert_eq!(semantic.rows.len(), 1);
+        assert_eq!(semantic.rows[0].status, "partial-error");
+        assert_eq!(
+            semantic.rows[0].error.as_deref(),
+            Some("invalid number: '+1'")
+        );
+    }
+
+    #[test]
     fn numfmt_native_semantic_warn_mode_keeps_passthrough_rows() {
         let args = ["numfmt", "--invalid=warn", "hello"];
 

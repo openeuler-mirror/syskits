@@ -93,10 +93,8 @@ fn parse_numeric_prefix(s: &str) -> Option<(usize, bool)> {
     let mut idx = 0;
     let mut chars = s.char_indices().peekable();
 
-    if let Some((i, c)) = chars.peek().copied()
-        && (c == '+' || c == '-')
-    {
-        idx = i + c.len_utf8();
+    if let Some((i, '-')) = chars.peek().copied() {
+        idx = i + 1;
         chars.next();
     }
 
@@ -308,7 +306,7 @@ fn numfmt_significant_digits(digits: &str) -> usize {
 }
 
 fn numfmt_number_may_lose_precision(number: &str) -> bool {
-    let unsigned = number.strip_prefix(['-', '+']).unwrap_or(number);
+    let unsigned = number.strip_prefix('-').unwrap_or(number);
     let (integer, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
     let integer_digits = numfmt_significant_digits(integer);
     let fraction_digits = numfmt_significant_digits(fraction);
@@ -1260,6 +1258,19 @@ mod tests {
         fn test_parse_without_suffix() {
             let result = numfmt_parse_suffix("1234").unwrap();
             assert_eq!(result, (1234.0, None));
+        }
+
+        #[test]
+        fn test_parse_rejects_leading_plus() {
+            for input in ["+1", "+.5", "+1.2", "+1K"] {
+                assert_eq!(
+                    numfmt_parse_suffix(input).unwrap_err(),
+                    format!("invalid number: '{input}'")
+                );
+            }
+
+            assert_eq!(numfmt_parse_suffix("-1").unwrap(), (-1.0, None));
+            assert_eq!(numfmt_parse_suffix("-.5").unwrap(), (-0.5, None));
         }
 
         // #[test]

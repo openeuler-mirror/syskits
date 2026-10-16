@@ -521,12 +521,42 @@ fn current_collate_locale_name() -> String {
     }
 }
 
+fn sort_locale_decimal_point() -> char {
+    unsafe {
+        let locale = ctcore::libc::localeconv();
+        if locale.is_null() {
+            return '.';
+        }
+
+        let decimal_point = (*locale).decimal_point;
+        if decimal_point.is_null() {
+            return '.';
+        }
+
+        let bytes = CStr::from_ptr(decimal_point).to_bytes();
+        if bytes.len() == 1 && bytes[0] != 0 {
+            char::from(bytes[0])
+        } else {
+            '.'
+        }
+    }
+}
+
+fn sort_debug_needs_numeric_locale_note(settings: &SortGlobalConfigs) -> bool {
+    settings.selectors.iter().any(|selector| {
+        matches!(
+            selector.settings.mode,
+            SortMode::SortNumeric | SortMode::SortHumanNumeric | SortMode::SortGeneralNumeric
+        )
+    })
+}
+
 fn sort_debug_diagnostic_text(settings: &SortGlobalConfigs) -> String {
     if !settings.is_debug {
         return String::new();
     }
 
-    if hard_locale(LcCategory::LcCollate) {
+    let mut text = if hard_locale(LcCategory::LcCollate) {
         let locale = current_collate_locale_name();
         format!(
             "{}: text ordering performed using ‘{}’ sorting rules\n",
@@ -538,7 +568,17 @@ fn sort_debug_diagnostic_text(settings: &SortGlobalConfigs) -> String {
             "{}: text ordering performed using simple byte comparison\n",
             ctcore::ct_util_name()
         )
+    };
+
+    if sort_debug_needs_numeric_locale_note(settings) {
+        text.push_str(&format!(
+            "{}: note numbers use '{}' as a decimal point in this locale\n",
+            ctcore::ct_util_name(),
+            sort_locale_decimal_point()
+        ));
     }
+
+    text
 }
 
 fn print_sort_debug_diagnostic(settings: &SortGlobalConfigs) {

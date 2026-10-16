@@ -204,6 +204,27 @@ fn test_status_level_noxfer() {
 }
 
 #[test]
+fn zero_block_size_operands_are_invalid_numbers() {
+    for operand in ["bs=0", "ibs=0", "obs=0", "cbs=0", "bs=0K"] {
+        let value = operand.split_once('=').unwrap().1;
+        match Parser::new().parse(&[operand]) {
+            Err(err) => assert_eq!(err, ParseError::InvalidNumber(value.to_string())),
+            Ok(_) => panic!("{operand} should reject zero block size"),
+        }
+    }
+}
+
+#[test]
+fn zero_record_count_and_offsets_are_allowed() {
+    let args = &["count=0", "skip=0", "seek=0"];
+    let settings = Parser::new().parse(args).unwrap();
+
+    assert_eq!(settings.count, Some(Num::Blocks(0)));
+    assert_eq!(settings.skip, 0);
+    assert_eq!(settings.seek, 0);
+}
+
+#[test]
 fn test_multiple_flags_options() {
     let args = &[
         "iflag=fullblock,count_bytes",

@@ -21,9 +21,9 @@ binary-heap-plus = { workspace = true }
 clap = { workspace = true }
 compare = { workspace = true }
 ctrlc = { workspace = true }
-fnv = { workspace = true }
 itertools = { workspace = true }
 memchr = { workspace = true }
+md-5 = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
 self_cell = { workspace = true }

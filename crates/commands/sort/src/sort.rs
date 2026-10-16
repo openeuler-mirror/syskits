@@ -20,7 +20,6 @@ use std::error::Error;
 use std::ffi::{CStr, OsStr, OsString};
 use std::fmt::Display;
 use std::fs::{File, OpenOptions};
-use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdout};
 use std::ops::Range;
 use std::path::Path;
@@ -31,7 +30,7 @@ use std::sync::{Arc, Mutex};
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
-use fnv::FnvHasher;
+use md5::{Digest as _, Md5};
 use rand::{Rng, thread_rng};
 use rayon::prelude::*;
 use unicode_width::UnicodeWidthStr;
@@ -2457,16 +2456,17 @@ fn sort_resolve_random_salt(random_source: Option<&str>) -> CTResult<[u8; 16]> {
     Ok(sort_get_rand_string())
 }
 
-fn sort_get_hash<T: Hash>(t: &T) -> u64 {
-    let mut s = FnvHasher::default();
-    t.hash(&mut s);
-    s.finish()
+fn sort_random_digest(text: &[u8], salt: &[u8]) -> [u8; 16] {
+    let mut md5 = Md5::new();
+    md5.update(salt);
+    md5.update(text);
+    md5.finalize().into()
 }
 
 fn sort_random_shuffle(a: &str, b: &str, salt: &[u8]) -> Ordering {
-    let da = sort_get_hash(&(a, salt));
-    let db = sort_get_hash(&(b, salt));
-    da.cmp(&db)
+    let da = sort_random_digest(a.as_bytes(), salt);
+    let db = sort_random_digest(b.as_bytes(), salt);
+    da.cmp(&db).then_with(|| a.as_bytes().cmp(b.as_bytes()))
 }
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy, Debug)]
@@ -10533,19 +10533,26 @@ mod tests {
         }
 
         #[test]
-        fn test_get_hash() {
-            let a = "Ted".to_string();
-
-            assert_eq!(2_646_829_031_758_483_623, sort_get_hash(&a));
-        }
-
-        #[test]
         fn test_random_shuffle() {
             let a = "Ted";
             let b = "Ted";
             let c = sort_get_rand_string();
 
             assert_eq!(Ordering::Equal, sort_random_shuffle(a, b, &c));
+        }
+
+        #[test]
+        fn test_random_digest_matches_gnu_seeded_md5() {
+            let salt = [0_u8; 16];
+
+            assert_eq!(
+                sort_random_digest(b"a", &salt),
+                [
+                    0x05, 0x31, 0x10, 0x3a, 0xd8, 0xfc, 0x7d, 0xd4, 0xf9, 0x72, 0xd9, 0x8e, 0x47,
+                    0x50, 0x99, 0x4e,
+                ]
+            );
+            assert_eq!(sort_random_shuffle("a", "b", &salt), Ordering::Less);
         }
 
         #[test]

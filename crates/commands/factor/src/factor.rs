@@ -69,7 +69,7 @@ impl FactorFlags {
     /// 从命令行参数创建配置结构体
     fn new(matches: &ArgMatches) -> Self {
         // 布尔标志提取模式
-        let print_exponents = matches.get_flag(factor_flags::EXPONENTS);
+        let print_exponents = matches.get_count(factor_flags::EXPONENTS) > 0;
 
         // 向量类型参数提取模式
         let numbers = matches
@@ -160,7 +160,7 @@ fn factor_option_error(args: &[OsString]) -> Option<String> {
         }
 
         if arg_str.starts_with('-') && arg_str != "-" {
-            if arg_str == "-h" || arg_str == "-V" {
+            if is_exponents_short_option_cluster(&arg_str) || arg_str == "-V" {
                 continue;
             }
             let invalid = arg_str.chars().nth(1).unwrap_or('-');
@@ -171,6 +171,10 @@ fn factor_option_error(args: &[OsString]) -> Option<String> {
     }
 
     None
+}
+
+fn is_exponents_short_option_cluster(arg: &str) -> bool {
+    arg.starts_with('-') && arg.len() > 1 && arg[1..].chars().all(|c| c == 'h')
 }
 
 fn factor_row_from_powers(
@@ -421,7 +425,7 @@ fn validate_options(args: &[OsString]) -> CTResult<()> {
         }
 
         if arg_str.starts_with('-') && arg_str != "-" {
-            if arg_str == "-h" || arg_str == "-V" {
+            if is_exponents_short_option_cluster(&arg_str) || arg_str == "-V" {
                 continue;
             }
             let invalid = arg_str.chars().nth(1).unwrap_or('-');
@@ -577,7 +581,7 @@ pub fn ct_app() -> Command {
             .short('h')
             .long(factor_flags::EXPONENTS)
             .help(t!("factor.clap.exponents"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(factor_flags::HELP)
             .long(factor_flags::HELP)
             .help(t!("factor.clap.help"))
@@ -657,6 +661,27 @@ mod tests {
         let flags = FactorFlags::new(&matches);
         assert!(flags.print_exponents);
         assert_eq!(flags.numbers, vec!["12", "24"]);
+
+        let matches = ct_app()
+            .try_get_matches_from(vec!["factor", "-h", "-h", "360"])
+            .unwrap();
+        let flags = FactorFlags::new(&matches);
+        assert!(flags.print_exponents);
+        assert_eq!(flags.numbers, vec!["360"]);
+
+        let matches = ct_app()
+            .try_get_matches_from(vec!["factor", "--exponents", "--exponents", "360"])
+            .unwrap();
+        let flags = FactorFlags::new(&matches);
+        assert!(flags.print_exponents);
+        assert_eq!(flags.numbers, vec!["360"]);
+
+        let matches = ct_app()
+            .try_get_matches_from(vec!["factor", "-hh", "360"])
+            .unwrap();
+        let flags = FactorFlags::new(&matches);
+        assert!(flags.print_exponents);
+        assert_eq!(flags.numbers, vec!["360"]);
     }
 
     use std::io::BufWriter;
@@ -689,6 +714,41 @@ mod tests {
         let buffer = writer.into_inner().unwrap();
         let output = String::from_utf8(buffer).unwrap();
         assert_eq!(output, "12: 2^2 3\n");
+    }
+
+    #[test]
+    fn test_factor_main_accepts_repeated_exponents_option() {
+        let buffer = Vec::new();
+        let mut writer = BufWriter::new(buffer);
+        let args = vec![
+            OsString::from("factor"),
+            OsString::from("-h"),
+            OsString::from("-h"),
+            OsString::from("360"),
+        ];
+
+        factor_main(args.into_iter(), &mut writer).unwrap();
+
+        let buffer = writer.into_inner().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        assert_eq!(output, "360: 2^3 3^2 5\n");
+    }
+
+    #[test]
+    fn test_factor_main_accepts_clustered_exponents_option() {
+        let buffer = Vec::new();
+        let mut writer = BufWriter::new(buffer);
+        let args = vec![
+            OsString::from("factor"),
+            OsString::from("-hh"),
+            OsString::from("360"),
+        ];
+
+        factor_main(args.into_iter(), &mut writer).unwrap();
+
+        let buffer = writer.into_inner().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        assert_eq!(output, "360: 2^3 3^2 5\n");
     }
 
     /// 测试 process_numbers 函数

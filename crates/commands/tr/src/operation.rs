@@ -66,6 +66,8 @@ pub enum BadSequence {
     InvalidRepeatCount(String),
     /// 当不截断 SET1 时，SET2 为空
     EmptySet2WhenNotTruncatingSet1,
+    /// 范围端点按反向排序
+    ReverseCollatingRange(u8, u8),
 }
 
 impl Display for BadSequence {
@@ -87,12 +89,26 @@ impl Display for BadSequence {
             Self::EmptySet2WhenNotTruncatingSet1 => {
                 write!(f, "when not truncating set1, string2 must be non-empty")
             }
+            Self::ReverseCollatingRange(start, end) => write!(
+                f,
+                "range-endpoints of '{}-{}' are in reverse collating sequence order",
+                printable_range_endpoint(*start),
+                printable_range_endpoint(*end)
+            ),
         }
     }
 }
 
 impl Error for BadSequence {}
 impl CTError for BadSequence {}
+
+fn printable_range_endpoint(byte: u8) -> String {
+    if byte.is_ascii_graphic() || byte == b' ' {
+        char::from(byte).to_string()
+    } else {
+        format!("\\{byte:03o}")
+    }
+}
 
 /// 字符序列类型
 #[derive(Debug, Clone, Copy)]
@@ -342,8 +358,11 @@ impl Sequence {
         )(input)
         .map(|(l, (a, b))| {
             (l, {
-                let (start, end) = (u32::from(a), u32::from(b));
-                Ok(Self::CharRange(start as u8, end as u8))
+                if b < a {
+                    Err(BadSequence::ReverseCollatingRange(a, b))
+                } else {
+                    Ok(Self::CharRange(a, b))
+                }
             })
         })
     }
@@ -883,6 +902,11 @@ mod tests {
             assert!(matches!(
                 TranslateOperation::new(vec![b'a'], vec![], false).unwrap_err(),
                 BadSequence::EmptySet2WhenNotTruncatingSet1
+            ));
+
+            assert!(matches!(
+                Sequence::from_str(b"z-a").unwrap_err(),
+                BadSequence::ReverseCollatingRange(b'z', b'a')
             ));
         }
 
@@ -1578,6 +1602,14 @@ mod tests {
             assert_eq!(
                 BadSequence::EmptySet2WhenNotTruncatingSet1.to_string(),
                 "when not truncating set1, string2 must be non-empty"
+            );
+            assert_eq!(
+                BadSequence::ReverseCollatingRange(b'z', b'a').to_string(),
+                "range-endpoints of 'z-a' are in reverse collating sequence order"
+            );
+            assert_eq!(
+                BadSequence::ReverseCollatingRange(1, 0).to_string(),
+                "range-endpoints of '\\001-\\000' are in reverse collating sequence order"
             );
         }
 

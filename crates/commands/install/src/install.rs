@@ -1813,14 +1813,9 @@ fn set_ownership_and_permissions(to: &Path, b: &Installer) -> CTResult<()> {
 ///
 /// # 返回值
 /// 返回 `CTResult<()>`，表示操作是否成功完成
-fn preserve_timestamps(from: &Path, to: &Path) -> CTResult<()> {
-    let meta = match fs::metadata(from) {
-        Ok(meta) => meta,
-        Err(e) => return Err(InstallError::MetadataFailed(e).into()),
-    };
-
-    let modified_time = FileTime::from_last_modification_time(&meta);
-    let accessed_time = FileTime::from_last_access_time(&meta);
+fn preserve_timestamps_from_metadata(meta: &fs::Metadata, to: &Path) -> CTResult<()> {
+    let modified_time = FileTime::from_last_modification_time(meta);
+    let accessed_time = FileTime::from_last_access_time(meta);
 
     match set_file_times(to, accessed_time, modified_time) {
         Ok(_) => Ok(()),
@@ -1829,6 +1824,16 @@ fn preserve_timestamps(from: &Path, to: &Path) -> CTResult<()> {
             Ok(())
         }
     }
+}
+
+#[cfg(test)]
+fn preserve_timestamps(from: &Path, to: &Path) -> CTResult<()> {
+    let meta = match fs::metadata(from) {
+        Ok(meta) => meta,
+        Err(e) => return Err(InstallError::MetadataFailed(e).into()),
+    };
+
+    preserve_timestamps_from_metadata(&meta, to)
 }
 
 /// 复制文件并设置其属性。
@@ -1850,6 +1855,11 @@ fn copy(from: &Path, to: &Path, b: &Installer) -> CTResult<()> {
     if b.compare && !b.need_copy(from, to)? {
         return Ok(());
     }
+    let source_metadata = if b.preserve_timestamps {
+        Some(fs::metadata(from).map_err(InstallError::MetadataFailed)?)
+    } else {
+        None
+    };
     // Declare the path here as we may need it for the verbose output below.
     let backup_path = perform_backup(to, b)?;
 
@@ -1874,8 +1884,8 @@ fn copy(from: &Path, to: &Path, b: &Installer) -> CTResult<()> {
 
     set_ownership_and_permissions(to, b)?;
 
-    if b.preserve_timestamps {
-        preserve_timestamps(from, to)?;
+    if let Some(source_metadata) = source_metadata.as_ref() {
+        preserve_timestamps_from_metadata(source_metadata, to)?;
     }
 
     if b.verbose {
@@ -2079,6 +2089,38 @@ mod tests {
             source_meta.modified().unwrap(),
             dest_meta.modified().unwrap()
         );
+    }
+
+    #[test]
+    fn test_copy_preserve_timestamps_keeps_original_atime() {
+        use std::os::unix::fs::MetadataExt;
+
+        const ATIME: i64 = 946_684_800;
+        const MTIME: i64 = 1_577_836_800;
+
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source");
+        let dest = temp.path().join("dest");
+
+        std::fs::write(&source, "test content").unwrap();
+        set_file_times(
+            &source,
+            FileTime::from_unix_time(ATIME, 0),
+            FileTime::from_unix_time(MTIME, 0),
+        )
+        .unwrap();
+
+        let installer = Installer {
+            preserve_timestamps: true,
+            ..Default::default()
+        };
+
+        copy(&source, &dest, &installer).unwrap();
+
+        let dest_meta = std::fs::metadata(&dest).unwrap();
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "test content");
+        assert_eq!(dest_meta.atime(), ATIME);
+        assert_eq!(dest_meta.mtime(), MTIME);
     }
 
     #[test]

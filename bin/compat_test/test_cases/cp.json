@@ -596,14 +596,19 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y f1)\" = \"$(stat -c %Y f2)\"",
+                        "command": "test \"$(stat -c %X f2)\" = \"946684800\"",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "test \"$(stat -c %Y f2)\" = \"1577836800\"",
                         "expected_exit": 0
                     }
                 ]
             },
             "setup_commands": [
-                "touch -d '2000-01-01 00:00:00' f1",
-                "sleep 1"
+                "printf 'source-data\\n' > f1",
+                "touch -a -d '2000-01-01 UTC' f1",
+                "touch -m -d '2020-01-01 UTC' f1"
             ],
             "cleanup_commands": [
                 "rm -f f1 f2"

@@ -69,6 +69,31 @@ fn fold_width_zero_is_rejected() {
 }
 
 #[test]
+fn fold_enforces_gnu_width_limit() {
+    let max_width = (usize::MAX - 8 - 1).to_string();
+    assert_fold_bytes(
+        "maximum GNU width",
+        &["fold", "-w", &max_width],
+        "C",
+        b"",
+        b"",
+    );
+
+    for invalid_width in [(usize::MAX - 8).to_string(), usize::MAX.to_string()] {
+        let output = run_fold_with_stdin(&["fold", "-w", &invalid_width], "C", b"");
+
+        assert_eq!(output.status.code(), Some(1), "width {invalid_width}");
+        assert!(output.stdout.is_empty(), "width {invalid_width}");
+        assert_eq!(
+            String::from_utf8(output.stderr).expect("utf8 stderr"),
+            format!(
+                "fold: invalid number of columns: '{invalid_width}': Value too large for defined data type\n"
+            )
+        );
+    }
+}
+
+#[test]
 fn fold_bytes_reset_width_after_newline_in_c_locale() {
     let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args(["fold", "-b", "-w", "8"])

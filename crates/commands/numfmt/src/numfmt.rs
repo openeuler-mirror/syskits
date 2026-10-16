@@ -123,6 +123,20 @@ mod native_semantic_tests {
     }
 
     #[test]
+    fn numfmt_native_semantic_preserves_fraction_without_scale_suffix() {
+        let args = ["numfmt", "--from=si", "1.1", "0.0001K"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.stderr_text, "");
+        assert_eq!(semantic.classic_text, "1.1\n1\n");
+        assert_eq!(semantic.rows.len(), 2);
+        assert_eq!(semantic.rows[0].output, "1.1");
+        assert_eq!(semantic.rows[1].output, "1");
+    }
+
+    #[test]
     fn numfmt_native_semantic_uses_last_repeated_to_option() {
         let args = ["numfmt", "--to=si", "--to=iec", "2048"];
 

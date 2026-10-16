@@ -8,6 +8,7 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+use std::borrow::Cow;
 use std::ffi::CStr;
 
 use bigdecimal::{BigDecimal, RoundingMode};
@@ -24,6 +25,22 @@ use crate::units::Result;
 
 const NUMFMT_MAX_UNSCALED_DIGITS: usize = 18;
 const NUMFMT_MAX_ACCEPTABLE_DIGITS: usize = 33;
+
+fn numfmt_locale_decimal_point() -> String {
+    unsafe {
+        let locale = ctcore::libc::localeconv();
+        if locale.is_null() || (*locale).decimal_point.is_null() {
+            return ".".to_string();
+        }
+
+        let decimal_point = CStr::from_ptr((*locale).decimal_point).to_bytes();
+        if decimal_point.is_empty() {
+            ".".to_string()
+        } else {
+            String::from_utf8_lossy(decimal_point).into_owned()
+        }
+    }
+}
 
 /// 遍历一行的字段，其中每个字段都是一个连续的非空格序列。
 /// 非空格的连续序列，可选择以一个或多个前导空格字符作为前缀。
@@ -89,21 +106,23 @@ impl<'a> Iterator for NumfmtWhitespaceSplitter<'a> {
     }
 }
 
-fn parse_numeric_prefix(s: &str) -> Option<(usize, bool)> {
+fn parse_numeric_prefix_with_decimal_point(s: &str, decimal_point: &str) -> Option<(usize, bool)> {
     let mut idx = 0;
-    let mut chars = s.char_indices().peekable();
+    let decimal_point = if decimal_point.is_empty() {
+        "."
+    } else {
+        decimal_point
+    };
 
-    if let Some((i, '-')) = chars.peek().copied() {
-        idx = i + 1;
-        chars.next();
+    if s.starts_with('-') {
+        idx = 1;
     }
 
     let mut digits_before = 0usize;
-    while let Some((i, c)) = chars.peek().copied() {
+    while let Some(c) = s[idx..].chars().next() {
         if c.is_ascii_digit() {
             digits_before += 1;
-            idx = i + c.len_utf8();
-            chars.next();
+            idx += c.len_utf8();
         } else {
             break;
         }
@@ -111,16 +130,14 @@ fn parse_numeric_prefix(s: &str) -> Option<(usize, bool)> {
 
     let mut has_dot = false;
     let mut digits_after = 0usize;
-    if let Some((i, '.')) = chars.peek().copied() {
+    if s[idx..].starts_with(decimal_point) {
         has_dot = true;
-        idx = i + 1;
-        chars.next();
+        idx += decimal_point.len();
 
-        while let Some((i, c)) = chars.peek().copied() {
+        while let Some(c) = s[idx..].chars().next() {
             if c.is_ascii_digit() {
                 digits_after += 1;
-                idx = i + c.len_utf8();
-                chars.next();
+                idx += c.len_utf8();
             } else {
                 break;
             }
@@ -132,6 +149,28 @@ fn parse_numeric_prefix(s: &str) -> Option<(usize, bool)> {
     }
 
     Some((idx, has_dot && digits_after == 0))
+}
+
+fn parse_numeric_prefix(s: &str) -> Option<(usize, bool)> {
+    parse_numeric_prefix_with_decimal_point(s, &numfmt_locale_decimal_point())
+}
+
+fn numfmt_normalize_decimal_point_with<'a>(number: &'a str, decimal_point: &str) -> Cow<'a, str> {
+    if decimal_point == "." || decimal_point.is_empty() {
+        Cow::Borrowed(number)
+    } else if let Some(index) = number.find(decimal_point) {
+        let mut normalized = String::with_capacity(number.len() - decimal_point.len() + 1);
+        normalized.push_str(&number[..index]);
+        normalized.push('.');
+        normalized.push_str(&number[index + decimal_point.len()..]);
+        Cow::Owned(normalized)
+    } else {
+        Cow::Borrowed(number)
+    }
+}
+
+fn numfmt_normalize_decimal_point(number: &str) -> Cow<'_, str> {
+    numfmt_normalize_decimal_point_with(number, &numfmt_locale_decimal_point())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -212,8 +251,7 @@ fn numfmt_parse_number_parts(s: &str) -> Result<NumfmtParsedNumber<'_>> {
 
 fn numfmt_parse_suffix(s: &str) -> Result<(f64, Option<NumfmtSuffix>)> {
     let parsed = numfmt_parse_number_parts(s)?;
-    let number = parsed
-        .number
+    let number = numfmt_normalize_decimal_point(parsed.number)
         .parse::<f64>()
         .map_err(|_| format!("invalid number: {}", s.quote()))?;
 
@@ -223,7 +261,8 @@ fn numfmt_parse_suffix(s: &str) -> Result<(f64, Option<NumfmtSuffix>)> {
 // 返回数字的隐式精度，即点后面的位数。例如
 // 例如，1.23 的隐含精度为 2。
 fn numfmt_parse_implicit_precision(s: &str) -> usize {
-    if let Some((_, decimal_part_value)) = s.split_once('.') {
+    let decimal_point = numfmt_locale_decimal_point();
+    if let Some((_, decimal_part_value)) = s.split_once(&decimal_point) {
         decimal_part_value
             .chars()
             .take_while(char::is_ascii_digit)
@@ -306,7 +345,8 @@ fn numfmt_significant_digits(digits: &str) -> usize {
 }
 
 fn numfmt_number_may_lose_precision(number: &str) -> bool {
-    let unsigned = number.strip_prefix('-').unwrap_or(number);
+    let normalized = numfmt_normalize_decimal_point(number);
+    let unsigned = normalized.strip_prefix('-').unwrap_or(&normalized);
     let (integer, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
     let integer_digits = numfmt_significant_digits(integer);
     let fraction_digits = numfmt_significant_digits(fraction);
@@ -559,6 +599,9 @@ fn numfmt_transform_to(
 }
 
 fn numfmt_normalize_exact_integer(number: &str) -> Option<String> {
+    let normalized = numfmt_normalize_decimal_point(number);
+    let number = normalized.as_ref();
+
     if number.contains('.') {
         return None;
     }
@@ -637,18 +680,17 @@ fn numfmt_format_unscaled_decimal_exact(
     }
 
     let parsed = numfmt_parse_number_parts(source)?;
-    if parsed.suffix.is_some() || !parsed.number.contains('.') {
+    let normalized = numfmt_normalize_decimal_point(parsed.number);
+    if parsed.suffix.is_some() || !normalized.contains('.') {
         return Ok(None);
     }
 
     let precision = i64::try_from(precision)
         .map_err(|_| "value/precision too large to be printed".to_string())?;
-    let number = parsed
-        .number
+    let number = normalized
         .parse::<BigDecimal>()
         .map_err(|_| format!("invalid number: {}", source.quote()))?;
-    let approximate = parsed
-        .number
+    let approximate = normalized
         .parse::<f64>()
         .map_err(|_| format!("invalid number: {}", source.quote()))?;
     numfmt_validate_unscaled_output(approximate, &options.transform.to, precision as usize)?;
@@ -668,7 +710,7 @@ fn numfmt_finish_format_string(
     let number = if numfmt_configs.format.is_grouping {
         numfmt_group_number_thousands(&number)
     } else {
-        number
+        numfmt_localize_number(&number)
     };
 
     let number_with_suffix = match &numfmt_configs.suffix {
@@ -684,17 +726,49 @@ fn numfmt_finish_format_string(
     )
 }
 
-fn numfmt_group_number_thousands(number: &str) -> String {
-    let Some((sep, grouping)) = numfmt_locale_thousands_grouping() else {
+fn numfmt_localize_number_with(number: &str, decimal_point: &str) -> String {
+    if decimal_point == "." || decimal_point.is_empty() {
+        return number.to_string();
+    }
+
+    let mantissa_end = number.find(['e', 'E', 'p', 'P']).unwrap_or(number.len());
+    let Some(decimal_index) = number[..mantissa_end].find('.') else {
         return number.to_string();
     };
 
-    numfmt_group_number_thousands_with(number, &sep, &grouping)
+    let mut localized = String::with_capacity(number.len() - 1 + decimal_point.len());
+    localized.push_str(&number[..decimal_index]);
+    localized.push_str(decimal_point);
+    localized.push_str(&number[decimal_index + 1..]);
+    localized
 }
 
+fn numfmt_localize_number(number: &str) -> String {
+    numfmt_localize_number_with(number, &numfmt_locale_decimal_point())
+}
+
+fn numfmt_group_number_thousands(number: &str) -> String {
+    let decimal_point = numfmt_locale_decimal_point();
+    let Some((sep, grouping)) = numfmt_locale_thousands_grouping() else {
+        return numfmt_localize_number_with(number, &decimal_point);
+    };
+
+    numfmt_group_number_thousands_with_decimal_point(number, &sep, &grouping, &decimal_point)
+}
+
+#[cfg(test)]
 fn numfmt_group_number_thousands_with(number: &str, sep: &str, grouping: &[u8]) -> String {
+    numfmt_group_number_thousands_with_decimal_point(number, sep, grouping, ".")
+}
+
+fn numfmt_group_number_thousands_with_decimal_point(
+    number: &str,
+    sep: &str,
+    grouping: &[u8],
+    decimal_point: &str,
+) -> String {
     if sep.is_empty() || grouping.is_empty() {
-        return number.to_string();
+        return numfmt_localize_number_with(number, decimal_point);
     }
 
     let (num_with_no_exp, exp) = match number.find(['e', 'E', 'p', 'P']) {
@@ -708,28 +782,32 @@ fn numfmt_group_number_thousands_with(number: &str, sep: &str, grouping: &[u8]) 
     };
 
     if rest.starts_with("0x") || rest.starts_with("0X") || rest.is_empty() {
-        return number.to_string();
+        return numfmt_localize_number_with(number, decimal_point);
     }
 
     let (int_part, frac_part) = match rest.find('.') {
-        Some(dot_idx) => (&rest[..dot_idx], &rest[dot_idx..]),
-        None => (rest, ""),
+        Some(dot_idx) => (&rest[..dot_idx], Some(&rest[dot_idx + 1..])),
+        None => (rest, None),
     };
 
     if int_part.len() <= 3 || !int_part.bytes().all(|c| c.is_ascii_digit()) {
-        return number.to_string();
+        return numfmt_localize_number_with(number, decimal_point);
     }
 
     let grouped = numfmt_apply_locale_grouping(int_part, sep, grouping);
     if grouped == int_part {
-        return number.to_string();
+        return numfmt_localize_number_with(number, decimal_point);
     }
 
+    let fraction_capacity = frac_part.map_or(0, |fraction| decimal_point.len() + fraction.len());
     let mut output =
-        String::with_capacity(sign.len() + grouped.len() + frac_part.len() + exp.len());
+        String::with_capacity(sign.len() + grouped.len() + fraction_capacity + exp.len());
     output.push_str(sign);
     output.push_str(&grouped);
-    output.push_str(frac_part);
+    if let Some(fraction) = frac_part {
+        output.push_str(decimal_point);
+        output.push_str(fraction);
+    }
     output.push_str(exp);
     output
 }
@@ -1228,6 +1306,39 @@ mod tests {
         assert_eq!(
             numfmt_group_number_thousands_with("123456789", ",", &[3, 2]),
             "12,34,56,789"
+        );
+    }
+
+    #[test]
+    fn test_locale_decimal_point_helpers() {
+        assert_eq!(
+            parse_numeric_prefix_with_decimal_point("1234,5K", ","),
+            Some((6, false))
+        );
+        assert_eq!(
+            parse_numeric_prefix_with_decimal_point("1234.5", ","),
+            Some((4, false))
+        );
+        assert_eq!(
+            parse_numeric_prefix_with_decimal_point("1234,", ","),
+            Some((5, true))
+        );
+        assert_eq!(parse_numeric_prefix_with_decimal_point("+1", ","), None);
+
+        let multibyte = "12٫5";
+        assert_eq!(
+            parse_numeric_prefix_with_decimal_point(multibyte, "٫"),
+            Some((multibyte.len(), false))
+        );
+        assert_eq!(
+            numfmt_normalize_decimal_point_with("1234,50", ","),
+            "1234.50"
+        );
+        assert_eq!(numfmt_localize_number_with("1.25K", ","), "1,25K");
+        assert_eq!(numfmt_localize_number_with("1.25e+03", ","), "1,25e+03");
+        assert_eq!(
+            numfmt_group_number_thousands_with_decimal_point("1234.50", ".", &[3, 0], ","),
+            "1.234,50"
         );
     }
 

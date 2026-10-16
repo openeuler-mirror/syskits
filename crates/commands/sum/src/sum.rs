@@ -24,9 +24,11 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
 use ctcore::ct_show;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 
 // 这个可以被 usize::div_ceil 替代，一旦它稳定下来。
@@ -85,13 +87,14 @@ fn sum_sysv(mut r: Box<dyn Read>) -> io::Result<(usize, u16)> {
     Ok((blocks_read, check_sum as u16))
 }
 
-fn sum_read_error(name: &str, error: io::Error) -> Box<dyn CTError> {
+fn sum_read_error(name: &OsStr, error: io::Error) -> Box<dyn CTError> {
     error.map_err_context(|| name.maybe_quote().to_string())
 }
 
-fn sum_open(name: &str) -> CTResult<Box<dyn Read>> {
+fn sum_open(name: impl AsRef<OsStr>) -> CTResult<Box<dyn Read>> {
+    let name = name.as_ref();
     match name {
-        "-" => Ok(ctcore::ct_io::stdin_reader_box()),
+        name if name == OsStr::new("-") => Ok(ctcore::ct_io::stdin_reader_box()),
         _ => {
             let f = File::open(name).map_err_context(|| name.maybe_quote().to_string())?;
             Ok(Box::new(f) as Box<dyn Read>)
@@ -105,10 +108,10 @@ mod sum_flags {
     pub static SUM_SYSTEM_V_COMPATIBLE: &str = "sysv";
 }
 
-fn input_files(matches: &ArgMatches) -> (Vec<String>, bool) {
-    match matches.get_many::<String>(sum_flags::SUM_FILE) {
+fn input_files(matches: &ArgMatches) -> (Vec<OsString>, bool) {
+    match matches.get_many::<OsString>(sum_flags::SUM_FILE) {
         Some(files) => (files.cloned().collect(), true),
-        None => (vec!["-".to_owned()], false),
+        None => (vec![OsString::from("-")], false),
     }
 }
 
@@ -145,21 +148,38 @@ pub struct SumRow {
 pub struct SumSemantic {
     pub rows: Vec<SumRow>,
     pub classic_text: String,
+    pub classic_bytes: Vec<u8>,
     pub stderr_text: String,
     pub exit_code: i32,
 }
 
-fn render_sum_row_classic(row: &SumRow) -> String {
-    let (width, checksum) = if row.algorithm == "sysv" {
-        (1usize, row.checksum.to_string())
+fn append_os_str(output: &mut Vec<u8>, value: &OsStr) {
+    #[cfg(unix)]
+    output.extend_from_slice(value.as_bytes());
+
+    #[cfg(not(unix))]
+    output.extend_from_slice(value.to_string_lossy().as_bytes());
+}
+
+fn render_sum_classic(
+    algorithm: &str,
+    checksum: u16,
+    blocks: usize,
+    file: Option<&OsStr>,
+) -> Vec<u8> {
+    let (width, checksum) = if algorithm == "sysv" {
+        (1usize, checksum.to_string())
     } else {
-        (5usize, format!("{:05}", row.checksum))
+        (5usize, format!("{checksum:05}"))
     };
 
-    match &row.file {
-        Some(file) => format!("{checksum} {:width$} {file}", row.blocks, width = width),
-        None => format!("{checksum} {:width$}", row.blocks, width = width),
+    let mut output = format!("{checksum} {blocks:width$}", width = width).into_bytes();
+    if let Some(file) = file {
+        output.push(b' ');
+        append_os_str(&mut output, file);
     }
+    output.push(b'\n');
+    output
 }
 
 pub fn sum_native_semantic(args: impl ctcore::Args) -> CTResult<SumSemantic> {
@@ -172,7 +192,7 @@ pub fn sum_native_semantic(args: impl ctcore::Args) -> CTResult<SumSemantic> {
     let algorithm = if is_sysv { "sysv" } else { "bsd" }.to_string();
 
     let mut rows = Vec::new();
-    let mut classic_text = String::new();
+    let mut classic_bytes = Vec::new();
     let mut stderr_text = String::new();
     let mut exit_code = 0;
 
@@ -194,7 +214,7 @@ pub fn sum_native_semantic(args: impl ctcore::Args) -> CTResult<SumSemantic> {
         let (blocks, checksum) = match result {
             Ok(result) => result,
             Err(error) => {
-                let error = sum_read_error(file, error);
+                let error = sum_read_error(file.as_os_str(), error);
                 exit_code = error.code();
                 stderr_text.push_str(&format!("sum: {error}\n"));
                 continue;
@@ -206,19 +226,26 @@ pub fn sum_native_semantic(args: impl ctcore::Args) -> CTResult<SumSemantic> {
             checksum,
             blocks,
             file: if is_print_names {
-                Some(file.clone())
+                Some(file.to_string_lossy().into_owned())
             } else {
                 None
             },
         };
-        classic_text.push_str(&render_sum_row_classic(&row));
-        classic_text.push('\n');
+        classic_bytes.extend_from_slice(&render_sum_classic(
+            &algorithm,
+            checksum,
+            blocks,
+            is_print_names.then_some(file.as_os_str()),
+        ));
         rows.push(row);
     }
+
+    let classic_text = String::from_utf8_lossy(&classic_bytes).into_owned();
 
     Ok(SumSemantic {
         rows,
         classic_text,
+        classic_bytes,
         stderr_text,
         exit_code,
     })
@@ -247,10 +274,9 @@ pub fn sum_main(args: impl ctcore::Args) -> CTResult<()> {
     let (files, is_print_names) = input_files(&matches);
 
     let is_sysv = sum_is_sysv(&matches);
-    let width = match is_sysv {
-        true => 1,
-        false => 5,
-    };
+    let algorithm = if is_sysv { "sysv" } else { "bsd" };
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
 
     for file in &files {
         let reader = match sum_open(file) {
@@ -267,19 +293,20 @@ pub fn sum_main(args: impl ctcore::Args) -> CTResult<()> {
         let (blocks, sum) = match result {
             Ok(result) => result,
             Err(error) => {
-                ct_show!(sum_read_error(file, error));
+                ct_show!(sum_read_error(file.as_os_str(), error));
                 continue;
             }
         };
 
-        match is_print_names {
-            true => {
-                println!("{sum:0width$} {blocks:width$} {file}");
-            }
-            false => {
-                println!("{sum:0width$} {blocks:width$}");
-            }
-        };
+        let output = render_sum_classic(
+            algorithm,
+            sum,
+            blocks,
+            is_print_names.then_some(file.as_os_str()),
+        );
+        stdout
+            .write_all(&output)
+            .expect("failed printing to stdout");
     }
     Ok(())
 }
@@ -293,7 +320,8 @@ pub fn ct_app() -> Command {
         Arg::new(sum_flags::SUM_FILE)
             .action(ArgAction::Append)
             .hide(true)
-            .value_hint(clap::ValueHint::FilePath),
+            .value_hint(clap::ValueHint::FilePath)
+            .value_parser(clap::builder::ValueParser::os_string()),
         Arg::new(sum_flags::SUM_BSD_COMPATIBLE)
             .short('r')
             .help(t!("sum.clap.sum_bsd_compatible"))
@@ -985,6 +1013,25 @@ mod tests {
         use std::fs;
         use tempfile::TempDir;
 
+        #[cfg(unix)]
+        #[test]
+        fn sum_native_semantic_preserves_non_utf8_classic_output() {
+            use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+            let dir = TempDir::new().unwrap();
+            let path = dir.path().join(OsString::from_vec(b"sample-\xff".to_vec()));
+            fs::write(&path, b"B").unwrap();
+
+            let args = [OsString::from(ctcore::ct_util_name()), path.clone().into()];
+            let semantic = sum_native_semantic(args.into_iter()).unwrap();
+
+            let mut expected = b"00066     1 ".to_vec();
+            expected.extend_from_slice(path.as_os_str().as_bytes());
+            expected.push(b'\n');
+            assert_eq!(semantic.classic_bytes, expected);
+            assert_eq!(semantic.exit_code, 0);
+        }
+
         #[test]
         fn sum_native_semantic_renders_rows_for_files() {
             let dir = TempDir::new().unwrap();
@@ -1052,12 +1099,27 @@ mod tests {
             let implicit = ct_app()
                 .try_get_matches_from([ctcore::ct_util_name()])
                 .unwrap();
-            assert_eq!(input_files(&implicit), (vec!["-".to_owned()], false));
+            assert_eq!(input_files(&implicit), (vec![OsString::from("-")], false));
 
             let explicit = ct_app()
                 .try_get_matches_from([ctcore::ct_util_name(), "-"])
                 .unwrap();
-            assert_eq!(input_files(&explicit), (vec!["-".to_owned()], true));
+            assert_eq!(input_files(&explicit), (vec![OsString::from("-")], true));
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn preserves_non_utf8_file_name_bytes() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let file = OsString::from_vec(b"input-\xff".to_vec());
+            let matches = ct_app()
+                .try_get_matches_from([OsString::from(ctcore::ct_util_name()), file.clone()])
+                .unwrap();
+            assert_eq!(input_files(&matches), (vec![file.clone()], true));
+
+            let output = render_sum_classic("bsd", 66, 1, Some(file.as_os_str()));
+            assert_eq!(output, b"00066     1 input-\xff\n");
         }
     }
 }

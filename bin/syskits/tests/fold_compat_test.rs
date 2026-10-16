@@ -133,6 +133,17 @@ fn fold_wraps_before_backspace_when_oversized_tab_still_exceeds_width() {
 }
 
 #[test]
+fn fold_wraps_oversized_tab_after_carriage_return_in_c_locale() {
+    assert_fold_bytes(
+        "oversized tab after carriage return",
+        &["fold", "-w", "4"],
+        "C",
+        b"\r\t",
+        b"\r\n\t",
+    );
+}
+
+#[test]
 fn fold_uses_locale_encoding_like_gnu() {
     assert_fold_bytes(
         "C locale byte mode",

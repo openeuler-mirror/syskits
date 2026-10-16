@@ -484,7 +484,12 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
                     continue;
                 }
 
-                if column != 0 {
+                let line_has_foldable_content = if single_byte_locale {
+                    !output.is_empty()
+                } else {
+                    column != 0
+                };
+                if line_has_foldable_content {
                     // 输出当前行（不包括当前字符），重置，然后rescan当前字符
                     writer.write_all(&output)?;
                     writer.write_all(b"\n")?;

@@ -10,6 +10,7 @@
  */
 
 extern crate rust_i18n;
+use rust_i18n::t;
 use std::cmp::Reverse;
 use std::ffi::OsString;
 use std::fs::{self, FileType, Metadata};
@@ -30,7 +31,7 @@ use ct_ls::{LsConfig, LsDereference, LsFormat, PathData, ls_flags};
 use ctcore::Tool;
 #[cfg(unix)]
 use ctcore::ct_entries;
-use ctcore::ct_error::CTResult;
+use ctcore::ct_error::{CTResult, UClapError};
 use ctcore::ct_fs::display_permissions;
 use ctcore::ct_locale::strcoll_compare;
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle};
@@ -598,7 +599,10 @@ pub fn vdir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDa
     rust_i18n::set_locale(&lang_code);
 
     let command = ct_app();
-    let matches = command.try_get_matches_from(args)?;
+    let matches = command.try_get_matches_from(args).map_err(|err| {
+        let code = ct_ls::ls_clap_error_exit_code(&err);
+        err.with_exit_code(code)
+    })?;
     let config = vdir_config_from_matches(&matches)?;
     let paths_from_args = vdir_paths_from_matches(&matches);
 
@@ -607,6 +611,9 @@ pub fn vdir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDa
 
 pub fn ct_app() -> Command {
     ct_ls::ct_app()
+        .override_usage(t!("vdir.usage"))
+        .about(t!("vdir.about"))
+        .after_help(t!("vdir.after_help"))
 }
 
 #[derive(Default)]
@@ -2081,6 +2088,27 @@ mod tests {
             let missing_args = vec![ctcore::ct_util_name()]; // 缺少任何参数
             let result = command.try_get_matches_from(missing_args);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_vdir_main_missing_block_size_exits_2() {
+            let args = [ctcore::ct_util_name(), "--block-size"];
+            match vdir_main(args.iter().map(OsString::from)) {
+                Err(err) => assert_eq!(err.code(), 2),
+                Ok(_) => panic!("expected missing --block-size argument to fail"),
+            }
+        }
+
+        #[test]
+        fn test_vdir_missing_block_size_uses_vdir_usage() {
+            let err = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "--block-size"])
+                .expect_err("expected missing --block-size argument to fail");
+
+            assert!(
+                err.to_string()
+                    .contains("Usage: vdir [OPTION]... [FILE]...")
+            );
         }
 
         #[test]

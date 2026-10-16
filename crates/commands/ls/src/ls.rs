@@ -1656,7 +1656,7 @@ pub fn ls_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData
     let command = ct_app();
 
     let matches = command.try_get_matches_from(args).map_err(|err| {
-        let code = if is_invalid_classify_arg(&err) { 1 } else { 2 };
+        let code = ls_clap_error_exit_code(&err);
         err.with_exit_code(code)
     })?;
 
@@ -1669,14 +1669,18 @@ pub fn ls_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData
     list(paths_from_args, &config)
 }
 
-fn is_invalid_classify_arg(err: &clap::Error) -> bool {
+pub fn ls_clap_error_exit_code(err: &clap::Error) -> i32 {
+    if is_invalid_ls_failure_arg(err) { 1 } else { 2 }
+}
+
+fn is_invalid_ls_failure_arg(err: &clap::Error) -> bool {
     if err.kind() != ClapErrorKind::InvalidValue {
         return false;
     }
 
     matches!(
         err.get(ContextKind::InvalidArg),
-        Some(ContextValue::String(arg)) if arg.starts_with("--classify")
+        Some(ContextValue::String(arg)) if arg.starts_with("--classify") || arg.starts_with("--color")
     )
 }
 
@@ -4594,6 +4598,18 @@ mod tests {
                 .map(OsString::from),
         )
         .expect_err("invalid --classify should fail");
+
+        assert_eq!(err.code(), 1);
+    }
+
+    #[test]
+    fn invalid_color_value_exits_with_failure() {
+        let err = ls_main(
+            [ctcore::ct_util_name(), "--color=invalid"]
+                .into_iter()
+                .map(OsString::from),
+        )
+        .expect_err("invalid --color should fail");
 
         assert_eq!(err.code(), 1);
     }

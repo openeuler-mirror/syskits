@@ -149,6 +149,32 @@ mod native_semantic_tests {
     }
 
     #[test]
+    fn numfmt_native_semantic_preserves_large_unscaled_integer() {
+        let args = ["numfmt", "9223372036854775807"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.stderr_text, "");
+        assert_eq!(semantic.classic_text, "9223372036854775807\n");
+        assert_eq!(semantic.rows.len(), 1);
+        assert_eq!(semantic.rows[0].output, "9223372036854775807");
+    }
+
+    #[test]
+    fn numfmt_native_semantic_formats_large_unscaled_integer_exactly() {
+        let args = ["numfmt", "--format=%020.0f", "9223372036854775807"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.stderr_text, "");
+        assert_eq!(semantic.classic_text, "09223372036854775807\n");
+        assert_eq!(semantic.rows.len(), 1);
+        assert_eq!(semantic.rows[0].output, "09223372036854775807");
+    }
+
+    #[test]
     fn numfmt_native_semantic_warn_mode_keeps_passthrough_rows() {
         let args = ["numfmt", "--invalid=warn", "hello"];
 

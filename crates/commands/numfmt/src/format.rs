@@ -1227,6 +1227,30 @@ pub fn numfmt_format_line(s: &str, numfmt_configs: &NumfmtConfigs) -> Result<Str
     }
 }
 
+fn numfmt_preserve_line_ending(
+    mut rendered: String,
+    zero_terminated: bool,
+    has_line_ending: bool,
+) -> String {
+    if !has_line_ending {
+        let line_ending = if zero_terminated { '\0' } else { '\n' };
+        if rendered.ends_with(line_ending) {
+            rendered.pop();
+        }
+    }
+    rendered
+}
+
+pub(crate) fn numfmt_format_line_with_line_ending(
+    s: &str,
+    numfmt_configs: &NumfmtConfigs,
+    has_line_ending: bool,
+) -> Result<String> {
+    numfmt_format_line(s, numfmt_configs).map(|rendered| {
+        numfmt_preserve_line_ending(rendered, numfmt_configs.zero_terminated, has_line_ending)
+    })
+}
+
 pub fn numfmt_format_line_abort(
     s: &str,
     numfmt_configs: &NumfmtConfigs,
@@ -1238,17 +1262,47 @@ pub fn numfmt_format_line_abort(
     }
 }
 
+pub(crate) fn numfmt_format_line_abort_with_line_ending(
+    s: &str,
+    numfmt_configs: &NumfmtConfigs,
+    has_line_ending: bool,
+) -> std::result::Result<String, NumfmtAbortRenderError> {
+    numfmt_format_line_abort(s, numfmt_configs).map(|rendered| {
+        numfmt_preserve_line_ending(rendered, numfmt_configs.zero_terminated, has_line_ending)
+    })
+}
+
 /// 根据所选选项格式化一行文本。
 ///
 /// 给定一行文本 "s"，将该行文本拆分成若干字段，对选定的数字字段进行转换和format，
 /// 并将结果打印到stdout。未被选中转换的字段将原封不动地通过。
 pub fn numfmt_format_and_print(s: &str, numfmt_configs: &NumfmtConfigs) -> Result<()> {
-    print!("{}", numfmt_format_line(s, numfmt_configs)?);
+    numfmt_format_and_print_with_line_ending(s, numfmt_configs, true)?;
+    Ok(())
+}
+
+pub(crate) fn numfmt_format_and_print_with_line_ending(
+    s: &str,
+    numfmt_configs: &NumfmtConfigs,
+    has_line_ending: bool,
+) -> Result<()> {
+    print!(
+        "{}",
+        numfmt_format_line_with_line_ending(s, numfmt_configs, has_line_ending)?
+    );
     Ok(())
 }
 
 pub fn numfmt_format_and_print_abort(s: &str, numfmt_configs: &NumfmtConfigs) -> Result<()> {
-    match numfmt_format_line_abort(s, numfmt_configs) {
+    numfmt_format_and_print_abort_with_line_ending(s, numfmt_configs, true)
+}
+
+pub(crate) fn numfmt_format_and_print_abort_with_line_ending(
+    s: &str,
+    numfmt_configs: &NumfmtConfigs,
+    has_line_ending: bool,
+) -> Result<()> {
+    match numfmt_format_line_abort_with_line_ending(s, numfmt_configs, has_line_ending) {
         Ok(rendered) => {
             print!("{rendered}");
             Ok(())
@@ -1340,6 +1394,35 @@ mod tests {
             numfmt_group_number_thousands_with_decimal_point("1234.50", ".", &[3, 0], ","),
             "1.234,50"
         );
+    }
+
+    #[test]
+    fn test_format_line_preserves_input_line_ending() {
+        let mut config = setup_default_config();
+
+        assert_eq!(
+            numfmt_format_line_with_line_ending("1", &config, true).unwrap(),
+            "1\n"
+        );
+        assert_eq!(
+            numfmt_format_line_with_line_ending("1", &config, false).unwrap(),
+            "1"
+        );
+        assert_eq!(
+            numfmt_format_line_abort_with_line_ending("1", &config, false).unwrap(),
+            "1"
+        );
+
+        config.zero_terminated = true;
+        assert_eq!(
+            numfmt_format_line_with_line_ending("1", &config, true).unwrap(),
+            "1\0"
+        );
+        assert_eq!(
+            numfmt_format_line_with_line_ending("1", &config, false).unwrap(),
+            "1"
+        );
+        assert_eq!(numfmt_format_line("1", &config).unwrap(), "1\0");
     }
 
     #[cfg(test)]

@@ -2793,12 +2793,11 @@ fn cp_source_metadata(
 
 #[cfg(unix)]
 fn handle_no_preserve_mode(cp_opts: &CpOptions, org_mode: u32) -> u32 {
-    let (is_preserve_mode, explicit_no_preserve_mode) = cp_opts.cp_preserve_mode();
-    let preserve_xattr = matches!(cp_opts.attributes.xattr, CpPreserve::Yes { .. });
-    if !is_preserve_mode && (!preserve_xattr || explicit_no_preserve_mode) {
+    let (_, explicit_no_preserve_mode) = cp_opts.cp_preserve_mode();
+    if explicit_no_preserve_mode {
         use libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
-        // 无论是否显式 --no-preserve=mode，只要不带 -p，就使用默认权限 (666)
-        // 随后由 umask 过滤为 644
+        // GNU cp only falls back to the default file creation permissions
+        // when mode preservation is explicitly disabled.
         const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
         return MODE_RW_UGO;
     }

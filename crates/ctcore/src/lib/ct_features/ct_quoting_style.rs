@@ -210,6 +210,10 @@ fn shell_without_escape(name: &str, quotes: CtQuotes, show_control_chars: bool) 
     let mut escaped_str = String::with_capacity(name.len());
 
     for c in name.chars() {
+        // Shell quoting is decided from the original name, before ls replaces
+        // non-printable characters with '?'.
+        must_quote |= c.is_control();
+
         let escaped = {
             let ec = CtEscapedChar::new_shell(c, false, quotes);
             if show_control_chars {
@@ -1096,8 +1100,8 @@ mod tests {
                 ("one\ntwo", "literal-show"),
                 ("one\\ntwo", "escape"),
                 ("\"one\\ntwo\"", "c"),
-                ("one?two", "shell"),
-                ("one\ntwo", "shell-show"),
+                ("'one?two'", "shell"),
+                ("'one\ntwo'", "shell-show"),
                 ("'one?two'", "shell-always"),
                 ("'one\ntwo'", "shell-always-show"),
                 ("'one'$'\\n''two'", "shell-escape"),
@@ -1140,9 +1144,9 @@ mod tests {
                     "\"\\000\\001\\002\\003\\004\\005\\006\\a\\b\\t\\n\\v\\f\\r\\016\\017\"",
                     "c",
                 ),
-                ("????????????????", "shell"),
+                ("'????????????????'", "shell"),
                 (
-                    "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F",
+                    "'\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F'",
                     "shell-show",
                 ),
                 ("'????????????????'", "shell-always"),
@@ -1178,9 +1182,9 @@ mod tests {
                     "\"\\020\\021\\022\\023\\024\\025\\026\\027\\030\\031\\032\\033\\034\\035\\036\\037\"",
                     "c",
                 ),
-                ("????????????????", "shell"),
+                ("'????????????????'", "shell"),
                 (
-                    "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
+                    "'\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F'",
                     "shell-show",
                 ),
                 ("'????????????????'", "shell-always"),
@@ -1207,8 +1211,8 @@ mod tests {
                 ("\x7F", "literal-show"),
                 ("\\177", "escape"),
                 ("\"\\177\"", "c"),
-                ("?", "shell"),
-                ("\x7F", "shell-show"),
+                ("'?'", "shell"),
+                ("'\x7F'", "shell-show"),
                 ("'?'", "shell-always"),
                 ("'\x7F'", "shell-always-show"),
                 ("''$'\\177'", "shell-escape"),
@@ -1566,7 +1570,7 @@ mod tests {
                     always_quote: false,
                     show_control: false,
                 },
-                "?",
+                "'?'",
             ),
             (
                 OsStr::new("hello world"),

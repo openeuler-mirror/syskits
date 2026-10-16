@@ -1053,6 +1053,40 @@
         ]
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "od",
+      "description": "LC_ALL=C下执行od --traditional binary.bin +10.；带点的传统偏移不应被吞掉，而应作为额外文件操作数报错；迁移原Cargo用例od_traditional_dotted_offset_after_file_is_extra_operand",
+      "args": ["--traditional", "binary.bin", "+10."],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": []
+      },
+      "environment": {
+        "files": [
+          {
+            "path": "binary.bin",
+            "content": "0123456789123456789\n",
+            "permissions": "644",
+            "owner": null,
+            "group": null,
+            "file_type": "Regular",
+            "symlink_target": null,
+            "size": null,
+            "timestamp": null
+          }
+        ]
+      },
+      "cleanup_commands": []
     }
     ]
 }

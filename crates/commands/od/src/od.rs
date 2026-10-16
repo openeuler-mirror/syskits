@@ -81,7 +81,7 @@ use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command, crate_version, parser::ValueSource};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CtSimpleError};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
 use ctcore::ct_parse_size::ParseSizeError;
 use ctcore::{ct_show_error, ct_show_warning};
 use std::ffi::OsString;
@@ -168,8 +168,13 @@ impl OdSettings {
 
         let mut label: Option<u64> = None;
 
-        let parsed_input = od_parse_inputs(matches)
-            .map_err(|e| CtSimpleError::new(1, format!("Invalid inputs: {e}")))?;
+        let parsed_input = od_parse_inputs(matches).map_err(|e| {
+            if e.starts_with("extra operand ") {
+                CTsageError::new(1, e)
+            } else {
+                CtSimpleError::new(1, format!("Invalid inputs: {e}"))
+            }
+        })?;
         let input_strings = match parsed_input {
             CommandLineInputs::FileNames(v) => v,
             CommandLineInputs::FileAndOffset((f, s, l)) => {

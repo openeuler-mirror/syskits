@@ -650,6 +650,19 @@ impl Write for Dest {
     }
 }
 
+fn seek_bytes_stays_in_first_output_block(settings: &DdOptions) -> bool {
+    let obs = u64::try_from(settings.obs).unwrap_or(u64::MAX);
+    settings.oflags.is_seek_bytes && settings.seek < obs
+}
+
+fn initial_output_len_before_seek(settings: &DdOptions) -> u64 {
+    if seek_bytes_stays_in_first_output_block(settings) {
+        0
+    } else {
+        settings.seek
+    }
+}
+
 /// The destination of the data, configured with the given settings.
 ///
 /// Use the [`Output::new_stdout`] or [`Output::new_file`] functions
@@ -702,7 +715,7 @@ impl<'a> DdOutput<'a> {
         // the behavior of GNU `dd` when given the command-line
         // argument `of=/dev/null`.
         if !settings.oconv.is_notrunc {
-            dst.set_len(settings.seek).ok();
+            dst.set_len(initial_output_len_before_seek(settings)).ok();
         }
 
         Self::prepare_file(dst, settings)
@@ -1100,14 +1113,18 @@ fn finalize_copy(mut output: BlockWriter, state: CopyState) -> std::io::Result<(
         output.discard_cache(offset, 0);
     }
 
+    let final_wstat = state.write_stat + wstat_update;
+
     // 如果需要，截断文件
-    if !state.input.settings.oconv.is_notrunc {
+    if !state.input.settings.oconv.is_notrunc
+        && !(final_wstat.bytes_total == 0
+            && seek_bytes_stays_in_first_output_block(state.input.settings))
+    {
         output.truncate();
     }
 
     dur += start_time.elapsed();
     // 发送最终统计信息
-    let final_wstat = state.write_stat + wstat_update;
     let prog_update = ProgUpdate::new(state.read_stat, final_wstat, dur, true);
     state.prog_tx.send(prog_update).unwrap_or(());
 
@@ -1662,6 +1679,57 @@ mod dd_copy_tests {
         let mut result = Vec::new();
         File::open(&file_path)?.read_to_end(&mut result)?;
         assert_eq!(&result[..], b"XXXHello, World!");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_with_seek_bytes_truncates_before_seek_within_first_block() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.seek = 3;
+        options.oflags.is_seek_bytes = true;
+
+        let dir = tempdir()?;
+        let file_path = dir.path().join("test.txt");
+        {
+            let mut file = File::create(&file_path)?;
+            file.write_all(b"XXXXXXXXXXXX")?;
+        }
+
+        let input_data = b"AbCde\nxyZ\n";
+        let input = create_test_input(input_data, &options)?;
+        let output = DdOutput::new_file(&file_path, &options)?;
+
+        dd_copy(input, output)?;
+
+        let mut result = Vec::new();
+        File::open(&file_path)?.read_to_end(&mut result)?;
+        assert_eq!(&result[..], b"\0\0\0AbCde\nxyZ\n");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_with_empty_input_and_seek_bytes_within_first_block_stays_empty() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.seek = 3;
+        options.oflags.is_seek_bytes = true;
+
+        let dir = tempdir()?;
+        let file_path = dir.path().join("test.txt");
+        {
+            let mut file = File::create(&file_path)?;
+            file.write_all(b"XXXXXXXXXXXX")?;
+        }
+
+        let input = create_test_input(b"", &options)?;
+        let output = DdOutput::new_file(&file_path, &options)?;
+
+        dd_copy(input, output)?;
+
+        let mut result = Vec::new();
+        File::open(&file_path)?.read_to_end(&mut result)?;
+        assert!(result.is_empty());
 
         Ok(())
     }

@@ -1,4 +1,6 @@
 use std::io::{Read, Write};
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
@@ -185,5 +187,28 @@ fn pr_continues_after_file_open_failure() {
 
     assert_eq!(output.status.code(), Some(1));
     assert_eq!(output.stdout, b"good\n");
+    assert!(output.stderr.is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn pr_reads_file_with_non_utf8_name() {
+    let dir = tempfile::tempdir().expect("create temp dir");
+    let file = dir
+        .path()
+        .join(std::ffi::OsString::from_vec(b"input-\xff".to_vec()));
+    std::fs::write(&file, b"raw\n").expect("write input");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["pr", "-t"])
+        .arg(&file)
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .stdin(Stdio::null())
+        .output()
+        .expect("run syskits pr");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"raw\n");
     assert!(output.stderr.is_empty());
 }

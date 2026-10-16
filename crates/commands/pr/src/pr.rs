@@ -15,9 +15,11 @@ use std::fs::{File, metadata};
 rust_i18n::i18n!("locales", fallback = "en-US");
 #[cfg(unix)]
 use std::ffi::CString;
+use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Error, Read, Write, stderr, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
+use std::path::Path;
 
 use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
@@ -29,7 +31,6 @@ use itertools::Itertools;
 use quick_error::ResultExt;
 use quick_error::quick_error;
 use regex::Regex;
-use std::ffi::OsString;
 use sys_locale::get_locale;
 use unicode_width::UnicodeWidthChar;
 use unicode_width::UnicodeWidthStr;
@@ -662,6 +663,7 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(pr_flags::PR_FILES)
             .action(ArgAction::Append)
+            .value_parser(clap::builder::OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
     ];
 
@@ -713,7 +715,11 @@ pub fn pr_native_semantic(args: impl ctcore::Args) -> CTResult<PrSemantic> {
 fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResult<PrSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = args.collect_ignore();
+    let args = args.collect::<Vec<_>>();
+    let option_args = args
+        .iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
 
     let opt_args = pr_recreate_arguments(&args);
 
@@ -739,12 +745,11 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
     };
 
     let mut files = matches
-        .get_many::<String>(pr_flags::PR_FILES)
-        .map(|v| v.map(|s| s.as_str()).collect::<Vec<_>>())
-        .unwrap_or_default()
-        .clone();
+        .get_many::<OsString>(pr_flags::PR_FILES)
+        .map(|values| values.map(OsString::as_os_str).collect::<Vec<_>>())
+        .unwrap_or_default();
     if files.is_empty() {
-        files.insert(0, PR_FILE_STDIN);
+        files.insert(0, OsStr::new(PR_FILE_STDIN));
     }
 
     let file_groups: Vec<_> = match matches.get_flag(pr_flags::PR_MERGE) {
@@ -755,7 +760,12 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
     };
 
     for file_group in file_groups {
-        let result_options = pr_build_options(&matches, &file_group, &args);
+        let display_paths = file_group
+            .iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        let paths = display_paths.iter().map(String::as_str).collect::<Vec<_>>();
+        let result_options = pr_build_options(&matches, &paths, &option_args);
         let options = match result_options {
             Ok(options) => options,
             Err(err) => {
@@ -765,17 +775,17 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
             }
         };
 
-        let cmd_result = match file_group.iter().exactly_one() {
-            Ok(group) => pr_collect_semantic_for_path(
+        let cmd_result = match file_group.iter().copied().exactly_one() {
+            Ok(group) => {
+                pr_collect_semantic_for_path(&mut semantic, &paths, group, &options, &mut output)
+            }
+            Err(_) => pr_collect_semantic_for_merge(
                 &mut semantic,
+                &paths,
                 &file_group,
-                group,
                 &options,
                 &mut output,
             ),
-            Err(_) => {
-                pr_collect_semantic_for_merge(&mut semantic, &file_group, &options, &mut output)
-            }
         };
 
         match cmd_result {
@@ -851,37 +861,42 @@ fn pr_write_semantic_diagnostics(semantic: &PrSemantic) -> CTResult<()> {
 /// 删除 -column 和 +page 选项，因为 getopts 无法解析 -3 等参数。
 /// # 参数
 /// * `args` - 命令行参数
-fn pr_recreate_arguments(args: &[String]) -> Vec<String> {
+fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
     let column_page_option_regex = Regex::new(r"^[-+]\d+.*").unwrap();
 
     let mut recreated_args = Vec::with_capacity(args.len());
     let mut stop_rewrite = false;
     for arg in args {
+        let arg = arg.as_ref();
         if stop_rewrite {
-            recreated_args.push(arg.clone());
+            recreated_args.push(arg.to_os_string());
             continue;
         }
-        if arg == "--" {
+        if arg == OsStr::new("--") {
             stop_rewrite = true;
-            recreated_args.push(arg.clone());
+            recreated_args.push(arg.to_os_string());
             continue;
         }
+        let Some(arg) = arg.to_str() else {
+            recreated_args.push(arg.to_os_string());
+            continue;
+        };
 
         // GNU pr accepts old-style column counts merged into -t (e.g. -t2 == -t -2).
         if let Some(old_column_count) = arg.strip_prefix("-t") {
             if !old_column_count.is_empty() && old_column_count.chars().all(|c| c.is_ascii_digit())
             {
-                recreated_args.push("-t".to_string());
+                recreated_args.push(OsString::from("-t"));
                 continue;
             }
 
             // GNU pr accepts -tn2 / -tn:2 style short-option clusters.
             if let Some(number_arg) = old_column_count.strip_prefix('n') {
-                recreated_args.push("-t".to_string());
+                recreated_args.push(OsString::from("-t"));
                 if number_arg.is_empty() {
-                    recreated_args.push("-n".to_string());
+                    recreated_args.push(OsString::from("-n"));
                 } else {
-                    recreated_args.push(format!("-n={number_arg}"));
+                    recreated_args.push(OsString::from(format!("-n={number_arg}")));
                 }
                 continue;
             }
@@ -892,17 +907,17 @@ fn pr_recreate_arguments(args: &[String]) -> Vec<String> {
         }
 
         if arg.starts_with("-n") && arg.len() > 2 && !arg.starts_with("-n=") {
-            recreated_args.push(format!("-n={}", &arg[2..]));
+            recreated_args.push(OsString::from(format!("-n={}", &arg[2..])));
         } else if arg.starts_with("-s") && arg.len() > 2 && !arg.starts_with("-s=") {
-            recreated_args.push(format!("-s={}", &arg[2..]));
+            recreated_args.push(OsString::from(format!("-s={}", &arg[2..])));
         } else if arg.starts_with("-S") && arg.len() > 2 && !arg.starts_with("-S=") {
-            recreated_args.push(format!("-S={}", &arg[2..]));
+            recreated_args.push(OsString::from(format!("-S={}", &arg[2..])));
         } else if arg.starts_with("-e") && arg.len() > 2 && !arg.starts_with("-e=") {
-            recreated_args.push(format!("-e={}", &arg[2..]));
+            recreated_args.push(OsString::from(format!("-e={}", &arg[2..])));
         } else if arg.starts_with("-i") && arg.len() > 2 && !arg.starts_with("-i=") {
-            recreated_args.push(format!("-i={}", &arg[2..]));
+            recreated_args.push(OsString::from(format!("-i={}", &arg[2..])));
         } else {
-            recreated_args.push(arg.clone());
+            recreated_args.push(OsString::from(arg));
         }
     }
 
@@ -1534,22 +1549,26 @@ fn parse_merge_mode(arg_matches: &ArgMatches) -> Result<bool, PrError> {
     Ok(is_merge_mode)
 }
 
-fn pr_open(path: &str) -> Result<Box<dyn Read>, PrError> {
-    if path == PR_FILE_STDIN {
+fn pr_open(path: impl AsRef<Path>) -> Result<Box<dyn Read>, PrError> {
+    let path = path.as_ref();
+    if path == Path::new(PR_FILE_STDIN) {
         return Ok(ctcore::ct_io::stdin_reader_box());
     }
 
-    metadata(path)
-        .map(|i| {
-            let path_string = path.to_string();
-            match i.file_type() {
-                #[cfg(unix)]
-                ft if ft.is_socket() => Err(PrError::IsSocket(path_string)),
-                ft if ft.is_dir() => Err(PrError::IsDirectory(path_string)),
-                _ => Ok(Box::new(File::open(path).context(path)?) as Box<dyn Read>),
-            }
-        })
-        .unwrap_or_else(|_| Err(PrError::NotExists(path.to_string())))
+    let path_string = path.as_os_str().to_string_lossy().into_owned();
+    let file_type = metadata(path)
+        .map_err(|_| PrError::NotExists(path_string.clone()))?
+        .file_type();
+
+    #[cfg(unix)]
+    if file_type.is_socket() {
+        return Err(PrError::IsSocket(path_string));
+    }
+    if file_type.is_dir() {
+        return Err(PrError::IsDirectory(path_string));
+    }
+
+    Ok(Box::new(File::open(path).context(path_string.as_str())?) as Box<dyn Read>)
 }
 
 fn pr_split_lines_if_form_feed(
@@ -1668,7 +1687,7 @@ fn pr_push_page_rows(
 fn pr_collect_semantic_for_path(
     semantic: &mut PrSemantic,
     paths: &[&str],
-    path: &str,
+    path: &OsStr,
     output_opts: &PrOutputOptions,
     output: &mut Option<&mut dyn Write>,
 ) -> Result<(), PrError> {
@@ -1722,7 +1741,13 @@ fn pr_handle(path: &str, output_opts: &PrOutputOptions) -> Result<i32, PrError> 
         exit_code: 0,
     };
     let mut output = None;
-    pr_collect_semantic_for_path(&mut semantic, &[path], path, output_opts, &mut output)?;
+    pr_collect_semantic_for_path(
+        &mut semantic,
+        &[path],
+        OsStr::new(path),
+        output_opts,
+        &mut output,
+    )?;
     let mut out = stdout();
     if !semantic.classic_bytes.is_empty() {
         out.write_all(&semantic.classic_bytes)?;
@@ -1890,22 +1915,23 @@ fn pr_read_stream_and_create_pages(
 fn pr_collect_semantic_for_merge(
     semantic: &mut PrSemantic,
     paths: &[&str],
+    input_paths: &[&OsStr],
     output_opts: &PrOutputOptions,
     output: &mut Option<&mut dyn Write>,
 ) -> Result<(), PrError> {
     let collect_semantic = output.is_none();
     // 检查文件是否存在
-    for path in paths {
-        pr_open(path)?;
+    for path in input_paths {
+        pr_open(*path)?;
     }
 
-    let file_pages = paths
+    let file_pages = input_paths
         .iter()
         .enumerate()
         .map(|(i, path)| {
             let mut page_input_opts = output_opts.clone();
             page_input_opts.start_page = 1;
-            let lines = pr_input_lines(pr_open(path).unwrap());
+            let lines = pr_input_lines(pr_open(*path).unwrap());
 
             pr_read_stream_and_create_pages(&page_input_opts, lines, i).collect::<Vec<_>>()
         })
@@ -2047,7 +2073,8 @@ fn mpr_handle(paths: &[&str], output_opts: &PrOutputOptions) -> Result<i32, PrEr
         exit_code: 0,
     };
     let mut output = None;
-    pr_collect_semantic_for_merge(&mut semantic, paths, output_opts, &mut output)?;
+    let input_paths = paths.iter().map(OsStr::new).collect::<Vec<_>>();
+    pr_collect_semantic_for_merge(&mut semantic, paths, &input_paths, output_opts, &mut output)?;
     let mut out = stdout();
     if !semantic.classic_bytes.is_empty() {
         out.write_all(&semantic.classic_bytes)?;
@@ -6258,7 +6285,10 @@ mod tests {
 
             let result = pr_recreate_arguments(&args);
 
-            assert_eq!(result, args);
+            assert_eq!(
+                result,
+                args.into_iter().map(OsString::from).collect::<Vec<_>>()
+            );
         }
 
         #[test]

@@ -29,3 +29,30 @@ fn fold_width_zero_is_rejected() {
         "stderr: {stderr:?}"
     );
 }
+
+#[test]
+fn fold_bytes_reset_width_after_newline_in_c_locale() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["fold", "-b", "-w", "8"])
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("TZ", "UTC0")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run syskits fold");
+
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin")
+        .write_all(b"a\n1234567890\n")
+        .expect("write stdin");
+
+    let output = child.wait_with_output().expect("wait for syskits fold");
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"a\n12345678\n90\n");
+    assert!(output.stderr.is_empty());
+}

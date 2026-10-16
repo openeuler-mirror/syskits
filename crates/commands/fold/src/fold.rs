@@ -441,24 +441,19 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
                         is_bs_following_last_blank = false;
                         break;
                     }
-                    value if value == libc::wchar_t::from(b'\x08') => {
-                        if column > 0 {
-                            column = column.saturating_sub(1);
-                        }
-                        output.extend_from_slice(&buffer[start_pos..start_pos + mblength]);
-                        if is_bs_following_last_blank && !convfail {
-                            bs_following_last_blank_num += 1;
-                        } else {
-                            is_bs_following_last_blank = false;
-                        }
-                        break;
-                    }
                     _ => {}
                 }
             }
 
+            let next_column =
+                if uses_column_rules && !convfail && wide_char == libc::wchar_t::from(b'\x08') {
+                    column.saturating_sub(1)
+                } else {
+                    column + increment
+                };
+
             // 检查是否会超过宽度
-            if column + increment > width {
+            if next_column > width {
                 // 处理spaces选项
                 if is_spaces && last_blank_pos.is_some() {
                     let blank_pos = last_blank_pos.unwrap();
@@ -510,7 +505,7 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
 
             // 字符可以放入当前行（或column == 0且字符太大的特殊情况）
             output.extend_from_slice(&buffer[start_pos..start_pos + mblength]);
-            column += increment;
+            column = next_column;
 
             if is_blank_seen && !convfail && wide_char == libc::wchar_t::from(b'\r') {
                 is_cr_after_last_blank = true;

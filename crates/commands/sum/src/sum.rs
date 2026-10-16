@@ -17,7 +17,7 @@
 //!    计算文件的大小，并以块的形式报告。块的大小可以是 512 字节（System V 算法）或 1024 字节（BSD 算法）。
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
@@ -110,6 +110,13 @@ mod sum_flags {
     pub static SUM_SYSTEM_V_COMPATIBLE: &str = "sysv";
 }
 
+fn input_files(matches: &ArgMatches) -> (Vec<String>, bool) {
+    match matches.get_many::<String>(sum_flags::SUM_FILE) {
+        Some(files) => (files.cloned().collect(), true),
+        None => (vec!["-".to_owned()], false),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SumRow {
     pub algorithm: String,
@@ -143,14 +150,9 @@ pub fn sum_native_semantic(args: impl ctcore::Args) -> CTResult<SumSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
-    let files: Vec<String> = if let Some(v) = matches.get_many::<String>(sum_flags::SUM_FILE) {
-        v.cloned().collect()
-    } else {
-        vec!["-".to_owned()]
-    };
+    let (files, is_print_names) = input_files(&matches);
 
     let is_sysv = matches.get_flag(sum_flags::SUM_SYSTEM_V_COMPATIBLE);
-    let is_print_names = files.len() > 1 || files[0] != "-";
     let algorithm = if is_sysv { "sysv" } else { "bsd" }.to_string();
 
     let mut rows = Vec::new();
@@ -217,14 +219,9 @@ pub fn sum_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
-    let files: Vec<String> = if let Some(v) = matches.get_many::<String>(sum_flags::SUM_FILE) {
-        v.cloned().collect()
-    } else {
-        vec!["-".to_owned()]
-    };
+    let (files, is_print_names) = input_files(&matches);
 
     let is_sysv = matches.get_flag(sum_flags::SUM_SYSTEM_V_COMPATIBLE);
-    let is_print_names = files.len() > 1 || files[0] != "-";
     let width = match is_sysv {
         true => 1,
         false => 5,
@@ -951,6 +948,24 @@ mod tests {
                 format!("sum: {path}: Is a directory\n")
             );
             assert_eq!(semantic.exit_code, 1);
+        }
+    }
+
+    #[cfg(test)]
+    mod input_files_tests {
+        use super::*;
+
+        #[test]
+        fn distinguishes_implicit_stdin_from_explicit_dash_operand() {
+            let implicit = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name()])
+                .unwrap();
+            assert_eq!(input_files(&implicit), (vec!["-".to_owned()], false));
+
+            let explicit = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "-"])
+                .unwrap();
+            assert_eq!(input_files(&explicit), (vec!["-".to_owned()], true));
         }
     }
 }

@@ -130,7 +130,13 @@ fn parse_numeric_prefix(s: &str) -> Option<(usize, bool)> {
     Some((idx, has_dot && digits_after == 0))
 }
 
-fn numfmt_parse_suffix(s: &str) -> Result<(f64, Option<NumfmtSuffix>)> {
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct NumfmtParsedNumber<'a> {
+    number: &'a str,
+    suffix: Option<NumfmtSuffix>,
+}
+
+fn numfmt_parse_number_parts(s: &str) -> Result<NumfmtParsedNumber<'_>> {
     if s.is_empty() {
         return Err("invalid number: ''".to_string());
     }
@@ -154,13 +160,14 @@ fn numfmt_parse_suffix(s: &str) -> Result<(f64, Option<NumfmtSuffix>)> {
         return Err(format!("invalid number: {}", s.quote()));
     }
 
-    let number = s[..num_end]
-        .parse::<f64>()
-        .map_err(|_| format!("invalid number: {}", s.quote()))?;
+    let number = &s[..num_end];
 
     let rest = s[num_end..].trim_start();
     if rest.is_empty() {
-        return Ok((number, None));
+        return Ok(NumfmtParsedNumber {
+            number,
+            suffix: None,
+        });
     }
 
     let raw_suffix = match rest.chars().next() {
@@ -193,7 +200,20 @@ fn numfmt_parse_suffix(s: &str) -> Result<(f64, Option<NumfmtSuffix>)> {
         ));
     }
 
-    Ok((number, Some((raw_suffix, with_i))))
+    Ok(NumfmtParsedNumber {
+        number,
+        suffix: Some((raw_suffix, with_i)),
+    })
+}
+
+fn numfmt_parse_suffix(s: &str) -> Result<(f64, Option<NumfmtSuffix>)> {
+    let parsed = numfmt_parse_number_parts(s)?;
+    let number = parsed
+        .number
+        .parse::<f64>()
+        .map_err(|_| format!("invalid number: {}", s.quote()))?;
+
+    Ok((number, parsed.suffix))
 }
 
 // 返回数字的隐式精度，即点后面的位数。例如
@@ -396,6 +416,80 @@ fn numfmt_transform_to(
     })
 }
 
+fn numfmt_normalize_exact_integer(number: &str) -> Option<String> {
+    if number.contains('.') {
+        return None;
+    }
+
+    let (is_negative, digits) = if let Some(rest) = number.strip_prefix('-') {
+        (true, rest)
+    } else if let Some(rest) = number.strip_prefix('+') {
+        (false, rest)
+    } else {
+        (false, number)
+    };
+
+    if digits.is_empty() || !digits.chars().all(|ch| ch.is_ascii_digit()) {
+        return None;
+    }
+
+    let digits = digits.trim_start_matches('0');
+    if digits.is_empty() {
+        return Some("0".to_string());
+    }
+
+    if digits.len() > 19 {
+        return None;
+    }
+
+    let mut normalized = String::with_capacity(digits.len() + if is_negative { 1 } else { 0 });
+    if is_negative {
+        normalized.push('-');
+    }
+    normalized.push_str(digits);
+    Some(normalized)
+}
+
+fn numfmt_format_unscaled_integer_exact(
+    source: &str,
+    options: &NumfmtConfigs,
+    precision: usize,
+) -> Result<Option<String>> {
+    if precision != 0
+        || options.transform.from != NumfmtUnit::None
+        || options.transform.to != NumfmtUnit::None
+        || options.transform.from_unit != 1
+        || options.transform.to_unit != 1
+    {
+        return Ok(None);
+    }
+
+    let parsed = numfmt_parse_number_parts(source)?;
+    if parsed.suffix.is_some() {
+        return Ok(None);
+    }
+
+    Ok(numfmt_normalize_exact_integer(parsed.number))
+}
+
+fn numfmt_finish_format_string(
+    number: String,
+    numfmt_configs: &NumfmtConfigs,
+    implicit_padding: Option<isize>,
+) -> String {
+    let number_with_suffix = match &numfmt_configs.suffix {
+        Some(suffix) => format!("{number}{suffix}"),
+        None => number,
+    };
+
+    let padded_number = get_padded_number(numfmt_configs, implicit_padding, number_with_suffix);
+
+    format!(
+        "{}{}{}",
+        numfmt_configs.format.prefix, padded_number, numfmt_configs.format.suffix
+    )
+}
+
 fn numfmt_format_string(
     source: &str,
     numfmt_configs: &NumfmtConfigs,
@@ -417,6 +511,16 @@ fn numfmt_format_string(
         0
     };
 
+    if let Some(number) =
+        numfmt_format_unscaled_integer_exact(source_without_suffix, numfmt_configs, precision)?
+    {
+        return Ok(numfmt_finish_format_string(
+            number,
+            numfmt_configs,
+            implicit_padding,
+        ));
+    }
+
     let number = numfmt_transform_to(
         numfmt_transform_from(source_without_suffix, &numfmt_configs.transform)?,
         &numfmt_configs.transform,
@@ -424,17 +528,10 @@ fn numfmt_format_string(
         precision,
     )?;
 
-    // 在应用填充之前，恢复后缀
-    let number_with_suffix = match &numfmt_configs.suffix {
-        Some(suffix) => format!("{number}{suffix}"),
-        None => number,
-    };
-
-    let padded_number = get_padded_number(numfmt_configs, implicit_padding, number_with_suffix);
-
-    Ok(format!(
-        "{}{}{}",
-        numfmt_configs.format.prefix, padded_number, numfmt_configs.format.suffix
+    Ok(numfmt_finish_format_string(
+        number,
+        numfmt_configs,
+        implicit_padding,
     ))
 }
 

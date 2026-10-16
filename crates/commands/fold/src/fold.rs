@@ -512,7 +512,11 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
             output.extend_from_slice(&buffer[start_pos..start_pos + mblength]);
             column = next_column;
 
-            if is_blank_seen && !convfail && wide_char == libc::wchar_t::from(b'\r') {
+            if is_blank_seen
+                && !convfail
+                && wide_char == libc::wchar_t::from(b'\r')
+                && (!single_byte_locale || uses_column_rules)
+            {
                 is_cr_after_last_blank = true;
             }
 

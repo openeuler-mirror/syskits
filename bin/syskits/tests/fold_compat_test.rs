@@ -144,6 +144,17 @@ fn fold_wraps_oversized_tab_after_carriage_return_in_c_locale() {
 }
 
 #[test]
+fn fold_bytes_spaces_do_not_apply_multibyte_carriage_return_compensation() {
+    assert_fold_bytes(
+        "byte mode carriage return after blank",
+        &["fold", "-b", "-s", "-w", "3"],
+        "C",
+        b" \ra\t",
+        b" \n\ra\t",
+    );
+}
+
+#[test]
 fn fold_uses_locale_encoding_like_gnu() {
     assert_fold_bytes(
         "C locale byte mode",

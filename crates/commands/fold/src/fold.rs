@@ -108,6 +108,7 @@ unsafe extern "C" {
         byte_count: usize,
         state: *mut libc::mbstate_t,
     ) -> usize;
+    fn iswblank(wide_char: libc::c_uint) -> libc::c_int;
     fn wcwidth(wide_char: libc::wchar_t) -> libc::c_int;
 }
 
@@ -238,6 +239,10 @@ fn fold_decode_next(
 fn fold_character_width(wide_char: libc::wchar_t) -> usize {
     let width = unsafe { wcwidth(wide_char) };
     usize::try_from(width).unwrap_or(0)
+}
+
+fn fold_is_blank(wide_char: libc::wchar_t) -> bool {
+    unsafe { iswblank(wide_char as libc::c_uint) != 0 }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -414,10 +419,10 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
                 if is_spaces && last_blank_pos.is_some() {
                     let blank_pos = last_blank_pos.unwrap();
 
-                    writer.write_all(&output[..=blank_pos])?;
+                    writer.write_all(&output[..blank_pos])?;
                     writer.write_all(b"\n")?;
 
-                    let remaining = output[blank_pos + 1..].to_vec();
+                    let remaining = output[blank_pos..].to_vec();
                     output = remaining;
 
                     let column_adjustment = if is_cr_after_last_blank {
@@ -475,8 +480,8 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
             }
 
             // 记录空格位置
-            if is_spaces && !convfail && matches!(wide_char, 0x09..=0x0d | 0x20) {
-                last_blank_pos = Some(output.len() - 1);
+            if is_spaces && !convfail && fold_is_blank(wide_char) {
+                last_blank_pos = Some(output.len());
                 last_blank_column = column;
                 last_blank_increment = increment;
                 is_blank_seen = true;
@@ -1478,6 +1483,26 @@ mod tests {
             )
             .expect("fold byte input");
             String::from_utf8(writer).expect("fold output is UTF-8")
+        }
+
+        #[test]
+        fn test_fold_spaces_breaks_after_multibyte_blank() -> CTResult<()> {
+            if fold_locale_is_single_byte() {
+                return Ok(());
+            }
+
+            let mut writer = Vec::new();
+            fold_file_multibyte_unified(
+                &mut writer,
+                BufReader::new("a\u{3000}bcde".as_bytes()),
+                true,
+                4,
+                CountMode::Columns,
+                false,
+            )?;
+
+            assert_eq!(writer, "a\u{3000}\nbcde".as_bytes());
+            Ok(())
         }
 
         #[test]

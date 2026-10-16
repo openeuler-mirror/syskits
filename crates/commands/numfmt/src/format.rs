@@ -1061,7 +1061,7 @@ fn pad_string(value: String, width: isize, fill: char) -> String {
     }
 
     let target_width = width.unsigned_abs();
-    let value_width = value.chars().count();
+    let value_width = value.len();
     if target_width <= value_width {
         return value;
     }
@@ -1557,6 +1557,24 @@ mod tests {
 
         config.zero_terminated = true;
         assert_eq!(numfmt_format_line("1\t2", &config).unwrap(), "1 2\0");
+    }
+
+    #[test]
+    fn test_padding_counts_multibyte_suffix_bytes() {
+        let mut config = setup_default_config();
+        config.transform.from = NumfmtUnit::None;
+        config.transform.to = NumfmtUnit::None;
+        config.padding = 5;
+        config.suffix = Some("é".to_string());
+
+        assert_eq!(numfmt_format_string("1", &config, None).unwrap(), "  1é");
+
+        config.padding = -5;
+        assert_eq!(numfmt_format_string("1", &config, None).unwrap(), "1é  ");
+
+        config.padding = 5;
+        config.suffix = Some("界".to_string());
+        assert_eq!(numfmt_format_string("1", &config, None).unwrap(), " 1界");
     }
 
     #[cfg(test)]

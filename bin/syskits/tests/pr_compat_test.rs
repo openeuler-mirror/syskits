@@ -1,4 +1,8 @@
+use std::io::{Read, Write};
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 fn run_pr_with_non_utf8_input(args: &[&str]) -> std::process::Output {
     let dir = tempfile::tempdir().expect("create temp dir");
@@ -94,4 +98,56 @@ fn pr_without_show_nonprinting_preserves_non_utf8_bytes() {
     );
     assert_eq!(output.stdout, [b'a', 0x07, 0x80, b'\n']);
     assert_eq!(output.stderr, b"");
+}
+
+#[test]
+fn pr_streams_output_before_stdin_eof() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["pr", "-t"])
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run syskits pr");
+
+    let mut stdin = child.stdin.take().expect("stdin");
+    let mut stdout = child.stdout.take().expect("stdout");
+    let (first_byte_sender, first_byte_receiver) = mpsc::channel();
+    let reader = thread::spawn(move || {
+        let mut output = Vec::new();
+        let mut first_byte = [0];
+        let first_read = stdout.read_exact(&mut first_byte);
+        first_byte_sender
+            .send(first_read.map(|()| first_byte[0]))
+            .expect("send first output byte");
+        stdout
+            .read_to_end(&mut output)
+            .expect("read remaining stdout");
+        (first_byte[0], output)
+    });
+
+    let input = (1..=20_000)
+        .map(|number| format!("{number}\n"))
+        .collect::<String>()
+        .into_bytes();
+    stdin.write_all(&input).expect("write streaming input");
+    let first_byte = first_byte_receiver.recv_timeout(Duration::from_secs(2));
+    drop(stdin);
+
+    let status = child.wait().expect("wait for syskits pr");
+    let (thread_first_byte, remaining_output) = reader.join().expect("join stdout reader");
+
+    assert!(status.success());
+    assert_eq!(
+        first_byte
+            .expect("pr should output before stdin reaches EOF")
+            .unwrap(),
+        b'1'
+    );
+    assert_eq!(thread_first_byte, b'1');
+    let mut output = vec![thread_first_byte];
+    output.extend_from_slice(&remaining_output);
+    assert_eq!(output, input);
 }

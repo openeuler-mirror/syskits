@@ -429,6 +429,11 @@ quick_error! {
             display("pr: {0}", msg)
         }
 
+        Output(err: std::io::Error) {
+            display("{0}", err)
+            source(err)
+        }
+
         IsDirectory(path: String) {
             display("pr: {0}: Is a directory", path)
         }
@@ -688,8 +693,11 @@ impl Tool for Pr {
 }
 
 pub fn pr_main(args: impl ctcore::Args) -> CTResult<()> {
-    let semantic = pr_native_semantic(args)?;
-    pr_write_semantic_output(&semantic)?;
+    let stdout = stdout();
+    let mut stdout = stdout.lock();
+    let semantic = pr_run(args, Some(&mut stdout))?;
+    drop(stdout);
+    pr_write_semantic_diagnostics(&semantic)?;
 
     if semantic.exit_code == 0 {
         Ok(())
@@ -699,6 +707,10 @@ pub fn pr_main(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 pub fn pr_native_semantic(args: impl ctcore::Args) -> CTResult<PrSemantic> {
+    pr_run(args, None)
+}
+
+fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResult<PrSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect_ignore();
@@ -708,7 +720,14 @@ pub fn pr_native_semantic(args: impl ctcore::Args) -> CTResult<PrSemantic> {
     let mut command = ct_app();
     let matches = match command.try_get_matches_from_mut(opt_args) {
         Ok(m) => m,
-        Err(e) => return Ok(pr_semantic_from_clap_error(e)),
+        Err(e) => {
+            let semantic = pr_semantic_from_clap_error(e);
+            if let Some(output) = output.as_deref_mut() {
+                pr_write_classic_output(&semantic, output)?;
+                output.flush()?;
+            }
+            return Ok(semantic);
+        }
     };
 
     let mut semantic = PrSemantic {
@@ -747,14 +766,26 @@ pub fn pr_native_semantic(args: impl ctcore::Args) -> CTResult<PrSemantic> {
         };
 
         let cmd_result = match file_group.iter().exactly_one() {
-            Ok(group) => pr_collect_semantic_for_path(&mut semantic, &file_group, group, &options),
-            Err(_) => pr_collect_semantic_for_merge(&mut semantic, &file_group, &options),
+            Ok(group) => pr_collect_semantic_for_path(
+                &mut semantic,
+                &file_group,
+                group,
+                &options,
+                &mut output,
+            ),
+            Err(_) => {
+                pr_collect_semantic_for_merge(&mut semantic, &file_group, &options, &mut output)
+            }
         };
 
-        if let Err(error) = cmd_result {
-            semantic.stderr_text = pr_error_text(&matches, &error);
-            semantic.exit_code = 1;
-            return Ok(semantic);
+        match cmd_result {
+            Ok(()) => {}
+            Err(PrError::Output(error)) => return Err(error.into()),
+            Err(error) => {
+                semantic.stderr_text = pr_error_text(&matches, &error);
+                semantic.exit_code = 1;
+                return Ok(semantic);
+            }
         }
     }
 
@@ -783,20 +814,23 @@ fn pr_semantic_from_clap_error(error: clap::Error) -> PrSemantic {
     }
 }
 
-fn pr_write_semantic_output(semantic: &PrSemantic) -> CTResult<()> {
-    let mut out = stdout();
+fn pr_write_classic_output(semantic: &PrSemantic, out: &mut dyn Write) -> std::io::Result<()> {
+    if !semantic.classic_bytes.is_empty() {
+        out.write_all(&semantic.classic_bytes)
+    } else if !semantic.classic_text.is_empty() {
+        out.write_all(semantic.classic_text.as_bytes())
+    } else {
+        Ok(())
+    }
+}
+
+fn pr_write_semantic_diagnostics(semantic: &PrSemantic) -> CTResult<()> {
     let mut err = stderr();
 
-    if !semantic.classic_bytes.is_empty() {
-        out.write_all(&semantic.classic_bytes)?;
-    } else if !semantic.classic_text.is_empty() {
-        out.write_all(semantic.classic_text.as_bytes())?;
-    }
     if !semantic.stderr_text.is_empty() {
         err.write_all(semantic.stderr_text.as_bytes())?;
     }
 
-    out.flush()?;
     err.flush()?;
     Ok(())
 }
@@ -1633,28 +1667,46 @@ fn pr_collect_semantic_for_path(
     paths: &[&str],
     path: &str,
     output_opts: &PrOutputOptions,
+    output: &mut Option<&mut dyn Write>,
 ) -> Result<(), PrError> {
     let lines = pr_input_lines(pr_open(path)?);
     let pages = pr_read_stream_and_create_pages(output_opts, lines, 0);
+    let collect_semantic = output.is_none();
 
     for (page_index, page_lines) in pages {
         let page_number = page_index + 1;
-        pr_push_page_rows(
-            &mut semantic.rows,
-            paths,
-            &page_lines,
-            output_opts,
-            page_number,
-        )?;
+        if collect_semantic {
+            pr_push_page_rows(
+                &mut semantic.rows,
+                paths,
+                &page_lines,
+                output_opts,
+                page_number,
+            )?;
+        }
         let mut page_output = Vec::new();
         pr_output_page(&page_lines, output_opts, &mut page_output, page_number)?;
-        semantic.classic_bytes.extend_from_slice(&page_output);
-        semantic
-            .classic_text
-            .push_str(&String::from_utf8_lossy(&page_output));
+        pr_consume_page_output(semantic, &page_output, output)?;
     }
 
     Ok(())
+}
+
+fn pr_consume_page_output(
+    semantic: &mut PrSemantic,
+    page_output: &[u8],
+    output: &mut Option<&mut dyn Write>,
+) -> Result<(), PrError> {
+    if let Some(output) = output.as_deref_mut() {
+        output.write_all(page_output).map_err(PrError::Output)?;
+        output.flush().map_err(PrError::Output)
+    } else {
+        semantic.classic_bytes.extend_from_slice(page_output);
+        semantic
+            .classic_text
+            .push_str(&String::from_utf8_lossy(page_output));
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1666,7 +1718,8 @@ fn pr_handle(path: &str, output_opts: &PrOutputOptions) -> Result<i32, PrError> 
         stderr_text: String::new(),
         exit_code: 0,
     };
-    pr_collect_semantic_for_path(&mut semantic, &[path], path, output_opts)?;
+    let mut output = None;
+    pr_collect_semantic_for_path(&mut semantic, &[path], path, output_opts, &mut output)?;
     let mut out = stdout();
     if !semantic.classic_bytes.is_empty() {
         out.write_all(&semantic.classic_bytes)?;
@@ -1835,7 +1888,9 @@ fn pr_collect_semantic_for_merge(
     semantic: &mut PrSemantic,
     paths: &[&str],
     output_opts: &PrOutputOptions,
+    output: &mut Option<&mut dyn Write>,
 ) -> Result<(), PrError> {
+    let collect_semantic = output.is_none();
     // 检查文件是否存在
     for path in paths {
         pr_open(path)?;
@@ -1957,13 +2012,15 @@ fn pr_collect_semantic_for_merge(
 
         let mut page_output_opts = output_opts.clone();
         page_output_opts.merge_files_print = Some(paths.len());
-        pr_push_page_rows(
-            &mut semantic.rows,
-            paths,
-            &merged_lines,
-            &page_output_opts,
-            page_number,
-        )?;
+        if collect_semantic {
+            pr_push_page_rows(
+                &mut semantic.rows,
+                paths,
+                &merged_lines,
+                &page_output_opts,
+                page_number,
+            )?;
+        }
         let mut page_output = Vec::new();
         pr_output_page(
             &merged_lines,
@@ -1971,10 +2028,7 @@ fn pr_collect_semantic_for_merge(
             &mut page_output,
             page_number,
         )?;
-        semantic.classic_bytes.extend_from_slice(&page_output);
-        semantic
-            .classic_text
-            .push_str(&String::from_utf8_lossy(&page_output));
+        pr_consume_page_output(semantic, &page_output, output)?;
     }
 
     Ok(())
@@ -1989,7 +2043,8 @@ fn mpr_handle(paths: &[&str], output_opts: &PrOutputOptions) -> Result<i32, PrEr
         stderr_text: String::new(),
         exit_code: 0,
     };
-    pr_collect_semantic_for_merge(&mut semantic, paths, output_opts)?;
+    let mut output = None;
+    pr_collect_semantic_for_merge(&mut semantic, paths, output_opts, &mut output)?;
     let mut out = stdout();
     if !semantic.classic_bytes.is_empty() {
         out.write_all(&semantic.classic_bytes)?;

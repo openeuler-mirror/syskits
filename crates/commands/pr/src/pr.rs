@@ -37,7 +37,6 @@ use unicode_width::UnicodeWidthStr;
 
 const PR_TAB: char = '\t';
 const PR_LINES_PER_PAGE: usize = 66;
-const PR_LINES_PER_PAGE_FOR_FORM_FEED: usize = 63;
 const PR_HEADER_LINES_PER_PAGE: usize = 5;
 const PR_TRAILER_LINES_PER_PAGE: usize = 5;
 const PR_FILE_STDIN: &str = "-";
@@ -1111,15 +1110,9 @@ fn parse_content_lines_per_page(arg_matches: &ArgMatches, page_length: usize) ->
     (is_display_header_and_trailer, content_lines_per_page)
 }
 
-fn parse_page_length(arg_matches: &ArgMatches, is_form_feed_used: bool) -> Result<usize, PrError> {
-    let default_lines_per_page = if is_form_feed_used {
-        PR_LINES_PER_PAGE_FOR_FORM_FEED
-    } else {
-        PR_LINES_PER_PAGE
-    };
-
-    let page_length = pr_parse_usize(arg_matches, pr_flags::PR_PAGE_LENGTH)
-        .unwrap_or(Ok(default_lines_per_page))?;
+fn parse_page_length(arg_matches: &ArgMatches, _is_form_feed_used: bool) -> Result<usize, PrError> {
+    let page_length =
+        pr_parse_usize(arg_matches, pr_flags::PR_PAGE_LENGTH).unwrap_or(Ok(PR_LINES_PER_PAGE))?;
     Ok(page_length)
 }
 

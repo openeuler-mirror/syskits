@@ -123,6 +123,32 @@ mod native_semantic_tests {
     }
 
     #[test]
+    fn numfmt_native_semantic_uses_last_repeated_to_option() {
+        let args = ["numfmt", "--to=si", "--to=iec", "2048"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.stderr_text, "");
+        assert_eq!(semantic.classic_text, "2.0K\n");
+        assert_eq!(semantic.rows.len(), 1);
+        assert_eq!(semantic.rows[0].transform_to, "iec");
+    }
+
+    #[test]
+    fn numfmt_native_semantic_uses_last_repeated_round_option() {
+        let args = ["numfmt", "--round=up", "--round=down", "--to-unit=10", "15"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.stderr_text, "");
+        assert_eq!(semantic.classic_text, "1\n");
+        assert_eq!(semantic.rows.len(), 1);
+        assert_eq!(semantic.rows[0].output, "1");
+    }
+
+    #[test]
     fn numfmt_native_semantic_warn_mode_keeps_passthrough_rows() {
         let args = ["numfmt", "--invalid=warn", "hello"];
 
@@ -975,7 +1001,8 @@ pub fn ct_app() -> Command {
             .long(numfmt_flags::NUMFMT_TO)
             .help(t!("numfmt.clap.numfmt_to"))
             .value_name("UNIT")
-            .default_value(numfmt_flags::NUMFMT_TO_DEFAULT),
+            .default_value(numfmt_flags::NUMFMT_TO_DEFAULT)
+            .overrides_with(numfmt_flags::NUMFMT_TO),
         Arg::new(numfmt_flags::NUMFMT_TO_UNIT)
             .long(numfmt_flags::NUMFMT_TO_UNIT)
             .help(t!("numfmt.clap.numfmt_to_unit"))
@@ -1009,7 +1036,8 @@ pub fn ct_app() -> Command {
             .help(t!("numfmt.clap.numfmt_round"))
             .value_name("METHOD")
             .default_value("from-zero")
-            .value_parser(["up", "down", "from-zero", "towards-zero", "nearest"]),
+            .value_parser(["up", "down", "from-zero", "towards-zero", "nearest"])
+            .overrides_with(numfmt_flags::NUMFMT_ROUND),
         Arg::new(numfmt_flags::NUMFMT_SUFFIX)
             .long(numfmt_flags::NUMFMT_SUFFIX)
             .help(

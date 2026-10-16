@@ -260,8 +260,8 @@ impl TrFlags {
 
     /// 验证反斜杠结尾
     fn validate_backslash_ending(&self) -> CTResult<()> {
-        if let Some(first) = self.sets.first() {
-            if first.ends_with('\\') {
+        for set in &self.sets {
+            if has_trailing_unescaped_backslash(set) {
                 ct_show!(CtSimpleError::new(
                     0,
                     "warning: an unescaped backslash at end of string is not portable"
@@ -270,6 +270,16 @@ impl TrFlags {
         }
         Ok(())
     }
+}
+
+fn has_trailing_unescaped_backslash(set: &str) -> bool {
+    set.as_bytes()
+        .iter()
+        .rev()
+        .take_while(|&&byte| byte == b'\\')
+        .count()
+        % 2
+        == 1
 }
 
 #[derive(Default)]

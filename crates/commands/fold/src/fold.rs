@@ -30,7 +30,7 @@
 //! 2. 字节模式（Byte Mode，-b选项）
 //! - 计算方式：按UTF-8字节长度计算，每个字符的increment = 字符的字节长度
 //! - 关键特性：完全按照GNU fold.c的multibyte_text函数实现
-//! - 换行符处理：不进行特殊处理，换行符被当作普通的1字节字符
+//! - 换行符处理：C/POSIX单字节locale下结束当前行；多字节locale下按普通字节计数
 //! - 中文字符：一个中文字符通常占3个字节
 //! - Emoji字符：通常占4个字节
 //! - ASCII字符：每个字符占1个字节
@@ -205,7 +205,7 @@ fn fold_file_generic<T: Read, W: Write>(
     width: usize,
     mode: CountMode,
 ) -> CTResult<()> {
-    fold_file_multibyte_unified(writer, file, is_spaces, width, mode)
+    fold_file_multibyte_unified(writer, file, is_spaces, width, mode, !fold_locale_is_utf8())
 }
 
 /// 统一的文本折叠函数 - 完全按照GNU fold.c的fold_multibyte_text函数实现
@@ -216,6 +216,7 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
     is_spaces: bool,
     width: usize,
     mode: CountMode,
+    single_byte_locale: bool,
 ) -> CTResult<()> {
     let mut buffer = Vec::new();
     file.read_to_end(&mut buffer)
@@ -225,8 +226,6 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
     let mut output = Vec::new();
     let mut last_blank_pos = None;
     let mut last_blank_column = 0;
-    let single_byte_locale = !fold_locale_is_utf8();
-
     let mut i = 0;
     while i < buffer.len() {
         // 获取当前字符及其字节长度 - mbrtowc逻辑
@@ -245,8 +244,9 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
             }
         };
 
-        // 列模式下换行符的特殊处理 - 对应GNU fold.c中的case L'\n'
-        if mode == CountMode::Columns && ch == '\n' {
+        // GNU fold_text handles newlines before counting in single-byte locales,
+        // while fold_multibyte_text only does so in column mode.
+        if ch == '\n' && (single_byte_locale || mode == CountMode::Columns) {
             writer.write_all(&output)?;
             writer.write_all(b"\n")?;
             column = 0;
@@ -458,10 +458,7 @@ pub fn ct_app() -> Command {
         Arg::new(fold_flags::FOLD_BYTES)
             .long(fold_flags::FOLD_BYTES)
             .short('b')
-            .help(
-                "count using bytes rather than columns (meaning control characters \
-                     such as newline are not treated specially)",
-            )
+            .help("count bytes rather than columns")
             .action(ArgAction::SetTrue)
             .conflicts_with(fold_flags::FOLD_CHARACTERS),
         Arg::new(fold_flags::FOLD_CHARACTERS)
@@ -991,7 +988,7 @@ mod tests {
         // fold 接口测试: fold [OPTION]... [FILE]...
         //
         // Options:
-        //   -b, --bytes          count using bytes rather than columns (meaning control characters such as newline are not treated specially)
+        //   -b, --bytes          count bytes rather than columns
         //   -s, --spaces         break lines at word boundaries rather than a hard cut-off
         //   -w, --width <WIDTH>  set WIDTH as the maximum line width rather than 80
         //   -h, --help           Print help
@@ -1308,7 +1305,7 @@ mod tests {
     mod fold_tests {
         use super::*;
         use ctcore::ct_error::CTResult;
-        use std::io::{BufWriter, Write};
+        use std::io::{BufReader, BufWriter, Write};
         use tempfile::NamedTempFile;
 
         /// 写入临时文件的辅助函数
@@ -1316,6 +1313,20 @@ mod tests {
             let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
             write!(temp_file, "{content}").expect("Failed to write to temp file");
             temp_file
+        }
+
+        fn fold_bytes(content: &str, width: usize, single_byte_locale: bool) -> String {
+            let mut writer = Vec::new();
+            fold_file_multibyte_unified(
+                &mut writer,
+                BufReader::new(content.as_bytes()),
+                false,
+                width,
+                CountMode::Bytes,
+                single_byte_locale,
+            )
+            .expect("fold byte input");
+            String::from_utf8(writer).expect("fold output is UTF-8")
         }
 
         #[test]
@@ -1803,123 +1814,42 @@ mod tests {
         }
 
         #[test]
-        fn test_fold_byte_mode_newline_handling() -> CTResult<()> {
-            // 测试字节模式下换行符的正确处理 - 我们修复的核心问题
+        fn test_fold_byte_mode_newline_handling() {
             let content = "a\nb";
-            let temp_file = write_temp_file(content);
 
-            let fold_flags = FoldFlags {
-                bytes: true,
-                characters: false,
-                spaces: false,
-                width: 1,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
-            };
-
-            let mut writer = Vec::new();
-            fold(&mut writer, &fold_flags)?;
-
-            let output = String::from_utf8(writer).unwrap();
-            // 在字节模式下，换行符被当作1字节字符处理，应该产生额外的换行
-            assert_eq!(output, "a\n\n\nb");
-
-            Ok(())
+            assert_eq!(fold_bytes(content, 1, true), "a\nb");
+            assert_eq!(fold_bytes(content, 1, false), "a\n\n\nb");
         }
 
         #[test]
-        fn test_fold_byte_mode_ascii_complex() -> CTResult<()> {
-            // 测试字节模式下复杂ASCII序列的处理
+        fn test_fold_byte_mode_ascii_complex() {
             let content = "12345678\n123456789";
-            let temp_file = write_temp_file(content);
 
-            let fold_flags = FoldFlags {
-                bytes: true,
-                characters: false,
-                spaces: false,
-                width: 8,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
-            };
-
-            let mut writer = Vec::new();
-            fold(&mut writer, &fold_flags)?;
-
-            let output = String::from_utf8(writer).unwrap();
-            // 验证输出与GNU fold完全一致
-            assert_eq!(output, "12345678\n\n1234567\n89");
-
-            Ok(())
+            assert_eq!(fold_bytes(content, 8, true), "12345678\n12345678\n9");
+            assert_eq!(fold_bytes(content, 8, false), "12345678\n\n1234567\n89");
         }
 
         #[test]
-        fn test_fold_byte_mode_chinese_newline() -> CTResult<()> {
-            // 测试字节模式下中文字符与换行符的组合处理
+        fn test_fold_byte_mode_chinese_newline_in_multibyte_locale() {
             let content = "容\n第二行";
-            let temp_file = write_temp_file(content);
 
-            let fold_flags = FoldFlags {
-                bytes: true,
-                characters: false,
-                spaces: false,
-                width: 8,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
-            };
-
-            let mut writer = Vec::new();
-            fold(&mut writer, &fold_flags)?;
-
-            let output = String::from_utf8(writer).unwrap();
-            // 验证中文字符的字节模式折叠结果
-            assert_eq!(output, "容\n第\n二行");
-
-            Ok(())
+            assert_eq!(fold_bytes(content, 8, false), "容\n第\n二行");
         }
 
         #[test]
-        fn test_fold_byte_mode_consecutive_newlines() -> CTResult<()> {
-            // 测试字节模式下连续换行符的处理
+        fn test_fold_byte_mode_consecutive_newlines() {
             let content = "a\n\nb";
-            let temp_file = write_temp_file(content);
 
-            let fold_flags = FoldFlags {
-                bytes: true,
-                characters: false,
-                spaces: false,
-                width: 1,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
-            };
-
-            let mut writer = Vec::new();
-            fold(&mut writer, &fold_flags)?;
-
-            let output = String::from_utf8(writer).unwrap();
-            // 验证连续换行符的处理
-            assert_eq!(output, "a\n\n\n\n\nb");
-
-            Ok(())
+            assert_eq!(fold_bytes(content, 1, true), "a\n\nb");
+            assert_eq!(fold_bytes(content, 1, false), "a\n\n\n\n\nb");
         }
 
         #[test]
-        fn test_fold_byte_mode_rescan_mechanism() -> CTResult<()> {
-            // 测试字节模式的rescan机制
+        fn test_fold_byte_mode_rescan_mechanism() {
             let content = "abc\ndef";
-            let temp_file = write_temp_file(content);
 
-            let fold_flags = FoldFlags {
-                bytes: true,
-                characters: false,
-                spaces: false,
-                width: 2,
-                files: vec![temp_file.path().to_string_lossy().to_string()],
-            };
-
-            let mut writer = Vec::new();
-            fold(&mut writer, &fold_flags)?;
-
-            let output = String::from_utf8(writer).unwrap();
-            // 验证rescan机制的正确性
-            assert_eq!(output, "ab\nc\n\nde\nf");
-
-            Ok(())
+            assert_eq!(fold_bytes(content, 2, true), "ab\nc\nde\nf");
+            assert_eq!(fold_bytes(content, 2, false), "ab\nc\n\nde\nf");
         }
 
         #[test]

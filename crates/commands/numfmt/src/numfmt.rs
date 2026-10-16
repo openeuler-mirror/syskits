@@ -35,6 +35,7 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, get_ct_exit_code};
 use ctcore::ct_ranges::CtRange;
+use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 use ctcore::ct_show;
 use ctcore::ct_show_error;
 use std::ffi::OsString;
@@ -246,6 +247,17 @@ mod native_semantic_tests {
         assert_eq!(semantic.classic_text, "1\n");
         assert_eq!(semantic.rows.len(), 1);
         assert_eq!(semantic.rows[0].output, "1");
+    }
+
+    #[test]
+    fn numfmt_native_semantic_accepts_unique_round_prefix() {
+        let args = ["numfmt", "--round=n", "1000"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.stderr_text, "");
+        assert_eq!(semantic.classic_text, "1000\n");
     }
 
     #[test]
@@ -1355,7 +1367,10 @@ pub fn ct_app() -> Command {
             .help(t!("numfmt.clap.numfmt_from"))
             .value_name("UNIT")
             .allow_hyphen_values(true)
-            .default_value(numfmt_flags::NUMFMT_FROM_DEFAULT),
+            .default_value(numfmt_flags::NUMFMT_FROM_DEFAULT)
+            .value_parser(CtShortcutValueParser::new([
+                "none", "auto", "si", "iec", "iec-i",
+            ])),
         Arg::new(numfmt_flags::NUMFMT_FROM_UNIT)
             .long(numfmt_flags::NUMFMT_FROM_UNIT)
             .help(t!("numfmt.clap.numfmt_from_unit"))
@@ -1368,6 +1383,9 @@ pub fn ct_app() -> Command {
             .value_name("UNIT")
             .allow_hyphen_values(true)
             .default_value(numfmt_flags::NUMFMT_TO_DEFAULT)
+            .value_parser(CtShortcutValueParser::new([
+                "none", "auto", "si", "iec", "iec-i",
+            ]))
             .overrides_with(numfmt_flags::NUMFMT_TO),
         Arg::new(numfmt_flags::NUMFMT_TO_UNIT)
             .long(numfmt_flags::NUMFMT_TO_UNIT)
@@ -1405,7 +1423,13 @@ pub fn ct_app() -> Command {
             .value_name("METHOD")
             .allow_hyphen_values(true)
             .default_value("from-zero")
-            .value_parser(["up", "down", "from-zero", "towards-zero", "nearest"])
+            .value_parser(CtShortcutValueParser::new([
+                "up",
+                "down",
+                "from-zero",
+                "towards-zero",
+                "nearest",
+            ]))
             .overrides_with(numfmt_flags::NUMFMT_ROUND),
         Arg::new(numfmt_flags::NUMFMT_SUFFIX)
             .long(numfmt_flags::NUMFMT_SUFFIX)
@@ -1420,7 +1444,9 @@ pub fn ct_app() -> Command {
             .help(t!("numfmt.clap.numfmt_invalid"))
             .default_value("abort")
             .allow_hyphen_values(true)
-            .value_parser(["abort", "fail", "warn", "ignore"])
+            .value_parser(CtShortcutValueParser::new([
+                "abort", "fail", "warn", "ignore",
+            ]))
             .value_name("INVALID"),
         Arg::new(numfmt_flags::NUMFMT_ZERO_TERMINATED)
             .short('z')
@@ -16400,6 +16426,34 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args);
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().kind(), ErrorKind::InvalidValue);
+        }
+
+        #[test]
+        fn test_ct_app_accepts_unique_xargmatch_prefixes() {
+            let command = ct_app();
+            let cmd_args = vec![
+                ctcore::ct_util_name(),
+                "--from=a",
+                "--to=s",
+                "--round=n",
+                "--invalid=w",
+                "1K",
+            ];
+            let matches = command.try_get_matches_from(cmd_args).unwrap();
+
+            assert_eq!(matches.get_one::<String>("from").unwrap(), "auto");
+            assert_eq!(matches.get_one::<String>("to").unwrap(), "si");
+            assert_eq!(matches.get_one::<String>("round").unwrap(), "nearest");
+            assert_eq!(matches.get_one::<String>("invalid").unwrap(), "warn");
+        }
+
+        #[test]
+        fn test_ct_app_rejects_ambiguous_xargmatch_prefix() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--to=i", "1000"];
+            let error = command.try_get_matches_from(cmd_args).unwrap_err();
+
+            assert_eq!(error.kind(), ErrorKind::InvalidValue);
         }
 
         #[test]

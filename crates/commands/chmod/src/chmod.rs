@@ -496,20 +496,7 @@ impl Chmoder {
 
     #[cfg(unix)]
     fn change_file(&self, file_perms: u32, mode: u32, file_path: &Path) -> Result<(), i32> {
-        if file_perms == mode {
-            if self.verbose && !self.changes {
-                println!(
-                    "{}",
-                    t!(
-                        "chmod.messages.retained",
-                        file = file_path.quote().to_string(),
-                        mode = format!("{:04o}", file_perms),
-                        str = display_permissions_unix(file_perms as mode_t, false)
-                    )
-                );
-            }
-            Ok(())
-        } else if let Err(err) = fs::set_permissions(file_path, fs::Permissions::from_mode(mode)) {
+        if let Err(err) = fs::set_permissions(file_path, fs::Permissions::from_mode(mode)) {
             if !self.quiet {
                 ct_show_error!("{}", err);
             }
@@ -528,7 +515,19 @@ impl Chmoder {
             }
             Err(1)
         } else {
-            if self.verbose || self.changes {
+            if file_perms == mode {
+                if self.verbose && !self.changes {
+                    println!(
+                        "{}",
+                        t!(
+                            "chmod.messages.retained",
+                            file = file_path.quote().to_string(),
+                            mode = format!("{:04o}", file_perms),
+                            str = display_permissions_unix(file_perms as mode_t, false)
+                        )
+                    );
+                }
+            } else if self.verbose || self.changes {
                 println!(
                     "{}",
                     t!(
@@ -1741,6 +1740,43 @@ mod tests {
         // 验证文件权限已更改
         let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
         assert_eq!(final_mode & 0o777, 0o644);
+    }
+
+    #[test]
+    fn test_change_file_same_mode_updates_ctime() {
+        let named_temp_file = NamedTempFile::new().unwrap();
+        let test_file_path = named_temp_file.path();
+
+        let initial_mode = 0o640;
+        fs::set_permissions(test_file_path, Permissions::from_mode(initial_mode)).unwrap();
+        let before = fs::metadata(test_file_path).unwrap();
+        let before_ctime = (before.ctime(), before.ctime_nsec());
+
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+
+        let chmoder = Chmoder {
+            changes: false,
+            quiet: false,
+            verbose: false,
+            preserve_root: false,
+            recursive: false,
+            dereference: false,
+            no_dereference: false,
+            traverse: TraverseMode::Physical,
+            fmode: Some(initial_mode),
+            cmode: None,
+        };
+
+        let result = chmoder.change_file(initial_mode, initial_mode, test_file_path);
+        assert!(result.is_ok());
+
+        let after = fs::metadata(test_file_path).unwrap();
+        let after_ctime = (after.ctime(), after.ctime_nsec());
+        assert!(
+            after_ctime > before_ctime,
+            "same-mode chmod should still update ctime"
+        );
+        assert_eq!(after.permissions().mode() & 0o777, initial_mode);
     }
 
     #[test]

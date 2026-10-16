@@ -340,28 +340,18 @@ enum TestPathCondition {
 /// 在非Windows平台上检查文件路径条件
 #[cfg(not(windows))]
 fn path(path: &OsStr, condition: &TestPathCondition) -> bool {
-    use std::fs::Metadata;
     use std::os::unix::fs::FileTypeExt;
 
     const S_ISUID: u32 = 0o4000;
     const S_ISGID: u32 = 0o2000;
     const S_ISVTX: u32 = 0o1000;
 
-    enum Permission {
-        Read = 0o4,
-        Write = 0o2,
-        Execute = 0o1,
+    match condition {
+        TestPathCondition::Readable => return effective_access(path, libc::R_OK),
+        TestPathCondition::Writable => return effective_access(path, libc::W_OK),
+        TestPathCondition::Executable => return effective_access(path, libc::X_OK),
+        _ => {}
     }
-
-    let perm = |metadata: Metadata, p: Permission| {
-        if geteuid() == metadata.uid() {
-            metadata.mode() & ((p as u32) << 6) != 0
-        } else if getegid() == metadata.gid() {
-            metadata.mode() & ((p as u32) << 3) != 0
-        } else {
-            metadata.mode() & (p as u32) != 0
-        }
-    };
 
     let metadata = if condition == &TestPathCondition::SymLink {
         fs::symlink_metadata(path)
@@ -390,13 +380,26 @@ fn path(path: &OsStr, condition: &TestPathCondition) -> bool {
         TestPathCondition::Sticky => metadata.mode() & S_ISVTX != 0,
         TestPathCondition::UserOwns => metadata.uid() == geteuid(),
         TestPathCondition::Fifo => file_type.is_fifo(),
-        TestPathCondition::Readable => perm(metadata, Permission::Read),
         TestPathCondition::Socket => file_type.is_socket(),
         TestPathCondition::NonEmpty => metadata.size() > 0,
         TestPathCondition::UserIdFlag => metadata.mode() & S_ISUID != 0,
-        TestPathCondition::Writable => perm(metadata, Permission::Write),
-        TestPathCondition::Executable => perm(metadata, Permission::Execute),
+        TestPathCondition::Readable
+        | TestPathCondition::Writable
+        | TestPathCondition::Executable => unreachable!(),
     }
+}
+
+#[cfg(not(windows))]
+fn effective_access(path: &OsStr, mode: libc::c_int) -> bool {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    let Ok(path) = CString::new(path.as_bytes()) else {
+        return false;
+    };
+
+    // GNU test uses euidaccess for -r/-w/-x; AT_EACCESS checks effective IDs.
+    unsafe { libc::faccessat(libc::AT_FDCWD, path.as_ptr(), mode, libc::AT_EACCESS) == 0 }
 }
 
 /// 在Windows平台上检查文件路径条件
@@ -599,6 +602,24 @@ mod tests_all {
             OsStr::new("nonexistent_file"),
             &TestPathCondition::Exists
         ));
+    }
+
+    #[test]
+    fn test_access_checks_use_effective_permissions() {
+        let temp_dir = tempdir().unwrap();
+        let test_file = temp_dir.path().join("mode000");
+
+        create_test_file(&test_file, 0o000).unwrap();
+
+        if geteuid() == 0 {
+            assert!(path(test_file.as_os_str(), &TestPathCondition::Readable));
+            assert!(path(test_file.as_os_str(), &TestPathCondition::Writable));
+        } else {
+            assert!(!path(test_file.as_os_str(), &TestPathCondition::Readable));
+            assert!(!path(test_file.as_os_str(), &TestPathCondition::Writable));
+        }
+
+        assert!(!path(test_file.as_os_str(), &TestPathCondition::Executable));
     }
 
     #[test]

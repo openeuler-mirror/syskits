@@ -50,7 +50,7 @@ struct TsortRunOutcome {
     had_cycle: bool,
     rows: Vec<TsortRow>,
     classic_bytes: Vec<u8>,
-    stderr_text: String,
+    stderr_bytes: Vec<u8>,
     output_events: Vec<TsortOutputEvent>,
     exit_code: i32,
 }
@@ -74,7 +74,7 @@ pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
                 stdout.write_all(&outcome.classic_bytes[range.clone()])?;
             }
             TsortOutputEvent::Stderr(range) => {
-                stderr.write_all(&outcome.stderr_text.as_bytes()[range.clone()])?;
+                stderr.write_all(&outcome.stderr_bytes[range.clone()])?;
             }
         }
     }
@@ -88,13 +88,14 @@ pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn tsort_native_semantic(args: impl ctcore::Args) -> CTResult<TsortSemantic> {
     let outcome = tsort_run(args)?;
     let classic_text = String::from_utf8_lossy(&outcome.classic_bytes).into_owned();
+    let stderr_text = String::from_utf8_lossy(&outcome.stderr_bytes).into_owned();
 
     Ok(TsortSemantic {
         had_cycle: outcome.had_cycle,
         rows: outcome.rows,
         classic_text,
         classic_bytes: outcome.classic_bytes,
-        stderr_text: outcome.stderr_text,
+        stderr_text,
         exit_code: outcome.exit_code,
     })
 }
@@ -172,12 +173,13 @@ pub fn ct_app() -> Command {
 }
 
 fn tsort_error_outcome(stderr_text: String, had_cycle: bool) -> TsortRunOutcome {
-    let stderr_len = stderr_text.len();
+    let stderr_bytes = stderr_text.into_bytes();
+    let stderr_len = stderr_bytes.len();
     TsortRunOutcome {
         had_cycle,
         rows: Vec::new(),
         classic_bytes: Vec::new(),
-        stderr_text,
+        stderr_bytes,
         output_events: vec![TsortOutputEvent::Stderr(0..stderr_len)],
         exit_code: 1,
     }
@@ -241,23 +243,23 @@ fn tsort_node_to_text(node: &[u8]) -> String {
 }
 
 fn push_tsort_stderr(
-    stderr_text: &mut String,
+    stderr_bytes: &mut Vec<u8>,
     output_events: &mut Vec<TsortOutputEvent>,
-    message: impl AsRef<str>,
+    message: impl AsRef<[u8]>,
 ) {
-    let start = stderr_text.len();
-    stderr_text.push_str("tsort: ");
-    stderr_text.push_str(message.as_ref());
-    stderr_text.push('\n');
-    output_events.push(TsortOutputEvent::Stderr(start..stderr_text.len()));
+    let start = stderr_bytes.len();
+    stderr_bytes.extend_from_slice(b"tsort: ");
+    stderr_bytes.extend_from_slice(message.as_ref());
+    stderr_bytes.push(b'\n');
+    output_events.push(TsortOutputEvent::Stderr(start..stderr_bytes.len()));
 }
 
 fn push_tsort_stderr_node(
-    stderr_text: &mut String,
+    stderr_bytes: &mut Vec<u8>,
     output_events: &mut Vec<TsortOutputEvent>,
     node: &[u8],
 ) {
-    push_tsort_stderr(stderr_text, output_events, tsort_node_to_text(node));
+    push_tsort_stderr(stderr_bytes, output_events, node);
 }
 
 use std::collections::VecDeque;
@@ -295,7 +297,7 @@ impl TSortGraph {
         let mut queue: VecDeque<TsortNode> = VecDeque::new();
         let mut rows = Vec::new();
         let mut classic_bytes = Vec::new();
-        let mut stderr_text = String::new();
+        let mut stderr_bytes = Vec::new();
         let mut output_events = Vec::new();
 
         // 1. 初始化扫描 (GNU walk_tree scan_zeros)
@@ -310,7 +312,7 @@ impl TSortGraph {
             if queue.is_empty() {
                 found_cycle = true;
                 if let Some(freed_node) =
-                    self.detect_and_break_cycle(filename, &mut stderr_text, &mut output_events)
+                    self.detect_and_break_cycle(filename, &mut stderr_bytes, &mut output_events)
                 {
                     if let Some(indegree) = self.indegrees.get(&freed_node) {
                         if *indegree == 0 {
@@ -351,7 +353,7 @@ impl TSortGraph {
             had_cycle: found_cycle,
             rows,
             classic_bytes,
-            stderr_text,
+            stderr_bytes,
             output_events,
             exit_code: if found_cycle { 1 } else { 0 },
         }
@@ -361,7 +363,7 @@ impl TSortGraph {
     fn detect_and_break_cycle(
         &mut self,
         filename: &str,
-        stderr_text: &mut String,
+        stderr_bytes: &mut Vec<u8>,
         output_events: &mut Vec<TsortOutputEvent>,
     ) -> Option<TsortNode> {
         let candidates: Vec<TsortNode> = self.indegrees.keys().cloned().collect();
@@ -402,7 +404,7 @@ impl TSortGraph {
                     if qlink.contains_key(k) {
                         // *** 发现了环 ***
                         push_tsort_stderr(
-                            stderr_text,
+                            stderr_bytes,
                             output_events,
                             format!("{}: input contains a loop:", filename.maybe_quote()),
                         );
@@ -412,7 +414,7 @@ impl TSortGraph {
                         let mut loop_node = curr.clone();
 
                         // 1. 打印 loop_node
-                        push_tsort_stderr_node(stderr_text, output_events, &loop_node);
+                        push_tsort_stderr_node(stderr_bytes, output_events, &loop_node);
 
                         // 开始回溯
                         loop {
@@ -440,7 +442,7 @@ impl TSortGraph {
                                 return Some(curr.clone());
                             }
 
-                            push_tsort_stderr_node(stderr_text, output_events, &next_node);
+                            push_tsort_stderr_node(stderr_bytes, output_events, &next_node);
                             loop_node = next_node;
                         }
                     } else {
@@ -561,7 +563,7 @@ mod tests {
             let outcome = graph.tsort_exe("test");
 
             assert_eq!(outcome.exit_code, 0);
-            assert!(outcome.stderr_text.is_empty());
+            assert!(outcome.stderr_bytes.is_empty());
             assert_eq!(
                 outcome
                     .rows
@@ -598,7 +600,9 @@ mod tests {
                     .collect::<Vec<_>>(),
                 vec!["A", "B", "C"]
             );
-            assert!(outcome.stderr_text.contains("input contains a loop"));
+            assert!(
+                String::from_utf8_lossy(&outcome.stderr_bytes).contains("input contains a loop")
+            );
 
             // 即便有环，现在的逻辑也会打破它并输出所有节点，所以最终图也应该是空的
             assert!(graph.indegrees.is_empty());

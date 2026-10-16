@@ -48,3 +48,31 @@ fn tsort_preserves_duplicate_relations_in_cycles() {
     assert_eq!(output.status.code(), Some(1));
     assert_eq!(stderr.matches("input contains a loop").count(), 2);
 }
+
+#[test]
+fn tsort_preserves_non_utf8_cycle_tokens_in_diagnostics() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .arg("tsort")
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run syskits tsort");
+
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(b"\xff a\na \xff\n")
+        .expect("write tsort input");
+
+    let output = child.wait_with_output().expect("wait for syskits tsort");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        output.stderr,
+        b"tsort: -: input contains a loop:\ntsort: a\ntsort: \xff\n"
+    );
+}

@@ -292,19 +292,41 @@ fn test_integers(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
 fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     // Don't manage the error. GNU doesn't show error when doing
     // test foo -nt bar
-    let (Ok(f_a), Ok(f_b)) = (fs::metadata(a), fs::metadata(b)) else {
-        return Ok(false);
-    };
+    let f_a = fs::metadata(a).ok();
+    let f_b = fs::metadata(b).ok();
 
     Ok(match op.to_str() {
         #[cfg(unix)]
-        Some("-ef") => f_a.ino() == f_b.ino() && f_a.dev() == f_b.dev(),
+        Some("-ef") => match (f_a.as_ref(), f_b.as_ref()) {
+            (Some(f_a), Some(f_b)) => f_a.ino() == f_b.ino() && f_a.dev() == f_b.dev(),
+            _ => false,
+        },
         #[cfg(not(unix))]
         Some("-ef") => unimplemented!(),
-        Some("-nt") => f_a.modified().unwrap() > f_b.modified().unwrap(),
-        Some("-ot") => f_a.modified().unwrap() < f_b.modified().unwrap(),
+        Some("-nt") => newer_than(f_a.as_ref(), f_b.as_ref()),
+        Some("-ot") => older_than(f_a.as_ref(), f_b.as_ref()),
         _ => return Err(ParseError::UnknownOperator(op.quote().to_string())),
     })
+}
+
+fn mtime(metadata: Option<&fs::Metadata>) -> Option<std::time::SystemTime> {
+    metadata.and_then(|metadata| metadata.modified().ok())
+}
+
+fn newer_than(a: Option<&fs::Metadata>, b: Option<&fs::Metadata>) -> bool {
+    match (mtime(a), mtime(b)) {
+        (Some(a), Some(b)) => a > b,
+        (Some(_), None) => true,
+        _ => false,
+    }
+}
+
+fn older_than(a: Option<&fs::Metadata>, b: Option<&fs::Metadata>) -> bool {
+    match (mtime(a), mtime(b)) {
+        (Some(a), Some(b)) => a < b,
+        (None, Some(_)) => true,
+        _ => false,
+    }
 }
 
 /// 检查文件描述符是否为终端
@@ -620,6 +642,37 @@ mod tests_all {
         }
 
         assert!(!path(test_file.as_os_str(), &TestPathCondition::Executable));
+    }
+
+    #[test]
+    fn test_file_age_operations_with_missing_files() {
+        let temp_dir = tempdir().unwrap();
+        let existing = temp_dir.path().join("existing");
+        let missing = temp_dir.path().join("missing");
+        let also_missing = temp_dir.path().join("also_missing");
+
+        create_test_file(&existing, 0o644).unwrap();
+
+        assert!(files(existing.as_os_str(), missing.as_os_str(), OsStr::new("-nt")).unwrap());
+        assert!(files(missing.as_os_str(), existing.as_os_str(), OsStr::new("-ot")).unwrap());
+        assert!(!files(existing.as_os_str(), missing.as_os_str(), OsStr::new("-ot")).unwrap());
+        assert!(!files(missing.as_os_str(), existing.as_os_str(), OsStr::new("-nt")).unwrap());
+        assert!(
+            !files(
+                missing.as_os_str(),
+                also_missing.as_os_str(),
+                OsStr::new("-nt")
+            )
+            .unwrap()
+        );
+        assert!(
+            !files(
+                missing.as_os_str(),
+                also_missing.as_os_str(),
+                OsStr::new("-ot")
+            )
+            .unwrap()
+        );
     }
 
     #[test]

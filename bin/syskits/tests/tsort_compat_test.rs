@@ -1,4 +1,10 @@
+#[cfg(unix)]
+use std::ffi::OsString;
+#[cfg(unix)]
+use std::fs;
 use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
 use std::process::{Command, Stdio};
 
 #[test]
@@ -75,4 +81,25 @@ fn tsort_preserves_non_utf8_cycle_tokens_in_diagnostics() {
         output.stderr,
         b"tsort: -: input contains a loop:\ntsort: a\ntsort: \xff\n"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn tsort_accepts_non_utf8_file_operand() {
+    let temp_dir = tempfile::tempdir().expect("create temp directory");
+    let mut file_path = temp_dir.path().to_path_buf();
+    file_path.push(OsString::from_vec(b"graph-\xff".to_vec()));
+    fs::write(&file_path, b"a b\n").expect("write tsort input");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .arg("tsort")
+        .arg(&file_path)
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .output()
+        .expect("run syskits tsort");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"a\nb\n");
+    assert!(output.stderr.is_empty());
 }

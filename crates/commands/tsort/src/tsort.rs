@@ -19,7 +19,7 @@ use ctcore::ct_error::{CTResult, set_ct_exit_code, strip_errno};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::collections::{BTreeMap, HashMap};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::ops::Range;
@@ -108,8 +108,8 @@ fn tsort_run(args: impl ctcore::Args) -> CTResult<TsortRunOutcome> {
 }
 
 fn tsort_run_from_matches(matches: &clap::ArgMatches) -> TsortRunOutcome {
-    let input_files: Vec<&String> = matches
-        .get_many::<String>(tsort_flags::TSORT_FILE)
+    let input_files: Vec<&OsString> = matches
+        .get_many::<OsString>(tsort_flags::TSORT_FILE)
         .map(|v| v.collect())
         .unwrap_or_default();
 
@@ -117,13 +117,16 @@ fn tsort_run_from_matches(matches: &clap::ArgMatches) -> TsortRunOutcome {
         return tsort_error_outcome(
             format!(
                 "tsort: extra operand '{}'\ntsort: Try 'tsort --help' for more information.\n",
-                input_files[1]
+                input_files[1].to_string_lossy()
             ),
             false,
         );
     }
 
-    let input_file = input_files.first().map(|s| s.as_str()).unwrap_or("-");
+    let input_file = input_files
+        .first()
+        .map(|s| s.as_os_str())
+        .unwrap_or_else(|| OsStr::new("-"));
 
     let input_buffer = match tsort_read_input(input_file) {
         Ok(input_buffer) => input_buffer,
@@ -161,6 +164,7 @@ pub fn ct_app() -> Command {
     let arg = Arg::new(tsort_flags::TSORT_FILE)
         .default_value("-")
         .hide(true)
+        .value_parser(clap::builder::OsStringValueParser::new())
         .value_hint(clap::ValueHint::FilePath)
         .num_args(0..); // 关键修改：允许 0 到多个参数，后续手动验证
 
@@ -185,18 +189,24 @@ fn tsort_error_outcome(stderr_text: String, had_cycle: bool) -> TsortRunOutcome 
     }
 }
 
-fn tsort_read_input(input_file: &str) -> Result<Vec<u8>, String> {
-    let mut input: Box<dyn Read> = if input_file == "-" {
+fn tsort_read_input(input_file: &OsStr) -> Result<Vec<u8>, String> {
+    let mut input: Box<dyn Read> = if input_file == OsStr::new("-") {
         ctcore::ct_io::stdin_reader_box()
     } else {
         let path = Path::new(input_file);
         if path.is_dir() {
-            return Err(format!("tsort: {input_file}: read error: Is a directory\n"));
+            return Err(format!(
+                "tsort: {}: read error: Is a directory\n",
+                input_file.maybe_quote()
+            ));
         }
-        Box::new(
-            File::open(path)
-                .map_err(|err| format!("tsort: {input_file}: {}\n", strip_errno(&err)))?,
-        ) as Box<dyn Read>
+        Box::new(File::open(path).map_err(|err| {
+            format!(
+                "tsort: {}: {}\n",
+                input_file.maybe_quote(),
+                strip_errno(&err)
+            )
+        })?) as Box<dyn Read>
     };
 
     let mut input_buffer = Vec::new();
@@ -292,7 +302,8 @@ impl TSortGraph {
         }
     }
 
-    fn tsort_exe(&mut self, filename: &str) -> TsortRunOutcome {
+    fn tsort_exe(&mut self, filename: impl AsRef<OsStr>) -> TsortRunOutcome {
+        let filename = filename.as_ref();
         let mut found_cycle = false;
         let mut queue: VecDeque<TsortNode> = VecDeque::new();
         let mut rows = Vec::new();
@@ -362,7 +373,7 @@ impl TSortGraph {
     // 完全重写：模拟 GNU tsort 的反向搜索 (Reverse Search) 算法
     fn detect_and_break_cycle(
         &mut self,
-        filename: &str,
+        filename: &OsStr,
         stderr_bytes: &mut Vec<u8>,
         output_events: &mut Vec<TsortOutputEvent>,
     ) -> Option<TsortNode> {

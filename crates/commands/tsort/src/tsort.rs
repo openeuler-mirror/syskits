@@ -21,7 +21,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{Read, Write};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -40,12 +40,14 @@ pub struct TsortSemantic {
     pub had_cycle: bool,
     pub rows: Vec<TsortRow>,
     pub classic_text: String,
+    pub classic_bytes: Vec<u8>,
     pub stderr_text: String,
     pub exit_code: i32,
 }
 
 struct TsortRunOutcome {
     rows: Vec<TsortRow>,
+    classic_bytes: Vec<u8>,
     stderr_text: String,
     exit_code: i32,
 }
@@ -53,7 +55,9 @@ struct TsortRunOutcome {
 pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
     let semantic = tsort_native_semantic(args)?;
 
-    if !semantic.classic_text.is_empty() {
+    if !semantic.classic_bytes.is_empty() {
+        std::io::stdout().write_all(&semantic.classic_bytes)?;
+    } else if !semantic.classic_text.is_empty() {
         print!("{}", semantic.classic_text);
     }
     if !semantic.stderr_text.is_empty() {
@@ -97,14 +101,7 @@ fn tsort_semantic_from_matches(matches: &clap::ArgMatches) -> CTResult<TsortSema
     };
     let mut graph = TSortGraph::new();
 
-    let mut tokens = Vec::new();
-    for buf_line in input_buffer.lines() {
-        for tok in buf_line.split_whitespace() {
-            if !tok.is_empty() {
-                tokens.push(tok.to_string());
-            }
-        }
-    }
+    let tokens = tsort_tokens(&input_buffer);
 
     if tokens.len() % 2 != 0 {
         return Ok(tsort_error_semantic(
@@ -121,16 +118,13 @@ fn tsort_semantic_from_matches(matches: &clap::ArgMatches) -> CTResult<TsortSema
     }
 
     let outcome = graph.tsort_exe(input_file);
-    let classic_text = outcome
-        .rows
-        .iter()
-        .map(|row| format!("{}\n", row.node))
-        .collect::<String>();
+    let classic_text = String::from_utf8_lossy(&outcome.classic_bytes).into_owned();
 
     Ok(TsortSemantic {
         had_cycle: outcome.exit_code != 0,
         rows: outcome.rows,
         classic_text,
+        classic_bytes: outcome.classic_bytes,
         stderr_text: outcome.stderr_text,
         exit_code: outcome.exit_code,
     })
@@ -163,13 +157,14 @@ fn tsort_error_semantic(stderr_text: String, had_cycle: bool) -> TsortSemantic {
         had_cycle,
         rows: Vec::new(),
         classic_text: String::new(),
+        classic_bytes: Vec::new(),
         stderr_text,
         exit_code: 1,
     }
 }
 
-fn tsort_read_input(input_file: &str) -> Result<String, String> {
-    let input: Box<dyn Read> = if input_file == "-" {
+fn tsort_read_input(input_file: &str) -> Result<Vec<u8>, String> {
+    let mut input: Box<dyn Read> = if input_file == "-" {
         ctcore::ct_io::stdin_reader_box()
     } else {
         let path = Path::new(input_file);
@@ -181,13 +176,48 @@ fn tsort_read_input(input_file: &str) -> Result<String, String> {
                 .map_err(|err| format!("tsort: {input_file}: {}\n", strip_errno(&err)))?,
         ) as Box<dyn Read>
     };
-    let mut buf_reader = BufReader::new(input);
 
-    let mut input_buffer = String::new();
-    buf_reader
-        .read_to_string(&mut input_buffer)
+    let mut input_buffer = Vec::new();
+    input
+        .read_to_end(&mut input_buffer)
         .map_err(|err| format!("tsort: {err}\n"))?;
     Ok(input_buffer)
+}
+
+fn is_tsort_delimiter(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\t' | b'\n')
+}
+
+fn tsort_tokens(input: &[u8]) -> Vec<Vec<u8>> {
+    let mut tokens = Vec::new();
+    let mut index = 0;
+
+    while index < input.len() {
+        while index < input.len() && is_tsort_delimiter(input[index]) {
+            index += 1;
+        }
+        if index == input.len() {
+            break;
+        }
+
+        let start = index;
+        while index < input.len() && !is_tsort_delimiter(input[index]) {
+            index += 1;
+        }
+
+        let token = &input[start..index];
+        let nul_index = token
+            .iter()
+            .position(|byte| *byte == b'\0')
+            .unwrap_or(token.len());
+        tokens.push(token[..nul_index].to_vec());
+    }
+
+    tokens
+}
+
+fn tsort_node_to_text(node: &[u8]) -> String {
+    String::from_utf8_lossy(node).into_owned()
 }
 
 fn push_tsort_stderr(stderr_text: &mut String, message: impl AsRef<str>) {
@@ -196,12 +226,18 @@ fn push_tsort_stderr(stderr_text: &mut String, message: impl AsRef<str>) {
     stderr_text.push('\n');
 }
 
+fn push_tsort_stderr_node(stderr_text: &mut String, node: &[u8]) {
+    push_tsort_stderr(stderr_text, tsort_node_to_text(node));
+}
+
 use std::collections::VecDeque;
+
+type TsortNode = Vec<u8>;
 
 #[derive(Default)]
 struct TSortGraph {
-    in_edges: BTreeMap<String, BTreeSet<String>>,
-    out_edges: BTreeMap<String, Vec<String>>,
+    in_edges: BTreeMap<TsortNode, BTreeSet<TsortNode>>,
+    out_edges: BTreeMap<TsortNode, Vec<TsortNode>>,
 }
 
 impl TSortGraph {
@@ -209,12 +245,12 @@ impl TSortGraph {
         Self::default()
     }
 
-    fn init_node(&mut self, n: String) {
+    fn init_node(&mut self, n: TsortNode) {
         self.in_edges.entry(n.clone()).or_default();
         self.out_edges.entry(n).or_default();
     }
 
-    fn add_edge(&mut self, from: String, to: String) {
+    fn add_edge(&mut self, from: TsortNode, to: TsortNode) {
         self.init_node(from.clone());
         self.init_node(to.clone());
 
@@ -229,8 +265,9 @@ impl TSortGraph {
 
     fn tsort_exe(&mut self, filename: &str) -> TsortRunOutcome {
         let mut found_cycle = false;
-        let mut queue: VecDeque<String> = VecDeque::new();
+        let mut queue: VecDeque<TsortNode> = VecDeque::new();
         let mut rows = Vec::new();
+        let mut classic_bytes = Vec::new();
         let mut stderr_text = String::new();
 
         // 1. 初始化扫描 (GNU walk_tree scan_zeros)
@@ -256,9 +293,11 @@ impl TSortGraph {
             }
 
             while let Some(n) = queue.pop_front() {
+                classic_bytes.extend_from_slice(&n);
+                classic_bytes.push(b'\n');
                 rows.push(TsortRow {
                     row_index: rows.len() + 1,
-                    node: n.clone(),
+                    node: tsort_node_to_text(&n),
                 });
 
                 if let Some(succs) = self.out_edges.remove(&n) {
@@ -278,6 +317,7 @@ impl TSortGraph {
 
         TsortRunOutcome {
             rows,
+            classic_bytes,
             stderr_text,
             exit_code: if found_cycle { 1 } else { 0 },
         }
@@ -288,16 +328,16 @@ impl TSortGraph {
         &mut self,
         filename: &str,
         stderr_text: &mut String,
-    ) -> Option<String> {
-        let candidates: Vec<String> = self.in_edges.keys().cloned().collect();
+    ) -> Option<TsortNode> {
+        let candidates: Vec<TsortNode> = self.in_edges.keys().cloned().collect();
 
         // 对应 GNU 代码中的 static struct item *loop
-        let mut cursor: Option<String> = None;
+        let mut cursor: Option<TsortNode> = None;
 
         // 对应 GNU 代码中的 qlink (记录路径: key -> value 表示 key 指向 value)
         // 注意 GNU 的 qlink 是反向链表，但在 detect_loop 中它的构建方式是：
         // 找到 k 指向 loop，则 k->qlink = loop。所以这是正向的路径记录 (Predecessor -> Successor)
-        let mut qlink: HashMap<String, String> = HashMap::new();
+        let mut qlink: HashMap<TsortNode, TsortNode> = HashMap::new();
 
         // 模拟 GNU 的 repeated walk_tree
         loop {
@@ -336,7 +376,7 @@ impl TSortGraph {
                         let mut loop_node = curr.clone();
 
                         // 1. 打印 loop_node
-                        push_tsort_stderr(stderr_text, &loop_node);
+                        push_tsort_stderr_node(stderr_text, &loop_node);
 
                         // 开始回溯
                         loop {
@@ -364,7 +404,7 @@ impl TSortGraph {
                                 return Some(curr.clone());
                             }
 
-                            push_tsort_stderr(stderr_text, &next_node);
+                            push_tsort_stderr_node(stderr_text, &next_node);
                             loop_node = next_node;
                         }
                     } else {
@@ -423,9 +463,9 @@ mod tests {
     mod graph_tests {
         use super::*;
 
-        // 辅助函数：简化 String 的创建
-        fn s(text: &str) -> String {
-            text.to_string()
+        // 辅助函数：简化字节节点的创建
+        fn s(text: &str) -> TsortNode {
+            text.as_bytes().to_vec()
         }
 
         #[test]
@@ -434,11 +474,11 @@ mod tests {
             graph.init_node(s("A"));
 
             // 直接检查内部 BTreeMap 是否包含键
-            assert!(graph.in_edges.contains_key("A"));
-            assert!(!graph.in_edges.contains_key("B"));
+            assert!(graph.in_edges.contains_key(&s("A")));
+            assert!(!graph.in_edges.contains_key(&s("B")));
 
             // 检查出度表是否初始化
-            assert!(graph.out_edges.contains_key("A"));
+            assert!(graph.out_edges.contains_key(&s("A")));
         }
 
         #[test]
@@ -447,17 +487,17 @@ mod tests {
             graph.add_edge(s("A"), s("B"));
 
             // 验证节点存在
-            assert!(graph.in_edges.contains_key("A"));
-            assert!(graph.in_edges.contains_key("B"));
+            assert!(graph.in_edges.contains_key(&s("A")));
+            assert!(graph.in_edges.contains_key(&s("B")));
 
             // 验证边存在 (A -> B)
             // A 的出度包含 B
-            assert!(graph.out_edges.get("A").unwrap().contains(&s("B")));
+            assert!(graph.out_edges.get(&s("A")).unwrap().contains(&s("B")));
             // B 的入度包含 A
-            assert!(graph.in_edges.get("B").unwrap().contains(&s("A")));
+            assert!(graph.in_edges.get(&s("B")).unwrap().contains(&s("A")));
 
             // 验证反向边不存在
-            assert!(!graph.out_edges.get("B").unwrap().contains(&s("A")));
+            assert!(!graph.out_edges.get(&s("B")).unwrap().contains(&s("A")));
         }
 
         #[test]
@@ -465,9 +505,9 @@ mod tests {
             let mut graph = TSortGraph::new();
             graph.init_node(s("A"));
 
-            assert!(graph.in_edges.contains_key("A"));
-            assert!(graph.in_edges.get("A").unwrap().is_empty()); // 新初始化的节点入度为0
-            assert!(graph.out_edges.get("A").unwrap().is_empty());
+            assert!(graph.in_edges.contains_key(&s("A")));
+            assert!(graph.in_edges.get(&s("A")).unwrap().is_empty()); // 新初始化的节点入度为0
+            assert!(graph.out_edges.get(&s("A")).unwrap().is_empty());
         }
 
         #[test]
@@ -571,8 +611,8 @@ mod tests {
             graph.add_edge(s("B"), s("C"));
 
             // 验证内部状态：A 的出度应该只有 1 个 B，不应该重复
-            assert_eq!(graph.out_edges.get("A").unwrap().len(), 1);
-            assert_eq!(graph.in_edges.get("B").unwrap().len(), 1);
+            assert_eq!(graph.out_edges.get(&s("A")).unwrap().len(), 1);
+            assert_eq!(graph.in_edges.get(&s("B")).unwrap().len(), 1);
 
             let outcome = graph.tsort_exe("test");
             assert_eq!(outcome.exit_code, 0);
@@ -587,8 +627,8 @@ mod tests {
             graph.add_edge(s("A"), s("A"));
 
             // 验证：节点存在，但没有自环边
-            assert!(graph.in_edges.contains_key("A"));
-            assert!(graph.in_edges.get("A").unwrap().is_empty());
+            assert!(graph.in_edges.contains_key(&s("A")));
+            assert!(graph.in_edges.get(&s("A")).unwrap().is_empty());
 
             let outcome = graph.tsort_exe("test");
             assert_eq!(outcome.exit_code, 0); // 自环不视为错误
@@ -757,6 +797,7 @@ mod tests {
             assert_eq!(semantic.stderr_text, "");
             assert_eq!(semantic.exit_code, 0);
             assert_eq!(semantic.classic_text, "a\nb\nc\nd\n");
+            assert_eq!(semantic.classic_bytes, b"a\nb\nc\nd\n");
             assert_eq!(
                 semantic.rows,
                 vec![
@@ -799,12 +840,51 @@ mod tests {
             assert!(semantic.had_cycle);
             assert_eq!(semantic.exit_code, 1);
             assert_eq!(semantic.classic_text, "a\nb\n");
+            assert_eq!(semantic.classic_bytes, b"a\nb\n");
             assert_eq!(
                 semantic.stderr_text,
                 format!(
                     "tsort: {}: input contains a loop:\ntsort: a\ntsort: b\n",
                     file_path.display()
                 )
+            );
+        }
+
+        #[test]
+        fn test_tsort_native_semantic_cr_is_not_a_token_delimiter() {
+            let semantic = ctcore::ct_io::with_injected_stdin(b"\r\n".to_vec(), || {
+                tsort_native_semantic(vec![OsString::from("tsort")].into_iter())
+            })
+            .unwrap();
+
+            assert_eq!(semantic.exit_code, 1);
+            assert_eq!(
+                semantic.stderr_text,
+                "tsort: -: input contains an odd number of tokens\n"
+            );
+            assert!(semantic.classic_bytes.is_empty());
+        }
+
+        #[test]
+        fn test_tsort_native_semantic_accepts_non_utf8_and_nul_tokens() {
+            let semantic = ctcore::ct_io::with_injected_stdin(b"a\0b c\n\xff d\n".to_vec(), || {
+                tsort_native_semantic(vec![OsString::from("tsort")].into_iter())
+            })
+            .unwrap();
+
+            assert_eq!(semantic.exit_code, 0);
+            assert_eq!(semantic.classic_bytes, b"a\n\xff\nc\nd\n");
+            assert_eq!(
+                semantic.classic_text,
+                String::from_utf8_lossy(b"a\n\xff\nc\nd\n").into_owned()
+            );
+            assert_eq!(
+                semantic
+                    .rows
+                    .iter()
+                    .map(|row| row.node.as_str())
+                    .collect::<Vec<_>>(),
+                vec!["a", "\u{fffd}", "c", "d"]
             );
         }
     }

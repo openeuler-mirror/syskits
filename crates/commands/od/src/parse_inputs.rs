@@ -10,6 +10,7 @@
  */
 use super::od_options;
 use clap::ArgMatches;
+use ctcore::ct_display::locale_quote;
 
 /// 命令行选项抽象接口
 pub trait CommandLineOpts {
@@ -87,7 +88,7 @@ fn try_parse_offset(
 
     // 获取最后一个参数并尝试解析为偏移量
     let last_arg = input_strings[input_strings.len() - 1];
-    if let Ok(offset) = parse_offset_operand(last_arg) {
+    if let Ok(offset) = parse_old_style_offset_operand(last_arg) {
         return create_offset_input(input_strings, offset);
     }
 
@@ -130,10 +131,7 @@ pub fn od_parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLine
         1 => parse_traditional_single_arg(input_strings),
         2 => parse_traditional_two_args(input_strings),
         3 => parse_traditional_three_args(input_strings),
-        _ => Err(format!(
-            "too many inputs after --traditional: {}",
-            input_strings[3]
-        )),
+        _ => Err(traditional_extra_operand_error(input_strings[1])),
     }
 }
 
@@ -144,7 +142,7 @@ fn create_stdin_input() -> CommandLineInputs {
 
 /// 解析传统模式下的单个参数
 fn parse_traditional_single_arg(input_strings: &[&str]) -> Result<CommandLineInputs, String> {
-    let offset = parse_offset_operand(input_strings[0]);
+    let offset = parse_old_style_offset_operand(input_strings[0]);
     Ok(match offset {
         Ok(n) => CommandLineInputs::FileAndOffset(("-".to_string(), n, None)),
         _ => CommandLineInputs::FileNames(vec![input_strings[0].to_string()]),
@@ -153,8 +151,8 @@ fn parse_traditional_single_arg(input_strings: &[&str]) -> Result<CommandLineInp
 
 /// 解析传统模式下的两个参数
 fn parse_traditional_two_args(input_strings: &[&str]) -> Result<CommandLineInputs, String> {
-    let offset0 = parse_offset_operand(input_strings[0]);
-    let offset1 = parse_offset_operand(input_strings[1]);
+    let offset0 = parse_old_style_offset_operand(input_strings[0]);
+    let offset1 = parse_old_style_offset_operand(input_strings[1]);
 
     match (offset0, offset1) {
         (Ok(n), Ok(m)) => Ok(CommandLineInputs::FileAndOffset((
@@ -167,14 +165,14 @@ fn parse_traditional_two_args(input_strings: &[&str]) -> Result<CommandLineInput
             m,
             None,
         ))),
-        _ => Err(format!("invalid offset: {}", input_strings[1])),
+        _ => Err(traditional_extra_operand_error(input_strings[1])),
     }
 }
 
 /// 解析传统模式下的三个参数
 fn parse_traditional_three_args(input_strings: &[&str]) -> Result<CommandLineInputs, String> {
-    let offset = parse_offset_operand(input_strings[1]);
-    let label = parse_offset_operand(input_strings[2]);
+    let offset = parse_old_style_offset_operand(input_strings[1]);
+    let label = parse_old_style_offset_operand(input_strings[2]);
 
     match (offset, label) {
         (Ok(n), Ok(m)) => Ok(CommandLineInputs::FileAndOffset((
@@ -182,9 +180,23 @@ fn parse_traditional_three_args(input_strings: &[&str]) -> Result<CommandLineInp
             n,
             Some(m),
         ))),
-        (Err(_), _) => Err(format!("invalid offset: {}", input_strings[1])),
-        (_, Err(_)) => Err(format!("invalid label: {}", input_strings[2])),
+        _ => Err(traditional_extra_operand_error(input_strings[1])),
     }
+}
+
+fn traditional_extra_operand_error(operand: &str) -> String {
+    format!(
+        "extra operand {}\nod: compatibility mode supports at most one file",
+        locale_quote(operand)
+    )
+}
+
+fn parse_old_style_offset_operand(s: &str) -> Result<u64, &'static str> {
+    if s.contains('.') {
+        return Err("解析失败");
+    }
+
+    parse_offset_operand(s)
 }
 
 /// 解析命令行中用于偏移量和标签的格式

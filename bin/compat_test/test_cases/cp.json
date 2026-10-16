@@ -885,7 +885,15 @@
                 },
                 "verifications": [
                     {
-                        "command": "test $(stat -c %b f2) -lt $(stat -c %s f2)",
+                        "command": "cmp f1 f2",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "test $(stat -c %s f2) -eq 1048576",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "test $(stat -c %b f2) -lt 2048",
                         "expected_exit": 0
                     }
                 ]
@@ -1281,13 +1289,23 @@
                 },
                 "verifications": [
                     {
-                        "command": "test $(stat -c %b f2) -lt $(stat -c %s f2)",
+                        "command": "cmp f1 f2",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "test $(stat -c %s f2) -eq 1048576",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "test $(stat -c %b f2) -lt 2048",
                         "expected_exit": 0
                     }
                 ]
             },
             "setup_commands": [
-                "dd if=/dev/zero of=f1 bs=1M count=1 2>/dev/null"
+                "printf A > f1",
+                "truncate -s 1048575 f1",
+                "printf Z | dd of=f1 bs=1 seek=1048575 conv=notrunc status=none"
             ],
             "cleanup_commands": [
                 "rm -f f1 f2"

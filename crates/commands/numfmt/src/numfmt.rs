@@ -15,6 +15,8 @@
 
 extern crate rust_i18n;
 use rust_i18n::t;
+use std::cell::RefCell;
+use std::fmt;
 use std::io::{BufRead, Write};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{
@@ -40,6 +42,73 @@ use ctcore::ct_show;
 use ctcore::ct_show_error;
 use std::ffi::OsString;
 use units::{NUMFMT_IEC_BASES, NUMFMT_SI_BASES};
+
+enum NumfmtDevTraceTarget {
+    Disabled,
+    Stderr,
+    Buffer(String),
+}
+
+thread_local! {
+    static NUMFMT_DEV_TRACE_TARGET: RefCell<NumfmtDevTraceTarget> =
+        const { RefCell::new(NumfmtDevTraceTarget::Disabled) };
+}
+
+struct NumfmtDevTraceGuard {
+    previous: Option<NumfmtDevTraceTarget>,
+}
+
+impl NumfmtDevTraceGuard {
+    fn new(enabled: bool, buffered: bool) -> Self {
+        let target = if !enabled {
+            NumfmtDevTraceTarget::Disabled
+        } else if buffered {
+            NumfmtDevTraceTarget::Buffer(String::new())
+        } else {
+            NumfmtDevTraceTarget::Stderr
+        };
+        let previous = NUMFMT_DEV_TRACE_TARGET.with(|slot| slot.replace(target));
+        Self {
+            previous: Some(previous),
+        }
+    }
+
+    fn take_buffer(&self) -> String {
+        NUMFMT_DEV_TRACE_TARGET.with(|slot| {
+            let mut target = slot.borrow_mut();
+            match &mut *target {
+                NumfmtDevTraceTarget::Buffer(buffer) => std::mem::take(buffer),
+                NumfmtDevTraceTarget::Disabled | NumfmtDevTraceTarget::Stderr => String::new(),
+            }
+        })
+    }
+}
+
+impl Drop for NumfmtDevTraceGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = self.previous.take() {
+            NUMFMT_DEV_TRACE_TARGET.with(|slot| {
+                slot.replace(previous);
+            });
+        }
+    }
+}
+
+pub(crate) fn numfmt_dev_debug_enabled() -> bool {
+    NUMFMT_DEV_TRACE_TARGET.with(|slot| !matches!(*slot.borrow(), NumfmtDevTraceTarget::Disabled))
+}
+
+pub(crate) fn numfmt_dev_trace(arguments: fmt::Arguments<'_>) {
+    NUMFMT_DEV_TRACE_TARGET.with(|slot| match &mut *slot.borrow_mut() {
+        NumfmtDevTraceTarget::Disabled => {}
+        NumfmtDevTraceTarget::Stderr => {
+            let _ = std::io::stderr().write_fmt(arguments);
+        }
+        NumfmtDevTraceTarget::Buffer(buffer) => {
+            let _ = fmt::Write::write_fmt(buffer, arguments);
+        }
+    });
+}
 
 pub mod errors;
 pub mod flags;
@@ -258,6 +327,48 @@ mod native_semantic_tests {
 
         assert_eq!(semantic.exit_code, 0);
         assert_eq!(semantic.classic_text, "     00001\n");
+        assert_eq!(semantic.stderr_text, "");
+    }
+
+    #[test]
+    fn numfmt_native_semantic_emits_internal_trace_for_dev_debug() {
+        let args = ["numfmt", "---debug", "--to=si", "1000"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.classic_text, "1.0K\n");
+        assert_eq!(
+            semantic.stderr_text,
+            concat!(
+                "setting Auto-Padding to 0 characters\n",
+                "simple_strtod_human:\n",
+                "  input string: '1000'\n",
+                "  locale decimal-point: '.'\n",
+                "  MAX_UNSCALED_DIGITS: 18\n",
+                "  parsed numeric value: 1000.000000\n",
+                "  input precision = 0\n",
+                "  suffix power=1000^0 = 1.000000\n",
+                "  returning value: 1000.000000 (1000)\n",
+                "double_to_human:\n",
+                "  scaled value to 1.000000 * 1000 ^ 1\n",
+                "  after rounding, value=1.000000 * 1000 ^ 1\n",
+                "  returning value: '1.0K'\n",
+                "formatting output:\n",
+                "  value: 1000.000000\n",
+                "  humanized: '1.0K'\n",
+            )
+        );
+    }
+
+    #[test]
+    fn numfmt_native_semantic_keeps_internal_trace_disabled_for_debug() {
+        let args = ["numfmt", "--debug", "--to=si", "1000"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.classic_text, "1.0K\n");
         assert_eq!(semantic.stderr_text, "");
     }
 
@@ -947,15 +1058,19 @@ fn numfmt_parse_unit_size_suffix(unit: &str) -> Option<usize> {
     None
 }
 
-fn normalize_numfmt_args(args: impl ctcore::Args) -> Vec<OsString> {
-    args.map(|arg| {
-        if arg.to_str() == Some("---debug") {
-            OsString::from("--debug")
-        } else {
-            arg
-        }
-    })
-    .collect()
+fn normalize_numfmt_args(args: impl ctcore::Args) -> (Vec<OsString>, bool) {
+    let mut dev_debug = false;
+    let args = args
+        .map(|arg| {
+            if arg.to_str() == Some("---debug") {
+                dev_debug = true;
+                OsString::from("--debug")
+            } else {
+                arg
+            }
+        })
+        .collect();
+    (args, dev_debug)
 }
 
 fn map_field_parse_error(err: String) -> String {
@@ -1013,6 +1128,36 @@ fn format_padding_overrides_padding(options: &NumfmtConfigs) -> bool {
     options.padding != 0
         && format_padding != 0
         && !(options.format.is_zero_padding && format_padding > 0)
+}
+
+fn numfmt_trace_format_options(matches: &ArgMatches, options: &NumfmtConfigs) {
+    let Some(format) = matches.get_one::<String>(numfmt_flags::NUMFMT_FORMAT) else {
+        return;
+    };
+
+    let padding = match options.format.padding {
+        Some(value) if value != 0 && !(options.format.is_zero_padding && value.is_positive()) => {
+            value
+        }
+        _ => options.padding,
+    };
+    numfmt_dev_trace(format_args!(
+        "format String:\n  input: {}\n  grouping: {}\n  padding width: {}\n  alignment: {}\n  prefix: {}\n  suffix: {}\n",
+        format.quote(),
+        if options.format.is_grouping {
+            "yes"
+        } else {
+            "no"
+        },
+        padding.unsigned_abs(),
+        if padding.is_negative() {
+            "Left"
+        } else {
+            "Right"
+        },
+        options.format.prefix.quote(),
+        options.format.suffix.quote(),
+    ));
 }
 
 fn init_numfmt_locale() -> bool {
@@ -1243,7 +1388,8 @@ fn numfmt_unknown_argument_message(args: &[OsString]) -> String {
 
 pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
     let locale_ok = init_numfmt_locale();
-    let normalized_args = normalize_numfmt_args(args);
+    let (normalized_args, dev_debug) = normalize_numfmt_args(args);
+    let _dev_trace_guard = NumfmtDevTraceGuard::new(dev_debug, false);
     let matches = match ct_app().try_get_matches_from(normalized_args.clone()) {
         Ok(matches) => matches,
         Err(err) if err.kind() == ErrorKind::UnknownArgument => {
@@ -1277,6 +1423,8 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
         ct_show_error!("--format padding overriding --padding");
     }
 
+    numfmt_trace_format_options(&matches, &options);
+
     if debug && grouping && is_c_locale() {
         ct_show_error!("grouping has no effect in this locale");
     }
@@ -1303,7 +1451,8 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
 
 pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemantic> {
     let locale_ok = init_numfmt_locale();
-    let normalized_args = normalize_numfmt_args(args);
+    let (normalized_args, dev_debug) = normalize_numfmt_args(args);
+    let dev_trace_guard = NumfmtDevTraceGuard::new(dev_debug, true);
     let matches = match ct_app().try_get_matches_from(normalized_args.clone()) {
         Ok(matches) => matches,
         Err(err) if err.kind() == ErrorKind::UnknownArgument => {
@@ -1352,6 +1501,8 @@ pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemanti
         ));
     }
 
+    numfmt_trace_format_options(&matches, &options);
+
     if debug && grouping && is_c_locale() {
         semantic.stderr_text.push_str(&numfmt_prefixed_stderr(
             "grouping has no effect in this locale",
@@ -1370,6 +1521,10 @@ pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemanti
             numfmt_collect_buffer_semantic(&mut locked_stdin, &options, &mut semantic, debug)?
         }
     };
+
+    semantic
+        .stderr_text
+        .push_str(&dev_trace_guard.take_buffer());
 
     if debug && options.invalid == NumfmtInvalidModes::Fail && semantic.exit_code == 2 {
         semantic.stderr_text.push_str(&numfmt_prefixed_stderr(

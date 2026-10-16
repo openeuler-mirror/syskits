@@ -264,6 +264,7 @@ fn numfmt_parse_number_parts(s: &str) -> Result<NumfmtParsedNumber<'_>> {
     })
 }
 
+#[cfg(test)]
 fn numfmt_parse_suffix(s: &str) -> Result<(f64, Option<NumfmtSuffix>)> {
     let parsed = numfmt_parse_number_parts(s)?;
     let number = numfmt_normalize_decimal_point(parsed.number)
@@ -271,6 +272,47 @@ fn numfmt_parse_suffix(s: &str) -> Result<(f64, Option<NumfmtSuffix>)> {
         .map_err(|_| format!("invalid number: {}", numfmt_quote(s)))?;
 
     Ok((number, parsed.suffix))
+}
+
+fn numfmt_suffix_power(raw_suffix: NumfmtRawSuffix) -> usize {
+    match raw_suffix {
+        NumfmtRawSuffix::K => 1,
+        NumfmtRawSuffix::M => 2,
+        NumfmtRawSuffix::G => 3,
+        NumfmtRawSuffix::T => 4,
+        NumfmtRawSuffix::P => 5,
+        NumfmtRawSuffix::E => 6,
+        NumfmtRawSuffix::Z => 7,
+        NumfmtRawSuffix::Y => 8,
+        NumfmtRawSuffix::R => 9,
+        NumfmtRawSuffix::Q => 10,
+    }
+}
+
+fn numfmt_dev_general(value: f64) -> String {
+    if value == 0.0 {
+        return "0".to_string();
+    }
+
+    let exponent = value.abs().log10().floor() as i32;
+    if !(-4..6).contains(&exponent) {
+        let scientific = format!("{value:.5E}");
+        let (mantissa, exponent) = scientific.split_once('E').unwrap();
+        let mantissa = mantissa.trim_end_matches('0').trim_end_matches('.');
+        let exponent = exponent.parse::<i32>().unwrap();
+        return format!("{mantissa}E{exponent:+03}");
+    }
+
+    let decimal_places = (5 - exponent).max(0) as usize;
+    let fixed = format!("{value:.decimal_places$}");
+    if fixed.contains('.') {
+        fixed
+            .trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_string()
+    } else {
+        fixed
+    }
 }
 
 // 返回数字的隐式精度，即点后面的位数。例如
@@ -343,10 +385,50 @@ fn numfmt_remove_suffix(i: f64, s: Option<NumfmtSuffix>, u: &NumfmtUnit) -> Resu
 }
 
 fn numfmt_transform_from(s: &str, numfmt_opts: &NumfmtTransformOptions) -> Result<f64> {
-    let (i, suffix) = numfmt_parse_suffix(s)?;
-    let i = i * (numfmt_opts.from_unit as f64);
+    let decimal_point = numfmt_locale_decimal_point();
+    crate::numfmt_dev_trace(format_args!(
+        "simple_strtod_human:\n  input string: {}\n  locale decimal-point: {}\n  MAX_UNSCALED_DIGITS: {}\n",
+        numfmt_quote(s),
+        numfmt_quote(&decimal_point),
+        NUMFMT_MAX_UNSCALED_DIGITS,
+    ));
 
+    let parsed = numfmt_parse_number_parts(s)?;
+    let i = numfmt_normalize_decimal_point(parsed.number)
+        .parse::<f64>()
+        .map_err(|_| format!("invalid number: {}", numfmt_quote(s)))?;
+    let input_precision = numfmt_parse_implicit_precision(parsed.number);
+    crate::numfmt_dev_trace(format_args!(
+        "  parsed numeric value: {i:.6}\n  input precision = {input_precision}\n"
+    ));
+
+    let suffix = parsed.suffix;
+    let mut scale_base = match numfmt_opts.from {
+        NumfmtUnit::Iec(_) => 1024.0_f64,
+        NumfmtUnit::Auto | NumfmtUnit::Si | NumfmtUnit::None => 1000.0_f64,
+    };
+    let power = suffix.map_or(0, |(raw_suffix, _)| numfmt_suffix_power(raw_suffix));
+    if matches!(suffix, Some((_, true))) && numfmt_opts.from == NumfmtUnit::Auto {
+        scale_base = 1024.0;
+        crate::numfmt_dev_trace(format_args!(
+            "  Auto-scaling, found 'i', switching to base {scale_base:.0}\n"
+        ));
+    }
+
+    let i = i * (numfmt_opts.from_unit as f64);
     numfmt_remove_suffix(i, suffix, &numfmt_opts.from).map(|number| {
+        let multiplier = scale_base.powi(power as i32);
+        let traced_value = if numfmt_opts.from_unit == 0 {
+            0.0
+        } else {
+            number / (numfmt_opts.from_unit as f64)
+        };
+        crate::numfmt_dev_trace(format_args!(
+            "  suffix power={:.0}^{power} = {multiplier:.6}\n  returning value: {traced_value:.6} ({})\n",
+            scale_base,
+            numfmt_dev_general(traced_value),
+        ));
+
         if numfmt_opts.from == NumfmtUnit::None && number == -0.0 {
             0.0
         } else {
@@ -387,10 +469,15 @@ fn numfmt_precision_loss_input(source: &str, options: &NumfmtConfigs) -> Option<
         return None;
     }
 
+    let parsed = numfmt_parse_number_parts(input).ok()?;
+    let number = numfmt_normalize_decimal_point(parsed.number)
+        .parse::<f64>()
+        .ok()?
+        * (options.transform.from_unit as f64);
+
     // GNU only reports precision loss after the complete number, including its
     // scale suffix, has been accepted by the input parser.
-    numfmt_transform_from(input, &options.transform).ok()?;
-    let parsed = numfmt_parse_number_parts(input).ok()?;
+    numfmt_remove_suffix(number, parsed.suffix, &options.transform.from).ok()?;
 
     numfmt_number_may_lose_precision(parsed.number).then(|| input.to_string())
 }
@@ -602,6 +689,12 @@ fn numfmt_consider_suffix(
         return Err("Number is too big and unsupported".to_string());
     }
 
+    crate::numfmt_dev_trace(format_args!(
+        "  scaled value to {:.6} * {:.0} ^ {power}\n",
+        n / bases[power],
+        bases[1],
+    ));
+
     let mut v = if precision > 0 {
         numfmt_round_with_precision(n / bases[power], round_method, precision)
     } else {
@@ -618,6 +711,11 @@ fn numfmt_consider_suffix(
         power += 1;
     }
 
+    crate::numfmt_dev_trace(format_args!(
+        "  after rounding, value={v:.6} * {:.0} ^ {power}\n",
+        bases[1],
+    ));
+
     let suffix = power
         .checked_sub(1)
         .map(|index| (raw_suffixes[index], is_with_i));
@@ -632,8 +730,9 @@ fn numfmt_transform_to(
 ) -> Result<String> {
     let value = s / (opts.to_unit as f64);
     numfmt_validate_unscaled_output(value, &opts.to, precision)?;
+    crate::numfmt_dev_trace(format_args!("double_to_human:\n"));
     let (i2, suffix) = numfmt_consider_suffix(value, &opts.to, round_method, precision)?;
-    Ok(match suffix {
+    let output = match suffix {
         None if opts.to != NumfmtUnit::None => {
             format!("{i2:.precision$}")
         }
@@ -656,7 +755,18 @@ fn numfmt_transform_to(
             format!("{:.1}{}", i2, DisplayableSuffix(numfmt_suffix))
         }
         Some(numfmt_suffix) => format!("{:.0}{}", i2, DisplayableSuffix(numfmt_suffix)),
-    })
+    };
+
+    if opts.to == NumfmtUnit::None {
+        crate::numfmt_dev_trace(format_args!("  no scaling, returning value: {output}\n"));
+    } else {
+        crate::numfmt_dev_trace(format_args!(
+            "  returning value: {}\n",
+            numfmt_quote(&output),
+        ));
+    }
+
+    Ok(output)
 }
 
 fn numfmt_normalize_exact_integer(number: &str) -> Option<String> {
@@ -767,6 +877,7 @@ fn numfmt_finish_format_string(
     number: String,
     numfmt_configs: &NumfmtConfigs,
     implicit_padding: Option<isize>,
+    trace_value: Option<f64>,
 ) -> String {
     let number = if numfmt_configs.format.is_grouping {
         numfmt_group_number_thousands(&number)
@@ -779,7 +890,21 @@ fn numfmt_finish_format_string(
         None => number,
     };
 
-    let padded_number = get_padded_number(numfmt_configs, implicit_padding, number_with_suffix);
+    if let Some(value) = trace_value {
+        crate::numfmt_dev_trace(format_args!(
+            "formatting output:\n  value: {value:.6}\n  humanized: {}\n",
+            numfmt_quote(&number_with_suffix),
+        ));
+    }
+
+    let padded_number =
+        get_padded_number(numfmt_configs, implicit_padding, number_with_suffix.clone());
+    if trace_value.is_some() && padded_number != number_with_suffix {
+        crate::numfmt_dev_trace(format_args!(
+            "  After padding: {}\n",
+            numfmt_quote(&padded_number),
+        ));
+    }
 
     format!(
         "{}{}{}",
@@ -960,6 +1085,21 @@ fn numfmt_apply_locale_grouping(int_part: &str, sep: &str, grouping: &[u8]) -> S
     groups.join(sep)
 }
 
+fn numfmt_trace_exact_value(
+    source: &str,
+    options: &NumfmtConfigs,
+    precision: usize,
+) -> Result<Option<f64>> {
+    if !crate::numfmt_dev_debug_enabled() {
+        return Ok(None);
+    }
+
+    let transformed = numfmt_transform_from(source, &options.transform)?;
+    let trace_value = transformed / (options.transform.to_unit as f64);
+    let _ = numfmt_transform_to(transformed, &options.transform, options.round, precision)?;
+    Ok(Some(trace_value))
+}
+
 fn numfmt_format_string(
     source: &str,
     numfmt_configs: &NumfmtConfigs,
@@ -982,25 +1122,33 @@ fn numfmt_format_string(
     if let Some(number) =
         numfmt_format_unscaled_integer_exact(source_without_suffix, numfmt_configs, precision)?
     {
+        let trace_value =
+            numfmt_trace_exact_value(source_without_suffix, numfmt_configs, precision)?;
         return Ok(numfmt_finish_format_string(
             number,
             numfmt_configs,
             implicit_padding,
+            trace_value,
         ));
     }
 
     if let Some(number) =
         numfmt_format_unscaled_decimal_exact(source_without_suffix, numfmt_configs, precision)?
     {
+        let trace_value =
+            numfmt_trace_exact_value(source_without_suffix, numfmt_configs, precision)?;
         return Ok(numfmt_finish_format_string(
             number,
             numfmt_configs,
             implicit_padding,
+            trace_value,
         ));
     }
 
+    let transformed = numfmt_transform_from(source_without_suffix, &numfmt_configs.transform)?;
+    let trace_value = transformed / (numfmt_configs.transform.to_unit as f64);
     let number = numfmt_transform_to(
-        numfmt_transform_from(source_without_suffix, &numfmt_configs.transform)?,
+        transformed,
         &numfmt_configs.transform,
         numfmt_configs.round,
         precision,
@@ -1010,6 +1158,7 @@ fn numfmt_format_string(
         number,
         numfmt_configs,
         implicit_padding,
+        Some(trace_value),
     ))
 }
 
@@ -1043,8 +1192,46 @@ fn numfmt_delimited_trailing_blank_error(
     }
 }
 
+fn numfmt_trace_custom_suffix(source: &str, options: &NumfmtConfigs) {
+    let Some(suffix) = &options.suffix else {
+        return;
+    };
+    if source.len() <= suffix.len() {
+        return;
+    }
+
+    if source.ends_with(suffix) {
+        crate::numfmt_dev_trace(format_args!("trimming suffix {}\n", numfmt_quote(suffix)));
+    } else {
+        crate::numfmt_dev_trace(format_args!("no valid suffix found\n"));
+    }
+}
+
+fn numfmt_auto_padding_enabled(options: &NumfmtConfigs) -> bool {
+    if options.delimiter.is_some() || options.padding != 0 {
+        return false;
+    }
+
+    !matches!(
+        options.format.padding,
+        Some(value)
+            if value != 0 && !(options.format.is_zero_padding && value.is_positive())
+    )
+}
+
+fn numfmt_trace_auto_padding(options: &NumfmtConfigs, implicit_padding: Option<isize>) {
+    if numfmt_auto_padding_enabled(options) {
+        crate::numfmt_dev_trace(format_args!(
+            "setting Auto-Padding to {} characters\n",
+            implicit_padding.unwrap_or(0).unsigned_abs(),
+        ));
+    }
+}
+
 fn numfmt_format_delimited_field(field: &str, numfmt_configs: &NumfmtConfigs) -> Result<String> {
     let source = field.trim_start();
+
+    numfmt_trace_custom_suffix(source, numfmt_configs);
 
     // With an explicit delimiter, GNU keeps trailing blanks inside the field
     // and lets end-pointer validation reject them.
@@ -1174,6 +1361,9 @@ fn numfmt_format_line_whitespace(s: &str, numfmt_configs: &NumfmtConfigs) -> Res
                 None
             };
 
+            numfmt_trace_custom_suffix(field, numfmt_configs);
+            numfmt_trace_auto_padding(numfmt_configs, implicit_padding);
+
             out.push_str(&numfmt_format_string(
                 field,
                 numfmt_configs,
@@ -1279,6 +1469,9 @@ fn numfmt_format_line_whitespace_abort(
             } else {
                 None
             };
+
+            numfmt_trace_custom_suffix(field, numfmt_configs);
+            numfmt_trace_auto_padding(numfmt_configs, implicit_padding);
 
             match numfmt_format_string(field, numfmt_configs, implicit_padding) {
                 Ok(rendered) => out.push_str(&rendered),

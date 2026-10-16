@@ -115,6 +115,41 @@ fn input_files(matches: &ArgMatches) -> (Vec<OsString>, bool) {
     }
 }
 
+fn normalize_args_for_posix(args: impl ctcore::Args, posixly_correct: bool) -> Vec<OsString> {
+    let mut args: Vec<_> = args.collect();
+    if !posixly_correct {
+        return args;
+    }
+
+    // GNU getopt stops option processing at the first operand in POSIX mode.
+    for index in 1..args.len() {
+        let arg = &args[index];
+        if arg == OsStr::new("--") {
+            break;
+        }
+        if arg == OsStr::new("-") || !arg.to_string_lossy().starts_with('-') {
+            if index + 1 < args.len() {
+                args.insert(index + 1, OsString::from("--"));
+            }
+            break;
+        }
+    }
+
+    args
+}
+
+fn parse_sum_matches_with_mode(
+    args: impl ctcore::Args,
+    posixly_correct: bool,
+) -> CTResult<ArgMatches> {
+    let args = normalize_args_for_posix(args, posixly_correct);
+    Ok(ct_app().try_get_matches_from(args)?)
+}
+
+fn parse_sum_matches(args: impl ctcore::Args) -> CTResult<ArgMatches> {
+    parse_sum_matches_with_mode(args, std::env::var_os("POSIXLY_CORRECT").is_some())
+}
+
 fn sum_is_sysv(matches: &ArgMatches) -> bool {
     let has_bsd = matches.get_flag(sum_flags::SUM_BSD_COMPATIBLE);
     let has_sysv = matches.get_flag(sum_flags::SUM_SYSTEM_V_COMPATIBLE);
@@ -185,7 +220,7 @@ fn render_sum_classic(
 pub fn sum_native_semantic(args: impl ctcore::Args) -> CTResult<SumSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let matches = ct_app().try_get_matches_from(args)?;
+    let matches = parse_sum_matches(args)?;
     let (files, is_print_names) = input_files(&matches);
 
     let is_sysv = sum_is_sysv(&matches);
@@ -276,7 +311,7 @@ pub fn sum_main(args: impl ctcore::Args) -> CTResult<()> {
 fn sum_main_with_writer(args: impl ctcore::Args, stdout: &mut impl Write) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let matches = ct_app().try_get_matches_from(args)?;
+    let matches = parse_sum_matches(args)?;
     let (files, is_print_names) = input_files(&matches);
 
     let is_sysv = sum_is_sysv(&matches);
@@ -1017,6 +1052,59 @@ mod tests {
             assert!(!parses_as_sysv(&["--sysv", "-r"]));
             assert!(parses_as_sysv(&["-r", "--sysv"]));
             assert!(!parses_as_sysv(&["-s", "-s", "-r", "-r"]));
+        }
+
+        #[test]
+        fn test_posixly_correct_stops_at_first_operand() {
+            let matches = parse_sum_matches_with_mode(
+                ["sum", "/dev/null", "-s"].into_iter().map(OsString::from),
+                true,
+            )
+            .unwrap();
+
+            assert!(!sum_is_sysv(&matches));
+            assert_eq!(
+                input_files(&matches),
+                (
+                    vec![OsString::from("/dev/null"), OsString::from("-s")],
+                    true
+                )
+            );
+        }
+
+        #[test]
+        fn test_posixly_correct_keeps_options_before_first_operand() {
+            let matches = parse_sum_matches_with_mode(
+                ["sum", "-s", "/dev/null", "-r"]
+                    .into_iter()
+                    .map(OsString::from),
+                true,
+            )
+            .unwrap();
+
+            assert!(sum_is_sysv(&matches));
+            assert_eq!(
+                input_files(&matches),
+                (
+                    vec![OsString::from("/dev/null"), OsString::from("-r")],
+                    true
+                )
+            );
+        }
+
+        #[test]
+        fn test_default_mode_still_permutes_options() {
+            let matches = parse_sum_matches_with_mode(
+                ["sum", "/dev/null", "-s"].into_iter().map(OsString::from),
+                false,
+            )
+            .unwrap();
+
+            assert!(sum_is_sysv(&matches));
+            assert_eq!(
+                input_files(&matches),
+                (vec![OsString::from("/dev/null")], true)
+            );
         }
     }
 

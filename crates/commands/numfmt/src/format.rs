@@ -374,6 +374,17 @@ fn numfmt_precision_loss_input(source: &str, options: &NumfmtConfigs) -> Option<
     numfmt_number_may_lose_precision(parsed.number).then(|| input.to_string())
 }
 
+fn numfmt_nul_delimited_first_field(input: &str) -> &str {
+    input.split_once('\0').map_or(input, |(field, _)| field)
+}
+
+pub(crate) fn numfmt_passthrough_input<'a>(input: &'a str, options: &NumfmtConfigs) -> &'a str {
+    match &options.delimiter {
+        Some(delimiter) if delimiter.is_empty() => numfmt_nul_delimited_first_field(input),
+        _ => input,
+    }
+}
+
 pub(crate) fn numfmt_precision_loss_inputs(
     input_line: &str,
     options: &NumfmtConfigs,
@@ -388,7 +399,7 @@ pub(crate) fn numfmt_precision_loss_inputs(
     if let Some(delimiter) = &options.delimiter {
         if delimiter.is_empty() {
             if ctcore::ct_ranges::contain(&options.fields, 1) {
-                check_field(input_line.trim_start());
+                check_field(numfmt_nul_delimited_first_field(input_line).trim_start());
             }
         } else {
             for (index, field) in (1..).zip(input_line.split(delimiter)) {
@@ -1009,10 +1020,11 @@ fn numfmt_format_line_delimited(s: &str, options: &NumfmtConfigs) -> Result<Stri
     let mut out = String::new();
 
     if delimiter.is_empty() {
+        let field = numfmt_nul_delimited_first_field(s);
         if ctcore::ct_ranges::contain(&options.fields, 1) {
-            out.push_str(&numfmt_format_string(s.trim_start(), options, None)?);
+            out.push_str(&numfmt_format_string(field.trim_start(), options, None)?);
         } else {
-            out.push_str(s);
+            out.push_str(field);
         }
     } else {
         for (n, field) in (1..).zip(s.split(delimiter)) {
@@ -1115,8 +1127,9 @@ fn numfmt_format_line_delimited_abort(
     let mut out = String::new();
 
     if delimiter.is_empty() {
+        let field = numfmt_nul_delimited_first_field(s);
         if ctcore::ct_ranges::contain(&options.fields, 1) {
-            match numfmt_format_string(s.trim_start(), options, None) {
+            match numfmt_format_string(field.trim_start(), options, None) {
                 Ok(rendered) => out.push_str(&rendered),
                 Err(error) => {
                     return Err(NumfmtAbortRenderError {
@@ -1126,7 +1139,7 @@ fn numfmt_format_line_delimited_abort(
                 }
             }
         } else {
-            out.push_str(s);
+            out.push_str(field);
         }
     } else {
         for (n, field) in (1..).zip(s.split(delimiter)) {
@@ -1423,6 +1436,23 @@ mod tests {
             "1"
         );
         assert_eq!(numfmt_format_line("1", &config).unwrap(), "1\0");
+    }
+
+    #[test]
+    fn test_empty_delimiter_stops_at_nul() {
+        let mut config = setup_default_config();
+        config.delimiter = Some(String::new());
+        config.fields = vec![ctcore::ct_ranges::CtRange { low: 1, high: 1 }];
+
+        assert_eq!(numfmt_format_line("12\u{0}34", &config).unwrap(), "12\n");
+        assert_eq!(
+            numfmt_format_line_abort("12\u{0}34", &config).unwrap(),
+            "12\n"
+        );
+        assert_eq!(numfmt_passthrough_input("bad\u{0}34", &config), "bad");
+
+        config.fields = vec![ctcore::ct_ranges::CtRange { low: 2, high: 2 }];
+        assert_eq!(numfmt_format_line("12\u{0}34", &config).unwrap(), "12\n");
     }
 
     #[cfg(test)]

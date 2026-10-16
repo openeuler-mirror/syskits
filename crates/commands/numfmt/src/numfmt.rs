@@ -28,7 +28,7 @@ use crate::flags::*;
 use crate::format::{
     numfmt_format_and_print_abort_with_line_ending, numfmt_format_and_print_with_line_ending,
     numfmt_format_line_abort_with_line_ending, numfmt_format_line_with_line_ending,
-    numfmt_precision_loss_inputs,
+    numfmt_passthrough_input, numfmt_precision_loss_inputs,
 };
 use crate::units::{NumfmtUnit, Result};
 use ctcore::Tool;
@@ -509,8 +509,11 @@ fn numfmt_process_semantic_line(
                 NumfmtInvalidModes::Ignore | NumfmtInvalidModes::Abort => {}
             }
 
-            let rendered =
-                numfmt_passthrough_text(input_line, options.zero_terminated, has_line_ending);
+            let rendered = numfmt_passthrough_text(
+                numfmt_passthrough_input(input_line, options),
+                options.zero_terminated,
+                has_line_ending,
+            );
             numfmt_push_row(
                 semantic,
                 options,
@@ -775,6 +778,7 @@ fn numfmt_format_and_handle_validation_with_line_ending(
             }
             NumfmtInvalidModes::Ignore => {}
         };
+        let input_line = numfmt_passthrough_input(input_line, numfmt_configs);
         if has_line_ending {
             if numfmt_configs.zero_terminated {
                 print!("{input_line}\0");

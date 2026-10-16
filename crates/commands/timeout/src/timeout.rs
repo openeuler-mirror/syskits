@@ -125,7 +125,7 @@ impl TimeoutFlags {
     fn new(timeout_flags: &clap::ArgMatches) -> CTResult<Self> {
         let signal = match timeout_flags
             .get_many::<String>(timeout_flags::TIMEOUT_SIGNAL)
-            .and_then(|signals| signals.last())
+            .and_then(|mut signals| signals.next_back())
         {
             Some(signal_) => {
                 let signal_result = get_ct_signal_by_name_or_value(signal_);

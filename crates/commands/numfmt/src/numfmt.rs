@@ -916,10 +916,7 @@ fn numfmt_unknown_argument_message(args: &[OsString]) -> String {
 
     match unknown {
         Some(arg) if arg.starts_with("--") => {
-            format!(
-                "unrecognized option '{}'\nTry 'numfmt --help' for more information.",
-                arg
-            )
+            format!("unrecognized option '{arg}'\nTry 'numfmt --help' for more information.")
         }
         Some(arg) => {
             let option = arg.trim_start_matches('-').chars().next().unwrap_or('-');

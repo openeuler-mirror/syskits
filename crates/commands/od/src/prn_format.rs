@@ -241,7 +241,7 @@ fn format_long_double_finite(sign: bool, exponent: u16, mantissa: u64) -> String
 
 fn format_g_like(value: f64, precision: usize) -> String {
     let abs = value.abs();
-    if abs >= 1e-4 && abs < 1e21 {
+    if (1e-4..1e21).contains(&abs) {
         trim_float_text(format!("{value:.precision$}"))
     } else {
         let text = format!("{value:.precision$e}");

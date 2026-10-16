@@ -419,7 +419,7 @@ fn get_mode(matches: &ArgMatches) -> Result<mode_t, String> {
 
 fn parse_mknod_mode(str_mode: &str) -> Result<mode_t, String> {
     if str_mode.contains(',') && !str_mode.chars().any(|c| c.is_ascii_digit()) {
-        let mut mode = MODE_RW_UGO as u32;
+        let mut mode = MODE_RW_UGO;
         let umask = ctcore::ct_mode::get_umask();
         for part in str_mode.split(',') {
             if part.is_empty() {

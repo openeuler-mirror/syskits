@@ -1116,8 +1116,8 @@ fn finalize_copy(mut output: BlockWriter, state: CopyState) -> std::io::Result<(
     let final_wstat = state.write_stat + wstat_update;
 
     // 如果需要，截断文件
-    if !state.input.settings.oconv.is_notrunc
-        && !(final_wstat.bytes_total == 0
+    if !(state.input.settings.oconv.is_notrunc
+        || final_wstat.bytes_total == 0
             && seek_bytes_stays_in_first_output_block(state.input.settings))
     {
         output.truncate();

@@ -22,6 +22,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{Read, Write};
+use std::ops::Range;
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -46,88 +47,106 @@ pub struct TsortSemantic {
 }
 
 struct TsortRunOutcome {
+    had_cycle: bool,
     rows: Vec<TsortRow>,
     classic_bytes: Vec<u8>,
     stderr_text: String,
+    output_events: Vec<TsortOutputEvent>,
     exit_code: i32,
 }
 
-pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
-    let semantic = tsort_native_semantic(args)?;
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum TsortOutputEvent {
+    Stdout(Range<usize>),
+    Stderr(Range<usize>),
+}
 
-    if !semantic.classic_bytes.is_empty() {
-        std::io::stdout().write_all(&semantic.classic_bytes)?;
-    } else if !semantic.classic_text.is_empty() {
-        print!("{}", semantic.classic_text);
+pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
+    let outcome = tsort_run(args)?;
+    let stdout = std::io::stdout();
+    let stderr = std::io::stderr();
+    let mut stdout = stdout.lock();
+    let mut stderr = stderr.lock();
+
+    for event in &outcome.output_events {
+        match event {
+            TsortOutputEvent::Stdout(range) => {
+                stdout.write_all(&outcome.classic_bytes[range.clone()])?;
+            }
+            TsortOutputEvent::Stderr(range) => {
+                stderr.write_all(&outcome.stderr_text.as_bytes()[range.clone()])?;
+            }
+        }
     }
-    if !semantic.stderr_text.is_empty() {
-        eprint!("{}", semantic.stderr_text);
-    }
-    if semantic.exit_code != 0 {
-        set_ct_exit_code(semantic.exit_code);
+    if outcome.exit_code != 0 {
+        set_ct_exit_code(outcome.exit_code);
     }
 
     Ok(())
 }
 
 pub fn tsort_native_semantic(args: impl ctcore::Args) -> CTResult<TsortSemantic> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
-    let matches = ct_app().try_get_matches_from(args)?;
-    tsort_semantic_from_matches(&matches)
-}
-
-fn tsort_semantic_from_matches(matches: &clap::ArgMatches) -> CTResult<TsortSemantic> {
-    let input_files: Vec<&String> = matches
-        .get_many::<String>(tsort_flags::TSORT_FILE)
-        .map(|v| v.collect())
-        .unwrap_or_default();
-
-    if input_files.len() > 1 {
-        return Ok(tsort_error_semantic(
-            format!(
-                "tsort: extra operand '{}'\ntsort: Try 'tsort --help' for more information.\n",
-                input_files[1]
-            ),
-            false,
-        ));
-    }
-
-    let input_file = input_files.first().map(|s| s.as_str()).unwrap_or("-");
-
-    let input_buffer = match tsort_read_input(input_file) {
-        Ok(input_buffer) => input_buffer,
-        Err(stderr_text) => return Ok(tsort_error_semantic(stderr_text, false)),
-    };
-    let mut graph = TSortGraph::new();
-
-    let tokens = tsort_tokens(&input_buffer);
-
-    if tokens.len() % 2 != 0 {
-        return Ok(tsort_error_semantic(
-            format!(
-                "tsort: {}: input contains an odd number of tokens\n",
-                input_file.maybe_quote()
-            ),
-            false,
-        ));
-    }
-
-    for chunk in tokens.chunks(2) {
-        graph.add_edge(chunk[0].clone(), chunk[1].clone());
-    }
-
-    let outcome = graph.tsort_exe(input_file);
+    let outcome = tsort_run(args)?;
     let classic_text = String::from_utf8_lossy(&outcome.classic_bytes).into_owned();
 
     Ok(TsortSemantic {
-        had_cycle: outcome.exit_code != 0,
+        had_cycle: outcome.had_cycle,
         rows: outcome.rows,
         classic_text,
         classic_bytes: outcome.classic_bytes,
         stderr_text: outcome.stderr_text,
         exit_code: outcome.exit_code,
     })
+}
+
+fn tsort_run(args: impl ctcore::Args) -> CTResult<TsortRunOutcome> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let matches = ct_app().try_get_matches_from(args)?;
+    Ok(tsort_run_from_matches(&matches))
+}
+
+fn tsort_run_from_matches(matches: &clap::ArgMatches) -> TsortRunOutcome {
+    let input_files: Vec<&String> = matches
+        .get_many::<String>(tsort_flags::TSORT_FILE)
+        .map(|v| v.collect())
+        .unwrap_or_default();
+
+    if input_files.len() > 1 {
+        return tsort_error_outcome(
+            format!(
+                "tsort: extra operand '{}'\ntsort: Try 'tsort --help' for more information.\n",
+                input_files[1]
+            ),
+            false,
+        );
+    }
+
+    let input_file = input_files.first().map(|s| s.as_str()).unwrap_or("-");
+
+    let input_buffer = match tsort_read_input(input_file) {
+        Ok(input_buffer) => input_buffer,
+        Err(stderr_text) => return tsort_error_outcome(stderr_text, false),
+    };
+    let mut graph = TSortGraph::new();
+
+    let tokens = tsort_tokens(&input_buffer);
+
+    if tokens.len() % 2 != 0 {
+        return tsort_error_outcome(
+            format!(
+                "tsort: {}: input contains an odd number of tokens\n",
+                input_file.maybe_quote()
+            ),
+            false,
+        );
+    }
+
+    for chunk in tokens.chunks(2) {
+        graph.add_edge(chunk[0].clone(), chunk[1].clone());
+    }
+
+    graph.tsort_exe(input_file)
 }
 
 pub fn ct_app() -> Command {
@@ -152,13 +171,14 @@ pub fn ct_app() -> Command {
         .arg(arg)
 }
 
-fn tsort_error_semantic(stderr_text: String, had_cycle: bool) -> TsortSemantic {
-    TsortSemantic {
+fn tsort_error_outcome(stderr_text: String, had_cycle: bool) -> TsortRunOutcome {
+    let stderr_len = stderr_text.len();
+    TsortRunOutcome {
         had_cycle,
         rows: Vec::new(),
-        classic_text: String::new(),
         classic_bytes: Vec::new(),
         stderr_text,
+        output_events: vec![TsortOutputEvent::Stderr(0..stderr_len)],
         exit_code: 1,
     }
 }
@@ -220,14 +240,24 @@ fn tsort_node_to_text(node: &[u8]) -> String {
     String::from_utf8_lossy(node).into_owned()
 }
 
-fn push_tsort_stderr(stderr_text: &mut String, message: impl AsRef<str>) {
+fn push_tsort_stderr(
+    stderr_text: &mut String,
+    output_events: &mut Vec<TsortOutputEvent>,
+    message: impl AsRef<str>,
+) {
+    let start = stderr_text.len();
     stderr_text.push_str("tsort: ");
     stderr_text.push_str(message.as_ref());
     stderr_text.push('\n');
+    output_events.push(TsortOutputEvent::Stderr(start..stderr_text.len()));
 }
 
-fn push_tsort_stderr_node(stderr_text: &mut String, node: &[u8]) {
-    push_tsort_stderr(stderr_text, tsort_node_to_text(node));
+fn push_tsort_stderr_node(
+    stderr_text: &mut String,
+    output_events: &mut Vec<TsortOutputEvent>,
+    node: &[u8],
+) {
+    push_tsort_stderr(stderr_text, output_events, tsort_node_to_text(node));
 }
 
 use std::collections::VecDeque;
@@ -269,6 +299,7 @@ impl TSortGraph {
         let mut rows = Vec::new();
         let mut classic_bytes = Vec::new();
         let mut stderr_text = String::new();
+        let mut output_events = Vec::new();
 
         // 1. 初始化扫描 (GNU walk_tree scan_zeros)
         // BTreeMap 默认迭代顺序是 key 的升序 (Alphabetical)，这与 C 语言 walk_tree 一致
@@ -281,7 +312,9 @@ impl TSortGraph {
         while !self.in_edges.is_empty() {
             if queue.is_empty() {
                 found_cycle = true;
-                if let Some(freed_node) = self.detect_and_break_cycle(filename, &mut stderr_text) {
+                if let Some(freed_node) =
+                    self.detect_and_break_cycle(filename, &mut stderr_text, &mut output_events)
+                {
                     if let Some(preds) = self.in_edges.get(&freed_node) {
                         if preds.is_empty() {
                             queue.push_back(freed_node);
@@ -293,8 +326,10 @@ impl TSortGraph {
             }
 
             while let Some(n) = queue.pop_front() {
+                let output_start = classic_bytes.len();
                 classic_bytes.extend_from_slice(&n);
                 classic_bytes.push(b'\n');
+                output_events.push(TsortOutputEvent::Stdout(output_start..classic_bytes.len()));
                 rows.push(TsortRow {
                     row_index: rows.len() + 1,
                     node: tsort_node_to_text(&n),
@@ -316,9 +351,11 @@ impl TSortGraph {
         }
 
         TsortRunOutcome {
+            had_cycle: found_cycle,
             rows,
             classic_bytes,
             stderr_text,
+            output_events,
             exit_code: if found_cycle { 1 } else { 0 },
         }
     }
@@ -328,6 +365,7 @@ impl TSortGraph {
         &mut self,
         filename: &str,
         stderr_text: &mut String,
+        output_events: &mut Vec<TsortOutputEvent>,
     ) -> Option<TsortNode> {
         let candidates: Vec<TsortNode> = self.in_edges.keys().cloned().collect();
 
@@ -368,6 +406,7 @@ impl TSortGraph {
                         // *** 发现了环 ***
                         push_tsort_stderr(
                             stderr_text,
+                            output_events,
                             format!("{}: input contains a loop:", filename.maybe_quote()),
                         );
 
@@ -376,7 +415,7 @@ impl TSortGraph {
                         let mut loop_node = curr.clone();
 
                         // 1. 打印 loop_node
-                        push_tsort_stderr_node(stderr_text, &loop_node);
+                        push_tsort_stderr_node(stderr_text, output_events, &loop_node);
 
                         // 开始回溯
                         loop {
@@ -404,7 +443,7 @@ impl TSortGraph {
                                 return Some(curr.clone());
                             }
 
-                            push_tsort_stderr_node(stderr_text, &next_node);
+                            push_tsort_stderr_node(stderr_text, output_events, &next_node);
                             loop_node = next_node;
                         }
                     } else {

@@ -9,7 +9,8 @@
  * See the Mulan PSL v2 for more details.
  */
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read};
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
@@ -33,6 +34,7 @@ macro_rules! CT_FICLONE {
 
 /// The fallback behavior for [`clone`] on failed system call.
 #[derive(Clone, Copy, PartialEq)]
+#[allow(dead_code)]
 enum CloneFallback {
     /// Raise an error.
     Error,
@@ -46,6 +48,13 @@ enum CloneOutcome {
     Reflink,
     CopyOffload,
     Unknown,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SparseSeekCopy {
+    Copied { used_offload: bool },
+    NoHoles,
+    Unsupported,
 }
 
 fn copy_file_range_all(src_file: &File, dst_file: &File) -> std::io::Result<CloneOutcome> {
@@ -97,6 +106,36 @@ where
     io::copy(&mut src_file, &mut dst_file).map(|_| ())
 }
 
+fn offload_or_no_offload_copy<P>(source: P, dest: P) -> std::io::Result<CloneOutcome>
+where
+    P: AsRef<Path>,
+{
+    let source = source.as_ref();
+    let dest = dest.as_ref();
+    let src_file = File::open(source)?;
+    let dst_file = File::create(dest)?;
+    let copy_file_range_result = copy_file_range_all(&src_file, &dst_file);
+    drop(dst_file);
+    drop(src_file);
+    match copy_file_range_result {
+        Ok(outcome) => Ok(outcome),
+        Err(_) => no_offload_copy(source, dest).map(|_| CloneOutcome::Unknown),
+    }
+}
+
+fn try_reflink(source: &Path, dest: &Path) -> std::io::Result<()> {
+    let src_file = File::open(source)?;
+    let dst_file = File::create(dest)?;
+    let src_fd = src_file.as_raw_fd();
+    let dst_fd = dst_file.as_raw_fd();
+    let result = unsafe { libc::ioctl(dst_fd, CT_FICLONE!(), src_fd) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
 /// Use the Linux `ioctl_ficlone` API to do a copy-on-write clone.
 ///
 /// `fallback` controls what to do if the system call fails.
@@ -107,23 +146,203 @@ where
 {
     let source = source.as_ref();
     let dest = dest.as_ref();
-    let src_file = File::open(source)?;
-    let dst_file = File::create(dest)?;
-    let src_fd = src_file.as_raw_fd();
-    let dst_fd = dst_file.as_raw_fd();
-    let result = unsafe { libc::ioctl(dst_fd, CT_FICLONE!(), src_fd) };
-    if result == 0 {
-        return Ok(CloneOutcome::Reflink);
+    match try_reflink(source, dest) {
+        Ok(()) => {
+            return Ok(CloneOutcome::Reflink);
+        }
+        Err(err) if fallback == CloneFallback::Error => {
+            return Err(err);
+        }
+        Err(_) => {}
     }
-    if fallback == CloneFallback::Error {
-        Err(std::io::Error::last_os_error())
+
+    offload_or_no_offload_copy(source, dest)
+}
+
+fn is_probably_sparse(metadata: &std::fs::Metadata) -> bool {
+    const ST_NBLOCKSIZE: u64 = 512;
+
+    metadata.is_file() && metadata.size() > 0 && metadata.blocks() < metadata.size() / ST_NBLOCKSIZE
+}
+
+fn lseek_u64(fd: libc::c_int, offset: u64, whence: libc::c_int) -> io::Result<u64> {
+    let result = unsafe { libc::lseek(fd, offset as libc::off_t, whence) };
+    if result < 0 {
+        Err(io::Error::last_os_error())
     } else {
-        let copy_file_range_result = copy_file_range_all(&src_file, &dst_file);
-        drop(dst_file);
-        drop(src_file);
-        match copy_file_range_result {
-            Ok(outcome) => Ok(outcome),
-            Err(_) => no_offload_copy(source, dest).map(|_| CloneOutcome::Unknown),
+        Ok(result as u64)
+    }
+}
+
+fn is_sparse_seek_unsupported(err: &io::Error) -> bool {
+    let code = err.raw_os_error();
+    code == Some(libc::EINVAL) || code == Some(libc::ENOTSUP) || code == Some(libc::EOPNOTSUPP)
+}
+
+fn copy_file_range_at(source: &File, dest: &File, offset: u64, len: u64) -> io::Result<bool> {
+    let src_fd = source.as_raw_fd();
+    let dst_fd = dest.as_raw_fd();
+    let mut src_offset = offset as libc::loff_t;
+    let mut dst_offset = offset as libc::loff_t;
+    let mut remaining = len;
+    let mut used_offload = false;
+
+    while remaining > 0 {
+        let copied = unsafe {
+            libc::copy_file_range(
+                src_fd,
+                &mut src_offset,
+                dst_fd,
+                &mut dst_offset,
+                remaining.min(1 << 30) as usize,
+                0,
+            )
+        };
+
+        if copied > 0 {
+            used_offload = true;
+            remaining -= copied as u64;
+            continue;
+        }
+
+        if copied == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::WriteZero,
+                "copy_file_range copied no data",
+            ));
+        }
+
+        let err = io::Error::last_os_error();
+        if err.kind() == io::ErrorKind::Interrupted {
+            continue;
+        }
+        return Err(err);
+    }
+
+    Ok(used_offload)
+}
+
+fn copy_data_range(
+    source: &File,
+    dest: &mut File,
+    offset: u64,
+    len: u64,
+    allow_copy_file_range: bool,
+) -> io::Result<bool> {
+    if len == 0 {
+        return Ok(false);
+    }
+
+    if allow_copy_file_range && copy_file_range_at(source, dest, offset, len).is_ok() {
+        return Ok(true);
+    }
+
+    let mut reader = source.try_clone()?;
+    reader.seek(SeekFrom::Start(offset))?;
+    dest.seek(SeekFrom::Start(offset))?;
+    let mut limited = reader.take(len);
+    io::copy(&mut limited, dest)?;
+    Ok(false)
+}
+
+fn sparse_copy_by_seek(
+    source: &File,
+    dest: &mut File,
+    len: u64,
+    allow_copy_file_range: bool,
+) -> io::Result<SparseSeekCopy> {
+    if len == 0 {
+        return Ok(SparseSeekCopy::NoHoles);
+    }
+
+    let src_fd = source.as_raw_fd();
+    let dst_fd = dest.as_raw_fd();
+    let mut offset = 0u64;
+    let mut found_hole = false;
+    let mut ranges = Vec::new();
+
+    while offset < len {
+        let data = match lseek_u64(src_fd, offset, libc::SEEK_DATA) {
+            Ok(data) => data,
+            Err(err) if err.raw_os_error() == Some(libc::ENXIO) => {
+                found_hole = true;
+                break;
+            }
+            Err(err) if is_sparse_seek_unsupported(&err) => return Ok(SparseSeekCopy::Unsupported),
+            Err(err) => return Err(err),
+        };
+
+        if data > offset {
+            found_hole = true;
+        }
+
+        let hole = match lseek_u64(src_fd, data, libc::SEEK_HOLE) {
+            Ok(hole) => hole.min(len),
+            Err(err) if is_sparse_seek_unsupported(&err) => return Ok(SparseSeekCopy::Unsupported),
+            Err(err) => return Err(err),
+        };
+
+        if hole <= data {
+            return Ok(SparseSeekCopy::Unsupported);
+        }
+
+        if hole < len {
+            found_hole = true;
+        }
+        ranges.push((data, hole));
+        offset = hole;
+    }
+
+    if !found_hole {
+        return Ok(SparseSeekCopy::NoHoles);
+    }
+
+    dest.set_len(len)?;
+    let mut used_offload = false;
+    for (data, hole) in ranges {
+        used_offload |= copy_data_range(source, dest, data, hole - data, allow_copy_file_range)?;
+    }
+
+    if unsafe { libc::ftruncate(dst_fd, len as libc::off_t) } < 0 {
+        return Err(io::Error::last_os_error());
+    }
+
+    Ok(SparseSeekCopy::Copied { used_offload })
+}
+
+fn sparse_copy_auto<P>(
+    source: P,
+    dest: P,
+    allow_copy_file_range: bool,
+) -> std::io::Result<Option<(CpSparseDebug, bool)>>
+where
+    P: AsRef<Path>,
+{
+    let source = source.as_ref();
+    let dest = dest.as_ref();
+    let src_file = File::open(source)?;
+    let metadata = src_file.metadata()?;
+
+    if !is_probably_sparse(&metadata) {
+        return Ok(None);
+    }
+
+    let mut dst_file = File::create(dest)?;
+    match sparse_copy_by_seek(
+        &src_file,
+        &mut dst_file,
+        metadata.size(),
+        allow_copy_file_range,
+    )? {
+        SparseSeekCopy::Copied { used_offload } => {
+            Ok(Some((CpSparseDebug::SeekHole, used_offload)))
+        }
+        SparseSeekCopy::NoHoles => Ok(None),
+        SparseSeekCopy::Unsupported => {
+            drop(dst_file);
+            drop(src_file);
+            sparse_copy(source, dest)?;
+            Ok(Some((CpSparseDebug::Zeros, false)))
         }
     }
 }
@@ -137,13 +356,10 @@ where
     use std::os::unix::prelude::MetadataExt;
 
     let mut src_file = File::open(source)?;
-    let dst_file = File::create(dest)?;
-    let dst_fd = dst_file.as_raw_fd();
+    let mut dst_file = File::create(dest)?;
 
     let size: usize = src_file.metadata()?.size().try_into().unwrap();
-    if unsafe { libc::ftruncate(dst_fd, size.try_into().unwrap()) } < 0 {
-        return Err(std::io::Error::last_os_error());
-    }
+    dst_file.set_len(size as u64)?;
 
     let blksize = dst_file.metadata()?.blksize();
     let mut buf: Vec<u8> = vec![0; blksize.try_into().unwrap()];
@@ -154,15 +370,12 @@ where
     // https://www.kernel.org/doc/html/latest/filesystems/fiemap.html
     while current_offset < size {
         let this_read = src_file.read(&mut buf)?;
-        if buf.iter().any(|&x| x != 0) {
-            unsafe {
-                libc::pwrite(
-                    dst_fd,
-                    buf.as_ptr() as *const libc::c_void,
-                    this_read,
-                    current_offset.try_into().unwrap(),
-                )
-            };
+        if this_read == 0 {
+            break;
+        }
+        if buf[..this_read].iter().any(|&x| x != 0) {
+            dst_file.seek(SeekFrom::Start(current_offset as u64))?;
+            dst_file.write_all(&buf[..this_read])?;
         }
         current_offset += this_read;
     }
@@ -231,6 +444,19 @@ pub(crate) fn copy_on_write(
             copy_debug.reflink = CpOffloadReflinkDebug::No;
             sparse_copy(source, dest)
         }
+        (CpReflinkMode::Never, CpSparseMode::Auto) => {
+            copy_debug.sparse_detection = CpSparseDebug::No;
+            copy_debug.offload = CpOffloadReflinkDebug::Avoided;
+            copy_debug.reflink = CpOffloadReflinkDebug::No;
+            match sparse_copy_auto(source, dest, false) {
+                Ok(Some((sparse_debug, _))) => {
+                    copy_debug.sparse_detection = sparse_debug;
+                    Ok(())
+                }
+                Ok(None) => no_offload_copy(source, dest),
+                Err(err) => Err(err),
+            }
+        }
         (CpReflinkMode::Never, _) => {
             copy_debug.sparse_detection = CpSparseDebug::No;
             copy_debug.offload = CpOffloadReflinkDebug::Avoided;
@@ -250,23 +476,39 @@ pub(crate) fn copy_on_write(
             no_offload_copy(source, dest)
         }
 
-        (CpReflinkMode::Auto, _) => {
+        (CpReflinkMode::Auto, CpSparseMode::Auto) => {
             copy_debug.sparse_detection = CpSparseDebug::No;
             copy_debug.reflink = CpOffloadReflinkDebug::Unsupported;
             if source_is_fifo {
                 copy_fifo_contents(source, dest).map(|_| ())
             } else {
-                match clone(source, dest, CloneFallback::FSCopy) {
-                    Ok(CloneOutcome::Reflink) => {
+                match try_reflink(source, dest) {
+                    Ok(()) => {
                         copy_debug.reflink = CpOffloadReflinkDebug::Yes;
                         Ok(())
                     }
-                    Ok(CloneOutcome::CopyOffload) => {
-                        copy_debug.offload = CpOffloadReflinkDebug::Yes;
-                        Ok(())
-                    }
-                    Ok(CloneOutcome::Unknown) => Ok(()),
-                    Err(err) => Err(err),
+                    Err(_) => match sparse_copy_auto(source, dest, true) {
+                        Ok(Some((sparse_debug, used_offload))) => {
+                            copy_debug.sparse_detection = sparse_debug;
+                            if used_offload {
+                                copy_debug.offload = CpOffloadReflinkDebug::Yes;
+                            }
+                            Ok(())
+                        }
+                        Ok(None) => match offload_or_no_offload_copy(source, dest) {
+                            Ok(CloneOutcome::CopyOffload) => {
+                                copy_debug.offload = CpOffloadReflinkDebug::Yes;
+                                Ok(())
+                            }
+                            Ok(CloneOutcome::Unknown) => Ok(()),
+                            Ok(CloneOutcome::Reflink) => {
+                                copy_debug.reflink = CpOffloadReflinkDebug::Yes;
+                                Ok(())
+                            }
+                            Err(err) => Err(err),
+                        },
+                        Err(err) => Err(err),
+                    },
                 }
             }
         }
@@ -495,6 +737,86 @@ mod tests {
                 panic!("Error: {err:#?}")
             }
         }
+    }
+
+    fn write_sparse_file(path: &std::path::Path) {
+        use std::io::{Seek, SeekFrom, Write};
+
+        let mut file = File::create(path).unwrap();
+        file.write_all(b"A").unwrap();
+        file.set_len(1_048_576).unwrap();
+        file.seek(SeekFrom::Start(1_048_575)).unwrap();
+        file.write_all(b"Z").unwrap();
+    }
+
+    fn assert_sparse_copy_matches_source(source: &std::path::Path, dest: &std::path::Path) {
+        use std::os::unix::fs::MetadataExt;
+
+        assert_eq!(fs::read(source).unwrap(), fs::read(dest).unwrap());
+        let dest_metadata = fs::metadata(dest).unwrap();
+        assert_eq!(dest_metadata.len(), 1_048_576);
+        assert!(
+            dest_metadata.blocks() < 2_048,
+            "expected sparse output, got {} blocks",
+            dest_metadata.blocks()
+        );
+    }
+
+    #[test]
+    fn test_copy_on_write_auto_auto_preserves_sparse_source_holes() {
+        let temp_dir = Builder::new()
+            .prefix("tests_sparse_auto")
+            .tempdir()
+            .unwrap();
+        let source = temp_dir.path().join("sparse.bin");
+        let dest = temp_dir.path().join("output.bin");
+        write_sparse_file(&source);
+
+        let result = copy_on_write(
+            source.as_path(),
+            dest.as_path(),
+            CpReflinkMode::Auto,
+            CpSparseMode::Auto,
+            "test context",
+            false,
+        )
+        .unwrap();
+
+        assert_sparse_copy_matches_source(&source, &dest);
+        if result.reflink != CpOffloadReflinkDebug::Yes {
+            assert!(matches!(
+                result.sparse_detection,
+                CpSparseDebug::SeekHole | CpSparseDebug::Zeros
+            ));
+        }
+    }
+
+    #[test]
+    fn test_copy_on_write_never_auto_preserves_sparse_source_holes() {
+        let temp_dir = Builder::new()
+            .prefix("tests_sparse_never_auto")
+            .tempdir()
+            .unwrap();
+        let source = temp_dir.path().join("sparse.bin");
+        let dest = temp_dir.path().join("output.bin");
+        write_sparse_file(&source);
+
+        let result = copy_on_write(
+            source.as_path(),
+            dest.as_path(),
+            CpReflinkMode::Never,
+            CpSparseMode::Auto,
+            "test context",
+            false,
+        )
+        .unwrap();
+
+        assert_sparse_copy_matches_source(&source, &dest);
+        assert_eq!(result.offload, CpOffloadReflinkDebug::Avoided);
+        assert!(matches!(
+            result.sparse_detection,
+            CpSparseDebug::SeekHole | CpSparseDebug::Zeros
+        ));
     }
 
     #[test]

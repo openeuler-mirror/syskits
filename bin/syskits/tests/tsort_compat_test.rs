@@ -1,4 +1,5 @@
-use std::process::Command;
+use std::io::Write;
+use std::process::{Command, Stdio};
 
 #[test]
 fn tsort_preserves_cycle_diagnostic_output_order() {
@@ -20,4 +21,30 @@ fn tsort_preserves_cycle_diagnostic_output_order() {
         output.stdout,
         b"tsort: -: input contains a loop:\ntsort: a\ntsort: b\na\nb\n"
     );
+}
+
+#[test]
+fn tsort_preserves_duplicate_relations_in_cycles() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .arg("tsort")
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run syskits tsort");
+
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(b"a b\na b\nb a\nb a\n")
+        .expect("write tsort input");
+
+    let output = child.wait_with_output().expect("wait for syskits tsort");
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(stderr.matches("input contains a loop").count(), 2);
 }

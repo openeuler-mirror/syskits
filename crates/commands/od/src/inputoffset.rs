@@ -63,8 +63,8 @@ impl OdInputOffset {
         match (self.radix, self.label) {
             (OdRadix::Decimal, None) => format!("{:07}", self.byte_pos),
             (OdRadix::Decimal, Some(l)) => format!("{:07} ({:07})", self.byte_pos, l),
-            (OdRadix::Hexadecimal, None) => format!("{:06X}", self.byte_pos),
-            (OdRadix::Hexadecimal, Some(l)) => format!("{:06X} ({:06X})", self.byte_pos, l),
+            (OdRadix::Hexadecimal, None) => format!("{:06x}", self.byte_pos),
+            (OdRadix::Hexadecimal, Some(l)) => format!("{:06x} ({:06x})", self.byte_pos, l),
             (OdRadix::Octal, None) => format!("{:07o}", self.byte_pos),
             (OdRadix::Octal, Some(l)) => format!("{:07o} ({:07o})", self.byte_pos, l),
             (OdRadix::NoPrefix, None) => String::new(),
@@ -84,7 +84,7 @@ impl OdInputOffset {
 #[test]
 fn test_input_offset() {
     let mut sut = OdInputOffset::new(OdRadix::Hexadecimal, 10, None);
-    assert_eq!("00000A", &sut.format_byte_offset());
+    assert_eq!("00000a", &sut.format_byte_offset());
     sut.increase_position(10);
     assert_eq!("000014", &sut.format_byte_offset());
 
@@ -109,16 +109,16 @@ fn test_input_offset() {
 #[test]
 fn test_input_offset_with_label() {
     let mut sut = OdInputOffset::new(OdRadix::Hexadecimal, 10, Some(20));
-    assert_eq!("00000A (000014)", &sut.format_byte_offset());
+    assert_eq!("00000a (000014)", &sut.format_byte_offset());
     sut.increase_position(10);
-    assert_eq!("000014 (00001E)", &sut.format_byte_offset());
+    assert_eq!("000014 (00001e)", &sut.format_byte_offset());
 
     // note normally the radix will not change after initialization
     sut.set_radix(OdRadix::Decimal);
     assert_eq!("0000020 (0000030)", &sut.format_byte_offset());
 
     sut.set_radix(OdRadix::Hexadecimal);
-    assert_eq!("000014 (00001E)", &sut.format_byte_offset());
+    assert_eq!("000014 (00001e)", &sut.format_byte_offset());
 
     sut.set_radix(OdRadix::Octal);
     assert_eq!("0000024 (0000036)", &sut.format_byte_offset());

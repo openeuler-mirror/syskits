@@ -5,6 +5,8 @@ use std::fs;
 use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
+#[cfg(target_os = "linux")]
+use std::os::unix::process::ExitStatusExt;
 use std::process::{Command, Stdio};
 
 #[test]
@@ -101,5 +103,40 @@ fn tsort_accepts_non_utf8_file_operand() {
 
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(output.stdout, b"a\nb\n");
+    assert!(output.stderr.is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn tsort_terminates_with_sigpipe_when_stdout_closes_early() {
+    let mut head = Command::new("head")
+        .args(["-n", "1"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .spawn()
+        .expect("run head");
+    let head_stdin = head.stdin.take().expect("head stdin");
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .arg("tsort")
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::from(head_stdin))
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run syskits tsort");
+
+    let mut input = child.stdin.take().expect("tsort stdin");
+    for number in 1..=20_000 {
+        writeln!(input, "{number} {number}").expect("write tsort input");
+    }
+    drop(input);
+
+    let output = child.wait_with_output().expect("wait for syskits tsort");
+    let head_status = head.wait().expect("wait for head");
+
+    assert!(head_status.success());
+    assert_eq!(output.status.signal(), Some(libc::SIGPIPE));
     assert!(output.stderr.is_empty());
 }

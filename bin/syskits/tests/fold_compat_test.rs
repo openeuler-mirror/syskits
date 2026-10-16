@@ -1,5 +1,8 @@
-use std::io::Write;
+use std::io::{Read, Write};
 use std::process::{Command, Output, Stdio};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 fn run_fold_with_stdin(args: &[&str], locale: &str, input: &[u8]) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
@@ -141,4 +144,52 @@ fn fold_uses_locale_encoding_like_gnu() {
         b"\xa4\xa2\xa4\xa2",
         b"\xa4\xa2\n\xa4\xa2",
     );
+}
+
+#[test]
+fn fold_streams_output_before_stdin_eof() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["fold", "-w", "1"])
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run syskits fold");
+
+    let mut stdin = child.stdin.take().expect("stdin");
+    let mut stdout = child.stdout.take().expect("stdout");
+    let (first_byte_sender, first_byte_receiver) = mpsc::channel();
+    let reader = thread::spawn(move || {
+        let mut output = Vec::new();
+        let mut first_byte = [0];
+        let first_read = stdout.read_exact(&mut first_byte);
+        first_byte_sender
+            .send(first_read.map(|()| first_byte[0]))
+            .expect("send first output byte");
+        stdout
+            .read_to_end(&mut output)
+            .expect("read remaining stdout");
+        (first_byte[0], output)
+    });
+
+    stdin
+        .write_all(&vec![b'x'; 20_000])
+        .expect("write streaming input");
+    let first_byte = first_byte_receiver.recv_timeout(Duration::from_secs(2));
+    drop(stdin);
+
+    let status = child.wait().expect("wait for syskits fold");
+    let (thread_first_byte, remaining_output) = reader.join().expect("join stdout reader");
+
+    assert!(status.success());
+    assert_eq!(
+        first_byte
+            .expect("fold should output before stdin reaches EOF")
+            .unwrap(),
+        b'x'
+    );
+    assert_eq!(thread_first_byte, b'x');
+    assert_eq!(remaining_output.len(), 39_998);
 }

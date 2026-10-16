@@ -35,7 +35,7 @@
 //! - UTF-8 Emoji字符：通常占4个字节
 //! - ASCII字符：每个字符占1个字节
 //! - 换行时机：当column + 字符字节长度 > 宽度时换行
-//! - 处理方式：字符流处理，读取整个文件到内存buffer
+//! - 处理方式：字符流处理，使用固定大小的buffer增量读取
 //! - Rescan机制：模拟GNU fold的goto rescan逻辑，超过宽度时先换行再重新处理当前字符
 //!
 //! 3. 字符模式（Character Mode，-c选项）
@@ -73,7 +73,7 @@
 //!   * 其他字符：使用Unicode显示宽度
 //!
 //! 算法步骤：
-//! 1. 读取整个文件到buffer（字符流处理）
+//! 1. 增量读取文件到buffer，保留可能不完整的多字节序列
 //! 2. 对每个字符：
 //!    a. 获取字符及其UTF-8字节长度（mblength）
 //!    b. 列模式下换行符的特殊处理：直接输出并重置状态
@@ -100,6 +100,9 @@ use std::path::Path;
 use sys_locale::get_locale;
 
 const FOLD_TAB_WIDTH: usize = 8; // 制表符宽度
+const FOLD_READ_BUFFER_SIZE: usize = 8 * 1024;
+// GNU uses MB_LEN_MAX and falls back to 16 when the platform value is unusable.
+const FOLD_MB_LEN_MAX: usize = 16;
 
 unsafe extern "C" {
     fn mbrtowc(
@@ -317,10 +320,9 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
     mode: CountMode,
     single_byte_locale: bool,
 ) -> CTResult<()> {
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)
-        .map_err_context(|| "failed to read input".to_string())?;
-
+    let mut buffer = Vec::with_capacity(FOLD_READ_BUFFER_SIZE + FOLD_MB_LEN_MAX);
+    let mut buffer_pos = 0;
+    let mut eof = false;
     let mut column = 0;
     let mut output = Vec::new();
     let mut last_blank_pos = None;
@@ -334,11 +336,45 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
     let mut conversion_state = unsafe { std::mem::zeroed::<libc::mbstate_t>() };
     let uses_column_rules =
         mode == CountMode::Columns || (single_byte_locale && mode == CountMode::Characters);
-    let mut i = 0;
-    while i < buffer.len() {
-        let start_pos = i;
+    let decode_lookahead = if single_byte_locale {
+        1
+    } else {
+        FOLD_MB_LEN_MAX
+    };
+    loop {
+        if buffer.len() - buffer_pos < decode_lookahead && !eof {
+            if buffer_pos != 0 {
+                let remaining = buffer.len() - buffer_pos;
+                buffer.copy_within(buffer_pos.., 0);
+                buffer.truncate(remaining);
+                buffer_pos = 0;
+            }
+
+            while buffer.len() < decode_lookahead && !eof {
+                let old_len = buffer.len();
+                buffer.resize(old_len + FOLD_READ_BUFFER_SIZE, 0);
+                let bytes_read = loop {
+                    match file.read(&mut buffer[old_len..]) {
+                        Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                        result => {
+                            break result.map_err_context(|| "failed to read input".to_string())?;
+                        }
+                    }
+                };
+                buffer.truncate(old_len + bytes_read);
+                if bytes_read == 0 {
+                    eof = true;
+                }
+            }
+        }
+
+        if buffer_pos == buffer.len() {
+            break;
+        }
+
+        let start_pos = buffer_pos;
         let decoded = fold_decode_next(
-            &buffer[i..],
+            &buffer[buffer_pos..],
             &mut conversion_state,
             single_byte_locale,
             &mut conversion_failed,
@@ -363,7 +399,7 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
             is_bs_following_last_blank = false;
             bs_following_last_blank_num = 0;
             is_cr_after_last_blank = false;
-            i += mblength;
+            buffer_pos += mblength;
             continue;
         }
 
@@ -493,7 +529,7 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
             break; // 退出rescan循环
         }
 
-        i += mblength;
+        buffer_pos += mblength;
     }
 
     // 输出剩余内容
@@ -1514,8 +1550,55 @@ mod tests {
     mod fold_tests {
         use super::*;
         use ctcore::ct_error::CTResult;
-        use std::io::{BufReader, BufWriter, Write};
+        use std::io::{self, BufReader, BufWriter, Read, Write};
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
         use tempfile::NamedTempFile;
+
+        struct StreamingProbeReader {
+            input: Vec<u8>,
+            offset: usize,
+            bytes_written: Arc<AtomicUsize>,
+        }
+
+        impl Read for StreamingProbeReader {
+            fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+                if self.offset < self.input.len() {
+                    let bytes_read = buffer.len().min(self.input.len() - self.offset);
+                    buffer[..bytes_read]
+                        .copy_from_slice(&self.input[self.offset..self.offset + bytes_read]);
+                    self.offset += bytes_read;
+                    return Ok(bytes_read);
+                }
+
+                if self.bytes_written.load(Ordering::SeqCst) == 0 {
+                    return Err(io::Error::other(
+                        "fold requested EOF before producing output",
+                    ));
+                }
+
+                Ok(0)
+            }
+        }
+
+        struct StreamingProbeWriter {
+            output: Vec<u8>,
+            bytes_written: Arc<AtomicUsize>,
+        }
+
+        impl Write for StreamingProbeWriter {
+            fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+                self.output.extend_from_slice(buffer);
+                self.bytes_written.fetch_add(buffer.len(), Ordering::SeqCst);
+                Ok(buffer.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
 
         /// 写入临时文件的辅助函数
         fn write_temp_file(content: &str) -> NamedTempFile {
@@ -1570,6 +1653,58 @@ mod tests {
             )
             .expect("fold byte input");
             String::from_utf8(writer).expect("fold output is UTF-8")
+        }
+
+        #[test]
+        fn fold_streams_output_before_reaching_eof() -> CTResult<()> {
+            let bytes_written = Arc::new(AtomicUsize::new(0));
+            let reader = StreamingProbeReader {
+                input: b"x\n".to_vec(),
+                offset: 0,
+                bytes_written: Arc::clone(&bytes_written),
+            };
+            let mut writer = StreamingProbeWriter {
+                output: Vec::new(),
+                bytes_written,
+            };
+
+            fold_file_multibyte_unified(
+                &mut writer,
+                BufReader::new(reader),
+                false,
+                1,
+                CountMode::Columns,
+                true,
+            )?;
+
+            assert_eq!(writer.output, b"x\n");
+            Ok(())
+        }
+
+        #[test]
+        fn fold_preserves_multibyte_character_across_read_boundary() -> CTResult<()> {
+            if fold_locale_is_single_byte() {
+                return Ok(());
+            }
+
+            let mut input = vec![b'a'; FOLD_READ_BUFFER_SIZE - 1];
+            input.extend_from_slice("界b".as_bytes());
+
+            let mut writer = Vec::new();
+            fold_file_multibyte_unified(
+                &mut writer,
+                BufReader::new(input.as_slice()),
+                false,
+                FOLD_READ_BUFFER_SIZE,
+                CountMode::Bytes,
+                false,
+            )?;
+
+            let mut expected = vec![b'a'; FOLD_READ_BUFFER_SIZE - 1];
+            expected.push(b'\n');
+            expected.extend_from_slice("界b".as_bytes());
+            assert_eq!(writer, expected);
+            Ok(())
         }
 
         #[test]

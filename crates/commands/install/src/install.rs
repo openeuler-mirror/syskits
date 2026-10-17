@@ -1120,7 +1120,12 @@ fn install_standard(paths: Vec<PathBuf>, b: &Installer) -> CTResult<()> {
         let to = paths[1].as_path();
 
         if b.no_target_dir {
-            if to.is_dir() {
+            // GNU -T treats the destination directory entry itself as the target.
+            // Do not follow a symlink here, since the copy will replace that link.
+            if fs::symlink_metadata(to)
+                .map(|metadata| metadata.is_dir())
+                .unwrap_or(false)
+            {
                 ct_show_error!("cannot create regular file {}: Is a directory", to.quote());
                 ctcore::ct_error::set_ct_exit_code(1);
                 return Err(1.into());
@@ -3279,6 +3284,27 @@ mod tests {
         // 验证多个文件是否都安装成功
         assert!(target_dir.join("source.txt").exists());
         assert!(target_dir.join("source2.txt").exists());
+    }
+
+    #[test]
+    fn test_no_target_directory_replaces_symlink_to_directory() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source");
+        let real_directory = temp.path().join("real");
+        let destination = temp.path().join("destination");
+        std::fs::write(&source, "content").unwrap();
+        std::fs::create_dir(&real_directory).unwrap();
+        std::os::unix::fs::symlink(&real_directory, &destination).unwrap();
+
+        let installer = Installer {
+            no_target_dir: true,
+            ..Default::default()
+        };
+        install_standard(vec![source, destination.clone()], &installer).unwrap();
+
+        assert!(std::fs::symlink_metadata(&destination).unwrap().is_file());
+        assert_eq!(std::fs::read_to_string(&destination).unwrap(), "content");
+        assert!(real_directory.is_dir());
     }
 
     #[cfg(unix)]

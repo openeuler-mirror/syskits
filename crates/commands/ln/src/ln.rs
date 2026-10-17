@@ -580,6 +580,11 @@ fn ln_link(src: &Path, dst: &Path, settings: &LnSettings) -> CTResult<()> {
         return Err(LnError::SameFile(source.into_owned(), dst.to_path_buf()).into());
     }
 
+    // GNU ln validates hard-link sources before any destructive destination handling.
+    if !settings.is_symbolic {
+        validate_hard_link_source(&source, settings)?;
+    }
+
     // 2. 处理备份和覆盖，并检查目标文件的备份是否存在，如果存在则删除备份文件
     let backup_path = handle_backup_and_overwrite(src, dst, settings)?;
 
@@ -691,33 +696,7 @@ fn create_link(source: &Path, dst: &Path, settings: &LnSettings) -> CTResult<()>
 
 /// 创建硬链接，处理符号链接解析。
 fn create_hard_link(source: &Path, dst: &Path, settings: &LnSettings) -> CTResult<()> {
-    let resolved_source = if settings.is_logical && source.is_symlink() {
-        fs::canonicalize(source)
-            .map_err_context(|| format!("failed to access {}", source.quote()))?
-    } else {
-        source.to_path_buf()
-    };
-
-    // 使用 symlink_metadata 来判断是否为目录。
-    // 这保证了在使用 -P (物理模式) 时，指向目录的符号链接不会被误判为目录，
-    // 但如果路径带有尾部斜杠（如 link-to-dir/），系统底层会自动解析它，从而正确拦截。
-    let is_dir = match fs::symlink_metadata(&resolved_source) {
-        Ok(meta) => meta.is_dir(),
-        Err(_) => false,
-    };
-
-    // 检查是否是目录硬链接请求
-    if is_dir {
-        if !settings.is_directory {
-            // 抛出正确的、专属的目录硬链接错误
-            return Err(LnError::HardLinkToDirectory(source.to_path_buf()).into());
-        }
-
-        // 检查是否具有root权限
-        if !is_root() {
-            return Err(LnError::NonRootPermission.into());
-        }
-    }
+    let resolved_source = validate_hard_link_source(source, settings)?;
 
     fs::hard_link(&resolved_source, dst).map_err(|err| {
         if err.kind() == std::io::ErrorKind::AlreadyExists {
@@ -732,6 +711,37 @@ fn create_hard_link(source: &Path, dst: &Path, settings: &LnSettings) -> CTResul
             }) as Box<dyn CTError>
         }
     })
+}
+
+fn validate_hard_link_source(source: &Path, settings: &LnSettings) -> CTResult<PathBuf> {
+    let resolved_source = if settings.is_logical && source.is_symlink() {
+        fs::canonicalize(source)
+            .map_err_context(|| format!("failed to access {}", source.quote()))?
+    } else {
+        source.to_path_buf()
+    };
+
+    // 使用 symlink_metadata 来判断是否为目录。
+    // 这保证了在使用 -P (物理模式) 时，指向目录的符号链接不会被误判为目录，
+    // 但如果路径带有尾部斜杠（如 link-to-dir/），系统底层会自动解析它，从而正确拦截。
+    let is_dir = fs::symlink_metadata(&resolved_source)
+        .map_err_context(|| format!("failed to access {}", source.quote()))?
+        .is_dir();
+
+    // 检查是否是目录硬链接请求
+    if is_dir {
+        if !settings.is_directory {
+            // 抛出正确的、专属的目录硬链接错误
+            return Err(LnError::HardLinkToDirectory(source.to_path_buf()).into());
+        }
+
+        // 检查是否具有root权限
+        if !is_root() {
+            return Err(LnError::NonRootPermission.into());
+        }
+    }
+
+    Ok(resolved_source)
 }
 
 /// 检查当前用户是否为root
@@ -1192,6 +1202,38 @@ mod tests {
         let _ = fs::remove_file(&target);
         let _ = fs::remove_file(&hard_target);
         let _ = fs::remove_file(temp.path().join("target.txt~"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_force_preserves_destination_for_invalid_hard_link_source() {
+        let temp = tempdir().unwrap();
+        let settings = LnSettings {
+            overwrite: OverwriteMode::Force,
+            ..LnSettings::default()
+        };
+
+        let missing_source = temp.path().join("missing");
+        let missing_destination = temp.path().join("missing-destination");
+        fs::write(&missing_destination, "old").unwrap();
+        assert!(ln_link(&missing_source, &missing_destination, &settings).is_err());
+        assert_eq!(fs::read_to_string(&missing_destination).unwrap(), "old");
+
+        let directory_source = temp.path().join("directory-source");
+        let directory_destination = temp.path().join("directory-destination");
+        fs::create_dir(&directory_source).unwrap();
+        fs::write(&directory_destination, "old").unwrap();
+        assert!(ln_link(&directory_source, &directory_destination, &settings).is_err());
+        assert_eq!(fs::read_to_string(&directory_destination).unwrap(), "old");
+
+        let symbolic_destination = temp.path().join("symbolic-destination");
+        fs::write(&symbolic_destination, "old").unwrap();
+        let symbolic_settings = LnSettings {
+            is_symbolic: true,
+            ..settings
+        };
+        assert!(ln_link(&missing_source, &symbolic_destination, &symbolic_settings).is_ok());
+        assert_eq!(fs::read_link(symbolic_destination).unwrap(), missing_source);
     }
 
     #[cfg(unix)]

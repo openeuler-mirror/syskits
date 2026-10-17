@@ -257,6 +257,30 @@ fn normalize_stty_file_short_option(args: impl ctcore::Args) -> Vec<OsString> {
     normalized
 }
 
+fn extract_dev_debug_option(args: Vec<OsString>) -> (Vec<OsString>, bool) {
+    let mut filtered = Vec::with_capacity(args.len());
+    let mut options_ended = false;
+    let mut dev_debug = false;
+
+    for (index, arg) in args.into_iter().enumerate() {
+        if index == 0 {
+            filtered.push(arg);
+            continue;
+        }
+
+        if !options_ended && arg == "--" {
+            options_ended = true;
+            filtered.push(arg);
+        } else if !options_ended && arg == "---debug" {
+            dev_debug = true;
+        } else {
+            filtered.push(arg);
+        }
+    }
+
+    (filtered, dev_debug)
+}
+
 fn clear_nonblocking(file: &std::fs::File) -> std::io::Result<()> {
     let fd = file.as_raw_fd();
 
@@ -385,10 +409,11 @@ pub fn stty_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn stty_main_with_writer<W: Write>(args: impl ctcore::Args, writer: &mut W) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = normalize_stty_file_short_option(args);
+    let (args, dev_debug) = extract_dev_debug_option(args.collect());
+    let args = normalize_stty_file_short_option(args.into_iter());
     let matches = ct_app().try_get_matches_from(args)?;
     let mut stty_opts = SttyFlags::new(&matches)?;
-    stty(&mut stty_opts, writer)
+    stty(&mut stty_opts, writer, dev_debug)
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -591,7 +616,7 @@ fn validate_settings_before_device(settings: &[SttySetting]) -> CTResult<()> {
 /// # 返回值
 ///
 /// 返回一个`CTResult`，表示操作成功完成或包含错误信息
-fn stty<W: Write>(opts: &mut SttyFlags, writer: &mut W) -> CTResult<()> {
+fn stty<W: Write>(opts: &mut SttyFlags, writer: &mut W, dev_debug: bool) -> CTResult<()> {
     // Check 参数冲突
     opts.check()?;
 
@@ -644,6 +669,11 @@ fn stty<W: Write>(opts: &mut SttyFlags, writer: &mut W) -> CTResult<()> {
             let current =
                 tcgetattr(opts.file.as_fd()).map_err(|e| CtSimpleError::new(1, e.to_string()))?;
             if !termios_equal(&termios, &current) {
+                if dev_debug {
+                    eprintln!("stty: indx: mode: actual mode");
+                    eprintln!("stty: requested mode: {termios:?}");
+                    eprintln!("stty: actual mode: {current:?}");
+                }
                 let msg = match &opts.file_name {
                     Some(file) => t!(
                         "stty.errors.unable_to_perform_file",
@@ -1664,6 +1694,52 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "--invalid-argument"];
             let executable = command.try_get_matches_from(args);
             assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_extract_dev_debug_option() {
+            let args = [ctcore::ct_util_name(), "echo", "---debug"]
+                .into_iter()
+                .map(OsString::from)
+                .collect();
+            let (args, dev_debug) = extract_dev_debug_option(args);
+            assert!(dev_debug);
+            assert_eq!(
+                args,
+                [ctcore::ct_util_name(), "echo"]
+                    .into_iter()
+                    .map(OsString::from)
+                    .collect::<Vec<_>>()
+            );
+
+            let args = [ctcore::ct_util_name(), "--", "---debug"]
+                .into_iter()
+                .map(OsString::from)
+                .collect();
+            let (args, dev_debug) = extract_dev_debug_option(args);
+            assert!(!dev_debug);
+            assert_eq!(
+                args,
+                [ctcore::ct_util_name(), "--", "---debug"]
+                    .into_iter()
+                    .map(OsString::from)
+                    .collect::<Vec<_>>()
+            );
+
+            let args = [ctcore::ct_util_name(), "drain", "---debug", "-g"]
+                .into_iter()
+                .map(OsString::from)
+                .collect();
+            let (args, dev_debug) = extract_dev_debug_option(args);
+            let args = normalize_stty_file_short_option(args.into_iter());
+            assert!(dev_debug);
+            assert_eq!(
+                args,
+                [ctcore::ct_util_name(), "-g", "drain"]
+                    .into_iter()
+                    .map(OsString::from)
+                    .collect::<Vec<_>>()
+            );
         }
 
         #[test]

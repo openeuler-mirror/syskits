@@ -44,9 +44,14 @@ use ctcore::{
 };
 
 use std::os::unix::process::CommandExt;
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering};
 
 unsafe extern "C" {
+    fn setitimer(
+        which: libc::c_int,
+        new_value: *const libc::itimerval,
+        old_value: *mut libc::itimerval,
+    ) -> libc::c_int;
     fn strtod_l(
         input: *const libc::c_char,
         end: *mut *mut libc::c_char,
@@ -60,6 +65,70 @@ static TIMEOUT_SIGNAL: AtomicI32 = AtomicI32::new(0);
 static IS_FOREGROUND: AtomicBool = AtomicBool::new(false);
 static ALARM_RECEIVED: AtomicBool = AtomicBool::new(false);
 static MONITOR_ACTIVE: AtomicBool = AtomicBool::new(false);
+static KILL_AFTER_PENDING: AtomicBool = AtomicBool::new(false);
+static KILL_AFTER_SECONDS: AtomicU64 = AtomicU64::new(0);
+static KILL_AFTER_MICROSECONDS: AtomicU32 = AtomicU32::new(0);
+
+fn configure_external_kill_after(kill_after: Option<Duration>) {
+    let Some(duration) = kill_after.filter(|duration| !duration.is_zero()) else {
+        KILL_AFTER_PENDING.store(false, Ordering::Release);
+        return;
+    };
+
+    let max_seconds = libc::time_t::MAX as u64;
+    let mut seconds = duration.as_secs().min(max_seconds);
+    let mut microseconds = duration.subsec_nanos().div_ceil(1_000);
+    if microseconds == 1_000_000 {
+        if seconds < max_seconds {
+            seconds += 1;
+            microseconds = 0;
+        } else {
+            microseconds -= 1;
+        }
+    }
+
+    KILL_AFTER_SECONDS.store(seconds, Ordering::Relaxed);
+    KILL_AFTER_MICROSECONDS.store(microseconds, Ordering::Relaxed);
+    KILL_AFTER_PENDING.store(true, Ordering::Release);
+}
+
+fn arm_external_kill_after() {
+    if !KILL_AFTER_PENDING.swap(false, Ordering::AcqRel) {
+        return;
+    }
+
+    TIMEOUT_SIGNAL.store(libc::SIGKILL, Ordering::Release);
+    let timer = libc::itimerval {
+        it_interval: libc::timeval {
+            tv_sec: 0,
+            tv_usec: 0,
+        },
+        it_value: libc::timeval {
+            tv_sec: KILL_AFTER_SECONDS.load(Ordering::Relaxed) as libc::time_t,
+            tv_usec: KILL_AFTER_MICROSECONDS.load(Ordering::Relaxed) as libc::suseconds_t,
+        },
+    };
+    unsafe {
+        setitimer(libc::ITIMER_REAL, &timer, std::ptr::null_mut());
+    }
+}
+
+fn disarm_external_kill_after() {
+    KILL_AFTER_PENDING.store(false, Ordering::Release);
+    let timer = libc::itimerval {
+        it_interval: libc::timeval {
+            tv_sec: 0,
+            tv_usec: 0,
+        },
+        it_value: libc::timeval {
+            tv_sec: 0,
+            tv_usec: 0,
+        },
+    };
+    unsafe {
+        setitimer(libc::ITIMER_REAL, &timer, std::ptr::null_mut());
+    }
+}
 
 #[inline]
 fn forward_signal_to_monitored_process(pid: i32, sig: i32, is_foreground: bool) {
@@ -106,9 +175,10 @@ extern "C" fn handle_sigalrm(_sig: libc::c_int) {
     if !MONITOR_ACTIVE.load(Ordering::Acquire) {
         return;
     }
+    let sig = TIMEOUT_SIGNAL.load(Ordering::Acquire);
+    arm_external_kill_after();
     ALARM_RECEIVED.store(true, Ordering::Release);
     let pid = CHILD_PID.load(Ordering::Acquire);
-    let sig = TIMEOUT_SIGNAL.load(Ordering::Acquire);
     let is_fg = IS_FOREGROUND.load(Ordering::Acquire);
     forward_signal_to_monitored_process(pid, sig, is_fg);
     // 我们只负责发信号，然后立刻返回，让操作系统的 wait() 正常回收子进程。
@@ -119,6 +189,7 @@ extern "C" fn handle_forwarding_signal(sig: libc::c_int) {
     if !MONITOR_ACTIVE.load(Ordering::Acquire) {
         return;
     }
+    arm_external_kill_after();
     let pid = CHILD_PID.load(Ordering::Acquire);
     let is_fg = IS_FOREGROUND.load(Ordering::Acquire);
     forward_signal_to_monitored_process(pid, sig, is_fg);
@@ -452,6 +523,7 @@ fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
 ///   则返回Ok(())；否则返回一个错误状态。
 ///     - 处理进程超时逻辑
 fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult<()> {
+    configure_external_kill_after(flags.kill_after);
     CHILD_PID.store(process.id() as i32, Ordering::Release);
     TIMEOUT_SIGNAL.store(flags.signal as i32, Ordering::Release);
     IS_FOREGROUND.store(flags.is_foreground, Ordering::Release);
@@ -515,6 +587,7 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
             }
             Ok(None) => {
                 // 进程超时，发送信号
+                KILL_AFTER_PENDING.store(false, Ordering::Release);
                 timeout_report_if_verbose(flags.signal, &flags.command[0], flags.is_verbose);
                 timeout_send_signal(process, flags.signal, flags.is_foreground);
 
@@ -530,6 +603,7 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
     };
 
     MONITOR_ACTIVE.store(false, Ordering::Release);
+    disarm_external_kill_after();
     CHILD_PID.store(0, Ordering::Release);
     TIMEOUT_SIGNAL.store(0, Ordering::Release);
     IS_FOREGROUND.store(false, Ordering::Release);

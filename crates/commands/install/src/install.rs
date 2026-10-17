@@ -46,7 +46,7 @@ use ctcore::ct_perms::{
 };
 use ctcore::ct_process::{getegid, geteuid, getgid, getuid};
 use ctcore::{ct_show, ct_show_error, uio_error};
-use file_diff::diff;
+use file_diff::diff_files;
 use filetime::{FileTime, set_file_times};
 #[cfg(target_os = "linux")]
 use selinux::{self, SecurityContext};
@@ -786,7 +786,15 @@ impl Installer {
         }
 
         // 比较文件内容
-        if !diff(from.to_str().unwrap(), to.to_str().unwrap()) {
+        let mut from_file = match File::open(from) {
+            Ok(file) => file,
+            Err(_) => return Ok(true),
+        };
+        let mut to_file = match File::open(to) {
+            Ok(file) => file,
+            Err(_) => return Ok(true),
+        };
+        if !diff_files(&mut from_file, &mut to_file) {
             return Ok(true);
         }
 
@@ -888,9 +896,9 @@ pub fn install_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
-    let paths: Vec<String> = matches
-        .get_many::<String>(install_options::INSTALL_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
+    let paths: Vec<PathBuf> = matches
+        .get_many::<OsString>(install_options::INSTALL_FILES)
+        .map(|values| values.map(PathBuf::from).collect())
         .unwrap_or_default();
 
     check_unimplemented(&matches)?;
@@ -1006,7 +1014,8 @@ pub fn ct_app() -> Command {
         Arg::new(install_options::INSTALL_FILES)
             .action(ArgAction::Append)
             .num_args(1..)
-            .value_hint(clap::ValueHint::AnyPath),
+            .value_hint(clap::ValueHint::AnyPath)
+            .value_parser(clap::builder::ValueParser::os_string()),
     ];
 
     Command::new(ctcore::ct_util_name())
@@ -1052,13 +1061,13 @@ fn check_unimplemented(_matches: &ArgMatches) -> CTResult<()> {
 ///
 /// # 返回值
 /// 返回 `CTResult<()>`，表示操作是否成功完成
-fn install_directory(paths: &[String], b: &Installer) -> CTResult<()> {
+fn install_directory(paths: &[PathBuf], b: &Installer) -> CTResult<()> {
     if paths.is_empty() {
         ct_show_error!("missing file operand");
         return Err(1.into());
     }
 
-    for path in paths.iter().map(Path::new) {
+    for path in paths {
         if let Err(e) = b.create_directory(path) {
             ct_show!(e);
             continue;
@@ -1100,20 +1109,20 @@ fn is_potential_directory_path(path: &Path) -> bool {
 ///
 /// # 返回值
 /// 返回 `CTResult<()>`，表示操作是否成功完成
-fn install_standard(paths: Vec<String>, b: &Installer) -> CTResult<()> {
+fn install_standard(paths: Vec<PathBuf>, b: &Installer) -> CTResult<()> {
     // 验证路径数量
     if paths.is_empty() {
         ct_show_error!("missing file operand");
         return Err(1.into());
     }
     if b.no_target_dir && paths.len() > 2 {
-        ct_show_error!("extra operand {}", paths[2].as_str().quote());
+        ct_show_error!("extra operand {}", paths[2].as_path().quote());
         return Err(1.into());
     }
     if b.target_dir.is_none() && paths.len() < 2 {
         ct_show_error!(
             "missing destination file operand after {}",
-            paths[0].as_str().quote()
+            paths[0].as_path().quote()
         );
         return Err(1.into());
     }
@@ -1123,8 +1132,8 @@ fn install_standard(paths: Vec<String>, b: &Installer) -> CTResult<()> {
     // 2. install source1 source2 ... target_dir (多文件复制到目录)
     if b.target_dir.is_none() && paths.len() == 2 {
         // 单文件复制模式: install source dest
-        let from = Path::new(&paths[0]);
-        let to = Path::new(&paths[1]);
+        let from = paths[0].as_path();
+        let to = paths[1].as_path();
 
         if b.no_target_dir {
             if to.is_dir() {
@@ -1173,7 +1182,7 @@ fn install_standard(paths: Vec<String>, b: &Installer) -> CTResult<()> {
     let target_dir = if let Some(ref dir) = b.target_dir {
         PathBuf::from(dir)
     } else {
-        PathBuf::from(&paths[paths.len() - 1])
+        paths[paths.len() - 1].clone()
     };
     if !target_dir.exists() {
         if b.create_leading && b.target_dir.is_some() {
@@ -1194,7 +1203,7 @@ fn install_standard(paths: Vec<String>, b: &Installer) -> CTResult<()> {
 
     let mut created_destinations = HashSet::with_capacity(sources.len());
 
-    for from in sources.iter().map(Path::new) {
+    for from in sources.iter().map(PathBuf::as_path) {
         if from.is_dir() {
             ct_show!(InstallError::OmittingDirectory(from.to_path_buf()));
             ctcore::ct_error::set_ct_exit_code(1);
@@ -1882,12 +1891,12 @@ fn strip_file(to: &Path, b: &Installer) -> CTResult<()> {
 
 fn prepare_strip_path(path: &Path) -> PathBuf {
     // 处理以连字符开头的文件名
-    if path
-        .as_os_str()
-        .to_str()
-        .unwrap_or_default()
-        .starts_with('-')
-    {
+    #[cfg(unix)]
+    let starts_with_hyphen = path.as_os_str().as_bytes().starts_with(b"-");
+    #[cfg(not(unix))]
+    let starts_with_hyphen = path.to_string_lossy().starts_with('-');
+
+    if starts_with_hyphen {
         let mut new_path = PathBuf::from(".");
         new_path.push(path);
         new_path
@@ -2977,7 +2986,7 @@ mod tests {
             .try_get_matches_from(["install", "-d", "-m755", numeric_arg.as_str()])
             .unwrap();
         let installer = Installer::new(&matches).unwrap();
-        install_directory(std::slice::from_ref(&numeric_arg), &installer).unwrap();
+        install_directory(std::slice::from_ref(&numeric), &installer).unwrap();
         assert_eq!(permission_mode(&numeric), 0o2755);
 
         let symbolic = temp.path().join("symbolic");
@@ -2988,7 +2997,7 @@ mod tests {
             .try_get_matches_from(["install", "-d", "-mg=rx", symbolic_arg.as_str()])
             .unwrap();
         let installer = Installer::new(&matches).unwrap();
-        install_directory(std::slice::from_ref(&symbolic_arg), &installer).unwrap();
+        install_directory(std::slice::from_ref(&symbolic), &installer).unwrap();
         assert_eq!(permission_mode(&symbolic), 0o2751);
 
         let explicit = temp.path().join("explicit");
@@ -2999,7 +3008,7 @@ mod tests {
             .try_get_matches_from(["install", "-d", "-m00755", explicit_arg.as_str()])
             .unwrap();
         let installer = Installer::new(&matches).unwrap();
-        install_directory(std::slice::from_ref(&explicit_arg), &installer).unwrap();
+        install_directory(std::slice::from_ref(&explicit), &installer).unwrap();
         assert_eq!(permission_mode(&explicit), 0o755);
     }
 
@@ -3028,7 +3037,7 @@ mod tests {
             ..Default::default()
         };
 
-        install_directory(&[target.to_string_lossy().into_owned()], &installer).unwrap();
+        install_directory(std::slice::from_ref(&target), &installer).unwrap();
 
         let parent_metadata = std::fs::metadata(&parent).unwrap();
         let target_metadata = std::fs::metadata(&target).unwrap();
@@ -3046,7 +3055,7 @@ mod tests {
             group_id: Some(getegid()),
             ..Default::default()
         };
-        install_directory(&[group_only.to_string_lossy().into_owned()], &installer).unwrap();
+        install_directory(std::slice::from_ref(&group_only), &installer).unwrap();
 
         let group_only_metadata = std::fs::metadata(group_only).unwrap();
         assert_eq!(group_only_metadata.uid(), TEST_UID);
@@ -3105,7 +3114,7 @@ mod tests {
             ..Default::default()
         };
 
-        let paths = vec![source.to_string_lossy().into_owned()];
+        let paths = vec![source.clone()];
         assert!(install_standard(paths, &installer).is_ok());
 
         // 验证文件是否正确安装
@@ -3124,7 +3133,7 @@ mod tests {
             ..installer
         };
 
-        let paths = vec![source.to_string_lossy().into_owned()];
+        let paths = vec![source.clone()];
         assert!(install_standard(paths, &installer).is_ok());
 
         // 验证备份文件是否创建
@@ -3135,15 +3144,63 @@ mod tests {
         let source2 = temp.path().join("source2.txt");
         std::fs::write(&source2, "test content 2").unwrap();
 
-        let paths = vec![
-            source.to_string_lossy().into_owned(),
-            source2.to_string_lossy().into_owned(),
-        ];
+        let paths = vec![source.clone(), source2.clone()];
         assert!(install_standard(paths, &installer).is_ok());
 
         // 验证多个文件是否都安装成功
         assert!(target_dir.join("source.txt").exists());
         assert!(target_dir.join("source2.txt").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_non_utf8_positional_paths() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let temp = tempdir().unwrap();
+        let source = temp
+            .path()
+            .join(OsString::from_vec(b"source-\xff".to_vec()));
+        let destination = temp
+            .path()
+            .join(OsString::from_vec(b"destination-\xfe".to_vec()));
+        std::fs::write(&source, "content").unwrap();
+
+        install_main(
+            vec![
+                OsString::from("install"),
+                source.clone().into_os_string(),
+                destination.clone().into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .unwrap();
+        assert_eq!(std::fs::read_to_string(&destination).unwrap(), "content");
+
+        install_main(
+            vec![
+                OsString::from("install"),
+                OsString::from("-C"),
+                source.into_os_string(),
+                destination.into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .unwrap();
+
+        let directory = temp
+            .path()
+            .join(OsString::from_vec(b"directory-\xfd".to_vec()));
+        install_main(
+            vec![
+                OsString::from("install"),
+                OsString::from("-d"),
+                directory.clone().into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .unwrap();
+        assert!(directory.is_dir());
     }
 
     #[test]
@@ -3160,11 +3217,7 @@ mod tests {
             ..Default::default()
         };
         let result = install_standard(
-            vec![
-                source_a.to_string_lossy().into_owned(),
-                source_b.to_string_lossy().into_owned(),
-                implicit_target.to_string_lossy().into_owned(),
-            ],
+            vec![source_a.clone(), source_b.clone(), implicit_target.clone()],
             &installer,
         );
         assert!(result.is_err());
@@ -3176,14 +3229,7 @@ mod tests {
             target_dir: Some(explicit_target.to_string_lossy().into_owned()),
             ..Default::default()
         };
-        install_standard(
-            vec![
-                source_a.to_string_lossy().into_owned(),
-                source_b.to_string_lossy().into_owned(),
-            ],
-            &installer,
-        )
-        .unwrap();
+        install_standard(vec![source_a.clone(), source_b.clone()], &installer).unwrap();
         assert_eq!(
             std::fs::read_to_string(explicit_target.join("a")).unwrap(),
             "A"
@@ -3213,14 +3259,7 @@ mod tests {
         };
         ctcore::ct_error::set_ct_exit_code(0);
 
-        install_standard(
-            vec![
-                source_a.to_string_lossy().into_owned(),
-                source_b.to_string_lossy().into_owned(),
-            ],
-            &installer,
-        )
-        .unwrap();
+        install_standard(vec![source_a.clone(), source_b.clone()], &installer).unwrap();
 
         assert_eq!(std::fs::read_to_string(target_dir.join("x")).unwrap(), "A");
         assert_eq!(ctcore::ct_error::get_ct_exit_code(), 1);
@@ -3246,14 +3285,7 @@ mod tests {
             ..Default::default()
         };
 
-        install_standard(
-            vec![
-                source_a.to_string_lossy().into_owned(),
-                source_b.to_string_lossy().into_owned(),
-            ],
-            &installer,
-        )
-        .unwrap();
+        install_standard(vec![source_a.clone(), source_b.clone()], &installer).unwrap();
 
         assert_eq!(std::fs::read_to_string(target_dir.join("x")).unwrap(), "B");
         assert_eq!(
@@ -3284,14 +3316,7 @@ mod tests {
             ..Default::default()
         };
 
-        install_standard(
-            vec![
-                source_a.to_string_lossy().into_owned(),
-                source_b.to_string_lossy().into_owned(),
-            ],
-            &installer,
-        )
-        .unwrap();
+        install_standard(vec![source_a.clone(), source_b.clone()], &installer).unwrap();
 
         assert_eq!(std::fs::read_to_string(target).unwrap(), "B");
     }

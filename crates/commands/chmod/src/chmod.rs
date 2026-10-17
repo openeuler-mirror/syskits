@@ -441,10 +441,15 @@ impl Chmoder {
             Some(mode) => self.change_file(file_perms, mode, file_path)?,
             None => {
                 let chmod_unwrapped = self.cmode.clone().unwrap();
+                let has_multiple_clauses = chmod_unwrapped.contains(',');
                 let mut new_mode = file_perms;
                 let mut naively_expected_new_mode = new_mode;
                 for mode in chmod_unwrapped.split(',') {
-                    let result = if mode.chars().any(|c| c.is_ascii_digit()) {
+                    let result = if has_multiple_clauses
+                        && mode.as_bytes().first().is_some_and(u8::is_ascii_digit)
+                    {
+                        Err(format!("invalid mode ({chmod_unwrapped})"))
+                    } else if mode.chars().any(|c| c.is_ascii_digit()) {
                         ct_mode::parse_numeric(new_mode, mode, meta.is_dir()).map(|v| (v, v))
                     } else {
                         ct_mode::parse_symbolic(new_mode, mode, get_umask(), meta.is_dir()).map(
@@ -1974,6 +1979,58 @@ mod tests {
 
         let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
         assert_eq!(final_mode & 0o777, 0o745);
+    }
+
+    #[test]
+    fn test_chmod_rejects_bare_numeric_clause_in_symbolic_list() {
+        let named_temp_file = NamedTempFile::new().unwrap();
+        let test_file_path = named_temp_file.path();
+
+        for mode in ["u+x,644", "644,u+x"] {
+            fs::set_permissions(test_file_path, Permissions::from_mode(0o600)).unwrap();
+            let chmoder = Chmoder {
+                changes: false,
+                quiet: false,
+                verbose: false,
+                preserve_root: false,
+                recursive: false,
+                dereference: false,
+                no_dereference: false,
+                traverse: TraverseMode::Physical,
+                fmode: None,
+                cmode: Some(mode.to_string()),
+            };
+
+            assert!(chmoder.process_path(test_file_path, true).is_err());
+            let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+            assert_eq!(final_mode & 0o7777, 0o600);
+        }
+    }
+
+    #[test]
+    fn test_chmod_accepts_operator_numeric_clause_in_symbolic_list() {
+        let named_temp_file = NamedTempFile::new().unwrap();
+        let test_file_path = named_temp_file.path();
+
+        for mode in ["u+x,+040", "+040,u+x"] {
+            fs::set_permissions(test_file_path, Permissions::from_mode(0o600)).unwrap();
+            let chmoder = Chmoder {
+                changes: false,
+                quiet: false,
+                verbose: false,
+                preserve_root: false,
+                recursive: false,
+                dereference: false,
+                no_dereference: false,
+                traverse: TraverseMode::Physical,
+                fmode: None,
+                cmode: Some(mode.to_string()),
+            };
+
+            assert!(chmoder.process_path(test_file_path, true).is_ok());
+            let final_mode = fs::metadata(test_file_path).unwrap().permissions().mode();
+            assert_eq!(final_mode & 0o7777, 0o740);
+        }
     }
 
     #[test]

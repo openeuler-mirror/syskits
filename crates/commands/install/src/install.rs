@@ -44,7 +44,7 @@ use ctcore::ct_fs::dir_strip_dot_for_creation;
 use ctcore::ct_perms::{
     CtOwnershipChangeOutputNames, CtVerbosityLevel, Verbosity, change_ownership,
 };
-use ctcore::ct_process::{getegid, geteuid};
+use ctcore::ct_process::{getegid, geteuid, getgid, getuid};
 use ctcore::{ct_show, ct_show_error, uio_error};
 use file_diff::diff;
 use filetime::{FileTime, set_file_times};
@@ -730,26 +730,10 @@ impl Installer {
     /// # 返回值
     /// 如果所有权不匹配返回 true
     fn check_ownership(&self, to_meta: &fs::Metadata) -> bool {
-        // 检查所有者
-        if let Some(owner_id) = self.owner_id {
-            if owner_id != to_meta.uid() {
-                return true;
-            }
-        }
+        let owner_id = self.owner_id.unwrap_or_else(getuid);
+        let group_id = self.group_id.unwrap_or_else(getgid);
 
-        // 检查组
-        if let Some(group_id) = self.group_id {
-            if group_id != to_meta.gid() {
-                return true;
-            }
-        } else {
-            #[cfg(not(target_os = "windows"))]
-            if to_meta.uid() != geteuid() || to_meta.gid() != getegid() {
-                return true;
-            }
-        }
-
-        false
+        to_meta.uid() != owner_id || to_meta.gid() != group_id
     }
 
     fn need_copy(&self, from: &Path, to: &Path) -> CTResult<bool> {
@@ -2253,6 +2237,35 @@ mod tests {
         // 创建目标文件并测试
         File::create(&dest).unwrap();
         assert!(installer.need_copy(&source, &dest).unwrap());
+    }
+
+    #[test]
+    fn test_compare_ownership_checks_default_ids_independently() {
+        if geteuid() != 0 {
+            return;
+        }
+
+        let temp = tempdir().unwrap();
+        let target = temp.path().join("target");
+        File::create(&target).unwrap();
+
+        let other_uid = if getuid() == 65534 { 65533 } else { 65534 };
+        if chown(&target, Some(other_uid), Some(getgid())).is_err() {
+            return;
+        }
+        let target_meta = std::fs::metadata(target).unwrap();
+
+        let group_only = Installer {
+            group_id: Some(getgid()),
+            ..Default::default()
+        };
+        assert!(group_only.check_ownership(&target_meta));
+
+        let owner_only = Installer {
+            owner_id: Some(other_uid),
+            ..Default::default()
+        };
+        assert!(!owner_only.check_ownership(&target_meta));
     }
 
     #[test]

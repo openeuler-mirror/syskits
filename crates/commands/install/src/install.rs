@@ -1350,20 +1350,21 @@ fn create_leading_dirs(path: &Path, verbose: bool, b: &Installer) -> Result<(), 
 /// - `Some(PathBuf)` - 备份文件的路径
 /// - `None` - 不需要备份（目标文件不存在）
 fn perform_backup(to: &Path, b: &Installer) -> CTResult<Option<PathBuf>> {
-    if to.exists() {
-        let backup_path = ct_backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
-        if let Some(ref backup_path) = backup_path {
-            // TODO!!
-            if let Err(err) = fs::rename(to, backup_path) {
-                return Err(
-                    InstallError::BackupFailed(to.to_path_buf(), backup_path.clone(), err).into(),
-                );
-            }
-        }
-        Ok(backup_path)
-    } else {
-        Ok(None)
+    match fs::symlink_metadata(to) {
+        Ok(_) => {}
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(InstallError::CannotStat(to.to_path_buf(), err).into()),
     }
+
+    let backup_path = ct_backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
+    if let Some(ref backup_path) = backup_path {
+        if let Err(err) = fs::rename(to, backup_path) {
+            return Err(
+                InstallError::BackupFailed(to.to_path_buf(), backup_path.clone(), err).into(),
+            );
+        }
+    }
+    Ok(backup_path)
 }
 
 /// 将文件从源路径复制到目标路径。
@@ -2109,6 +2110,34 @@ mod tests {
         let backup = perform_backup(&dest, &installer).unwrap();
         assert!(backup.is_some());
         assert!(backup.unwrap().ends_with("dest~"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_perform_backup_preserves_dangling_symlink() {
+        let temp = tempdir().unwrap();
+        let dest = temp.path().join("dest");
+        std::os::unix::fs::symlink("missing-target", &dest).unwrap();
+
+        let installer = Installer {
+            backup_mode: CtBackupMode::SimpleBackup,
+            suffix: String::from("~"),
+            ..Default::default()
+        };
+
+        let backup = perform_backup(&dest, &installer).unwrap().unwrap();
+
+        assert!(fs::symlink_metadata(&dest).is_err());
+        assert!(
+            fs::symlink_metadata(&backup)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(
+            fs::read_link(backup).unwrap(),
+            PathBuf::from("missing-target")
+        );
     }
 
     #[test]

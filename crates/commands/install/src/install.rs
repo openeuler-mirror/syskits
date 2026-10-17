@@ -1889,17 +1889,27 @@ fn prepare_strip_path(path: &Path) -> PathBuf {
     }
 }
 
+#[cfg(unix)]
+fn reset_sigchld_for_strip() {
+    // System V-style wait fails when an ignored SIGCHLD disposition is inherited.
+    unsafe {
+        libc::signal(libc::SIGCHLD, libc::SIG_DFL);
+    }
+}
+
 fn execute_strip(path: &Path, strip_program: &str) -> CTResult<()> {
+    #[cfg(unix)]
+    reset_sigchld_for_strip();
+
     match process::Command::new(strip_program).arg(path).status() {
         Ok(status) if status.success() => Ok(()),
-        Ok(status) => {
+        Ok(_) => {
             // 如果 strip 失败，删除目标文件
             let _ = fs::remove_file(path);
-            Err(InstallError::StripProgramFailed(format!(
-                "strip process terminated abnormally - exit code: {}",
-                status.code().unwrap()
-            ))
-            .into())
+            Err(
+                InstallError::StripProgramFailed("strip process terminated abnormally".into())
+                    .into(),
+            )
         }
         Err(e) => {
             // 如果 strip 失败，删除目标文件
@@ -3387,5 +3397,65 @@ mod tests {
 
         copy(&source, &destination, &installer).unwrap();
         assert_eq!(permission_mode(destination), 0o444);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_strip_resets_inherited_ignored_sigchld() {
+        const CHILD_ROOT: &str = "CT_INSTALL_STRIP_SIGCHLD_TEST_ROOT";
+
+        if let Some(root) = std::env::var_os(CHILD_ROOT) {
+            let root = PathBuf::from(root);
+            let installer = Installer {
+                strip: true,
+                strip_program: "/bin/true".into(),
+                ..Default::default()
+            };
+            copy(&root.join("source"), &root.join("destination"), &installer).unwrap();
+            return;
+        }
+
+        let temp = tempdir().unwrap();
+        std::fs::write(temp.path().join("source"), "content").unwrap();
+
+        let mut child = ProcessCommand::new(std::env::current_exe().unwrap());
+        child
+            .args([
+                "--exact",
+                "tests::test_strip_resets_inherited_ignored_sigchld",
+            ])
+            .env(CHILD_ROOT, temp.path());
+        unsafe {
+            child.pre_exec(|| {
+                libc::signal(libc::SIGCHLD, libc::SIG_IGN);
+                Ok(())
+            });
+        }
+
+        assert!(child.status().unwrap().success());
+        assert!(temp.path().join("destination").exists());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_strip_signal_failure_does_not_panic() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source");
+        let destination = temp.path().join("destination");
+        let strip_program = temp.path().join("die");
+
+        std::fs::write(&source, "content").unwrap();
+        std::fs::write(&strip_program, "#!/bin/sh\nkill -TERM $$\n").unwrap();
+        std::fs::set_permissions(&strip_program, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let installer = Installer {
+            strip: true,
+            strip_program: strip_program.to_string_lossy().into_owned(),
+            ..Default::default()
+        };
+        let result = copy(&source, &destination, &installer);
+
+        assert!(result.is_err());
+        assert!(!destination.exists());
     }
 }

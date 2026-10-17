@@ -2773,6 +2773,44 @@ mod tests {
     }
 
     #[test]
+    fn test_symbolic_mode_without_who_ignores_umask() {
+        const CHILD_ROOT: &str = "CT_INSTALL_SYMBOLIC_MODE_UMASK_TEST_ROOT";
+
+        if let Some(root) = std::env::var_os(CHILD_ROOT) {
+            let root = PathBuf::from(root);
+            let args = vec![
+                OsString::from("install"),
+                OsString::from("-m"),
+                OsString::from("=rw"),
+                root.join("source").into_os_string(),
+                root.join("destination").into_os_string(),
+            ];
+            install_main(args.into_iter()).unwrap();
+            return;
+        }
+
+        let temp = tempdir().unwrap();
+        std::fs::write(temp.path().join("source"), "content").unwrap();
+
+        let mut child = ProcessCommand::new(std::env::current_exe().unwrap());
+        child
+            .args([
+                "--exact",
+                "tests::test_symbolic_mode_without_who_ignores_umask",
+            ])
+            .env(CHILD_ROOT, temp.path());
+        unsafe {
+            child.pre_exec(|| {
+                libc::umask(0o077);
+                Ok(())
+            });
+        }
+
+        assert!(child.status().unwrap().success());
+        assert_eq!(permission_mode(temp.path().join("destination")), 0o666);
+    }
+
+    #[test]
     fn test_leading_directories_ignore_umask() {
         const CHILD_ROOT: &str = "CT_INSTALL_UMASK_TEST_ROOT";
 

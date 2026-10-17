@@ -2536,9 +2536,7 @@ fn pr_get_rendered_line_for_printing(
     let mut content = match &file_line.line_content {
         Ok(content) => {
             if let Some((tab_ch, tab_width)) = output_opts.expand_tabs {
-                let expand_plain_tabs = tab_ch != '\t'
-                    && (output_opts.merge_files_print.is_some()
-                        || output_opts.column_mode_options.is_some());
+                let expand_plain_tabs = tab_ch != '\t';
                 expand_tabs_to_spaces(
                     content,
                     tab_ch,

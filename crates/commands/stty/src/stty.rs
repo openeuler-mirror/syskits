@@ -1249,10 +1249,10 @@ fn stty_apply_recover_mode(termios: &mut Termios, input: &str) -> ControlFlow<bo
         parsed[idx] = value;
     }
 
-    termios.input_flags = nix::sys::termios::InputFlags::from_bits_truncate(parsed[0] as _);
-    termios.output_flags = nix::sys::termios::OutputFlags::from_bits_truncate(parsed[1] as _);
-    termios.control_flags = nix::sys::termios::ControlFlags::from_bits_truncate(parsed[2] as _);
-    termios.local_flags = nix::sys::termios::LocalFlags::from_bits_truncate(parsed[3] as _);
+    termios.input_flags = nix::sys::termios::InputFlags::from_bits_retain(parsed[0] as _);
+    termios.output_flags = nix::sys::termios::OutputFlags::from_bits_retain(parsed[1] as _);
+    termios.control_flags = nix::sys::termios::ControlFlags::from_bits_retain(parsed[2] as _);
+    termios.local_flags = nix::sys::termios::LocalFlags::from_bits_retain(parsed[3] as _);
 
     for (idx, raw) in parts.iter().skip(4).enumerate() {
         let Ok(value) = u8::from_str_radix(raw, 16) else {
@@ -2674,6 +2674,29 @@ mod tests {
             if XCASE_RAW_BIT != 0 {
                 assert_ne!(termios.local_flags.bits() & XCASE_RAW_BIT, 0);
             }
+        }
+
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        #[test]
+        fn test_recover_mode_retains_linux_legacy_flags() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            let mut fields = vec![
+                format!("{IUCLC_RAW_BIT:x}"),
+                format!("{OFILL_RAW_BIT:x}"),
+                "0".to_string(),
+                format!("{XCASE_RAW_BIT:x}"),
+            ];
+            for _ in 0..termios.control_chars.len() {
+                fields.push("0".to_string());
+            }
+
+            assert!(matches!(
+                stty_apply_recover_mode(&mut termios, &fields.join(":")),
+                ControlFlow::Break(true)
+            ));
+            assert_ne!(termios.input_flags.bits() & IUCLC_RAW_BIT, 0);
+            assert_ne!(termios.output_flags.bits() & OFILL_RAW_BIT, 0);
+            assert_ne!(termios.local_flags.bits() & XCASE_RAW_BIT, 0);
         }
     }
 

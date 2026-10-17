@@ -11,7 +11,7 @@
 
 use crate::device::Device;
 use crate::{TermSize, tiocgwinsz, tiocswinsz};
-use ctcore::ct_error::{CTResult, CtSimpleError};
+use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use nix::libc::{c_int, c_ushort};
 use nix::sys::termios::{_POSIX_VDISABLE, BaudRate, SpecialCharacterIndices, Termios, cfgetospeed};
 use nix::sys::termios::{
@@ -19,6 +19,7 @@ use nix::sys::termios::{
     SpecialCharacterIndices as S,
 };
 use std::ffi::OsStr;
+use std::io::Write;
 use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
 
@@ -468,11 +469,12 @@ impl SpecialSetting {
     ///
     /// # 返回
     /// 返回一个`CTResult`，包含一个布尔值，指示操作是否成功。
-    pub fn apply(
+    pub fn apply<W: Write + ?Sized>(
         self,
         termios: &mut Termios,
         value: Option<&OsStr>,
         device: &Device,
+        writer: &mut W,
     ) -> CTResult<bool> {
         match self {
             // 应用输入速度设置
@@ -484,9 +486,9 @@ impl SpecialSetting {
             // 应用超时时间设置，单位为十分之一秒
             SpecialSetting::TimeoutTenths => self.apply_timeout(termios, value),
             // 查询设备尺寸信息
-            SpecialSetting::Size => self.query_size(device),
+            SpecialSetting::Size => self.query_size(device, writer),
             // 查询当前速度设置
-            SpecialSetting::ShowSpeed => self.query_speed(termios),
+            SpecialSetting::ShowSpeed => self.query_speed(termios, writer),
             // 应用行数或列数设置
             SpecialSetting::Rows | SpecialSetting::Columns => self.apply_size(device, value),
             // 应用行模式设置
@@ -608,7 +610,7 @@ impl SpecialSetting {
     ///
     /// 返回一个`CTResult`，包含一个布尔值，表示操作是否成功
     /// 主要用于确认函数执行无误
-    fn query_size(&self, device: &Device) -> CTResult<bool> {
+    fn query_size<W: Write + ?Sized>(&self, device: &Device, writer: &mut W) -> CTResult<bool> {
         // 初始化一个默认的终端尺寸结构体
         let mut size = TermSize::default();
 
@@ -616,7 +618,8 @@ impl SpecialSetting {
         // 这里使用`unsafe`是因为`tiocgwinsz`是一个直接与操作系统交互的低级操作
         // 需要确保调用是正确的，避免不安全的操作
         unsafe { tiocgwinsz(device.as_raw_fd(), &mut size as *mut _)? };
-        println!("{} {}", size.rows, size.columns);
+        writeln!(writer, "{} {}", size.rows, size.columns)
+            .map_err_context(|| "write error".to_string())?;
         Ok(true)
     }
 
@@ -629,7 +632,7 @@ impl SpecialSetting {
     /// # Returns
     ///
     /// 返回一个结果为布尔值的CTResult，表示操作是否成功
-    fn query_speed(&self, termios: &Termios) -> CTResult<bool> {
+    fn query_speed<W: Write + ?Sized>(&self, termios: &Termios, writer: &mut W) -> CTResult<bool> {
         // 获取当前终端的输出速度（波特率）
         let speed = cfgetospeed(termios);
 
@@ -637,7 +640,7 @@ impl SpecialSetting {
         for (text, _, baud_rate) in BAUD_RATES {
             // 如果找到匹配的波特率，则打印当前的波特率并终止遍历
             if *baud_rate == speed {
-                println!("{text}");
+                writeln!(writer, "{text}").map_err_context(|| "write error".to_string())?;
                 break;
             }
         }
@@ -919,10 +922,12 @@ fn parse_numeric_base(raw: &str) -> (u32, &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nix::pty::openpty;
     use nix::sys::termios::{ControlFlags, Termios};
     use std::ffi::OsString;
+    use std::fs::File;
     use std::io::stdin;
-    use std::io::{IsTerminal, stdout};
+    use std::io::{self, IsTerminal, Write, stdout};
     use std::os::fd::AsRawFd;
     use std::os::unix::ffi::OsStringExt;
 
@@ -1074,6 +1079,37 @@ mod tests {
         }
     }
 
+    struct WriteFailWriter;
+
+    impl Write for WriteFailWriter {
+        fn write(&mut self, _buffer: &[u8]) -> io::Result<usize> {
+            Err(io::Error::from_raw_os_error(nix::libc::EBADF))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_query_settings_report_write_errors() {
+        let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+        let stdin_device = Device::Stdin(stdin());
+        let speed_error = SpecialSetting::ShowSpeed
+            .apply(&mut termios, None, &stdin_device, &mut WriteFailWriter)
+            .unwrap_err();
+        assert_eq!(speed_error.to_string(), "write error: Bad file descriptor");
+        assert_eq!(speed_error.code(), 1);
+
+        let pty = openpty(None, None).unwrap();
+        let size_device = Device::File(File::from(pty.slave));
+        let size_error = SpecialSetting::Size
+            .apply(&mut termios, None, &size_device, &mut WriteFailWriter)
+            .unwrap_err();
+        assert_eq!(size_error.to_string(), "write error: Bad file descriptor");
+        assert_eq!(size_error.code(), 1);
+    }
+
     #[test]
     fn test_special_setting_size() {
         if is_container() || !stdout().is_terminal() {
@@ -1089,7 +1125,9 @@ mod tests {
             .expect("size setting should exist");
 
         assert!(!size_setting.requires_value);
-        let result = size_setting.setting.apply(&mut termios, None, &device);
+        let result = size_setting
+            .setting
+            .apply(&mut termios, None, &device, &mut std::io::sink());
         assert!(result.is_ok());
     }
 
@@ -1103,9 +1141,12 @@ mod tests {
             .expect("min setting should exist");
 
         assert!(min_setting.requires_value);
-        let result = min_setting
-            .setting
-            .apply(&mut termios, Some(OsStr::new("1")), &device);
+        let result = min_setting.setting.apply(
+            &mut termios,
+            Some(OsStr::new("1")),
+            &device,
+            &mut std::io::sink(),
+        );
         assert!(result.is_ok());
     }
 
@@ -1118,9 +1159,12 @@ mod tests {
             .find(|s| s.name == "erase")
             .expect("erase setting should exist");
 
-        let result = erase_setting
-            .setting
-            .apply(&mut termios, Some(OsStr::new("0177")), &device);
+        let result = erase_setting.setting.apply(
+            &mut termios,
+            Some(OsStr::new("0177")),
+            &device,
+            &mut std::io::sink(),
+        );
 
         assert!(result.is_ok());
         assert_eq!(
@@ -1138,9 +1182,12 @@ mod tests {
             .find(|s| s.name == "flush")
             .expect("flush setting should exist");
 
-        let result = flush_setting
-            .setting
-            .apply(&mut termios, Some(OsStr::new("^A")), &device);
+        let result = flush_setting.setting.apply(
+            &mut termios,
+            Some(OsStr::new("^A")),
+            &device,
+            &mut std::io::sink(),
+        );
 
         assert!(result.is_ok());
         assert_eq!(
@@ -1159,9 +1206,12 @@ mod tests {
             .expect("time setting should exist");
 
         assert!(time_setting.requires_value);
-        let result = time_setting
-            .setting
-            .apply(&mut termios, Some(OsStr::new("1")), &device);
+        let result = time_setting.setting.apply(
+            &mut termios,
+            Some(OsStr::new("1")),
+            &device,
+            &mut std::io::sink(),
+        );
         assert!(result.is_ok());
     }
 
@@ -1174,9 +1224,12 @@ mod tests {
             .find(|s| s.name == "min")
             .expect("min setting should exist");
 
-        let result = min_setting
-            .setting
-            .apply(&mut termios, Some(OsStr::new("invalid")), &device);
+        let result = min_setting.setting.apply(
+            &mut termios,
+            Some(OsStr::new("invalid")),
+            &device,
+            &mut std::io::sink(),
+        );
         assert!(result.is_err());
     }
 }

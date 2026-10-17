@@ -77,19 +77,28 @@ fn forward_signal_to_monitored_process(pid: i32, sig: i32, is_foreground: bool) 
         libc::kill(pid, sig);
     }
 
-    // Unit tests share the test runner's process group. The real group behavior
-    // is covered by check-timeout-compat.sh.
-    #[cfg(not(test))]
     if !is_foreground {
+        // Unit tests share the test runner's process group. The real group behavior
+        // is covered by check-timeout-compat.sh.
+        #[cfg(not(test))]
         unsafe {
             // The monitor leads this group, so ignore the propagated signal itself.
             libc::signal(sig, libc::SIG_IGN);
             libc::kill(0, sig);
         }
-    }
 
-    #[cfg(test)]
-    let _ = is_foreground;
+        if sig != libc::SIGKILL && sig != libc::SIGCONT {
+            unsafe {
+                libc::kill(pid, libc::SIGCONT);
+            }
+
+            #[cfg(not(test))]
+            unsafe {
+                libc::signal(libc::SIGCONT, libc::SIG_IGN);
+                libc::kill(0, libc::SIGCONT);
+            }
+        }
+    }
 }
 
 /// 专用于兼容 GNU 行为的 SIGALRM 处理器
@@ -1053,7 +1062,7 @@ mod tests {
         }
 
         #[test]
-        fn test_forward_signal_stop_does_not_force_continue() {
+        fn test_forward_signal_stop_forces_continue() {
             let mut cmd = Command::new("sleep");
             cmd.arg("30");
             unsafe {
@@ -1076,7 +1085,7 @@ mod tests {
                 .find(|line| line.starts_with("State:"))
                 .expect("state line exists");
             assert!(
-                state_line.contains("\tT"),
+                !state_line.contains("\tT"),
                 "unexpected process state: {state_line}"
             );
 

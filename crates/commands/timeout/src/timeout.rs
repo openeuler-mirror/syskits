@@ -448,6 +448,17 @@ fn timeout_unblock_sigchld() {
     }
 }
 
+fn timeout_unblock_alarm_and_sigchld() {
+    let mut signals = nix::sys::signal::SigSet::empty();
+    signals.add(nix::sys::signal::Signal::SIGALRM);
+    signals.add(nix::sys::signal::Signal::SIGCHLD);
+    let _ = nix::sys::signal::sigprocmask(
+        nix::sys::signal::SigmaskHow::SIG_UNBLOCK,
+        Some(&signals),
+        None,
+    );
+}
+
 fn timeout_install_signal_handlers(timeout_signal: usize) {
     unsafe {
         let alarm_sa = nix::sys::signal::SigAction::new(
@@ -551,6 +562,8 @@ fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
 
     // Install caught dispositions before fork so exec resets them in COMMAND.
     timeout_install_signal_handlers(flags.signal);
+    // GNU does not pass inherited SIGALRM/SIGCHLD blocking to COMMAND.
+    timeout_unblock_alarm_and_sigchld();
 
     let mut cmd = process::Command::new(&flags.command[0]);
     cmd.args(&flags.command[1..])

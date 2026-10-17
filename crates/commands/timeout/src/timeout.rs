@@ -520,9 +520,37 @@ fn timeout_install_signal_handlers(timeout_signal: usize) {
 }
 
 /// 在详细模式下报告超时并发送信号给指定命令
+fn timeout_signal_name(signal: usize) -> String {
+    if let Some(name) = get_ct_signal_name_by_value(signal) {
+        return name.to_owned();
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let rtmin = libc::SIGRTMIN() as usize;
+        let rtmax = libc::SIGRTMAX() as usize;
+        if signal == rtmin {
+            return "RTMIN".to_owned();
+        }
+        if signal == rtmax {
+            return "RTMAX".to_owned();
+        }
+        if (rtmin..=rtmax).contains(&signal) {
+            let from_min = signal - rtmin;
+            let from_max = rtmax - signal;
+            if from_min <= from_max {
+                return format!("RTMIN+{from_min}");
+            }
+            return format!("RTMAX-{from_max}");
+        }
+    }
+
+    signal.to_string()
+}
+
 fn timeout_report_if_verbose(signal: usize, cmd: &OsStr, is_verbose: bool) {
     if is_verbose {
-        let s = get_ct_signal_name_by_value(signal).unwrap();
+        let s = timeout_signal_name(signal);
         ct_show_error!("sending signal {} to command {}", s, cmd.quote());
     }
 }
@@ -849,6 +877,19 @@ mod tests {
         // 测试 execute 方法
         let args = vec![OsString::from("timeout"), OsString::from("--version")];
         assert!(tool.execute(&args).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_realtime_signal_names_for_verbose_output() {
+        let rtmin = libc::SIGRTMIN() as usize;
+        let rtmax = libc::SIGRTMAX() as usize;
+
+        assert_eq!(timeout_signal_name(rtmin), "RTMIN");
+        assert_eq!(timeout_signal_name(rtmin + 1), "RTMIN+1");
+        assert_eq!(timeout_signal_name(rtmax - 1), "RTMAX-1");
+        assert_eq!(timeout_signal_name(rtmax), "RTMAX");
+        assert_eq!(timeout_signal_name(usize::MAX), usize::MAX.to_string());
     }
 
     mod timeout_flags_tests {

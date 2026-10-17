@@ -28,7 +28,7 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, UClapError};
 use ctcore::ct_process::CtChildExt;
-use std::ffi::OsString;
+use std::ffi::{CString, OsString};
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
@@ -45,6 +45,15 @@ use ctcore::{
 
 use std::os::unix::process::CommandExt;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+
+unsafe extern "C" {
+    fn strtod_l(
+        input: *const libc::c_char,
+        end: *mut *mut libc::c_char,
+        locale: libc::locale_t,
+    ) -> libc::c_double;
+}
+
 // 用于给 C 风格的信号处理器传递子进程状态
 static CHILD_PID: AtomicI32 = AtomicI32::new(0);
 static TIMEOUT_SIGNAL: AtomicI32 = AtomicI32::new(0);
@@ -122,9 +131,50 @@ struct TimeoutFlags {
 
 fn parse_timeout_duration(duration: &str) -> Result<Duration, String> {
     // Rust excludes vertical tab from this predicate, while C isspace includes it.
-    ctcore::ct_parse_time::ct_from_str(
-        duration.trim_start_matches(|c: char| c.is_ascii_whitespace() || c == '\u{b}'),
-    )
+    let duration = duration.trim_start_matches(|c: char| c.is_ascii_whitespace() || c == '\u{b}');
+    ctcore::ct_parse_time::ct_from_str(duration)
+        .or_else(|error| parse_hex_timeout_duration(duration).ok_or(error))
+}
+
+fn parse_hex_timeout_duration(duration: &str) -> Option<Duration> {
+    let (number, multiplier) = if let Some(number) = duration.strip_suffix('s') {
+        (number, 1.0)
+    } else if let Some(number) = duration.strip_suffix('m') {
+        (number, 60.0)
+    } else if let Some(number) = duration.strip_suffix('h') {
+        (number, 60.0 * 60.0)
+    } else if let Some(number) = duration.strip_suffix('d') {
+        (number, 60.0 * 60.0 * 24.0)
+    } else {
+        (duration, 1.0)
+    };
+    let unsigned = number.strip_prefix(['+', '-']).unwrap_or(number);
+    if !(unsigned.starts_with("0x") || unsigned.starts_with("0X")) {
+        return None;
+    }
+
+    let number = CString::new(number).ok()?;
+    let locale =
+        unsafe { libc::newlocale(libc::LC_NUMERIC_MASK, c"C".as_ptr(), std::ptr::null_mut()) };
+    if locale.is_null() {
+        return None;
+    }
+
+    let mut end = std::ptr::null_mut();
+    let parsed = unsafe {
+        let parsed = strtod_l(number.as_ptr(), &mut end, locale);
+        libc::freelocale(locale);
+        parsed
+    };
+    if end == number.as_ptr().cast_mut() || unsafe { *end } != 0 || parsed.is_nan() || parsed < 0.0
+    {
+        return None;
+    }
+
+    let seconds = parsed * multiplier;
+    let whole_seconds = seconds.trunc();
+    let nanos = (seconds.fract() * 1_000_000_000.0).trunc();
+    Some(Duration::new(whole_seconds as u64, nanos as u32))
 }
 
 impl TimeoutFlags {
@@ -698,6 +748,30 @@ mod tests {
                 let matches = ct_app().try_get_matches_from(args).unwrap();
                 assert!(TimeoutFlags::new(&matches).is_err());
             }
+        }
+
+        #[test]
+        fn test_hexadecimal_floating_point_duration() {
+            assert_eq!(
+                parse_timeout_duration("0x1p0").unwrap(),
+                Duration::from_secs(1)
+            );
+            assert_eq!(
+                parse_timeout_duration("+0X1.8p+1s").unwrap(),
+                Duration::from_secs(3)
+            );
+            assert_eq!(
+                parse_timeout_duration("0x1p-1m").unwrap(),
+                Duration::from_secs(30)
+            );
+            assert!(parse_timeout_duration("-0x1p0").is_err());
+            assert!(parse_timeout_duration("0x1p0junk").is_err());
+
+            let args = vec![ctcore::ct_util_name(), "-k", "0x1p1", "0x1p2s", "true"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = TimeoutFlags::new(&matches).unwrap();
+            assert_eq!(flags.kill_after, Some(Duration::from_secs(2)));
+            assert_eq!(flags.duration, Duration::from_secs(4));
         }
 
         #[test]

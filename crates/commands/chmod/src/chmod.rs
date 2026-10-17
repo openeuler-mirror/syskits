@@ -113,6 +113,26 @@ fn extract_negative_modes(mut extr_args: impl ctcore::Args) -> (Option<String>, 
     (parsed_chmod, clean_chmod_args)
 }
 
+fn validate_mode(mode_string: &str) -> Result<(), ()> {
+    let has_multiple_clauses = mode_string.contains(',');
+    let mut current_mode = 0;
+
+    for mode in mode_string.split(',') {
+        if has_multiple_clauses && mode.as_bytes().first().is_some_and(u8::is_ascii_digit) {
+            return Err(());
+        }
+
+        current_mode = if mode.chars().any(|c| c.is_ascii_digit()) {
+            ct_mode::parse_numeric(current_mode, mode, false)
+        } else {
+            ct_mode::parse_symbolic(current_mode, mode, 0, false)
+        }
+        .map_err(|_| ())?;
+    }
+
+    Ok(())
+}
+
 #[derive(Default)]
 pub struct Chmod;
 impl Tool for Chmod {
@@ -193,6 +213,11 @@ pub fn chmod_main(args: impl ctcore::Args) -> CTResult<()> {
 
     if f.is_empty() {
         return Err(CTsageError::new(1, "missing operand".to_string()));
+    }
+
+    if let Some(mode) = cmode.as_deref() {
+        validate_mode(mode)
+            .map_err(|()| CtSimpleError::new(1, format!("invalid mode: {}", mode.quote())))?;
     }
 
     let chmoder_info = Chmoder {
@@ -788,6 +813,22 @@ mod tests {
 
             assert!(result.is_err());
         }
+
+        #[test]
+        fn test_invalid_mode_is_reported_before_file_access() {
+            let args = [
+                ctcore::ct_util_name(),
+                "invalid",
+                "this-file-must-not-be-accessed",
+            ];
+            let error = chmod_main(args.iter().map(OsString::from))
+                .unwrap_err()
+                .to_string();
+
+            assert!(error.contains("invalid mode"));
+            assert!(!error.contains("cannot access"));
+        }
+
         #[test]
         fn test_ctmain_arg_reference_without_mode() {
             // 测试用例：单独指定 --reference 而不指定 --mode

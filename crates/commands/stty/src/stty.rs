@@ -597,6 +597,7 @@ fn validate_settings_before_device(settings: &[SttySetting]) -> CTResult<()> {
     let libc_termios = unsafe { std::mem::zeroed::<nix::libc::termios>() };
     let mut check_mode = Termios::from(libc_termios);
     let check_device = Device::Stdin(stdin());
+    let mut sink = std::io::sink();
 
     for setting in settings {
         validate_setting_syntax(setting)?;
@@ -607,7 +608,7 @@ fn validate_settings_before_device(settings: &[SttySetting]) -> CTResult<()> {
             continue;
         }
 
-        let applied = stty_apply_setting(&mut check_mode, setting, &check_device)?;
+        let applied = stty_apply_setting(&mut check_mode, setting, &check_device, &mut sink)?;
         if matches!(
             applied,
             ControlFlow::Break(false) | ControlFlow::Continue(())
@@ -685,7 +686,7 @@ fn stty<W: Write>(opts: &mut SttyFlags, writer: &mut W, dev_debug: bool) -> CTRe
                 continue;
             }
 
-            let applied = stty_apply_setting(&mut termios, setting, &opts.file)?;
+            let applied = stty_apply_setting(&mut termios, setting, &opts.file, writer)?;
             if matches!(
                 applied,
                 ControlFlow::Break(false) | ControlFlow::Continue(())
@@ -1204,10 +1205,11 @@ fn apply_raw_mode(termios: &mut Termios) {
 /// - `ControlFlow::Continue(())`: 如果没有找到匹配的设置。
 /// - `ControlFlow::Break(true)`: 如果成功应用了特殊设置。
 /// - `ControlFlow::Break(false)`: 如果成功应用了常规标志设置。
-fn stty_apply_setting(
+fn stty_apply_setting<W: Write + ?Sized>(
     termios: &mut Termios,
     setting: &SttySetting,
     device: &Device,
+    writer: &mut W,
 ) -> CTResult<ControlFlow<bool>> {
     let Some(s) = setting.name.to_str() else {
         return Ok(ControlFlow::Continue(()));
@@ -1223,7 +1225,9 @@ fn stty_apply_setting(
     }
 
     // 处理特殊设置
-    if let ControlFlow::Break(applied) = stty_apply_special_setting(termios, setting, device)? {
+    if let ControlFlow::Break(applied) =
+        stty_apply_special_setting(termios, setting, device, writer)?
+    {
         return Ok(ControlFlow::Break(applied));
     }
 
@@ -1478,10 +1482,11 @@ fn stty_apply_combination_setting(
 ///   - `ControlFlow::Continue(())`: 如果未找到匹配的特殊设置，或者设置不需要值但未提供值。
 ///   - `ControlFlow::Break(false)`: 如果需要值但未提供。
 ///   - `ControlFlow::Break(true)`: 如果设置成功应用。
-fn stty_apply_special_setting(
+fn stty_apply_special_setting<W: Write + ?Sized>(
     termios: &mut Termios,
     setting: &SttySetting,
     device: &Device,
+    writer: &mut W,
 ) -> CTResult<ControlFlow<bool>> {
     // 查找特殊设置
     for entry in settings::SPECIAL_SETTINGS {
@@ -1494,7 +1499,7 @@ fn stty_apply_special_setting(
             }
 
             // 应用设置
-            return match entry.setting.apply(termios, value, device) {
+            return match entry.setting.apply(termios, value, device, writer) {
                 Ok(applied) => Ok(ControlFlow::Break(applied)),
                 Err(err) if err.to_string().starts_with("invalid argument") => {
                     Ok(ControlFlow::Break(false))
@@ -2606,6 +2611,22 @@ mod tests {
     mod stty_apply_tests {
         use super::*;
 
+        fn apply_setting_for_test(
+            termios: &mut Termios,
+            setting: &SttySetting,
+            device: &Device,
+        ) -> CTResult<ControlFlow<bool>> {
+            stty_apply_setting(termios, setting, device, &mut std::io::sink())
+        }
+
+        fn apply_special_setting_for_test(
+            termios: &mut Termios,
+            setting: &SttySetting,
+            device: &Device,
+        ) -> CTResult<ControlFlow<bool>> {
+            stty_apply_special_setting(termios, setting, device, &mut std::io::sink())
+        }
+
         #[test]
         fn test_stty_apply_baud_rate_valid() {
             let mut termios = unsafe { std::mem::zeroed::<Termios>() };
@@ -2636,7 +2657,7 @@ mod tests {
             let mut termios = unsafe { std::mem::zeroed::<Termios>() };
             let device = Device::Stdin(stdin());
             assert!(matches!(
-                stty_apply_special_setting(&mut termios, &SttySetting::from("size"), &device),
+                apply_special_setting_for_test(&mut termios, &SttySetting::from("size"), &device),
                 Ok(ControlFlow::Break(true))
             ));
         }
@@ -2646,7 +2667,7 @@ mod tests {
             let mut termios = unsafe { std::mem::zeroed::<Termios>() };
             let device = Device::Stdin(stdin());
             assert!(matches!(
-                stty_apply_special_setting(
+                apply_special_setting_for_test(
                     &mut termios,
                     &SttySetting::new("min", Some("1")),
                     &device
@@ -2660,7 +2681,11 @@ mod tests {
             let mut termios = unsafe { std::mem::zeroed::<Termios>() };
             let device = Device::Stdin(stdin());
             assert!(matches!(
-                stty_apply_special_setting(&mut termios, &SttySetting::from("invalid"), &device),
+                apply_special_setting_for_test(
+                    &mut termios,
+                    &SttySetting::from("invalid"),
+                    &device
+                ),
                 Ok(ControlFlow::Continue(()))
             ));
         }
@@ -2671,21 +2696,21 @@ mod tests {
             let device = Device::Stdin(stdin());
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, &SttySetting::from("evenp"), &device),
+                apply_setting_for_test(&mut termios, &SttySetting::from("evenp"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             assert!(termios.control_flags.contains(C::PARENB));
             assert!(!termios.control_flags.contains(C::PARODD));
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, &SttySetting::from("-evenp"), &device),
+                apply_setting_for_test(&mut termios, &SttySetting::from("-evenp"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             assert!(!termios.control_flags.contains(C::PARENB));
             assert!(termios.control_flags.contains(C::CS8));
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, &SttySetting::from("raw"), &device),
+                apply_setting_for_test(&mut termios, &SttySetting::from("raw"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             assert!(termios.input_flags.bits() == 0);
@@ -2699,7 +2724,7 @@ mod tests {
             );
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, &SttySetting::from("-raw"), &device),
+                apply_setting_for_test(&mut termios, &SttySetting::from("-raw"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             assert!(termios.input_flags.contains(I::BRKINT));
@@ -2707,13 +2732,13 @@ mod tests {
             assert!(termios.local_flags.contains(L::ICANON));
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, &SttySetting::from("tabs"), &device),
+                apply_setting_for_test(&mut termios, &SttySetting::from("tabs"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             assert!(O::TAB0.is_in(&termios, Some(O::TABDLY)));
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, &SttySetting::from("-tabs"), &device),
+                apply_setting_for_test(&mut termios, &SttySetting::from("-tabs"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             assert!(O::TAB3.is_in(&termios, Some(O::TABDLY)));
@@ -2725,19 +2750,19 @@ mod tests {
             let device = Device::Stdin(stdin());
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, &SttySetting::from("-ek"), &device),
+                apply_setting_for_test(&mut termios, &SttySetting::from("-ek"), &device),
                 Ok(ControlFlow::Break(false))
             ));
             assert!(matches!(
-                stty_apply_setting(&mut termios, &SttySetting::from("-sane"), &device),
+                apply_setting_for_test(&mut termios, &SttySetting::from("-sane"), &device),
                 Ok(ControlFlow::Break(false))
             ));
             assert!(matches!(
-                stty_apply_setting(&mut termios, &SttySetting::from("-crt"), &device),
+                apply_setting_for_test(&mut termios, &SttySetting::from("-crt"), &device),
                 Ok(ControlFlow::Break(false))
             ));
             assert!(matches!(
-                stty_apply_setting(&mut termios, &SttySetting::from("-dec"), &device),
+                apply_setting_for_test(&mut termios, &SttySetting::from("-dec"), &device),
                 Ok(ControlFlow::Break(false))
             ));
         }
@@ -2792,7 +2817,7 @@ mod tests {
             let before = termios.output_flags.bits();
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, &SttySetting::from("dec"), &device),
+                apply_setting_for_test(&mut termios, &SttySetting::from("dec"), &device),
                 Ok(ControlFlow::Break(true))
             ));
 
@@ -2802,7 +2827,7 @@ mod tests {
             let before = termios.output_flags.bits();
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, &SttySetting::from("dec"), &device),
+                apply_setting_for_test(&mut termios, &SttySetting::from("dec"), &device),
                 Ok(ControlFlow::Break(true))
             ));
 
@@ -2815,14 +2840,14 @@ mod tests {
             let device = Device::Stdin(stdin());
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, &SttySetting::from("ofill"), &device),
+                apply_setting_for_test(&mut termios, &SttySetting::from("ofill"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             if OFILL_RAW_BIT != 0 {
                 assert_ne!(termios.output_flags.bits() & OFILL_RAW_BIT, 0);
             }
             assert!(matches!(
-                stty_apply_setting(&mut termios, &SttySetting::from("-ofill"), &device),
+                apply_setting_for_test(&mut termios, &SttySetting::from("-ofill"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             if OFILL_RAW_BIT != 0 {
@@ -2830,7 +2855,7 @@ mod tests {
             }
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, &SttySetting::from("iuclc"), &device),
+                apply_setting_for_test(&mut termios, &SttySetting::from("iuclc"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             if IUCLC_RAW_BIT != 0 {
@@ -2838,7 +2863,7 @@ mod tests {
             }
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, &SttySetting::from("xcase"), &device),
+                apply_setting_for_test(&mut termios, &SttySetting::from("xcase"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             if XCASE_RAW_BIT != 0 {

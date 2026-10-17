@@ -474,25 +474,8 @@ fn ln_target_is_dir(path: &Path, settings: &LnSettings) -> bool {
 }
 
 /// 构建目标文件的路径。
-fn build_target_path(src: &Path, target_dir: &Path, settings: &LnSettings) -> CTResult<PathBuf> {
-    if settings.is_no_dereference && matches!(settings.overwrite, OverwriteMode::Force) {
-        handle_no_dereference_path(target_dir)
-    } else {
-        build_normal_target_path(src, target_dir)
-    }
-}
-
-/// 处理 no_dereference 选项的目标路径。
-fn handle_no_dereference_path(target_dir: &Path) -> CTResult<PathBuf> {
-    if target_dir.is_symlink() {
-        if target_dir.is_file() {
-            let _ = fs::remove_file(target_dir);
-        }
-        if target_dir.is_dir() {
-            let _ = fs::remove_dir(target_dir);
-        }
-    }
-    Ok(target_dir.to_path_buf())
+fn build_target_path(src: &Path, target_dir: &Path, _settings: &LnSettings) -> CTResult<PathBuf> {
+    build_normal_target_path(src, target_dir)
 }
 
 /// 构建普通目标路径。
@@ -1289,6 +1272,42 @@ mod tests {
         };
         assert!(ln_link(&missing_source, &symbolic_destination, &symbolic_settings).is_ok());
         assert_eq!(fs::read_link(symbolic_destination).unwrap(), missing_source);
+    }
+
+    #[test]
+    fn test_force_no_dereference_keeps_target_directory() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source");
+        fs::write(&source, "data").unwrap();
+        let settings = LnSettings {
+            overwrite: OverwriteMode::Force,
+            is_no_dereference: true,
+            ..LnSettings::default()
+        };
+
+        let operand_dir = temp.path().join("operand-directory");
+        fs::create_dir(&operand_dir).unwrap();
+        assert!(ln_exec(&[source.clone(), operand_dir.clone()], &settings).is_ok());
+        assert!(operand_dir.is_dir());
+        assert_eq!(
+            fs::read_to_string(operand_dir.join("source")).unwrap(),
+            "data"
+        );
+
+        let target_source = temp.path().join("target-source");
+        fs::write(&target_source, "target-data").unwrap();
+        let target_dir = temp.path().join("target-directory");
+        fs::create_dir(&target_dir).unwrap();
+        let target_settings = LnSettings {
+            target_dir: Some(target_dir.clone()),
+            ..settings
+        };
+        assert!(ln_exec(&[target_source], &target_settings).is_ok());
+        assert!(target_dir.is_dir());
+        assert_eq!(
+            fs::read_to_string(target_dir.join("target-source")).unwrap(),
+            "target-data"
+        );
     }
 
     #[cfg(unix)]

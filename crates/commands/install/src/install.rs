@@ -62,7 +62,7 @@ use std::fs::OpenOptions;
 use std::io::{self, Read, Seek, SeekFrom};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::{MetadataExt, chown};
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt, chown};
 #[cfg(target_os = "linux")]
 use std::os::unix::io::AsRawFd;
 #[cfg(unix)]
@@ -1382,7 +1382,14 @@ fn create_leading_dirs(path: &Path, verbose: bool, b: &Installer) -> Result<(), 
             }
             continue;
         }
-        fs::create_dir(&cur)?;
+        let mut builder = fs::DirBuilder::new();
+        builder.mode(DEFAULT_MODE).create(&cur)?;
+        // mkdir still applies umask; restore rwx bits while keeping inherited special bits.
+        let special_mode = fs::metadata(&cur)?.mode() & 0o7000;
+        fs::set_permissions(
+            &cur,
+            fs::Permissions::from_mode(DEFAULT_MODE | special_mode),
+        )?;
 
         if b.set_context {
             if let Some(ref ctx) = b.context {
@@ -2148,7 +2155,13 @@ mod tests {
     use std::fs::File;
     use std::io::Write;
     use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::process::CommandExt;
+    use std::process::Command as ProcessCommand;
     use tempfile::tempdir;
+
+    fn permission_mode(path: impl AsRef<Path>) -> u32 {
+        std::fs::metadata(path).unwrap().mode() & 0o7777
+    }
 
     #[test]
     fn test_tool_implementation() {
@@ -2747,6 +2760,67 @@ mod tests {
         );
         assert_eq!(std::fs::read_to_string(&target).unwrap(), "KEEP");
         assert_eq!(std::fs::metadata(&target).unwrap().mode() & 0o777, 0o600);
+    }
+
+    #[test]
+    fn test_leading_directories_ignore_umask() {
+        const CHILD_ROOT: &str = "CT_INSTALL_UMASK_TEST_ROOT";
+
+        if let Some(root) = std::env::var_os(CHILD_ROOT) {
+            let root = PathBuf::from(root);
+            let installer = Installer {
+                specified_mode: Some(0o700),
+                ..Default::default()
+            };
+
+            let directory_target = root.join("existing/ancestor/target");
+            create_leading_dirs(&directory_target, false, &installer).unwrap();
+            installer.set_directory_mode(&directory_target).unwrap();
+
+            let create_leading_parent = root.join("create-leading/a/b");
+            create_leading_dirs(&create_leading_parent, false, &installer).unwrap();
+
+            let setgid_parent = root.join("setgid/a/b");
+            create_leading_dirs(&setgid_parent, false, &installer).unwrap();
+            return;
+        }
+
+        let temp = tempdir().unwrap();
+        let existing = temp.path().join("existing");
+        std::fs::create_dir(&existing).unwrap();
+        std::fs::set_permissions(&existing, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let setgid = temp.path().join("setgid");
+        std::fs::create_dir(&setgid).unwrap();
+        std::fs::set_permissions(&setgid, std::fs::Permissions::from_mode(0o2755)).unwrap();
+
+        let mut child = ProcessCommand::new(std::env::current_exe().unwrap());
+        child
+            .args(["--exact", "tests::test_leading_directories_ignore_umask"])
+            .env(CHILD_ROOT, temp.path());
+        unsafe {
+            child.pre_exec(|| {
+                libc::umask(0o077);
+                Ok(())
+            });
+        }
+
+        assert!(child.status().unwrap().success());
+        assert_eq!(permission_mode(existing), 0o700);
+        assert_eq!(
+            permission_mode(temp.path().join("existing/ancestor")),
+            0o755
+        );
+        assert_eq!(
+            permission_mode(temp.path().join("existing/ancestor/target")),
+            0o700
+        );
+        assert_eq!(permission_mode(temp.path().join("create-leading/a")), 0o755);
+        assert_eq!(
+            permission_mode(temp.path().join("create-leading/a/b")),
+            0o755
+        );
+        assert_eq!(permission_mode(temp.path().join("setgid/a")), 0o2755);
+        assert_eq!(permission_mode(temp.path().join("setgid/a/b")), 0o2755);
     }
 
     #[test]

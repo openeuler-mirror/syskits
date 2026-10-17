@@ -794,7 +794,7 @@ impl SpecialSetting {
 /// 返回值:
 /// - `Ok(BaudRate)`: 如果解析成功且波特率被支持，则返回相应的波特率值
 /// - `Err(CtSimpleError)`: 如果解析失败或波特率不被支持，则返回错误
-fn parse_baud_rate(s: &str) -> CTResult<BaudRate> {
+pub(crate) fn parse_baud_rate(s: &str) -> CTResult<BaudRate> {
     // GNU stty matches speed spellings exactly. This is important for aliases
     // such as "134.5", "exta", and "extb", and prevents accepting unrelated
     // base-0 spellings such as "0x2580" for 9600 baud.

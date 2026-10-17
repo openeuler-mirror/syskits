@@ -33,7 +33,7 @@ use nix::sys::termios::{
     Termios, cfgetispeed, cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
-use settings::{BAUD_RATES, Settings};
+use settings::{BAUD_RATES, Settings, parse_baud_rate};
 use settings::{CONTROL_CHARS, CONTROL_SETTINGS, INPUT_SETTINGS, LOCAL_SETTINGS, OUTPUT_SETTINGS};
 use std::ffi::{OsStr, OsString};
 use std::fmt;
@@ -506,6 +506,21 @@ fn validate_setting_syntax(setting: &SttySetting) -> CTResult<()> {
                 1,
                 format!("invalid argument '{setting}'"),
             ));
+        }
+        if matches!(name, "ispeed" | "ospeed") {
+            let value = setting
+                .value
+                .as_deref()
+                .expect("speed value was checked above");
+            let valid = value
+                .to_str()
+                .is_some_and(|value| parse_baud_rate(value).is_ok());
+            if !valid {
+                return Err(CtSimpleError::new(
+                    1,
+                    format!("invalid {name} '{}'", value.to_string_lossy()),
+                ));
+            }
         }
         return Ok(());
     }
@@ -2176,6 +2191,15 @@ mod tests {
         fn test_pre_device_validation_rejects_invalid_baud_rate() {
             assert!(validate_settings_before_device(&parse_settings(&["ispeed", "420"])).is_err());
             assert!(validate_settings_before_device(&parse_settings(&["ospeed", "420"])).is_err());
+        }
+
+        #[test]
+        fn test_pre_device_validation_reports_invalid_speed_spelling() {
+            for speed_type in ["ispeed", "ospeed"] {
+                let settings = parse_settings(&[speed_type, "0x2580"]);
+                let error = validate_settings_before_device(&settings).unwrap_err();
+                assert_eq!(error.to_string(), format!("invalid {speed_type} '0x2580'"));
+            }
         }
 
         #[test]

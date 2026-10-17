@@ -71,7 +71,7 @@ pub struct LnSettings {
     /// 是否跟随符号链接
     is_logical: bool,
     /// 指定的目标目录
-    target_dir: Option<String>,
+    target_dir: Option<PathBuf>,
     /// 是否将目标视为普通文件
     is_no_target_dir: bool,
     /// 是否不解引用符号链接
@@ -225,9 +225,9 @@ pub fn ln_main(args: impl ctcore::Args) -> CTResult<()> {
     /* the list of files */
 
     let paths: Vec<PathBuf> = matches
-        .get_many::<String>(LN_ARG_FILES)
+        .get_many::<PathBuf>(LN_ARG_FILES)
         .unwrap()
-        .map(PathBuf::from)
+        .cloned()
         .collect();
 
     let settings = LnSettings::new(&matches)?;
@@ -287,6 +287,7 @@ pub fn ct_app() -> Command {
             .help(t!("ln.clap.ln_target_directory"))
             .value_name("DIRECTORY")
             .value_hint(clap::ValueHint::DirPath)
+            .value_parser(clap::builder::ValueParser::path_buf())
             .conflicts_with(lnoptions::LN_NO_TARGET_DIRECTORY),
         Arg::new(lnoptions::LN_NO_TARGET_DIRECTORY)
             .short('T')
@@ -317,6 +318,7 @@ pub fn ct_app() -> Command {
         Arg::new(LN_ARG_FILES)
             .action(ArgAction::Append)
             .value_hint(clap::ValueHint::AnyPath)
+            .value_parser(clap::builder::ValueParser::path_buf())
             .required(true)
             .num_args(1..),
     ];
@@ -362,7 +364,7 @@ pub fn ct_app() -> Command {
 fn ln_exec(files: &[PathBuf], settings: &LnSettings) -> CTResult<()> {
     // 处理第四种形式：使用 -t 选项指定目标目录
     if let Some(ref target_dir) = settings.target_dir {
-        return link_files_in_dir(files, &PathBuf::from(target_dir), settings);
+        return link_files_in_dir(files, target_dir, settings);
     }
 
     // 如果没有指定 -T 选项
@@ -483,18 +485,8 @@ fn handle_no_dereference_path(target_dir: &Path) -> CTResult<PathBuf> {
 
 /// 构建普通目标路径。
 fn build_normal_target_path(src: &Path, target_dir: &Path) -> CTResult<PathBuf> {
-    match src.as_os_str().to_str() {
-        Some(name) => {
-            let basename = Path::new(name)
-                .file_name()
-                .map_or_else(|| name, |b| b.to_str().unwrap());
-            Ok(target_dir.join(basename))
-        }
-        None => {
-            ct_show_error!("cannot stat {}: No such file or directory", src.quote());
-            Err(LnError::SomeLinksFailed.into())
-        }
-    }
+    let basename = src.file_name().unwrap_or_else(|| src.as_os_str());
+    Ok(target_dir.join(basename))
 }
 
 fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
@@ -834,8 +826,8 @@ impl LnSettings {
             is_logical: logical,
             is_relative: matches.get_flag(lnoptions::LN_RELATIVE),
             target_dir: matches
-                .get_one::<String>(lnoptions::LN_TARGET_DIRECTORY)
-                .map(String::from),
+                .get_one::<PathBuf>(lnoptions::LN_TARGET_DIRECTORY)
+                .cloned(),
             is_no_target_dir: matches.get_flag(lnoptions::LN_NO_TARGET_DIRECTORY),
             is_no_dereference: matches.get_flag(lnoptions::LN_NO_DEREFERENCE),
             is_verbose: matches.get_flag(lnoptions::LN_VERBOSE),
@@ -924,6 +916,57 @@ mod tests {
             assert!(settings.is_symbolic);
             assert!(settings.is_directory);
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_non_utf8_operands() {
+        use std::os::unix::ffi::OsStringExt;
+        use std::os::unix::fs::MetadataExt as _;
+
+        let temp = tempdir().unwrap();
+        let positional_dir = temp.path().join("positional");
+        fs::create_dir(&positional_dir).unwrap();
+        let source = positional_dir.join(OsString::from_vec(b"source-\xff".to_vec()));
+        let destination = positional_dir.join(OsString::from_vec(b"destination-\xfe".to_vec()));
+        fs::write(&source, "data").unwrap();
+
+        ln_main(
+            [
+                OsString::from("ln"),
+                source.clone().into_os_string(),
+                destination.clone().into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .unwrap();
+        assert_eq!(
+            fs::metadata(&source).unwrap().ino(),
+            fs::metadata(&destination).unwrap().ino()
+        );
+
+        let target_root = temp.path().join("target");
+        fs::create_dir(&target_root).unwrap();
+        let target_dir = target_root.join(OsString::from_vec(b"directory-\xfd".to_vec()));
+        fs::create_dir(&target_dir).unwrap();
+        let target_source = target_root.join(OsString::from_vec(b"source-\xfc".to_vec()));
+        fs::write(&target_source, "data").unwrap();
+
+        ln_main(
+            [
+                OsString::from("ln"),
+                OsString::from("-t"),
+                target_dir.clone().into_os_string(),
+                target_source.clone().into_os_string(),
+            ]
+            .into_iter(),
+        )
+        .unwrap();
+        let target_link = target_dir.join(target_source.file_name().unwrap());
+        assert_eq!(
+            fs::metadata(&target_source).unwrap().ino(),
+            fs::metadata(target_link).unwrap().ino()
+        );
     }
 
     #[test]
@@ -1190,7 +1233,7 @@ mod tests {
         let new_target = temp.path().join("new_target");
         fs::create_dir(&new_target).unwrap();
         let settings = LnSettings {
-            target_dir: Some(new_target.to_string_lossy().into_owned()),
+            target_dir: Some(new_target.clone()),
             ..settings
         };
         let files = vec![source.clone(), source2.clone()];

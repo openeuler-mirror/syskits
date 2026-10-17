@@ -229,19 +229,6 @@ impl SttyFlags {
             .map(|v| v.map(|s| s.as_str()).collect::<Vec<&str>>())
             .map(|args| parse_settings(&args));
 
-        // 根据命令行参数确定设备类型
-        let file = match matches.get_one::<String>(stty_flags::STTY_FILE) {
-            // 当指定文件时，以非阻塞模式打开文件
-            Some(f) => {
-                let fd = std::fs::OpenOptions::new()
-                    .read(true)
-                    .custom_flags(O_NONBLOCK)
-                    .open(f)
-                    .map_err(|e| CtSimpleError::new(1, format!("Failed to open device: {e}")))?;
-                Device::File(fd)
-            }
-            None => Device::Stdin(stdin()),
-        };
         let file_name = matches.get_one::<String>(stty_flags::STTY_FILE).cloned();
 
         Ok(Self {
@@ -251,9 +238,25 @@ impl SttyFlags {
             is_save: matches.get_flag(stty_flags::STTY_SAVE),
             stdout_is_terminal: false,
             file_name,
-            file,
+            // GNU validates every setting before opening the requested file.
+            // Keep stdin as a placeholder until the checking pass completes.
+            file: Device::Stdin(stdin()),
             settings,
         })
+    }
+
+    fn open_file_if_requested(&mut self) -> CTResult<()> {
+        let Some(file_name) = &self.file_name else {
+            return Ok(());
+        };
+
+        let fd = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(O_NONBLOCK)
+            .open(file_name)
+            .map_err(|e| CtSimpleError::new(1, format!("Failed to open device: {e}")))?;
+        self.file = Device::File(fd);
+        Ok(())
     }
 
     /// 检查配置选项是否有效
@@ -466,6 +469,42 @@ fn tcsetattr_arg_for_setting(setting: &str) -> Option<SetArg> {
     }
 }
 
+fn setting_uses_device_during_apply(setting: &str) -> bool {
+    matches!(
+        setting.split_whitespace().next(),
+        Some("speed" | "size" | "rows" | "cols" | "columns")
+    )
+}
+
+fn validate_settings_before_device(settings: &[String]) -> CTResult<()> {
+    let libc_termios = unsafe { std::mem::zeroed::<nix::libc::termios>() };
+    let mut check_mode = Termios::from(libc_termios);
+    let check_device = Device::Stdin(stdin());
+
+    for setting in settings {
+        validate_setting_syntax(setting)?;
+
+        // GNU's checking pass validates the presence of these operands but
+        // postpones their ioctl or output work until after opening the device.
+        if is_drain_setting(setting) || setting_uses_device_during_apply(setting) {
+            continue;
+        }
+
+        let applied = stty_apply_setting(&mut check_mode, setting, &check_device)?;
+        if matches!(
+            applied,
+            ControlFlow::Break(false) | ControlFlow::Continue(())
+        ) {
+            return Err(CtSimpleError::new(
+                1,
+                format!("invalid argument '{setting}'"),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 /// 设置或打印终端的配置
 ///
 /// 此函数根据提供的`SttyFlags`参数检查、获取或设置终端属性
@@ -484,10 +523,10 @@ fn stty<W: Write>(opts: &mut SttyFlags, writer: &mut W) -> CTResult<()> {
     opts.check()?;
 
     if let Some(settings) = &opts.settings {
-        for setting in settings {
-            validate_setting_syntax(setting)?;
-        }
+        validate_settings_before_device(settings)?;
     }
+
+    opts.open_file_if_requested()?;
 
     opts.stdout_is_terminal = std::io::stdout().is_terminal();
 
@@ -1751,16 +1790,30 @@ mod tests {
 
         #[test]
         fn test_stty_flags_new_with_file_option() {
-            if should_skip_tty_tests() {
-                println!("Skipping test_stty_flags_new_with_file_option in container environment");
-                return;
-            }
             let command = ct_app();
             let matches = command
-                .try_get_matches_from(vec![ctcore::ct_util_name(), "-F", "/dev/tty"])
+                .try_get_matches_from(vec![ctcore::ct_util_name(), "-F", "/dev/null"])
                 .unwrap();
-            let flags = SttyFlags::new(&matches).unwrap();
+            let mut flags = SttyFlags::new(&matches).unwrap();
+            assert!(matches!(flags.file, Device::Stdin(_)));
+            flags.open_file_if_requested().unwrap();
             assert!(matches!(flags.file, Device::File(_)));
+        }
+
+        #[test]
+        fn test_stty_flags_defer_file_open_errors() {
+            let command = ct_app();
+            let matches = command
+                .try_get_matches_from(vec![
+                    ctcore::ct_util_name(),
+                    "-F",
+                    "/definitely/missing/stty-device",
+                ])
+                .unwrap();
+            let mut flags = SttyFlags::new(&matches).unwrap();
+
+            assert!(matches!(flags.file, Device::Stdin(_)));
+            assert!(flags.open_file_if_requested().is_err());
         }
 
         #[test]
@@ -1871,6 +1924,18 @@ mod tests {
             assert!(validate_setting_syntax("ofill").is_ok());
             assert!(validate_setting_syntax("-ofill").is_ok());
             assert!(validate_setting_syntax("ofill extra").is_err());
+        }
+
+        #[test]
+        fn test_pre_device_validation_rejects_invalid_baud_rate() {
+            assert!(validate_settings_before_device(&["ispeed 420".to_string()]).is_err());
+            assert!(validate_settings_before_device(&["ospeed 420".to_string()]).is_err());
+        }
+
+        #[test]
+        fn test_pre_device_validation_defers_window_size_ioctls() {
+            assert!(validate_settings_before_device(&["rows invalid".to_string()]).is_ok());
+            assert!(validate_settings_before_device(&["columns invalid".to_string()]).is_ok());
         }
     }
 

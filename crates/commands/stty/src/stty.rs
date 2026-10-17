@@ -876,8 +876,7 @@ fn stty_print_control_chars<W: Write>(
     if opts.is_all || !termios.local_flags.contains(L::ICANON) {
         let min = termios.control_chars[SpecialCharacterIndices::VMIN as usize];
         let time = termios.control_chars[SpecialCharacterIndices::VTIME as usize];
-        items.push(format!("min = {min};"));
-        items.push(format!("time = {time};"));
+        items.push(format!("min = {min}; time = {time};"));
     }
 
     write_wrapped_items(writer, items, " ", output_width(opts))
@@ -2348,6 +2347,10 @@ mod tests {
             let rendered = String::from_utf8(out).unwrap();
             assert!(rendered.lines().all(|line| line.len() <= 12));
             assert_eq!(rendered, "alpha beta\ngamma delta\n");
+
+            let mut exact_out = Vec::new();
+            write_wrapped_items(&mut exact_out, ["alpha", "123456"], " ", 12).unwrap();
+            assert_eq!(String::from_utf8(exact_out).unwrap(), "alpha 123456\n");
         }
 
         #[test]
@@ -2411,6 +2414,50 @@ mod tests {
             assert_eq!(
                 String::from_utf8(noncanonical_out).unwrap(),
                 "min = 1; time = 0;\n"
+            );
+        }
+
+        #[test]
+        fn test_all_output_wraps_min_time_as_one_field() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            for (name, index) in CONTROL_CHARS {
+                if let Some(value) = sane_control_char_value(name) {
+                    termios.control_chars[*index as usize] = value;
+                }
+            }
+            termios.control_chars[SpecialCharacterIndices::VEOL as usize] = 0;
+            termios.control_chars[SpecialCharacterIndices::VEOL2 as usize] = 0;
+            termios.control_chars[SpecialCharacterIndices::VSWTC as usize] = 0;
+            termios.control_chars[SpecialCharacterIndices::VMIN as usize] = 1;
+            termios.control_chars[SpecialCharacterIndices::VTIME as usize] = 0;
+
+            let opts = SttyFlags {
+                is_all: true,
+                is_save: false,
+                stdout_is_terminal: false,
+                file_name: None,
+                file: Device::Stdin(stdin()),
+                settings: None,
+            };
+            let old_columns = std::env::var_os("COLUMNS");
+            unsafe {
+                std::env::set_var("COLUMNS", "54");
+            }
+
+            let mut out = Vec::new();
+            let result = stty_print_control_chars(&termios, &opts, &mut out);
+
+            unsafe {
+                match old_columns {
+                    Some(value) => std::env::set_var("COLUMNS", value),
+                    None => std::env::remove_var("COLUMNS"),
+                }
+            }
+
+            result.unwrap();
+            let rendered = String::from_utf8(out).unwrap();
+            assert!(
+                rendered.contains("werase = ^W; lnext = ^V; discard = ^O;\nmin = 1; time = 0;\n")
             );
         }
 

@@ -861,9 +861,10 @@ fn ln_numbered_backup_path(path: &Path) -> PathBuf {
 }
 
 fn ln_existing_backup_path(path: &Path, suffix: &OsStr) -> PathBuf {
-    let test_path = ln_simple_backup_path(path, OsStr::new(".~1~"));
-    if test_path.exists() {
-        return ln_numbered_backup_path(path);
+    let first_numbered_path = ln_simple_backup_path(path, OsStr::new(".~1~"));
+    let next_numbered_path = ln_numbered_backup_path(path);
+    if next_numbered_path != first_numbered_path {
+        return next_numbered_path;
     }
     ln_simple_backup_path(path, suffix)
 }
@@ -1257,6 +1258,23 @@ mod tests {
         assert_eq!(
             ln_numbered_backup_path(&dangling_destination),
             ln_simple_backup_path(&dangling_destination, OsStr::new(".~2~"))
+        );
+    }
+
+    #[test]
+    fn test_existing_backup_detects_any_numbered_version() {
+        let temp = tempdir().unwrap();
+        let destination = temp.path().join("destination");
+        fs::write(&destination, "old").unwrap();
+        fs::write(
+            ln_simple_backup_path(&destination, OsStr::new(".~2~")),
+            "two",
+        )
+        .unwrap();
+
+        assert_eq!(
+            ln_existing_backup_path(&destination, OsStr::new("~")),
+            ln_simple_backup_path(&destination, OsStr::new(".~3~"))
         );
     }
 

@@ -589,6 +589,10 @@ fn setting_uses_device_during_apply(setting: &SttySetting) -> bool {
     )
 }
 
+fn setting_requires_tcsetattr(setting: &SttySetting) -> bool {
+    !is_drain_setting(setting) && !setting_uses_device_during_apply(setting)
+}
+
 fn validate_settings_before_device(settings: &[SttySetting]) -> CTResult<()> {
     let libc_termios = unsafe { std::mem::zeroed::<nix::libc::termios>() };
     let mut check_mode = Termios::from(libc_termios);
@@ -664,13 +668,15 @@ fn stty<W: Write>(opts: &mut SttyFlags, writer: &mut W, dev_debug: bool) -> CTRe
     // 通过 stty_apply_setting 应用设置
     if let Some(settings) = &opts.settings {
         let mut tcsetattr_arg = SetArg::TCSADRAIN;
-        let mut has_terminal_setting = false;
+        let mut has_non_drain_setting = false;
+        let mut requires_tcsetattr = false;
 
         for setting in settings {
             if let Some(arg) = tcsetattr_arg_for_setting(setting) {
                 tcsetattr_arg = arg;
             } else {
-                has_terminal_setting = true;
+                has_non_drain_setting = true;
+                requires_tcsetattr |= setting_requires_tcsetattr(setting);
             }
         }
 
@@ -689,10 +695,12 @@ fn stty<W: Write>(opts: &mut SttyFlags, writer: &mut W, dev_debug: bool) -> CTRe
             }
         }
 
-        if !has_terminal_setting {
+        if !has_non_drain_setting {
             stty_print_settings(&termios, opts, writer)?;
             return Ok(());
-        } else {
+        }
+
+        if requires_tcsetattr {
             tcsetattr(opts.file.as_fd(), tcsetattr_arg, &termios)
                 .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
             let current = tcgetattr_preserving_raw(opts.file.as_fd())
@@ -2216,6 +2224,20 @@ mod tests {
             assert!(
                 validate_settings_before_device(&parse_settings(&["columns", "invalid"])).is_ok()
             );
+        }
+
+        #[test]
+        fn test_query_and_window_settings_do_not_require_tcsetattr() {
+            let settings =
+                parse_settings(&["speed", "size", "rows", "25", "cols", "80", "columns", "81"]);
+            assert!(
+                settings
+                    .iter()
+                    .all(|setting| !setting_requires_tcsetattr(setting))
+            );
+
+            let mixed = parse_settings(&["speed", "echo"]);
+            assert!(mixed.iter().any(setting_requires_tcsetattr));
         }
 
         #[test]

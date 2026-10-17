@@ -188,7 +188,9 @@ impl TimeoutFlags {
             .and_then(|mut signals| signals.next_back())
         {
             Some(signal_) => {
-                let signal_result = get_ct_signal_by_name_or_value(signal_);
+                // GNU operand2sig normalizes signal names in the C locale.
+                let normalized_signal = signal_.to_ascii_uppercase();
+                let signal_result = get_ct_signal_by_name_or_value(&normalized_signal);
                 match signal_result {
                     None => {
                         return Err(CTsageError::new(
@@ -666,6 +668,20 @@ mod tests {
                 flags.signal,
                 get_ct_signal_by_name_or_value("KILL").unwrap()
             );
+        }
+
+        #[cfg(target_os = "linux")]
+        #[test]
+        fn test_signal_names_are_case_insensitive() {
+            for (signal, expected) in [
+                ("term", libc::SIGTERM as usize),
+                ("sigterm", libc::SIGTERM as usize),
+                ("rtmin+1", (libc::SIGRTMIN() + 1) as usize),
+            ] {
+                let args = vec![ctcore::ct_util_name(), "-s", signal, "1", "true"];
+                let matches = ct_app().try_get_matches_from(args).unwrap();
+                assert_eq!(TimeoutFlags::new(&matches).unwrap().signal, expected);
+            }
         }
 
         #[test]

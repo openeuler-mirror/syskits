@@ -70,7 +70,19 @@ fn extract_negative_modes(mut extr_args: impl ctcore::Args) -> (Option<String>, 
                 && arg.starts_with('-')
                 && matches!(
                     arg.chars().nth(1).unwrap(),
-                    'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7'
+                    'r' | 'w'
+                        | 'x'
+                        | 'X'
+                        | 's'
+                        | 't'
+                        | 'u'
+                        | 'g'
+                        | 'o'
+                        | 'a'
+                        | ','
+                        | '+'
+                        | '='
+                        | '0'..='7'
                 )
         });
 
@@ -1597,6 +1609,17 @@ mod tests {
         );
         assert_eq!(c, Some("-w,-r".to_string()));
         assert_eq!(a, ["w", "file\\ with\\ spaces.txt"]);
+    }
+
+    #[test]
+    fn test_extract_option_like_mode_prefixes() {
+        for mode in ["-+x", "-=x", "-,u+x", "-a+x"] {
+            let (parsed_mode, args) =
+                extract_negative_modes([mode, "file"].iter().map(OsString::from));
+
+            assert_eq!(parsed_mode, Some(mode.to_string()));
+            assert_eq!(args, ["w", "file"]);
+        }
     }
 
     #[test]

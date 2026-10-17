@@ -24,7 +24,9 @@ use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 
 use device::Device;
-use nix::libc::{O_NONBLOCK, STDOUT_FILENO, TIOCGWINSZ, TIOCSWINSZ, c_ushort, tcflag_t};
+use nix::libc::{
+    F_GETFL, F_SETFL, O_NONBLOCK, STDOUT_FILENO, TIOCGWINSZ, TIOCSWINSZ, c_ushort, tcflag_t,
+};
 use nix::sys::termios::SetArg;
 use nix::sys::termios::{
     ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O, SpecialCharacterIndices,
@@ -255,6 +257,23 @@ fn normalize_stty_file_short_option(args: impl ctcore::Args) -> Vec<OsString> {
     normalized
 }
 
+fn clear_nonblocking(file: &std::fs::File) -> std::io::Result<()> {
+    let fd = file.as_raw_fd();
+
+    // SAFETY: fd is owned by `file`; both commands only read or update its status flags.
+    let flags = unsafe { nix::libc::fcntl(fd, F_GETFL) };
+    if flags == -1 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    let result = unsafe { nix::libc::fcntl(fd, F_SETFL, flags & !O_NONBLOCK) };
+    if result == -1 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    Ok(())
+}
+
 impl SttyFlags {
     fn new(matches: &ArgMatches) -> CTResult<Self> {
         // 处理特别配置中的键值对逻辑，这里从命令行参数中获取设置项，然后解析这些设置项
@@ -289,6 +308,15 @@ impl SttyFlags {
             .custom_flags(O_NONBLOCK)
             .open(file_name)
             .map_err(|e| CtSimpleError::new(1, format!("Failed to open device: {e}")))?;
+        clear_nonblocking(&fd).map_err(|e| {
+            CtSimpleError::new(
+                1,
+                format!(
+                    "{}: couldn't reset non-blocking mode: {e}",
+                    file_name.to_string_lossy()
+                ),
+            )
+        })?;
         self.file = Device::File(fd);
         Ok(())
     }
@@ -1880,6 +1908,25 @@ mod tests {
             assert!(matches!(flags.file, Device::Stdin(_)));
             flags.open_file_if_requested().unwrap();
             assert!(matches!(flags.file, Device::File(_)));
+        }
+
+        #[test]
+        fn test_clear_nonblocking_status_flag() {
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(O_NONBLOCK)
+                .open("/dev/null")
+                .unwrap();
+
+            let flags = unsafe { nix::libc::fcntl(file.as_raw_fd(), F_GETFL) };
+            assert_ne!(flags, -1);
+            assert_ne!(flags & O_NONBLOCK, 0);
+
+            clear_nonblocking(&file).unwrap();
+
+            let flags = unsafe { nix::libc::fcntl(file.as_raw_fd(), F_GETFL) };
+            assert_ne!(flags, -1);
+            assert_eq!(flags & O_NONBLOCK, 0);
         }
 
         #[test]

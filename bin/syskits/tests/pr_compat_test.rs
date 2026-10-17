@@ -291,3 +291,28 @@ fn pr_custom_expand_character_also_expands_plain_tabs() {
     assert_eq!(output.stdout, b"a   b   c\n");
     assert!(output.stderr.is_empty());
 }
+
+#[test]
+fn pr_discards_backspace_at_column_zero() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["pr", "-t"])
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run syskits pr");
+
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(b"\x08X\n")
+        .expect("write input");
+    let output = child.wait_with_output().expect("wait for syskits pr");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"X\n");
+    assert!(output.stderr.is_empty());
+}

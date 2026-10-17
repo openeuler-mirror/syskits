@@ -2544,6 +2544,8 @@ fn pr_get_rendered_line_for_printing(
                     numbering_width,
                     expand_plain_tabs,
                 )
+            } else if !output_opts.show_control_chars && !output_opts.show_nonprinting {
+                discard_backspace_underflow(content, numbering_width)
             } else {
                 content.clone()
             }
@@ -2738,6 +2740,32 @@ fn pr_take_display_width(s: &str, max_width: usize, tab_width: usize) -> String 
 
         result.push(c);
         current_col = next_col;
+    }
+
+    result
+}
+
+fn discard_backspace_underflow(s: &str, initial_col: usize) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut current_col = initial_col;
+
+    for c in s.chars() {
+        if c == '\u{0008}' {
+            if current_col > 0 {
+                result.push(c);
+                current_col -= 1;
+            }
+            continue;
+        }
+
+        result.push(c);
+        if c == '\t' {
+            current_col = (current_col / 8 + 1) * 8;
+        } else if let Some(byte) = pr_raw_byte_from_char(c) {
+            current_col += pr_raw_byte_display_width(byte);
+        } else {
+            current_col += UnicodeWidthChar::width(c).unwrap_or(0);
+        }
     }
 
     result

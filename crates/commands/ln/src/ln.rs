@@ -543,6 +543,13 @@ fn is_same_file(path1: &Path, path2: &Path, settings: &LnSettings) -> bool {
     };
 
     if is_same_inode {
+        // GNU permits a symbolic link onto itself when the original directory
+        // entry is preserved by a backup. Hard links and -f without backups
+        // still need the same-file protection below.
+        if settings.is_symbolic && settings.backup != CtBackupMode::NoBackup {
+            return false;
+        }
+
         // 如果将要覆盖或备份目标文件
         let will_replace = settings.overwrite == OverwriteMode::Force
             || settings.overwrite == OverwriteMode::Interactive
@@ -1276,6 +1283,49 @@ mod tests {
             ln_existing_backup_path(&destination, OsStr::new("~")),
             ln_simple_backup_path(&destination, OsStr::new(".~3~"))
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_symbolic_self_backup_preserves_original_contents() {
+        let temp = tempdir().unwrap();
+        let symbolic_path = temp.path().join("symbolic");
+        fs::write(&symbolic_path, "old").unwrap();
+        let symbolic_settings = LnSettings {
+            backup: CtBackupMode::SimpleBackup,
+            suffix: OsString::from("~"),
+            is_symbolic: true,
+            ..LnSettings::default()
+        };
+
+        ln_link(&symbolic_path, &symbolic_path, &symbolic_settings).unwrap();
+
+        assert_eq!(fs::read_link(&symbolic_path).unwrap(), symbolic_path);
+        assert_eq!(
+            fs::read_to_string(temp.path().join("symbolic~")).unwrap(),
+            "old"
+        );
+
+        let forced_path = temp.path().join("forced");
+        fs::write(&forced_path, "forced-old").unwrap();
+        let forced_settings = LnSettings {
+            overwrite: OverwriteMode::Force,
+            is_symbolic: true,
+            ..LnSettings::default()
+        };
+        assert!(ln_link(&forced_path, &forced_path, &forced_settings).is_err());
+        assert_eq!(fs::read_to_string(&forced_path).unwrap(), "forced-old");
+
+        let hard_path = temp.path().join("hard");
+        fs::write(&hard_path, "hard-old").unwrap();
+        let hard_settings = LnSettings {
+            backup: CtBackupMode::SimpleBackup,
+            suffix: OsString::from("~"),
+            ..LnSettings::default()
+        };
+        assert!(ln_link(&hard_path, &hard_path, &hard_settings).is_err());
+        assert_eq!(fs::read_to_string(&hard_path).unwrap(), "hard-old");
+        assert!(!temp.path().join("hard~").exists());
     }
 
     #[test]

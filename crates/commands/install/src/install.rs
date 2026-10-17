@@ -39,7 +39,7 @@ use ctcore::Tool;
 use ctcore::ct_backup_control::{self, CtBackupMode};
 use ctcore::ct_display::Quotable;
 use ctcore::ct_entries::{grp2gid, usr2uid};
-use ctcore::ct_error::{CTError, CTIoError, CTResult, FromIo};
+use ctcore::ct_error::{CTError, CTIoError, CTResult};
 use ctcore::ct_fs::dir_strip_dot_for_creation;
 use ctcore::ct_mode::get_umask;
 use ctcore::ct_perms::{
@@ -295,7 +295,11 @@ impl Display for InstallError {
         match self {
             // 创建目录失败,显示具体错误原因
             Self::CreateDirFailed(dir, e) => {
-                Display::fmt(&uio_error!(e, "failed to create {}", dir.quote()), f)
+                if e.raw_os_error() == Some(libc::EEXIST) {
+                    write!(f, "cannot create directory {}: File exists", dir.quote())
+                } else {
+                    Display::fmt(&uio_error!(e, "cannot create directory {}", dir.quote()), f)
+                }
             }
 
             // 修改文件权限失败
@@ -765,17 +769,27 @@ impl Installer {
     /// # 返回值
     /// 返回 `CTResult<()>`，表示操作是否成功
     fn create_directory(&self, path: &Path) -> CTResult<()> {
-        // 如果路径已存在，不需要创建
-        if path.exists() {
-            return Ok(());
-        }
-
         // 处理特殊情况：install -d foo/. 应该创建 foo/
         let path_to_create = dir_strip_dot_for_creation(path);
 
+        match fs::metadata(&path_to_create) {
+            Ok(metadata) if metadata.is_dir() => return Ok(()),
+            Ok(_) => {
+                return Err(InstallError::CreateDirFailed(
+                    path.to_path_buf(),
+                    io::Error::from_raw_os_error(libc::EEXIST),
+                )
+                .into());
+            }
+            Err(e) if e.kind() != io::ErrorKind::NotFound => {
+                return Err(InstallError::CreateDirFailed(path.to_path_buf(), e).into());
+            }
+            Err(_) => {}
+        }
+
         // 创建目录及其所有父目录，并在 verbose 模式下打印每一层
         create_leading_dirs(path_to_create.as_path(), self.verbose, self)
-            .map_err_context(|| path_to_create.as_path().maybe_quote().to_string())?;
+            .map_err(|e| InstallError::CreateDirFailed(path.to_path_buf(), e))?;
 
         Ok(())
     }
@@ -2671,6 +2685,28 @@ mod tests {
 
         assert_eq!(installer.backup_mode, CtBackupMode::ExistingBackup);
         assert_eq!(installer.suffix, ".bak");
+    }
+
+    #[test]
+    fn test_create_directory_rejects_existing_regular_file() {
+        let temp = tempdir().unwrap();
+        let target = temp.path().join("target");
+        std::fs::write(&target, "KEEP").unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600)).unwrap();
+
+        let installer = Installer {
+            specified_mode: Some(0o755),
+            ..Default::default()
+        };
+
+        let error = installer.create_directory(&target).unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            format!("cannot create directory {}: File exists", target.quote())
+        );
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "KEEP");
+        assert_eq!(std::fs::metadata(&target).unwrap().mode() & 0o777, 0o600);
     }
 
     #[test]

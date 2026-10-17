@@ -608,7 +608,7 @@ fn ln_link(src: &Path, dst: &Path, settings: &LnSettings) -> CTResult<()> {
     create_link(&source, dst, settings)?;
 
     // 4. 打印详细信息
-    print_link_info(dst, &source, backup_path, settings);
+    print_link_info(dst, &source, backup_path, settings)?;
 
     Ok(())
 }
@@ -801,13 +801,41 @@ fn is_root() -> bool {
 }
 
 /// 打印链接详细信息。
-fn print_link_info(dst: &Path, source: &Path, backup_path: Option<PathBuf>, settings: &LnSettings) {
-    if settings.is_verbose {
-        println!(
-            "{}",
-            format_link_info(dst, source, backup_path.as_deref(), settings.is_symbolic)
-        );
+fn print_link_info(
+    dst: &Path,
+    source: &Path,
+    backup_path: Option<PathBuf>,
+    settings: &LnSettings,
+) -> CTResult<()> {
+    if !settings.is_verbose {
+        return Ok(());
     }
+
+    let stdout = std::io::stdout();
+    let mut stdout = stdout.lock();
+    write_link_info(
+        &mut stdout,
+        dst,
+        source,
+        backup_path.as_deref(),
+        settings.is_symbolic,
+    )
+    .and_then(|()| stdout.flush())
+    .map_err_context(|| "write error".to_string())
+}
+
+fn write_link_info<W: Write>(
+    output: &mut W,
+    dst: &Path,
+    source: &Path,
+    backup_path: Option<&Path>,
+    is_symbolic: bool,
+) -> std::io::Result<()> {
+    writeln!(
+        output,
+        "{}",
+        format_link_info(dst, source, backup_path, is_symbolic)
+    )
 }
 
 fn format_link_info(
@@ -1476,6 +1504,32 @@ mod tests {
                 false,
             ),
             "'dest~' ~ 'dest' => 'source'"
+        );
+    }
+
+    #[test]
+    fn test_verbose_write_errors_are_returned() {
+        struct FailingWriter;
+
+        impl std::io::Write for FailingWriter {
+            fn write(&mut self, _buffer: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("full"))
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        assert!(
+            write_link_info(
+                &mut FailingWriter,
+                Path::new("link"),
+                Path::new("source"),
+                None,
+                true,
+            )
+            .is_err()
         );
     }
 

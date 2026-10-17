@@ -34,6 +34,7 @@ use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use settings::{BAUD_RATES, Settings};
 use settings::{CONTROL_CHARS, CONTROL_SETTINGS, INPUT_SETTINGS, LOCAL_SETTINGS, OUTPUT_SETTINGS};
 use std::ffi::OsString;
+use std::fmt;
 use std::io::{IsTerminal, Write, stdin};
 use std::ops::ControlFlow;
 use std::os::fd::AsFd;
@@ -55,7 +56,38 @@ struct SttyFlags {
     stdout_is_terminal: bool,
     file_name: Option<String>,
     file: Device,
-    settings: Option<Vec<String>>,
+    settings: Option<Vec<SttySetting>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct SttySetting {
+    name: String,
+    value: Option<String>,
+}
+
+impl SttySetting {
+    fn new(name: &str, value: Option<&str>) -> Self {
+        Self {
+            name: name.to_string(),
+            value: value.map(str::to_string),
+        }
+    }
+}
+
+impl From<&str> for SttySetting {
+    fn from(name: &str) -> Self {
+        Self::new(name, None)
+    }
+}
+
+impl fmt::Display for SttySetting {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)?;
+        if let Some(value) = &self.value {
+            write!(f, " {value}")?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -73,19 +105,19 @@ const OFILL_RAW_BIT: tcflag_t = 0o0000100;
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 const OFILL_RAW_BIT: tcflag_t = 0;
 
-// 解析配置参数，将参数与可能的值组合成一个字符串列表
+// 解析配置参数，保留每个 argv 元素的边界。
 //
 // # 参数
 // - `args`: &[&str] - 一个字符串切片，包含配置参数
 //
 // # 返回值
-// - Vec<String> - 一个字符串列表，每个字符串包含参数及其可能的值
-fn parse_settings(args: &[&str]) -> Vec<String> {
+// - Vec<SttySetting> - 设置名及其可能的值
+fn parse_settings(args: &[&str]) -> Vec<SttySetting> {
     let mut cfg_settings = Vec::new();
     let mut iter = args.iter().peekable();
 
     while let Some(arg) = iter.next() {
-        let mut setting = arg.to_string();
+        let mut value = None;
 
         // 检查当前参数是否为特殊设置，并获取其 requires_value 标志
         if let Some(entry) = settings::SPECIAL_SETTINGS
@@ -93,16 +125,14 @@ fn parse_settings(args: &[&str]) -> Vec<String> {
             .find(|entry| entry.name == *arg)
         {
             if entry.requires_value {
-                // 如果下一个参数存在，则将其作为值附加到当前设置后面
                 if let Some(next_arg) = iter.peek() {
-                    setting.push(' ');
-                    setting.push_str(next_arg);
+                    value = Some(**next_arg);
                     iter.next();
                 }
             }
         }
 
-        cfg_settings.push(setting);
+        cfg_settings.push(SttySetting::new(arg, value));
     }
 
     cfg_settings
@@ -390,23 +420,26 @@ fn find_combination_setting(name: &str) -> Option<bool> {
     Some(reversible)
 }
 
-fn validate_setting_syntax(setting: &str) -> CTResult<()> {
-    if BAUD_RATES.iter().any(|(text, _, _)| *text == setting) {
+fn validate_setting_syntax(setting: &SttySetting) -> CTResult<()> {
+    let name = setting.name.as_str();
+    let value = setting.value.as_deref();
+
+    if value.is_none() && BAUD_RATES.iter().any(|(text, _, _)| *text == name) {
         return Ok(());
     }
 
-    if setting.contains(':') {
+    if value.is_none() && name.contains(':') {
         return Ok(());
     }
-
-    let mut parts = setting.split_whitespace();
-    let Some(name) = parts.next() else {
-        return Err(CtSimpleError::new(1, "invalid argument ''"));
-    };
-    let value = parts.next();
 
     if let Some(entry) = find_special_setting(name) {
         if entry.requires_value && value.is_none() {
+            return Err(CtSimpleError::new(
+                1,
+                format!("invalid argument '{setting}'"),
+            ));
+        }
+        if !entry.requires_value && value.is_some() {
             return Err(CtSimpleError::new(
                 1,
                 format!("invalid argument '{setting}'"),
@@ -457,26 +490,29 @@ fn validate_setting_syntax(setting: &str) -> CTResult<()> {
     Ok(())
 }
 
-fn is_drain_setting(setting: &str) -> bool {
-    matches!(setting, "drain" | "-drain")
+fn is_drain_setting(setting: &SttySetting) -> bool {
+    setting.value.is_none() && matches!(setting.name.as_str(), "drain" | "-drain")
 }
 
-fn tcsetattr_arg_for_setting(setting: &str) -> Option<SetArg> {
-    match setting {
+fn tcsetattr_arg_for_setting(setting: &SttySetting) -> Option<SetArg> {
+    if setting.value.is_some() {
+        return None;
+    }
+    match setting.name.as_str() {
         "drain" => Some(SetArg::TCSADRAIN),
         "-drain" => Some(SetArg::TCSANOW),
         _ => None,
     }
 }
 
-fn setting_uses_device_during_apply(setting: &str) -> bool {
+fn setting_uses_device_during_apply(setting: &SttySetting) -> bool {
     matches!(
-        setting.split_whitespace().next(),
-        Some("speed" | "size" | "rows" | "cols" | "columns")
+        setting.name.as_str(),
+        "speed" | "size" | "rows" | "cols" | "columns"
     )
 }
 
-fn validate_settings_before_device(settings: &[String]) -> CTResult<()> {
+fn validate_settings_before_device(settings: &[SttySetting]) -> CTResult<()> {
     let libc_termios = unsafe { std::mem::zeroed::<nix::libc::termios>() };
     let mut check_mode = Termios::from(libc_termios);
     let check_device = Device::Stdin(stdin());
@@ -1040,26 +1076,28 @@ fn apply_raw_mode(termios: &mut Termios) {
     termios.control_chars[SpecialCharacterIndices::VTIME as usize] = 0;
 }
 
-/// 根据提供的字符串和设备信息应用终端设置。
+/// 根据结构化设置和设备信息应用终端设置。
 ///
-/// 该函数通过解析字符串 `s` 并将相应的设置应用到 `termios` 结构中，处理各种终端设置。它首先尝试应用波特率设置，
-/// 然后是特殊设置，最后是常规标志设置。如果字符串 `s` 以 '-' 开头，则表示应移除该设置。函数返回一个 `ControlFlow`，
+/// 该函数将 `setting` 应用到 `termios` 结构中。它首先尝试应用波特率设置，
+/// 然后是特殊设置，最后是常规标志设置。如果设置名以 '-' 开头，则表示应移除该设置。函数返回一个 `ControlFlow`，
 /// 表示是否应用了特殊设置。
 ///
 /// # 参数
 /// - `termios`: 可变引用到 `Termios` 结构，表示终端的设置。
-/// - `s`: 包含要应用设置的字符串切片。
+/// - `setting`: 包含要应用的设置名及可选值。
 /// - `device`: 引用到 `Device` 结构，提供设备特定的信息。
 ///
 /// # 返回值
-/// - `ControlFlow::Continue(false)`: 如果没有应用特殊设置。
+/// - `ControlFlow::Continue(())`: 如果没有找到匹配的设置。
 /// - `ControlFlow::Break(true)`: 如果成功应用了特殊设置。
 /// - `ControlFlow::Break(false)`: 如果成功应用了常规标志设置。
 fn stty_apply_setting(
     termios: &mut Termios,
-    s: &str,
+    setting: &SttySetting,
     device: &Device,
 ) -> CTResult<ControlFlow<bool>> {
+    let s = setting.name.as_str();
+
     if let ControlFlow::Break(applied) = stty_apply_recover_mode(termios, s) {
         return Ok(ControlFlow::Break(applied));
     }
@@ -1070,11 +1108,15 @@ fn stty_apply_setting(
     }
 
     // 处理特殊设置
-    if let ControlFlow::Break(applied) = stty_apply_special_setting(termios, s, device)? {
+    if let ControlFlow::Break(applied) = stty_apply_special_setting(termios, setting, device)? {
         return Ok(ControlFlow::Break(applied));
     }
 
     // 处理常规标志设置
+    if setting.value.is_some() {
+        return Ok(ControlFlow::Continue(()));
+    }
+
     let (remove, name) = match s.strip_prefix('-') {
         Some(s) => (true, s),
         None => (false, s),
@@ -1312,11 +1354,11 @@ fn stty_apply_combination_setting(
 
 /// 为终端应用特殊设置。例如：speed, rows, columns etc.
 ///
-/// 此函数解析包含设置信息的字符串，并根据预定义的特殊设置列表匹配和应用相应的配置。
+/// 此函数根据预定义的特殊设置列表匹配设置名，并传递未修改的 argv 值。
 ///
 /// # 参数
 /// - `termios`: 可变引用到 `Termios` 结构体，表示当前终端设置。
-/// - `s`: 包含设置信息的字符串切片，例如 "eol ^M"。
+/// - `setting`: 包含特殊设置名及可选值。
 /// - `device`: 引用到 `Device` 结构体，表示当前设备信息。
 ///
 /// # 返回值
@@ -1326,20 +1368,13 @@ fn stty_apply_combination_setting(
 ///   - `ControlFlow::Break(true)`: 如果设置成功应用。
 fn stty_apply_special_setting(
     termios: &mut Termios,
-    s: &str,
+    setting: &SttySetting,
     device: &Device,
 ) -> CTResult<ControlFlow<bool>> {
-    // 将输入拆分为部分（例如 "eol ^M" -> ["eol", "^M"]）
-    let parts: Vec<&str> = s.split_whitespace().collect();
-    if parts.is_empty() {
-        return Ok(ControlFlow::Continue(()));
-    }
-
     // 查找特殊设置
     for entry in settings::SPECIAL_SETTINGS {
-        if parts[0] == entry.name {
-            // 获取设置名称对应的值
-            let value = parts.get(1).copied();
+        if setting.name == entry.name {
+            let value = setting.value.as_deref();
 
             // 检查是否需要值但未提供
             if entry.requires_value && value.is_none() {
@@ -1826,7 +1861,7 @@ mod tests {
             assert!(flags.settings.is_some());
             assert_eq!(
                 flags.settings.unwrap(),
-                vec!["raw".to_string(), "-echo".to_string()]
+                vec![SttySetting::from("raw"), SttySetting::from("-echo")]
             );
         }
 
@@ -1862,7 +1897,7 @@ mod tests {
                     stdout_is_terminal: false,
                     file_name: None,
                     file: Device::Stdin(stdin()),
-                    settings: Some(vec![setting.to_string()]),
+                    settings: Some(vec![SttySetting::from(setting)]),
                 };
                 assert!(flags.check().is_ok());
             }
@@ -1876,7 +1911,7 @@ mod tests {
                 stdout_is_terminal: false,
                 file_name: None,
                 file: Device::Stdin(stdin()),
-                settings: Some(vec!["drain".to_string(), "echo".to_string()]),
+                settings: Some(vec![SttySetting::from("drain"), SttySetting::from("echo")]),
             };
             assert!(flags.check().is_err());
         }
@@ -1890,21 +1925,37 @@ mod tests {
         fn test_parse_settings_basic() {
             let args = &["raw", "9600"];
             let settings = parse_settings(args);
-            assert_eq!(settings, vec!["raw", "9600"]);
+            assert_eq!(
+                settings,
+                vec![SttySetting::from("raw"), SttySetting::from("9600")]
+            );
         }
 
         #[test]
         fn test_parse_settings_with_special_settings() {
             let args = &["min", "1", "time", "10"];
             let settings = parse_settings(args);
-            assert_eq!(settings, vec!["min 1", "time 10"]);
+            assert_eq!(
+                settings,
+                vec![
+                    SttySetting::new("min", Some("1")),
+                    SttySetting::new("time", Some("10")),
+                ]
+            );
         }
 
         #[test]
         fn test_parse_settings_mixed() {
             let args = &["raw", "min", "1", "9600"];
             let settings = parse_settings(args);
-            assert_eq!(settings, vec!["raw", "min 1", "9600"]);
+            assert_eq!(
+                settings,
+                vec![
+                    SttySetting::from("raw"),
+                    SttySetting::new("min", Some("1")),
+                    SttySetting::from("9600"),
+                ]
+            );
         }
 
         #[test]
@@ -1916,26 +1967,46 @@ mod tests {
 
         #[test]
         fn test_validate_setting_syntax_combination_and_custom() {
-            assert!(validate_setting_syntax("evenp").is_ok());
-            assert!(validate_setting_syntax("-evenp").is_ok());
-            assert!(validate_setting_syntax("ek").is_ok());
-            assert!(validate_setting_syntax("-ek").is_err());
+            assert!(validate_setting_syntax(&SttySetting::from("evenp")).is_ok());
+            assert!(validate_setting_syntax(&SttySetting::from("-evenp")).is_ok());
+            assert!(validate_setting_syntax(&SttySetting::from("ek")).is_ok());
+            assert!(validate_setting_syntax(&SttySetting::from("-ek")).is_err());
 
-            assert!(validate_setting_syntax("ofill").is_ok());
-            assert!(validate_setting_syntax("-ofill").is_ok());
-            assert!(validate_setting_syntax("ofill extra").is_err());
+            assert!(validate_setting_syntax(&SttySetting::from("ofill")).is_ok());
+            assert!(validate_setting_syntax(&SttySetting::from("-ofill")).is_ok());
+            assert!(validate_setting_syntax(&SttySetting::from("ofill extra")).is_err());
         }
 
         #[test]
         fn test_pre_device_validation_rejects_invalid_baud_rate() {
-            assert!(validate_settings_before_device(&["ispeed 420".to_string()]).is_err());
-            assert!(validate_settings_before_device(&["ospeed 420".to_string()]).is_err());
+            assert!(validate_settings_before_device(&parse_settings(&["ispeed", "420"])).is_err());
+            assert!(validate_settings_before_device(&parse_settings(&["ospeed", "420"])).is_err());
         }
 
         #[test]
         fn test_pre_device_validation_defers_window_size_ioctls() {
-            assert!(validate_settings_before_device(&["rows invalid".to_string()]).is_ok());
-            assert!(validate_settings_before_device(&["columns invalid".to_string()]).is_ok());
+            assert!(validate_settings_before_device(&parse_settings(&["rows", "invalid"])).is_ok());
+            assert!(
+                validate_settings_before_device(&parse_settings(&["columns", "invalid"])).is_ok()
+            );
+        }
+
+        #[test]
+        fn test_embedded_whitespace_preserves_argv_boundaries() {
+            let value_with_whitespace = parse_settings(&["erase", "X Y"]);
+            assert_eq!(
+                value_with_whitespace,
+                vec![SttySetting::new("erase", Some("X Y"))]
+            );
+            assert!(validate_settings_before_device(&value_with_whitespace).is_err());
+
+            let setting_with_whitespace = parse_settings(&["erase X"]);
+            assert_eq!(setting_with_whitespace, vec![SttySetting::from("erase X")]);
+            assert!(validate_settings_before_device(&setting_with_whitespace).is_err());
+
+            // GNU accepts a one-byte whitespace character as a literal value.
+            let literal_tab = parse_settings(&["erase", "\t"]);
+            assert!(validate_settings_before_device(&literal_tab).is_ok());
         }
     }
 
@@ -2176,7 +2247,7 @@ mod tests {
             let mut termios = unsafe { std::mem::zeroed::<Termios>() };
             let device = Device::Stdin(stdin());
             assert!(matches!(
-                stty_apply_special_setting(&mut termios, "size", &device),
+                stty_apply_special_setting(&mut termios, &SttySetting::from("size"), &device),
                 Ok(ControlFlow::Break(true))
             ));
         }
@@ -2186,7 +2257,11 @@ mod tests {
             let mut termios = unsafe { std::mem::zeroed::<Termios>() };
             let device = Device::Stdin(stdin());
             assert!(matches!(
-                stty_apply_special_setting(&mut termios, "min 1", &device),
+                stty_apply_special_setting(
+                    &mut termios,
+                    &SttySetting::new("min", Some("1")),
+                    &device
+                ),
                 Ok(ControlFlow::Break(true))
             ));
         }
@@ -2196,7 +2271,7 @@ mod tests {
             let mut termios = unsafe { std::mem::zeroed::<Termios>() };
             let device = Device::Stdin(stdin());
             assert!(matches!(
-                stty_apply_special_setting(&mut termios, "invalid", &device),
+                stty_apply_special_setting(&mut termios, &SttySetting::from("invalid"), &device),
                 Ok(ControlFlow::Continue(()))
             ));
         }
@@ -2207,21 +2282,21 @@ mod tests {
             let device = Device::Stdin(stdin());
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, "evenp", &device),
+                stty_apply_setting(&mut termios, &SttySetting::from("evenp"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             assert!(termios.control_flags.contains(C::PARENB));
             assert!(!termios.control_flags.contains(C::PARODD));
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, "-evenp", &device),
+                stty_apply_setting(&mut termios, &SttySetting::from("-evenp"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             assert!(!termios.control_flags.contains(C::PARENB));
             assert!(termios.control_flags.contains(C::CS8));
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, "raw", &device),
+                stty_apply_setting(&mut termios, &SttySetting::from("raw"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             assert!(termios.input_flags.bits() == 0);
@@ -2235,7 +2310,7 @@ mod tests {
             );
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, "-raw", &device),
+                stty_apply_setting(&mut termios, &SttySetting::from("-raw"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             assert!(termios.input_flags.contains(I::BRKINT));
@@ -2243,13 +2318,13 @@ mod tests {
             assert!(termios.local_flags.contains(L::ICANON));
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, "tabs", &device),
+                stty_apply_setting(&mut termios, &SttySetting::from("tabs"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             assert!(O::TAB0.is_in(&termios, Some(O::TABDLY)));
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, "-tabs", &device),
+                stty_apply_setting(&mut termios, &SttySetting::from("-tabs"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             assert!(O::TAB3.is_in(&termios, Some(O::TABDLY)));
@@ -2261,19 +2336,19 @@ mod tests {
             let device = Device::Stdin(stdin());
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, "-ek", &device),
+                stty_apply_setting(&mut termios, &SttySetting::from("-ek"), &device),
                 Ok(ControlFlow::Break(false))
             ));
             assert!(matches!(
-                stty_apply_setting(&mut termios, "-sane", &device),
+                stty_apply_setting(&mut termios, &SttySetting::from("-sane"), &device),
                 Ok(ControlFlow::Break(false))
             ));
             assert!(matches!(
-                stty_apply_setting(&mut termios, "-crt", &device),
+                stty_apply_setting(&mut termios, &SttySetting::from("-crt"), &device),
                 Ok(ControlFlow::Break(false))
             ));
             assert!(matches!(
-                stty_apply_setting(&mut termios, "-dec", &device),
+                stty_apply_setting(&mut termios, &SttySetting::from("-dec"), &device),
                 Ok(ControlFlow::Break(false))
             ));
         }
@@ -2301,7 +2376,7 @@ mod tests {
             let before = termios.output_flags.bits();
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, "dec", &device),
+                stty_apply_setting(&mut termios, &SttySetting::from("dec"), &device),
                 Ok(ControlFlow::Break(true))
             ));
 
@@ -2311,7 +2386,7 @@ mod tests {
             let before = termios.output_flags.bits();
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, "dec", &device),
+                stty_apply_setting(&mut termios, &SttySetting::from("dec"), &device),
                 Ok(ControlFlow::Break(true))
             ));
 
@@ -2324,14 +2399,14 @@ mod tests {
             let device = Device::Stdin(stdin());
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, "ofill", &device),
+                stty_apply_setting(&mut termios, &SttySetting::from("ofill"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             if OFILL_RAW_BIT != 0 {
                 assert_ne!(termios.output_flags.bits() & OFILL_RAW_BIT, 0);
             }
             assert!(matches!(
-                stty_apply_setting(&mut termios, "-ofill", &device),
+                stty_apply_setting(&mut termios, &SttySetting::from("-ofill"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             if OFILL_RAW_BIT != 0 {
@@ -2339,7 +2414,7 @@ mod tests {
             }
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, "iuclc", &device),
+                stty_apply_setting(&mut termios, &SttySetting::from("iuclc"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             if IUCLC_RAW_BIT != 0 {
@@ -2347,7 +2422,7 @@ mod tests {
             }
 
             assert!(matches!(
-                stty_apply_setting(&mut termios, "xcase", &device),
+                stty_apply_setting(&mut termios, &SttySetting::from("xcase"), &device),
                 Ok(ControlFlow::Break(true))
             ));
             if XCASE_RAW_BIT != 0 {

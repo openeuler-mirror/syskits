@@ -61,9 +61,9 @@ use std::fs::OpenOptions;
 use std::io::{self, Read, Seek, SeekFrom};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt, chown};
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(target_os = "linux")]
-use std::os::unix::io::AsRawFd;
+use std::os::unix::io::{AsRawFd, FromRawFd};
 #[cfg(unix)]
 use std::path::{Path, PathBuf};
 use std::process;
@@ -807,53 +807,39 @@ impl Installer {
     /// * `path` - 要创建的目录路径
     ///
     /// # 返回值
-    /// 返回 `CTResult<()>`，表示操作是否成功
-    fn create_directory(&self, path: &Path) -> CTResult<()> {
+    /// 返回打开的目录句柄，用于不受 `PATH_MAX` 限制地更新最终属性
+    fn create_directory(&self, path: &Path) -> CTResult<File> {
         // 处理特殊情况：install -d foo/. 应该创建 foo/
         let path_to_create = dir_strip_dot_for_creation(path);
 
-        match fs::metadata(&path_to_create) {
-            Ok(metadata) if metadata.is_dir() => return Ok(()),
-            Ok(_) => {
-                return Err(InstallError::CreateDirFailed(
-                    path.to_path_buf(),
-                    io::Error::from_raw_os_error(libc::EEXIST),
-                )
-                .into());
-            }
-            Err(e) if e.kind() != io::ErrorKind::NotFound => {
-                return Err(InstallError::CreateDirFailed(path.to_path_buf(), e).into());
-            }
-            Err(_) => {}
-        }
-
-        // 创建目录及其所有父目录，并在 verbose 模式下打印每一层
-        create_leading_dirs(path_to_create.as_path(), self.verbose, self)
-            .map_err(|e| InstallError::CreateDirFailed(path.to_path_buf(), e))?;
-
-        Ok(())
+        open_or_create_directories(path_to_create.as_path(), self.verbose, self)
+            .map_err(|e| InstallError::CreateDirFailed(path.to_path_buf(), e).into())
     }
 
-    /// 设置目录所有者和组，未指定的字段保持不变。
-    fn set_directory_ownership(&self, path: &Path) -> CTResult<()> {
+    fn set_directory_ownership_fd(&self, directory: &File, path: &Path) -> CTResult<()> {
         if self.owner_id.is_none() && self.group_id.is_none() {
             return Ok(());
         }
 
-        chown(path, self.owner_id, self.group_id).map_err(|e| {
-            InstallError::ChangeDirOwnerAndPermissionsFailed(path.to_path_buf(), e).into()
-        })
+        let dot = CString::new(".").unwrap();
+        let owner_id = self.owner_id.unwrap_or(!0 as libc::uid_t);
+        let group_id = self.group_id.unwrap_or(!0 as libc::gid_t);
+        let result =
+            unsafe { libc::fchownat(directory.as_raw_fd(), dot.as_ptr(), owner_id, group_id, 0) };
+        if result == 0 {
+            Ok(())
+        } else {
+            Err(InstallError::ChangeDirOwnerAndPermissionsFailed(
+                path.to_path_buf(),
+                io::Error::last_os_error(),
+            )
+            .into())
+        }
     }
 
-    /// 设置目录权限模式。
-    ///
-    /// # 参数
-    /// * `path` - 目录路径
-    ///
-    /// # 返回值
-    /// 返回 `CTResult<()>`，表示操作是否成功
-    fn set_directory_mode(&self, path: &Path) -> CTResult<()> {
-        let current_mode = fs::metadata(path)
+    fn set_directory_mode_fd(&self, directory: &File, path: &Path) -> CTResult<()> {
+        let current_mode = directory
+            .metadata()
             .map(|metadata| metadata.mode() & mode::CHMOD_MODE_BITS)
             .map_err(|_| {
                 ctcore::ct_error::set_ct_exit_code(1);
@@ -861,7 +847,16 @@ impl Installer {
             })?;
         let directory_mode =
             (current_mode & !self.directory_mode_bits) | (self.mode() & self.directory_mode_bits);
-        if mode::install_chmod(path, directory_mode).is_err() {
+        let dot = CString::new(".").unwrap();
+        let result = unsafe {
+            libc::fchmodat(
+                directory.as_raw_fd(),
+                dot.as_ptr(),
+                directory_mode as libc::mode_t,
+                0,
+            )
+        };
+        if result != 0 {
             ctcore::ct_error::set_ct_exit_code(1);
             return Err(InstallError::ChmodFailed(path.to_path_buf()).into());
         }
@@ -1068,19 +1063,22 @@ fn install_directory(paths: &[PathBuf], b: &Installer) -> CTResult<()> {
     }
 
     for path in paths {
-        if let Err(e) = b.create_directory(path) {
-            ct_show!(e);
-            continue;
-        }
+        let directory = match b.create_directory(path) {
+            Ok(directory) => directory,
+            Err(e) => {
+                ct_show!(e);
+                continue;
+            }
+        };
 
         // GNU make_dir_parents changes ownership before permissions because
         // chown can clear setuid/setgid bits.
-        if let Err(e) = b.set_directory_ownership(path) {
+        if let Err(e) = b.set_directory_ownership_fd(&directory, path) {
             ct_show!(e);
             continue;
         }
 
-        if let Err(e) = b.set_directory_mode(path) {
+        if let Err(e) = b.set_directory_mode_fd(&directory, path) {
             ct_show!(e);
             continue;
         }
@@ -1394,46 +1392,143 @@ fn apply_preserve_context(_from: &Path, _to: &Path) -> CTResult<()> {
     Ok(())
 }
 
-// 给函数签名增加 b: &Installer 参数
-fn create_leading_dirs(path: &Path, verbose: bool, b: &Installer) -> Result<(), std::io::Error> {
-    let mut cur = PathBuf::new();
-    for component in path.components() {
-        cur.push(component);
-        if cur.exists() {
-            if !cur.is_dir() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::NotADirectory,
-                    "Not a directory",
+fn directory_component_cstring(component: &OsStr) -> io::Result<CString> {
+    CString::new(component.as_bytes())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "path contains a NUL byte"))
+}
+
+fn open_directory_at(directory: libc::c_int, component: &OsStr) -> io::Result<File> {
+    let component = directory_component_cstring(component)?;
+    let fd = unsafe {
+        libc::openat(
+            directory,
+            component.as_ptr(),
+            libc::O_PATH | libc::O_DIRECTORY | libc::O_CLOEXEC,
+        )
+    };
+    if fd < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(unsafe { File::from_raw_fd(fd) })
+    }
+}
+
+fn create_directory_at(directory: &File, component: &OsStr) -> io::Result<()> {
+    let component = directory_component_cstring(component)?;
+    let result = unsafe {
+        libc::mkdirat(
+            directory.as_raw_fd(),
+            component.as_ptr(),
+            DEFAULT_MODE as libc::mode_t,
+        )
+    };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+fn chmod_directory_at(directory: &File, component: &OsStr, mode: u32) -> io::Result<()> {
+    let component = directory_component_cstring(component)?;
+    let result = unsafe {
+        libc::fchmodat(
+            directory.as_raw_fd(),
+            component.as_ptr(),
+            mode as libc::mode_t,
+            0,
+        )
+    };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+fn open_or_create_directories(path: &Path, verbose: bool, b: &Installer) -> io::Result<File> {
+    let start = if path.is_absolute() {
+        OsStr::new("/")
+    } else {
+        OsStr::new(".")
+    };
+    let mut directory = open_directory_at(libc::AT_FDCWD, start)?;
+    let mut display_path = if path.is_absolute() {
+        PathBuf::from("/")
+    } else {
+        PathBuf::new()
+    };
+    let mut components = path.components().peekable();
+
+    while let Some(component) = components.next() {
+        let component = match component {
+            std::path::Component::RootDir | std::path::Component::CurDir => continue,
+            std::path::Component::ParentDir => OsStr::new(".."),
+            std::path::Component::Normal(component) => component,
+            std::path::Component::Prefix(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "unsupported path prefix",
                 ));
             }
-            continue;
-        }
-        let mut builder = fs::DirBuilder::new();
-        builder.mode(DEFAULT_MODE).create(&cur)?;
-        // mkdir still applies umask; restore rwx bits while keeping inherited special bits.
-        let special_mode = fs::metadata(&cur)?.mode() & 0o7000;
-        fs::set_permissions(
-            &cur,
-            fs::Permissions::from_mode(DEFAULT_MODE | special_mode),
-        )?;
+        };
+        let is_final = components
+            .clone()
+            .all(|remaining| remaining == std::path::Component::CurDir);
+        display_path.push(component);
 
-        if b.set_context {
-            if let Some(ref ctx) = b.context {
-                let _ = apply_explicit_selinux_context(&cur, ctx);
-            } else {
-                let _ = apply_default_selinux_context(&cur, DEFAULT_MODE);
+        let mut created = false;
+        let next_directory = match open_directory_at(directory.as_raw_fd(), component) {
+            Ok(next) => next,
+            Err(error) if error.raw_os_error() == Some(libc::ENOENT) && component != ".." => {
+                match create_directory_at(&directory, component) {
+                    Ok(()) => {
+                        created = true;
+                        open_directory_at(directory.as_raw_fd(), component)?
+                    }
+                    Err(create_error) if create_error.raw_os_error() == Some(libc::EEXIST) => {
+                        open_directory_at(directory.as_raw_fd(), component)
+                            .map_err(|_| create_error)?
+                    }
+                    Err(create_error) => return Err(create_error),
+                }
+            }
+            Err(error) if is_final && error.raw_os_error() == Some(libc::ENOTDIR) => {
+                return Err(io::Error::from_raw_os_error(libc::EEXIST));
+            }
+            Err(error) => return Err(error),
+        };
+
+        if created {
+            // mkdir applies umask; restore rwx bits while keeping inherited special bits.
+            let special_mode = next_directory.metadata()?.mode() & 0o7000;
+            chmod_directory_at(&directory, component, DEFAULT_MODE | special_mode)?;
+
+            if b.set_context {
+                if let Some(ref context) = b.context {
+                    let _ = apply_explicit_selinux_context(&display_path, context);
+                } else {
+                    let _ = apply_default_selinux_context(&display_path, DEFAULT_MODE);
+                }
+            }
+
+            if verbose {
+                println!(
+                    "install: {} {}",
+                    t!("install.verbose_creating_dir"),
+                    display_path.quote()
+                );
             }
         }
 
-        if verbose {
-            println!(
-                "install: {} {}",
-                t!("install.verbose_creating_dir"),
-                cur.quote()
-            );
-        }
+        directory = next_directory;
     }
-    Ok(())
+
+    Ok(directory)
+}
+
+fn create_leading_dirs(path: &Path, verbose: bool, b: &Installer) -> io::Result<()> {
+    open_or_create_directories(path, verbose, b).map(|_| ())
 }
 
 /// 在覆盖文件前执行备份操作。
@@ -2188,7 +2283,7 @@ mod tests {
     use std::ffi::OsString;
     use std::fs::File;
     use std::io::Write;
-    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::fs::{PermissionsExt, chown};
     use std::os::unix::process::CommandExt;
     use std::process::Command as ProcessCommand;
     use tempfile::tempdir;
@@ -2925,8 +3020,11 @@ mod tests {
             };
 
             let directory_target = root.join("existing/ancestor/target");
-            create_leading_dirs(&directory_target, false, &installer).unwrap();
-            installer.set_directory_mode(&directory_target).unwrap();
+            let directory =
+                open_or_create_directories(&directory_target, false, &installer).unwrap();
+            installer
+                .set_directory_mode_fd(&directory, &directory_target)
+                .unwrap();
 
             let create_leading_parent = root.join("create-leading/a/b");
             create_leading_dirs(&create_leading_parent, false, &installer).unwrap();
@@ -2972,6 +3070,29 @@ mod tests {
         );
         assert_eq!(permission_mode(temp.path().join("setgid/a")), 0o2755);
         assert_eq!(permission_mode(temp.path().join("setgid/a/b")), 0o2755);
+    }
+
+    #[test]
+    fn test_directory_creation_beyond_path_max() {
+        let temp = tempdir().unwrap();
+        let mut path = temp.path().to_path_buf();
+        let component = "x".repeat(200);
+        for _ in 0..25 {
+            path.push(&component);
+        }
+        assert!(path.as_os_str().as_bytes().len() > 4096);
+
+        let installer = Installer {
+            specified_mode: Some(0o751),
+            ..Default::default()
+        };
+        let directory = installer.create_directory(&path).unwrap();
+        installer
+            .set_directory_ownership_fd(&directory, &path)
+            .unwrap();
+        installer.set_directory_mode_fd(&directory, &path).unwrap();
+
+        assert_eq!(directory.metadata().unwrap().mode() & 0o7777, 0o751);
     }
 
     #[test]
@@ -3076,7 +3197,8 @@ mod tests {
             ..Default::default()
         };
 
-        match installer.set_directory_ownership(&target) {
+        let directory = open_or_create_directories(&target, false, &installer).unwrap();
+        match installer.set_directory_ownership_fd(&directory, &target) {
             Ok(()) => {
                 let metadata = std::fs::metadata(target).unwrap();
                 assert_eq!(metadata.uid(), desired_uid);

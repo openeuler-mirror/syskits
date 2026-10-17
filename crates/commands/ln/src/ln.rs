@@ -241,11 +241,13 @@ pub fn ct_app() -> Command {
             .short('f')
             .long(lnoptions::LN_FORCE)
             .help(t!("ln.clap.ln_force"))
+            .overrides_with(lnoptions::LN_FORCE)
             .action(ArgAction::SetTrue),
         Arg::new(lnoptions::LN_INTERACTIVE)
             .short('i')
             .long(lnoptions::LN_INTERACTIVE)
             .help(t!("ln.clap.ln_interactive"))
+            .overrides_with(lnoptions::LN_INTERACTIVE)
             .action(ArgAction::SetTrue),
         Arg::new(lnoptions::LN_NO_DEREFERENCE)
             .short('n')
@@ -254,18 +256,21 @@ pub fn ct_app() -> Command {
                 "treat LINK_NAME as a normal file if it is a \
                     symbolic link to a directory",
             )
+            .overrides_with(lnoptions::LN_NO_DEREFERENCE)
             .action(ArgAction::SetTrue),
         Arg::new(lnoptions::LN_LOGICAL)
             .short('L')
             .long(lnoptions::LN_LOGICAL)
             .help(t!("ln.clap.ln_logical"))
             .overrides_with(lnoptions::LN_PHYSICAL)
+            .overrides_with(lnoptions::LN_LOGICAL)
             .action(ArgAction::SetTrue),
         // Not implemented yet
         Arg::new(lnoptions::LN_PHYSICAL)
             .short('P')
             .long(lnoptions::LN_PHYSICAL)
             .help(t!("ln.clap.ln_physical"))
+            .overrides_with(lnoptions::LN_PHYSICAL)
             .action(ArgAction::SetTrue),
         Arg::new(lnoptions::LN_SYMBOLIC)
             .short('s')
@@ -285,23 +290,27 @@ pub fn ct_app() -> Command {
             .short('T')
             .long(lnoptions::LN_NO_TARGET_DIRECTORY)
             .help(t!("ln.clap.ln_no_target_directory"))
+            .overrides_with(lnoptions::LN_NO_TARGET_DIRECTORY)
             .action(ArgAction::SetTrue),
         Arg::new(lnoptions::LN_RELATIVE)
             .short('r')
             .long(lnoptions::LN_RELATIVE)
             .help(t!("ln.clap.ln_relative"))
             .requires(lnoptions::LN_SYMBOLIC)
+            .overrides_with(lnoptions::LN_RELATIVE)
             .action(ArgAction::SetTrue),
         Arg::new(lnoptions::LN_VERBOSE)
             .short('v')
             .long(lnoptions::LN_VERBOSE)
             .help(t!("ln.clap.ln_verbose"))
+            .overrides_with(lnoptions::LN_VERBOSE)
             .action(ArgAction::SetTrue),
         Arg::new(lnoptions::LN_DIRECTORY)
             .short('d')
             .visible_short_alias('F')
             .long(lnoptions::LN_DIRECTORY)
             .help("allow the superuser to try to hard link directories")
+            .overrides_with(lnoptions::LN_DIRECTORY)
             .action(ArgAction::SetTrue)
             .conflicts_with(lnoptions::LN_SYMBOLIC),
         Arg::new(LN_ARG_FILES)
@@ -316,9 +325,18 @@ pub fn ct_app() -> Command {
         .about(t!("ln.about"))
         .override_usage(t!("ln.usage"))
         .infer_long_args(true)
-        .arg(ct_backup_control::arguments::backup())
-        .arg(ct_backup_control::arguments::backup_no_args())
-        .arg(ct_backup_control::arguments::suffix())
+        .arg(
+            ct_backup_control::arguments::backup()
+                .overrides_with(ct_backup_control::arguments::OPT_BACKUP),
+        )
+        .arg(
+            ct_backup_control::arguments::backup_no_args()
+                .overrides_with(ct_backup_control::arguments::OPT_BACKUP_NO_ARG),
+        )
+        .arg(
+            ct_backup_control::arguments::suffix()
+                .overrides_with(ct_backup_control::arguments::OPT_SUFFIX),
+        )
         .args(args)
 }
 
@@ -863,6 +881,42 @@ mod tests {
     use std::ffi::OsString;
     use std::fs;
     use tempfile::tempdir;
+
+    #[test]
+    fn test_ct_app_accepts_repeated_options() {
+        for option in [
+            "-ff", "-ii", "-vv", "-nn", "-TT", "-LL", "-PP", "-dd", "-bb",
+        ] {
+            ct_app()
+                .try_get_matches_from(["ln", option, "source", "dest"])
+                .unwrap_or_else(|error| panic!("repeated option {option} was rejected: {error}"));
+        }
+
+        ct_app()
+            .try_get_matches_from(["ln", "-srr", "source", "dest"])
+            .unwrap_or_else(|error| panic!("repeated option -r was rejected: {error}"));
+    }
+
+    #[test]
+    fn test_repeated_backup_options_use_last_value() {
+        let matches = ct_app()
+            .try_get_matches_from([
+                "ln",
+                "-S",
+                ".one",
+                "-S",
+                ".two",
+                "--backup=simple",
+                "--backup=numbered",
+                "source",
+                "dest",
+            ])
+            .unwrap();
+        let settings = LnSettings::new(&matches).unwrap();
+
+        assert_eq!(settings.suffix, ".two");
+        assert_eq!(settings.backup, CtBackupMode::NumberedBackup);
+    }
 
     #[test]
     fn test_tool_implementation() {

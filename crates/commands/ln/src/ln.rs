@@ -803,12 +803,30 @@ fn is_root() -> bool {
 /// 打印链接详细信息。
 fn print_link_info(dst: &Path, source: &Path, backup_path: Option<PathBuf>, settings: &LnSettings) {
     if settings.is_verbose {
-        print!("{} => {}", dst.quote(), source.quote());
-        if let Some(path) = backup_path {
-            println!(" (backup: {})", path.quote());
-        } else {
-            println!();
-        }
+        println!(
+            "{}",
+            format_link_info(dst, source, backup_path.as_deref(), settings.is_symbolic)
+        );
+    }
+}
+
+fn format_link_info(
+    dst: &Path,
+    source: &Path,
+    backup_path: Option<&Path>,
+    is_symbolic: bool,
+) -> String {
+    let operator = if is_symbolic { "->" } else { "=>" };
+    if let Some(backup) = backup_path {
+        format!(
+            "{} ~ {} {} {}",
+            backup.quote(),
+            dst.quote(),
+            operator,
+            source.quote()
+        )
+    } else {
+        format!("{} {} {}", dst.quote(), operator, source.quote())
     }
 }
 
@@ -1441,6 +1459,23 @@ mod tests {
         assert_eq!(
             fs::read_to_string(protected_target.join("name")).unwrap(),
             "A"
+        );
+    }
+
+    #[test]
+    fn test_verbose_link_format() {
+        assert_eq!(
+            format_link_info(Path::new("link"), Path::new("source"), None, true),
+            "'link' -> 'source'"
+        );
+        assert_eq!(
+            format_link_info(
+                Path::new("dest"),
+                Path::new("source"),
+                Some(Path::new("dest~")),
+                false,
+            ),
+            "'dest~' ~ 'dest' => 'source'"
         );
     }
 

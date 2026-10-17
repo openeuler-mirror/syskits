@@ -169,6 +169,7 @@ pub fn chmod_main(args: impl ctcore::Args) -> CTResult<()> {
         None => None,
     };
 
+    let diagnose_surprises = parsed_cmode.is_some();
     let chmod_flags_modes = args_match.get_one::<String>(chmod_flags::MODE);
     let chmod = if let Some(parsed_cmode) = parsed_cmode {
         parsed_cmode
@@ -205,6 +206,7 @@ pub fn chmod_main(args: impl ctcore::Args) -> CTResult<()> {
         traverse,
         fmode: mode_reference,
         cmode,
+        diagnose_surprises,
     };
 
     chmoder_info.chmod(&f)
@@ -329,6 +331,7 @@ struct Chmoder {
     traverse: TraverseMode,
     fmode: Option<u32>,
     cmode: Option<String>,
+    diagnose_surprises: bool,
 }
 
 impl Chmoder {
@@ -494,7 +497,7 @@ impl Chmoder {
                 }
 
                 self.change_file(file_perms, new_mode, file_path)?;
-                if (new_mode & !naively_expected_new_mode) != 0 {
+                if self.diagnose_surprises && (new_mode & !naively_expected_new_mode) != 0 {
                     return Err(CtSimpleError::new(
                         1,
                         format!(
@@ -1647,6 +1650,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         // 调用 chmod 方法
@@ -1687,6 +1691,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         // 调用 walk_dir 方法
@@ -1724,6 +1729,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         // 调用 chmod_file 方法
@@ -1759,6 +1765,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         // 调用 change_file 方法
@@ -1793,6 +1800,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(initial_mode),
             cmode: None,
+            diagnose_surprises: false,
         };
 
         let result = chmoder.change_file(initial_mode, initial_mode, test_file_path);
@@ -1826,6 +1834,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(empty_dir_path.as_path(), true);
@@ -1852,6 +1861,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("invalid_mode".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.change_file(0o600, 0o644, test_file_path.as_path());
@@ -1880,6 +1890,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result1 = chmoder.process_path(&file1_path, true);
@@ -1913,6 +1924,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(&dir_path, true);
@@ -1942,6 +1954,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(&temp_dir.path().join("dir1"), true);
@@ -1969,6 +1982,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: None,
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(test_file_path.as_path(), true);
@@ -1995,6 +2009,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: None,
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(test_file_path.as_path(), true);
@@ -2022,6 +2037,7 @@ mod tests {
                 traverse: TraverseMode::Physical,
                 fmode: None,
                 cmode: Some(mode.to_string()),
+                diagnose_surprises: false,
             };
 
             assert!(chmoder.process_path(test_file_path, true).is_err());
@@ -2048,6 +2064,7 @@ mod tests {
                 traverse: TraverseMode::Physical,
                 fmode: None,
                 cmode: Some(mode.to_string()),
+                diagnose_surprises: false,
             };
 
             assert!(chmoder.process_path(test_file_path, true).is_ok());
@@ -2077,6 +2094,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         // Call chmod_file method
@@ -2109,6 +2127,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("invalid_mode_string".to_string()),
+            diagnose_surprises: false,
         };
 
         // Call chmod_file method
@@ -2142,6 +2161,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: None,
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         // Call chmod_file method
@@ -2175,6 +2195,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: None,
+            diagnose_surprises: false,
         };
 
         // Call chmod_file method
@@ -2207,6 +2228,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         // Call chmod_file method
@@ -2233,6 +2255,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(non_existent_dir_path, true);
@@ -2255,6 +2278,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(test_file_path, true);
@@ -2290,6 +2314,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(single_level_dir_path.as_path(), true);
@@ -2329,6 +2354,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(symlink_path.as_path(), true);
@@ -2366,6 +2392,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(root_dir_path.as_path(), true);
@@ -2406,6 +2433,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(&test_file_path_on_ro_fs, true);
@@ -2442,6 +2470,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(test_file_path.as_path(), true);
@@ -2477,6 +2506,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(large_file_path.as_path(), true);
@@ -2509,6 +2539,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(hidden_file_path.as_path(), true);
@@ -2615,6 +2646,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(nonexistent_file_path.as_path(), true);
@@ -2647,6 +2679,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(test_dir_path.as_path(), true);
@@ -2671,6 +2704,7 @@ mod tests {
             traverse: TraverseMode::Physical,
             fmode: Some(0o644),
             cmode: Some("u+rwx,g=r,o=rx".to_string()),
+            diagnose_surprises: false,
         };
 
         let result = chmoder.process_path(Path::new(""), true);

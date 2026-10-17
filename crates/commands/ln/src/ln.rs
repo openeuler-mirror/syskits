@@ -41,20 +41,26 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
 use ctcore::ct_fs::make_path_relative_to;
 use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
+use ctcore::ct_show_error;
 use ctcore::libc;
-use ctcore::{ct_prompt_yes, ct_show_error};
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::fs;
+use std::io::{BufRead, Write};
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, symlink};
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
+
+#[cfg(unix)]
+unsafe extern "C" {
+    fn rpmatch(response: *const libc::c_char) -> libc::c_int;
+}
 
 /// ln 命令的配置选项
 pub struct LnSettings {
@@ -212,6 +218,11 @@ impl Tool for Ln {
 }
 
 pub fn ln_main(args: impl ctcore::Args) -> CTResult<()> {
+    #[cfg(unix)]
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+    }
+
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let after_help = format!(
@@ -621,9 +632,7 @@ fn handle_backup_and_overwrite(
         return Ok(None);
     }
 
-    if settings.overwrite == OverwriteMode::Interactive
-        && !ct_prompt_yes!("replace {}?", dst.quote())
-    {
+    if settings.overwrite == OverwriteMode::Interactive && !prompt_overwrite(dst) {
         return Err(LnError::SomeLinksFailed.into());
     }
 
@@ -637,6 +646,41 @@ fn handle_backup_and_overwrite(
 
     handle_overwrite_mode(dst, src, settings)?;
     Ok(backup_path)
+}
+
+fn prompt_overwrite(dst: &Path) -> bool {
+    eprint!("{}: replace {}? ", ctcore::ct_util_name(), dst.quote());
+    ctcore::ct_crash_if_err!(1, std::io::stderr().flush());
+    read_yes_response()
+}
+
+fn read_yes_response() -> bool {
+    let stdin = std::io::stdin();
+    let mut stdin = stdin.lock();
+    let mut response = Vec::new();
+
+    match stdin.read_until(b'\n', &mut response) {
+        Ok(0) | Err(_) => false,
+        Ok(_) => {
+            if response.last() == Some(&b'\n') {
+                response.pop();
+            }
+            response_is_yes(&response)
+        }
+    }
+}
+
+#[cfg(unix)]
+fn response_is_yes(response: &[u8]) -> bool {
+    let mut nul_terminated = Vec::with_capacity(response.len() + 1);
+    nul_terminated.extend_from_slice(response);
+    nul_terminated.push(0);
+    unsafe { rpmatch(nul_terminated.as_ptr().cast()) > 0 }
+}
+
+#[cfg(not(unix))]
+fn response_is_yes(response: &[u8]) -> bool {
+    matches!(response.first(), Some(b'y' | b'Y'))
 }
 
 /// 生成备份路径。
@@ -948,6 +992,14 @@ mod tests {
         assert_eq!(settings_for("-if").overwrite, OverwriteMode::Force);
         assert_eq!(settings_for("-fif").overwrite, OverwriteMode::Force);
         assert_eq!(settings_for("-ifi").overwrite, OverwriteMode::Interactive);
+    }
+
+    #[test]
+    fn test_yes_response_keeps_leading_whitespace() {
+        assert!(response_is_yes(b"y"));
+        assert!(response_is_yes(b"Y"));
+        assert!(!response_is_yes(b" y"));
+        assert!(!response_is_yes(b"\ty"));
     }
 
     #[test]

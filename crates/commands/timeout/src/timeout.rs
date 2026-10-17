@@ -478,6 +478,15 @@ fn timeout_install_signal_handlers(timeout_signal: usize) {
             }
         }
 
+        // GNU keeps the monitor from being stopped by terminal job-control
+        // signals while the background COMMAND is reading from the TTY.
+        for sig in [
+            nix::sys::signal::Signal::SIGTTIN,
+            nix::sys::signal::Signal::SIGTTOU,
+        ] {
+            let _ = nix::sys::signal::signal(sig, nix::sys::signal::SigHandler::SigIgn);
+        }
+
         // GNU installs this after the cleanup handler, so it also wins when
         // the user selected SIGCHLD as the timeout signal.
         let sigchld_sa = nix::sys::signal::SigAction::new(
@@ -566,6 +575,8 @@ fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
             libc::signal(libc::SIGHUP, libc::SIG_DFL);
             libc::signal(libc::SIGTERM, libc::SIG_DFL);
             libc::signal(libc::SIGALRM, libc::SIG_DFL);
+            libc::signal(libc::SIGTTIN, libc::SIG_DFL);
+            libc::signal(libc::SIGTTOU, libc::SIG_DFL);
 
             Ok(())
         });

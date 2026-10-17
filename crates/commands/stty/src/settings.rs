@@ -12,7 +12,7 @@
 use crate::device::Device;
 use crate::{TermSize, tiocgwinsz, tiocswinsz};
 use ctcore::ct_error::{CTResult, CtSimpleError};
-use nix::libc::c_ushort;
+use nix::libc::{c_int, c_ushort};
 use nix::sys::termios::{_POSIX_VDISABLE, BaudRate, SpecialCharacterIndices, Termios, cfgetospeed};
 use nix::sys::termios::{
     ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O,
@@ -660,7 +660,7 @@ impl SpecialSetting {
     fn apply_size(&self, device: &Device, value: Option<&OsStr>) -> CTResult<bool> {
         // 检查是否有值提供，如果没有则直接返回Ok(false)
         if let Some(val) = value {
-            // 将提供的字符串值解析为无符号短整型，如果解析失败则返回错误
+            // GNU parses through INT_MAX, then lets assignment to winsize narrow the value.
             let parsed_val = parse_u16_with_base(require_utf8(val)?)?;
 
             // 获取当前终端的尺寸
@@ -861,9 +861,44 @@ fn parse_u32_with_base(raw: &str) -> CTResult<u32> {
 }
 
 fn parse_u16_with_base(raw: &str) -> CTResult<c_ushort> {
-    let value = parse_u32_with_base(raw)?;
-    c_ushort::try_from(value)
-        .map_err(|_| CtSimpleError::new(1, format!("invalid argument '{raw}'")))
+    let invalid = || CtSimpleError::new(1, format!("invalid argument '{raw}'"));
+    let raw = raw.trim_start_matches(|c: char| c.is_ascii_whitespace());
+
+    if raw.starts_with('-') {
+        return Err(invalid());
+    }
+
+    let parse_number = |number: &str| {
+        let number = number.strip_prefix('+').unwrap_or(number);
+        if number.is_empty() {
+            return None;
+        }
+        let (radix, digits) = parse_numeric_base(number);
+        u32::from_str_radix(digits, radix).ok()
+    };
+
+    // In hexadecimal input b/B is a digit, so try the unsuffixed form first.
+    let value = if let Some(value) = parse_number(raw) {
+        value
+    } else {
+        let (number, multiplier) = raw
+            .strip_suffix('b')
+            .map(|number| (number, 512))
+            .or_else(|| raw.strip_suffix('B').map(|number| (number, 1024)))
+            .ok_or_else(invalid)?;
+        let number = if number.is_empty() {
+            1
+        } else {
+            parse_number(number).ok_or_else(invalid)?
+        };
+        number.checked_mul(multiplier).ok_or_else(invalid)?
+    };
+
+    if value > c_int::MAX as u32 {
+        return Err(invalid());
+    }
+
+    Ok(value as c_ushort)
 }
 
 fn parse_u8_with_base(raw: &str) -> CTResult<u8> {
@@ -1010,6 +1045,26 @@ mod tests {
     fn test_parse_control_char_non_utf8_literal_byte() {
         let value = OsString::from_vec(vec![0xff]);
         assert_eq!(parse_control_char(&value).unwrap(), 0xff);
+    }
+
+    #[test]
+    fn test_parse_window_size_gnu_integer_syntax() {
+        assert_eq!(parse_u16_with_base("1b").unwrap(), 512);
+        assert_eq!(parse_u16_with_base("1B").unwrap(), 1024);
+        assert_eq!(parse_u16_with_base("b").unwrap(), 512);
+        assert_eq!(parse_u16_with_base("0xb").unwrap(), 11);
+        assert_eq!(parse_u16_with_base("+010").unwrap(), 8);
+    }
+
+    #[test]
+    fn test_parse_window_size_narrows_after_int_range_check() {
+        assert_eq!(parse_u16_with_base("65536").unwrap(), 0);
+        assert_eq!(parse_u16_with_base("65537").unwrap(), 1);
+        assert_eq!(parse_u16_with_base("2147483647").unwrap(), 65535);
+        assert!(parse_u16_with_base("2147483648").is_err());
+        assert!(parse_u16_with_base("4194304b").is_err());
+        assert!(parse_u16_with_base("-1").is_err());
+        assert!(parse_u16_with_base("1bb").is_err());
     }
 
     #[test]

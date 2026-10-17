@@ -176,7 +176,15 @@ pub fn chmod_main(args: impl ctcore::Args) -> CTResult<()> {
         // command-line symlinked directories are traversed, but nested symlinks are not.
         TraverseMode::First
     };
-    let mode_reference = match args_match.get_one::<String>(chmod_flags::REFERENCE) {
+    let reference_file = args_match.get_one::<String>(chmod_flags::REFERENCE);
+    if parsed_cmode.is_some() && reference_file.is_some() {
+        return Err(CTsageError::new(
+            1,
+            "cannot combine mode and --reference options",
+        ));
+    }
+
+    let mode_reference = match reference_file {
         Some(reference) => match fs::metadata(reference) {
             Ok(metra) => Some(metra.mode() & 0o7777),
             Err(e) => {
@@ -826,6 +834,38 @@ mod tests {
                 .to_string();
 
             assert!(error.contains("invalid mode"));
+            assert!(!error.contains("cannot access"));
+        }
+
+        #[test]
+        fn test_quiet_does_not_suppress_invalid_mode() {
+            let args = [
+                ctcore::ct_util_name(),
+                "-f",
+                "invalid",
+                "this-file-must-not-be-accessed",
+            ];
+            let error = chmod_main(args.iter().map(OsString::from))
+                .unwrap_err()
+                .to_string();
+
+            assert!(error.contains("invalid mode"));
+        }
+
+        #[test]
+        fn test_option_mode_conflicts_with_reference_before_access() {
+            let args = [
+                ctcore::ct_util_name(),
+                "-w",
+                "--reference=this-reference-must-not-be-accessed",
+                "this-target-must-not-be-accessed",
+            ];
+            let error = chmod_main(args.iter().map(OsString::from))
+                .unwrap_err()
+                .to_string();
+
+            assert!(error.contains("cannot combine mode and --reference options"));
+            assert!(!error.contains("cannot stat"));
             assert!(!error.contains("cannot access"));
         }
 

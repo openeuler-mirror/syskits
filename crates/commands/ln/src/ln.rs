@@ -46,7 +46,7 @@ use ctcore::{ct_prompt_yes, ct_show_error};
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::error::Error;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::fs;
 #[cfg(unix)]
@@ -63,7 +63,7 @@ pub struct LnSettings {
     /// 备份模式
     backup: CtBackupMode,
     /// 备份文件后缀
-    suffix: String,
+    suffix: OsString,
     /// 是否创建符号链接
     is_symbolic: bool,
     /// 是否使用相对路径
@@ -338,7 +338,8 @@ pub fn ct_app() -> Command {
         )
         .arg(
             ct_backup_control::arguments::suffix()
-                .overrides_with(ct_backup_control::arguments::OPT_SUFFIX),
+                .overrides_with(ct_backup_control::arguments::OPT_SUFFIX)
+                .value_parser(clap::builder::ValueParser::os_string()),
         )
         .args(args)
 }
@@ -757,16 +758,17 @@ fn print_link_info(dst: &Path, source: &Path, backup_path: Option<PathBuf>, sett
     }
 }
 
-fn ln_simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
-    let mut p = path.as_os_str().to_str().unwrap().to_owned();
-    p.push_str(suffix);
+fn ln_simple_backup_path(path: &Path, suffix: &OsStr) -> PathBuf {
+    let mut p = path.as_os_str().to_os_string();
+    p.push(suffix);
     PathBuf::from(p)
 }
 
 fn ln_numbered_backup_path(path: &Path) -> PathBuf {
     let mut i: u64 = 1;
     loop {
-        let new_path = ln_simple_backup_path(path, &format!(".~{i}~"));
+        let suffix = OsString::from(format!(".~{i}~"));
+        let new_path = ln_simple_backup_path(path, &suffix);
         if !new_path.exists() {
             return new_path;
         }
@@ -774,8 +776,8 @@ fn ln_numbered_backup_path(path: &Path) -> PathBuf {
     }
 }
 
-fn ln_existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
-    let test_path = ln_simple_backup_path(path, ".~1~");
+fn ln_existing_backup_path(path: &Path, suffix: &OsStr) -> PathBuf {
+    let test_path = ln_simple_backup_path(path, OsStr::new(".~1~"));
     if test_path.exists() {
         return ln_numbered_backup_path(path);
     }
@@ -789,6 +791,36 @@ pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> std::io::R
     } else {
         symlink_file(src, dst)
     }
+}
+
+fn ln_determine_backup_mode(matches: &ArgMatches) -> CTResult<CtBackupMode> {
+    let has_backup = matches.contains_id(ct_backup_control::arguments::OPT_BACKUP)
+        || matches.get_flag(ct_backup_control::arguments::OPT_BACKUP_NO_ARG);
+    let has_explicit_control = matches
+        .get_one::<String>(ct_backup_control::arguments::OPT_BACKUP)
+        .is_some();
+
+    if has_backup
+        && !has_explicit_control
+        && let Some(control) = std::env::var_os("VERSION_CONTROL")
+        && control.to_str().is_none()
+    {
+        return Err(ct_backup_control::CtBackupError::InvalidArgument(
+            control.to_string_lossy().into_owned(),
+            "$VERSION_CONTROL".to_owned(),
+        )
+        .into());
+    }
+
+    ct_backup_control::determine_backup_mode(matches)
+}
+
+fn ln_determine_backup_suffix(matches: &ArgMatches) -> OsString {
+    matches
+        .get_one::<OsString>(ct_backup_control::arguments::OPT_SUFFIX)
+        .cloned()
+        .or_else(|| std::env::var_os("SIMPLE_BACKUP_SUFFIX"))
+        .unwrap_or_else(|| OsString::from("~"))
 }
 
 impl LnSettings {
@@ -812,8 +844,8 @@ impl LnSettings {
             OverwriteMode::NoClobber
         };
 
-        let backup_mode = ct_backup_control::determine_backup_mode(matches)?;
-        let backup_suffix = ct_backup_control::determine_backup_suffix(matches);
+        let backup_mode = ln_determine_backup_mode(matches)?;
+        let backup_suffix = ln_determine_backup_suffix(matches);
 
         // When we have "-L" or "-L -P", false otherwise
         let logical = matches.get_flag(lnoptions::LN_LOGICAL);
@@ -855,7 +887,7 @@ impl Default for LnSettings {
         Self {
             overwrite: OverwriteMode::NoClobber,
             backup: CtBackupMode::NoBackup,
-            suffix: String::new(),
+            suffix: OsString::new(),
             is_symbolic: false,
             is_relative: false,
             is_logical: false,
@@ -969,6 +1001,53 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_non_utf8_backup_environment() {
+        use std::os::unix::ffi::OsStringExt;
+
+        fn restore_var(name: &str, value: Option<OsString>) {
+            unsafe {
+                if let Some(value) = value {
+                    std::env::set_var(name, value);
+                } else {
+                    std::env::remove_var(name);
+                }
+            }
+        }
+
+        let previous_suffix = std::env::var_os("SIMPLE_BACKUP_SUFFIX");
+        let previous_control = std::env::var_os("VERSION_CONTROL");
+        let raw_suffix = OsString::from_vec(b"-\xff".to_vec());
+        let matches = ct_app()
+            .try_get_matches_from(["ln", "-b", "source", "dest"])
+            .unwrap();
+
+        unsafe {
+            std::env::set_var("SIMPLE_BACKUP_SUFFIX", &raw_suffix);
+            std::env::remove_var("VERSION_CONTROL");
+        }
+        let suffix_settings = LnSettings::new(&matches);
+
+        unsafe {
+            std::env::set_var("VERSION_CONTROL", OsString::from_vec(vec![0xff]));
+        }
+        let control_result = LnSettings::new(&matches);
+
+        restore_var("SIMPLE_BACKUP_SUFFIX", previous_suffix);
+        restore_var("VERSION_CONTROL", previous_control);
+
+        let suffix_settings = suffix_settings.unwrap();
+        assert_eq!(suffix_settings.suffix, raw_suffix);
+        assert_eq!(
+            ln_simple_backup_path(Path::new("dest"), &suffix_settings.suffix)
+                .into_os_string()
+                .into_vec(),
+            b"dest-\xff"
+        );
+        assert!(control_result.is_err());
+    }
+
     #[test]
     fn test_repeated_backup_options_use_last_value() {
         let matches = ct_app()
@@ -986,7 +1065,7 @@ mod tests {
             .unwrap();
         let settings = LnSettings::new(&matches).unwrap();
 
-        assert_eq!(settings.suffix, ".two");
+        assert_eq!(settings.suffix, OsString::from(".two"));
         assert_eq!(settings.backup, CtBackupMode::NumberedBackup);
     }
 
@@ -1020,7 +1099,7 @@ mod tests {
         let settings = LnSettings {
             overwrite: OverwriteMode::Force,
             backup: CtBackupMode::NoBackup,
-            suffix: String::new(),
+            suffix: OsString::new(),
             is_symbolic: true,
             is_relative: false,
             is_logical: false,
@@ -1078,7 +1157,7 @@ mod tests {
         let settings = LnSettings {
             overwrite: OverwriteMode::Force,
             backup: CtBackupMode::SimpleBackup,
-            suffix: String::from("~"),
+            suffix: OsString::from("~"),
             is_symbolic: true,
             is_relative: false,
             is_logical: false,
@@ -1163,7 +1242,7 @@ mod tests {
         fs::write(&path, "test").unwrap();
 
         // 测试简单备份
-        let backup = ln_simple_backup_path(&path, "~");
+        let backup = ln_simple_backup_path(&path, OsStr::new("~"));
         assert_eq!(backup.file_name().unwrap(), "test.txt~");
 
         // 测试编号备份
@@ -1171,7 +1250,7 @@ mod tests {
         assert!(backup.to_str().unwrap().contains(".~1~"));
 
         // 测试已存在备份
-        let backup = ln_existing_backup_path(&path, "~");
+        let backup = ln_existing_backup_path(&path, OsStr::new("~"));
         assert!(backup.to_str().unwrap().ends_with('~'));
     }
 
@@ -1196,7 +1275,7 @@ mod tests {
         let settings = LnSettings {
             overwrite: OverwriteMode::Force,
             backup: CtBackupMode::NoBackup,
-            suffix: String::new(),
+            suffix: OsString::new(),
             is_symbolic: true,
             is_relative: false,
             is_logical: false,

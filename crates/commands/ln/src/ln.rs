@@ -242,12 +242,14 @@ pub fn ct_app() -> Command {
             .long(lnoptions::LN_FORCE)
             .help(t!("ln.clap.ln_force"))
             .overrides_with(lnoptions::LN_FORCE)
+            .overrides_with(lnoptions::LN_INTERACTIVE)
             .action(ArgAction::SetTrue),
         Arg::new(lnoptions::LN_INTERACTIVE)
             .short('i')
             .long(lnoptions::LN_INTERACTIVE)
             .help(t!("ln.clap.ln_interactive"))
             .overrides_with(lnoptions::LN_INTERACTIVE)
+            .overrides_with(lnoptions::LN_FORCE)
             .action(ArgAction::SetTrue),
         Arg::new(lnoptions::LN_NO_DEREFERENCE)
             .short('n')
@@ -895,6 +897,21 @@ mod tests {
         ct_app()
             .try_get_matches_from(["ln", "-srr", "source", "dest"])
             .unwrap_or_else(|error| panic!("repeated option -r was rejected: {error}"));
+    }
+
+    #[test]
+    fn test_force_and_interactive_last_option_wins() {
+        let settings_for = |option| {
+            let matches = ct_app()
+                .try_get_matches_from(["ln", option, "source", "dest"])
+                .unwrap();
+            LnSettings::new(&matches).unwrap()
+        };
+
+        assert_eq!(settings_for("-fi").overwrite, OverwriteMode::Interactive);
+        assert_eq!(settings_for("-if").overwrite, OverwriteMode::Force);
+        assert_eq!(settings_for("-fif").overwrite, OverwriteMode::Force);
+        assert_eq!(settings_for("-ifi").overwrite, OverwriteMode::Interactive);
     }
 
     #[test]

@@ -50,6 +50,40 @@ fn pr_pages_zero_is_rejected_without_reading_stdin() {
 }
 
 #[test]
+fn pr_rejects_zero_page_length_and_width() {
+    for (option, diagnostic) in [
+        (
+            "-l0",
+            "pr: '-l PAGE_LENGTH' invalid number of lines: ‘0’: Numerical result out of range\n",
+        ),
+        (
+            "-w0",
+            "pr: '-w PAGE_WIDTH' invalid number of characters: ‘0’: Numerical result out of range\n",
+        ),
+        (
+            "-W0",
+            "pr: '-W PAGE_WIDTH' invalid number of characters: ‘0’: Numerical result out of range\n",
+        ),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C.UTF-8")
+            .env("LANG", "C.UTF-8")
+            .args(["pr", "-t", option])
+            .stdin(Stdio::null())
+            .output()
+            .expect("run syskits pr with a zero page dimension");
+
+        assert_eq!(output.status.code(), Some(1), "option {option}");
+        assert_eq!(output.stdout, b"", "option {option}");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr),
+            diagnostic,
+            "option {option}"
+        );
+    }
+}
+
+#[test]
 fn pr_number_lines_invalid_argument_exits_without_reading_stdin() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .env("LC_ALL", "C.UTF-8")

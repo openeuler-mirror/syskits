@@ -1119,6 +1119,15 @@ fn parse_content_lines_per_page(arg_matches: &ArgMatches, page_length: usize) ->
 fn parse_page_length(arg_matches: &ArgMatches, _is_form_feed_used: bool) -> Result<usize, PrError> {
     let page_length =
         pr_parse_usize(arg_matches, pr_flags::PR_PAGE_LENGTH).unwrap_or(Ok(PR_LINES_PER_PAGE))?;
+    if page_length == 0 {
+        let value = arg_matches
+            .get_one::<String>(pr_flags::PR_PAGE_LENGTH)
+            .expect("zero page length came from an explicit option");
+        return Err(PrError::EncounteredErrorsNoHelp(format!(
+            "'-l PAGE_LENGTH' invalid number of lines: {}: Numerical result out of range",
+            locale_quote(value)
+        )));
+    }
     Ok(page_length)
 }
 
@@ -1289,7 +1298,17 @@ fn parse_page_width(
     is_merge_mode: bool,
 ) -> Result<Option<usize>, PrError> {
     let page_width = if let Some(res) = pr_parse_usize(arg_matches, pr_flags::PR_PAGE_WIDTH) {
-        Some(res?)
+        let page_width = res?;
+        if page_width == 0 {
+            let value = arg_matches
+                .get_one::<String>(pr_flags::PR_PAGE_WIDTH)
+                .expect("zero page width came from an explicit option");
+            return Err(PrError::EncounteredErrorsNoHelp(format!(
+                "'-W PAGE_WIDTH' invalid number of characters: {}: Numerical result out of range",
+                locale_quote(value)
+            )));
+        }
+        Some(page_width)
     } else if is_merge_mode {
         pr_parse_usize(arg_matches, pr_flags::PR_COLUMN_WIDTH).transpose()?
     } else {
@@ -1332,6 +1351,15 @@ fn parse_column_width(arg_matches: &ArgMatches) -> Result<usize, PrError> {
 
     let column_width = pr_parse_usize(arg_matches, pr_flags::PR_COLUMN_WIDTH)
         .unwrap_or(Ok(default_column_width))?;
+    if column_width == 0 {
+        let value = arg_matches
+            .get_one::<String>(pr_flags::PR_COLUMN_WIDTH)
+            .expect("zero page width came from an explicit option");
+        return Err(PrError::EncounteredErrorsNoHelp(format!(
+            "'-w PAGE_WIDTH' invalid number of characters: {}: Numerical result out of range",
+            locale_quote(value)
+        )));
+    }
     Ok(column_width)
 }
 

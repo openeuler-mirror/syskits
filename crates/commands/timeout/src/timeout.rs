@@ -133,10 +133,10 @@ fn parse_timeout_duration(duration: &str) -> Result<Duration, String> {
     // Rust excludes vertical tab from this predicate, while C isspace includes it.
     let duration = duration.trim_start_matches(|c: char| c.is_ascii_whitespace() || c == '\u{b}');
     ctcore::ct_parse_time::ct_from_str(duration)
-        .or_else(|error| parse_hex_timeout_duration(duration).ok_or(error))
+        .or_else(|error| parse_c_timeout_duration(duration).ok_or(error))
 }
 
-fn parse_hex_timeout_duration(duration: &str) -> Option<Duration> {
+fn parse_c_timeout_duration(duration: &str) -> Option<Duration> {
     let (number, multiplier) = if let Some(number) = duration.strip_suffix('s') {
         (number, 1.0)
     } else if let Some(number) = duration.strip_suffix('m') {
@@ -149,7 +149,10 @@ fn parse_hex_timeout_duration(duration: &str) -> Option<Duration> {
         (duration, 1.0)
     };
     let unsigned = number.strip_prefix(['+', '-']).unwrap_or(number);
-    if !(unsigned.starts_with("0x") || unsigned.starts_with("0X")) {
+    let is_hex = unsigned.starts_with("0x") || unsigned.starts_with("0X");
+    let is_infinity =
+        unsigned.eq_ignore_ascii_case("inf") || unsigned.eq_ignore_ascii_case("infinity");
+    if !(is_hex || is_infinity) {
         return None;
     }
 
@@ -772,6 +775,21 @@ mod tests {
             let flags = TimeoutFlags::new(&matches).unwrap();
             assert_eq!(flags.kill_after, Some(Duration::from_secs(2)));
             assert_eq!(flags.duration, Duration::from_secs(4));
+        }
+
+        #[test]
+        fn test_infinity_duration_spellings() {
+            for duration in ["INF", "INFINITY", "+inf", "+InFiNiTy", "INFs", "infinityd"] {
+                assert!(parse_timeout_duration(duration).unwrap() >= Duration::from_secs(u64::MAX));
+            }
+            assert!(parse_timeout_duration("-INF").is_err());
+            assert!(parse_timeout_duration("infinite").is_err());
+
+            let args = vec![ctcore::ct_util_name(), "-k", "+INFINITYs", "INF", "true"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = TimeoutFlags::new(&matches).unwrap();
+            assert_eq!(flags.kill_after, Some(Duration::from_secs(u64::MAX)));
+            assert_eq!(flags.duration, Duration::from_secs(u64::MAX));
         }
 
         #[test]

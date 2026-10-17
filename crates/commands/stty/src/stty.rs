@@ -111,6 +111,7 @@ fn parse_settings(args: &[&str]) -> Vec<String> {
 fn normalize_stty_file_short_option(args: impl ctcore::Args) -> Vec<OsString> {
     let mut normalized = Vec::new();
     let mut options_ended = false;
+    let mut drain_settings_start = None;
 
     for arg in args {
         if options_ended {
@@ -125,6 +126,22 @@ fn normalize_stty_file_short_option(args: impl ctcore::Args) -> Vec<OsString> {
         }
 
         if let Some(text) = arg.to_str() {
+            if matches!(text, "drain" | "-drain") {
+                drain_settings_start.get_or_insert(normalized.len());
+                normalized.push(arg);
+                continue;
+            }
+
+            let is_output_style_option = matches!(text, "--all" | "--save")
+                || text.strip_prefix('-').is_some_and(|shorts| {
+                    !shorts.is_empty() && shorts.chars().all(|c| c == 'a' || c == 'g')
+                });
+            if is_output_style_option && let Some(insert_at) = drain_settings_start {
+                normalized.insert(insert_at, arg);
+                drain_settings_start = Some(insert_at + 1);
+                continue;
+            }
+
             if text.starts_with("-F") && text.len() > 2 {
                 normalized.push(OsString::from("-F"));
                 normalized.push(OsString::from(&text[2..]));
@@ -132,6 +149,7 @@ fn normalize_stty_file_short_option(args: impl ctcore::Args) -> Vec<OsString> {
             }
         }
 
+        drain_settings_start = None;
         normalized.push(arg);
     }
 
@@ -191,8 +209,13 @@ impl SttyFlags {
             return Err(CtSimpleError::new(1, err_message));
         }
 
-        // 检查是否在指定输出风格的同时设置了模式，如果设置了模式，则返回错误
-        if self.settings.is_some() && (self.is_save || self.is_all) {
+        // GNU treats drain/-drain like options for the purpose of deciding
+        // whether an output style was combined with a mode setting.
+        let has_mode_setting = self
+            .settings
+            .as_ref()
+            .is_some_and(|settings| settings.iter().any(|setting| !is_drain_setting(setting)));
+        if has_mode_setting && (self.is_save || self.is_all) {
             let err_message = "when specifying an output style, modes may not be set";
             return Err(CtSimpleError::new(1, err_message));
         }
@@ -1530,6 +1553,48 @@ mod tests {
         }
 
         #[test]
+        fn test_drain_output_style_options_are_normalized_before_settings() {
+            for (args, expected) in [
+                (
+                    vec![ctcore::ct_util_name(), "drain", "-g"],
+                    vec![ctcore::ct_util_name(), "-g", "drain"],
+                ),
+                (
+                    vec![ctcore::ct_util_name(), "-drain", "--all"],
+                    vec![ctcore::ct_util_name(), "--all", "-drain"],
+                ),
+                (
+                    vec![ctcore::ct_util_name(), "drain", "-ag"],
+                    vec![ctcore::ct_util_name(), "-ag", "drain"],
+                ),
+            ] {
+                let normalized = normalize_stty_file_short_option(args.iter().map(OsString::from));
+                assert_eq!(
+                    normalized,
+                    expected.into_iter().map(OsString::from).collect::<Vec<_>>()
+                );
+            }
+        }
+
+        #[test]
+        fn test_drain_output_style_normalization_stops_after_double_dash() {
+            let args = normalize_stty_file_short_option(
+                [ctcore::ct_util_name(), "drain", "--", "-g"]
+                    .iter()
+                    .map(OsString::from),
+            );
+            assert_eq!(
+                args,
+                vec![
+                    OsString::from(ctcore::ct_util_name()),
+                    OsString::from("drain"),
+                    OsString::from("--"),
+                    OsString::from("-g"),
+                ]
+            );
+        }
+
+        #[test]
         fn test_ct_app_multiple_settings() {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), "raw", "-echo", "9600", "size"];
@@ -1619,6 +1684,34 @@ mod tests {
                 file_name: None,
                 file: Device::Stdin(stdin()),
                 settings: None,
+            };
+            assert!(flags.check().is_err());
+        }
+
+        #[test]
+        fn test_stty_flags_allow_output_style_with_only_drain_settings() {
+            for setting in ["drain", "-drain"] {
+                let flags = SttyFlags {
+                    is_all: true,
+                    is_save: false,
+                    stdout_is_terminal: false,
+                    file_name: None,
+                    file: Device::Stdin(stdin()),
+                    settings: Some(vec![setting.to_string()]),
+                };
+                assert!(flags.check().is_ok());
+            }
+        }
+
+        #[test]
+        fn test_stty_flags_reject_output_style_with_drain_and_mode() {
+            let flags = SttyFlags {
+                is_all: false,
+                is_save: true,
+                stdout_is_terminal: false,
+                file_name: None,
+                file: Device::Stdin(stdin()),
+                settings: Some(vec!["drain".to_string(), "echo".to_string()]),
             };
             assert!(flags.check().is_err());
         }

@@ -111,9 +111,18 @@ fn parse_settings(args: &[&str]) -> Vec<String> {
 fn normalize_stty_file_short_option(args: impl ctcore::Args) -> Vec<OsString> {
     let mut normalized = Vec::new();
     let mut options_ended = false;
+    let mut settings_start = None;
     let mut drain_settings_start = None;
+    let mut args = args.peekable();
+    let mut is_program_name = true;
 
-    for arg in args {
+    while let Some(arg) = args.next() {
+        if is_program_name {
+            is_program_name = false;
+            normalized.push(arg);
+            continue;
+        }
+
         if options_ended {
             normalized.push(arg);
             continue;
@@ -126,7 +135,58 @@ fn normalize_stty_file_short_option(args: impl ctcore::Args) -> Vec<OsString> {
         }
 
         if let Some(text) = arg.to_str() {
+            if matches!(text, "-F" | "--file") {
+                let value = args.next();
+                let insert_at = settings_start.unwrap_or(normalized.len());
+                normalized.insert(insert_at, arg);
+                let inserted = if let Some(value) = value {
+                    normalized.insert(insert_at + 1, value);
+                    2
+                } else {
+                    1
+                };
+                if let Some(start) = settings_start.as_mut() {
+                    *start += inserted;
+                }
+                if let Some(start) = drain_settings_start.as_mut()
+                    && *start >= insert_at
+                {
+                    *start += inserted;
+                }
+                continue;
+            }
+
+            if let Some(value) = text.strip_prefix("-F").filter(|value| !value.is_empty()) {
+                let insert_at = settings_start.unwrap_or(normalized.len());
+                normalized.insert(insert_at, OsString::from("-F"));
+                normalized.insert(insert_at + 1, OsString::from(value));
+                if let Some(start) = settings_start.as_mut() {
+                    *start += 2;
+                }
+                if let Some(start) = drain_settings_start.as_mut()
+                    && *start >= insert_at
+                {
+                    *start += 2;
+                }
+                continue;
+            }
+
+            if text.starts_with("--file=") {
+                let insert_at = settings_start.unwrap_or(normalized.len());
+                normalized.insert(insert_at, arg);
+                if let Some(start) = settings_start.as_mut() {
+                    *start += 1;
+                }
+                if let Some(start) = drain_settings_start.as_mut()
+                    && *start >= insert_at
+                {
+                    *start += 1;
+                }
+                continue;
+            }
+
             if matches!(text, "drain" | "-drain") {
+                settings_start.get_or_insert(normalized.len());
                 drain_settings_start.get_or_insert(normalized.len());
                 normalized.push(arg);
                 continue;
@@ -138,17 +198,22 @@ fn normalize_stty_file_short_option(args: impl ctcore::Args) -> Vec<OsString> {
                 });
             if is_output_style_option && let Some(insert_at) = drain_settings_start {
                 normalized.insert(insert_at, arg);
+                if let Some(start) = settings_start.as_mut()
+                    && *start >= insert_at
+                {
+                    *start += 1;
+                }
                 drain_settings_start = Some(insert_at + 1);
                 continue;
             }
 
-            if text.starts_with("-F") && text.len() > 2 {
-                normalized.push(OsString::from("-F"));
-                normalized.push(OsString::from(&text[2..]));
+            if is_output_style_option {
+                normalized.push(arg);
                 continue;
             }
         }
 
+        settings_start.get_or_insert(normalized.len());
         drain_settings_start = None;
         normalized.push(arg);
     }
@@ -1548,6 +1613,53 @@ mod tests {
                     OsString::from(ctcore::ct_util_name()),
                     OsString::from("--"),
                     OsString::from("-F/dev/tty"),
+                ]
+            );
+        }
+
+        #[test]
+        fn test_file_options_are_normalized_before_settings() {
+            for (args, expected) in [
+                (
+                    vec![ctcore::ct_util_name(), "echo", "-F", "/dev/tty"],
+                    vec![ctcore::ct_util_name(), "-F", "/dev/tty", "echo"],
+                ),
+                (
+                    vec![ctcore::ct_util_name(), "echo", "-F/dev/tty"],
+                    vec![ctcore::ct_util_name(), "-F", "/dev/tty", "echo"],
+                ),
+                (
+                    vec![ctcore::ct_util_name(), "echo", "--file", "/dev/tty"],
+                    vec![ctcore::ct_util_name(), "--file", "/dev/tty", "echo"],
+                ),
+                (
+                    vec![ctcore::ct_util_name(), "echo", "--file=/dev/tty"],
+                    vec![ctcore::ct_util_name(), "--file=/dev/tty", "echo"],
+                ),
+            ] {
+                let normalized = normalize_stty_file_short_option(args.iter().map(OsString::from));
+                assert_eq!(
+                    normalized,
+                    expected.into_iter().map(OsString::from).collect::<Vec<_>>()
+                );
+            }
+        }
+
+        #[test]
+        fn test_file_option_normalization_after_setting_stops_after_double_dash() {
+            let args = normalize_stty_file_short_option(
+                [ctcore::ct_util_name(), "echo", "--", "-F", "/dev/tty"]
+                    .iter()
+                    .map(OsString::from),
+            );
+            assert_eq!(
+                args,
+                vec![
+                    OsString::from(ctcore::ct_util_name()),
+                    OsString::from("echo"),
+                    OsString::from("--"),
+                    OsString::from("-F"),
+                    OsString::from("/dev/tty"),
                 ]
             );
         }

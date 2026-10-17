@@ -1169,7 +1169,7 @@ fn install_standard(paths: Vec<String>, b: &Installer) -> CTResult<()> {
         PathBuf::from(&paths[paths.len() - 1])
     };
     if !target_dir.exists() {
-        if b.create_leading {
+        if b.create_leading && b.target_dir.is_some() {
             create_leading_dirs(&target_dir, b.verbose, b)
                 .map_err(|e| InstallError::CreateDirFailed(target_dir.clone(), e))?;
         } else {
@@ -3050,6 +3050,54 @@ mod tests {
         // 验证多个文件是否都安装成功
         assert!(target_dir.join("source.txt").exists());
         assert!(target_dir.join("source2.txt").exists());
+    }
+
+    #[test]
+    fn test_multi_source_create_leading_requires_explicit_target_directory() {
+        let temp = tempdir().unwrap();
+        let source_a = temp.path().join("a");
+        let source_b = temp.path().join("b");
+        std::fs::write(&source_a, "A").unwrap();
+        std::fs::write(&source_b, "B").unwrap();
+
+        let implicit_target = temp.path().join("implicit/target");
+        let installer = Installer {
+            create_leading: true,
+            ..Default::default()
+        };
+        let result = install_standard(
+            vec![
+                source_a.to_string_lossy().into_owned(),
+                source_b.to_string_lossy().into_owned(),
+                implicit_target.to_string_lossy().into_owned(),
+            ],
+            &installer,
+        );
+        assert!(result.is_err());
+        assert!(!implicit_target.exists());
+
+        let explicit_target = temp.path().join("explicit/target");
+        let installer = Installer {
+            create_leading: true,
+            target_dir: Some(explicit_target.to_string_lossy().into_owned()),
+            ..Default::default()
+        };
+        install_standard(
+            vec![
+                source_a.to_string_lossy().into_owned(),
+                source_b.to_string_lossy().into_owned(),
+            ],
+            &installer,
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(explicit_target.join("a")).unwrap(),
+            "A"
+        );
+        assert_eq!(
+            std::fs::read_to_string(explicit_target.join("b")).unwrap(),
+            "B"
+        );
     }
 
     #[test]

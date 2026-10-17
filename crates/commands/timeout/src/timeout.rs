@@ -28,7 +28,7 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, UClapError};
 use ctcore::ct_process::CtChildExt;
-use std::ffi::{CString, OsString};
+use std::ffi::{CString, OsStr, OsString};
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
@@ -126,7 +126,7 @@ struct TimeoutFlags {
     is_preserve_status: bool,
     is_verbose: bool,
 
-    command: Vec<String>,
+    command: Vec<OsString>,
 }
 
 fn parse_timeout_duration(duration: &str) -> Result<Duration, String> {
@@ -229,9 +229,9 @@ impl TimeoutFlags {
         let is_verbose = timeout_flags.get_flag(timeout_flags::TIMEOUT_VERBOSE);
 
         let command = timeout_flags
-            .get_many::<String>(timeout_flags::TIMEOUT_COMMAND)
+            .get_many::<OsString>(timeout_flags::TIMEOUT_COMMAND)
             .unwrap()
-            .map(String::from)
+            .cloned()
             .collect::<Vec<_>>();
 
         Ok(Self {
@@ -307,6 +307,7 @@ pub fn ct_app() -> Command {
             .value_name("COMMAND [ARGS]")
             .required(true)
             .action(ArgAction::Append)
+            .value_parser(clap::builder::OsStringValueParser::new())
             .value_hint(clap::ValueHint::CommandName)
             .help(t!("timeout.clap.timeout_command")),
     ];
@@ -333,7 +334,7 @@ fn timeout_unblock_sigchld() {
 }
 
 /// 在详细模式下报告超时并发送信号给指定命令
-fn timeout_report_if_verbose(signal: usize, cmd: &str, is_verbose: bool) {
+fn timeout_report_if_verbose(signal: usize, cmd: &OsStr, is_verbose: bool) {
     if is_verbose {
         let s = get_ct_signal_name_by_value(signal).unwrap();
         ct_show_error!("sending signal {} to command {}", s, cmd.quote());
@@ -624,6 +625,7 @@ impl Tool for Timeout {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
 
     // 新增：测试 Tool trait 的基本实现
     #[test]
@@ -656,7 +658,26 @@ mod tests {
             assert_eq!(flags.duration, Duration::from_secs(5));
             assert!(!flags.is_preserve_status);
             assert!(!flags.is_verbose);
-            assert_eq!(flags.command, vec!["sleep".to_string(), "1".to_string()]);
+            assert_eq!(
+                flags.command,
+                vec![OsString::from("sleep"), OsString::from("1")]
+            );
+        }
+
+        #[test]
+        fn test_non_utf8_command_operands_are_preserved() {
+            let command = OsString::from_vec(b"command-\xff".to_vec());
+            let argument = OsString::from_vec(b"argument-\xfe".to_vec());
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("1"),
+                command.clone(),
+                argument.clone(),
+            ];
+
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = TimeoutFlags::new(&matches).unwrap();
+            assert_eq!(flags.command, vec![command, argument]);
         }
 
         #[test]
@@ -872,7 +893,7 @@ mod tests {
                 duration: Duration::from_secs(1),
                 is_preserve_status: false,
                 is_verbose: false,
-                command: vec!["true".to_string()],
+                command: vec!["true".into()],
             });
             // 进程在超时前正常结束，应该返回成功
             assert!(result.is_ok());
@@ -887,7 +908,7 @@ mod tests {
                 duration: Duration::from_secs(1),
                 is_preserve_status: false,
                 is_verbose: false,
-                command: vec!["nonexistent_command".to_string()],
+                command: vec!["nonexistent_command".into()],
             });
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 127);
@@ -902,7 +923,7 @@ mod tests {
                 duration: Duration::from_secs(1), // 增加超时时间以确保false命令能正常退出
                 is_preserve_status: true,
                 is_verbose: false,
-                command: vec!["false".to_string()],
+                command: vec!["false".into()],
             });
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 1);
@@ -917,7 +938,7 @@ mod tests {
                 duration: Duration::from_secs(1),
                 is_preserve_status: true,
                 is_verbose: false,
-                command: vec!["true".to_string()],
+                command: vec!["true".into()],
             });
             // 进程正常退出（退出码0），preserve_status模式下应该返回成功
             assert!(result.is_ok());
@@ -932,7 +953,7 @@ mod tests {
                 duration: Duration::from_millis(100), // 很短的超时时间
                 is_preserve_status: false,
                 is_verbose: false,
-                command: vec!["sleep".to_string(), "1".to_string()], // sleep 1秒
+                command: vec!["sleep".into(), "1".into()], // sleep 1秒
             });
             // 进程应该超时并返回124
             assert!(result.is_err());
@@ -948,7 +969,7 @@ mod tests {
                 duration: Duration::from_millis(100), // 100ms超时
                 is_preserve_status: false,
                 is_verbose: false,
-                command: vec!["sleep".to_string(), "1".to_string()], // sleep 1秒
+                command: vec!["sleep".into(), "1".into()], // sleep 1秒
             });
             // 进程应该超时并返回124（兼容性要求）
             assert!(result.is_err());
@@ -964,7 +985,7 @@ mod tests {
                 duration: Duration::from_millis(100),
                 is_preserve_status: false,
                 is_verbose: false,
-                command: vec!["sleep".to_string(), "1".to_string()],
+                command: vec!["sleep".into(), "1".into()],
             });
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 137);
@@ -979,7 +1000,7 @@ mod tests {
                 duration: Duration::from_millis(100),
                 is_preserve_status: false,
                 is_verbose: false,
-                command: vec!["sleep".to_string(), "1".to_string()],
+                command: vec!["sleep".into(), "1".into()],
             });
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 137);

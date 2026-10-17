@@ -41,7 +41,6 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_entries::{grp2gid, usr2uid};
 use ctcore::ct_error::{CTError, CTIoError, CTResult};
 use ctcore::ct_fs::dir_strip_dot_for_creation;
-use ctcore::ct_mode::get_umask;
 use ctcore::ct_perms::{
     CtOwnershipChangeOutputNames, CtVerbosityLevel, Verbosity, change_ownership,
 };
@@ -79,6 +78,8 @@ pub struct Installer {
     main_function: MainFunction,
     /// 指定的权限模式
     specified_mode: Option<u32>,
+    /// 指定目录模式显式修改的权限位
+    directory_mode_bits: u32,
     /// 备份模式
     backup_mode: CtBackupMode,
     /// 备份文件后缀
@@ -118,6 +119,7 @@ impl Default for Installer {
         Self {
             main_function: MainFunction::Standard,
             specified_mode: None,
+            directory_mode_bits: mode::CHMOD_MODE_BITS,
             backup_mode: CtBackupMode::NoBackup,
             suffix: String::new(),
             owner_id: None,
@@ -426,19 +428,19 @@ impl Installer {
         (main_function, considering_dir)
     }
 
-    fn parse_mode(matches: &ArgMatches, considering_dir: bool) -> CTResult<Option<u32>> {
+    fn parse_mode(matches: &ArgMatches, considering_dir: bool) -> CTResult<(Option<u32>, u32)> {
         if matches.contains_id(install_options::INSTALL_MODE) {
             let x = matches
                 .get_one::<String>(install_options::INSTALL_MODE)
                 .ok_or(1)?;
-            Ok(Some(
-                mode::install_parse(x, considering_dir, get_umask()).map_err(|err| {
-                    ct_show_error!("Invalid mode string: {}", err);
-                    1
-                })?,
-            ))
+            // Like GNU install's mode_adjust call, -m is independent of the caller's umask.
+            let parsed = mode::install_parse_with_bits(x, considering_dir, 0).map_err(|err| {
+                ct_show_error!("Invalid mode string: {}", err);
+                1
+            })?;
+            Ok((Some(parsed.mode), parsed.affected_bits))
         } else {
-            Ok(None)
+            Ok((None, mode::CHMOD_MODE_BITS))
         }
     }
 
@@ -501,7 +503,7 @@ impl Installer {
 
     pub fn new(matches: &ArgMatches) -> CTResult<Self> {
         let (main_function, considering_dir) = Self::parse_main_function(matches);
-        let specified_mode = Self::parse_mode(matches, considering_dir)?;
+        let (specified_mode, directory_mode_bits) = Self::parse_mode(matches, considering_dir)?;
         let suffix_enables_backup = matches
             .get_one::<String>(ct_backup_control::arguments::OPT_SUFFIX)
             .is_some();
@@ -575,6 +577,7 @@ impl Installer {
         Ok(Self {
             main_function,
             specified_mode,
+            directory_mode_bits,
             backup_mode,
             suffix: ct_backup_control::determine_backup_suffix(matches),
             owner_id,
@@ -835,7 +838,15 @@ impl Installer {
     /// # 返回值
     /// 返回 `CTResult<()>`，表示操作是否成功
     fn set_directory_mode(&self, path: &Path) -> CTResult<()> {
-        if mode::install_chmod(path, self.mode()).is_err() {
+        let current_mode = fs::metadata(path)
+            .map(|metadata| metadata.mode() & mode::CHMOD_MODE_BITS)
+            .map_err(|_| {
+                ctcore::ct_error::set_ct_exit_code(1);
+                InstallError::ChmodFailed(path.to_path_buf())
+            })?;
+        let directory_mode =
+            (current_mode & !self.directory_mode_bits) | (self.mode() & self.directory_mode_bits);
+        if mode::install_chmod(path, directory_mode).is_err() {
             ctcore::ct_error::set_ct_exit_code(1);
             return Err(InstallError::ChmodFailed(path.to_path_buf()).into());
         }
@@ -861,7 +872,6 @@ impl Installer {
             groups_only: self.owner_id.is_none(),
             force_silent: false,
             level: CtVerbosityLevel::Normal,
-            force_silent: false,
         }
     }
 }
@@ -2821,6 +2831,44 @@ mod tests {
         );
         assert_eq!(permission_mode(temp.path().join("setgid/a")), 0o2755);
         assert_eq!(permission_mode(temp.path().join("setgid/a/b")), 0o2755);
+    }
+
+    #[test]
+    fn test_existing_directory_mode_preserves_unaffected_bits() {
+        let temp = tempdir().unwrap();
+
+        let numeric = temp.path().join("numeric");
+        std::fs::create_dir(&numeric).unwrap();
+        std::fs::set_permissions(&numeric, std::fs::Permissions::from_mode(0o2777)).unwrap();
+        let numeric_arg = numeric.to_string_lossy().into_owned();
+        let matches = ct_app()
+            .try_get_matches_from(["install", "-d", "-m755", numeric_arg.as_str()])
+            .unwrap();
+        let installer = Installer::new(&matches).unwrap();
+        install_directory(std::slice::from_ref(&numeric_arg), &installer).unwrap();
+        assert_eq!(permission_mode(&numeric), 0o2755);
+
+        let symbolic = temp.path().join("symbolic");
+        std::fs::create_dir(&symbolic).unwrap();
+        std::fs::set_permissions(&symbolic, std::fs::Permissions::from_mode(0o2721)).unwrap();
+        let symbolic_arg = symbolic.to_string_lossy().into_owned();
+        let matches = ct_app()
+            .try_get_matches_from(["install", "-d", "-mg=rx", symbolic_arg.as_str()])
+            .unwrap();
+        let installer = Installer::new(&matches).unwrap();
+        install_directory(std::slice::from_ref(&symbolic_arg), &installer).unwrap();
+        assert_eq!(permission_mode(&symbolic), 0o2751);
+
+        let explicit = temp.path().join("explicit");
+        std::fs::create_dir(&explicit).unwrap();
+        std::fs::set_permissions(&explicit, std::fs::Permissions::from_mode(0o2777)).unwrap();
+        let explicit_arg = explicit.to_string_lossy().into_owned();
+        let matches = ct_app()
+            .try_get_matches_from(["install", "-d", "-m00755", explicit_arg.as_str()])
+            .unwrap();
+        let installer = Installer::new(&matches).unwrap();
+        install_directory(std::slice::from_ref(&explicit_arg), &installer).unwrap();
+        assert_eq!(permission_mode(&explicit), 0o755);
     }
 
     #[test]

@@ -455,13 +455,16 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &LnSettings
             continue;
         }
 
-        // 创建链接
-        if let Err(e) = ln_link(srcpath, &targetpath, settings) {
-            ct_show_error!("{}", e);
-            all_successful = false;
+        // GNU records a destination only after its link was created.
+        match ln_link(srcpath, &targetpath, settings) {
+            Ok(()) => {
+                linked_destinations.insert(targetpath);
+            }
+            Err(e) => {
+                ct_show_error!("{}", e);
+                all_successful = false;
+            }
         }
-
-        linked_destinations.insert(targetpath);
     }
 
     if all_successful {
@@ -1326,6 +1329,27 @@ mod tests {
         assert!(ln_link(&hard_path, &hard_path, &hard_settings).is_err());
         assert_eq!(fs::read_to_string(&hard_path).unwrap(), "hard-old");
         assert!(!temp.path().join("hard~").exists());
+    }
+
+    #[test]
+    fn test_failed_link_does_not_reserve_destination() {
+        let temp = tempdir().unwrap();
+        let missing_source = temp.path().join("missing/name");
+        let good_dir = temp.path().join("good");
+        let good_source = good_dir.join("name");
+        let target_dir = temp.path().join("target");
+        fs::create_dir(&good_dir).unwrap();
+        fs::create_dir(&target_dir).unwrap();
+        fs::write(&good_source, "good").unwrap();
+
+        let result = link_files_in_dir(
+            &[missing_source, good_source],
+            &target_dir,
+            &LnSettings::default(),
+        );
+
+        assert!(result.is_err());
+        assert_eq!(fs::read_to_string(target_dir.join("name")).unwrap(), "good");
     }
 
     #[test]

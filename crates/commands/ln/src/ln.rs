@@ -507,11 +507,13 @@ fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
     }
 
     if let Ok(src_abs) = canonicalize(src, MissingHandling::Missing, ResolveMode::Physical) {
-        if let Ok(dst_abs) = canonicalize(
-            dst.parent().unwrap(),
-            MissingHandling::Missing,
-            ResolveMode::Physical,
-        ) {
+        let dst_parent = dst
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        if let Ok(dst_abs) =
+            canonicalize(dst_parent, MissingHandling::Missing, ResolveMode::Physical)
+        {
             return make_path_relative_to(src_abs, dst_abs).into();
         }
     }
@@ -1623,6 +1625,21 @@ mod tests {
         };
         assert!(ln_link(Path::new(""), &empty_link, &settings).is_err());
         assert!(fs::symlink_metadata(empty_link).is_err());
+
+        let expected_empty_dst = make_path_relative_to(
+            canonicalize(&src, MissingHandling::Missing, ResolveMode::Physical).unwrap(),
+            canonicalize(
+                Path::new("."),
+                MissingHandling::Missing,
+                ResolveMode::Physical,
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            relative_path(&src, Path::new("")).as_ref(),
+            expected_empty_dst.as_path()
+        );
+        assert!(ln_link(&src, Path::new(""), &settings).is_err());
     }
 
     #[test]

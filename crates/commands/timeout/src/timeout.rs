@@ -120,6 +120,13 @@ struct TimeoutFlags {
     command: Vec<String>,
 }
 
+fn parse_timeout_duration(duration: &str) -> Result<Duration, String> {
+    // Rust excludes vertical tab from this predicate, while C isspace includes it.
+    ctcore::ct_parse_time::ct_from_str(
+        duration.trim_start_matches(|c: char| c.is_ascii_whitespace() || c == '\u{b}'),
+    )
+}
+
 impl TimeoutFlags {
     // 根据提供的命令行参数创建一个新的CTimeout实例
     fn new(timeout_flags: &clap::ArgMatches) -> CTResult<Self> {
@@ -144,7 +151,7 @@ impl TimeoutFlags {
 
         let kill_after = match timeout_flags.get_one::<String>(timeout_flags::TIMEOUT_KILL_AFTER) {
             None => None,
-            Some(kill_after_str) => match ctcore::ct_parse_time::ct_from_str(kill_after_str) {
+            Some(kill_after_str) => match parse_timeout_duration(kill_after_str) {
                 Ok(mut k) => {
                     // 处理正数下溢出。如果解析为0，但输入包含数字(1-9)，说明是极端微小的浮点数，向上取整为1纳秒
                     if k.is_zero() && kill_after_str.chars().any(|c| ('1'..='9').contains(&c)) {
@@ -161,7 +168,7 @@ impl TimeoutFlags {
         let duration_str = timeout_flags
             .get_one::<String>(timeout_flags::TIMEOUT_DURATION)
             .unwrap();
-        let mut duration = match ctcore::ct_parse_time::ct_from_str(duration_str) {
+        let mut duration = match parse_timeout_duration(duration_str) {
             Ok(duration) => duration,
             Err(err) => {
                 return Err(CTsageError::new(ExitStatus::TimeoutFailed.into(), err));
@@ -668,6 +675,29 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args).unwrap();
             let flags = TimeoutFlags::new(&matches).unwrap();
             assert_eq!(flags.kill_after, Some(Duration::from_secs(2)));
+        }
+
+        #[test]
+        fn test_duration_accepts_only_leading_ascii_whitespace() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-k",
+                "\t\u{b} 2s",
+                "\r\n 5s",
+                "true",
+            ];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = TimeoutFlags::new(&matches).unwrap();
+            assert_eq!(flags.kill_after, Some(Duration::from_secs(2)));
+            assert_eq!(flags.duration, Duration::from_secs(5));
+
+            for args in [
+                vec![ctcore::ct_util_name(), "5s ", "true"],
+                vec![ctcore::ct_util_name(), "-k", "2s ", "5s", "true"],
+            ] {
+                let matches = ct_app().try_get_matches_from(args).unwrap();
+                assert!(TimeoutFlags::new(&matches).is_err());
+            }
         }
 
         #[test]

@@ -51,6 +51,7 @@ use file_diff::diff;
 use filetime::{FileTime, set_file_times};
 #[cfg(target_os = "linux")]
 use selinux::{self, SecurityContext};
+use std::collections::HashSet;
 use std::error::Error;
 use std::ffi::{CString, OsStr, OsString};
 use std::fmt::{Debug, Display};
@@ -242,6 +243,12 @@ enum InstallError {
     /// - 目标文件路径
     SameFile(PathBuf, PathBuf),
 
+    /// 目标文件已由本次调用中的另一个源文件创建
+    /// 参数:
+    /// - 目标文件路径
+    /// - 源文件路径
+    JustCreatedDestination(PathBuf, PathBuf),
+
     /// 指定的用户不存在
     /// 参数: 用户名
     InvalidUser(String),
@@ -325,6 +332,14 @@ impl Display for InstallError {
             Self::SameFile(from, to) => {
                 write!(f, "{} and {} are the same file", from.quote(), to.quote())
             }
+
+            // 目标文件已由本次调用中的另一个源文件创建
+            Self::JustCreatedDestination(to, from) => write!(
+                f,
+                "will not overwrite just-created {} with {}",
+                to.quote(),
+                from.quote()
+            ),
 
             // 指定的用户不存在
             Self::InvalidUser(user) => write!(f, "invalid user: {}", user.quote()),
@@ -550,7 +565,7 @@ impl Installer {
         }
     }
 
-    fn process_source_file(&self, from: &Path, to: &Path) -> CTResult<()> {
+    fn process_source_file(&self, from: &Path, to: &Path) -> CTResult<CopyStatus> {
         if from.is_dir() {
             return Err(InstallError::OmittingDirectory(from.to_path_buf()).into());
         }
@@ -1086,6 +1101,8 @@ fn install_standard(paths: Vec<String>, b: &Installer) -> CTResult<()> {
         &paths[..paths.len() - 1]
     };
 
+    let mut created_destinations = HashSet::with_capacity(sources.len());
+
     for from in sources.iter().map(Path::new) {
         if from.is_dir() {
             ct_show!(InstallError::OmittingDirectory(from.to_path_buf()));
@@ -1098,9 +1115,21 @@ fn install_standard(paths: Vec<String>, b: &Installer) -> CTResult<()> {
         };
         let to = target_dir.join(file_name);
 
-        if let Err(e) = b.process_source_file(from, &to) {
-            ct_show!(e);
+        if b.backup_mode != CtBackupMode::NumberedBackup && created_destinations.contains(&to) {
+            ct_show!(InstallError::JustCreatedDestination(to, from.to_path_buf()));
             ctcore::ct_error::set_ct_exit_code(1);
+            continue;
+        }
+
+        match b.process_source_file(from, &to) {
+            Ok(CopyStatus::Copied) => {
+                created_destinations.insert(to);
+            }
+            Ok(CopyStatus::Unchanged) => {}
+            Err(e) => {
+                ct_show!(e);
+                ctcore::ct_error::set_ct_exit_code(1);
+            }
         }
     }
 
@@ -1909,6 +1938,12 @@ fn same_file_is_unsafe(from: &Path, to: &Path, source_metadata: &fs::Metadata) -
     target_link_metadata.nlink() <= 1 || same_name(from, to)
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CopyStatus {
+    Copied,
+    Unchanged,
+}
+
 /// 复制文件并设置其属性。
 ///
 /// # 功能
@@ -1923,10 +1958,10 @@ fn same_file_is_unsafe(from: &Path, to: &Path, source_metadata: &fs::Metadata) -
 /// * `b` - 安装器配置
 ///
 /// # 返回值
-/// 返回 `CTResult<()>`，表示操作是否成功完成
-fn copy(from: &Path, to: &Path, b: &Installer) -> CTResult<()> {
+/// 返回复制状态；使用 `-C` 跳过未变化的目标时返回 `CopyStatus::Unchanged`
+fn copy(from: &Path, to: &Path, b: &Installer) -> CTResult<CopyStatus> {
     if b.compare && !b.need_copy(from, to)? {
-        return Ok(());
+        return Ok(CopyStatus::Unchanged);
     }
 
     // GNU install validates the source before backing up or unlinking the destination.
@@ -1977,7 +2012,7 @@ fn copy(from: &Path, to: &Path, b: &Installer) -> CTResult<()> {
         copy_debug.print();
     }
 
-    Ok(())
+    Ok(CopyStatus::Copied)
 }
 
 #[derive(Default)]
@@ -2565,6 +2600,108 @@ mod tests {
         // 验证多个文件是否都安装成功
         assert!(target_dir.join("source.txt").exists());
         assert!(target_dir.join("source2.txt").exists());
+    }
+
+    #[test]
+    fn test_multi_source_basename_collision_preserves_first_destination() {
+        let temp = tempdir().unwrap();
+        let source_a = temp.path().join("a/x");
+        let source_b = temp.path().join("b/x");
+        let target_dir = temp.path().join("out");
+
+        std::fs::create_dir_all(source_a.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(source_b.parent().unwrap()).unwrap();
+        std::fs::create_dir(&target_dir).unwrap();
+        std::fs::write(&source_a, "A").unwrap();
+        std::fs::write(&source_b, "B").unwrap();
+
+        let installer = Installer {
+            target_dir: Some(target_dir.to_string_lossy().into_owned()),
+            ..Default::default()
+        };
+        ctcore::ct_error::set_ct_exit_code(0);
+
+        install_standard(
+            vec![
+                source_a.to_string_lossy().into_owned(),
+                source_b.to_string_lossy().into_owned(),
+            ],
+            &installer,
+        )
+        .unwrap();
+
+        assert_eq!(std::fs::read_to_string(target_dir.join("x")).unwrap(), "A");
+        assert_eq!(ctcore::ct_error::get_ct_exit_code(), 1);
+        ctcore::ct_error::set_ct_exit_code(0);
+    }
+
+    #[test]
+    fn test_multi_source_basename_collision_allows_numbered_backup() {
+        let temp = tempdir().unwrap();
+        let source_a = temp.path().join("a/x");
+        let source_b = temp.path().join("b/x");
+        let target_dir = temp.path().join("out");
+
+        std::fs::create_dir_all(source_a.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(source_b.parent().unwrap()).unwrap();
+        std::fs::create_dir(&target_dir).unwrap();
+        std::fs::write(&source_a, "A").unwrap();
+        std::fs::write(&source_b, "B").unwrap();
+
+        let installer = Installer {
+            backup_mode: CtBackupMode::NumberedBackup,
+            target_dir: Some(target_dir.to_string_lossy().into_owned()),
+            ..Default::default()
+        };
+
+        install_standard(
+            vec![
+                source_a.to_string_lossy().into_owned(),
+                source_b.to_string_lossy().into_owned(),
+            ],
+            &installer,
+        )
+        .unwrap();
+
+        assert_eq!(std::fs::read_to_string(target_dir.join("x")).unwrap(), "B");
+        assert_eq!(
+            std::fs::read_to_string(target_dir.join("x.~1~")).unwrap(),
+            "A"
+        );
+    }
+
+    #[test]
+    fn test_multi_source_compare_skip_does_not_mark_destination_as_created() {
+        let temp = tempdir().unwrap();
+        let source_a = temp.path().join("a/x");
+        let source_b = temp.path().join("b/x");
+        let target_dir = temp.path().join("out");
+        let target = target_dir.join("x");
+
+        std::fs::create_dir_all(source_a.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(source_b.parent().unwrap()).unwrap();
+        std::fs::create_dir(&target_dir).unwrap();
+        std::fs::write(&source_a, "A").unwrap();
+        std::fs::write(&source_b, "B").unwrap();
+        std::fs::write(&target, "A").unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(DEFAULT_MODE)).unwrap();
+
+        let installer = Installer {
+            compare: true,
+            target_dir: Some(target_dir.to_string_lossy().into_owned()),
+            ..Default::default()
+        };
+
+        install_standard(
+            vec![
+                source_a.to_string_lossy().into_owned(),
+                source_b.to_string_lossy().into_owned(),
+            ],
+            &installer,
+        )
+        .unwrap();
+
+        assert_eq!(std::fs::read_to_string(target).unwrap(), "B");
     }
 
     #[test]

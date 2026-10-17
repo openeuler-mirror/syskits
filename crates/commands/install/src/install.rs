@@ -1591,11 +1591,14 @@ fn copy_file(
         copy_file_with_debug(from, to)
     } else {
         copy_file_regular(from, to).map(|_| None)
-    };
+    }
+    .map_err(|err| InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err))?;
 
-    copy_debug.map_err(|err| {
-        InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into()
-    })
+    // GNU install stages every destination as 0600 so strip can rewrite a read-only source.
+    fs::set_permissions(to, fs::Permissions::from_mode(0o600))
+        .map_err(|err| InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err))?;
+
+    Ok(copy_debug)
 }
 
 fn copy_file_regular(from: &Path, to: &Path) -> io::Result<()> {
@@ -3356,5 +3359,33 @@ mod tests {
         let result = strip_file(&test_file, &installer);
         assert!(result.is_err());
         assert!(!test_file.exists()); // 失败时文件应该被删除
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_strip_runs_with_writable_staging_mode() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source");
+        let destination = temp.path().join("destination");
+        let strip_program = temp.path().join("check-mode");
+
+        std::fs::write(&source, "content").unwrap();
+        std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o444)).unwrap();
+        std::fs::write(
+            &strip_program,
+            "#!/bin/sh\ntest \"$(stat -c %a -- \"$1\")\" = 600\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&strip_program, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let installer = Installer {
+            specified_mode: Some(0o444),
+            strip: true,
+            strip_program: strip_program.to_string_lossy().into_owned(),
+            ..Default::default()
+        };
+
+        copy(&source, &destination, &installer).unwrap();
+        assert_eq!(permission_mode(destination), 0o444);
     }
 }

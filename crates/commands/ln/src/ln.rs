@@ -121,6 +121,8 @@ enum LnError {
     HardLinkToDirectory(PathBuf),
     /// 目标硬链接已存在
     HardLinkAlreadyExists(PathBuf),
+    /// 不允许覆盖目录
+    CannotOverwriteDirectory(PathBuf),
 }
 
 impl Display for LnError {
@@ -135,6 +137,10 @@ impl Display for LnError {
 
             Self::HardLinkAlreadyExists(s) => {
                 write!(f, "failed to create hard link {}: File exists", s.quote())
+            }
+
+            Self::CannotOverwriteDirectory(s) => {
+                write!(f, "{}: cannot overwrite directory", s.quote())
             }
 
             // 源文件和目标文件是同一个文件时的错误信息
@@ -611,8 +617,16 @@ fn handle_backup_and_overwrite(
     settings: &LnSettings,
 ) -> CTResult<Option<PathBuf>> {
     // 使用 symlink_metadata 准确判断文件或悬空链接是否存在
-    if fs::symlink_metadata(dst).is_err() {
+    let Ok(dst_metadata) = fs::symlink_metadata(dst) else {
         return Ok(None);
+    };
+
+    let will_replace =
+        settings.overwrite != OverwriteMode::NoClobber || settings.backup != CtBackupMode::NoBackup;
+
+    // GNU ln rejects directories before prompting, backing up, or unlinking.
+    if will_replace && dst_metadata.is_dir() {
+        return Err(LnError::CannotOverwriteDirectory(dst.to_path_buf()).into());
     }
 
     if settings.overwrite == OverwriteMode::Interactive && !prompt_overwrite(dst) {
@@ -685,24 +699,11 @@ fn rename_backup(dst: &Path, backup: &Path) -> CTResult<()> {
 fn handle_overwrite_mode(dst: &Path, _src: &Path, settings: &LnSettings) -> CTResult<()> {
     match settings.overwrite {
         OverwriteMode::NoClobber => Ok(()),
-        OverwriteMode::Interactive => {
-            if let Ok(meta) = fs::symlink_metadata(dst) {
-                if meta.is_dir() {
-                    let _ = fs::remove_dir(dst);
-                } else {
-                    let _ = fs::remove_file(dst);
-                }
-            }
-            Ok(())
-        }
-        OverwriteMode::Force => {
-            // 无论目标是普通文件、目录还是悬空的符号链接，都尝试删除它
-            if let Ok(meta) = fs::symlink_metadata(dst) {
-                if meta.is_dir() {
-                    let _ = fs::remove_dir(dst);
-                } else {
-                    let _ = fs::remove_file(dst);
-                }
+        OverwriteMode::Interactive | OverwriteMode::Force => {
+            // unlink(2), as used by GNU ln, cannot remove a directory even if
+            // the destination changes after the metadata check above.
+            if fs::symlink_metadata(dst).is_ok() {
+                let _ = fs::remove_file(dst);
             }
             Ok(())
         }
@@ -1308,6 +1309,43 @@ mod tests {
             fs::read_to_string(target_dir.join("target-source")).unwrap(),
             "target-data"
         );
+    }
+
+    #[test]
+    fn test_no_overwrite_mode_replaces_a_directory() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source");
+        fs::write(&source, "data").unwrap();
+
+        for (name, overwrite, backup) in [
+            ("force", OverwriteMode::Force, CtBackupMode::NoBackup),
+            (
+                "backup",
+                OverwriteMode::NoClobber,
+                CtBackupMode::SimpleBackup,
+            ),
+            (
+                "interactive",
+                OverwriteMode::Interactive,
+                CtBackupMode::NoBackup,
+            ),
+        ] {
+            let destination = temp.path().join(name);
+            fs::create_dir(&destination).unwrap();
+            let settings = LnSettings {
+                overwrite,
+                backup,
+                suffix: OsString::from("~"),
+                is_symbolic: true,
+                is_no_target_dir: true,
+                ..LnSettings::default()
+            };
+
+            let error = ln_exec(&[source.clone(), destination.clone()], &settings).unwrap_err();
+            assert!(error.to_string().contains("cannot overwrite directory"));
+            assert!(destination.is_dir());
+            assert!(!ln_simple_backup_path(&destination, OsStr::new("~")).exists());
+        }
     }
 
     #[cfg(unix)]

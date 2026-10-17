@@ -230,6 +230,12 @@ enum InstallError {
     /// 参数: IO错误信息
     MetadataFailed(std::io::Error),
 
+    /// 获取源文件元数据失败
+    /// 参数:
+    /// - 源文件路径
+    /// - IO错误信息
+    CannotStat(PathBuf, std::io::Error),
+
     /// 指定的用户不存在
     /// 参数: 用户名
     InvalidUser(String),
@@ -303,6 +309,11 @@ impl Display for InstallError {
 
             // 获取文件元数据失败
             Self::MetadataFailed(e) => Display::fmt(&uio_error!(e, ""), f),
+
+            // 获取源文件元数据失败
+            Self::CannotStat(path, e) => {
+                Display::fmt(&uio_error!(e, "cannot stat {}", path.quote()), f)
+            }
 
             // 指定的用户不存在
             Self::InvalidUser(user) => write!(f, "invalid user: {}", user.quote()),
@@ -1855,11 +1866,11 @@ fn copy(from: &Path, to: &Path, b: &Installer) -> CTResult<()> {
     if b.compare && !b.need_copy(from, to)? {
         return Ok(());
     }
-    let source_metadata = if b.preserve_timestamps {
-        Some(fs::metadata(from).map_err(InstallError::MetadataFailed)?)
-    } else {
-        None
-    };
+
+    // GNU install validates the source before backing up or unlinking the destination.
+    let source_metadata =
+        fs::metadata(from).map_err(|err| InstallError::CannotStat(from.to_path_buf(), err))?;
+
     // Declare the path here as we may need it for the verbose output below.
     let backup_path = perform_backup(to, b)?;
 
@@ -1884,8 +1895,8 @@ fn copy(from: &Path, to: &Path, b: &Installer) -> CTResult<()> {
 
     set_ownership_and_permissions(to, b)?;
 
-    if let Some(source_metadata) = source_metadata.as_ref() {
-        preserve_timestamps_from_metadata(source_metadata, to)?;
+    if b.preserve_timestamps {
+        preserve_timestamps_from_metadata(&source_metadata, to)?;
     }
 
     if b.verbose {
@@ -2013,6 +2024,18 @@ mod tests {
 
         assert!(dest.exists());
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "test content");
+    }
+
+    #[test]
+    fn test_copy_missing_source_preserves_existing_destination() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("missing");
+        let dest = temp.path().join("dest");
+
+        std::fs::write(&dest, "KEEP").unwrap();
+
+        assert!(copy(&source, &dest, &Installer::default()).is_err());
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "KEEP");
     }
 
     #[test]

@@ -249,6 +249,12 @@ enum InstallError {
     /// - 源文件路径
     JustCreatedDestination(PathBuf, PathBuf),
 
+    /// 创建备份会覆盖源文件
+    /// 参数:
+    /// - 目标文件路径
+    /// - 源文件路径
+    BackupWouldDestroySource(PathBuf, PathBuf),
+
     /// 指定的用户不存在
     /// 参数: 用户名
     InvalidUser(String),
@@ -337,6 +343,14 @@ impl Display for InstallError {
             Self::JustCreatedDestination(to, from) => write!(
                 f,
                 "will not overwrite just-created {} with {}",
+                to.quote(),
+                from.quote()
+            ),
+
+            // 创建备份会覆盖源文件
+            Self::BackupWouldDestroySource(to, from) => write!(
+                f,
+                "backing up {} might destroy source;  {} not copied",
                 to.quote(),
                 from.quote()
             ),
@@ -1939,6 +1953,35 @@ fn same_file_is_unsafe(from: &Path, to: &Path, source_metadata: &fs::Metadata) -
     target_link_metadata.nlink() <= 1 || same_name(from, to)
 }
 
+fn source_is_destination_backup(
+    from: &Path,
+    to: &Path,
+    source_metadata: &fs::Metadata,
+    b: &Installer,
+) -> bool {
+    if matches!(
+        b.backup_mode,
+        CtBackupMode::NoBackup | CtBackupMode::NumberedBackup
+    ) || fs::symlink_metadata(to).is_err()
+    {
+        return false;
+    }
+
+    let (Some(source_name), Some(target_name)) = (from.file_name(), to.file_name()) else {
+        return false;
+    };
+    let mut backup_name = target_name.to_os_string();
+    backup_name.push(&b.suffix);
+    if source_name != backup_name {
+        return false;
+    }
+
+    let Ok(backup_metadata) = fs::metadata(to.with_file_name(backup_name)) else {
+        return false;
+    };
+    source_metadata.dev() == backup_metadata.dev() && source_metadata.ino() == backup_metadata.ino()
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CopyStatus {
     Copied,
@@ -1971,6 +2014,12 @@ fn copy(from: &Path, to: &Path, b: &Installer) -> CTResult<CopyStatus> {
 
     if same_file_is_unsafe(from, to, &source_metadata) {
         return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
+    }
+
+    if source_is_destination_backup(from, to, &source_metadata, b) {
+        return Err(
+            InstallError::BackupWouldDestroySource(to.to_path_buf(), from.to_path_buf()).into(),
+        );
     }
 
     // Declare the path here as we may need it for the verbose output below.
@@ -2166,6 +2215,47 @@ mod tests {
 
         assert!(copy(&source, &dest, &Installer::default()).is_err());
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "KEEP");
+    }
+
+    #[test]
+    fn test_copy_rejects_backup_that_would_destroy_source() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("dest~");
+        let dest = temp.path().join("dest");
+
+        std::fs::write(&source, "replacement").unwrap();
+        std::fs::write(&dest, "original").unwrap();
+        let installer = Installer {
+            backup_mode: CtBackupMode::SimpleBackup,
+            suffix: String::from("~"),
+            ..Default::default()
+        };
+
+        assert!(copy(&source, &dest, &installer).is_err());
+        assert_eq!(std::fs::read_to_string(&source).unwrap(), "replacement");
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "original");
+    }
+
+    #[test]
+    fn test_copy_allows_source_matching_simple_name_with_numbered_backup() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("dest~");
+        let dest = temp.path().join("dest");
+
+        std::fs::write(&source, "replacement").unwrap();
+        std::fs::write(&dest, "original").unwrap();
+        let installer = Installer {
+            backup_mode: CtBackupMode::NumberedBackup,
+            ..Default::default()
+        };
+
+        copy(&source, &dest, &installer).unwrap();
+        assert_eq!(std::fs::read_to_string(&source).unwrap(), "replacement");
+        assert_eq!(std::fs::read_to_string(&dest).unwrap(), "replacement");
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join("dest.~1~")).unwrap(),
+            "original"
+        );
     }
 
     #[test]

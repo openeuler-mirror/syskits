@@ -236,6 +236,12 @@ enum InstallError {
     /// - IO错误信息
     CannotStat(PathBuf, std::io::Error),
 
+    /// 源文件和目标文件是同一文件
+    /// 参数:
+    /// - 源文件路径
+    /// - 目标文件路径
+    SameFile(PathBuf, PathBuf),
+
     /// 指定的用户不存在
     /// 参数: 用户名
     InvalidUser(String),
@@ -313,6 +319,11 @@ impl Display for InstallError {
             // 获取源文件元数据失败
             Self::CannotStat(path, e) => {
                 Display::fmt(&uio_error!(e, "cannot stat {}", path.quote()), f)
+            }
+
+            // 源文件和目标文件是同一文件
+            Self::SameFile(from, to) => {
+                write!(f, "{} and {} are the same file", from.quote(), to.quote())
             }
 
             // 指定的用户不存在
@@ -1847,6 +1858,57 @@ fn preserve_timestamps(from: &Path, to: &Path) -> CTResult<()> {
     preserve_timestamps_from_metadata(&meta, to)
 }
 
+fn same_name(from: &Path, to: &Path) -> bool {
+    if from == to {
+        return true;
+    }
+    if from.file_name() != to.file_name() {
+        return false;
+    }
+
+    let from_parent = match from.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    };
+    let to_parent = match to.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    };
+    let (Ok(from_parent), Ok(to_parent)) = (fs::metadata(from_parent), fs::metadata(to_parent))
+    else {
+        return false;
+    };
+
+    from_parent.dev() == to_parent.dev() && from_parent.ino() == to_parent.ino()
+}
+
+fn same_file_is_unsafe(from: &Path, to: &Path, source_metadata: &fs::Metadata) -> bool {
+    let Ok(target_metadata) = fs::metadata(to) else {
+        return false;
+    };
+    if source_metadata.dev() != target_metadata.dev()
+        || source_metadata.ino() != target_metadata.ino()
+    {
+        return false;
+    }
+
+    let (Ok(source_link_metadata), Ok(target_link_metadata)) =
+        (fs::symlink_metadata(from), fs::symlink_metadata(to))
+    else {
+        return false;
+    };
+
+    // GNU install unlinks a destination symlink before copying, so replacing it is safe.
+    if target_link_metadata.file_type().is_symlink() {
+        return false;
+    }
+    if source_link_metadata.file_type().is_symlink() {
+        return true;
+    }
+
+    target_link_metadata.nlink() <= 1 || same_name(from, to)
+}
+
 /// 复制文件并设置其属性。
 ///
 /// # 功能
@@ -1870,6 +1932,10 @@ fn copy(from: &Path, to: &Path, b: &Installer) -> CTResult<()> {
     // GNU install validates the source before backing up or unlinking the destination.
     let source_metadata =
         fs::metadata(from).map_err(|err| InstallError::CannotStat(from.to_path_buf(), err))?;
+
+    if same_file_is_unsafe(from, to, &source_metadata) {
+        return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
+    }
 
     // Declare the path here as we may need it for the verbose output below.
     let backup_path = perform_backup(to, b)?;
@@ -2036,6 +2102,47 @@ mod tests {
 
         assert!(copy(&source, &dest, &Installer::default()).is_err());
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "KEEP");
+    }
+
+    #[test]
+    fn test_copy_same_file_preserves_source() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source");
+
+        std::fs::write(&source, "DATA").unwrap();
+
+        assert!(copy(&source, &source, &Installer::default()).is_err());
+        assert_eq!(std::fs::read_to_string(&source).unwrap(), "DATA");
+    }
+
+    #[test]
+    fn test_copy_same_file_alias_preserves_source() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source");
+        let target = temp.path().join(".").join("source");
+
+        std::fs::write(&source, "DATA").unwrap();
+
+        assert!(copy(&source, &target, &Installer::default()).is_err());
+        assert_eq!(std::fs::read_to_string(&source).unwrap(), "DATA");
+    }
+
+    #[test]
+    fn test_copy_distinct_hard_link_is_allowed() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source");
+        let target = temp.path().join("target");
+
+        std::fs::write(&source, "DATA").unwrap();
+        std::fs::hard_link(&source, &target).unwrap();
+
+        copy(&source, &target, &Installer::default()).unwrap();
+        assert_eq!(std::fs::read_to_string(&source).unwrap(), "DATA");
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "DATA");
+        assert_ne!(
+            std::fs::metadata(&source).unwrap().ino(),
+            std::fs::metadata(&target).unwrap().ino()
+        );
     }
 
     #[test]

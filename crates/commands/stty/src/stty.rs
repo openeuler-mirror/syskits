@@ -1396,9 +1396,6 @@ fn stty_apply_combination_setting(
             if reversed {
                 ControlFlow::Break(false)
             } else {
-                I::IXON.apply(termios, true);
-                I::IXOFF.apply(termios, false);
-                O::ONLCR.apply(termios, true);
                 L::ECHOE.apply(termios, true);
                 L::ECHOCTL.apply(termios, true);
                 L::ECHOKE.apply(termios, true);
@@ -2549,6 +2546,33 @@ mod tests {
                 stty_apply_setting(&mut termios, &SttySetting::from("-dec"), &device),
                 Ok(ControlFlow::Break(false))
             ));
+        }
+
+        #[test]
+        fn test_crt_only_enables_echo_flags() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            termios.input_flags.insert(I::IXOFF | I::BRKINT);
+            termios.output_flags.insert(O::OPOST | O::TAB3);
+            termios.control_flags.insert(C::CREAD);
+            termios.local_flags.insert(L::ICANON);
+
+            let input_before = termios.input_flags.bits();
+            let output_before = termios.output_flags.bits();
+            let control_before = termios.control_flags.bits();
+            let local_before = termios.local_flags.bits();
+
+            assert!(matches!(
+                stty_apply_combination_setting(&mut termios, "crt", false),
+                ControlFlow::Break(true)
+            ));
+
+            assert_eq!(termios.input_flags.bits(), input_before);
+            assert_eq!(termios.output_flags.bits(), output_before);
+            assert_eq!(termios.control_flags.bits(), control_before);
+            assert_eq!(
+                termios.local_flags.bits(),
+                local_before | L::ECHOE.bits() | L::ECHOCTL.bits() | L::ECHOKE.bits()
+            );
         }
 
         #[test]

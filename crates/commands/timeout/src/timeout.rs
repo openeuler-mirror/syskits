@@ -422,6 +422,38 @@ fn timeout_unblock_sigchld() {
     }
 }
 
+fn timeout_install_signal_handlers(timeout_signal: usize) {
+    unsafe {
+        let alarm_sa = nix::sys::signal::SigAction::new(
+            nix::sys::signal::SigHandler::Handler(handle_sigalrm),
+            nix::sys::signal::SaFlags::SA_RESTART,
+            nix::sys::signal::SigSet::empty(),
+        );
+        let _ = nix::sys::signal::sigaction(nix::sys::signal::Signal::SIGALRM, &alarm_sa);
+
+        let forwarding_sa = nix::sys::signal::SigAction::new(
+            nix::sys::signal::SigHandler::Handler(handle_forwarding_signal),
+            nix::sys::signal::SaFlags::SA_RESTART,
+            nix::sys::signal::SigSet::empty(),
+        );
+
+        for sig in [
+            nix::sys::signal::Signal::SIGINT,
+            nix::sys::signal::Signal::SIGQUIT,
+            nix::sys::signal::Signal::SIGHUP,
+            nix::sys::signal::Signal::SIGTERM,
+        ] {
+            let _ = nix::sys::signal::sigaction(sig, &forwarding_sa);
+        }
+
+        if let Ok(custom_signal) = nix::sys::signal::Signal::try_from(timeout_signal as i32) {
+            if custom_signal != nix::sys::signal::Signal::SIGALRM {
+                let _ = nix::sys::signal::sigaction(custom_signal, &forwarding_sa);
+            }
+        }
+    }
+}
+
 /// 在详细模式下报告超时并发送信号给指定命令
 fn timeout_report_if_verbose(signal: usize, cmd: &OsStr, is_verbose: bool) {
     if is_verbose {
@@ -473,6 +505,9 @@ fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
             libc::setpgid(0, 0);
         }
     }
+
+    // Install caught dispositions before fork so exec resets them in COMMAND.
+    timeout_install_signal_handlers(flags.signal);
 
     let mut cmd = process::Command::new(&flags.command[0]);
     cmd.args(&flags.command[1..])
@@ -529,36 +564,6 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
     IS_FOREGROUND.store(flags.is_foreground, Ordering::Release);
     ALARM_RECEIVED.store(false, Ordering::Release);
     MONITOR_ACTIVE.store(true, Ordering::Release);
-
-    unsafe {
-        let alarm_sa = nix::sys::signal::SigAction::new(
-            nix::sys::signal::SigHandler::Handler(handle_sigalrm),
-            nix::sys::signal::SaFlags::SA_RESTART,
-            nix::sys::signal::SigSet::empty(),
-        );
-        let _ = nix::sys::signal::sigaction(nix::sys::signal::Signal::SIGALRM, &alarm_sa);
-
-        let forwarding_sa = nix::sys::signal::SigAction::new(
-            nix::sys::signal::SigHandler::Handler(handle_forwarding_signal),
-            nix::sys::signal::SaFlags::SA_RESTART,
-            nix::sys::signal::SigSet::empty(),
-        );
-
-        for sig in [
-            nix::sys::signal::Signal::SIGINT,
-            nix::sys::signal::Signal::SIGQUIT,
-            nix::sys::signal::Signal::SIGHUP,
-            nix::sys::signal::Signal::SIGTERM,
-        ] {
-            let _ = nix::sys::signal::sigaction(sig, &forwarding_sa);
-        }
-
-        if let Ok(custom_signal) = nix::sys::signal::Signal::try_from(flags.signal as i32) {
-            if custom_signal != nix::sys::signal::Signal::SIGALRM {
-                let _ = nix::sys::signal::sigaction(custom_signal, &forwarding_sa);
-            }
-        }
-    }
 
     let wait_result = if flags.duration.is_zero() {
         process.wait().map(Some)

@@ -500,6 +500,12 @@ fn build_normal_target_path(src: &Path, target_dir: &Path) -> CTResult<PathBuf> 
 }
 
 fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
+    // GNU falls back to the original SOURCE when canonicalization fails.
+    // Preserve an empty SOURCE explicitly so it is not rewritten to `.`.
+    if src.as_os_str().is_empty() {
+        return src.into();
+    }
+
     if let Ok(src_abs) = canonicalize(src, MissingHandling::Missing, ResolveMode::Physical) {
         if let Ok(dst_abs) = canonicalize(
             dst.parent().unwrap(),
@@ -1607,6 +1613,16 @@ mod tests {
 
         let rel_path = relative_path(&src, &dst);
         assert!(rel_path.to_str().unwrap().contains("../src/file.txt"));
+        assert!(relative_path(Path::new(""), &dst).as_os_str().is_empty());
+
+        let empty_link = temp.path().join("empty-link");
+        let settings = LnSettings {
+            is_symbolic: true,
+            is_relative: true,
+            ..LnSettings::default()
+        };
+        assert!(ln_link(Path::new(""), &empty_link, &settings).is_err());
+        assert!(fs::symlink_metadata(empty_link).is_err());
     }
 
     #[test]

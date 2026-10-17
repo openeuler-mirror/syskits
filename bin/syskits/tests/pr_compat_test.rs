@@ -266,3 +266,28 @@ fn pr_consumes_form_feed_after_full_page() {
     assert_eq!(output.stdout, b"1\n2\n3\nnext\n");
     assert!(output.stderr.is_empty());
 }
+
+#[test]
+fn pr_custom_expand_character_also_expands_plain_tabs() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["pr", "-t", "-e.4"])
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run syskits pr");
+
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(b"a.b\tc\n")
+        .expect("write input");
+    let output = child.wait_with_output().expect("wait for syskits pr");
+
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"a   b   c\n");
+    assert!(output.stderr.is_empty());
+}

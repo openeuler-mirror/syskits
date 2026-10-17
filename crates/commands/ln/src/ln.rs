@@ -526,6 +526,29 @@ fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
     src.into()
 }
 
+fn same_directory_entry(path1: &Path, path2: &Path) -> bool {
+    let basename1 = path1.file_name().unwrap_or_else(|| path1.as_os_str());
+    let basename2 = path2.file_name().unwrap_or_else(|| path2.as_os_str());
+    if basename1 != basename2 {
+        return false;
+    }
+
+    let parent1 = path1
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let parent2 = path2
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+
+    match (fs::canonicalize(parent1), fs::canonicalize(parent2)) {
+        (Ok(parent1), Ok(parent2)) => parent1 == parent2,
+        // Be conservative if a parent cannot be resolved before removing DEST.
+        _ => true,
+    }
+}
+
 /// 检查两个路径是否指向同一个物理文件
 fn is_same_file(path1: &Path, path2: &Path, settings: &LnSettings) -> bool {
     // 1. 获取目标(dst)的 metadata：永远使用 lstat，因为我们要覆盖的是目标自身，而不是它指向的东西
@@ -581,6 +604,14 @@ fn is_same_file(path1: &Path, path2: &Path, settings: &LnSettings) -> bool {
         // 如果没有开启替换，同数据块直接视为同文件，拒绝操作
         if !will_replace {
             return true;
+        }
+
+        // In physical hard-link mode, GNU compares directory entries without
+        // following a final symlink. Canonicalizing the complete paths would
+        // incorrectly treat two hard links to the same symlink as one file.
+        #[cfg(unix)]
+        if !settings.is_symbolic && !settings.is_logical {
+            return meta1.nlink() == 1 || same_directory_entry(path1, path2);
         }
 
         // 如果开启了替换（如 -f），则检查它们的绝对规范路径。
@@ -1664,6 +1695,34 @@ mod tests {
 
         assert!(ln_exec(&[PathBuf::from("path/."), output.clone()], &settings).is_err());
         assert!(fs::symlink_metadata(output.join("path")).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_physical_symlink_hardlink_with_distinct_name_is_allowed() {
+        use std::os::unix::fs::MetadataExt as _;
+
+        let temp = tempdir().unwrap();
+        let target = temp.path().join("target");
+        let source = temp.path().join("source");
+        let destination = temp.path().join("destination");
+        fs::write(&target, "data").unwrap();
+        std::os::unix::fs::symlink("target", &source).unwrap();
+        fs::hard_link(&source, &destination).unwrap();
+        let settings = LnSettings {
+            overwrite: OverwriteMode::Force,
+            ..LnSettings::default()
+        };
+
+        assert!(!is_same_file(&source, &destination, &settings));
+        assert!(is_same_file(&source, &source, &settings));
+        ln_link(&source, &destination, &settings).unwrap();
+
+        assert_eq!(
+            fs::symlink_metadata(&source).unwrap().ino(),
+            fs::symlink_metadata(&destination).unwrap().ino()
+        );
+        assert_eq!(fs::read_link(destination).unwrap(), PathBuf::from("target"));
     }
 
     #[test]

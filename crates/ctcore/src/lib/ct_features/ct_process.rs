@@ -91,13 +91,14 @@ impl CtChildExt for Child {
                 return Ok(Some(status));
             }
 
-            if start.elapsed() >= timeout {
+            let elapsed = start.elapsed();
+            if elapsed >= timeout {
                 break;
             }
 
-            // XXX: 这有点恶心，但它比只是为了等待而启动一个线程（这是之前的解决方案）更干净。
-            // 我们可能也想在这里使用不同的持续时间
-            thread::sleep(Duration::from_millis(100));
+            // Keep polling bounded without sleeping past short deadlines.
+            let remaining = timeout - elapsed;
+            thread::sleep(remaining.min(Duration::from_millis(100)));
         }
 
         Ok(None)
@@ -180,5 +181,16 @@ mod tests {
 
         // Ensure the elapsed time is greater than or equal to the timeout duration
         assert!(start.elapsed() >= Duration::from_secs(2));
+    }
+
+    #[test]
+    fn test_wait_or_timeout_honors_short_deadline() {
+        let mut child = Command::new("sleep").arg(".05").spawn().unwrap();
+
+        let result = child.wait_or_timeout(Duration::from_millis(10)).unwrap();
+
+        assert_eq!(result, None);
+        let _ = child.kill();
+        let _ = child.wait();
     }
 }

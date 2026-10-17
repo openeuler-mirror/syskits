@@ -961,6 +961,22 @@ mod tests {
         }
 
         #[test]
+        fn test_timeout_short_duration_resolution() {
+            let result = timeout(&TimeoutFlags {
+                is_foreground: false,
+                kill_after: None,
+                signal: get_ct_signal_by_name_or_value("TERM").unwrap(),
+                duration: Duration::from_millis(10),
+                is_preserve_status: false,
+                is_verbose: false,
+                command: vec!["sleep".into(), ".05".into()],
+            });
+
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 124);
+        }
+
+        #[test]
         fn test_timeout_with_kill_after() {
             let result = timeout(&TimeoutFlags {
                 is_foreground: false,

@@ -160,6 +160,7 @@ struct PrFileLine {
     page_number: usize,
     group_key: usize,
     line_content: Result<String, std::io::Error>,
+    has_line_terminator: bool,
     form_feeds_after: usize,
     inline_form_feed_after: bool,
 }
@@ -170,6 +171,7 @@ impl PartialEq for PrFileLine {
             || self.line_number != other.line_number
             || self.page_number != other.page_number
             || self.group_key != other.group_key
+            || self.has_line_terminator != other.has_line_terminator
             || self.form_feeds_after != other.form_feeds_after
             || self.inline_form_feed_after != other.inline_form_feed_after
         {
@@ -230,6 +232,7 @@ pub struct PrSemantic {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PrInputLine {
     text: String,
+    has_line_terminator: bool,
 }
 
 struct PrInputLines {
@@ -263,6 +266,7 @@ impl Default for PrFileLine {
             page_number: 0,
             group_key: 0,
             line_content: Ok(String::new()),
+            has_line_terminator: true,
             form_feeds_after: 0,
             inline_form_feed_after: false,
         }
@@ -277,11 +281,13 @@ impl Iterator for PrInputLines {
         match self.reader.read_until(b'\n', &mut self.buffer) {
             Ok(0) => None,
             Ok(_) => {
-                if self.buffer.last() == Some(&b'\n') {
+                let has_line_terminator = self.buffer.last() == Some(&b'\n');
+                if has_line_terminator {
                     self.buffer.pop();
                 }
                 Some(Ok(PrInputLine {
                     text: pr_decode_input_bytes(&self.buffer),
+                    has_line_terminator,
                 }))
             }
             Err(err) => Some(Err(err)),
@@ -1573,6 +1579,7 @@ fn pr_split_lines_if_form_feed(
             let mut lines = Vec::new();
             let mut f_occurred = 0;
             let mut chunk = String::new();
+            let has_line_terminator = content.has_line_terminator;
 
             for c in content.text.chars() {
                 if c == char::from(PR_FF) {
@@ -1584,6 +1591,7 @@ fn pr_split_lines_if_form_feed(
                     let line_content = std::mem::take(&mut chunk);
                     lines.push(PrFileLine {
                         line_content: Ok(line_content),
+                        has_line_terminator: false,
                         form_feeds_after: f_occurred,
                         inline_form_feed_after: true,
                         ..PrFileLine::default()
@@ -1595,6 +1603,7 @@ fn pr_split_lines_if_form_feed(
 
             lines.push(PrFileLine {
                 line_content: Ok(chunk),
+                has_line_terminator,
                 form_feeds_after: f_occurred,
                 inline_form_feed_after: f_occurred > 0,
                 ..PrFileLine::default()
@@ -2005,6 +2014,7 @@ fn pr_collect_semantic_for_merge(
                             page_number,
                             group_key: row_index,
                             line_content: Ok(content.clone()),
+                            has_line_terminator: file_line.has_line_terminator,
                             form_feeds_after: file_line.form_feeds_after,
                             inline_form_feed_after: file_line.inline_form_feed_after,
                         }),
@@ -2017,6 +2027,7 @@ fn pr_collect_semantic_for_merge(
                         page_number,
                         group_key: row_index,
                         line_content: Ok(String::new()),
+                        has_line_terminator: true,
                         form_feeds_after: 0,
                         inline_form_feed_after: false,
                     });
@@ -2264,15 +2275,9 @@ fn pr_write_columns(
             continue;
         }
 
-        let segment = pr_get_line_for_printing(
-            output_opts,
-            cell.unwrap_or(&blank_line),
-            columns,
-            0,
-            &line_width,
-            1,
-            true,
-        )?;
+        let cell = cell.unwrap_or(&blank_line);
+        let segment =
+            pr_get_line_for_printing(output_opts, cell, columns, 0, &line_width, 1, true)?;
         lines_printed += 1;
         let rendered_row = if let Some((tab_ch, tab_width)) = output_opts.output_tabs {
             replace_spaces_with_tabs_by_segments(
@@ -2285,7 +2290,12 @@ fn pr_write_columns(
             format!("{}{}", output_opts.offset_spaces, segment)
         };
         pr_write_rendered_text(out, &rendered_row)?;
-        out.write_all(line_separator)?;
+        let row_separator = if output_opts.is_double_space && !cell.has_line_terminator {
+            output_opts.line_separator.as_bytes()
+        } else {
+            line_separator
+        };
+        out.write_all(row_separator)?;
     }
 
     Ok(lines_printed)
@@ -2486,7 +2496,17 @@ fn pr_write_multicolumn_table(
                 .collect::<String>()
         };
         pr_write_rendered_text(out, &rendered_row)?;
-        out.write_all(line_separator)?;
+        let row_has_unterminated_input = if output_opts.merge_files_print.is_some() {
+            row.iter().flatten().all(|line| !line.has_line_terminator)
+        } else {
+            row.iter().flatten().any(|line| !line.has_line_terminator)
+        };
+        let row_separator = if output_opts.is_double_space && row_has_unterminated_input {
+            output_opts.line_separator.as_bytes()
+        } else {
+            line_separator
+        };
+        out.write_all(row_separator)?;
     }
 
     Ok(lines_printed)
@@ -3205,6 +3225,7 @@ fn pr_get_columns(output_opts: &PrOutputOptions) -> usize {
 fn test_input_line(content: &str) -> PrInputLine {
     PrInputLine {
         text: content.to_string(),
+        has_line_terminator: true,
     }
 }
 
@@ -3227,6 +3248,7 @@ mod tests {
                 page_number: 2,
                 group_key: 5,
                 line_content: Ok("测试行".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 0,
                 inline_form_feed_after: false,
             };
@@ -3237,6 +3259,7 @@ mod tests {
                 page_number: 2,
                 group_key: 5,
                 line_content: Ok("测试行".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 0,
                 inline_form_feed_after: false,
             };
@@ -3250,6 +3273,7 @@ mod tests {
                 page_number: 2,
                 group_key: 5,
                 line_content: Ok("测试行".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 0,
                 inline_form_feed_after: false,
             };
@@ -3263,6 +3287,7 @@ mod tests {
                 page_number: 2,
                 group_key: 5,
                 line_content: Ok("不同内容".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 0,
                 inline_form_feed_after: false,
             };
@@ -3276,6 +3301,7 @@ mod tests {
                 page_number: 2,
                 group_key: 5,
                 line_content: Err(Error::other("测试错误")),
+                has_line_terminator: true,
                 form_feeds_after: 0,
                 inline_form_feed_after: false,
             };
@@ -3289,6 +3315,7 @@ mod tests {
                 page_number: 2,
                 group_key: 5,
                 line_content: Err(Error::other("测试错误")),
+                has_line_terminator: true,
                 form_feeds_after: 0,
                 inline_form_feed_after: false,
             };
@@ -3303,6 +3330,7 @@ mod tests {
                 page_number: 2,
                 group_key: 5,
                 line_content: Ok("测试行".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 1, // 不同的form_feeds_after
                 inline_form_feed_after: false,
             };
@@ -4878,6 +4906,7 @@ mod tests {
                 page_number: 0,
                 group_key: 0,
                 line_content: Ok(content.to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 0,
                 inline_form_feed_after: false,
             }
@@ -4894,6 +4923,7 @@ mod tests {
                     page_number: 0,
                     group_key: 0,
                     line_content: Ok(content.to_string()),
+                    has_line_terminator: true,
                     form_feeds_after: 0,
                     inline_form_feed_after: false,
                 })
@@ -5064,6 +5094,7 @@ mod tests {
                 page_number: 0,
                 group_key: 0,
                 line_content: Ok("test line".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 0,
                 inline_form_feed_after: false,
             };
@@ -5414,6 +5445,7 @@ mod tests {
                     page_number: 1,
                     group_key: 1,
                     line_content: Ok("left".to_string()),
+                    has_line_terminator: true,
                     form_feeds_after: 0,
                     inline_form_feed_after: false,
                 },
@@ -5423,6 +5455,7 @@ mod tests {
                     page_number: 1,
                     group_key: 2,
                     line_content: Ok("right   ".to_string()),
+                    has_line_terminator: true,
                     form_feeds_after: 0,
                     inline_form_feed_after: false,
                 },
@@ -5473,6 +5506,7 @@ mod tests {
                 page_number: 1,
                 group_key: 2,
                 line_content: Ok("1       ".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 0,
                 inline_form_feed_after: false,
             }];
@@ -5522,6 +5556,7 @@ mod tests {
                 page_number: 1,
                 group_key: 1,
                 line_content: Ok("56 456789 123456789 abcdefghi ABCDEDFHI".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 1,
                 inline_form_feed_after: true,
             }];
@@ -5569,6 +5604,7 @@ mod tests {
                 page_number: 1,
                 group_key: 2,
                 line_content: Ok("42 456789 123456789 abcdefghi ABCDEDFHI".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 0,
                 inline_form_feed_after: false,
             };
@@ -5618,6 +5654,7 @@ mod tests {
                 page_number: 1,
                 group_key: 1,
                 line_content: Ok("42 456789 123456789 abcdefghi ABCDEDFHI".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 1,
                 inline_form_feed_after: true,
             };
@@ -5667,6 +5704,7 @@ mod tests {
                 page_number: 1,
                 group_key: 1,
                 line_content: Ok("44 456789 123456789 xyzxyzxyz XYZXYZXYZ".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 0,
                 inline_form_feed_after: false,
             };
@@ -5716,6 +5754,7 @@ mod tests {
                 page_number: 1,
                 group_key: 1,
                 line_content: Ok("42 456789 123456789 abcdefghi ABCDEDFHI".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 0,
                 inline_form_feed_after: false,
             };
@@ -5761,6 +5800,7 @@ mod tests {
                 page_number: 1,
                 group_key: 1,
                 line_content: Ok("42<<<  123456789 abcdefghi ABCDEDFHI  >>>".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 1,
                 inline_form_feed_after: true,
             };
@@ -5807,6 +5847,7 @@ mod tests {
                 page_number: 1,
                 group_key: 1,
                 line_content: Ok("56 456789 123456789 abcdefghi ABCDEDFHI".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 1,
                 inline_form_feed_after: true,
             };
@@ -5852,6 +5893,7 @@ mod tests {
                 page_number: 1,
                 group_key: 1,
                 line_content: Ok("75 456789 123456789 abcdefghi ABCDEDFHI".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 1,
                 inline_form_feed_after: true,
             };
@@ -5944,6 +5986,7 @@ mod tests {
                 page_number: 0,
                 group_key: 0,
                 line_content: Err(std::io::Error::other("测试IO错误")),
+                has_line_terminator: true,
                 form_feeds_after: 0,
                 inline_form_feed_after: false,
             };
@@ -6402,6 +6445,7 @@ mod tests {
                 page_number: 0,
                 group_key: 0,
                 line_content: Ok("a        b".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 0,
                 inline_form_feed_after: false,
             }];
@@ -7000,6 +7044,7 @@ mod tests {
                 page_number: 1,
                 group_key: 1,
                 line_content: Ok("line".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 1,
                 inline_form_feed_after: false,
             }];
@@ -7025,6 +7070,7 @@ mod tests {
                 page_number: 1,
                 group_key: 1,
                 line_content: Ok("短内容".to_string()),
+                has_line_terminator: true,
                 form_feeds_after: 0,
                 inline_form_feed_after: false,
             };

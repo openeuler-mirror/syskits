@@ -915,7 +915,7 @@ fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
             recreated_args.push(OsString::from(format!("-n={}", &arg[2..])));
         } else if arg.starts_with("-s") && arg.len() > 2 && !arg.starts_with("-s=") {
             recreated_args.push(OsString::from(format!("-s={}", &arg[2..])));
-        } else if arg.starts_with("-S") && arg.len() > 2 && !arg.starts_with("-S=") {
+        } else if arg.starts_with("-S") && arg.len() > 2 {
             recreated_args.push(OsString::from(format!("-S={}", &arg[2..])));
         } else if arg.starts_with("-e") && arg.len() > 2 && !arg.starts_with("-e=") {
             recreated_args.push(OsString::from(format!("-e={}", &arg[2..])));

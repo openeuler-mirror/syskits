@@ -154,6 +154,31 @@ fn pr_c_and_v_escape_zero_width_wide_char() {
 }
 
 #[test]
+fn pr_short_sep_string_preserves_leading_equals() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .args(["pr", "-t", "-2", "-S=X"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run syskits pr with a leading-equals separator");
+
+    child
+        .stdin
+        .take()
+        .expect("open pr stdin")
+        .write_all(b"1\n2\n")
+        .expect("write pr input");
+
+    let output = child.wait_with_output().expect("wait for syskits pr");
+    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.stdout, b"1\t\t\t\t   =X2\n");
+    assert_eq!(output.stderr, b"");
+}
+
+#[test]
 fn pr_without_show_nonprinting_preserves_non_utf8_bytes() {
     let output = run_pr_with_non_utf8_input(&["-t"]);
 

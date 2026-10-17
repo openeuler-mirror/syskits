@@ -437,6 +437,10 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &LnSettings
         return Err(LnError::TargetIsDirectory(target_dir.to_owned()).into());
     }
 
+    let track_linked_destinations = files.len() >= 2
+        && settings.overwrite == OverwriteMode::Force
+        && !settings.is_symbolic
+        && settings.backup != CtBackupMode::NumberedBackup;
     let mut linked_destinations = HashSet::with_capacity(files.len());
     let mut all_successful = true;
 
@@ -445,7 +449,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &LnSettings
         let targetpath = build_target_path(srcpath, target_dir, settings)?;
 
         // 检查是否已创建该目标
-        if linked_destinations.contains(&targetpath) {
+        if track_linked_destinations && linked_destinations.contains(&targetpath) {
             ct_show_error!(
                 "will not overwrite just-created '{}' with '{}'",
                 targetpath.display(),
@@ -458,7 +462,9 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &LnSettings
         // GNU records a destination only after its link was created.
         match ln_link(srcpath, &targetpath, settings) {
             Ok(()) => {
-                linked_destinations.insert(targetpath);
+                if track_linked_destinations {
+                    linked_destinations.insert(targetpath);
+                }
             }
             Err(e) => {
                 ct_show_error!("{}", e);
@@ -1352,6 +1358,92 @@ mod tests {
         assert_eq!(fs::read_to_string(target_dir.join("name")).unwrap(), "good");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_safe_multi_source_replacement_modes() {
+        let temp = tempdir().unwrap();
+
+        let symbolic_a = temp.path().join("symbolic/a/name");
+        let symbolic_b = temp.path().join("symbolic/b/name");
+        let symbolic_target = temp.path().join("symbolic/target");
+        fs::create_dir_all(symbolic_a.parent().unwrap()).unwrap();
+        fs::create_dir_all(symbolic_b.parent().unwrap()).unwrap();
+        fs::create_dir(&symbolic_target).unwrap();
+        fs::write(&symbolic_a, "A").unwrap();
+        fs::write(&symbolic_b, "B").unwrap();
+        let symbolic_settings = LnSettings {
+            overwrite: OverwriteMode::Force,
+            is_symbolic: true,
+            ..LnSettings::default()
+        };
+
+        link_files_in_dir(
+            &[symbolic_a, symbolic_b.clone()],
+            &symbolic_target,
+            &symbolic_settings,
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read_link(symbolic_target.join("name")).unwrap(),
+            symbolic_b
+        );
+
+        let numbered_a = temp.path().join("numbered/a/name");
+        let numbered_b = temp.path().join("numbered/b/name");
+        let numbered_target = temp.path().join("numbered/target");
+        fs::create_dir_all(numbered_a.parent().unwrap()).unwrap();
+        fs::create_dir_all(numbered_b.parent().unwrap()).unwrap();
+        fs::create_dir(&numbered_target).unwrap();
+        fs::write(&numbered_a, "A").unwrap();
+        fs::write(&numbered_b, "B").unwrap();
+        let numbered_settings = LnSettings {
+            overwrite: OverwriteMode::Force,
+            backup: CtBackupMode::NumberedBackup,
+            ..LnSettings::default()
+        };
+
+        link_files_in_dir(
+            &[numbered_a, numbered_b],
+            &numbered_target,
+            &numbered_settings,
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read_to_string(numbered_target.join("name")).unwrap(),
+            "B"
+        );
+        assert_eq!(
+            fs::read_to_string(numbered_target.join("name.~1~")).unwrap(),
+            "A"
+        );
+
+        let protected_a = temp.path().join("protected/a/name");
+        let protected_b = temp.path().join("protected/b/name");
+        let protected_target = temp.path().join("protected/target");
+        fs::create_dir_all(protected_a.parent().unwrap()).unwrap();
+        fs::create_dir_all(protected_b.parent().unwrap()).unwrap();
+        fs::create_dir(&protected_target).unwrap();
+        fs::write(&protected_a, "A").unwrap();
+        fs::write(&protected_b, "B").unwrap();
+        let protected_settings = LnSettings {
+            overwrite: OverwriteMode::Force,
+            ..LnSettings::default()
+        };
+
+        assert!(
+            link_files_in_dir(
+                &[protected_a, protected_b],
+                &protected_target,
+                &protected_settings,
+            )
+            .is_err()
+        );
+        assert_eq!(
+            fs::read_to_string(protected_target.join("name")).unwrap(),
+            "A"
+        );
+    }
+
     #[test]
     fn test_tool_implementation() {
         let tool = Ln;
@@ -1404,9 +1496,9 @@ mod tests {
         let files = vec![source.clone(), source2.clone()];
         assert!(link_files_in_dir(&files, &target_dir, &settings).is_ok());
 
-        // 测试重复文件
+        // 符号链接强制模式允许安全地重复替换同一目标
         let files = vec![source.clone(), source.clone()];
-        assert!(link_files_in_dir(&files, &target_dir, &settings).is_err());
+        assert!(link_files_in_dir(&files, &target_dir, &settings).is_ok());
 
         // 清理文件
         let _ = fs::remove_file(&source);

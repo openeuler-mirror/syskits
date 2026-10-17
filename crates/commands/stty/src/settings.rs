@@ -372,6 +372,11 @@ pub const SPECIAL_SETTINGS: &[SpecialSettingEntry] = &[
     },
     // Special characters
     SpecialSettingEntry {
+        name: "flush",
+        setting: SpecialSetting::Discard,
+        requires_value: true,
+    },
+    SpecialSettingEntry {
         name: "discard",
         setting: SpecialSetting::Discard,
         requires_value: true,
@@ -1045,6 +1050,26 @@ mod tests {
         assert_eq!(
             termios.control_chars[SpecialCharacterIndices::VERASE as usize],
             127
+        );
+    }
+
+    #[test]
+    fn test_special_setting_flush_alias() {
+        let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+        let device = Device::Stdin(stdin());
+        let flush_setting = SPECIAL_SETTINGS
+            .iter()
+            .find(|s| s.name == "flush")
+            .expect("flush setting should exist");
+
+        let result = flush_setting
+            .setting
+            .apply(&mut termios, Some("^A"), &device);
+
+        assert!(result.is_ok());
+        assert_eq!(
+            termios.control_chars[SpecialCharacterIndices::VDISCARD as usize],
+            1
         );
     }
 

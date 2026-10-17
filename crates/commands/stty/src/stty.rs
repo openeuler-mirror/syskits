@@ -967,8 +967,8 @@ fn stty_print_flags<T: TermiosFlag, W: Write>(
         name,
         flag,
         is_show,
-        is_sane,
-        sane_value: _,
+        is_sane: _,
+        sane_value,
         group,
     } in flags
     {
@@ -987,11 +987,12 @@ fn stty_print_flags<T: TermiosFlag, W: Write>(
             continue;
         }
 
+        let differs_from_sane = sane_value.is_some_and(|expected| is_val != expected);
         if group.is_some() {
-            if is_val && (!is_sane || opts.is_all) {
+            if is_val && (opts.is_all || differs_from_sane) {
                 push_flag(true);
             }
-        } else if opts.is_all || is_val != is_sane {
+        } else if opts.is_all || differs_from_sane {
             push_flag(is_val);
         }
     }
@@ -2407,6 +2408,34 @@ mod tests {
             assert!(!input_rendered.contains("tandem"));
             assert!(output_rendered.contains("-ofill"));
             assert!(local_rendered.contains("-xcase"));
+        }
+
+        #[test]
+        fn test_default_output_omits_sane_preserved_flags() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            termios.input_flags = I::IGNPAR | I::PARMRK | I::INPCK | I::ISTRIP;
+            termios.control_flags =
+                C::PARENB | C::PARODD | C::CS7 | C::HUPCL | C::CSTOPB | C::CLOCAL;
+            apply_sane_mode(&mut termios);
+            termios.input_flags.insert(I::IGNBRK);
+            termios.control_flags.remove(C::CREAD);
+
+            let opts = SttyFlags {
+                is_all: false,
+                is_save: false,
+                stdout_is_terminal: false,
+                file_name: None,
+                file: Device::Stdin(stdin()),
+                settings: None,
+            };
+            let mut input_out = Vec::new();
+            let mut control_out = Vec::new();
+
+            stty_print_flags(&termios, &opts, INPUT_SETTINGS, &mut input_out).unwrap();
+            stty_print_flags(&termios, &opts, CONTROL_SETTINGS, &mut control_out).unwrap();
+
+            assert_eq!(String::from_utf8(input_out).unwrap(), "ignbrk\n");
+            assert_eq!(String::from_utf8(control_out).unwrap(), "-cread\n");
         }
 
         #[test]

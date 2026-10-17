@@ -495,7 +495,13 @@ fn build_target_path(src: &Path, target_dir: &Path, _settings: &LnSettings) -> C
 
 /// 构建普通目标路径。
 fn build_normal_target_path(src: &Path, target_dir: &Path) -> CTResult<PathBuf> {
-    let basename = src.file_name().unwrap_or_else(|| src.as_os_str());
+    // GNU last_component preserves a final `/.`, while Path::file_name()
+    // normalizes it away. Keep the dot so DIRECTORY/. is passed to the OS.
+    let basename = if src.as_os_str().as_encoded_bytes().ends_with(b"/.") {
+        OsStr::new(".")
+    } else {
+        src.file_name().unwrap_or_else(|| src.as_os_str())
+    };
     Ok(target_dir.join(basename))
 }
 
@@ -1640,6 +1646,24 @@ mod tests {
             expected_empty_dst.as_path()
         );
         assert!(ln_link(&src, Path::new(""), &settings).is_err());
+    }
+
+    #[test]
+    fn test_trailing_dot_basename_is_preserved() {
+        let target_dir = Path::new("target");
+        let target_path = build_normal_target_path(Path::new("path/."), target_dir).unwrap();
+        assert_eq!(target_path.as_os_str(), OsStr::new("target/."));
+
+        let temp = tempdir().unwrap();
+        let output = temp.path().join("output");
+        fs::create_dir(&output).unwrap();
+        let settings = LnSettings {
+            is_symbolic: true,
+            ..LnSettings::default()
+        };
+
+        assert!(ln_exec(&[PathBuf::from("path/."), output.clone()], &settings).is_err());
+        assert!(fs::symlink_metadata(output.join("path")).is_err());
     }
 
     #[test]

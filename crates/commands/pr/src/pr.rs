@@ -1765,8 +1765,6 @@ fn pr_read_stream_and_create_pages(
     let last_page = output_opts.end_page;
     let lines_needed_per_page = pr_lines_to_read_for_page(output_opts);
     let is_omit_pagination = output_opts.is_omit_pagination;
-    let keep_input_form_feeds =
-        !output_opts.is_display_header_and_trailer && !output_opts.is_omit_pagination;
     let mut ignore_next_leading_form_feed = false;
     Box::new(
         lines
@@ -1798,10 +1796,7 @@ fn pr_read_stream_and_create_pages(
 
                     if is_form_feed_marker {
                         let mut effective_form_feeds_after = form_feeds_after;
-                        if first_page.is_empty()
-                            && ignore_next_leading_form_feed
-                            && !keep_input_form_feeds
-                        {
+                        if first_page.is_empty() && ignore_next_leading_form_feed {
                             // GNU pr consumes one leading form feed if the previous page
                             // was already full (FF-coincidence case), which prevents an
                             // extra empty page.
@@ -1853,8 +1848,7 @@ fn pr_read_stream_and_create_pages(
                 if first_page.is_empty() {
                     return None;
                 }
-                ignore_next_leading_form_feed = !keep_input_form_feeds
-                    && first_page.len() == lines_needed_per_page
+                ignore_next_leading_form_feed = first_page.len() == lines_needed_per_page
                     && first_page
                         .last()
                         .is_some_and(|line| line.form_feeds_after == 0);
@@ -6898,14 +6892,13 @@ mod tests {
 
             let pages: Vec<_> = pr_read_stream_and_create_pages(&output_opts, lines, 0).collect();
 
-            assert_eq!(pages.len(), 4);
+            assert_eq!(pages.len(), 3);
             assert_eq!(pages[0].1.len(), 2);
             assert_eq!(pages[0].1[0].line_content.as_ref().unwrap(), "line1");
             assert_eq!(pages[0].1[1].line_content.as_ref().unwrap(), "line2");
             assert!(pages[1].1.is_empty());
-            assert!(pages[2].1.is_empty());
-            assert_eq!(pages[3].1.len(), 1);
-            assert_eq!(pages[3].1[0].line_content.as_ref().unwrap(), "line3");
+            assert_eq!(pages[2].1.len(), 1);
+            assert_eq!(pages[2].1[0].line_content.as_ref().unwrap(), "line3");
         }
 
         #[test]

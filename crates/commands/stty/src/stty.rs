@@ -1003,10 +1003,27 @@ fn output_width(opts: &SttyFlags) -> usize {
         .or_else(|| {
             std::env::var("COLUMNS")
                 .ok()
-                .and_then(|value| value.parse::<usize>().ok())
-                .filter(|width| *width > 0)
+                .and_then(|value| parse_columns_width(&value))
         })
         .unwrap_or(80)
+}
+
+fn parse_columns_width(raw: &str) -> Option<usize> {
+    let raw = raw.trim_start_matches(|c: char| c.is_ascii_whitespace());
+    let raw = raw.strip_prefix('+').unwrap_or(raw);
+    if raw.is_empty() || raw.starts_with('-') {
+        return None;
+    }
+
+    let (radix, digits) = if raw.starts_with("0x") || raw.starts_with("0X") {
+        (16, &raw[2..])
+    } else if raw.len() > 1 && raw.starts_with('0') {
+        (8, &raw[1..])
+    } else {
+        (10, raw)
+    };
+    let width = u32::from_str_radix(digits, radix).ok()?;
+    (width > 0 && width <= nix::libc::c_int::MAX as u32).then_some(width as usize)
 }
 
 fn terminal_width_stdout() -> Option<usize> {
@@ -2520,6 +2537,21 @@ mod tests {
             }
 
             assert_eq!(width, 120);
+        }
+
+        #[test]
+        fn test_columns_width_uses_gnu_base_zero_syntax() {
+            assert_eq!(parse_columns_width("64"), Some(64));
+            assert_eq!(parse_columns_width("0100"), Some(64));
+            assert_eq!(parse_columns_width("0x40"), Some(64));
+            assert_eq!(parse_columns_width("+0X40"), Some(64));
+            assert_eq!(parse_columns_width(" 0100"), Some(64));
+
+            assert_eq!(parse_columns_width("0"), None);
+            assert_eq!(parse_columns_width("-1"), None);
+            assert_eq!(parse_columns_width("08"), None);
+            assert_eq!(parse_columns_width("64 "), None);
+            assert_eq!(parse_columns_width("2147483648"), None);
         }
     }
 

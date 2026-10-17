@@ -835,8 +835,12 @@ pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> std::io::R
 }
 
 fn ln_determine_backup_mode(matches: &ArgMatches) -> CTResult<CtBackupMode> {
+    let suffix_enables_backup = matches
+        .get_one::<OsString>(ct_backup_control::arguments::OPT_SUFFIX)
+        .is_some();
     let has_backup = matches.contains_id(ct_backup_control::arguments::OPT_BACKUP)
-        || matches.get_flag(ct_backup_control::arguments::OPT_BACKUP_NO_ARG);
+        || matches.get_flag(ct_backup_control::arguments::OPT_BACKUP_NO_ARG)
+        || suffix_enables_backup;
     let has_explicit_control = matches
         .get_one::<String>(ct_backup_control::arguments::OPT_BACKUP)
         .is_some();
@@ -853,7 +857,7 @@ fn ln_determine_backup_mode(matches: &ArgMatches) -> CTResult<CtBackupMode> {
         .into());
     }
 
-    ct_backup_control::determine_backup_mode(matches)
+    ct_backup_control::determine_backup_mode_with_activation(matches, suffix_enables_backup)
 }
 
 fn ln_determine_backup_suffix(matches: &ArgMatches) -> OsString {
@@ -947,6 +951,8 @@ mod tests {
     use std::ffi::OsString;
     use std::fs;
     use tempfile::tempdir;
+
+    static BACKUP_ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn test_ct_app_accepts_repeated_options() {
@@ -1055,6 +1061,10 @@ mod tests {
     fn test_non_utf8_backup_environment() {
         use std::os::unix::ffi::OsStringExt;
 
+        let _guard = BACKUP_ENV_MUTEX
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+
         fn restore_var(name: &str, value: Option<OsString>) {
             unsafe {
                 if let Some(value) = value {
@@ -1116,6 +1126,42 @@ mod tests {
 
         assert_eq!(settings.suffix, OsString::from(".two"));
         assert_eq!(settings.backup, CtBackupMode::NumberedBackup);
+    }
+
+    #[test]
+    fn test_suffix_option_enables_backup() {
+        let _guard = BACKUP_ENV_MUTEX
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let previous_control = std::env::var_os("VERSION_CONTROL");
+        unsafe { std::env::remove_var("VERSION_CONTROL") };
+
+        let short_matches = ct_app()
+            .try_get_matches_from(["ln", "-S", ".bak", "source", "dest"])
+            .unwrap();
+        let short_settings = LnSettings::new(&short_matches);
+        let long_matches = ct_app()
+            .try_get_matches_from(["ln", "--suffix=.bak", "source", "dest"])
+            .unwrap();
+        let long_settings = LnSettings::new(&long_matches);
+        let disabled_matches = ct_app()
+            .try_get_matches_from(["ln", "--backup=none", "-S", ".bak", "source", "dest"])
+            .unwrap();
+        let disabled_settings = LnSettings::new(&disabled_matches);
+
+        unsafe {
+            if let Some(control) = previous_control {
+                std::env::set_var("VERSION_CONTROL", control);
+            } else {
+                std::env::remove_var("VERSION_CONTROL");
+            }
+        }
+
+        for settings in [short_settings.unwrap(), long_settings.unwrap()] {
+            assert_eq!(settings.backup, CtBackupMode::ExistingBackup);
+            assert_eq!(settings.suffix, OsString::from(".bak"));
+        }
+        assert_eq!(disabled_settings.unwrap().backup, CtBackupMode::NoBackup);
     }
 
     #[test]

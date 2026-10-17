@@ -183,6 +183,7 @@ pub const BAUD_RATES: &[(&str, u32, BaudRate)] = &[
     ("75", 75, BaudRate::B75),
     ("110", 110, BaudRate::B110),
     ("134", 134, BaudRate::B134),
+    ("134.5", 134, BaudRate::B134),
     ("150", 150, BaudRate::B150),
     ("200", 200, BaudRate::B200),
     ("300", 300, BaudRate::B300),
@@ -190,12 +191,16 @@ pub const BAUD_RATES: &[(&str, u32, BaudRate)] = &[
     ("1200", 1200, BaudRate::B1200),
     ("1800", 1800, BaudRate::B1800),
     ("2400", 2400, BaudRate::B2400),
+    ("4800", 4800, BaudRate::B4800),
     ("9600", 9600, BaudRate::B9600),
     ("19200", 19200, BaudRate::B19200),
     ("38400", 38400, BaudRate::B38400),
+    ("exta", 19200, BaudRate::B19200),
+    ("extb", 38400, BaudRate::B38400),
     ("57600", 57600, BaudRate::B57600),
     ("115200", 115200, BaudRate::B115200),
     ("230400", 230400, BaudRate::B230400),
+    ("460800", 460800, BaudRate::B460800),
     ("500000", 500000, BaudRate::B500000),
     ("576000", 576000, BaudRate::B576000),
     ("921600", 921600, BaudRate::B921600),
@@ -783,13 +788,11 @@ impl SpecialSetting {
 /// - `Ok(BaudRate)`: 如果解析成功且波特率被支持，则返回相应的波特率值
 /// - `Err(CtSimpleError)`: 如果解析失败或波特率不被支持，则返回错误
 fn parse_baud_rate(s: &str) -> CTResult<BaudRate> {
-    // 尝试将字符串解析为u32类型，如果解析失败，则返回一个自定义的错误
-    let rate = parse_u32_with_base(s)?;
-
-    // 遍历预定义的波特率数组，查找匹配的波特率值
-    for (_, baud_rate_val, baud_rate) in BAUD_RATES {
-        // 如果找到匹配的波特率值，则返回相应的波特率
-        if *baud_rate_val == rate {
+    // GNU stty matches speed spellings exactly. This is important for aliases
+    // such as "134.5", "exta", and "extb", and prevents accepting unrelated
+    // base-0 spellings such as "0x2580" for 9600 baud.
+    for (text, _, baud_rate) in BAUD_RATES {
+        if *text == s {
             return Ok(*baud_rate);
         }
     }
@@ -919,6 +922,20 @@ mod tests {
         for &(text, _, _baud_rate) in BAUD_RATES {
             assert!(!text.is_empty());
         }
+    }
+
+    #[test]
+    fn test_parse_baud_rate_gnu_aliases() {
+        assert_eq!(parse_baud_rate("134.5").unwrap(), BaudRate::B134);
+        assert_eq!(parse_baud_rate("4800").unwrap(), BaudRate::B4800);
+        assert_eq!(parse_baud_rate("exta").unwrap(), BaudRate::B19200);
+        assert_eq!(parse_baud_rate("extb").unwrap(), BaudRate::B38400);
+        assert_eq!(parse_baud_rate("460800").unwrap(), BaudRate::B460800);
+    }
+
+    #[test]
+    fn test_parse_baud_rate_requires_exact_gnu_spelling() {
+        assert!(parse_baud_rate("0x2580").is_err());
     }
 
     #[test]

@@ -30,7 +30,7 @@ use nix::libc::{
 use nix::sys::termios::SetArg;
 use nix::sys::termios::{
     ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O, SpecialCharacterIndices,
-    Termios, cfgetispeed, cfgetospeed, cfsetospeed, tcgetattr, tcsetattr,
+    Termios, cfgetispeed, cfgetospeed, cfsetospeed, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use settings::{BAUD_RATES, Settings, parse_baud_rate};
@@ -618,6 +618,20 @@ fn validate_settings_before_device(settings: &[SttySetting]) -> CTResult<()> {
     Ok(())
 }
 
+fn tcgetattr_preserving_raw<Fd: AsFd>(fd: Fd) -> nix::Result<Termios> {
+    let mut raw = std::mem::MaybeUninit::<nix::libc::termios>::uninit();
+    let result = unsafe { nix::libc::tcgetattr(fd.as_fd().as_raw_fd(), raw.as_mut_ptr()) };
+    nix::errno::Errno::result(result)?;
+    let raw = unsafe { raw.assume_init() };
+
+    let mut termios = Termios::from(raw);
+    termios.input_flags = I::from_bits_retain(raw.c_iflag);
+    termios.output_flags = O::from_bits_retain(raw.c_oflag);
+    termios.control_flags = C::from_bits_retain(raw.c_cflag);
+    termios.local_flags = L::from_bits_retain(raw.c_lflag);
+    Ok(termios)
+}
+
 /// 设置或打印终端的配置
 ///
 /// 此函数根据提供的`SttyFlags`参数检查、获取或设置终端属性
@@ -644,7 +658,7 @@ fn stty<W: Write>(opts: &mut SttyFlags, writer: &mut W, dev_debug: bool) -> CTRe
     opts.stdout_is_terminal = std::io::stdout().is_terminal();
 
     // 通过 tcgetattr 获取终端配置
-    let mut termios = tcgetattr(opts.file.as_fd())
+    let mut termios = tcgetattr_preserving_raw(opts.file.as_fd())
         .map_err(|e| CtSimpleError::new(1, format!("Could not get terminal attributes: {e}")))?;
 
     // 通过 stty_apply_setting 应用设置
@@ -681,8 +695,8 @@ fn stty<W: Write>(opts: &mut SttyFlags, writer: &mut W, dev_debug: bool) -> CTRe
         } else {
             tcsetattr(opts.file.as_fd(), tcsetattr_arg, &termios)
                 .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
-            let current =
-                tcgetattr(opts.file.as_fd()).map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+            let current = tcgetattr_preserving_raw(opts.file.as_fd())
+                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
             if !termios_equal(&termios, &current) {
                 if dev_debug {
                     eprintln!("stty: indx: mode: actual mode");
@@ -710,17 +724,11 @@ fn stty<W: Write>(opts: &mut SttyFlags, writer: &mut W, dev_debug: bool) -> CTRe
 fn termios_equal(lhs: &Termios, rhs: &Termios) -> bool {
     let lhs_libc: nix::libc::termios = lhs.clone().into();
     let rhs_libc: nix::libc::termios = rhs.clone().into();
-    let lhs_input = lhs.input_flags.bits() & !IUCLC_RAW_BIT;
-    let rhs_input = rhs.input_flags.bits() & !IUCLC_RAW_BIT;
-    let lhs_output = lhs.output_flags.bits() & !OFILL_RAW_BIT;
-    let rhs_output = rhs.output_flags.bits() & !OFILL_RAW_BIT;
-    let lhs_local = lhs.local_flags.bits() & !XCASE_RAW_BIT;
-    let rhs_local = rhs.local_flags.bits() & !XCASE_RAW_BIT;
 
-    lhs_input == rhs_input
-        && lhs_output == rhs_output
+    lhs.input_flags.bits() == rhs.input_flags.bits()
+        && lhs.output_flags.bits() == rhs.output_flags.bits()
         && lhs.control_flags.bits() == rhs.control_flags.bits()
-        && lhs_local == rhs_local
+        && lhs.local_flags.bits() == rhs.local_flags.bits()
         && lhs_libc.c_line == rhs_libc.c_line
         && lhs.control_chars == rhs.control_chars
         && cfgetispeed(lhs) == cfgetispeed(rhs)
@@ -2723,6 +2731,24 @@ mod tests {
                 assert_eq!(termios.local_flags, original.local_flags);
                 assert_eq!(termios.control_chars, original.control_chars);
             }
+        }
+
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        #[test]
+        fn test_termios_equal_detects_legacy_flag_differences() {
+            let original = unsafe { std::mem::zeroed::<Termios>() };
+
+            let mut actual = original.clone();
+            actual.input_flags = I::from_bits_retain(IUCLC_RAW_BIT);
+            assert!(!termios_equal(&original, &actual));
+
+            let mut actual = original.clone();
+            actual.output_flags = O::from_bits_retain(OFILL_RAW_BIT);
+            assert!(!termios_equal(&original, &actual));
+
+            let mut actual = original.clone();
+            actual.local_flags = L::from_bits_retain(XCASE_RAW_BIT);
+            assert!(!termios_equal(&original, &actual));
         }
     }
 

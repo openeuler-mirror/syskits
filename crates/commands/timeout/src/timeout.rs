@@ -35,9 +35,6 @@ use std::process::{self, Child, Stdio};
 use std::time::Duration;
 use sys_locale::get_locale;
 
-#[cfg(unix)]
-use ctcore::ct_signals::enable_pipe_errors;
-
 use ctcore::{
     ct_show_error,
     ct_signals::{get_ct_signal_by_name_or_value, get_ct_signal_name_by_value},
@@ -68,6 +65,31 @@ static MONITOR_ACTIVE: AtomicBool = AtomicBool::new(false);
 static KILL_AFTER_PENDING: AtomicBool = AtomicBool::new(false);
 static KILL_AFTER_SECONDS: AtomicU64 = AtomicU64::new(0);
 static KILL_AFTER_MICROSECONDS: AtomicU32 = AtomicU32::new(0);
+static INHERITED_SIGPIPE_IGNORED: AtomicBool = AtomicBool::new(false);
+
+// Rust changes SIGPIPE before main, so record the exec-inherited disposition first.
+unsafe extern "C" fn capture_inherited_sigpipe_disposition() {
+    let mut action = std::mem::MaybeUninit::<libc::sigaction>::uninit();
+    if unsafe { libc::sigaction(libc::SIGPIPE, std::ptr::null(), action.as_mut_ptr()) } == 0 {
+        let action = unsafe { action.assume_init() };
+        INHERITED_SIGPIPE_IGNORED.store(action.sa_sigaction == libc::SIG_IGN, Ordering::Relaxed);
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static CAPTURE_SIGPIPE_DISPOSITION: unsafe extern "C" fn() = capture_inherited_sigpipe_disposition;
+
+fn restore_inherited_sigpipe_disposition() -> Result<(), nix::errno::Errno> {
+    let handler = if INHERITED_SIGPIPE_IGNORED.load(Ordering::Relaxed) {
+        nix::sys::signal::SigHandler::SigIgn
+    } else {
+        nix::sys::signal::SigHandler::SigDfl
+    };
+
+    unsafe { nix::sys::signal::signal(nix::sys::signal::Signal::SIGPIPE, handler) }.map(|_| ())
+}
 
 fn configure_external_kill_after(kill_after: Option<Duration>) {
     let Some(duration) = kill_after.filter(|duration| !duration.is_zero()) else {
@@ -495,8 +517,7 @@ fn timeout_terminate_self_with_signal(signal: i32) -> CTResult<()> {
 /// * `CTResult<()>` - 一个结果类型，包装了可能的错误
 ///     - 根据指定的超时标志设置进程的超时行为
 fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
-    #[cfg(unix)]
-    enable_pipe_errors()?;
+    restore_inherited_sigpipe_disposition()?;
 
     // GNU makes the timeout monitor the group leader before forking COMMAND.
     #[cfg(not(test))]
@@ -515,9 +536,16 @@ fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
+    let inherited_sigpipe_ignored = INHERITED_SIGPIPE_IGNORED.load(Ordering::Relaxed);
+
     // 子进程的预处理 (pre_exec)
     unsafe {
-        cmd.pre_exec(|| {
+        cmd.pre_exec(move || {
+            // std::process resets SIGPIPE before pre_exec; GNU preserves SIG_IGN.
+            if inherited_sigpipe_ignored {
+                libc::signal(libc::SIGPIPE, libc::SIG_IGN);
+            }
+
             // 信号洗礼：清除 Shell 强加给后台任务的 SIG_IGN 魔法
             // 确保子进程 (如脚本) 可以正常使用 trap 捕获这些信号！
             libc::signal(libc::SIGINT, libc::SIG_DFL);
@@ -525,7 +553,6 @@ fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
             libc::signal(libc::SIGHUP, libc::SIG_DFL);
             libc::signal(libc::SIGTERM, libc::SIG_DFL);
             libc::signal(libc::SIGALRM, libc::SIG_DFL);
-            libc::signal(libc::SIGPIPE, libc::SIG_DFL);
 
             Ok(())
         });

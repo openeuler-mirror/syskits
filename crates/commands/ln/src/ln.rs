@@ -621,6 +621,12 @@ fn handle_backup_and_overwrite(
         return Ok(None);
     }
 
+    if settings.overwrite == OverwriteMode::Interactive
+        && !ct_prompt_yes!("replace {}?", dst.quote())
+    {
+        return Err(LnError::SomeLinksFailed.into());
+    }
+
     let backup_path = generate_backup_path(dst, settings)?;
     if let Some(ref backup) = backup_path {
         if fs::symlink_metadata(backup).is_ok() {
@@ -653,9 +659,6 @@ fn handle_overwrite_mode(dst: &Path, _src: &Path, settings: &LnSettings) -> CTRe
     match settings.overwrite {
         OverwriteMode::NoClobber => Ok(()),
         OverwriteMode::Interactive => {
-            if !ct_prompt_yes!("replace {}?", dst.quote()) {
-                return Err(LnError::SomeLinksFailed.into());
-            }
             if let Ok(meta) = fs::symlink_metadata(dst) {
                 if meta.is_dir() {
                     let _ = fs::remove_dir(dst);

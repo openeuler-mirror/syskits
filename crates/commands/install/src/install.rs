@@ -476,7 +476,13 @@ impl Installer {
     pub fn new(matches: &ArgMatches) -> CTResult<Self> {
         let (main_function, considering_dir) = Self::parse_main_function(matches);
         let specified_mode = Self::parse_mode(matches, considering_dir)?;
-        let backup_mode = ct_backup_control::determine_backup_mode(matches)?;
+        let suffix_enables_backup = matches
+            .get_one::<String>(ct_backup_control::arguments::OPT_SUFFIX)
+            .is_some();
+        let backup_mode = ct_backup_control::determine_backup_mode_with_activation(
+            matches,
+            suffix_enables_backup,
+        )?;
         let target_dir = matches
             .get_one::<String>(install_options::INSTALL_TARGET_DIRECTORY)
             .cloned();
@@ -2653,6 +2659,18 @@ mod tests {
         assert!(!installer.set_context);
         assert!(installer.context.is_none());
         assert!(!installer.debug);
+    }
+
+    #[test]
+    fn test_suffix_option_enables_backup() {
+        let matches = ct_app()
+            .try_get_matches_from(["install", "-S", ".bak", "source", "dest"])
+            .unwrap();
+
+        let installer = Installer::new(&matches).unwrap();
+
+        assert_eq!(installer.backup_mode, CtBackupMode::ExistingBackup);
+        assert_eq!(installer.suffix, ".bak");
     }
 
     #[test]

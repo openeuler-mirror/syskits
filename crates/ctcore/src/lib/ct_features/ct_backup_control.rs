@@ -334,6 +334,17 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 /// }
 /// ```
 pub fn determine_backup_mode(matches: &ArgMatches) -> CTResult<CtBackupMode> {
+    determine_backup_mode_with_activation(matches, false)
+}
+
+/// Determine the backup mode when another utility-specific option also enables backups.
+///
+/// `backup_enabled` augments `-b` and `--backup`; explicit backup controls and
+/// `VERSION_CONTROL` retain their normal precedence.
+pub fn determine_backup_mode_with_activation(
+    matches: &ArgMatches,
+    backup_enabled: bool,
+) -> CTResult<CtBackupMode> {
     let has_backup_opt = matches.contains_id(arguments::OPT_BACKUP);
     let has_b_flag = matches.get_flag(arguments::OPT_BACKUP_NO_ARG);
     let has_suffix_opt = matches
@@ -344,7 +355,7 @@ pub fn determine_backup_mode(matches: &ArgMatches) -> CTResult<CtBackupMode> {
 
     // GNU 的 -S/--suffix 和 -b/--backup 一样会启用备份，然后由 VERSION_CONTROL
     // 决定类型。
-    if has_backup_opt || has_b_flag || has_suffix_opt {
+    if has_backup_opt || has_b_flag || has_suffix_opt || backup_enabled {
         if let Some(method) = matches.get_one::<String>(arguments::OPT_BACKUP) {
             match_method(method, "backup type")
         } else if let Ok(method) = env::var("VERSION_CONTROL") {
@@ -532,6 +543,26 @@ mod tests {
         let result = determine_backup_mode(&matches).unwrap();
 
         assert_eq!(result, CtBackupMode::ExistingBackup);
+    }
+
+    #[test]
+    fn test_backup_mode_external_activation_honors_version_control() {
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
+        let matches = make_app().get_matches_from(vec!["command", "-S", ".bak"]);
+
+        let result = determine_backup_mode_with_activation(&matches, true).unwrap();
+        assert_eq!(result, CtBackupMode::ExistingBackup);
+
+        let matches = make_app().get_matches_from(vec!["command", "--backup=none", "-S", ".bak"]);
+        let result = determine_backup_mode_with_activation(&matches, true).unwrap();
+        assert_eq!(result, CtBackupMode::NoBackup);
+
+        unsafe { env::set_var(ENV_VERSION_CONTROL, "numbered") };
+        let matches = make_app().get_matches_from(vec!["command", "-S", ".bak"]);
+        let result = determine_backup_mode_with_activation(&matches, true).unwrap();
+        assert_eq!(result, CtBackupMode::NumberedBackup);
+        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 
     // --backup只能带有参数一起使用

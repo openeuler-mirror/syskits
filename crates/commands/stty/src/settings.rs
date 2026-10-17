@@ -18,7 +18,9 @@ use nix::sys::termios::{
     ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O,
     SpecialCharacterIndices as S,
 };
+use std::ffi::OsStr;
 use std::os::fd::AsRawFd;
+use std::os::unix::ffi::OsStrExt;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Settings<T> {
@@ -461,7 +463,7 @@ impl SpecialSetting {
     ///
     /// # 参数
     /// - `termios`: 一个可变引用，指向`Termios`结构体，用于配置终端行为。
-    /// - `value`: 一个可选的字符串引用，为某些设置提供具体数值。
+    /// - `value`: 一个可选的原始操作数，为某些设置提供具体数值。
     /// - `device`: 一个设备引用，用于查询或应用设备特定设置。
     ///
     /// # 返回
@@ -469,7 +471,7 @@ impl SpecialSetting {
     pub fn apply(
         self,
         termios: &mut Termios,
-        value: Option<&str>,
+        value: Option<&OsStr>,
         device: &Device,
     ) -> CTResult<bool> {
         match self {
@@ -507,9 +509,9 @@ impl SpecialSetting {
     ///
     /// # 返回
     /// - `CTResult<bool>`: 结果类型包装，表示操作是否成功如果速度值无效或设置速度失败，将返回错误
-    fn apply_input_speed(&self, termios: &mut Termios, value: Option<&str>) -> CTResult<bool> {
+    fn apply_input_speed(&self, termios: &mut Termios, value: Option<&OsStr>) -> CTResult<bool> {
         if let Some(speed) = value {
-            let speed = parse_baud_rate(speed)?;
+            let speed = parse_baud_rate(require_utf8(speed)?)?;
             // 设置输入速度，并处理可能的错误
             nix::sys::termios::cfsetispeed(termios, speed)
                 .map_err(|e| CtSimpleError::new(1, format!("Failed to set input speed: {e}")))?;
@@ -528,16 +530,16 @@ impl SpecialSetting {
     /// # 参数
     ///
     /// - `termios`: 一个`Termios`结构体的可变引用，用于修改终端的I/O属性。
-    /// - `value`: 一个`Option<&str>`类型参数，可能包含要设置的输出速度字符串表示。
+    /// - `value`: 一个`Option<&OsStr>`类型参数，可能包含要设置的输出速度字节表示。
     ///
     /// # 返回值
     ///
     /// - `CTResult<bool>`: 一个结果类型，包含一个布尔值。如果成功设置输出速度，返回`Ok(true)`；
     ///   如果未提供速度值或设置失败，返回`Ok(false)`。如果设置过程中遇到错误，返回一个错误类型。
-    fn apply_output_speed(&self, termios: &mut Termios, value: Option<&str>) -> CTResult<bool> {
+    fn apply_output_speed(&self, termios: &mut Termios, value: Option<&OsStr>) -> CTResult<bool> {
         if let Some(speed) = value {
             // 解析提供的速度字符串为`Speed`枚举类型
-            let speed = parse_baud_rate(speed)?;
+            let speed = parse_baud_rate(require_utf8(speed)?)?;
             nix::sys::termios::cfsetospeed(termios, speed)
                 .map_err(|e| CtSimpleError::new(1, format!("Failed to set output speed: {e}")))?;
 
@@ -558,9 +560,9 @@ impl SpecialSetting {
     ///
     /// * `CTResult<bool>`: 一个结果类型，包含操作是否成功的布尔值如果提供了一个值并且成功设置，则返回Ok(true)；如果未提供值，则返回Ok(false)
     /// * 如果解析值失败，则返回一个错误
-    fn apply_min_chars(&self, termios: &mut Termios, value: Option<&str>) -> CTResult<bool> {
+    fn apply_min_chars(&self, termios: &mut Termios, value: Option<&OsStr>) -> CTResult<bool> {
         if let Some(val) = value {
-            let parsed_val = parse_u8_with_base(val)?;
+            let parsed_val = parse_u8_with_base(require_utf8(val)?)?;
             // 将解析后的值设置为termios配置中的最小字符数
             termios.control_chars[SpecialCharacterIndices::VMIN as usize] = parsed_val;
             Ok(true)
@@ -582,9 +584,9 @@ impl SpecialSetting {
     /// # 返回
     /// - `CTResult<bool>`: 一个结果类型，包含一个布尔值，表示是否成功应用了超时设置
     ///   如果成功应用或没有提供值，则返回Ok(true)或Ok(false)，错误情况下返回Err
-    fn apply_timeout(&self, termios: &mut Termios, value: Option<&str>) -> CTResult<bool> {
+    fn apply_timeout(&self, termios: &mut Termios, value: Option<&OsStr>) -> CTResult<bool> {
         if let Some(val) = value {
-            let parsed_val = parse_u8_with_base(val)?;
+            let parsed_val = parse_u8_with_base(require_utf8(val)?)?;
             // 将解析后的值设置为Termios结构体中的VTIME特殊字符
             termios.control_chars[SpecialCharacterIndices::VTIME as usize] = parsed_val;
             Ok(true)
@@ -655,11 +657,11 @@ impl SpecialSetting {
     /// - `Ok(true)`: 如果大小设置成功应用，则返回Ok(true)。
     /// - `Ok(false)`: 如果未提供值（即value为None），则返回Ok(false)。
     /// - `Err(_)`: 如果解析失败或设备不支持，则返回一个错误。
-    fn apply_size(&self, device: &Device, value: Option<&str>) -> CTResult<bool> {
+    fn apply_size(&self, device: &Device, value: Option<&OsStr>) -> CTResult<bool> {
         // 检查是否有值提供，如果没有则直接返回Ok(false)
         if let Some(val) = value {
             // 将提供的字符串值解析为无符号短整型，如果解析失败则返回错误
-            let parsed_val = parse_u16_with_base(val)?;
+            let parsed_val = parse_u16_with_base(require_utf8(val)?)?;
 
             // 获取当前终端的尺寸
             let mut size = TermSize::default();
@@ -691,9 +693,9 @@ impl SpecialSetting {
     /// 该函数尝试将提供的行纪律值解析为u8类型，并将其应用到提供的Termios配置中
     /// 如果提供了值并且解析成功，则更新Termios配置并返回Ok(true)
     /// 如果解析失败或未提供值，则返回Ok(false)，并不改变Termios配置
-    fn apply_line(&self, termios: &mut Termios, value: Option<&str>) -> CTResult<bool> {
+    fn apply_line(&self, termios: &mut Termios, value: Option<&OsStr>) -> CTResult<bool> {
         if let Some(line) = value {
-            let line = parse_u8_with_base(line)?;
+            let line = parse_u8_with_base(require_utf8(line)?)?;
             // 将当前的Termios配置转换为nix::libc::termios类型，直接修改c_line字段
             let mut libc_termios: nix::libc::termios = termios.clone().into();
             libc_termios.c_line = line;
@@ -746,7 +748,7 @@ impl SpecialSetting {
     fn apply_special_characters(
         &self,
         termios: &mut Termios,
-        value: Option<&str>,
+        value: Option<&OsStr>,
     ) -> CTResult<bool> {
         if let Some(char) = value {
             let control_char = parse_control_char(char)?;
@@ -805,31 +807,33 @@ fn parse_baud_rate(s: &str) -> CTResult<BaudRate> {
     Err(CtSimpleError::new(1, format!("invalid argument '{s}'")))
 }
 
-/// Parse a control character from a string
+/// Parse a control character from an operand's raw bytes.
 /// 解析控制字符
 ///
 /// 控制字符可以是单个字符、以 '^' 开头的序列、`undef`/`^-`，或整数编码。
 ///
 /// # 参数
-/// - `s`: 待解析的控制字符字符串
+/// - `s`: 待解析的控制字符原始操作数
 ///
 /// # 返回值
 /// - `Ok(nix::libc::cc_t)`: 成功解析后的控制字符
 /// - `Err(CtSimpleError)`: 解析失败时返回错误
-fn parse_control_char(s: &str) -> CTResult<nix::libc::cc_t> {
-    if s.is_empty() {
+fn parse_control_char(s: impl AsRef<OsStr>) -> CTResult<nix::libc::cc_t> {
+    let s = s.as_ref();
+    let bytes = s.as_bytes();
+
+    if bytes.is_empty() {
         return Ok(0);
     }
 
-    if s.len() == 1 {
-        return Ok(s.as_bytes()[0]);
+    if bytes.len() == 1 {
+        return Ok(bytes[0]);
     }
 
-    if matches!(s, "^-" | "undef") {
+    if matches!(bytes, b"^-" | b"undef") {
         return Ok(_POSIX_VDISABLE);
     }
 
-    let bytes = s.as_bytes();
     if bytes[0] == b'^' {
         if bytes[1] == b'?' {
             return Ok(127);
@@ -837,9 +841,16 @@ fn parse_control_char(s: &str) -> CTResult<nix::libc::cc_t> {
         return Ok(bytes[1] & !0o140);
     }
 
-    let value = parse_u32_with_base(s)?;
+    let text = require_utf8(s)?;
+    let value = parse_u32_with_base(text)?;
     nix::libc::cc_t::try_from(value)
-        .map_err(|_| CtSimpleError::new(1, format!("invalid argument '{s}'")))
+        .map_err(|_| CtSimpleError::new(1, format!("invalid argument '{text}'")))
+}
+
+fn require_utf8(value: &OsStr) -> CTResult<&str> {
+    value.to_str().ok_or_else(|| {
+        CtSimpleError::new(1, format!("invalid argument '{}'", value.to_string_lossy()))
+    })
 }
 
 fn parse_u32_with_base(raw: &str) -> CTResult<u32> {
@@ -874,9 +885,11 @@ fn parse_numeric_base(raw: &str) -> (u32, &str) {
 mod tests {
     use super::*;
     use nix::sys::termios::{ControlFlags, Termios};
+    use std::ffi::OsString;
     use std::io::stdin;
     use std::io::{IsTerminal, stdout};
     use std::os::fd::AsRawFd;
+    use std::os::unix::ffi::OsStringExt;
 
     /// 检测是否在容器环境中运行
     fn is_container() -> bool {
@@ -994,6 +1007,12 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_control_char_non_utf8_literal_byte() {
+        let value = OsString::from_vec(vec![0xff]);
+        assert_eq!(parse_control_char(&value).unwrap(), 0xff);
+    }
+
+    #[test]
     fn test_special_settings() {
         for entry in SPECIAL_SETTINGS {
             assert!(!entry.name.is_empty());
@@ -1029,7 +1048,9 @@ mod tests {
             .expect("min setting should exist");
 
         assert!(min_setting.requires_value);
-        let result = min_setting.setting.apply(&mut termios, Some("1"), &device);
+        let result = min_setting
+            .setting
+            .apply(&mut termios, Some(OsStr::new("1")), &device);
         assert!(result.is_ok());
     }
 
@@ -1044,7 +1065,7 @@ mod tests {
 
         let result = erase_setting
             .setting
-            .apply(&mut termios, Some("0177"), &device);
+            .apply(&mut termios, Some(OsStr::new("0177")), &device);
 
         assert!(result.is_ok());
         assert_eq!(
@@ -1064,7 +1085,7 @@ mod tests {
 
         let result = flush_setting
             .setting
-            .apply(&mut termios, Some("^A"), &device);
+            .apply(&mut termios, Some(OsStr::new("^A")), &device);
 
         assert!(result.is_ok());
         assert_eq!(
@@ -1083,7 +1104,9 @@ mod tests {
             .expect("time setting should exist");
 
         assert!(time_setting.requires_value);
-        let result = time_setting.setting.apply(&mut termios, Some("1"), &device);
+        let result = time_setting
+            .setting
+            .apply(&mut termios, Some(OsStr::new("1")), &device);
         assert!(result.is_ok());
     }
 
@@ -1098,7 +1121,7 @@ mod tests {
 
         let result = min_setting
             .setting
-            .apply(&mut termios, Some("invalid"), &device);
+            .apply(&mut termios, Some(OsStr::new("invalid")), &device);
         assert!(result.is_err());
     }
 }

@@ -33,11 +33,12 @@ use nix::sys::termios::{
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use settings::{BAUD_RATES, Settings};
 use settings::{CONTROL_CHARS, CONTROL_SETTINGS, INPUT_SETTINGS, LOCAL_SETTINGS, OUTPUT_SETTINGS};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::io::{IsTerminal, Write, stdin};
 use std::ops::ControlFlow;
 use std::os::fd::AsFd;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::AsRawFd;
 use sys_locale::get_locale;
@@ -54,22 +55,26 @@ struct SttyFlags {
     is_all: bool,
     is_save: bool,
     stdout_is_terminal: bool,
-    file_name: Option<String>,
+    file_name: Option<OsString>,
     file: Device,
     settings: Option<Vec<SttySetting>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct SttySetting {
-    name: String,
-    value: Option<String>,
+    name: OsString,
+    value: Option<OsString>,
 }
 
 impl SttySetting {
     fn new(name: &str, value: Option<&str>) -> Self {
+        Self::from_os(OsStr::new(name), value.map(OsStr::new))
+    }
+
+    fn from_os(name: &OsStr, value: Option<&OsStr>) -> Self {
         Self {
-            name: name.to_string(),
-            value: value.map(str::to_string),
+            name: name.to_os_string(),
+            value: value.map(OsStr::to_os_string),
         }
     }
 }
@@ -82,9 +87,9 @@ impl From<&str> for SttySetting {
 
 impl fmt::Display for SttySetting {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name)?;
+        write!(f, "{}", self.name.to_string_lossy())?;
         if let Some(value) = &self.value {
-            write!(f, " {value}")?;
+            write!(f, " {}", value.to_string_lossy())?;
         }
         Ok(())
     }
@@ -108,31 +113,29 @@ const OFILL_RAW_BIT: tcflag_t = 0;
 // 解析配置参数，保留每个 argv 元素的边界。
 //
 // # 参数
-// - `args`: &[&str] - 一个字符串切片，包含配置参数
+// - `args`: 保留原始 argv 字节的配置参数
 //
 // # 返回值
 // - Vec<SttySetting> - 设置名及其可能的值
-fn parse_settings(args: &[&str]) -> Vec<SttySetting> {
+fn parse_settings<T: AsRef<OsStr>>(args: &[T]) -> Vec<SttySetting> {
     let mut cfg_settings = Vec::new();
     let mut iter = args.iter().peekable();
 
     while let Some(arg) = iter.next() {
+        let arg = arg.as_ref();
         let mut value = None;
 
         // 检查当前参数是否为特殊设置，并获取其 requires_value 标志
-        if let Some(entry) = settings::SPECIAL_SETTINGS
-            .iter()
-            .find(|entry| entry.name == *arg)
-        {
+        if let Some(entry) = arg.to_str().and_then(find_special_setting) {
             if entry.requires_value {
                 if let Some(next_arg) = iter.peek() {
-                    value = Some(**next_arg);
+                    value = Some(next_arg.as_ref().to_os_string());
                     iter.next();
                 }
             }
         }
 
-        cfg_settings.push(SttySetting::new(arg, value));
+        cfg_settings.push(SttySetting::from_os(arg, value.as_deref()));
     }
 
     cfg_settings
@@ -164,57 +167,58 @@ fn normalize_stty_file_short_option(args: impl ctcore::Args) -> Vec<OsString> {
             continue;
         }
 
+        if matches!(arg.as_os_str().as_bytes(), b"-F" | b"--file") {
+            let value = args.next();
+            let insert_at = settings_start.unwrap_or(normalized.len());
+            normalized.insert(insert_at, arg);
+            let inserted = if let Some(value) = value {
+                normalized.insert(insert_at + 1, value);
+                2
+            } else {
+                1
+            };
+            if let Some(start) = settings_start.as_mut() {
+                *start += inserted;
+            }
+            if let Some(start) = drain_settings_start.as_mut()
+                && *start >= insert_at
+            {
+                *start += inserted;
+            }
+            continue;
+        }
+
+        let arg_bytes = arg.as_os_str().as_bytes();
+        if arg_bytes.starts_with(b"-F") && arg_bytes.len() > 2 {
+            let insert_at = settings_start.unwrap_or(normalized.len());
+            normalized.insert(insert_at, OsString::from("-F"));
+            normalized.insert(insert_at + 1, OsString::from_vec(arg_bytes[2..].to_vec()));
+            if let Some(start) = settings_start.as_mut() {
+                *start += 2;
+            }
+            if let Some(start) = drain_settings_start.as_mut()
+                && *start >= insert_at
+            {
+                *start += 2;
+            }
+            continue;
+        }
+
+        if arg_bytes.starts_with(b"--file=") {
+            let insert_at = settings_start.unwrap_or(normalized.len());
+            normalized.insert(insert_at, arg);
+            if let Some(start) = settings_start.as_mut() {
+                *start += 1;
+            }
+            if let Some(start) = drain_settings_start.as_mut()
+                && *start >= insert_at
+            {
+                *start += 1;
+            }
+            continue;
+        }
+
         if let Some(text) = arg.to_str() {
-            if matches!(text, "-F" | "--file") {
-                let value = args.next();
-                let insert_at = settings_start.unwrap_or(normalized.len());
-                normalized.insert(insert_at, arg);
-                let inserted = if let Some(value) = value {
-                    normalized.insert(insert_at + 1, value);
-                    2
-                } else {
-                    1
-                };
-                if let Some(start) = settings_start.as_mut() {
-                    *start += inserted;
-                }
-                if let Some(start) = drain_settings_start.as_mut()
-                    && *start >= insert_at
-                {
-                    *start += inserted;
-                }
-                continue;
-            }
-
-            if let Some(value) = text.strip_prefix("-F").filter(|value| !value.is_empty()) {
-                let insert_at = settings_start.unwrap_or(normalized.len());
-                normalized.insert(insert_at, OsString::from("-F"));
-                normalized.insert(insert_at + 1, OsString::from(value));
-                if let Some(start) = settings_start.as_mut() {
-                    *start += 2;
-                }
-                if let Some(start) = drain_settings_start.as_mut()
-                    && *start >= insert_at
-                {
-                    *start += 2;
-                }
-                continue;
-            }
-
-            if text.starts_with("--file=") {
-                let insert_at = settings_start.unwrap_or(normalized.len());
-                normalized.insert(insert_at, arg);
-                if let Some(start) = settings_start.as_mut() {
-                    *start += 1;
-                }
-                if let Some(start) = drain_settings_start.as_mut()
-                    && *start >= insert_at
-                {
-                    *start += 1;
-                }
-                continue;
-            }
-
             if matches!(text, "drain" | "-drain") {
                 settings_start.get_or_insert(normalized.len());
                 drain_settings_start.get_or_insert(normalized.len());
@@ -255,11 +259,11 @@ impl SttyFlags {
     fn new(matches: &ArgMatches) -> CTResult<Self> {
         // 处理特别配置中的键值对逻辑，这里从命令行参数中获取设置项，然后解析这些设置项
         let settings = matches
-            .get_many::<String>(stty_flags::STTY_SETTINGS)
-            .map(|v| v.map(|s| s.as_str()).collect::<Vec<&str>>())
+            .get_many::<OsString>(stty_flags::STTY_SETTINGS)
+            .map(|v| v.cloned().collect::<Vec<_>>())
             .map(|args| parse_settings(&args));
 
-        let file_name = matches.get_one::<String>(stty_flags::STTY_FILE).cloned();
+        let file_name = matches.get_one::<OsString>(stty_flags::STTY_FILE).cloned();
 
         Ok(Self {
             // 是否显示所有设置的标志
@@ -421,25 +425,30 @@ fn find_combination_setting(name: &str) -> Option<bool> {
 }
 
 fn validate_setting_syntax(setting: &SttySetting) -> CTResult<()> {
-    let name = setting.name.as_str();
-    let value = setting.value.as_deref();
+    let Some(name) = setting.name.to_str() else {
+        return Err(CtSimpleError::new(
+            1,
+            format!("invalid argument '{setting}'"),
+        ));
+    };
+    let has_value = setting.value.is_some();
 
-    if value.is_none() && BAUD_RATES.iter().any(|(text, _, _)| *text == name) {
+    if !has_value && BAUD_RATES.iter().any(|(text, _, _)| *text == name) {
         return Ok(());
     }
 
-    if value.is_none() && name.contains(':') {
+    if !has_value && name.contains(':') {
         return Ok(());
     }
 
     if let Some(entry) = find_special_setting(name) {
-        if entry.requires_value && value.is_none() {
+        if entry.requires_value && !has_value {
             return Err(CtSimpleError::new(
                 1,
                 format!("invalid argument '{setting}'"),
             ));
         }
-        if !entry.requires_value && value.is_some() {
+        if !entry.requires_value && has_value {
             return Err(CtSimpleError::new(
                 1,
                 format!("invalid argument '{setting}'"),
@@ -454,7 +463,7 @@ fn validate_setting_syntax(setting: &SttySetting) -> CTResult<()> {
     };
 
     if is_custom_regular_setting(base_name) {
-        if value.is_some() {
+        if has_value {
             return Err(CtSimpleError::new(
                 1,
                 format!("invalid argument '{setting}'"),
@@ -464,7 +473,7 @@ fn validate_setting_syntax(setting: &SttySetting) -> CTResult<()> {
     }
 
     if let Some(is_reversible) = find_combination_setting(base_name) {
-        if value.is_some() || (is_remove && !is_reversible) {
+        if has_value || (is_remove && !is_reversible) {
             return Err(CtSimpleError::new(
                 1,
                 format!("invalid argument '{setting}'"),
@@ -480,7 +489,7 @@ fn validate_setting_syntax(setting: &SttySetting) -> CTResult<()> {
         ));
     };
 
-    if value.is_some() || (is_remove && is_grouped) {
+    if has_value || (is_remove && is_grouped) {
         return Err(CtSimpleError::new(
             1,
             format!("invalid argument '{setting}'"),
@@ -491,24 +500,24 @@ fn validate_setting_syntax(setting: &SttySetting) -> CTResult<()> {
 }
 
 fn is_drain_setting(setting: &SttySetting) -> bool {
-    setting.value.is_none() && matches!(setting.name.as_str(), "drain" | "-drain")
+    setting.value.is_none() && matches!(setting.name.to_str(), Some("drain" | "-drain"))
 }
 
 fn tcsetattr_arg_for_setting(setting: &SttySetting) -> Option<SetArg> {
     if setting.value.is_some() {
         return None;
     }
-    match setting.name.as_str() {
-        "drain" => Some(SetArg::TCSADRAIN),
-        "-drain" => Some(SetArg::TCSANOW),
+    match setting.name.to_str() {
+        Some("drain") => Some(SetArg::TCSADRAIN),
+        Some("-drain") => Some(SetArg::TCSANOW),
         _ => None,
     }
 }
 
 fn setting_uses_device_during_apply(setting: &SttySetting) -> bool {
     matches!(
-        setting.name.as_str(),
-        "speed" | "size" | "rows" | "cols" | "columns"
+        setting.name.to_str(),
+        Some("speed" | "size" | "rows" | "cols" | "columns")
     )
 }
 
@@ -608,9 +617,11 @@ fn stty<W: Write>(opts: &mut SttyFlags, writer: &mut W) -> CTResult<()> {
                 tcgetattr(opts.file.as_fd()).map_err(|e| CtSimpleError::new(1, e.to_string()))?;
             if !termios_equal(&termios, &current) {
                 let msg = match &opts.file_name {
-                    Some(file) => {
-                        t!("stty.errors.unable_to_perform_file", file = file.as_str()).to_string()
-                    }
+                    Some(file) => t!(
+                        "stty.errors.unable_to_perform_file",
+                        file = file.to_string_lossy().as_ref()
+                    )
+                    .to_string(),
                     None => t!("stty.errors.unable_to_perform").to_string(),
                 };
                 return Err(CtSimpleError::new(1, msg));
@@ -1096,7 +1107,9 @@ fn stty_apply_setting(
     setting: &SttySetting,
     device: &Device,
 ) -> CTResult<ControlFlow<bool>> {
-    let s = setting.name.as_str();
+    let Some(s) = setting.name.to_str() else {
+        return Ok(ControlFlow::Continue(()));
+    };
 
     if let ControlFlow::Break(applied) = stty_apply_recover_mode(termios, s) {
         return Ok(ControlFlow::Break(applied));
@@ -1493,11 +1506,13 @@ pub fn ct_app() -> Command {
             .short('F')
             .long(stty_flags::STTY_FILE)
             .num_args(1)
+            .value_parser(clap::builder::OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath)
             .value_name("DEVICE")
             .help(t!("stty.clap.stty_file")),
         Arg::new(stty_flags::STTY_SETTINGS)
             .action(ArgAction::Append)
+            .value_parser(clap::builder::OsStringValueParser::new())
             .allow_hyphen_values(true)
             .help(t!("stty.clap.stty_settings")),
     ];
@@ -1535,6 +1550,7 @@ mod tests {
     use std::ffi::OsString;
     use std::io::IsTerminal;
     use std::os::fd::AsRawFd;
+    use std::os::unix::ffi::OsStringExt;
 
     #[test]
     fn test_tool_implementation() {
@@ -1649,9 +1665,10 @@ mod tests {
             assert_eq!(
                 executable
                     .unwrap()
-                    .get_one::<String>(stty_flags::STTY_FILE)
-                    .unwrap(),
-                "/dev/tty"
+                    .get_one::<OsString>(stty_flags::STTY_FILE)
+                    .unwrap()
+                    .as_os_str(),
+                OsStr::new("/dev/tty")
             );
         }
 
@@ -1668,10 +1685,34 @@ mod tests {
             assert_eq!(
                 executable
                     .unwrap()
-                    .get_one::<String>(stty_flags::STTY_FILE)
-                    .unwrap(),
-                "/dev/tty"
+                    .get_one::<OsString>(stty_flags::STTY_FILE)
+                    .unwrap()
+                    .as_os_str(),
+                OsStr::new("/dev/tty")
             );
+        }
+
+        #[test]
+        fn test_file_options_preserve_attached_non_utf8_values() {
+            let raw_path = OsString::from_vec(b"/tmp/stty-\xff".to_vec());
+
+            for prefix in [b"-F".as_slice(), b"--file=".as_slice()] {
+                let mut attached = prefix.to_vec();
+                attached.extend_from_slice(raw_path.as_os_str().as_bytes());
+                let args = normalize_stty_file_short_option(
+                    [
+                        OsString::from(ctcore::ct_util_name()),
+                        OsString::from("echo"),
+                        OsString::from_vec(attached),
+                    ]
+                    .into_iter(),
+                );
+                let matches = ct_app().try_get_matches_from(args).unwrap();
+                let flags = SttyFlags::new(&matches).unwrap();
+
+                assert_eq!(flags.file_name, Some(raw_path.clone()));
+                assert_eq!(flags.settings, Some(vec![SttySetting::from("echo")]));
+            }
         }
 
         #[test]
@@ -1786,13 +1827,19 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "raw", "-echo", "9600", "size"];
             let executable = command.try_get_matches_from(args);
             assert!(executable.is_ok());
-            let settings: Vec<String> = executable
+            let settings: Vec<OsString> = executable
                 .unwrap()
-                .get_many::<String>(stty_flags::STTY_SETTINGS)
+                .get_many::<OsString>(stty_flags::STTY_SETTINGS)
                 .unwrap()
                 .cloned()
                 .collect();
-            assert_eq!(settings, vec!["raw", "-echo", "9600", "size"]);
+            assert_eq!(
+                settings,
+                vec!["raw", "-echo", "9600", "size"]
+                    .into_iter()
+                    .map(OsString::from)
+                    .collect::<Vec<_>>()
+            );
         }
     }
 
@@ -1833,6 +1880,34 @@ mod tests {
             assert!(matches!(flags.file, Device::Stdin(_)));
             flags.open_file_if_requested().unwrap();
             assert!(matches!(flags.file, Device::File(_)));
+        }
+
+        #[test]
+        fn test_stty_flags_preserve_non_utf8_operands() {
+            let raw_char = OsString::from_vec(vec![0xff]);
+            let matches = ct_app()
+                .try_get_matches_from(vec![
+                    OsString::from(ctcore::ct_util_name()),
+                    OsString::from("erase"),
+                    raw_char.clone(),
+                ])
+                .unwrap();
+            let flags = SttyFlags::new(&matches).unwrap();
+            let settings = flags.settings.unwrap();
+            assert_eq!(settings[0].name, OsString::from("erase"));
+            assert_eq!(settings[0].value.as_ref(), Some(&raw_char));
+
+            let raw_path = OsString::from_vec(b"/tmp/stty-\xff".to_vec());
+            let matches = ct_app()
+                .try_get_matches_from(vec![
+                    OsString::from(ctcore::ct_util_name()),
+                    OsString::from("-F"),
+                    raw_path.clone(),
+                    OsString::from("-g"),
+                ])
+                .unwrap();
+            let flags = SttyFlags::new(&matches).unwrap();
+            assert_eq!(flags.file_name, Some(raw_path));
         }
 
         #[test]

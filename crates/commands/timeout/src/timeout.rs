@@ -459,6 +459,16 @@ fn timeout_unblock_alarm_and_sigchld() {
     );
 }
 
+fn timeout_block_alarm() -> Result<(), nix::errno::Errno> {
+    let mut signals = nix::sys::signal::SigSet::empty();
+    signals.add(nix::sys::signal::Signal::SIGALRM);
+    nix::sys::signal::sigprocmask(
+        nix::sys::signal::SigmaskHow::SIG_BLOCK,
+        Some(&signals),
+        None,
+    )
+}
+
 fn timeout_install_signal_handlers(timeout_signal: usize) {
     unsafe {
         let alarm_sa = nix::sys::signal::SigAction::new(
@@ -591,21 +601,46 @@ fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
             libc::signal(libc::SIGTTIN, libc::SIG_DFL);
             libc::signal(libc::SIGTTOU, libc::SIG_DFL);
 
+            // The monitor blocks SIGALRM across spawn to close the fork race;
+            // COMMAND must inherit the unblocked mask GNU saved before fork.
+            let mut signals = std::mem::zeroed();
+            libc::sigemptyset(&mut signals);
+            libc::sigaddset(&mut signals, libc::SIGALRM);
+            if libc::sigprocmask(libc::SIG_UNBLOCK, &signals, std::ptr::null_mut()) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+
             Ok(())
         });
     }
 
-    let process = &mut cmd.spawn().map_err(|err| {
-        let status = if err.kind() == ErrorKind::NotFound {
-            ExitStatus::CommandNotFound
-        } else {
-            ExitStatus::CommandNotExecutable
-        };
-        CtSimpleError::new(status.into(), format!("failed to execute process: {err}"))
-    })?;
+    timeout_block_alarm()?;
+    let mut process = match cmd.spawn() {
+        Ok(process) => process,
+        Err(err) => {
+            timeout_unblock_alarm_and_sigchld();
+            let status = if err.kind() == ErrorKind::NotFound {
+                ExitStatus::CommandNotFound
+            } else {
+                ExitStatus::CommandNotExecutable
+            };
+            return Err(CtSimpleError::new(
+                status.into(),
+                format!("failed to execute process: {err}"),
+            ));
+        }
+    };
 
     timeout_unblock_sigchld();
-    handle_process_timeout(process, flags)
+    configure_external_kill_after(flags.kill_after);
+    CHILD_PID.store(process.id() as i32, Ordering::Release);
+    TIMEOUT_SIGNAL.store(flags.signal as i32, Ordering::Release);
+    IS_FOREGROUND.store(flags.is_foreground, Ordering::Release);
+    ALARM_RECEIVED.store(false, Ordering::Release);
+    MONITOR_ACTIVE.store(true, Ordering::Release);
+    timeout_unblock_alarm_and_sigchld();
+
+    handle_process_timeout(&mut process, flags)
 }
 
 /// 处理进程超时逻辑
@@ -622,13 +657,6 @@ fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
 ///   则返回Ok(())；否则返回一个错误状态。
 ///     - 处理进程超时逻辑
 fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult<()> {
-    configure_external_kill_after(flags.kill_after);
-    CHILD_PID.store(process.id() as i32, Ordering::Release);
-    TIMEOUT_SIGNAL.store(flags.signal as i32, Ordering::Release);
-    IS_FOREGROUND.store(flags.is_foreground, Ordering::Release);
-    ALARM_RECEIVED.store(false, Ordering::Release);
-    MONITOR_ACTIVE.store(true, Ordering::Release);
-
     let wait_result = if flags.duration.is_zero() {
         process.wait().map(Some)
     } else {
@@ -636,9 +664,24 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
     };
 
     let result = if ALARM_RECEIVED.load(Ordering::Acquire) {
-        // 阻塞等待子进程执行完 trap 清理逻辑并正式退出
-        let _ = process.wait();
-        Err(ExitStatus::CommandTimedOut.into()) // 等子进程死透了，我们再优雅返回 124
+        // External SIGALRM follows GNU's cleanup path: report the configured
+        // termination signal, then preserve COMMAND's status when requested.
+        timeout_report_if_verbose(flags.signal, &flags.command[0], flags.is_verbose);
+        let status = process.wait()?;
+        if flags.is_preserve_status {
+            if let Some(signal) = status.signal() {
+                Err(ExitStatus::SignalTerminated(signal).into())
+            } else {
+                let exit_code = status.code().unwrap_or(0);
+                if exit_code == 0 {
+                    Ok(())
+                } else {
+                    Err(exit_code.into())
+                }
+            }
+        } else {
+            Err(ExitStatus::CommandTimedOut.into())
+        }
     } else {
         match wait_result {
             Ok(Some(status)) => {

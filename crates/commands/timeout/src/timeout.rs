@@ -575,6 +575,9 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
             Ok(Some(status)) => {
                 // 进程在超时前结束 (未超时)
                 if let Some(signal) = status.signal() {
+                    if status.core_dumped() {
+                        ct_show_error!("the monitored command dumped core");
+                    }
                     // GNU re-raises a command signal when no timeout occurred.
                     timeout_terminate_self_with_signal(signal)
                 } else {

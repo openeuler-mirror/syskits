@@ -313,8 +313,7 @@ pub fn ct_app() -> Command {
             .long(lnoptions::LN_DIRECTORY)
             .help("allow the superuser to try to hard link directories")
             .overrides_with(lnoptions::LN_DIRECTORY)
-            .action(ArgAction::SetTrue)
-            .conflicts_with(lnoptions::LN_SYMBOLIC),
+            .action(ArgAction::SetTrue),
         Arg::new(LN_ARG_FILES)
             .action(ArgAction::Append)
             .value_hint(clap::ValueHint::AnyPath)
@@ -912,6 +911,19 @@ mod tests {
         assert_eq!(settings_for("-if").overwrite, OverwriteMode::Force);
         assert_eq!(settings_for("-fif").overwrite, OverwriteMode::Force);
         assert_eq!(settings_for("-ifi").overwrite, OverwriteMode::Interactive);
+    }
+
+    #[test]
+    fn test_symbolic_ignores_directory_option() {
+        for options in ["-sd", "-ds", "-sF", "-Fs"] {
+            let matches = ct_app()
+                .try_get_matches_from(["ln", options, "missing", "link"])
+                .unwrap_or_else(|error| panic!("options {options} were rejected: {error}"));
+            let settings = LnSettings::new(&matches).unwrap();
+
+            assert!(settings.is_symbolic);
+            assert!(settings.is_directory);
+        }
     }
 
     #[test]

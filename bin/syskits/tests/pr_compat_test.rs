@@ -88,6 +88,38 @@ fn pr_show_nonprinting_accepts_non_utf8_input() {
 }
 
 #[test]
+fn pr_c_and_v_escape_zero_width_wide_char() {
+    for option in ["-c", "-v"] {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C.UTF-8")
+            .env("LANG", "C.UTF-8")
+            .args(["pr", "-t", option])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("run syskits pr");
+
+        child
+            .stdin
+            .take()
+            .expect("open pr stdin")
+            .write_all(b"e\xcc\x81\n")
+            .expect("write combining character");
+
+        let output = child.wait_with_output().expect("wait for syskits pr");
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "option {option}, stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stdout, b"e\\314\\201\n", "option {option}");
+        assert_eq!(output.stderr, b"", "option {option}");
+    }
+}
+
+#[test]
 fn pr_without_show_nonprinting_preserves_non_utf8_bytes() {
     let output = run_pr_with_non_utf8_input(&["-t"]);
 

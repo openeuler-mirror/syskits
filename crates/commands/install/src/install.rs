@@ -863,20 +863,6 @@ impl Installer {
         Ok(())
     }
 
-    fn get_chown_ids(&self) -> Option<(u32, u32)> {
-        if self.owner_id.is_some() || self.group_id.is_some() {
-            Some((
-                self.owner_id.unwrap_or(geteuid()),
-                self.group_id.unwrap_or(getegid()),
-            ))
-        } else if geteuid() == 0 {
-            // 特殊情况：root 用户
-            Some((0, 0))
-        } else {
-            None
-        }
-    }
-
     fn get_verbosity(&self) -> Verbosity {
         Verbosity {
             groups_only: self.owner_id.is_none(),
@@ -1246,7 +1232,6 @@ fn install_standard(paths: Vec<PathBuf>, b: &Installer) -> CTResult<()> {
 /// * `b` - 安装器配置，包含所有者和组的设置
 ///
 /// # 特殊情况
-/// - 如果用户是 root (uid=0)，且未指定所有者和组，则设置为 root:root
 /// - 如果只指定了组，则只修改组所有权
 /// - 如果既未指定所有者也未指定组，则不进行任何修改
 ///
@@ -1257,10 +1242,9 @@ fn install_standard(paths: Vec<PathBuf>, b: &Installer) -> CTResult<()> {
 /// # 返回值
 /// 返回 `CTResult<()>`，表示操作是否成功完成
 fn chown_optional_user_group(path: &Path, b: &Installer) -> CTResult<()> {
-    // 获取所有者和组 ID
-    let Some((owner_id, group_id)) = b.get_chown_ids() else {
+    if b.owner_id.is_none() && b.group_id.is_none() {
         return Ok(());
-    };
+    }
 
     // 执行 chown 操作
     let meta = match fs::metadata(path) {
@@ -1272,8 +1256,8 @@ fn chown_optional_user_group(path: &Path, b: &Installer) -> CTResult<()> {
     match change_ownership(
         path,
         &meta,
-        Some(owner_id),
-        Some(group_id),
+        b.owner_id,
+        b.group_id,
         CtOwnershipChangeOutputNames::default(),
         false,
         verbosity,
@@ -2048,13 +2032,14 @@ fn execute_strip(path: &Path, strip_program: &str) -> CTResult<()> {
 /// # 返回值
 /// 返回 `CTResult<()>`，表示操作是否成功完成
 fn set_ownership_and_permissions(to: &Path, b: &Installer) -> CTResult<()> {
+    // chown can clear setuid/setgid bits, so GNU install applies the final mode afterward.
+    chown_optional_user_group(to, b)?;
+
     // Silent the warning as we want to the error message
     #[allow(clippy::question_mark)]
     if mode::install_chmod(to, b.mode()).is_err() {
         return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
     }
-
-    chown_optional_user_group(to, b)?;
 
     Ok(())
 }
@@ -2280,6 +2265,7 @@ impl Tool for Install {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ctcore::ct_process::{getegid, geteuid};
     use std::ffi::OsString;
     use std::fs::File;
     use std::io::Write;
@@ -2604,6 +2590,27 @@ mod tests {
 
         let metadata = std::fs::metadata(&file).unwrap();
         assert_eq!(metadata.mode() & 0o777, 0o644);
+    }
+
+    #[test]
+    fn test_chown_precedes_final_setid_mode() {
+        if geteuid() != 0 {
+            return;
+        }
+
+        let temp = tempdir().unwrap();
+        let file = temp.path().join("test");
+        File::create(&file).unwrap();
+        let installer = Installer {
+            specified_mode: Some(0o6755),
+            owner_id: Some(geteuid()),
+            group_id: Some(getegid()),
+            ..Default::default()
+        };
+
+        set_ownership_and_permissions(&file, &installer).unwrap();
+
+        assert_eq!(std::fs::metadata(file).unwrap().mode() & 0o7777, 0o6755);
     }
 
     #[test]
@@ -3498,12 +3505,16 @@ mod tests {
         File::create(&test_file).unwrap();
 
         // 测试默认情况（不设置所有者和组）
-        let installer = Installer {
-            owner_id: None,
-            group_id: None,
-            ..Default::default()
-        };
+        let installer = Installer::default();
         assert!(chown_optional_user_group(&test_file, &installer).is_ok());
+
+        if geteuid() == 0 {
+            let other_gid = if getegid() == 65534 { 65533 } else { 65534 };
+            if chown(&test_file, Some(geteuid()), Some(other_gid)).is_ok() {
+                chown_optional_user_group(&test_file, &installer).unwrap();
+                assert_eq!(std::fs::metadata(&test_file).unwrap().gid(), other_gid);
+            }
+        }
 
         // 测试只设置组
         let installer = Installer {

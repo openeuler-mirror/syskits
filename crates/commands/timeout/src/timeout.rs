@@ -264,6 +264,7 @@ pub fn ct_app() -> Command {
         .version(command_version)
         .about(application_info)
         .override_usage(usage_description)
+        .args_override_self(true)
         .trailing_var_arg(true)
         .infer_long_args(true)
         .args(&args)
@@ -634,6 +635,31 @@ mod tests {
                 flags.signal,
                 get_ct_signal_by_name_or_value("TERM").unwrap()
             );
+        }
+
+        #[test]
+        fn test_repeated_options_use_last_value() {
+            let args = vec![
+                ctcore::ct_util_name(),
+                "-k",
+                "1s",
+                "--kill-after=2s",
+                "-v",
+                "--verbose",
+                "--foreground",
+                "--foreground",
+                "--preserve-status",
+                "--preserve-status",
+                "5s",
+                "true",
+            ];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = TimeoutFlags::new(&matches).unwrap();
+
+            assert_eq!(flags.kill_after, Some(Duration::from_secs(2)));
+            assert!(flags.is_verbose);
+            assert!(flags.is_foreground);
+            assert!(flags.is_preserve_status);
         }
 
         #[test]

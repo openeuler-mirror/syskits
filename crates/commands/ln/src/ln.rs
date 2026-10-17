@@ -635,7 +635,7 @@ fn handle_backup_and_overwrite(
 
     let backup_path = generate_backup_path(dst, settings)?;
     if let Some(ref backup) = backup_path {
-        if fs::symlink_metadata(backup).is_ok() {
+        if backup != dst && fs::symlink_metadata(backup).is_ok() {
             let _ = fs::remove_file(backup); // 忽略错误，交由系统处理
         }
         rename_backup(dst, backup)?;
@@ -697,17 +697,14 @@ fn rename_backup(dst: &Path, backup: &Path) -> CTResult<()> {
 
 /// 处理覆盖模式。
 fn handle_overwrite_mode(dst: &Path, _src: &Path, settings: &LnSettings) -> CTResult<()> {
-    match settings.overwrite {
-        OverwriteMode::NoClobber => Ok(()),
-        OverwriteMode::Interactive | OverwriteMode::Force => {
-            // unlink(2), as used by GNU ln, cannot remove a directory even if
-            // the destination changes after the metadata check above.
-            if fs::symlink_metadata(dst).is_ok() {
-                let _ = fs::remove_file(dst);
-            }
-            Ok(())
-        }
+    let force =
+        settings.overwrite != OverwriteMode::NoClobber || settings.backup != CtBackupMode::NoBackup;
+    if force && fs::symlink_metadata(dst).is_ok() {
+        // unlink(2), as used by GNU ln, cannot remove a directory even if
+        // the destination changes after the metadata check above.
+        let _ = fs::remove_file(dst);
     }
+    Ok(())
 }
 
 /// 创建链接（符号或硬链接）。
@@ -1162,6 +1159,24 @@ mod tests {
             assert_eq!(settings.suffix, OsString::from(".bak"));
         }
         assert_eq!(disabled_settings.unwrap().backup, CtBackupMode::NoBackup);
+    }
+
+    #[test]
+    fn test_empty_backup_suffix_replaces_destination() {
+        let temp = tempdir().unwrap();
+        let source = temp.path().join("source");
+        let destination = temp.path().join("destination");
+        fs::write(&source, "new").unwrap();
+        fs::write(&destination, "old").unwrap();
+        let settings = LnSettings {
+            backup: CtBackupMode::ExistingBackup,
+            suffix: OsString::new(),
+            ..LnSettings::default()
+        };
+
+        ln_link(&source, &destination, &settings).unwrap();
+
+        assert_eq!(fs::read_to_string(destination).unwrap(), "new");
     }
 
     #[test]

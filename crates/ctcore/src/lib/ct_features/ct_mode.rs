@@ -15,7 +15,7 @@ use libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t, umask};
 
 pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Result<u32, String> {
     let (op, pos) = parse_op(mode).map_or_else(|_| (None, 0), |(op, pos)| (Some(op), pos));
-    mode = mode[pos..].trim();
+    mode = &mode[pos..];
     let change = if mode.is_empty() {
         0
     } else {
@@ -276,6 +276,18 @@ mod test {
         let considering_dir = false;
         let expected = Ok(0o400);
         assert_eq!(super::parse_numeric(fperm, mode, considering_dir), expected);
+    }
+
+    #[test]
+    fn reject_numeric_modes_with_whitespace() {
+        for mode in [
+            " 400", "400 ", "\t400", "400\n", "4 00", "+ 400", "+400 ", "=\t400", "-4 00",
+        ] {
+            assert!(
+                super::parse_numeric(0o644, mode, false).is_err(),
+                "numeric mode with whitespace was accepted: {mode:?}"
+            );
+        }
     }
 
     #[test]

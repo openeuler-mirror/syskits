@@ -205,13 +205,7 @@ impl TimeoutFlags {
         let kill_after = match timeout_flags.get_one::<String>(timeout_flags::TIMEOUT_KILL_AFTER) {
             None => None,
             Some(kill_after_str) => match parse_timeout_duration(kill_after_str) {
-                Ok(mut k) => {
-                    // 处理正数下溢出。如果解析为0，但输入包含数字(1-9)，说明是极端微小的浮点数，向上取整为1纳秒
-                    if k.is_zero() && kill_after_str.chars().any(|c| ('1'..='9').contains(&c)) {
-                        k = Duration::from_nanos(1);
-                    }
-                    Some(k)
-                }
+                Ok(kill_after) => Some(kill_after),
                 Err(err) => {
                     return Err(CTsageError::new(ExitStatus::TimeoutFailed.into(), err));
                 }
@@ -221,17 +215,12 @@ impl TimeoutFlags {
         let duration_str = timeout_flags
             .get_one::<String>(timeout_flags::TIMEOUT_DURATION)
             .unwrap();
-        let mut duration = match parse_timeout_duration(duration_str) {
+        let duration = match parse_timeout_duration(duration_str) {
             Ok(duration) => duration,
             Err(err) => {
                 return Err(CTsageError::new(ExitStatus::TimeoutFailed.into(), err));
             }
         };
-
-        // 同理，处理主超时的正数下溢出。这使得 1e-10000 变成 1纳秒而不是无限等待
-        if duration.is_zero() && duration_str.chars().any(|c| ('1'..='9').contains(&c)) {
-            duration = Duration::from_nanos(1);
-        }
 
         let is_preserve_status = timeout_flags.get_flag(timeout_flags::TIMEOUT_PRESERVE_STATUS);
         let is_foreground = timeout_flags.get_flag(timeout_flags::TIMEOUT_FOREGROUND);
@@ -790,6 +779,18 @@ mod tests {
             let flags = TimeoutFlags::new(&matches).unwrap();
             assert_eq!(flags.kill_after, Some(Duration::from_secs(u64::MAX)));
             assert_eq!(flags.duration, Duration::from_secs(u64::MAX));
+        }
+
+        #[test]
+        fn test_duration_underflow_disables_timer() {
+            assert_eq!(parse_timeout_duration("1e-10000").unwrap(), Duration::ZERO);
+            assert_eq!(parse_timeout_duration("0e-10000").unwrap(), Duration::ZERO);
+
+            let args = vec![ctcore::ct_util_name(), "-k", "1e-10000", "0e-10000", "true"];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+            let flags = TimeoutFlags::new(&matches).unwrap();
+            assert_eq!(flags.kill_after, Some(Duration::ZERO));
+            assert_eq!(flags.duration, Duration::ZERO);
         }
 
         #[test]

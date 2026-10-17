@@ -594,7 +594,11 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
 
                 if flags.signal == get_ct_signal_by_name_or_value("KILL").unwrap() {
                     let _ = process.wait()?;
-                    timeout_terminate_self_with_signal(libc::SIGKILL)
+                    if flags.is_foreground {
+                        Err(ExitStatus::SignalTerminated(libc::SIGKILL).into())
+                    } else {
+                        timeout_terminate_self_with_signal(libc::SIGKILL)
+                    }
                 } else {
                     handle_timeout_exceeded(process, flags)
                 }
@@ -1091,6 +1095,22 @@ mod tests {
                 is_verbose: false,
                 command: vec!["sleep".into(), "1".into()],
             });
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err().code(), 137);
+        }
+
+        #[test]
+        fn test_timeout_with_foreground_initial_kill_signal() {
+            let result = timeout(&TimeoutFlags {
+                is_foreground: true,
+                kill_after: None,
+                signal: get_ct_signal_by_name_or_value("KILL").unwrap(),
+                duration: Duration::from_millis(10),
+                is_preserve_status: false,
+                is_verbose: false,
+                command: vec!["sleep".into(), "1".into()],
+            });
+
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().code(), 137);
         }

@@ -849,9 +849,8 @@ fn stty_control_char_to_string(cc: nix::libc::cc_t) -> CTResult<String> {
 /// 打印终端控制字符设置
 ///
 /// 该函数根据提供的`Termios`结构体和`SttyFlags`选项，打印出终端的控制字符设置
-/// 如果`opts.is_all`为`false`，则函数什么也不做直接返回
-/// 如果`opts.is_all`为`true`，则函数会遍历一个控制字符索引列表，并打印出每个控制字符的当前设置
-/// 最后，函数还会打印出`VMIN`和`VTIME`特殊字符的设置
+/// 详细模式打印全部控制字符；默认模式打印偏离 sane 值的控制字符，
+/// 并且仅在非 canonical 模式下同时打印`VMIN`和`VTIME`。
 ///
 /// # 参数
 ///
@@ -874,13 +873,10 @@ fn stty_print_control_chars<W: Write>(
         }
     }
 
-    let min = termios.control_chars[SpecialCharacterIndices::VMIN as usize];
-    if opts.is_all || min != 1 {
+    if opts.is_all || !termios.local_flags.contains(L::ICANON) {
+        let min = termios.control_chars[SpecialCharacterIndices::VMIN as usize];
+        let time = termios.control_chars[SpecialCharacterIndices::VTIME as usize];
         items.push(format!("min = {min};"));
-    }
-
-    let time = termios.control_chars[SpecialCharacterIndices::VTIME as usize];
-    if opts.is_all || time != 0 {
         items.push(format!("time = {time};"));
     }
 
@@ -2340,6 +2336,7 @@ mod tests {
         #[test]
         fn test_default_output_prints_non_sane_control_chars() {
             let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            termios.local_flags.insert(L::ICANON);
             for (name, index) in CONTROL_CHARS {
                 if let Some(value) = sane_control_char_value(name) {
                     termios.control_chars[*index as usize] = value;
@@ -2363,6 +2360,41 @@ mod tests {
 
             let rendered = String::from_utf8(out).unwrap();
             assert_eq!(rendered, "eol = M-^?; eol2 = M-^?;\n");
+        }
+
+        #[test]
+        fn test_default_min_time_output_depends_on_canonical_mode() {
+            let mut termios = unsafe { std::mem::zeroed::<Termios>() };
+            for (name, index) in CONTROL_CHARS {
+                if let Some(value) = sane_control_char_value(name) {
+                    termios.control_chars[*index as usize] = value;
+                }
+            }
+            let opts = SttyFlags {
+                is_all: false,
+                is_save: false,
+                stdout_is_terminal: false,
+                file_name: None,
+                file: Device::Stdin(stdin()),
+                settings: None,
+            };
+
+            termios.local_flags.insert(L::ICANON);
+            termios.control_chars[SpecialCharacterIndices::VMIN as usize] = 7;
+            termios.control_chars[SpecialCharacterIndices::VTIME as usize] = 8;
+            let mut canonical_out = Vec::new();
+            stty_print_control_chars(&termios, &opts, &mut canonical_out).unwrap();
+            assert!(canonical_out.is_empty());
+
+            termios.local_flags.remove(L::ICANON);
+            termios.control_chars[SpecialCharacterIndices::VMIN as usize] = 1;
+            termios.control_chars[SpecialCharacterIndices::VTIME as usize] = 0;
+            let mut noncanonical_out = Vec::new();
+            stty_print_control_chars(&termios, &opts, &mut noncanonical_out).unwrap();
+            assert_eq!(
+                String::from_utf8(noncanonical_out).unwrap(),
+                "min = 1; time = 0;\n"
+            );
         }
 
         #[test]

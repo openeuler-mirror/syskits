@@ -62,7 +62,7 @@ use std::fs::OpenOptions;
 use std::io::{self, Read, Seek, SeekFrom};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{MetadataExt, chown};
 #[cfg(target_os = "linux")]
 use std::os::unix::io::AsRawFd;
 #[cfg(unix)]
@@ -205,6 +205,12 @@ enum InstallError {
     /// - 错误信息
     ChownFailed(PathBuf, String),
 
+    /// 修改目录所有者和权限失败
+    /// 参数:
+    /// - 目录路径
+    /// - IO错误信息
+    ChangeDirOwnerAndPermissionsFailed(PathBuf, std::io::Error),
+
     /// 目标路径无效(不存在)
     /// 参数: 无效的目标路径
     InvalidTarget(PathBuf),
@@ -307,6 +313,22 @@ impl Display for InstallError {
 
             // 修改文件所有者失败,包含具体错误信息
             Self::ChownFailed(file, msg) => write!(f, "failed to chown {}: {}", file.quote(), msg),
+
+            // 修改目录所有者或权限失败
+            Self::ChangeDirOwnerAndPermissionsFailed(dir, e) => {
+                if e.raw_os_error() == Some(libc::EINVAL) {
+                    write!(
+                        f,
+                        "cannot change owner and permissions of {}: Invalid argument",
+                        dir.quote()
+                    )
+                } else {
+                    Display::fmt(
+                        &uio_error!(e, "cannot change owner and permissions of {}", dir.quote()),
+                        f,
+                    )
+                }
+            }
 
             // 目标路径不存在
             Self::InvalidTarget(target) => write!(
@@ -794,6 +816,17 @@ impl Installer {
         Ok(())
     }
 
+    /// 设置目录所有者和组，未指定的字段保持不变。
+    fn set_directory_ownership(&self, path: &Path) -> CTResult<()> {
+        if self.owner_id.is_none() && self.group_id.is_none() {
+            return Ok(());
+        }
+
+        chown(path, self.owner_id, self.group_id).map_err(|e| {
+            InstallError::ChangeDirOwnerAndPermissionsFailed(path.to_path_buf(), e).into()
+        })
+    }
+
     /// 设置目录权限模式。
     ///
     /// # 参数
@@ -1010,6 +1043,13 @@ fn install_directory(paths: &[String], b: &Installer) -> CTResult<()> {
 
     for path in paths.iter().map(Path::new) {
         if let Err(e) = b.create_directory(path) {
+            ct_show!(e);
+            continue;
+        }
+
+        // GNU make_dir_parents changes ownership before permissions because
+        // chown can clear setuid/setgid bits.
+        if let Err(e) = b.set_directory_ownership(path) {
             ct_show!(e);
             continue;
         }
@@ -2710,6 +2750,83 @@ mod tests {
     }
 
     #[test]
+    fn test_install_directory_applies_owner_and_group() {
+        if geteuid() != 0 {
+            return;
+        }
+
+        const TEST_UID: u32 = 65534;
+        const TEST_GID: u32 = 65534;
+
+        let temp = tempdir().unwrap();
+        let probe = temp.path().join("chown-probe");
+        std::fs::create_dir(&probe).unwrap();
+        if chown(&probe, Some(TEST_UID), Some(TEST_GID)).is_err() {
+            return;
+        }
+
+        let parent = temp.path().join("parent");
+        let target = parent.join("target");
+        let installer = Installer {
+            specified_mode: Some(0o2750),
+            owner_id: Some(TEST_UID),
+            group_id: Some(TEST_GID),
+            ..Default::default()
+        };
+
+        install_directory(&[target.to_string_lossy().into_owned()], &installer).unwrap();
+
+        let parent_metadata = std::fs::metadata(&parent).unwrap();
+        let target_metadata = std::fs::metadata(&target).unwrap();
+        assert_eq!(parent_metadata.uid(), geteuid());
+        assert_eq!(parent_metadata.gid(), getegid());
+        assert_eq!(target_metadata.uid(), TEST_UID);
+        assert_eq!(target_metadata.gid(), TEST_GID);
+        assert_eq!(target_metadata.mode() & 0o7777, 0o2750);
+
+        let group_only = temp.path().join("group-only");
+        std::fs::create_dir(&group_only).unwrap();
+        chown(&group_only, Some(TEST_UID), Some(TEST_GID)).unwrap();
+
+        let installer = Installer {
+            group_id: Some(getegid()),
+            ..Default::default()
+        };
+        install_directory(&[group_only.to_string_lossy().into_owned()], &installer).unwrap();
+
+        let group_only_metadata = std::fs::metadata(group_only).unwrap();
+        assert_eq!(group_only_metadata.uid(), TEST_UID);
+        assert_eq!(group_only_metadata.gid(), getegid());
+    }
+
+    #[test]
+    fn test_set_directory_ownership_is_not_ignored() {
+        let temp = tempdir().unwrap();
+        let target = temp.path().join("target");
+        std::fs::create_dir(&target).unwrap();
+
+        let desired_uid = if geteuid() == 0 { 65534 } else { 0 };
+        let desired_gid = if getegid() == 0 { 65534 } else { 0 };
+        let installer = Installer {
+            owner_id: Some(desired_uid),
+            group_id: Some(desired_gid),
+            ..Default::default()
+        };
+
+        match installer.set_directory_ownership(&target) {
+            Ok(()) => {
+                let metadata = std::fs::metadata(target).unwrap();
+                assert_eq!(metadata.uid(), desired_uid);
+                assert_eq!(metadata.gid(), desired_gid);
+            }
+            Err(e) => assert!(
+                e.to_string()
+                    .contains("cannot change owner and permissions")
+            ),
+        }
+    }
+
+    #[test]
     fn test_standard() {
         let temp = tempdir().unwrap();
 
@@ -2898,6 +3015,15 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "failed to chown '/test/path': permission denied"
+        );
+
+        let err = InstallError::ChangeDirOwnerAndPermissionsFailed(
+            PathBuf::from("/test/path"),
+            io::Error::from_raw_os_error(libc::EINVAL),
+        );
+        assert_eq!(
+            err.to_string(),
+            "cannot change owner and permissions of '/test/path': Invalid argument"
         );
 
         // 测试 InvalidTarget

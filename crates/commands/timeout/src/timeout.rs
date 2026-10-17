@@ -73,14 +73,23 @@ fn forward_signal_to_monitored_process(pid: i32, sig: i32, is_foreground: bool) 
             return;
         }
 
-        // Always signal the direct child first.
+        // GNU also signals the child directly in case it left our process group.
         libc::kill(pid, sig);
+    }
 
-        // In background mode we also signal the entire monitored process group.
-        if !is_foreground {
-            libc::kill(-pid, sig);
+    // Unit tests share the test runner's process group. The real group behavior
+    // is covered by check-timeout-compat.sh.
+    #[cfg(not(test))]
+    if !is_foreground {
+        unsafe {
+            // The monitor leads this group, so ignore the propagated signal itself.
+            libc::signal(sig, libc::SIG_IGN);
+            libc::kill(0, sig);
         }
     }
+
+    #[cfg(test)]
+    let _ = is_foreground;
 }
 
 /// 专用于兼容 GNU 行为的 SIGALRM 处理器
@@ -343,13 +352,7 @@ fn timeout_report_if_verbose(signal: usize, cmd: &OsStr, is_verbose: bool) {
 
 /// 发送信号给一个带有超时的进程，处理前台和后台进程
 fn timeout_send_signal(process: &mut Child, signal: usize, is_foreground: bool) {
-    unsafe {
-        if is_foreground {
-            libc::kill(process.id() as libc::c_int, signal as libc::c_int);
-        } else {
-            libc::kill(-(process.id() as libc::c_int), signal as libc::c_int);
-        }
-    }
+    forward_signal_to_monitored_process(process.id() as i32, signal as i32, is_foreground);
 }
 
 fn timeout_terminate_self_with_signal(signal: i32) -> CTResult<()> {
@@ -383,23 +386,24 @@ fn timeout(flags: &TimeoutFlags) -> CTResult<()> {
     #[cfg(unix)]
     enable_pipe_errors()?;
 
+    // GNU makes the timeout monitor the group leader before forking COMMAND.
+    #[cfg(not(test))]
+    if !flags.is_foreground {
+        unsafe {
+            libc::setpgid(0, 0);
+        }
+    }
+
     let mut cmd = process::Command::new(&flags.command[0]);
     cmd.args(&flags.command[1..])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
 
-    let is_foreground = flags.is_foreground;
-
     // 子进程的预处理 (pre_exec)
     unsafe {
-        cmd.pre_exec(move || {
-            // 1. 如果不是前台模式，自立门户 (新建进程组)
-            if !is_foreground {
-                libc::setpgid(0, 0);
-            }
-
-            // 2. 信号洗礼：清除 Shell 强加给后台任务的 SIG_IGN 魔法
+        cmd.pre_exec(|| {
+            // 信号洗礼：清除 Shell 强加给后台任务的 SIG_IGN 魔法
             // 确保子进程 (如脚本) 可以正常使用 trap 捕获这些信号！
             libc::signal(libc::SIGINT, libc::SIG_DFL);
             libc::signal(libc::SIGQUIT, libc::SIG_DFL);

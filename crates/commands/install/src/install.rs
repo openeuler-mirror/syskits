@@ -1462,7 +1462,7 @@ fn perform_backup(to: &Path, b: &Installer) -> CTResult<Option<PathBuf>> {
 ///
 /// # 功能
 /// - 处理目标文件已存在的情况
-/// - 支持复制 /dev/null
+/// - 支持复制非普通源文件
 /// - 自动删除目标位置的无效符号链接
 ///
 /// # 参数
@@ -1523,6 +1523,7 @@ impl CopyDebugInfo {
         }
     }
 
+    #[cfg(not(target_os = "linux"))]
     fn unsupported() -> Self {
         Self {
             offload: CopyDebugValue::Unsupported,
@@ -1598,23 +1599,17 @@ fn copy_file(
 }
 
 fn copy_file_regular(from: &Path, to: &Path) -> io::Result<()> {
-    if from.as_os_str() == "/dev/null" {
-        /* workaround a limitation of fs::copy
-         * https://github.com/rust-lang/rust/issues/79390
-         */
-        File::create(to).map(|_| ())
-    } else {
-        fs::copy(from, to).map(|_| ())
+    if fs::metadata(from)?.is_file() {
+        return fs::copy(from, to).map(|_| ());
     }
+
+    let mut source = File::open(from)?;
+    let mut destination = File::create(to)?;
+    io::copy(&mut source, &mut destination).map(|_| ())
 }
 
 #[cfg(target_os = "linux")]
 fn copy_file_with_debug(from: &Path, to: &Path) -> io::Result<Option<CopyDebugInfo>> {
-    if from.as_os_str() == "/dev/null" {
-        File::create(to)?;
-        return Ok(Some(CopyDebugInfo::unsupported()));
-    }
-
     copy_file_linux_debug(from, to).map(Some)
 }
 
@@ -2396,6 +2391,27 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&dest).unwrap(), "test content");
         assert_eq!(debug.reflink, CopyDebugValue::Unsupported);
         assert_eq!(debug.sparse_detection, SparseDebugValue::No);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_copy_nonregular_source_without_path_special_case() {
+        let temp = tempdir().unwrap();
+        let destination = temp.path().join("destination");
+
+        copy(
+            Path::new("/dev/./null"),
+            &destination,
+            &Installer::default(),
+        )
+        .unwrap();
+        assert_eq!(std::fs::metadata(&destination).unwrap().len(), 0);
+
+        let source_link = temp.path().join("null-link");
+        let linked_destination = temp.path().join("linked-destination");
+        std::os::unix::fs::symlink("/dev/null", &source_link).unwrap();
+        copy(&source_link, &linked_destination, &Installer::default()).unwrap();
+        assert_eq!(std::fs::metadata(linked_destination).unwrap().len(), 0);
     }
 
     #[test]

@@ -997,14 +997,14 @@ fn stty_print_flags<T: TermiosFlag, W: Write>(
 }
 
 fn output_width(opts: &SttyFlags) -> usize {
-    std::env::var("COLUMNS")
-        .ok()
-        .and_then(|value| value.parse::<usize>().ok())
-        .filter(|width| *width > 0)
+    opts.stdout_is_terminal
+        .then(terminal_width_stdout)
+        .flatten()
         .or_else(|| {
-            opts.stdout_is_terminal
-                .then(terminal_width_stdout)
-                .flatten()
+            std::env::var("COLUMNS")
+                .ok()
+                .and_then(|value| value.parse::<usize>().ok())
+                .filter(|width| *width > 0)
         })
         .unwrap_or(80)
 }

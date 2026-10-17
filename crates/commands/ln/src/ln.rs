@@ -803,15 +803,61 @@ fn ln_simple_backup_path(path: &Path, suffix: &OsStr) -> PathBuf {
 }
 
 fn ln_numbered_backup_path(path: &Path) -> PathBuf {
-    let mut i: u64 = 1;
-    loop {
-        let suffix = OsString::from(format!(".~{i}~"));
-        let new_path = ln_simple_backup_path(path, &suffix);
-        if !new_path.exists() {
-            return new_path;
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let basename = path.file_name().unwrap_or_else(|| path.as_os_str());
+    let basename = basename.as_encoded_bytes();
+    let mut max_version: Option<Vec<u8>> = None;
+
+    if let Ok(entries) = fs::read_dir(parent) {
+        for entry in entries.flatten() {
+            let file_name = entry.file_name();
+            let file_name = file_name.as_encoded_bytes();
+            if !file_name.starts_with(basename) {
+                continue;
+            }
+
+            let suffix = &file_name[basename.len()..];
+            if suffix.len() < 4 || !suffix.starts_with(b".~") || !suffix.ends_with(b"~") {
+                continue;
+            }
+
+            let version = &suffix[2..suffix.len() - 1];
+            if !matches!(version.first(), Some(b'1'..=b'9'))
+                || !version.iter().all(u8::is_ascii_digit)
+            {
+                continue;
+            }
+
+            let is_larger = max_version.as_ref().is_none_or(|max| {
+                version.len() > max.len()
+                    || (version.len() == max.len() && version > max.as_slice())
+            });
+            if is_larger {
+                max_version = Some(version.to_vec());
+            }
         }
-        i += 1;
     }
+
+    let mut next_version = max_version.unwrap_or_else(|| vec![b'0']);
+    let mut carry = true;
+    for digit in next_version.iter_mut().rev() {
+        if *digit == b'9' {
+            *digit = b'0';
+        } else {
+            *digit += 1;
+            carry = false;
+            break;
+        }
+    }
+    if carry {
+        next_version.insert(0, b'1');
+    }
+
+    let next_version = String::from_utf8(next_version).expect("backup version is ASCII");
+    ln_simple_backup_path(path, OsStr::new(&format!(".~{next_version}~")))
 }
 
 fn ln_existing_backup_path(path: &Path, suffix: &OsStr) -> PathBuf {
@@ -1177,6 +1223,41 @@ mod tests {
         ln_link(&source, &destination, &settings).unwrap();
 
         assert_eq!(fs::read_to_string(destination).unwrap(), "new");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_numbered_backup_uses_max_version_and_counts_dangling_symlinks() {
+        let temp = tempdir().unwrap();
+
+        let gap_destination = temp.path().join("gap-destination");
+        fs::write(&gap_destination, "old").unwrap();
+        fs::write(
+            ln_simple_backup_path(&gap_destination, OsStr::new(".~1~")),
+            "one",
+        )
+        .unwrap();
+        fs::write(
+            ln_simple_backup_path(&gap_destination, OsStr::new(".~3~")),
+            "three",
+        )
+        .unwrap();
+        assert_eq!(
+            ln_numbered_backup_path(&gap_destination),
+            ln_simple_backup_path(&gap_destination, OsStr::new(".~4~"))
+        );
+
+        let dangling_destination = temp.path().join("dangling-destination");
+        fs::write(&dangling_destination, "old").unwrap();
+        std::os::unix::fs::symlink(
+            "nowhere",
+            ln_simple_backup_path(&dangling_destination, OsStr::new(".~1~")),
+        )
+        .unwrap();
+        assert_eq!(
+            ln_numbered_backup_path(&dangling_destination),
+            ln_simple_backup_path(&dangling_destination, OsStr::new(".~2~"))
+        );
     }
 
     #[test]

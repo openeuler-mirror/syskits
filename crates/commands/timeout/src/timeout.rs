@@ -575,7 +575,8 @@ fn handle_process_timeout(process: &mut Child, flags: &TimeoutFlags) -> CTResult
             Ok(Some(status)) => {
                 // 进程在超时前结束 (未超时)
                 if let Some(signal) = status.signal() {
-                    Err(ExitStatus::SignalTerminated(signal).into())
+                    // GNU re-raises a command signal when no timeout occurred.
+                    timeout_terminate_self_with_signal(signal)
                 } else {
                     let exit_code = status.code().unwrap_or(0);
                     if exit_code == 0 {

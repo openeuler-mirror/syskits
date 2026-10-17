@@ -3077,7 +3077,8 @@ fn escape_control_chars(input: &str, show_control_chars: bool, show_nonprinting:
             result.push(c);
             continue;
         }
-        if c.is_control() {
+        // GNU's multibyte path treats wcwidth() values below 1 as nonprinting.
+        if UnicodeWidthChar::width(c).unwrap_or(0) < 1 {
             let cp = c as u32;
             if show_nonprinting {
                 if cp < 0x80 {

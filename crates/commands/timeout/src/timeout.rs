@@ -217,6 +217,10 @@ extern "C" fn handle_forwarding_signal(sig: libc::c_int) {
     forward_signal_to_monitored_process(pid, sig, is_fg);
 }
 
+// Install a caught disposition before fork so exec resets SIGCHLD to SIG_DFL
+// in COMMAND, even when timeout itself inherited SIGCHLD=SIG_IGN.
+extern "C" fn handle_sigchld(_sig: libc::c_int) {}
+
 pub mod timeout_flags {
     pub static TIMEOUT_FOREGROUND: &str = "foreground";
     pub static TIMEOUT_KILL_AFTER: &str = "kill-after";
@@ -473,6 +477,15 @@ fn timeout_install_signal_handlers(timeout_signal: usize) {
                 let _ = nix::sys::signal::sigaction(custom_signal, &forwarding_sa);
             }
         }
+
+        // GNU installs this after the cleanup handler, so it also wins when
+        // the user selected SIGCHLD as the timeout signal.
+        let sigchld_sa = nix::sys::signal::SigAction::new(
+            nix::sys::signal::SigHandler::Handler(handle_sigchld),
+            nix::sys::signal::SaFlags::SA_RESTART,
+            nix::sys::signal::SigSet::empty(),
+        );
+        let _ = nix::sys::signal::sigaction(nix::sys::signal::Signal::SIGCHLD, &sigchld_sa);
     }
 }
 

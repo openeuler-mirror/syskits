@@ -1241,18 +1241,18 @@ fn stty_apply_recover_mode(termios: &mut Termios, input: &str) -> ControlFlow<bo
         return ControlFlow::Break(false);
     }
 
-    let mut parsed = [0u64; 4];
+    let mut parsed = [0 as tcflag_t; 4];
     for (idx, raw) in parts.iter().take(4).enumerate() {
-        let Ok(value) = u64::from_str_radix(raw, 16) else {
+        let Ok(value) = tcflag_t::from_str_radix(raw, 16) else {
             return ControlFlow::Break(false);
         };
         parsed[idx] = value;
     }
 
-    termios.input_flags = nix::sys::termios::InputFlags::from_bits_retain(parsed[0] as _);
-    termios.output_flags = nix::sys::termios::OutputFlags::from_bits_retain(parsed[1] as _);
-    termios.control_flags = nix::sys::termios::ControlFlags::from_bits_retain(parsed[2] as _);
-    termios.local_flags = nix::sys::termios::LocalFlags::from_bits_retain(parsed[3] as _);
+    termios.input_flags = nix::sys::termios::InputFlags::from_bits_retain(parsed[0]);
+    termios.output_flags = nix::sys::termios::OutputFlags::from_bits_retain(parsed[1]);
+    termios.control_flags = nix::sys::termios::ControlFlags::from_bits_retain(parsed[2]);
+    termios.local_flags = nix::sys::termios::LocalFlags::from_bits_retain(parsed[3]);
 
     for (idx, raw) in parts.iter().skip(4).enumerate() {
         let Ok(value) = u8::from_str_radix(raw, 16) else {
@@ -2697,6 +2697,32 @@ mod tests {
             assert_ne!(termios.input_flags.bits() & IUCLC_RAW_BIT, 0);
             assert_ne!(termios.output_flags.bits() & OFILL_RAW_BIT, 0);
             assert_ne!(termios.local_flags.bits() & XCASE_RAW_BIT, 0);
+        }
+
+        #[test]
+        fn test_recover_mode_rejects_tcflag_overflow_without_changes() {
+            let mut original = unsafe { std::mem::zeroed::<Termios>() };
+            original.input_flags = I::BRKINT | I::IXON;
+            original.output_flags = O::OPOST | O::ONLCR;
+            original.control_flags = C::CREAD | C::CS8;
+            original.local_flags = L::ECHO | L::ICANON;
+
+            let overflow = format!("{:x}", tcflag_t::MAX as u128 + 1);
+            for overflow_index in 0..4 {
+                let mut termios = original.clone();
+                let mut fields = vec!["0".to_string(); 4 + termios.control_chars.len()];
+                fields[overflow_index] = overflow.clone();
+
+                assert!(matches!(
+                    stty_apply_recover_mode(&mut termios, &fields.join(":")),
+                    ControlFlow::Break(false)
+                ));
+                assert_eq!(termios.input_flags, original.input_flags);
+                assert_eq!(termios.output_flags, original.output_flags);
+                assert_eq!(termios.control_flags, original.control_flags);
+                assert_eq!(termios.local_flags, original.local_flags);
+                assert_eq!(termios.control_chars, original.control_chars);
+            }
         }
     }
 

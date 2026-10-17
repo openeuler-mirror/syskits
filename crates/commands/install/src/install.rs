@@ -409,6 +409,27 @@ pub enum MainFunction {
     Standard,
 }
 
+fn parse_base0_id(value: &str) -> Option<u32> {
+    let value = value.trim_start();
+    let value = value.strip_prefix('+').unwrap_or(value);
+    if value.is_empty() || value.starts_with('-') {
+        return None;
+    }
+
+    let (digits, radix) = if let Some(digits) = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
+        (digits, 16)
+    } else if value.len() > 1 && value.starts_with('0') {
+        (value, 8)
+    } else {
+        (value, 10)
+    };
+
+    u32::from_str_radix(digits, radix).ok()
+}
+
 impl Installer {
     /// Determine the mode for chmod after copy.
     pub fn mode(&self) -> u32 {
@@ -473,10 +494,11 @@ impl Installer {
         if owner.is_empty() {
             Ok(None)
         } else {
-            // 将所有者名称转换为ID
             match usr2uid(&owner) {
                 Ok(u) => Ok(Some(u)),
-                Err(_) => Err(InstallError::InvalidUser(owner).into()),
+                Err(_) => parse_base0_id(&owner)
+                    .map(Some)
+                    .ok_or_else(|| InstallError::InvalidUser(owner).into()),
             }
         }
     }
@@ -493,10 +515,11 @@ impl Installer {
         if group.is_empty() {
             Ok(None)
         } else {
-            // 将组名称转换为ID
             match grp2gid(&group) {
                 Ok(g) => Ok(Some(g)),
-                Err(_) => Err(InstallError::InvalidGroup(group).into()),
+                Err(_) => parse_base0_id(&group)
+                    .map(Some)
+                    .ok_or_else(|| InstallError::InvalidGroup(group).into()),
             }
         }
     }
@@ -2765,6 +2788,35 @@ mod tests {
         assert!(!installer.set_context);
         assert!(installer.context.is_none());
         assert!(!installer.debug);
+    }
+
+    #[test]
+    fn test_base0_numeric_owner_and_group_parsing() {
+        assert_eq!(parse_base0_id("0"), Some(0));
+        assert_eq!(parse_base0_id("010"), Some(8));
+        assert_eq!(parse_base0_id("0x2a"), Some(42));
+        assert_eq!(parse_base0_id("0X2A"), Some(42));
+        assert_eq!(parse_base0_id("+42"), Some(42));
+        assert_eq!(parse_base0_id(" 42"), Some(42));
+        assert_eq!(parse_base0_id("08"), None);
+        assert_eq!(parse_base0_id("-1"), None);
+        assert_eq!(parse_base0_id("4294967296"), None);
+        assert_eq!(parse_base0_id("42 "), None);
+
+        let matches = ct_app()
+            .try_get_matches_from([
+                "install",
+                "-o",
+                "0xfffffffe",
+                "-g",
+                "037777777776",
+                "source",
+                "destination",
+            ])
+            .unwrap();
+        let installer = Installer::new(&matches).unwrap();
+        assert_eq!(installer.owner_id, Some(u32::MAX - 1));
+        assert_eq!(installer.group_id, Some(u32::MAX - 1));
     }
 
     #[test]

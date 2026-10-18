@@ -127,6 +127,9 @@ pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<gid_t>> {
 
 #[cfg(all(target_os = "linux", feature = "process"))]
 fn sort_groups(mut groups: Vec<gid_t>, egid: gid_t) -> Vec<gid_t> {
+    let mut seen = std::collections::HashSet::with_capacity(groups.len());
+    groups.retain(|gid| seen.insert(*gid));
+
     if let Some(index) = groups.iter().position(|&x| x == egid) {
         groups[..=index].rotate_right(1);
     } else {
@@ -453,6 +456,7 @@ mod test {
         assert_eq!(sort_groups(vec![1, 2, 3], 2), vec![2, 1, 3]);
         assert_eq!(sort_groups(vec![1, 2, 3], 1), vec![1, 2, 3]);
         assert_eq!(sort_groups(vec![1, 2, 3], 0), vec![0, 1, 2, 3]);
+        assert_eq!(sort_groups(vec![1, 1, 2, 1, 3, 2], 2), vec![2, 1, 3]);
     }
 
     #[test]

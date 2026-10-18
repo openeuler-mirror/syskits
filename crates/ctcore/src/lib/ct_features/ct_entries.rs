@@ -267,10 +267,19 @@ impl CtPasswd {
 
     /// Return the groups for this user using `primary_gid` as the login group.
     pub fn belongs_to_with_primary_gid(&self, primary_gid: gid_t) -> Vec<gid_t> {
+        self.belongs_to_name_with_primary_gid(&self.name, primary_gid)
+    }
+
+    /// Return the groups associated with `name`, using this entry's primary GID.
+    pub fn belongs_to_name(&self, name: &str) -> Vec<gid_t> {
+        self.belongs_to_name_with_primary_gid(name, self.gid)
+    }
+
+    fn belongs_to_name_with_primary_gid(&self, name: &str, primary_gid: gid_t) -> Vec<gid_t> {
         let mut ngroups: c_int = 8;
         let mut ngroups_old: c_int;
         let mut groups = vec![0; ngroups.try_into().unwrap()];
-        let name = CString::new(self.name.as_bytes()).unwrap();
+        let name = CString::new(name.as_bytes()).unwrap();
         loop {
             ngroups_old = ngroups;
             if unsafe {

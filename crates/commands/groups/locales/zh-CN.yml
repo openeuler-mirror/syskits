@@ -12,3 +12,7 @@ groups:
     current_process: "获取当前进程的组失败"
     group_not_found: "无法根据组 ID %{gid} 找到组名称"
     user_not_found: "%{user}: 无此用户"
+    invalid_option: "不适用的选项 -- %{option}"
+    unrecognized_option: "未识别的选项 ‘%{option}’"
+    option_argument: "选项 ‘%{option}’ 不允许有参数"
+    try_help: "请尝试执行 \"%{command} --help\" 来获取更多信息。"

@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use ctcore::{
     ct_entries::{CtPasswd, Locate, get_groups_gnu, gid2grp_os},
-    ct_error::{CTError, CTResult, strip_errno},
+    ct_error::{CTError, CTResult, FromIo, strip_errno},
     ct_process::{getegid, getgid},
 };
 use rust_i18n::t;
@@ -404,6 +404,20 @@ pub fn groups_native_semantic(args: impl ctcore::Args) -> CTResult<GroupsSemanti
     groups_collect_for_users(users)
 }
 
+fn groups_write_stdout(
+    writer: &mut impl IoWrite,
+    bytes: &[u8],
+    stdout_was_closed: bool,
+) -> CTResult<()> {
+    let result = if stdout_was_closed {
+        Err(std::io::Error::from_raw_os_error(libc::EBADF))
+    } else {
+        writer.write_all(bytes)
+    };
+    result.map_err_context(|| "write error".to_string())?;
+    writer.flush().map_err_context(|| "write error".to_string())
+}
+
 #[derive(Default)]
 pub struct Groups;
 impl Tool for Groups {
@@ -424,8 +438,11 @@ impl Tool for Groups {
                 for event in &semantic.output_events {
                     match event {
                         GroupsOutputEvent::Stdout(range) => {
-                            stdout.write_all(&semantic.classic_bytes[range.clone()])?;
-                            stdout.flush()?;
+                            groups_write_stdout(
+                                &mut stdout,
+                                &semantic.classic_bytes[range.clone()],
+                                ctcore::ct_stdout_was_closed(),
+                            )?;
                         }
                         GroupsOutputEvent::Stderr(range) => {
                             stderr.write_all(&semantic.stderr_text.as_bytes()[range.clone()])?;
@@ -656,6 +673,14 @@ mod tests {
             }];
 
             assert_eq!(groups_render_classic_bytes(&entries), b"grp_\xff bin\n");
+        }
+
+        #[test]
+        fn test_groups_closed_stdout_reports_bad_file_descriptor() {
+            let error = crate::groups_write_stdout(&mut std::io::sink(), b"root\n", true)
+                .expect_err("closed stdout");
+            assert_eq!(error.code(), 1);
+            assert_eq!(error.to_string(), "write error: Bad file descriptor");
         }
     }
 

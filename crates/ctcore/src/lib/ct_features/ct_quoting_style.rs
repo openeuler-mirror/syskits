@@ -31,6 +31,9 @@ unsafe extern "C" {
     fn iswprint(wide: crate::libc::c_uint) -> crate::libc::c_int;
 }
 
+#[cfg(unix)]
+use crate::ct_locale::{LcCategory, hard_locale};
+
 // 这些是在shell（如bash）中有特殊含义的字符。
 // 第一个常量包含仅在名称开始处出现时才有特殊含义的字符
 const CT_SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
@@ -758,6 +761,22 @@ fn escape_shell_byte_segments_pass(
 
 #[cfg(unix)]
 fn escape_c_name(name: &OsStr, quotes: CtQuotes) -> String {
+    if !hard_locale(LcCategory::LcCtype) {
+        return name
+            .as_bytes()
+            .iter()
+            .flat_map(|byte| {
+                if byte.is_ascii() {
+                    CtEscapedChar::new_c(char::from(*byte), quotes)
+                } else {
+                    CtEscapedChar {
+                        state: CtEscapeState::Octal(CtEscapeOctal::from(char::from(*byte))),
+                    }
+                }
+            })
+            .collect();
+    }
+
     let mut escaped = String::new();
     let mut bytes = name.as_bytes();
 

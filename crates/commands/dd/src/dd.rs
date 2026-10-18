@@ -87,6 +87,8 @@ struct DdOptions {
     status: Option<StatusLevel>,
     /// Whether the output writer should buffer partial blocks until complete.
     buffered: bool,
+    /// Whether consecutive short reads should suggest `iflag=fullblock`.
+    warn_partial_read: bool,
 }
 
 /// A timer which triggers on a given interval
@@ -340,6 +342,10 @@ struct Input<'a> {
 
     /// A read error suppressed by `conv=noerror` for the copy loop to handle.
     pending_read_error: Option<InputReadError>,
+
+    /// State used for GNU's one-time consecutive short-read warning.
+    previous_read_len: usize,
+    warn_partial_read: bool,
 }
 
 struct InputReadError {
@@ -368,6 +374,8 @@ impl<'a> Input<'a> {
             src,
             settings,
             pending_read_error: None,
+            previous_read_len: 0,
+            warn_partial_read: settings.warn_partial_read,
         })
     }
 
@@ -394,6 +402,8 @@ impl<'a> Input<'a> {
             src,
             settings,
             pending_read_error: None,
+            previous_read_len: 0,
+            warn_partial_read: settings.warn_partial_read,
         })
     }
 
@@ -412,6 +422,8 @@ impl<'a> Input<'a> {
             src,
             settings,
             pending_read_error: None,
+            previous_read_len: 0,
+            warn_partial_read: settings.warn_partial_read,
         })
     }
 }
@@ -459,7 +471,10 @@ impl Read for Input<'_> {
             .then(|| self.src.recovery_offset(target_len));
         loop {
             match self.src.read(&mut buf[base_idx..]) {
-                Ok(0) => return Ok(base_idx),
+                Ok(0) => {
+                    self.previous_read_len = 0;
+                    return Ok(base_idx);
+                }
                 Ok(rlen) if self.settings.iflags.is_fullblock => {
                     base_idx += rlen;
 
@@ -467,16 +482,36 @@ impl Read for Input<'_> {
                         return Ok(target_len);
                     }
                 }
-                Ok(len) => return Ok(len),
+                Ok(len) => {
+                    if self.warn_partial_read
+                        && self.previous_read_len > 0
+                        && self.previous_read_len < target_len
+                    {
+                        if self.settings.status != Some(StatusLevel::None) {
+                            let previous = self.previous_read_len;
+                            let unit = if previous == 1 { "byte" } else { "bytes" };
+                            ct_show_error!(
+                                "warning: partial read ({previous} {unit}); suggest iflag=fullblock"
+                            );
+                        }
+                        self.warn_partial_read = false;
+                    }
+                    self.previous_read_len = len;
+                    return Ok(len);
+                }
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
                 Err(e) if self.settings.iconv.noerror => {
+                    self.previous_read_len = 0;
                     self.pending_read_error = Some(InputReadError {
                         source: e,
                         recovery_offset: recovery_offset.unwrap_or(Ok(None)),
                     });
                     return Ok(base_idx);
                 }
-                Err(e) => return Err(e),
+                Err(e) => {
+                    self.previous_read_len = 0;
+                    return Err(e);
+                }
             }
         }
     }
@@ -1733,6 +1768,7 @@ mod dd_copy_tests {
             oflags: OFlags::default(),
             status: None,
             buffered: false,
+            warn_partial_read: false,
         }
     }
 
@@ -1751,6 +1787,8 @@ mod dd_copy_tests {
             src: Source::File(temp_file),
             settings,
             pending_read_error: None,
+            previous_read_len: 0,
+            warn_partial_read: settings.warn_partial_read,
         })
     }
 
@@ -1903,6 +1941,8 @@ mod dd_copy_tests {
             src: Source::File(input_file),
             settings: &options,
             pending_read_error: None,
+            previous_read_len: 0,
+            warn_partial_read: options.warn_partial_read,
         };
         let (output, mut result_file) = create_test_output(&options)?;
 
@@ -1929,6 +1969,8 @@ mod dd_copy_tests {
             src: Source::File(input_file),
             settings: &options,
             pending_read_error: None,
+            previous_read_len: 0,
+            warn_partial_read: options.warn_partial_read,
         };
         let mut buffer = vec![BUF_INIT_BYTE; options.ibs];
 
@@ -2080,6 +2122,7 @@ mod tests_input_new_stdin {
             oflags: OFlags::default(),
             status: None,
             buffered: false,
+            warn_partial_read: false,
         }
     }
 
@@ -2137,6 +2180,8 @@ mod tests_dest {
 #[cfg(test)]
 mod tests_input_additional {
     use super::*;
+    #[cfg(unix)]
+    use std::os::{fd::OwnedFd, unix::net::UnixStream};
     use tempfile::NamedTempFile;
 
     #[test]
@@ -2155,6 +2200,8 @@ mod tests_input_additional {
                 ..Default::default()
             },
             pending_read_error: None,
+            previous_read_len: 0,
+            warn_partial_read: false,
         };
 
         let mut buf = [0u8; 512];
@@ -2177,10 +2224,41 @@ mod tests_input_additional {
                 ..Default::default()
             },
             pending_read_error: None,
+            previous_read_len: 0,
+            warn_partial_read: false,
         };
 
         let mut buf = [0u8; 512];
         assert!(input.read(&mut buf).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_consecutive_partial_reads_consume_the_warning() {
+        let (reader, mut writer) = UnixStream::pair().unwrap();
+        let reader = File::from(OwnedFd::from(reader));
+        let settings = DdOptions {
+            ibs: 4,
+            status: Some(StatusLevel::None),
+            warn_partial_read: true,
+            ..Default::default()
+        };
+        let mut input = Input {
+            src: Source::File(reader),
+            settings: &settings,
+            pending_read_error: None,
+            previous_read_len: 0,
+            warn_partial_read: settings.warn_partial_read,
+        };
+        let mut buf = [0; 4];
+
+        writer.write_all(b"a").unwrap();
+        assert_eq!(input.read(&mut buf).unwrap(), 1);
+        assert!(input.warn_partial_read);
+
+        writer.write_all(b"b").unwrap();
+        assert_eq!(input.read(&mut buf).unwrap(), 1);
+        assert!(!input.warn_partial_read);
     }
 }
 

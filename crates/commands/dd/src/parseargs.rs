@@ -266,6 +266,20 @@ impl Parser {
             .count
             .map(|c| c.force_bytes_if(self.iflag.is_count_bytes));
 
+        let uses_two_buffers =
+            self.bs.is_none() || block.is_some() || has_conversion_table || conv.swab;
+        let has_count_records = match count {
+            Some(Num::Blocks(n)) => n > 0,
+            Some(Num::Bytes(n)) => n >= ibs as u64,
+            None => false,
+        };
+        let warn_partial_read = !uses_two_buffers
+            && !self.iflag.is_fullblock
+            && (skip >= ibs as u64
+                || has_count_records
+                || self.iflag.is_direct
+                || self.oflag.is_direct);
+
         Ok(DdOptions {
             skip,
             seek,
@@ -280,6 +294,7 @@ impl Parser {
             iflags: self.iflag,
             oflags: self.oflag,
             status: self.status,
+            warn_partial_read,
         })
     }
 

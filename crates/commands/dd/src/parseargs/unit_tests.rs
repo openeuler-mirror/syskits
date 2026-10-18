@@ -110,6 +110,25 @@ fn test_status_level_none() {
 }
 
 #[test]
+fn partial_read_warning_matches_gnu_activation_conditions() {
+    assert!(
+        Parser::new()
+            .parse(&["bs=4", "count=2"])
+            .unwrap()
+            .warn_partial_read
+    );
+
+    for args in [
+        &["ibs=4", "obs=4", "count=2"][..],
+        &["bs=4", "count=2", "iflag=fullblock"][..],
+        &["bs=4", "count=2", "conv=swab"][..],
+        &["bs=4", "iflag=count_bytes", "count=1"][..],
+    ] {
+        assert!(!Parser::new().parse(args).unwrap().warn_partial_read);
+    }
+}
+
+#[test]
 #[allow(clippy::cognitive_complexity)]
 fn test_all_top_level_args_no_leading_dashes() {
     let args = &[

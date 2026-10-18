@@ -204,6 +204,36 @@ fn test_status_level_noxfer() {
 }
 
 #[test]
+fn test_status_level_list_uses_last_value() {
+    for (value, expected) in [
+        ("none,noxfer", StatusLevel::Noxfer),
+        ("noxfer,none", StatusLevel::None),
+        ("progress,progress", StatusLevel::Progress),
+    ] {
+        let operand = format!("status={value}");
+        let settings = Parser::new().parse(&[&operand]).unwrap();
+        assert_eq!(settings.status, Some(expected));
+    }
+}
+
+#[test]
+fn test_status_level_list_rejects_invalid_tokens() {
+    for (value, invalid) in [
+        ("none,bad", "bad"),
+        ("bad,none", "bad"),
+        ("none,", ""),
+        (",none", ""),
+    ] {
+        let operand = format!("status={value}");
+        let error = Parser::new().parse(&[&operand]).err().unwrap();
+        assert_eq!(
+            error,
+            ParseError::StatusLevelNotRecognized(invalid.to_string())
+        );
+    }
+}
+
+#[test]
 fn zero_block_size_operands_are_invalid_numbers() {
     for operand in ["bs=0", "ibs=0", "obs=0", "cbs=0", "bs=0K"] {
         let value = operand.split_once('=').unwrap().1;

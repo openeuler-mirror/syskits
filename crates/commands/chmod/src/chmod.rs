@@ -457,6 +457,23 @@ fn nix_error_to_io(error: nix::errno::Errno) -> io::Error {
     io::Error::from_raw_os_error(error as i32)
 }
 
+const CHMOD_MODE_BITS: u32 = 0o7777;
+const SPECIAL_MODE_BITS: u32 = 0o7000;
+
+// GNU treats a failed verification stat as no reportable mode change.
+fn mode_changed(old_mode: u32, requested_mode: u32, actual_mode: Option<u32>) -> bool {
+    let new_mode = if requested_mode & SPECIAL_MODE_BITS != 0 {
+        let Some(actual_mode) = actual_mode else {
+            return false;
+        };
+        actual_mode
+    } else {
+        requested_mode
+    };
+
+    ((old_mode ^ new_mode) & CHMOD_MODE_BITS) != 0
+}
+
 struct Chmoder {
     changes: bool,
     quiet: bool,
@@ -791,15 +808,37 @@ impl Chmoder {
             }
             Err(1)
         } else {
-            if file_perms == mode {
+            if !self.verbose && !self.changes {
+                return Ok(());
+            }
+
+            let actual_mode = if mode & SPECIAL_MODE_BITS != 0 {
+                match target.metadata(true) {
+                    Ok(metadata) => Some(metadata.st_mode as u32),
+                    Err(err) => {
+                        if !self.quiet {
+                            ct_show_error!(
+                                "getting new attributes of {}: {}",
+                                file_path.quote(),
+                                strip_errno(&err)
+                            );
+                        }
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
+            if !mode_changed(file_perms, mode, actual_mode) {
                 if self.verbose && !self.changes {
                     println!(
                         "{}",
                         t!(
                             "chmod.messages.retained",
                             file = file_path.quote().to_string(),
-                            mode = format!("{:04o}", file_perms),
-                            str = display_permissions_unix(file_perms as mode_t, false)
+                            mode = format!("{:04o}", mode),
+                            str = display_permissions_unix(mode as mode_t, false)
                         )
                     );
                 }
@@ -874,6 +913,14 @@ mod tests {
             DeviceInode::from_metadata(&root),
             DeviceInode::from_metadata(&followed_alias)
         );
+    }
+
+    #[test]
+    fn test_mode_changed_uses_actual_mode_for_special_bits() {
+        assert!(!mode_changed(0o644, 0o2644, Some(0o644)));
+        assert!(mode_changed(0o600, 0o2644, Some(0o644)));
+        assert!(!mode_changed(0o644, 0o2644, None));
+        assert!(mode_changed(0o600, 0o644, None));
     }
 
     #[cfg(unix)]

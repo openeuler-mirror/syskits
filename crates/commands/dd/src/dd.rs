@@ -25,7 +25,7 @@ use blocks::{ConversionState, conv_block_unblock_helper};
 use ctcore::ct_io::CtOwnedFileDescriptorOrHandle;
 use datastructures::*;
 #[cfg(target_os = "linux")]
-use nix::fcntl::FcntlArg::F_SETFL;
+use nix::fcntl::FcntlArg::{F_GETFL, F_SETFL};
 #[cfg(target_os = "linux")]
 use nix::fcntl::OFlag;
 use parseargs::Parser;
@@ -437,6 +437,7 @@ fn set_fd_flags(fd: libc::c_int, add_flags: Option<libc::c_int>) -> io::Result<(
     if flags == 0 {
         return Ok(());
     }
+    let old_flags = nix::fcntl::fcntl(fd, F_GETFL).map_err(io::Error::from)?;
 
     if flags & libc::O_DIRECTORY != 0 {
         let stat = fstat(fd).map_err(io::Error::from)?;
@@ -446,8 +447,10 @@ fn set_fd_flags(fd: libc::c_int, add_flags: Option<libc::c_int>) -> io::Result<(
         flags &= !libc::O_DIRECTORY;
     }
 
-    if flags != 0 {
-        nix::fcntl::fcntl(fd, F_SETFL(OFlag::from_bits_retain(flags))).map_err(io::Error::from)?;
+    let new_flags = old_flags | flags;
+    if old_flags != new_flags {
+        nix::fcntl::fcntl(fd, F_SETFL(OFlag::from_bits_retain(new_flags)))
+            .map_err(io::Error::from)?;
     }
     Ok(())
 }

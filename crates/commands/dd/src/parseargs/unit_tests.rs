@@ -420,6 +420,24 @@ fn block_and_unblock_without_cbs_are_ignored() {
 }
 
 #[test]
+fn non_data_conversions_do_not_buffer_bs_short_reads() {
+    for conversion in [
+        "noerror",
+        "sync",
+        "sparse",
+        "excl",
+        "nocreat",
+        "notrunc",
+        "fdatasync",
+        "fsync",
+    ] {
+        let conv = format!("conv={conversion}");
+        let settings = Parser::new().parse(&["bs=4", &conv]).unwrap();
+        assert!(!settings.buffered, "{conversion} must not buffer bs reads");
+    }
+}
+
+#[test]
 fn implied_block_modes_conflict_with_opposite_explicit_modes() {
     for conversion in [
         "ascii,block",

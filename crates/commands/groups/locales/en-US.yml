@@ -4,3 +4,8 @@ groups:
   about: |-
     Print group memberships for each `USERNAME` or, if no `USERNAME` is specified, for
     the current process (which may differ if the groups data‐base has changed).
+  quote_mark: "'"
+  errors:
+    current_process: "failed to get groups for the current process"
+    group_not_found: "cannot find name for group ID %{gid}"
+    user_not_found: "%{user}: no such user"

@@ -4,3 +4,8 @@ groups:
   about: |-
     打印每个用户名的组成员身份，或者如果未指定用户名，则打印
     当前进程的组成员身份（如果组数据库已更改，则可能有所不同）。
+  quote_mark: '"'
+  errors:
+    current_process: "获取当前进程的组失败"
+    group_not_found: "无法根据组 ID %{gid} 找到组名称"
+    user_not_found: "%{user}: 无此用户"

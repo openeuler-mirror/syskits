@@ -52,22 +52,37 @@ impl CTError for GroupsError {}
 #[derive(Debug)]
 struct GroupsClapError {
     inner: Box<dyn CTError>,
-    diagnostic: Option<String>,
+    diagnostic: Option<Vec<u8>>,
     show_usage: bool,
 }
 
 impl GroupsClapError {
+    #[cfg(test)]
     fn new(error: clap::Error) -> Self {
+        Self::new_with_args(error, &[])
+    }
+
+    fn new_with_args(error: clap::Error, args: &[OsString]) -> Self {
         let diagnostic = match error.kind() {
-            clap::error::ErrorKind::UnknownArgument => match error.get(ContextKind::InvalidArg) {
-                Some(ContextValue::String(argument)) => groups_invalid_option_diagnostic(argument),
-                _ => None,
-            },
+            clap::error::ErrorKind::UnknownArgument => args
+                .iter()
+                .skip(1)
+                .find(|argument| {
+                    argument.to_str().is_none() && argument.as_bytes().first() == Some(&b'-')
+                })
+                .map(OsString::as_os_str)
+                .map(groups_invalid_option_diagnostic)
+                .unwrap_or_else(|| match error.get(ContextKind::InvalidArg) {
+                    Some(ContextValue::String(argument)) => {
+                        groups_invalid_option_diagnostic(OsStr::new(argument))
+                    }
+                    _ => None,
+                }),
             clap::error::ErrorKind::TooManyValues => match error.get(ContextKind::InvalidArg) {
                 Some(ContextValue::String(argument))
                     if argument == "--help" || argument == "--version" =>
                 {
-                    Some(format!("option '{argument}' doesn't allow an argument"))
+                    Some(format!("option '{argument}' doesn't allow an argument").into_bytes())
                 }
                 _ => None,
             },
@@ -85,21 +100,36 @@ impl GroupsClapError {
     }
 }
 
-fn groups_invalid_option_diagnostic(argument: &str) -> Option<String> {
-    if argument.starts_with("--") {
-        Some(format!("unrecognized option '{argument}'"))
+fn groups_invalid_option_diagnostic(argument: &OsStr) -> Option<Vec<u8>> {
+    let argument = argument.as_bytes();
+    if argument.starts_with(b"--") {
+        let mut diagnostic = b"unrecognized option '".to_vec();
+        diagnostic.extend_from_slice(argument);
+        diagnostic.push(b'\'');
+        Some(diagnostic)
     } else {
         argument
-            .as_bytes()
             .get(1)
-            .map(|option| format!("invalid option -- '{}'", char::from(*option)))
+            .map(|option| [b"invalid option -- '".as_slice(), &[*option], b"'"].concat())
     }
 }
 
 impl Display for GroupsClapError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.diagnostic {
-            Some(diagnostic) => f.write_str(diagnostic),
+            Some(diagnostic) => match std::str::from_utf8(diagnostic) {
+                Ok(diagnostic) => f.write_str(diagnostic),
+                Err(_) => {
+                    let mut stderr = std::io::stderr().lock();
+                    let _ = stderr
+                        .write_all(ctcore::ct_util_name().as_bytes())
+                        .and_then(|_| stderr.write_all(b": "))
+                        .and_then(|_| stderr.write_all(diagnostic))
+                        .and_then(|_| stderr.write_all(b"\n"))
+                        .and_then(|_| stderr.flush());
+                    Ok(())
+                }
+            },
             None => Display::fmt(&self.inner, f),
         }
     }
@@ -459,9 +489,10 @@ fn groups_collect_for_users(users: Vec<OsString>) -> CTResult<GroupsSemantic> {
 pub fn groups_native_semantic(args: impl ctcore::Args) -> CTResult<GroupsSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args: Vec<OsString> = args.collect();
     let matches = ct_app()
-        .try_get_matches_from(args)
-        .map_err(GroupsClapError::new)?;
+        .try_get_matches_from(args.iter().cloned())
+        .map_err(|error| GroupsClapError::new_with_args(error, &args))?;
     let users: Vec<OsString> = matches
         .get_many::<OsString>(opt_flags::USERS)
         .map(|v| v.cloned().collect())
@@ -805,7 +836,7 @@ mod tests {
 
         use clap::error::ErrorKind;
         use ctcore::ct_error::CTError;
-        use std::ffi::OsString;
+        use std::ffi::{OsStr, OsString};
 
         #[test]
         fn test_ct_app_version() {
@@ -878,6 +909,21 @@ mod tests {
                 assert_eq!(error.code(), 1);
                 assert!(error.usage());
             }
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_invalid_option_diagnostic_preserves_non_utf8_bytes() {
+            use std::os::unix::ffi::OsStrExt;
+
+            assert_eq!(
+                crate::groups_invalid_option_diagnostic(OsStr::from_bytes(b"-\xff")),
+                Some(b"invalid option -- '\xff'".to_vec())
+            );
+            assert_eq!(
+                crate::groups_invalid_option_diagnostic(OsStr::from_bytes(b"--bad\xff")),
+                Some(b"unrecognized option '--bad\xff'".to_vec())
+            );
         }
     }
 }

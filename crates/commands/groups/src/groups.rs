@@ -170,7 +170,7 @@ fn groups_collect_for_users(users: Vec<String>) -> CTResult<GroupsSemantic> {
         for user in users {
             match CtPasswd::locate_name(user.as_str()) {
                 Ok(passwd) => {
-                    let gids = groups_for_named_user(passwd.gid, passwd.belongs_to());
+                    let gids = groups_for_named_user(passwd.gid, passwd.belongs_to_name(&user));
                     let groups = gids
                         .iter()
                         .map(|gid| groups_infallible_gid2grp(gid, &mut stderr_text, &mut exit_code))

@@ -40,7 +40,6 @@ use ctcore::ct_error::{CTResult, FromIo};
 use ctcore::ct_show_error;
 #[cfg(target_os = "linux")]
 use nix::{
-    errno::Errno,
     fcntl::{PosixFadviseAdvice, posix_fadvise},
     sys::stat::{SFlag, fstat},
 };
@@ -699,8 +698,8 @@ enum Dest {
     #[cfg(unix)]
     Fifo(File),
 
-    /// Output to nothing, dropping each byte written to the output.
-    #[cfg(unix)]
+    /// Test-only output that drops all bytes written to it.
+    #[cfg(test)]
     Sink,
 }
 
@@ -717,7 +716,7 @@ impl Dest {
                 f.flush()?;
                 f.sync_all()
             }
-            #[cfg(unix)]
+            #[cfg(test)]
             Self::Sink => Ok(()),
         }
     }
@@ -734,7 +733,7 @@ impl Dest {
                 f.flush()?;
                 f.sync_data()
             }
-            #[cfg(unix)]
+            #[cfg(test)]
             Self::Sink => Ok(()),
         }
     }
@@ -760,7 +759,7 @@ impl Dest {
                 // Seeking in a named pipe means *reading* from the pipe.
                 io::copy(&mut f.take(n), &mut io::sink())
             }
-            #[cfg(unix)]
+            #[cfg(test)]
             Self::Sink => Ok(0),
         }
     }
@@ -790,7 +789,8 @@ impl Dest {
             Self::Stdout(stdout) => posix_fadvise(stdout.as_raw_fd(), offset, len, advice),
             #[cfg(unix)]
             Self::Fifo(f) => posix_fadvise(f.as_raw_fd(), offset, len, advice),
-            _ => Err(Errno::ESPIPE),
+            #[cfg(test)]
+            Self::Sink => Err(nix::errno::Errno::ESPIPE),
         }
     }
 }
@@ -815,7 +815,7 @@ impl Write for Dest {
             Self::Stdout(stdout) => stdout.write(buf),
             #[cfg(unix)]
             Self::Fifo(f) => f.write(buf),
-            #[cfg(unix)]
+            #[cfg(test)]
             Self::Sink => Ok(buf.len()),
         }
     }
@@ -826,7 +826,7 @@ impl Write for Dest {
             Self::File(f, _) => f.flush(),
             #[cfg(unix)]
             Self::Fifo(f) => f.flush(),
-            #[cfg(unix)]
+            #[cfg(test)]
             Self::Sink => Ok(()),
         }
     }
@@ -942,15 +942,6 @@ impl<'a> DdOutput<'a> {
         if settings.seek > 0 {
             Dest::Fifo(File::open(filename)?).seek(settings.seek)?;
         }
-        // If `count=0`, then we don't bother opening the file for
-        // writing because that would cause this process to block
-        // indefinitely.
-        if let Some(Num::Blocks(0) | Num::Bytes(0)) = settings.count {
-            let dst = Dest::Sink;
-            return Ok(Self { dst, settings });
-        }
-        // At this point, we know there is at least one block to write
-        // to the output, so we open the file for writing.
         let mut opts = OpenOptions::new();
         opts.write(true)
             .create(!settings.oconv.is_nocreat)
@@ -958,7 +949,10 @@ impl<'a> DdOutput<'a> {
             .append(settings.oflags.is_append);
         #[cfg(target_os = "linux")]
         opts.custom_flags(make_linux_oflags(&settings.oflags).unwrap_or(0));
-        let dst = Dest::Fifo(opts.open(filename)?);
+        let dst = Dest::Fifo(
+            opts.open(filename)
+                .map_err_context(|| format!("failed to open {}", filename.quote()))?,
+        );
         Ok(Self { dst, settings })
     }
 

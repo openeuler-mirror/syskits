@@ -50,20 +50,30 @@ impl Display for GroupsError {
             Self::GetGroupsForCurrentProcessFailed(err) => {
                 write!(
                     f,
-                    "failed to get groups for the current process: {}",
+                    "{}: {}",
+                    t!("groups.errors.current_process"),
                     strip_errno(err)
                 )
             }
-            Self::GroupNotFound(gid) => write!(f, "cannot find name for group ID {gid}"),
+            Self::GroupNotFound(gid) => {
+                write!(f, "{}", t!("groups.errors.group_not_found", gid = gid))
+            }
             Self::UserNotFound(user) => {
-                write!(f, "{}: no such user", groups_quote_username(user))
+                let user = groups_quote_username(user);
+                write!(f, "{}", t!("groups.errors.user_not_found", user = user))
             }
         }
     }
 }
 
 fn groups_quote_username(user: &OsStr) -> String {
-    let mut quoted = String::from("'");
+    let quote_mark = t!("groups.quote_mark");
+    groups_quote_username_with_mark(user, &quote_mark)
+}
+
+fn groups_quote_username_with_mark(user: &OsStr, quote_mark: &str) -> String {
+    let quote_byte = quote_mark.as_bytes().first().copied().unwrap_or(b'\'');
+    let mut quoted = quote_mark.to_string();
     for &byte in user.as_bytes() {
         match byte {
             b'\x07' => quoted.push_str("\\a"),
@@ -73,7 +83,11 @@ fn groups_quote_username(user: &OsStr) -> String {
             b'\r' => quoted.push_str("\\r"),
             b'\t' => quoted.push_str("\\t"),
             b'\x0b' => quoted.push_str("\\v"),
-            b'\\' | b'\'' => {
+            b'\\' => {
+                quoted.push('\\');
+                quoted.push(char::from(byte));
+            }
+            byte if byte == quote_byte => {
                 quoted.push('\\');
                 quoted.push(char::from(byte));
             }
@@ -81,7 +95,7 @@ fn groups_quote_username(user: &OsStr) -> String {
             _ => write!(quoted, "\\{byte:03o}").unwrap(),
         }
     }
-    quoted.push('\'');
+    quoted.push_str(quote_mark);
     quoted
 }
 
@@ -402,7 +416,7 @@ mod tests {
     mod tests_groups_main {
         use crate::{
             GroupsOutputEvent, GroupsRawEntry, groups_for_current_process, groups_for_named_user,
-            groups_main, groups_native_semantic, groups_quote_username,
+            groups_main, groups_native_semantic, groups_quote_username_with_mark,
             groups_render_classic_bytes,
         };
 
@@ -545,12 +559,16 @@ mod tests {
         #[test]
         fn test_groups_quote_username_uses_gnu_escape_style() {
             assert_eq!(
-                groups_quote_username(OsStr::new("groups_compat_'_missing")),
+                groups_quote_username_with_mark(OsStr::new("groups_compat_'_missing"), "'"),
                 "'groups_compat_\\'_missing'"
             );
             assert_eq!(
-                groups_quote_username(OsStr::new("path\\name")),
+                groups_quote_username_with_mark(OsStr::new("path\\name"), "'"),
                 "'path\\\\name'"
+            );
+            assert_eq!(
+                groups_quote_username_with_mark(OsStr::new("groups_compat_missing"), "\""),
+                "\"groups_compat_missing\""
             );
         }
 

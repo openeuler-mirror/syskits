@@ -357,8 +357,18 @@ fn icf_case_error() {
 
 #[test]
 fn icf_block_error() {
-    let args = &["conv=block,unblock"];
+    let args = &["cbs=1", "conv=block,unblock"];
     assert!(Parser::new().parse(args).is_err());
+}
+
+#[test]
+fn block_and_unblock_without_cbs_are_ignored() {
+    for conversion in ["block", "unblock", "block,unblock"] {
+        let conv = format!("conv={conversion}");
+        let settings = Parser::new().parse(&["bs=4", &conv]).unwrap();
+        assert_eq!(settings.iconv.mode, None);
+        assert!(!settings.buffered);
+    }
 }
 
 #[test]

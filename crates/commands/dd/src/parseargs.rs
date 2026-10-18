@@ -19,6 +19,9 @@ use ctcore::ct_error::CTError;
 use ctcore::ct_parse_size::{CtParser as SizeParser, ParseSizeError};
 use ctcore::ct_show_warning;
 use std::error::Error;
+use std::ffi::{OsStr, OsString};
+#[cfg(unix)]
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
 /// Parser Errors describe errors with ct_parser input
 #[derive(Debug, PartialEq, Eq)]
@@ -48,8 +51,8 @@ const MAX_CONVERSION_BLOCK_SIZE: u64 = isize::MAX as u64;
 /// Contains a temporary state during parsing of the arguments
 #[derive(Debug, PartialEq)]
 pub struct Parser {
-    infile: Option<String>,
-    outfile: Option<String>,
+    infile: Option<OsString>,
+    outfile: Option<OsString>,
     /// The block size option specified on the command-line, if any.
     bs: Option<usize>,
     /// The input block size option specified on the command-line, if any.
@@ -123,10 +126,20 @@ impl Parser {
         Self::default()
     }
 
+    #[cfg(test)]
     pub(crate) fn parse(self, operands: &[&str]) -> Result<DdOptions, ParseError> {
         self.read(operands)?.validate()
     }
 
+    pub(crate) fn parse_os(mut self, operands: &[&OsStr]) -> Result<DdOptions, ParseError> {
+        for operand in operands {
+            self.parse_os_operand(operand)?;
+        }
+
+        self.validate()
+    }
+
+    #[cfg(test)]
     pub(crate) fn read(mut self, operands: &[&str]) -> Result<Self, ParseError> {
         for operand in operands {
             self.parse_operand(operand)?;
@@ -279,10 +292,10 @@ impl Parser {
                 }
                 "count" => self.count = Some(Self::parse_n(v)?),
                 "ibs" => self.ibs = Self::parse_bytes(k, v)?,
-                "if" => self.infile = Some(v.to_string()),
+                "if" => self.infile = Some(OsString::from(v)),
                 "iflag" => self.parse_input_flags(v)?,
                 "obs" => self.obs = Self::parse_bytes(k, v)?,
-                "of" => self.outfile = Some(v.to_string()),
+                "of" => self.outfile = Some(OsString::from(v)),
                 "oflag" => self.parse_output_flags(v)?,
                 "seek" | "oseek" => self.seek = Self::parse_n(v)?,
                 "skip" | "iseek" => self.skip = Self::parse_n(v)?,
@@ -291,6 +304,26 @@ impl Parser {
             },
         }
         Ok(())
+    }
+
+    fn parse_os_operand(&mut self, operand: &OsStr) -> Result<(), ParseError> {
+        #[cfg(unix)]
+        {
+            let bytes = operand.as_bytes();
+            if let Some(path) = bytes.strip_prefix(b"if=") {
+                self.infile = Some(OsString::from_vec(path.to_vec()));
+                return Ok(());
+            }
+            if let Some(path) = bytes.strip_prefix(b"of=") {
+                self.outfile = Some(OsString::from_vec(path.to_vec()));
+                return Ok(());
+            }
+        }
+
+        let operand = operand
+            .to_str()
+            .ok_or_else(|| ParseError::UnrecognizedOperand(operand.to_string_lossy().into()))?;
+        self.parse_operand(operand)
     }
 
     fn parse_n(val: &str) -> Result<Num, ParseError> {

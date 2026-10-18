@@ -16,6 +16,8 @@ use crate::conversion_tables::{
     ASCII_TO_EBCDIC_UCASE_TO_LCASE, ASCII_TO_IBM, EBCDIC_TO_ASCII_LCASE_TO_UCASE,
 };
 use crate::parseargs::Parser;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
 
 #[cfg(target_os = "windows")]
 #[allow(clippy::useless_vec)]
@@ -339,6 +341,25 @@ fn test_override_multiple_options() {
     assert_eq!(settings.skip, 2048);
     assert_eq!(settings.seek, 2048);
     assert_eq!(settings.count, Some(Num::Bytes(1024)));
+}
+
+#[cfg(unix)]
+#[test]
+fn non_utf8_input_and_output_paths_are_preserved() {
+    let input = OsString::from_vec(b"if=input-\xff".to_vec());
+    let output = OsString::from_vec(b"of=output-\xfe".to_vec());
+    let settings = Parser::new()
+        .parse_os(&[input.as_os_str(), output.as_os_str()])
+        .unwrap();
+
+    assert_eq!(
+        settings.infile,
+        Some(OsString::from_vec(b"input-\xff".to_vec()))
+    );
+    assert_eq!(
+        settings.outfile,
+        Some(OsString::from_vec(b"output-\xfe".to_vec()))
+    );
 }
 
 // // ----- IConvFlags/Output -----

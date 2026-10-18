@@ -34,7 +34,6 @@ mod opt_flags {
 #[derive(Debug)]
 
 enum GroupsError {
-    GetGroupsFailed,
     GetGroupsForCurrentProcessFailed(std::io::Error),
     GroupNotFound(u32),
     UserNotFound(String),
@@ -46,7 +45,6 @@ impl CTError for GroupsError {}
 impl Display for GroupsError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::GetGroupsFailed => write!(f, "failed to fetch groups"),
             Self::GetGroupsForCurrentProcessFailed(err) => {
                 write!(
                     f,
@@ -147,11 +145,10 @@ fn groups_collect_for_users(users: Vec<String>) -> CTResult<GroupsSemantic> {
         let egid = getegid();
         let (gids, get_groups_error) = match get_groups_gnu(None) {
             Ok(gids) => (groups_for_current_process(rgid, egid, gids), None),
-            Err(err) if err.kind() == std::io::ErrorKind::InvalidInput => (
+            Err(err) => (
                 groups_for_current_process(rgid, egid, Vec::new()),
                 Some(GroupsError::GetGroupsForCurrentProcessFailed(err)),
             ),
-            Err(_) => return Err(GroupsError::GetGroupsFailed.into()),
         };
         let groups = gids
             .iter()

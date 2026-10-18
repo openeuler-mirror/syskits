@@ -56,6 +56,7 @@ struct GroupsClapError {
     diagnostic: Option<Vec<u8>>,
     show_usage: bool,
     exit_code: Option<i32>,
+    display_request: bool,
 }
 
 impl GroupsClapError {
@@ -114,9 +115,20 @@ impl GroupsClapError {
             diagnostic,
             show_usage,
             exit_code: closed_stdout_error.then_some(1),
+            display_request,
         }
     }
 }
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn groups_restore_default_sigpipe() {
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+}
+
+#[cfg(any(not(target_os = "linux"), test))]
+fn groups_restore_default_sigpipe() {}
 
 fn groups_invalid_option_diagnostic(argument: &OsStr) -> Option<Vec<u8>> {
     let argument = argument.as_bytes();
@@ -168,7 +180,12 @@ impl Display for GroupsClapError {
                     Ok(())
                 }
             },
-            None => Display::fmt(&self.inner, f),
+            None => {
+                if self.display_request {
+                    groups_restore_default_sigpipe();
+                }
+                Display::fmt(&self.inner, f)
+            }
         }
     }
 }

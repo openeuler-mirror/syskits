@@ -211,9 +211,9 @@ pub fn chmod_main(args: impl ctcore::Args) -> CTResult<()> {
         .unwrap_or_default();
     let cmode = if mode_reference.is_some() {
         // "--reference" 和 MODE 互斥
-        // 若使用了 "--reference"，则需要将 MODE 解释为另一个 FILE
+        // 若使用了 "--reference"，则需要将 MODE 解释为第一个 FILE
         // 直接用 clap 实现这种行为不可行
-        f.push(chmod);
+        f.insert(0, chmod);
         None
     } else {
         Some(chmod)

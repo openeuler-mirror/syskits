@@ -385,7 +385,7 @@ impl Chmoder {
     }
 
     fn chmod(&self, files: &[String]) -> CTResult<()> {
-        let mut r = Ok(());
+        let mut failed = false;
 
         for name in files {
             let file_name = &name[..];
@@ -401,9 +401,20 @@ impl Chmoder {
                 ));
             }
 
-            r = self.process_path(file_path, true).and(r);
+            if let Err(error) = self.process_path(file_path, true) {
+                let message = error.to_string();
+                if !message.is_empty() {
+                    ct_show_error!("{message}");
+                }
+                failed = true;
+            }
         }
-        r
+
+        if failed {
+            Err(ExitCode::new(1))
+        } else {
+            Ok(())
+        }
     }
 
     fn process_path(&self, file_path: &Path, is_cmdline: bool) -> CTResult<()> {

@@ -165,6 +165,37 @@ fn vdir_shell_style_does_not_quote_unescaped_bell() {
 }
 
 #[test]
+fn vdir_long_aligns_single_and_double_shell_quotes() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    for name in ["plain", "a space", "a'quote"] {
+        fs::write(temp_dir.path().join(name), b"").expect("write fixture");
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args([
+            "vdir",
+            "-ln",
+            "--time-style=+T",
+            "--quoting-style=shell",
+            ".",
+        ])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    let lines = String::from_utf8(output.stdout).expect("utf8 output");
+    let names = lines
+        .lines()
+        .skip(1)
+        .map(|line| line.rsplit_once(" T ").expect("time separator").1)
+        .collect::<Vec<_>>();
+    assert_eq!(names, ["'a space'", "\"a'quote\"", " plain"]);
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

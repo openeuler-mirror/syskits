@@ -70,29 +70,21 @@ unsafe extern "C" {
 /// > to be used in a further call to getgroups().
 pub fn get_groups() -> IOResult<Vec<gid_t>> {
     let mut groups = Vec::new();
-    loop {
-        let ngroups = match unsafe { getgroups(0, ptr::null_mut()) } {
-            -1 => return Err(IOError::last_os_error()),
-            // Not just optimization; 0 would mess up the next call
-            0 => return Ok(Vec::new()),
-            n => n,
-        };
+    let ngroups = match unsafe { getgroups(0, ptr::null_mut()) } {
+        -1 => return Err(IOError::last_os_error()),
+        // Not just optimization; 0 would mess up the next call
+        0 => return Ok(Vec::new()),
+        n => n,
+    };
 
-        // 这是一个小缓冲区，所以我们能够负担得起对其进行零初始化，并使用安全的Vec操作
-        groups.resize(ngroups.try_into().unwrap(), 0);
-        let res = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
-        if res == -1 {
-            let err = IOError::last_os_error();
-            if err.raw_os_error() == Some(libc::EINVAL) {
-                // 更改的组数量，重试
-                continue;
-            } else {
-                return Err(err);
-            }
-        } else {
-            groups.truncate(res.try_into().unwrap());
-            return Ok(groups);
-        }
+    // 这是一个小缓冲区，所以我们能够负担得起对其进行零初始化，并使用安全的Vec操作
+    groups.resize(ngroups.try_into().unwrap(), 0);
+    let res = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
+    if res == -1 {
+        Err(IOError::last_os_error())
+    } else {
+        groups.truncate(res.try_into().unwrap());
+        Ok(groups)
     }
 }
 

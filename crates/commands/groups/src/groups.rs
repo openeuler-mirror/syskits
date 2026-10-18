@@ -355,13 +355,13 @@ fn groups_collect_for_users(users: Vec<OsString>) -> CTResult<GroupsSemantic> {
             exit_code = 1;
             stderr_text.push_str(&format!("groups: {err}\n"));
         }
+        groups_record_stderr_event(stderr_start, &stderr_text, &mut output_events);
         entries.push(GroupsEntry { user: None, groups });
         let raw_entry = GroupsRawEntry {
             user: None,
             groups: raw_groups,
         };
         groups_record_stdout_event(&raw_entry, &mut classic_bytes, &mut output_events);
-        groups_record_stderr_event(stderr_start, &stderr_text, &mut output_events);
     } else {
         for user in users {
             let stderr_start = stderr_text.len();
@@ -382,6 +382,7 @@ fn groups_collect_for_users(users: Vec<OsString>) -> CTResult<GroupsSemantic> {
                         .iter()
                         .map(|group| group.to_string_lossy().into_owned())
                         .collect();
+                    groups_record_stderr_event(stderr_start, &stderr_text, &mut output_events);
                     entries.push(GroupsEntry {
                         user: Some(user.to_string_lossy().into_owned()),
                         groups,
@@ -395,9 +396,9 @@ fn groups_collect_for_users(users: Vec<OsString>) -> CTResult<GroupsSemantic> {
                 Err(_) => {
                     exit_code = 1;
                     stderr_text.push_str(&format!("groups: {}\n", GroupsError::UserNotFound(user)));
+                    groups_record_stderr_event(stderr_start, &stderr_text, &mut output_events);
                 }
             }
-            groups_record_stderr_event(stderr_start, &stderr_text, &mut output_events);
         }
     }
 

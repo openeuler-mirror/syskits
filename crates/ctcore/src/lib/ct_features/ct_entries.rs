@@ -40,10 +40,11 @@ use libc::{c_char, c_int, gid_t, uid_t};
 use libc::{getgrgid, getgrnam, getgroups};
 use libc::{getpwnam, getpwuid, group, passwd};
 
-use std::ffi::{CStr, CString};
+use std::ffi::{CStr, CString, OsStr};
 use std::io::Error as IOError;
 use std::io::ErrorKind;
 use std::io::Result as IOResult;
+use std::os::unix::ffi::OsStrExt;
 use std::ptr;
 use std::sync::Mutex;
 
@@ -181,17 +182,22 @@ impl CtPasswd {
     /// Unlike `Locate<&str>`, this follows `getpwnam` semantics and does not
     /// treat numeric strings as UIDs.
     pub fn locate_name(name: &str) -> IOResult<Self> {
+        Self::locate_name_os(OsStr::new(name))
+    }
+
+    /// Locate a passwd entry by its raw platform name.
+    pub fn locate_name_os(name: &OsStr) -> IOResult<Self> {
         let _guard = PW_LOCK.lock();
         // SAFETY: We hold PW_LOCK.
         unsafe {
-            let cstring = CString::new(name).unwrap();
+            let cstring = CString::new(name.as_bytes()).unwrap();
             let data = getpwnam(cstring.as_ptr());
             if !data.is_null() {
                 Ok(Self::from_raw(ptr::read(data as *const _)))
             } else {
                 Err(IOError::new(
                     ErrorKind::NotFound,
-                    format!("Not found: {name}"),
+                    format!("Not found: {}", name.to_string_lossy()),
                 ))
             }
         }
@@ -267,15 +273,27 @@ impl CtPasswd {
 
     /// Return the groups for this user using `primary_gid` as the login group.
     pub fn belongs_to_with_primary_gid(&self, primary_gid: gid_t) -> Vec<gid_t> {
-        self.belongs_to_name_with_primary_gid(&self.name, primary_gid)
+        self.belongs_to_name_os_with_primary_gid(
+            OsStr::from_bytes(self.name_bytes()),
+            primary_gid,
+        )
     }
 
     /// Return the groups associated with `name`, using this entry's primary GID.
     pub fn belongs_to_name(&self, name: &str) -> Vec<gid_t> {
-        self.belongs_to_name_with_primary_gid(name, self.gid)
+        self.belongs_to_name_os(OsStr::new(name))
     }
 
-    fn belongs_to_name_with_primary_gid(&self, name: &str, primary_gid: gid_t) -> Vec<gid_t> {
+    /// Return the groups associated with a raw platform name.
+    pub fn belongs_to_name_os(&self, name: &OsStr) -> Vec<gid_t> {
+        self.belongs_to_name_os_with_primary_gid(name, self.gid)
+    }
+
+    fn belongs_to_name_os_with_primary_gid(
+        &self,
+        name: &OsStr,
+        primary_gid: gid_t,
+    ) -> Vec<gid_t> {
         let mut ngroups: c_int = 8;
         let mut ngroups_old: c_int;
         let mut groups = vec![0; ngroups.try_into().unwrap()];

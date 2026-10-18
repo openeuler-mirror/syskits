@@ -127,6 +127,24 @@ fn vdir_preserves_non_utf8_invalid_option_byte() {
     );
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn vdir_quotes_utf8_bytes_that_are_invalid_in_c_locale() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("é"), b"").expect("write fixture");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["vdir", "-1", "."])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert_eq!(output.stdout, b"\\303\\251\n");
+}
+
 #[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");

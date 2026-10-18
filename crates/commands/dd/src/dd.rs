@@ -363,15 +363,12 @@ impl<'a> Input<'a> {
     /// Instantiate this struct with stdin as a source.
     fn new_stdin(settings: &'a DdOptions) -> CTResult<Self> {
         #[cfg(unix)]
-        let mut src = Source::stdin_as_file();
+        let src = Source::stdin_as_file();
         #[cfg(target_os = "linux")]
         if let Source::StdinFile(f) = &src {
             set_fd_flags(f.as_raw_fd(), make_linux_iflags(&settings.iflags))
                 .map_err_context(|| "setting flags for 'standard input'".to_string())?;
         };
-        if settings.skip > 0 {
-            src.skip(settings.skip)?;
-        }
         Ok(Self {
             src,
             settings,
@@ -396,10 +393,7 @@ impl<'a> Input<'a> {
                 .map_err_context(|| format!("failed to open {}", filename.quote()))?
         };
 
-        let mut src = Source::File(src);
-        if settings.skip > 0 {
-            src.skip(settings.skip)?;
-        }
+        let src = Source::File(src);
         Ok(Self {
             src,
             settings,
@@ -416,10 +410,7 @@ impl<'a> Input<'a> {
         opts.read(true);
         #[cfg(target_os = "linux")]
         opts.custom_flags(make_linux_iflags(&settings.iflags).unwrap_or(0));
-        let mut src = Source::Fifo(opts.open(filename)?);
-        if settings.skip > 0 {
-            src.skip(settings.skip)?;
-        }
+        let src = Source::Fifo(opts.open(filename)?);
         Ok(Self {
             src,
             settings,
@@ -427,6 +418,10 @@ impl<'a> Input<'a> {
             previous_read_len: 0,
             warn_partial_read: settings.warn_partial_read,
         })
+    }
+
+    fn skip(&mut self) -> io::Result<u64> {
+        self.src.skip(self.settings.skip)
     }
 }
 
@@ -1090,7 +1085,11 @@ impl BlockWriter<'_> {
 }
 
 /// Copy data from input to output with dd functionality
-fn dd_copy(input: Input, output: DdOutput) -> std::io::Result<()> {
+fn dd_copy(mut input: Input, output: DdOutput) -> std::io::Result<()> {
+    if input.settings.skip > 0 {
+        input.skip()?;
+    }
+
     // 初始化复制环境
     let (mut state, mut output) = initialize_copy_environment(input, output);
 
@@ -1752,11 +1751,6 @@ mod dd_copy_tests {
         let mut temp_file = tempfile()?;
         temp_file.write_all(data)?;
         temp_file.seek(SeekFrom::Start(0))?;
-
-        // 如果设置了skip，需要相应地调整文件位置
-        if settings.skip > 0 {
-            temp_file.seek(SeekFrom::Start(settings.skip))?;
-        }
 
         Ok(Input {
             src: Source::File(temp_file),

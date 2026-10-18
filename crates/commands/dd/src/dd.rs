@@ -586,7 +586,12 @@ impl Input<'_> {
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read is aligned to multiples of ibs; remaining space is filled with the 'pad' byte.
-    fn fill_blocks(&mut self, buf: &mut Vec<u8>, pad: u8) -> std::io::Result<ReadStat> {
+    fn fill_blocks(
+        &mut self,
+        buf: &mut Vec<u8>,
+        pad: u8,
+        max_bytes: usize,
+    ) -> std::io::Result<ReadStat> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut base_idx = 0;
@@ -595,12 +600,17 @@ impl Input<'_> {
         while base_idx < buf.len() {
             let next_blk = cmp::min(base_idx + self.settings.ibs, buf.len());
             let target_len = next_blk - base_idx;
+            let bytes_remaining = max_bytes.saturating_sub(bytes_total);
+            if bytes_remaining == 0 {
+                break;
+            }
+            let read_len = cmp::min(target_len, bytes_remaining);
 
             if self.settings.iconv.noerror {
                 buf[base_idx..next_blk].fill(pad);
             }
 
-            let rlen = self.read(&mut buf[base_idx..next_blk])?;
+            let rlen = self.read(&mut buf[base_idx..base_idx + read_len])?;
             if self.pending_read_error.is_some() {
                 reads_partial += 1;
                 base_idx = next_blk;
@@ -1423,10 +1433,24 @@ fn read_helper(
 ) -> std::io::Result<ReadStat> {
     // Read
     // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
-    buf.resize(bsize, BUF_INIT_BYTE);
+    let buffer_size = if i.settings.iconv.sync.is_some() {
+        let remainder = bsize % i.settings.ibs;
+        if remainder == 0 {
+            bsize
+        } else {
+            bsize
+                .checked_add(i.settings.ibs - remainder)
+                .ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "input buffer size overflow")
+                })?
+        }
+    } else {
+        bsize
+    };
+    buf.resize(buffer_size, BUF_INIT_BYTE);
 
     let mut rstat = match i.settings.iconv.sync {
-        Some(ch) => i.fill_blocks(buf, ch)?,
+        Some(ch) => i.fill_blocks(buf, ch, bsize)?,
         _ => i.fill_consecutive(buf)?,
     };
     // Return early if no data
@@ -1880,6 +1904,34 @@ mod dd_copy_tests {
         result_file.seek(SeekFrom::Start(0))?;
         result_file.read_to_end(&mut result)?;
         assert_eq!(&result[..], b"Hell");
+        Ok(())
+    }
+
+    #[test]
+    fn test_count_bytes_sync_pads_a_partial_input_record() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.ibs = 4;
+        options.obs = 4;
+        options.count = Some(Num::Bytes(1));
+        options.iconv.sync = Some(0);
+
+        let mut input = create_test_input(b"x", &options)?;
+        let mut buffer = Vec::new();
+        let mut swab_byte = None;
+        let mut conversion_state = ConversionState::default();
+
+        let stat = read_helper(
+            &mut input,
+            &mut buffer,
+            &mut swab_byte,
+            &mut conversion_state,
+            1,
+        )?;
+
+        assert_eq!(stat.reads_complete, 0);
+        assert_eq!(stat.reads_partial, 1);
+        assert_eq!(stat.bytes_total, 1);
+        assert_eq!(buffer, b"x\0\0\0");
         Ok(())
     }
 

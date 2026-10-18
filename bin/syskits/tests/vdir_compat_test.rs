@@ -1,6 +1,8 @@
 use std::fs;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 use std::process::Command;
 
 use tempfile::TempDir;
@@ -20,6 +22,25 @@ fn set_selinux_xattr(path: &std::path::Path, value: &[u8]) -> bool {
             0,
         ) == 0
     }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn vdir_quotes_non_utf8_file_name_bytes() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let name = std::ffi::OsString::from_vec(b"bad\xffname".to_vec());
+    fs::write(temp_dir.path().join(&name), b"").expect("write fixture");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args([std::ffi::OsStr::new("vdir"), std::ffi::OsStr::new("-1")])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert_eq!(output.stdout, b"bad\\377name\n");
 }
 
 #[test]

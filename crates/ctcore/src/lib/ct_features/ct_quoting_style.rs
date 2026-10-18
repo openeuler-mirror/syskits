@@ -12,7 +12,7 @@ use std::char::from_digit;
 use std::ffi::OsStr;
 use std::fmt;
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
@@ -756,6 +756,34 @@ fn escape_shell_byte_segments_pass(
     (escaped, must_quote, in_dollar)
 }
 
+#[cfg(unix)]
+fn escape_c_name(name: &OsStr, quotes: CtQuotes) -> String {
+    let mut escaped = String::new();
+    let mut bytes = name.as_bytes();
+
+    while !bytes.is_empty() {
+        match std::str::from_utf8(bytes) {
+            Ok(valid) => {
+                escaped.extend(valid.chars().flat_map(|c| CtEscapedChar::new_c(c, quotes)));
+                break;
+            }
+            Err(error) => {
+                let valid_len = error.valid_up_to();
+                let valid = unsafe { std::str::from_utf8_unchecked(&bytes[..valid_len]) };
+                escaped.extend(valid.chars().flat_map(|c| CtEscapedChar::new_c(c, quotes)));
+
+                let invalid_len = error.error_len().unwrap_or(bytes.len() - valid_len);
+                for byte in &bytes[valid_len..valid_len + invalid_len] {
+                    escaped.extend(CtEscapeOctal::from(char::from(*byte)));
+                }
+                bytes = &bytes[valid_len + invalid_len..];
+            }
+        }
+    }
+
+    escaped
+}
+
 pub fn escape_name(name: &OsStr, style: &CtQuotingStyle) -> String {
     match style {
         CtQuotingStyle::Literal { show_control } => {
@@ -769,6 +797,9 @@ pub fn escape_name(name: &OsStr, style: &CtQuotingStyle) -> String {
             }
         }
         CtQuotingStyle::C { quotes } => {
+            #[cfg(unix)]
+            let escaped_str = escape_c_name(name, *quotes);
+            #[cfg(not(unix))]
             let escaped_str: String = name
                 .to_string_lossy()
                 .chars()

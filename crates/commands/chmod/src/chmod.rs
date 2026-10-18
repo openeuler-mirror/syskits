@@ -29,9 +29,10 @@ use nix::sys::stat::{
 };
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
+use std::cell::Cell;
 use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
@@ -460,6 +461,42 @@ fn nix_error_to_io(error: nix::errno::Errno) -> io::Error {
 const CHMOD_MODE_BITS: u32 = 0o7777;
 const SPECIAL_MODE_BITS: u32 = 0o7000;
 
+thread_local! {
+    static STDOUT_WRITE_FAILED: Cell<bool> = const { Cell::new(false) };
+}
+
+fn write_output_line(writer: &mut impl Write, message: &str) -> io::Result<()> {
+    writer.write_all(message.as_bytes())?;
+    writer.write_all(b"\n")?;
+    writer.flush()
+}
+
+fn reset_stdout_write_error() {
+    STDOUT_WRITE_FAILED.with(|failed| failed.set(false));
+}
+
+fn write_stdout_line(message: &str) -> Result<(), i32> {
+    if STDOUT_WRITE_FAILED.with(|failed| failed.get()) {
+        return Err(1);
+    }
+
+    let result = if ctcore::ct_stdout_was_closed() || ctcore::ct_stdout_is_closed() {
+        Err(io::Error::from_raw_os_error(ctcore::libc::EBADF))
+    } else {
+        let stdout = io::stdout();
+        write_output_line(&mut stdout.lock(), message)
+    };
+
+    if let Err(error) = result {
+        STDOUT_WRITE_FAILED.with(|failed| failed.set(true));
+        set_ct_exit_code(1);
+        ct_show_error!("write error: {}", strip_errno(&error));
+        Err(1)
+    } else {
+        Ok(())
+    }
+}
+
 // GNU treats a failed verification stat as no reportable mode change.
 fn mode_changed(old_mode: u32, requested_mode: u32, actual_mode: Option<u32>) -> bool {
     let new_mode = if requested_mode & SPECIAL_MODE_BITS != 0 {
@@ -491,17 +528,16 @@ struct Chmoder {
 impl Chmoder {
     fn describe_access_failure(&self, file_path: &Path) {
         if self.verbose {
-            println!(
-                "{}",
-                t!(
-                    "chmod.messages.inaccessible",
-                    file = file_path.quote().to_string()
-                )
+            let message = t!(
+                "chmod.messages.inaccessible",
+                file = file_path.quote().to_string()
             );
+            let _ = write_stdout_line(&message);
         }
     }
 
     fn chmod(&self, files: &[OsString]) -> CTResult<()> {
+        reset_stdout_write_error();
         let mut failed = false;
         let root_dev_ino = if self.recursive && self.preserve_root {
             let root_path = Path::new("/");
@@ -631,12 +667,16 @@ impl Chmoder {
             self.chmod_meta(target, file_path, target_meta.st_mode)
         } else {
             if self.verbose && !self.changes {
-                println!(
+                match write_stdout_line(&format!(
                     "neither symbolic link {} nor referent has been changed",
                     file_path.quote()
-                );
+                )) {
+                    Ok(()) => Ok(()),
+                    Err(_) => Err(ExitCode::new(1)),
+                }
+            } else {
+                Ok(())
             }
-            Ok(())
         };
 
         // GNU fts opens a directory for traversal after process_file has applied
@@ -794,17 +834,15 @@ impl Chmoder {
                 );
             }
             if self.verbose {
-                println!(
-                    "{}",
-                    t!(
-                        "chmod.messages.failed",
-                        file = file_path.quote().to_string(),
-                        mode1 = format!("{:04o}", file_perms),
-                        str1 = display_permissions_unix(file_perms as mode_t, false),
-                        mode2 = format!("{:04o}", mode),
-                        str2 = display_permissions_unix(mode as mode_t, false)
-                    )
+                let message = t!(
+                    "chmod.messages.failed",
+                    file = file_path.quote().to_string(),
+                    mode1 = format!("{:04o}", file_perms),
+                    str1 = display_permissions_unix(file_perms as mode_t, false),
+                    mode2 = format!("{:04o}", mode),
+                    str2 = display_permissions_unix(mode as mode_t, false)
                 );
+                let _ = write_stdout_line(&message);
             }
             Err(1)
         } else {
@@ -832,28 +870,24 @@ impl Chmoder {
 
             if !mode_changed(file_perms, mode, actual_mode) {
                 if self.verbose && !self.changes {
-                    println!(
-                        "{}",
-                        t!(
-                            "chmod.messages.retained",
-                            file = file_path.quote().to_string(),
-                            mode = format!("{:04o}", mode),
-                            str = display_permissions_unix(mode as mode_t, false)
-                        )
+                    let message = t!(
+                        "chmod.messages.retained",
+                        file = file_path.quote().to_string(),
+                        mode = format!("{:04o}", mode),
+                        str = display_permissions_unix(mode as mode_t, false)
                     );
+                    write_stdout_line(&message)?;
                 }
             } else if self.verbose || self.changes {
-                println!(
-                    "{}",
-                    t!(
-                        "chmod.messages.changed",
-                        file = file_path.quote().to_string(),
-                        mode1 = format!("{:04o}", file_perms),
-                        str1 = display_permissions_unix(file_perms as mode_t, false),
-                        mode2 = format!("{:04o}", mode),
-                        str2 = display_permissions_unix(mode as mode_t, false)
-                    )
+                let message = t!(
+                    "chmod.messages.changed",
+                    file = file_path.quote().to_string(),
+                    mode1 = format!("{:04o}", file_perms),
+                    str1 = display_permissions_unix(file_perms as mode_t, false),
+                    mode2 = format!("{:04o}", mode),
+                    str2 = display_permissions_unix(mode as mode_t, false)
                 );
+                write_stdout_line(&message)?;
             }
             Ok(())
         }
@@ -921,6 +955,28 @@ mod tests {
         assert!(mode_changed(0o600, 0o2644, Some(0o644)));
         assert!(!mode_changed(0o644, 0o2644, None));
         assert!(mode_changed(0o600, 0o644, None));
+    }
+
+    #[test]
+    fn test_write_output_line_propagates_write_errors() {
+        struct BrokenWriter;
+
+        impl Write for BrokenWriter {
+            fn write(&mut self, _buffer: &[u8]) -> io::Result<usize> {
+                Err(io::Error::from_raw_os_error(ctcore::libc::EBADF))
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let mut output = Vec::new();
+        write_output_line(&mut output, "retained").unwrap();
+        assert_eq!(output, b"retained\n");
+
+        let error = write_output_line(&mut BrokenWriter, "changed").unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(ctcore::libc::EBADF));
     }
 
     #[cfg(unix)]

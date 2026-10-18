@@ -414,8 +414,26 @@ fn groups_write_stdout(
     } else {
         writer.write_all(bytes)
     };
-    result.map_err_context(|| "write error".to_string())?;
-    writer.flush().map_err_context(|| "write error".to_string())
+    groups_handle_stdout_result(result)?;
+    groups_handle_stdout_result(writer.flush())
+}
+
+fn groups_handle_stdout_result(result: std::io::Result<()>) -> CTResult<()> {
+    match result {
+        Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => {
+            groups_terminate_with_sigpipe()
+        }
+        result => result.map_err_context(|| "write error".to_string()),
+    }
+}
+
+fn groups_terminate_with_sigpipe() -> ! {
+    // Rust ignores SIGPIPE by default; GNU groups uses the default signal action.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        libc::raise(libc::SIGPIPE);
+        libc::_exit(128 + libc::SIGPIPE);
+    }
 }
 
 #[derive(Default)]

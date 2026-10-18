@@ -453,6 +453,25 @@ pub fn uid2usr(id: uid_t) -> IOResult<String> {
     CtPasswd::locate(id).map(|p| p.name)
 }
 
+/// Resolve a UID without requiring the user name to be valid UTF-8.
+pub fn uid2usr_os(id: uid_t) -> IOResult<OsString> {
+    let _guard = PW_LOCK.lock();
+    // SAFETY: We hold PW_LOCK and copy the static NSS result before unlocking.
+    unsafe {
+        let data = getpwuid(id);
+        if data.is_null() {
+            Err(IOError::new(
+                ErrorKind::NotFound,
+                format!("No such id: {id}"),
+            ))
+        } else {
+            cstr2osstring((*data).pw_name).ok_or_else(|| {
+                IOError::new(ErrorKind::InvalidData, format!("User {id} has no name"))
+            })
+        }
+    }
+}
+
 #[inline]
 pub fn gid2grp(id: gid_t) -> IOResult<String> {
     Group::locate(id).map(|p| p.name)

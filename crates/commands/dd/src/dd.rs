@@ -31,7 +31,7 @@ use nix::fcntl::OFlag;
 use parseargs::Parser;
 use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
 
-use clap::{Arg, Command, crate_version};
+use clap::{Arg, Command, builder::ValueParser, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 #[cfg(unix)]
@@ -73,8 +73,8 @@ const BUF_INIT_BYTE: u8 = 0xDD;
 /// Final settings after parsing
 #[derive(Default)]
 struct DdOptions {
-    infile: Option<String>,
-    outfile: Option<String>,
+    infile: Option<OsString>,
+    outfile: Option<OsString>,
     ibs: usize,
     obs: usize,
     skip: u64,
@@ -1318,7 +1318,7 @@ fn try_get_len_of_block_device(file: &mut File) -> io::Result<Option<u64>> {
 
 /// Decide whether the named file is a named pipe, also known as a FIFO.
 #[cfg(unix)]
-fn is_fifo(filename: &str) -> bool {
+fn is_fifo(filename: &Path) -> bool {
     if let Ok(metadata) = std::fs::metadata(filename) {
         if metadata.file_type().is_fifo() {
             return true;
@@ -1348,24 +1348,28 @@ fn dd_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
 
-    let options: DdOptions = Parser::new().parse(
+    let options: DdOptions = Parser::new().parse_os(
         &matches
-            .get_many::<String>(options::OPERANDS)
+            .get_many::<OsString>(options::OPERANDS)
             .unwrap_or_default()
-            .map(|s| s.as_ref())
+            .map(OsString::as_os_str)
             .collect::<Vec<_>>()[..],
     )?;
 
     let i = match options.infile {
         #[cfg(unix)]
-        Some(ref infile) if is_fifo(infile) => Input::new_fifo(Path::new(&infile), &options)?,
-        Some(ref infile) => Input::new_file(Path::new(&infile), &options)?,
+        Some(ref infile) if is_fifo(Path::new(infile)) => {
+            Input::new_fifo(Path::new(infile), &options)?
+        }
+        Some(ref infile) => Input::new_file(Path::new(infile), &options)?,
         None => Input::new_stdin(&options)?,
     };
     let o = match options.outfile {
         #[cfg(unix)]
-        Some(ref outfile) if is_fifo(outfile) => DdOutput::new_fifo(Path::new(&outfile), &options)?,
-        Some(ref outfile) => DdOutput::new_file(Path::new(&outfile), &options)?,
+        Some(ref outfile) if is_fifo(Path::new(outfile)) => {
+            DdOutput::new_fifo(Path::new(outfile), &options)?
+        }
+        Some(ref outfile) => DdOutput::new_file(Path::new(outfile), &options)?,
         None if is_stdout_redirected_to_seekable_file() => {
             DdOutput::new_file_from_stdout(&options)?
         }
@@ -1381,7 +1385,11 @@ pub fn ct_app() -> Command {
         .override_usage(t!("dd.usage"))
         .after_help(t!("dd.after_help"))
         .infer_long_args(true)
-        .arg(Arg::new(options::OPERANDS).num_args(1..))
+        .arg(
+            Arg::new(options::OPERANDS)
+                .num_args(1..)
+                .value_parser(ValueParser::os_string()),
+        )
 }
 
 #[cfg(test)]

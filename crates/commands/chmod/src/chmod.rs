@@ -288,10 +288,12 @@ fn chmod_args_init() -> Vec<Arg> {
             .action(ArgAction::SetTrue),
         Arg::new(chmod_flags::NO_PRESERVE_ROOT)
             .long(chmod_flags::NO_PRESERVE_ROOT)
+            .overrides_with(chmod_flags::PRESERVE_ROOT)
             .help(t!("chmod.clap.no_preserve_root"))
             .action(ArgAction::SetTrue),
         Arg::new(chmod_flags::PRESERVE_ROOT)
             .long(chmod_flags::PRESERVE_ROOT)
+            .overrides_with(chmod_flags::NO_PRESERVE_ROOT)
             .help(t!("chmod.clap.preserve_root"))
             .action(ArgAction::SetTrue),
         Arg::new(chmod_flags::RECURSIVE)
@@ -1200,19 +1202,30 @@ mod tests {
     }
 
     #[test]
-    fn test_ct_app_arg_mutually_exclusive_preserve_root_and_no_preserve_root() {
-        let command = ct_app();
+    fn test_ct_app_preserve_root_last_option_wins() {
+        let matches = ct_app()
+            .try_get_matches_from([
+                ctcore::ct_util_name(),
+                "--preserve-root",
+                "--no-preserve-root",
+                "0644",
+                "/path/to/file",
+            ])
+            .unwrap();
+        assert!(!matches.get_flag(chmod_flags::PRESERVE_ROOT));
+        assert!(matches.get_flag(chmod_flags::NO_PRESERVE_ROOT));
 
-        // 测试用例：同时指定 --preserve-root 和 --no-preserve-root
-        let args = vec![
-            ctcore::ct_util_name(),
-            "--preserve-root",
-            "--no-preserve-root",
-            "0644",
-            "/path/to/file",
-        ];
-        let result = command.try_get_matches_from(args);
-        assert!(result.is_ok());
+        let matches = ct_app()
+            .try_get_matches_from([
+                ctcore::ct_util_name(),
+                "--no-preserve-root",
+                "--preserve-root",
+                "0644",
+                "/path/to/file",
+            ])
+            .unwrap();
+        assert!(matches.get_flag(chmod_flags::PRESERVE_ROOT));
+        assert!(!matches.get_flag(chmod_flags::NO_PRESERVE_ROOT));
     }
     // #[test]
     // fn test_ct_app_arg_required_mode_or_file() {

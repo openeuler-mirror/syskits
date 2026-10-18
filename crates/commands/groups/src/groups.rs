@@ -15,7 +15,7 @@ extern crate rust_i18n;
 use ctcore::{
     ct_entries::{CtPasswd, Locate, get_groups, gid2grp_os},
     ct_error::{CTError, CTResult, FromIo, strip_errno},
-    ct_process::{getegid, getgid},
+    ct_process::{getegid, getgid, getuid},
 };
 use rust_i18n::t;
 use std::error::Error;
@@ -318,6 +318,12 @@ fn groups_collect_for_users(users: Vec<OsString>) -> CTResult<GroupsSemantic> {
 
     if users.is_empty() {
         let stderr_start = stderr_text.len();
+        nix::errno::Errno::clear();
+        let ruid = getuid();
+        let uid_error = std::io::Error::last_os_error();
+        if ruid == libc::uid_t::MAX && uid_error.raw_os_error().unwrap_or(0) != 0 {
+            return Err(uid_error.map_err_context(|| t!("groups.errors.real_uid").to_string()));
+        }
         let rgid = getgid();
         let egid = getegid();
         let (gids, get_groups_error) = match get_groups() {

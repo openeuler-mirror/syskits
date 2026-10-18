@@ -55,16 +55,21 @@ struct GroupsClapError {
     inner: Box<dyn CTError>,
     diagnostic: Option<Vec<u8>>,
     show_usage: bool,
+    exit_code: Option<i32>,
 }
 
 impl GroupsClapError {
     #[cfg(test)]
     fn new(error: clap::Error) -> Self {
-        Self::new_with_args(error, &[])
+        Self::new_with_args(error, &[], false)
     }
 
-    fn new_with_args(error: clap::Error, args: &[OsString]) -> Self {
-        let diagnostic = match error.kind() {
+    fn new_with_args(error: clap::Error, args: &[OsString], stdout_was_closed: bool) -> Self {
+        let display_request = matches!(
+            error.kind(),
+            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+        );
+        let option_diagnostic = match error.kind() {
             clap::error::ErrorKind::UnknownArgument => args
                 .iter()
                 .skip(1)
@@ -93,16 +98,22 @@ impl GroupsClapError {
             },
             _ => None,
         };
-        let diagnostic = diagnostic.map(groups_append_help_hint);
-        let show_usage = diagnostic.is_none()
-            && !matches!(
-                error.kind(),
-                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
-            );
+        let closed_stdout_error = display_request && stdout_was_closed;
+        let diagnostic = if closed_stdout_error {
+            Some(
+                GroupsError::WriteFailed(std::io::Error::from_raw_os_error(libc::EBADF))
+                    .to_string()
+                    .into_bytes(),
+            )
+        } else {
+            option_diagnostic.map(groups_append_help_hint)
+        };
+        let show_usage = diagnostic.is_none() && !display_request;
         Self {
             inner: error.into(),
             diagnostic,
             show_usage,
+            exit_code: closed_stdout_error.then_some(1),
         }
     }
 }
@@ -166,7 +177,7 @@ impl Error for GroupsClapError {}
 
 impl CTError for GroupsClapError {
     fn code(&self) -> i32 {
-        self.inner.code()
+        self.exit_code.unwrap_or_else(|| self.inner.code())
     }
 
     fn usage(&self) -> bool {
@@ -527,7 +538,9 @@ pub fn groups_native_semantic(args: impl ctcore::Args) -> CTResult<GroupsSemanti
     let args: Vec<OsString> = args.collect();
     let matches = ct_app()
         .try_get_matches_from(args.iter().cloned())
-        .map_err(|error| GroupsClapError::new_with_args(error, &args))?;
+        .map_err(|error| {
+            GroupsClapError::new_with_args(error, &args, ctcore::ct_stdout_was_closed())
+        })?;
     let users: Vec<OsString> = matches
         .get_many::<OsString>(opt_flags::USERS)
         .map(|v| v.cloned().collect())
@@ -952,6 +965,19 @@ mod tests {
                         ctcore::ct_help_utility_name()
                     )
                 );
+                assert_eq!(error.code(), 1);
+                assert!(!error.usage());
+            }
+        }
+
+        #[test]
+        fn test_help_and_version_diagnose_closed_stdout() {
+            for option in ["--help", "--version"] {
+                let error = ct_app()
+                    .try_get_matches_from([ctcore::ct_util_name(), option])
+                    .expect_err("display request");
+                let error = crate::GroupsClapError::new_with_args(error, &[], true);
+                assert_eq!(error.to_string(), "write error: Bad file descriptor");
                 assert_eq!(error.code(), 1);
                 assert!(!error.usage());
             }

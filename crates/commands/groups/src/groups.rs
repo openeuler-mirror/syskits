@@ -13,7 +13,6 @@
 
 extern crate rust_i18n;
 use ctcore::{
-    ct_display::Quotable,
     ct_entries::{CtPasswd, Locate, get_groups_gnu, gid2grp_os},
     ct_error::{CTError, CTResult, strip_errno},
     ct_process::{getegid, getgid},
@@ -63,10 +62,6 @@ impl Display for GroupsError {
 }
 
 fn groups_quote_username(user: &OsStr) -> String {
-    if let Some(user) = user.to_str() {
-        return user.quote().to_string();
-    }
-
     let mut quoted = String::from("'");
     for &byte in user.as_bytes() {
         match byte {
@@ -366,10 +361,10 @@ mod tests {
     mod tests_groups_main {
         use crate::{
             GroupsRawEntry, groups_for_current_process, groups_for_named_user, groups_main,
-            groups_native_semantic, groups_render_classic_bytes,
+            groups_native_semantic, groups_quote_username, groups_render_classic_bytes,
         };
 
-        use std::ffi::OsString;
+        use std::ffi::{OsStr, OsString};
 
         #[test]
         fn test_groups_main_version() {
@@ -477,6 +472,18 @@ mod tests {
             assert_eq!(
                 result.stderr_text,
                 "groups: 'groups_compat_\\377_missing': no such user\n"
+            );
+        }
+
+        #[test]
+        fn test_groups_quote_username_uses_gnu_escape_style() {
+            assert_eq!(
+                groups_quote_username(OsStr::new("groups_compat_'_missing")),
+                "'groups_compat_\\'_missing'"
+            );
+            assert_eq!(
+                groups_quote_username(OsStr::new("path\\name")),
+                "'path\\\\name'"
             );
         }
 

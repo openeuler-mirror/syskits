@@ -553,12 +553,14 @@ impl Input<'_> {
     /// function prints an error message to stderr and sets the exit
     /// status code to 1.
     #[allow(unused_variables)]
-    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t, report_error: bool) {
         #[cfg(target_os = "linux")]
         {
             if let Err(e) = self.src.discard_cache(offset, len) {
-                ct_show_error!("failed to discard cache for: 'standard input': {}", e);
-                set_ct_exit_code(1);
+                if report_error {
+                    ct_show_error!("failed to discard cache for: 'standard input': {}", e);
+                    set_ct_exit_code(1);
+                }
             }
         }
         #[cfg(not(target_os = "linux"))]
@@ -968,12 +970,14 @@ impl<'a> DdOutput<'a> {
     /// this function prints an error message to stderr and sets the
     /// exit status code to 1.
     #[allow(unused_variables)]
-    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t, report_error: bool) {
         #[cfg(target_os = "linux")]
         {
             if let Err(e) = self.dst.discard_cache(offset, len) {
-                ct_show_error!("failed to discard cache for: 'standard output': {}", e);
-                set_ct_exit_code(1);
+                if report_error {
+                    ct_show_error!("failed to discard cache for: 'standard output': {}", e);
+                    set_ct_exit_code(1);
+                }
             }
         }
         #[cfg(not(target_os = "linux"))]
@@ -1048,10 +1052,10 @@ enum BlockWriter<'a> {
 }
 
 impl BlockWriter<'_> {
-    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t, report_error: bool) {
         match self {
-            Self::Unbuffered(o) => o.discard_cache(offset, len),
-            Self::Buffered(o) => o.discard_cache(offset, len),
+            Self::Unbuffered(o) => o.discard_cache(offset, len, report_error),
+            Self::Buffered(o) => o.discard_cache(offset, len, report_error),
         }
     }
 
@@ -1177,10 +1181,10 @@ fn initialize_copy_environment<'a>(
 fn perform_copy_loop(state: &mut CopyState, output: &mut BlockWriter) -> std::io::Result<()> {
     if let Some(Num::Blocks(0) | Num::Bytes(0)) = state.input.settings.count {
         if state.input.settings.iflags.is_nocache {
-            state.input.discard_cache(0, 0);
+            state.input.discard_cache(0, 0, true);
         }
         if state.input.settings.oflags.is_nocache {
-            output.discard_cache(0, 0);
+            output.discard_cache(0, 0, true);
         }
         return Ok(());
     }
@@ -1300,7 +1304,7 @@ fn handle_cache_updates(
         } else {
             rstat_update.bytes_total as i64
         };
-        state.input.discard_cache(offset, len);
+        state.input.discard_cache(offset, len, false);
     }
 
     // 处理输出缓存
@@ -1312,7 +1316,7 @@ fn handle_cache_updates(
         } else {
             wstat_update.bytes_total as i64
         };
-        output.discard_cache(offset, len);
+        output.discard_cache(offset, len, false);
     }
 
     Ok(())
@@ -1355,7 +1359,7 @@ fn finalize_copy(mut output: BlockWriter, mut state: CopyState) -> std::io::Resu
     if state.input.settings.oflags.is_direct {
         let final_written = state.write_offset.saturating_add(wstat_update.bytes_total);
         let offset = i64::try_from(final_written).unwrap_or(i64::MAX);
-        output.discard_cache(offset, 0);
+        output.discard_cache(offset, 0, true);
     }
 
     let final_wstat = state.write_stat + wstat_update;

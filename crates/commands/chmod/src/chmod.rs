@@ -610,8 +610,21 @@ impl Chmoder {
                 || self.traverse == TraverseMode::Logical
                 || (self.traverse == TraverseMode::First && is_cmdline));
 
-        // Open the directory before changing its mode, as GNU fts does when
-        // classifying an entry. All child operations are then relative to this fd.
+        let mut r = if !is_symlink || should_deref {
+            self.chmod_meta(target, file_path, target_meta.st_mode)
+        } else {
+            if self.verbose && !self.changes {
+                println!(
+                    "neither symbolic link {} nor referent has been changed",
+                    file_path.quote()
+                );
+            }
+            Ok(())
+        };
+
+        // GNU fts opens a directory for traversal after process_file has applied
+        // its new mode. Keep traversal fd-relative, but preserve that ordering so
+        // removing read permission is reported as an FTS_DNR-style error.
         let mut directory = if should_traverse {
             match target.open_directory(!is_symlink || should_deref) {
                 Ok(directory) => Some(directory),
@@ -623,25 +636,17 @@ impl Chmoder {
                     } else {
                         Err(CtSimpleError::new(
                             1,
-                            format!("cannot read directory {}: {}", file_path.quote(), err),
+                            format!(
+                                "cannot read directory {}: {}",
+                                file_path.quote(),
+                                strip_errno(&err)
+                            ),
                         ))
                     };
                 }
             }
         } else {
             None
-        };
-
-        let mut r = if !is_symlink || should_deref {
-            self.chmod_meta(target, file_path, target_meta.st_mode)
-        } else {
-            if self.verbose && !self.changes {
-                println!(
-                    "neither symbolic link {} nor referent has been changed",
-                    file_path.quote()
-                );
-            }
-            Ok(())
         };
 
         if let Some(directory) = directory.as_mut() {
@@ -674,7 +679,7 @@ impl Chmoder {
                             ct_show_error!(
                                 "cannot read directory {}: {}",
                                 file_path.quote(),
-                                nix_error_to_io(error)
+                                strip_errno(&nix_error_to_io(error))
                             );
                         }
                         r = Err(ExitCode::new(1));
@@ -868,6 +873,48 @@ mod tests {
         assert_eq!(
             DeviceInode::from_metadata(&root),
             DeviceInode::from_metadata(&followed_alias)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_recursive_mode_removing_read_reports_directory_error() {
+        if ctcore::ct_process::geteuid() == 0 {
+            return;
+        }
+
+        let temp_dir = Builder::new()
+            .prefix("chmod_directory_read_error")
+            .tempdir()
+            .unwrap();
+        let tree = temp_dir.path().join("tree");
+        fs::create_dir(&tree).unwrap();
+        let leaf = tree.join("leaf");
+        File::create(&leaf).unwrap();
+
+        let chmoder = Chmoder {
+            changes: false,
+            quiet: false,
+            verbose: false,
+            preserve_root: false,
+            recursive: true,
+            dereference: false,
+            no_dereference: false,
+            traverse: TraverseMode::Physical,
+            fmode: Some(0),
+            cmode: None,
+            diagnose_surprises: false,
+        };
+
+        let error = chmoder.process_path(&tree, true).unwrap_err().to_string();
+        assert!(error.contains("cannot read directory"), "{error}");
+        assert!(error.contains("Permission denied"), "{error}");
+        assert!(!error.contains("(os error"), "{error}");
+
+        fs::set_permissions(&tree, Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(
+            fs::metadata(&leaf).unwrap().permissions().mode() & 0o777,
+            0o644
         );
     }
 

@@ -324,8 +324,13 @@ fn groups_collect_for_users(users: Vec<OsString>) -> CTResult<GroupsSemantic> {
         if ruid == libc::uid_t::MAX && uid_error.raw_os_error().unwrap_or(0) != 0 {
             return Err(uid_error.map_err_context(|| t!("groups.errors.real_uid").to_string()));
         }
-        let rgid = getgid();
+        nix::errno::Errno::clear();
         let egid = getegid();
+        let gid_error = std::io::Error::last_os_error();
+        if egid == libc::gid_t::MAX && gid_error.raw_os_error().unwrap_or(0) != 0 {
+            return Err(gid_error.map_err_context(|| t!("groups.errors.effective_gid").to_string()));
+        }
+        let rgid = getgid();
         let (gids, get_groups_error) = match get_groups() {
             Ok(gids) => (groups_for_current_process(rgid, egid, gids), None),
             Err(err) => (

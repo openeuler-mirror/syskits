@@ -155,10 +155,17 @@ impl Num {
         }
     }
 
-    fn to_bytes(self, block_size: u64) -> u64 {
+    fn to_bytes(self, block_size: u64) -> Option<u64> {
+        let bytes = match self {
+            Self::Blocks(n) => n.checked_mul(block_size),
+            Self::Bytes(n) => Some(n),
+        }?;
+        (bytes <= i64::MAX as u64).then_some(bytes)
+    }
+
+    fn value(self) -> u64 {
         match self {
-            Self::Blocks(n) => n * block_size,
-            Self::Bytes(n) => n,
+            Self::Blocks(n) | Self::Bytes(n) => n,
         }
     }
 }

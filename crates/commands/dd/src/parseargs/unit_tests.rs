@@ -396,6 +396,20 @@ fn icf_block_error() {
 }
 
 #[test]
+fn block_offset_multiplication_overflow_is_rejected() {
+    let value = "9223372036854775807";
+    for args in [
+        &["ibs=2", "skip=9223372036854775807"][..],
+        &["obs=2", "seek=9223372036854775807"][..],
+    ] {
+        assert_eq!(
+            Parser::new().parse(args).err(),
+            Some(ParseError::NumberTooLarge(value.to_string()))
+        );
+    }
+}
+
+#[test]
 fn block_and_unblock_without_cbs_are_ignored() {
     for conversion in ["block", "unblock", "block,unblock"] {
         let conv = format!("conv={conversion}");

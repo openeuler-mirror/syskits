@@ -930,15 +930,21 @@ impl<'a> DdOutput<'a> {
             .map_err_context(|| format!("failed to open {}", filename.quote()))?;
 
         // Seek to the index in the output file, truncating if requested.
-        //
-        // Calling `set_len()` may result in an error (for example,
-        // when calling it on `/dev/null`), but we don't want to
-        // terminate the process when that happens.  Instead, we
-        // suppress the error by calling `Result::ok()`. This matches
-        // the behavior of GNU `dd` when given the command-line
-        // argument `of=/dev/null`.
         if !settings.oconv.is_notrunc {
-            dst.set_len(initial_output_len_before_seek(settings)).ok();
+            let len = initial_output_len_before_seek(settings);
+            if let Err(e) = dst.set_len(len) {
+                let metadata = dst
+                    .metadata()
+                    .map_err_context(|| format!("cannot fstat {}", filename.quote()))?;
+                if metadata.is_file() || metadata.is_dir() {
+                    ct_show_error!(
+                        "failed to truncate to {} bytes in output file {}: {}",
+                        len,
+                        filename.quote(),
+                        e
+                    );
+                }
+            }
         }
 
         Self::prepare_file(dst, settings)

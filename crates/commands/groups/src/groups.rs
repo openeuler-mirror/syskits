@@ -20,11 +20,12 @@ use ctcore::{
 };
 use rust_i18n::t;
 use std::error::Error;
-use std::fmt::Display;
+use std::fmt::{Display, Write as FmtWrite};
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use ctcore::Tool;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
+use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 
 mod opt_flags {
@@ -36,7 +37,7 @@ mod opt_flags {
 enum GroupsError {
     GetGroupsForCurrentProcessFailed(std::io::Error),
     GroupNotFound(u32),
-    UserNotFound(String),
+    UserNotFound(OsString),
 }
 
 impl Error for GroupsError {}
@@ -53,9 +54,38 @@ impl Display for GroupsError {
                 )
             }
             Self::GroupNotFound(gid) => write!(f, "cannot find name for group ID {gid}"),
-            Self::UserNotFound(user) => write!(f, "{}: no such user", user.quote()),
+            Self::UserNotFound(user) => {
+                write!(f, "{}: no such user", groups_quote_username(user))
+            }
         }
     }
+}
+
+fn groups_quote_username(user: &OsStr) -> String {
+    if let Some(user) = user.to_str() {
+        return user.quote().to_string();
+    }
+
+    let mut quoted = String::from("'");
+    for &byte in user.as_bytes() {
+        match byte {
+            b'\x07' => quoted.push_str("\\a"),
+            b'\x08' => quoted.push_str("\\b"),
+            b'\x0c' => quoted.push_str("\\f"),
+            b'\n' => quoted.push_str("\\n"),
+            b'\r' => quoted.push_str("\\r"),
+            b'\t' => quoted.push_str("\\t"),
+            b'\x0b' => quoted.push_str("\\v"),
+            b'\\' | b'\'' => {
+                quoted.push('\\');
+                quoted.push(char::from(byte));
+            }
+            b' '..=b'~' => quoted.push(char::from(byte)),
+            _ => write!(quoted, "\\{byte:03o}").unwrap(),
+        }
+    }
+    quoted.push('\'');
+    quoted
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,6 +111,7 @@ pub fn ct_app() -> Command {
         .arg(
             Arg::new(opt_flags::USERS)
                 .action(ArgAction::Append)
+                .value_parser(OsStringValueParser::new())
                 .value_name(opt_flags::USERS)
                 .value_hint(clap::ValueHint::Username),
         )
@@ -142,7 +173,7 @@ fn groups_for_named_user(primary_gid: u32, groups: Vec<u32>) -> Vec<u32> {
     result
 }
 
-fn groups_collect_for_users(users: Vec<String>) -> CTResult<GroupsSemantic> {
+fn groups_collect_for_users(users: Vec<OsString>) -> CTResult<GroupsSemantic> {
     let mut entries = Vec::new();
     let mut stderr_text = String::new();
     let mut exit_code = 0;
@@ -168,7 +199,7 @@ fn groups_collect_for_users(users: Vec<String>) -> CTResult<GroupsSemantic> {
         entries.push(GroupsEntry { user: None, groups });
     } else {
         for user in users {
-            match CtPasswd::locate_name(user.as_str()) {
+            match CtPasswd::locate_name_os(&user) {
                 Ok(passwd) => {
                     let reverse_passwd = CtPasswd::locate(passwd.uid).ok();
                     if reverse_passwd.is_none() {
@@ -176,13 +207,13 @@ fn groups_collect_for_users(users: Vec<String>) -> CTResult<GroupsSemantic> {
                     }
                     let group_passwd = reverse_passwd.as_ref().unwrap_or(&passwd);
                     let gids =
-                        groups_for_named_user(passwd.gid, group_passwd.belongs_to_name(&user));
+                        groups_for_named_user(passwd.gid, group_passwd.belongs_to_name_os(&user));
                     let groups = gids
                         .iter()
                         .map(|gid| groups_infallible_gid2grp(gid, &mut stderr_text, &mut exit_code))
                         .collect();
                     entries.push(GroupsEntry {
-                        user: Some(user),
+                        user: Some(user.to_string_lossy().into_owned()),
                         groups,
                     });
                 }
@@ -207,9 +238,9 @@ pub fn groups_native_semantic(args: impl ctcore::Args) -> CTResult<GroupsSemanti
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
-    let users: Vec<String> = matches
-        .get_many::<String>(opt_flags::USERS)
-        .map(|v| v.map(ToString::to_string).collect())
+    let users: Vec<OsString> = matches
+        .get_many::<OsString>(opt_flags::USERS)
+        .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
     groups_collect_for_users(users)
@@ -381,6 +412,25 @@ mod tests {
                 format!("groups: '{}': no such user\n", numeric_name)
             );
             assert!(result.classic_text.is_empty());
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_groups_non_utf8_username_uses_raw_argument_bytes() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let args = [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from_vec(b"groups_compat_\xff_missing".to_vec()),
+            ];
+            let result = groups_native_semantic(args.into_iter()).expect("semantic");
+
+            assert_eq!(result.exit_code, 1);
+            assert!(result.entries.is_empty());
+            assert_eq!(
+                result.stderr_text,
+                "groups: 'groups_compat_\\377_missing': no such user\n"
+            );
         }
     }
 

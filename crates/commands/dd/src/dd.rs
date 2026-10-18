@@ -732,7 +732,17 @@ enum Dest {
 impl Dest {
     fn fsync(&mut self) -> io::Result<()> {
         match self {
-            Self::Stdout(stdout) => stdout.flush(),
+            Self::Stdout(stdout) => {
+                stdout.flush()?;
+                #[cfg(target_os = "linux")]
+                {
+                    nix::unistd::fsync(stdout.as_raw_fd()).map_err(io::Error::from)
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    Ok(())
+                }
+            }
             Self::File(f, _) => {
                 f.flush()?;
                 f.sync_all()

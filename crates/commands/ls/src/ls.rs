@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::error::Error;
 #[cfg(unix)]
 use std::ffi::CString;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::{Display, Write as FmtWrite};
 use std::fs::{self, DirEntry, FileType, Metadata, ReadDir};
 use std::io::{BufWriter, ErrorKind, Write, stdout};
@@ -1527,8 +1527,12 @@ fn ls_semantic_row(
         name: name.to_string_lossy().into_owned(),
         mode: metadata.as_ref().map(|md| display_permissions(md, true)),
         inode: metadata.as_ref().and_then(semantic_inode),
-        user: metadata.as_ref().map(|md| display_uname(md, config)),
-        group: metadata.as_ref().map(|md| display_group(md, config)),
+        user: metadata
+            .as_ref()
+            .map(|md| display_uname(md, config).to_string_lossy().into_owned()),
+        group: metadata
+            .as_ref()
+            .map(|md| display_group(md, config).to_string_lossy().into_owned()),
         file_type: ls_file_type_name(file_type.as_ref()).into(),
         size,
         size_display,
@@ -2954,8 +2958,8 @@ fn display_dir_entry_size<W: Write>(
         };
         (
             display_symlink_count(mdata).len(),
-            display_uname(mdata, config).len(),
-            display_group(mdata, config).len(),
+            display_uname(mdata, config).as_bytes().len(),
+            display_group(mdata, config).as_bytes().len(),
             size_len,
             major_len,
             minor_len,
@@ -2971,6 +2975,20 @@ fn pad_left(string: &str, cnt: usize) -> String {
 
 fn pad_right(string: &str, cnt: usize) -> String {
     format!("{string:<cnt$}")
+}
+
+#[cfg(unix)]
+fn write_os_str_padded<W: Write>(
+    output: &mut W,
+    value: &OsStr,
+    width: usize,
+) -> std::io::Result<()> {
+    let bytes = value.as_bytes();
+    output.write_all(bytes)?;
+    for _ in bytes.len()..width {
+        output.write_all(b" ")?;
+    }
+    Ok(())
 }
 
 fn get_raw_block_size(md: &Metadata) -> u64 {
@@ -3518,9 +3536,9 @@ fn display_item_long<W: Write>(
     quoted: bool,
     any_has_acl_or_context: bool,
 ) -> CTResult<()> {
-    let mut output_display: String = String::new();
+    let mut output_display = Vec::new();
     if ls_config.is_dired {
-        output_display += "  ";
+        output_display.extend_from_slice(b"  ");
     }
     if let Some(md) = item.get_metadata(output) {
         let is_acl_set = ls_has_acl(item.display_name.as_os_str());
@@ -3553,21 +3571,21 @@ fn display_item_long<W: Write>(
         .unwrap();
 
         if ls_config.long.is_owner {
-            write!(
-                output_display,
-                " {}",
-                pad_right(&display_uname(md, ls_config), padding.uname)
-            )
-            .unwrap();
+            output_display.push(b' ');
+            write_os_str_padded(
+                &mut output_display,
+                &display_uname(md, ls_config),
+                padding.uname,
+            )?;
         }
 
         if ls_config.long.is_group {
-            write!(
-                output_display,
-                " {}",
-                pad_right(&display_group(md, ls_config), padding.group)
-            )
-            .unwrap();
+            output_display.push(b' ');
+            write_os_str_padded(
+                &mut output_display,
+                &display_group(md, ls_config),
+                padding.group,
+            )?;
         }
 
         if ls_config.is_context {
@@ -3582,12 +3600,12 @@ fn display_item_long<W: Write>(
         // 在 GNU/Hurd 中，Author 与 owner 只有区别，因此我们重用了
         // owner，因为 Rust 目前不支持 GNU/Hurd。
         if ls_config.long.is_author {
-            write!(
-                output_display,
-                " {}",
-                pad_right(&display_uname(md, ls_config), padding.uname)
-            )
-            .unwrap();
+            output_display.push(b' ');
+            write_os_str_padded(
+                &mut output_display,
+                &display_uname(md, ls_config),
+                padding.uname,
+            )?;
         }
 
         match display_len_or_rdev(md, ls_config) {
@@ -3746,7 +3764,7 @@ fn display_item_long<W: Write>(
         )
         .unwrap();
     }
-    write!(output, "{output_display}")?;
+    output.write_all(&output_display)?;
 
     Ok(())
 }
@@ -3757,51 +3775,57 @@ fn get_inode(metadata: &Metadata) -> String {
 }
 
 #[cfg(unix)]
-fn cached_uid2usr(uid: u32) -> String {
-    static UID_CACHE: Lazy<Mutex<HashMap<u32, String>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+fn cached_uid2usr(uid: u32) -> OsString {
+    static UID_CACHE: Lazy<Mutex<HashMap<u32, OsString>>> =
+        Lazy::new(|| Mutex::new(HashMap::new()));
 
     let mut uid_cache = UID_CACHE.lock().unwrap();
     uid_cache
         .entry(uid)
-        .or_insert_with(|| ct_entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()))
+        .or_insert_with(|| {
+            ct_entries::uid2usr_os(uid).unwrap_or_else(|_| OsString::from(uid.to_string()))
+        })
         .clone()
 }
 
 #[cfg(unix)]
-fn display_uname(metadata: &Metadata, config: &LsConfig) -> String {
+fn display_uname(metadata: &Metadata, config: &LsConfig) -> OsString {
     match config.long.is_numeric_uid_gid {
-        true => metadata.uid().to_string(),
+        true => OsString::from(metadata.uid().to_string()),
         false => cached_uid2usr(metadata.uid()),
     }
 }
 
 #[cfg(target_os = "linux")]
-fn cached_gid2grp(gid: u32) -> String {
-    static GID_CACHE: Lazy<Mutex<HashMap<u32, String>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+fn cached_gid2grp(gid: u32) -> OsString {
+    static GID_CACHE: Lazy<Mutex<HashMap<u32, OsString>>> =
+        Lazy::new(|| Mutex::new(HashMap::new()));
 
     let mut gid_cache_mutex = GID_CACHE.lock().unwrap();
     gid_cache_mutex
         .entry(gid)
-        .or_insert_with(|| ct_entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()))
+        .or_insert_with(|| {
+            ct_entries::gid2grp_os(gid).unwrap_or_else(|_| OsString::from(gid.to_string()))
+        })
         .clone()
 }
 
 #[cfg(target_os = "linux")]
-fn display_group(metadata: &Metadata, config: &LsConfig) -> String {
+fn display_group(metadata: &Metadata, config: &LsConfig) -> OsString {
     match config.long.is_numeric_uid_gid {
-        true => metadata.gid().to_string(),
+        true => OsString::from(metadata.gid().to_string()),
         false => cached_gid2grp(metadata.gid()),
     }
 }
 
 #[cfg(target_os = "windows")]
-fn display_uname(_metadata: &Metadata, _config: &LsConfig) -> String {
-    "somebody".to_string()
+fn display_uname(_metadata: &Metadata, _config: &LsConfig) -> OsString {
+    OsString::from("somebody")
 }
 
 #[cfg(target_os = "windows")]
-fn display_group(_metadata: &Metadata, _config: &LsConfig) -> String {
-    "somegroup".to_string()
+fn display_group(_metadata: &Metadata, _config: &LsConfig) -> OsString {
+    OsString::from("somegroup")
 }
 
 // get_time 的实现是分开的，因为某些选项，例如
@@ -4639,6 +4663,16 @@ mod tests {
         ENV_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn padded_nss_name_preserves_non_utf8_bytes() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let mut output = Vec::new();
+        write_os_str_padded(&mut output, OsStr::from_bytes(b"u\xff"), 3).unwrap();
+        assert_eq!(output, b"u\xff ");
     }
 
     #[test]

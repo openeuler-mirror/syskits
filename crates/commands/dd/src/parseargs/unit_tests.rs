@@ -12,9 +12,7 @@
 use super::*;
 
 use crate::StatusLevel;
-use crate::conversion_tables::{
-    ASCII_TO_EBCDIC_UCASE_TO_LCASE, ASCII_TO_IBM, EBCDIC_TO_ASCII_LCASE_TO_UCASE,
-};
+use crate::conversion_tables::*;
 use crate::parseargs::Parser;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
@@ -465,6 +463,27 @@ fn parse_icf_tokens_elu() {
             ..Default::default()
         }
     );
+}
+
+#[test]
+fn combined_charset_case_tables_use_gnu_composition_order() {
+    for conversion in [Conversion::Ascii, Conversion::Ebcdic, Conversion::Ibm] {
+        for case in [Case::Lower, Case::Upper] {
+            let actual = get_ctable(Some(conversion), Some(case)).unwrap();
+            for byte in 0u8..=u8::MAX {
+                let case_table = match case {
+                    Case::Lower => &ASCII_UCASE_TO_LCASE,
+                    Case::Upper => &ASCII_LCASE_TO_UCASE,
+                };
+                let expected = match conversion {
+                    Conversion::Ascii => case_table[EBCDIC_TO_ASCII[byte as usize] as usize],
+                    Conversion::Ebcdic => ASCII_TO_EBCDIC[case_table[byte as usize] as usize],
+                    Conversion::Ibm => ASCII_TO_IBM[case_table[byte as usize] as usize],
+                };
+                assert_eq!(actual[byte as usize], expected);
+            }
+        }
+    }
 }
 
 #[test]

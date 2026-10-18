@@ -41,6 +41,8 @@ pub enum ParseError {
 }
 
 const MAX_DD_NUMBER: u64 = i64::MAX as u64;
+const MAX_BLOCK_SIZE: u64 = isize::MAX as u64 - 1;
+const MAX_CONVERSION_BLOCK_SIZE: u64 = isize::MAX as u64;
 
 /// Contains a temporary state during parsing of the arguments
 #[derive(Debug, PartialEq)]
@@ -300,6 +302,14 @@ impl Parser {
         let bytes = parse_bytes_with_opt_multiplier(val)?;
         if bytes == 0 {
             return Err(ParseError::InvalidNumber(val.to_string()));
+        }
+        let max = if arg == "cbs" {
+            MAX_CONVERSION_BLOCK_SIZE
+        } else {
+            MAX_BLOCK_SIZE
+        };
+        if bytes > max {
+            return Err(ParseError::BsOutOfRange(arg.to_string()));
         }
         bytes
             .try_into()
@@ -728,7 +738,10 @@ impl Default for Parser {
 #[cfg(test)]
 mod tests {
     use crate::Num;
-    use crate::parseargs::{ParseError, Parser, parse_bytes_with_opt_multiplier};
+    use crate::parseargs::{
+        MAX_BLOCK_SIZE, MAX_CONVERSION_BLOCK_SIZE, ParseError, Parser,
+        parse_bytes_with_opt_multiplier,
+    };
     use std::matches;
     const BIG: &str = "9999999999999999999999999999999999999999999999999999999999999";
 
@@ -767,6 +780,29 @@ mod tests {
         for arg in ["+K", " K", "++1", "+ 1", "-0", " -0"] {
             assert!(parse_bytes_with_opt_multiplier(arg).is_err());
         }
+    }
+
+    #[test]
+    fn test_parse_block_size_limits() {
+        for arg in ["bs", "ibs", "obs"] {
+            assert_eq!(
+                Parser::parse_bytes(arg, &MAX_BLOCK_SIZE.to_string()),
+                Ok(MAX_BLOCK_SIZE as usize)
+            );
+            assert_eq!(
+                Parser::parse_bytes(arg, &(MAX_BLOCK_SIZE + 1).to_string()),
+                Err(ParseError::BsOutOfRange(arg.to_string()))
+            );
+        }
+
+        assert_eq!(
+            Parser::parse_bytes("cbs", &MAX_CONVERSION_BLOCK_SIZE.to_string()),
+            Ok(MAX_CONVERSION_BLOCK_SIZE as usize)
+        );
+        assert_eq!(
+            Parser::parse_bytes("cbs", &(MAX_CONVERSION_BLOCK_SIZE + 1).to_string()),
+            Err(ParseError::BsOutOfRange("cbs".to_string()))
+        );
     }
 
     #[test]

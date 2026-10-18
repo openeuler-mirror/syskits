@@ -59,9 +59,9 @@ impl<'a> DDBufferedOutput<'a> {
         self.inner.sync()
     }
 
-    /// Truncate the underlying file to the current stream position, if possible.
-    pub(crate) fn truncate(&mut self) -> std::io::Result<()> {
-        self.inner.dst.truncate()
+    /// Set the underlying file to the current stream position, if possible.
+    pub(crate) fn truncate(&mut self, allow_shrink: bool) -> std::io::Result<()> {
+        self.inner.dst.truncate(allow_shrink)
     }
 
     /// Write the given bytes one block at a time.

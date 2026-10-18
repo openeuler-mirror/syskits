@@ -796,12 +796,17 @@ impl Dest {
         }
     }
 
-    /// Truncate the underlying file to the current stream position, if possible.
-    fn truncate(&mut self) -> io::Result<()> {
+    /// Set the underlying file to the current stream position, if possible.
+    fn truncate(&mut self, allow_shrink: bool) -> io::Result<()> {
         match self {
             Self::File(f, _) => {
                 let pos = f.stream_position()?;
-                f.set_len(pos)
+                let metadata = f.metadata()?;
+                if allow_shrink || metadata.is_file() && metadata.len() < pos {
+                    f.set_len(pos)
+                } else {
+                    Ok(())
+                }
             }
             _ => Ok(()),
         }
@@ -1055,9 +1060,9 @@ impl<'a> DdOutput<'a> {
         }
     }
 
-    /// Truncate the underlying file to the current stream position, if possible.
-    fn truncate(&mut self) -> std::io::Result<()> {
-        self.dst.truncate()
+    /// Set the underlying file to the current stream position, if possible.
+    fn truncate(&mut self, allow_shrink: bool) -> std::io::Result<()> {
+        self.dst.truncate(allow_shrink)
     }
 }
 
@@ -1097,7 +1102,7 @@ impl BlockWriter<'_> {
     }
 
     /// Truncate the file to the final cursor location.
-    fn truncate(&mut self) {
+    fn truncate(&mut self, allow_shrink: bool) {
         // Calling `set_len()` may result in an error (for example,
         // when calling it on `/dev/null`), but we don't want to
         // terminate the process when that happens. Instead, we
@@ -1105,8 +1110,8 @@ impl BlockWriter<'_> {
         // the behavior of GNU `dd` when given the command-line
         // argument `of=/dev/null`.
         match self {
-            Self::Unbuffered(o) => o.truncate().ok(),
-            Self::Buffered(o) => o.truncate().ok(),
+            Self::Unbuffered(o) => o.truncate(allow_shrink).ok(),
+            Self::Buffered(o) => o.truncate(allow_shrink).ok(),
         };
     }
 
@@ -1395,8 +1400,8 @@ fn finalize_copy(mut output: BlockWriter, mut state: CopyState) -> std::io::Resu
 
     // Dense writes extend the file themselves. A final size adjustment is
     // needed only after output was produced, notably for sparse seeks.
-    if !state.input.settings.oconv.is_notrunc && final_wstat.bytes_total != 0 {
-        output.truncate();
+    if final_wstat.bytes_total != 0 {
+        output.truncate(!state.input.settings.oconv.is_notrunc);
     }
 
     dur += start_time.elapsed();

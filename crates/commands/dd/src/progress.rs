@@ -49,7 +49,7 @@ use std::{
     error::Error,
     sync::{
         Arc,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
 };
 
@@ -476,17 +476,22 @@ pub(crate) fn gen_prog_updater(
 ///
 /// The closure also registers a signal handler for `SIGUSR1`. When
 /// the `SIGUSR1` signal is sent to this process, the transfer
-/// statistics are printed to stderr.
+/// statistics are printed to stderr. `SIGINT` prints final statistics
+/// before terminating with the signal's default action.
 #[cfg(target_os = "linux")]
 pub(crate) fn gen_prog_updater(
     rx: mpsc::Receiver<ProgUpdate>,
     print_level: Option<StatusLevel>,
+    interrupted: Arc<AtomicBool>,
 ) -> impl Fn() {
     // TODO: SIGINFO: Trigger progress line reprint. BSD-style Linux only.
     fn posixly_correct() -> bool {
         env::var("POSIXLY_CORRECT").is_ok()
     }
-    fn register_linux_signal_handler(signal_count: Arc<AtomicUsize>) -> Result<(), Box<dyn Error>> {
+    fn register_linux_signal_handlers(
+        signal_count: Arc<AtomicUsize>,
+        interrupted: Arc<AtomicBool>,
+    ) -> Result<(), Box<dyn Error>> {
         if !posixly_correct() {
             unsafe {
                 signal_hook::low_level::register(signal::SIGUSR1, move || {
@@ -494,19 +499,19 @@ pub(crate) fn gen_prog_updater(
                 })?;
             }
         }
+        signal_hook::flag::register(signal::SIGINT, interrupted)?;
 
         Ok(())
     }
     // --------------------------------------------------------------
+    let signal_count = Arc::new(AtomicUsize::new(0));
+    register_linux_signal_handlers(signal_count.clone(), interrupted.clone()).unwrap_or_else(|e| {
+        if Some(StatusLevel::None) != print_level {
+            eprintln!("Internal dd Warning: Unable to register signal handler \n\t{e}");
+        }
+    });
+
     move || {
-        let signal_count = Arc::new(AtomicUsize::new(0));
-
-        register_linux_signal_handler(signal_count.clone()).unwrap_or_else(|e| {
-            if Some(StatusLevel::None) != print_level {
-                eprintln!("Internal dd Warning: Unable to register signal handler \n\t{e}");
-            }
-        });
-
         // Holds the state of whether we have printed the current progress.
         // This is needed so that we know whether or not to print a newline
         // character before outputting non-progress data.
@@ -540,8 +545,18 @@ pub(crate) fn gen_prog_updater(
                 current.print_final_stats(print_level, progress_printed);
                 progress_printed = false;
             }
+            if interrupted.swap(false, Ordering::Relaxed) {
+                current.print_final_stats(print_level, progress_printed);
+                terminate_on_sigint();
+            }
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn terminate_on_sigint() -> ! {
+    let _ = signal_hook::low_level::emulate_default_handler(signal::SIGINT);
+    signal_hook::low_level::exit(128 + signal::SIGINT);
 }
 
 #[cfg(test)]

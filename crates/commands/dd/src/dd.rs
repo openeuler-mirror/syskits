@@ -29,6 +29,8 @@ use nix::fcntl::FcntlArg::{F_GETFL, F_SETFL};
 #[cfg(target_os = "linux")]
 use nix::fcntl::OFlag;
 use parseargs::Parser;
+#[cfg(target_os = "linux")]
+use progress::terminate_on_sigint;
 use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
 
 use clap::{Arg, Command, builder::ValueParser, crate_version};
@@ -1165,6 +1167,8 @@ struct CopyState<'a> {
     read_offset: u64,
     write_offset: u128,
     alarm: Alarm,
+    #[cfg(target_os = "linux")]
+    interrupted: Arc<AtomicBool>,
 }
 
 /// 初始化复制环境
@@ -1190,6 +1194,15 @@ fn initialize_copy_environment<'a>(
 
     // 设置进度报告
     let (prog_tx, rx) = mpsc::channel();
+    #[cfg(target_os = "linux")]
+    let interrupted = Arc::new(AtomicBool::new(false));
+    #[cfg(target_os = "linux")]
+    let output_thread = thread::spawn(gen_prog_updater(
+        rx,
+        input.settings.status,
+        interrupted.clone(),
+    ));
+    #[cfg(target_os = "windows")]
     let output_thread = thread::spawn(gen_prog_updater(rx, input.settings.status));
     let alarm = Alarm::with_interval(Duration::from_secs(1));
 
@@ -1217,6 +1230,8 @@ fn initialize_copy_environment<'a>(
         read_offset,
         write_offset,
         alarm,
+        #[cfg(target_os = "linux")]
+        interrupted,
     };
 
     (state, output)
@@ -1234,15 +1249,31 @@ fn perform_copy_loop(state: &mut CopyState, output: &mut BlockWriter) -> std::io
     }
 
     while below_count_limit(&state.input.settings.count, &state.read_stat) {
+        #[cfg(target_os = "linux")]
+        terminate_if_interrupted(state);
+
         // 读取数据块
         if !read_and_process_block(state, output)? {
             break;
         }
 
+        #[cfg(target_os = "linux")]
+        terminate_if_interrupted(state);
+
         // 更新进度
         update_progress(state);
     }
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn terminate_if_interrupted(state: &CopyState) {
+    if state.interrupted.swap(false, Relaxed) {
+        let duration = state.duration + state.start_time.elapsed();
+        ProgUpdate::new(state.read_stat, state.write_stat, duration, false)
+            .print_final_stats(state.input.settings.status, false);
+        terminate_on_sigint();
+    }
 }
 
 /// 读取并处理一个数据块

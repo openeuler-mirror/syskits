@@ -90,7 +90,7 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
                 return Err(err);
             }
         } else {
-            groups.truncate(ngroups.try_into().unwrap());
+            groups.truncate(res.try_into().unwrap());
             return Ok(groups);
         }
     }

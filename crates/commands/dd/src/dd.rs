@@ -1131,6 +1131,8 @@ fn initialize_copy_environment<'a>(
     output: DdOutput<'a>,
 ) -> (CopyState<'a>, BlockWriter<'a>) {
     let bsize = calc_bsize(input.settings.ibs, output.settings.obs);
+    let read_offset = input.settings.skip;
+    let write_offset = u128::from(output.settings.seek);
 
     // 按需分配缓冲区。
     // 如果 count=0，主循环将直接退出，此时分配巨大的内存不仅无用，
@@ -1170,8 +1172,8 @@ fn initialize_copy_environment<'a>(
         duration: Duration::ZERO,
         prog_tx,
         output_thread,
-        read_offset: 0,
-        write_offset: 0,
+        read_offset,
+        write_offset,
         alarm,
     };
 

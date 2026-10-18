@@ -46,6 +46,7 @@ enum GroupsError {
     GroupNotFound(u32),
     UserNotFound(OsString),
     WriteFailed(std::io::Error),
+    WriteFailedWithoutDetail,
 }
 
 impl Error for GroupsError {}
@@ -271,6 +272,7 @@ impl Display for GroupsError {
                 };
                 write!(f, "{}: {detail}", t!("groups.errors.write_error"))
             }
+            Self::WriteFailedWithoutDetail => write!(f, "{}", t!("groups.errors.write_error")),
         }
     }
 }
@@ -613,14 +615,15 @@ fn groups_write_stdout(
     writer: &mut impl IoWrite,
     bytes: &[u8],
     stdout_was_closed: bool,
+    write_error_detail: bool,
 ) -> CTResult<()> {
     let result = if stdout_was_closed {
         Err(std::io::Error::from_raw_os_error(libc::EBADF))
     } else {
         writer.write_all(bytes)
     };
-    groups_handle_stdout_result(result)?;
-    groups_handle_stdout_result(writer.flush())
+    groups_handle_stdout_result(result, write_error_detail)?;
+    groups_handle_stdout_result(writer.flush(), write_error_detail)
 }
 
 fn groups_write_stderr(writer: &mut impl IoWrite, bytes: &[u8]) -> CTResult<()> {
@@ -642,7 +645,10 @@ fn groups_handle_stderr_result(result: std::io::Result<()>) -> CTResult<()> {
     }
 }
 
-fn groups_handle_stdout_result(result: std::io::Result<()>) -> CTResult<()> {
+fn groups_handle_stdout_result(
+    result: std::io::Result<()>,
+    write_error_detail: bool,
+) -> CTResult<()> {
     match result {
         Err(error)
             if error.kind() == std::io::ErrorKind::BrokenPipe
@@ -650,7 +656,14 @@ fn groups_handle_stdout_result(result: std::io::Result<()>) -> CTResult<()> {
         {
             groups_terminate_with_sigpipe()
         }
-        Err(error) => Err(Box::new(GroupsError::WriteFailed(error))),
+        Err(error) => {
+            let error = if write_error_detail {
+                GroupsError::WriteFailed(error)
+            } else {
+                GroupsError::WriteFailedWithoutDetail
+            };
+            Err(Box::new(error))
+        }
         Ok(()) => Ok(()),
     }
 }
@@ -682,14 +695,19 @@ impl Tool for Groups {
                 let mut stdout = std::io::stdout().lock();
                 let mut stderr = std::io::stderr().lock();
                 let mut stdout_error = None;
-                for event in &semantic.output_events {
+                for (event_index, event) in semantic.output_events.iter().enumerate() {
                     match event {
                         GroupsOutputEvent::Stdout(range) => {
                             if stdout_error.is_none() {
+                                let stdout_was_closed = ctcore::ct_stdout_was_closed();
+                                let diagnostic_follows = semantic.output_events[event_index + 1..]
+                                    .iter()
+                                    .any(|event| matches!(event, GroupsOutputEvent::Stderr(_)));
                                 if let Err(error) = groups_write_stdout(
                                     &mut stdout,
                                     &semantic.classic_bytes[range.clone()],
-                                    ctcore::ct_stdout_was_closed(),
+                                    stdout_was_closed,
+                                    stdout_was_closed || !diagnostic_follows,
                                 ) {
                                     stdout_error = Some(error);
                                 }
@@ -964,10 +982,21 @@ mod tests {
 
         #[test]
         fn test_groups_closed_stdout_reports_bad_file_descriptor() {
-            let error = crate::groups_write_stdout(&mut std::io::sink(), b"root\n", true)
+            let error = crate::groups_write_stdout(&mut std::io::sink(), b"root\n", true, true)
                 .expect_err("closed stdout");
             assert_eq!(error.code(), 1);
             assert_eq!(error.to_string(), "write error: Bad file descriptor");
+        }
+
+        #[test]
+        fn test_groups_buffered_write_error_omits_stale_errno() {
+            let error = crate::groups_handle_stdout_result(
+                Err(std::io::Error::from_raw_os_error(libc::ENOSPC)),
+                false,
+            )
+            .expect_err("write error");
+            assert_eq!(error.code(), 1);
+            assert_eq!(error.to_string(), "write error");
         }
     }
 

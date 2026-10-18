@@ -381,6 +381,21 @@ enum FileTarget<'a> {
     At { dir_fd: i32, name: &'a OsStr },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DeviceInode {
+    device: ctcore::libc::dev_t,
+    inode: ctcore::libc::ino_t,
+}
+
+impl DeviceInode {
+    fn from_metadata(metadata: &FileStat) -> Self {
+        Self {
+            device: metadata.st_dev,
+            inode: metadata.st_ino,
+        }
+    }
+}
+
 impl FileTarget<'_> {
     fn metadata(self, follow_symlink: bool) -> io::Result<FileStat> {
         let result = match self {
@@ -469,21 +484,31 @@ impl Chmoder {
 
     fn chmod(&self, files: &[OsString]) -> CTResult<()> {
         let mut failed = false;
+        let root_dev_ino = if self.recursive && self.preserve_root {
+            let root_path = Path::new("/");
+            let metadata = FileTarget::Path(root_path)
+                .metadata(false)
+                .map_err(|error| {
+                    CtSimpleError::new(
+                        1,
+                        format!(
+                            "failed to get attributes of {}: {}",
+                            root_path.quote(),
+                            error
+                        ),
+                    )
+                })?;
+            Some(DeviceInode::from_metadata(&metadata))
+        } else {
+            None
+        };
 
         for name in files {
             let file_path = Path::new(name);
 
-            if self.recursive && self.preserve_root && file_path == Path::new("/") {
-                return Err(CtSimpleError::new(
-                    1,
-                    format!(
-                        "it is dangerous to operate recursively on {}\nchmod: use --no-preserve-root to override this failsafe",
-                        file_path.quote()
-                    ),
-                ));
-            }
-
-            if let Err(error) = self.process_path(file_path, true) {
+            if let Err(error) =
+                self.process_target(FileTarget::Path(file_path), file_path, true, root_dev_ino)
+            {
                 let message = error.to_string();
                 if !message.is_empty() {
                     ct_show_error!("{message}");
@@ -499,8 +524,9 @@ impl Chmoder {
         }
     }
 
+    #[cfg(test)]
     fn process_path(&self, file_path: &Path, is_cmdline: bool) -> CTResult<()> {
-        self.process_target(FileTarget::Path(file_path), file_path, is_cmdline)
+        self.process_target(FileTarget::Path(file_path), file_path, is_cmdline, None)
     }
 
     fn process_target(
@@ -508,6 +534,7 @@ impl Chmoder {
         target: FileTarget<'_>,
         file_path: &Path,
         is_cmdline: bool,
+        root_dev_ino: Option<DeviceInode>,
     ) -> CTResult<()> {
         let symlink_meta = match target.metadata(false) {
             Ok(metadata) => metadata,
@@ -554,6 +581,25 @@ impl Chmoder {
         } else {
             symlink_meta
         };
+
+        if root_dev_ino == Some(DeviceInode::from_metadata(&target_meta)) {
+            let message = if file_path.as_os_str() == OsStr::new("/") {
+                format!(
+                    "it is dangerous to operate recursively on {}",
+                    file_path.quote()
+                )
+            } else {
+                format!(
+                    "it is dangerous to operate recursively on {} (same as {})",
+                    file_path.quote(),
+                    Path::new("/").quote()
+                )
+            };
+            return Err(CtSimpleError::new(
+                1,
+                format!("{message}\nchmod: use --no-preserve-root to override this failsafe"),
+            ));
+        }
 
         let target_is_dir = (target_meta.st_mode & ctcore::libc::S_IFMT) == ctcore::libc::S_IFDIR;
         let should_traverse = self.recursive
@@ -616,6 +662,7 @@ impl Chmoder {
                                 },
                                 &child_path,
                                 false,
+                                root_dev_ino,
                             )
                             .and(r);
                     }
@@ -794,6 +841,28 @@ mod tests {
         // 测试 execute 方法
         let args = vec![OsString::from("chmod"), OsString::from("--help")];
         assert!(tool.execute(&args).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_root_aliases_have_same_device_and_inode() {
+        use std::os::unix::fs::symlink;
+
+        let root = FileTarget::Path(Path::new("/")).metadata(false).unwrap();
+        let dot_alias = FileTarget::Path(Path::new("/./")).metadata(false).unwrap();
+        assert_eq!(
+            DeviceInode::from_metadata(&root),
+            DeviceInode::from_metadata(&dot_alias)
+        );
+
+        let temp_dir = Builder::new().prefix("chmod_root_alias").tempdir().unwrap();
+        let symlink_alias = temp_dir.path().join("root");
+        symlink("/", &symlink_alias).unwrap();
+        let followed_alias = FileTarget::Path(&symlink_alias).metadata(true).unwrap();
+        assert_eq!(
+            DeviceInode::from_metadata(&root),
+            DeviceInode::from_metadata(&followed_alias)
+        );
     }
 
     #[cfg(test)]

@@ -43,6 +43,26 @@ fn vdir_quotes_non_utf8_file_name_bytes() {
     assert_eq!(output.stdout, b"bad\\377name\n");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn vdir_keeps_non_utf8_hidden_names_hidden() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let hidden = std::ffi::OsString::from_vec(b".hidden\xff".to_vec());
+    fs::write(temp_dir.path().join(hidden), b"").expect("write hidden fixture");
+    fs::write(temp_dir.path().join("visible"), b"").expect("write visible fixture");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["vdir", "-1"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert_eq!(output.stdout, b"visible\n");
+}
+
 #[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");

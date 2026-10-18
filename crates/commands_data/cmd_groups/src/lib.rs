@@ -31,12 +31,13 @@ impl GroupsIntent {
 impl GroupsCore {
     fn run_core(
         intent: &GroupsIntent,
-    ) -> Result<(CtValue, String, String, i32), CtDiagnosticError> {
+    ) -> Result<(CtValue, String, Vec<u8>, String, i32), CtDiagnosticError> {
         let semantic = ct_groups::groups_native_semantic(intent.argv.iter().cloned())
             .map_err(|err| CtDiagnosticError::simple(err.to_string()).with_code(err.code()))?;
         Ok((
             semantic_to_value(&semantic),
             semantic.classic_text,
+            semantic.classic_bytes,
             semantic.stderr_text,
             semantic.exit_code,
         ))
@@ -83,12 +84,13 @@ impl DataCommand for CmdGroups {
         _ctx: &DataEngineContext,
     ) -> Result<CtPipelineData, CtDiagnosticError> {
         let intent = GroupsIntent::from_call(call)?;
-        let (value, classic_text, stderr_text, exit_code) = GroupsCore::run_core(&intent)?;
+        let (value, classic_text, classic_bytes, stderr_text, exit_code) =
+            GroupsCore::run_core(&intent)?;
         Ok(CtPipelineData::Value(
             value,
             CtPipelineMetadata {
                 classic_text: Some(classic_text),
-                classic_bytes: None,
+                classic_bytes: Some(classic_bytes),
                 classic_append_newline: false,
                 stderr_text: Some(stderr_text),
                 exit_code,
@@ -129,6 +131,7 @@ mod tests {
                 groups: vec!["root".into(), "wheel".into()],
             }],
             classic_text: "root : root wheel\n".into(),
+            classic_bytes: b"root : root wheel\n".to_vec(),
             stderr_text: String::new(),
             exit_code: 0,
         });

@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use ctcore::{
     ct_display::Quotable,
-    ct_entries::{CtPasswd, Locate, get_groups_gnu, gid2grp},
+    ct_entries::{CtPasswd, Locate, get_groups_gnu, gid2grp_os},
     ct_error::{CTError, CTResult, strip_errno},
     ct_process::{getegid, getgid},
 };
@@ -25,6 +25,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use ctcore::Tool;
 use std::ffi::{OsStr, OsString};
+use std::io::Write as IoWrite;
 use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 
@@ -98,8 +99,14 @@ pub struct GroupsEntry {
 pub struct GroupsSemantic {
     pub entries: Vec<GroupsEntry>,
     pub classic_text: String,
+    pub classic_bytes: Vec<u8>,
     pub stderr_text: String,
     pub exit_code: i32,
+}
+
+struct GroupsRawEntry {
+    user: Option<OsString>,
+    groups: Vec<OsString>,
 }
 
 pub fn ct_app() -> Command {
@@ -127,13 +134,13 @@ impl Display for GroupsEntry {
     }
 }
 
-fn groups_infallible_gid2grp(gid: &u32, stderr_text: &mut String, exit_code: &mut i32) -> String {
-    match gid2grp(*gid) {
+fn groups_infallible_gid2grp(gid: &u32, stderr_text: &mut String, exit_code: &mut i32) -> OsString {
+    match gid2grp_os(*gid) {
         Ok(grp) => grp,
         Err(_) => {
             *exit_code = 1;
             stderr_text.push_str(&format!("groups: {}\n", GroupsError::GroupNotFound(*gid)));
-            gid.to_string()
+            OsString::from(gid.to_string())
         }
     }
 }
@@ -150,6 +157,24 @@ fn groups_render_classic_text(entries: &[GroupsEntry]) -> String {
         .join("\n");
     classic_text.push('\n');
     classic_text
+}
+
+fn groups_render_classic_bytes(entries: &[GroupsRawEntry]) -> Vec<u8> {
+    let mut classic_bytes = Vec::new();
+    for entry in entries {
+        if let Some(user) = &entry.user {
+            classic_bytes.extend_from_slice(user.as_bytes());
+            classic_bytes.extend_from_slice(b" : ");
+        }
+        for (index, group) in entry.groups.iter().enumerate() {
+            if index != 0 {
+                classic_bytes.push(b' ');
+            }
+            classic_bytes.extend_from_slice(group.as_bytes());
+        }
+        classic_bytes.push(b'\n');
+    }
+    classic_bytes
 }
 
 fn groups_for_current_process(rgid: u32, egid: u32, groups: Vec<u32>) -> Vec<u32> {
@@ -175,6 +200,7 @@ fn groups_for_named_user(primary_gid: u32, groups: Vec<u32>) -> Vec<u32> {
 
 fn groups_collect_for_users(users: Vec<OsString>) -> CTResult<GroupsSemantic> {
     let mut entries = Vec::new();
+    let mut raw_entries = Vec::new();
     let mut stderr_text = String::new();
     let mut exit_code = 0;
 
@@ -188,15 +214,23 @@ fn groups_collect_for_users(users: Vec<OsString>) -> CTResult<GroupsSemantic> {
                 Some(GroupsError::GetGroupsForCurrentProcessFailed(err)),
             ),
         };
-        let groups = gids
+        let raw_groups: Vec<OsString> = gids
             .iter()
             .map(|gid| groups_infallible_gid2grp(gid, &mut stderr_text, &mut exit_code))
+            .collect();
+        let groups = raw_groups
+            .iter()
+            .map(|group| group.to_string_lossy().into_owned())
             .collect();
         if let Some(err) = get_groups_error {
             exit_code = 1;
             stderr_text.push_str(&format!("groups: {err}\n"));
         }
         entries.push(GroupsEntry { user: None, groups });
+        raw_entries.push(GroupsRawEntry {
+            user: None,
+            groups: raw_groups,
+        });
     } else {
         for user in users {
             match CtPasswd::locate_name_os(&user) {
@@ -208,13 +242,21 @@ fn groups_collect_for_users(users: Vec<OsString>) -> CTResult<GroupsSemantic> {
                     let group_passwd = reverse_passwd.as_ref().unwrap_or(&passwd);
                     let gids =
                         groups_for_named_user(passwd.gid, group_passwd.belongs_to_name_os(&user));
-                    let groups = gids
+                    let raw_groups: Vec<OsString> = gids
                         .iter()
                         .map(|gid| groups_infallible_gid2grp(gid, &mut stderr_text, &mut exit_code))
+                        .collect();
+                    let groups = raw_groups
+                        .iter()
+                        .map(|group| group.to_string_lossy().into_owned())
                         .collect();
                     entries.push(GroupsEntry {
                         user: Some(user.to_string_lossy().into_owned()),
                         groups,
+                    });
+                    raw_entries.push(GroupsRawEntry {
+                        user: Some(user),
+                        groups: raw_groups,
                     });
                 }
                 Err(_) => {
@@ -226,9 +268,11 @@ fn groups_collect_for_users(users: Vec<OsString>) -> CTResult<GroupsSemantic> {
     }
 
     let classic_text = groups_render_classic_text(&entries);
+    let classic_bytes = groups_render_classic_bytes(&raw_entries);
     Ok(GroupsSemantic {
         entries,
         classic_text,
+        classic_bytes,
         stderr_text,
         exit_code,
     })
@@ -261,8 +305,10 @@ impl Tool for Groups {
         let result = groups_native_semantic(args.iter().cloned());
         match result {
             Ok(semantic) => {
-                if !semantic.classic_text.is_empty() {
-                    print!("{}", semantic.classic_text);
+                if !semantic.classic_bytes.is_empty() {
+                    std::io::stdout()
+                        .lock()
+                        .write_all(&semantic.classic_bytes)?;
                 }
                 if !semantic.stderr_text.is_empty() {
                     eprint!("{}", semantic.stderr_text);
@@ -319,7 +365,8 @@ mod tests {
 
     mod tests_groups_main {
         use crate::{
-            groups_for_current_process, groups_for_named_user, groups_main, groups_native_semantic,
+            GroupsRawEntry, groups_for_current_process, groups_for_named_user, groups_main,
+            groups_native_semantic, groups_render_classic_bytes,
         };
 
         use std::ffi::OsString;
@@ -431,6 +478,22 @@ mod tests {
                 result.stderr_text,
                 "groups: 'groups_compat_\\377_missing': no such user\n"
             );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_groups_classic_bytes_preserve_non_utf8_group_name() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let entries = [GroupsRawEntry {
+                user: None,
+                groups: vec![
+                    OsString::from_vec(b"grp_\xff".to_vec()),
+                    OsString::from("bin"),
+                ],
+            }];
+
+            assert_eq!(groups_render_classic_bytes(&entries), b"grp_\xff bin\n");
         }
     }
 

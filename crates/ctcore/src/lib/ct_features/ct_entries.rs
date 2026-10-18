@@ -40,11 +40,11 @@ use libc::{c_char, c_int, gid_t, uid_t};
 use libc::{getgrgid, getgrnam, getgroups};
 use libc::{getpwnam, getpwuid, group, passwd};
 
-use std::ffi::{CStr, CString, OsStr};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::io::Error as IOError;
 use std::io::ErrorKind;
 use std::io::Result as IOResult;
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::ptr;
 use std::sync::Mutex;
 
@@ -174,6 +174,10 @@ unsafe fn cstr2bytes(ptr: *const c_char) -> Option<Vec<u8>> {
     } else {
         unsafe { Some(CStr::from_ptr(ptr).to_bytes().to_vec()) }
     }
+}
+
+unsafe fn cstr2osstring(ptr: *const c_char) -> Option<OsString> {
+    cstr2bytes(ptr).map(OsString::from_vec)
 }
 
 impl CtPasswd {
@@ -452,6 +456,25 @@ pub fn uid2usr(id: uid_t) -> IOResult<String> {
 #[inline]
 pub fn gid2grp(id: gid_t) -> IOResult<String> {
     Group::locate(id).map(|p| p.name)
+}
+
+/// Resolve a GID without requiring the group name to be valid UTF-8.
+pub fn gid2grp_os(id: gid_t) -> IOResult<OsString> {
+    let _guard = PW_LOCK.lock();
+    // SAFETY: We hold PW_LOCK and copy the static NSS result before unlocking.
+    unsafe {
+        let data = getgrgid(id);
+        if data.is_null() {
+            Err(IOError::new(
+                ErrorKind::NotFound,
+                format!("No such id: {id}"),
+            ))
+        } else {
+            cstr2osstring((*data).gr_name).ok_or_else(|| {
+                IOError::new(ErrorKind::InvalidData, format!("Group {id} has no name"))
+            })
+        }
+    }
 }
 
 #[inline]

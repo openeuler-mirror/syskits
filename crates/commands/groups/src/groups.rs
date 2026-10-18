@@ -14,7 +14,7 @@
 extern crate rust_i18n;
 use ctcore::{
     ct_display::Quotable,
-    ct_entries::{CtPasswd, get_groups_gnu, gid2grp},
+    ct_entries::{CtPasswd, Locate, get_groups_gnu, gid2grp},
     ct_error::{CTError, CTResult, strip_errno},
     ct_process::{getegid, getgid},
 };
@@ -170,7 +170,13 @@ fn groups_collect_for_users(users: Vec<String>) -> CTResult<GroupsSemantic> {
         for user in users {
             match CtPasswd::locate_name(user.as_str()) {
                 Ok(passwd) => {
-                    let gids = groups_for_named_user(passwd.gid, passwd.belongs_to_name(&user));
+                    let reverse_passwd = CtPasswd::locate(passwd.uid).ok();
+                    if reverse_passwd.is_none() {
+                        exit_code = 1;
+                    }
+                    let group_passwd = reverse_passwd.as_ref().unwrap_or(&passwd);
+                    let gids =
+                        groups_for_named_user(passwd.gid, group_passwd.belongs_to_name(&user));
                     let groups = gids
                         .iter()
                         .map(|gid| groups_infallible_gid2grp(gid, &mut stderr_text, &mut exit_code))

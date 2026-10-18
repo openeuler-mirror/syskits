@@ -1179,7 +1179,6 @@ fn read_and_process_block(
     let mut loop_bsize = calc_loop_bsize(
         &state.input.settings.count,
         &state.read_stat,
-        &state.write_stat,
         state.input.settings.ibs,
         state.buffer_size,
     );
@@ -1487,13 +1486,7 @@ fn calc_bsize(ibs: usize, obs: usize) -> usize {
 
 // Calculate the buffer size appropriate for this loop iteration, respecting
 // a count=N if present.
-fn calc_loop_bsize(
-    count: &Option<Num>,
-    rstat: &ReadStat,
-    wstat: &WriteStat,
-    ibs: usize,
-    ideal_bsize: usize,
-) -> usize {
+fn calc_loop_bsize(count: &Option<Num>, rstat: &ReadStat, ibs: usize, ideal_bsize: usize) -> usize {
     match count {
         Some(Num::Blocks(rmax)) => {
             let rsofar = rstat.reads_complete + rstat.reads_partial;
@@ -1502,7 +1495,7 @@ fn calc_loop_bsize(
         }
         Some(Num::Bytes(bmax)) => {
             let bmax: u128 = (*bmax).into();
-            let bremain: u128 = bmax - wstat.bytes_total;
+            let bremain = bmax.saturating_sub(rstat.bytes_total.into());
             cmp::min(ideal_bsize as u128, bremain) as usize
         }
         None => ideal_bsize,
@@ -1932,6 +1925,28 @@ mod dd_copy_tests {
         assert_eq!(stat.reads_partial, 1);
         assert_eq!(stat.bytes_total, 1);
         assert_eq!(buffer, b"x\0\0\0");
+        Ok(())
+    }
+
+    #[test]
+    fn test_count_bytes_uses_input_progress_when_conversion_expands_output() -> CTResult<()> {
+        let options = Parser::new()
+            .parse(&[
+                "ibs=4",
+                "obs=4",
+                "cbs=100",
+                "conv=block",
+                "iflag=count_bytes",
+                "count=10",
+                "status=none",
+            ])
+            .unwrap();
+        let input = create_test_input(b"a\nb\nc\nd\ne\nf\n", &options)?;
+        let (output, result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        assert_eq!(result_file.metadata()?.len(), 500);
         Ok(())
     }
 

@@ -216,17 +216,12 @@ impl Source {
         }
     }
 
-    fn skip(&mut self, n: u64) -> io::Result<u64> {
+    fn skip(&mut self, n: u64) -> io::Result<SkipResult> {
         match self {
             #[cfg(not(unix))]
-            Self::Stdin(stdin) => match io::copy(&mut stdin.take(n), &mut io::sink()) {
-                Ok(m) if m < n => {
-                    ct_show_error!("'standard input': cannot skip to specified offset");
-                    Ok(m)
-                }
-                Ok(m) => Ok(m),
-                Err(e) => Err(e),
-            },
+            Self::Stdin(stdin) => {
+                io::copy(&mut stdin.take(n), &mut io::sink()).map(SkipResult::new)
+            }
             #[cfg(unix)]
             Self::StdinFile(f) => {
                 if let Ok(Some(len)) = try_get_len_of_block_device(f) {
@@ -235,21 +230,28 @@ impl Source {
                         // this case prints the stats but sets the exit code to 1
                         ct_show_error!("'standard input': cannot skip: Invalid argument");
                         set_ct_exit_code(1);
-                        return Ok(len);
+                        return Ok(SkipResult {
+                            bytes_skipped: len,
+                            error_reported: true,
+                        });
                     }
                 }
-                match io::copy(&mut f.take(n), &mut io::sink()) {
-                    Ok(m) if m < n => {
-                        ct_show_error!("'standard input': cannot skip to specified offset");
-                        Ok(m)
-                    }
-                    Ok(m) => Ok(m),
-                    Err(e) => Err(e),
+                io::copy(&mut f.take(n), &mut io::sink()).map(SkipResult::new)
+            }
+            Self::File(f) => {
+                let start = f.stream_position()?;
+                let metadata = f.metadata()?;
+                if metadata.is_file() && metadata.len() > 0 {
+                    let bytes_skipped = metadata.len().saturating_sub(start).min(n);
+                    f.seek(SeekFrom::Start(start.saturating_add(bytes_skipped)))?;
+                    Ok(SkipResult::new(bytes_skipped))
+                } else {
+                    f.seek(io::SeekFrom::Current(n.try_into().unwrap()))?;
+                    Ok(SkipResult::new(n))
                 }
             }
-            Self::File(f) => f.seek(io::SeekFrom::Current(n.try_into().unwrap())),
             #[cfg(unix)]
-            Self::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
+            Self::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()).map(SkipResult::new),
         }
     }
 
@@ -315,6 +317,20 @@ impl Source {
             Self::File(f) => posix_fadvise(f.as_raw_fd(), offset, len, advice),
             Self::StdinFile(f) => posix_fadvise(f.as_raw_fd(), offset, len, advice),
             Self::Fifo(f) => posix_fadvise(f.as_raw_fd(), offset, len, advice),
+        }
+    }
+}
+
+struct SkipResult {
+    bytes_skipped: u64,
+    error_reported: bool,
+}
+
+impl SkipResult {
+    fn new(bytes_skipped: u64) -> Self {
+        Self {
+            bytes_skipped,
+            error_reported: false,
         }
     }
 }
@@ -421,7 +437,20 @@ impl<'a> Input<'a> {
     }
 
     fn skip(&mut self) -> io::Result<u64> {
-        self.src.skip(self.settings.skip)
+        let result = self.src.skip(self.settings.skip)?;
+        if result.bytes_skipped < self.settings.skip
+            && !result.error_reported
+            && self.settings.status != Some(StatusLevel::None)
+        {
+            match self.settings.infile.as_ref() {
+                Some(path) => ct_show_error!(
+                    "{}: cannot skip to specified offset",
+                    Path::new(path).quote()
+                ),
+                None => ct_show_error!("'standard input': cannot skip to specified offset"),
+            }
+        }
+        Ok(result.bytes_skipped)
     }
 }
 
@@ -2327,7 +2356,17 @@ mod tests_source_additional {
         temp_file.as_file().write_all(&data).unwrap();
 
         let mut source = Source::File(temp_file.reopen().unwrap());
-        assert_eq!(source.skip(50).unwrap(), 50);
+        assert_eq!(source.skip(50).unwrap().bytes_skipped, 50);
+    }
+
+    #[test]
+    fn test_source_skip_stops_at_end_of_regular_file() {
+        let data = [1u8; 100];
+        let temp_file = NamedTempFile::new().unwrap();
+        temp_file.as_file().write_all(&data).unwrap();
+
+        let mut source = Source::File(temp_file.reopen().unwrap());
+        assert_eq!(source.skip(150).unwrap().bytes_skipped, 100);
     }
 }
 

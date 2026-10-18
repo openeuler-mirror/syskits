@@ -3086,7 +3086,7 @@ fn display_items<W: Write>(
 
     let quoted = items.iter().any(|item| {
         let name = escape_name(&item.display_name, &config.quoting_style);
-        name.starts_with('\'')
+        name.starts_with(['\'', '"'])
     });
 
     if config.format == LsFormat::Long {
@@ -3428,7 +3428,7 @@ fn display_grid<W: Write>(
         let names = names
             .into_iter()
             .map(|name| {
-                if quoted && !name.contents.starts_with('\'') {
+                if quoted && !name.contents.starts_with(['\'', '"']) {
                     Cell {
                         contents: format!(" {}", name.contents),
                         width: name.width + 1,
@@ -3647,7 +3647,7 @@ fn display_item_long<W: Write>(
         let item_name =
             display_item_name(item, ls_config, None, String::new(), output, style_manager).contents;
 
-        let displayed_item = if quoted && !item_name.starts_with('\'') {
+        let displayed_item = if quoted && !item_name.starts_with(['\'', '"']) {
             format!(" {item_name}")
         } else {
             item_name

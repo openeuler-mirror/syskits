@@ -157,26 +157,17 @@ impl Parser {
             return Err(ParseError::MultipleExclNoCreate);
         }
 
-        // The GNU docs state that
-        // - ascii implies unblock
-        // - ebcdic and ibm imply block
-        // This has a side effect in how it's implemented in GNU, because this errors:
-        //     conv=block,unblock
-        // but these don't:
-        //     conv=ascii,block,unblock
-        //     conv=block,ascii,unblock
-        //     conv=block,unblock,ascii
-        //     conv=block conv=unblock conv=ascii
+        // ascii implies unblock, while ebcdic and ibm imply block. GNU merges
+        // those implied modes with explicit modes before checking conflicts.
         let block = if let Some(cbs) = self.cbs {
-            match conversion {
-                Some(Conversion::Ascii) => Some(Block::Unblock(cbs)),
-                Some(_) => Some(Block::Block(cbs)),
-                None => match (conv.block, conv.unblock) {
-                    (false, false) => None,
-                    (true, false) => Some(Block::Block(cbs)),
-                    (false, true) => Some(Block::Unblock(cbs)),
-                    (true, true) => return Err(ParseError::MultipleBlockUnblock),
-                },
+            let block = conv.block
+                || matches!(conversion, Some(Conversion::Ebcdic) | Some(Conversion::Ibm));
+            let unblock = conv.unblock || matches!(conversion, Some(Conversion::Ascii));
+            match (block, unblock) {
+                (false, false) => None,
+                (true, false) => Some(Block::Block(cbs)),
+                (false, true) => Some(Block::Unblock(cbs)),
+                (true, true) => return Err(ParseError::MultipleBlockUnblock),
             }
         } else {
             None

@@ -372,6 +372,30 @@ fn block_and_unblock_without_cbs_are_ignored() {
 }
 
 #[test]
+fn implied_block_modes_conflict_with_opposite_explicit_modes() {
+    for conversion in [
+        "ascii,block",
+        "block,ascii",
+        "ebcdic,unblock",
+        "unblock,ebcdic",
+        "ibm,unblock",
+        "unblock,ibm",
+    ] {
+        let conv = format!("conv={conversion}");
+        let error = Parser::new().parse(&["cbs=2", &conv]).err().unwrap();
+        assert_eq!(error, ParseError::MultipleBlockUnblock);
+    }
+}
+
+#[test]
+fn implied_block_modes_allow_matching_explicit_modes() {
+    for conversion in ["ascii,unblock", "ebcdic,block", "ibm,block"] {
+        let conv = format!("conv={conversion}");
+        assert!(Parser::new().parse(&["cbs=2", &conv]).is_ok());
+    }
+}
+
+#[test]
 fn icf_creat_error() {
     let args = &["conv=excl,nocreat"];
     assert!(Parser::new().parse(args).is_err());

@@ -591,8 +591,20 @@ fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
     }
 }
 
+fn trim_leading_numeric_syntax(s: &str) -> &str {
+    let trimmed = s.trim_start_matches(|c: char| c.is_ascii_whitespace());
+    let unsigned = trimmed.strip_prefix('+').unwrap_or(trimmed);
+
+    if unsigned.starts_with(|c: char| c.is_ascii_digit()) {
+        unsigned
+    } else {
+        s
+    }
+}
+
 fn parse_bytes_with_opt_multiplier_inner(full: &str, s: &str) -> Result<u64, ParseError> {
-    if let Some((left, right)) = s.split_once('x') {
+    let normalized = trim_leading_numeric_syntax(s);
+    if let Some((left, right)) = normalized.split_once('x') {
         let left = parse_bytes_no_x(full, left)?;
         let right = parse_bytes_with_opt_multiplier_inner(full, right)?;
         let result = left
@@ -605,7 +617,7 @@ fn parse_bytes_with_opt_multiplier_inner(full: &str, s: &str) -> Result<u64, Par
 
         Ok(result)
     } else {
-        parse_bytes_no_x(full, s)
+        parse_bytes_no_x(full, normalized)
     }
 }
 
@@ -742,6 +754,18 @@ mod tests {
             parse_bytes_with_opt_multiplier("1wx2cx3w").unwrap(),
             2 * 2 * (3 * 2) // (1 * 2) * (2 * 1) * (3 * 2)
         );
+    }
+
+    #[test]
+    fn test_parse_bytes_with_opt_multiplier_leading_syntax() {
+        for arg in ["+1", " 1", "\t+1", "\n1"] {
+            assert_eq!(parse_bytes_with_opt_multiplier(arg), Ok(1));
+        }
+        assert_eq!(parse_bytes_with_opt_multiplier(" 1x +2"), Ok(2));
+
+        for arg in ["+K", " K", "++1", "+ 1", "-0", " -0"] {
+            assert!(parse_bytes_with_opt_multiplier(arg).is_err());
+        }
     }
 
     #[test]

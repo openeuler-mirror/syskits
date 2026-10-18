@@ -463,7 +463,7 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
         flag |= libc::O_DIRECTORY;
     }
     if iflags.is_dsync {
-        flag |= libc::O_DSYNC;
+        flag |= libc::O_DSYNC | libc::O_RSYNC;
     }
     if iflags.is_noatime {
         flag |= libc::O_NOATIME;

@@ -28,6 +28,7 @@ pub enum ParseError {
     MultipleUCaseLCase,
     MultipleBlockUnblock,
     MultipleExclNoCreate,
+    MultipleDirectNoCache,
     FlagNoMatch(String),
     ConvFlagNoMatch(String),
     MultiplierStringParseFailure(String),
@@ -155,6 +156,12 @@ impl Parser {
 
         if conv.nocreat && conv.excl {
             return Err(ParseError::MultipleExclNoCreate);
+        }
+
+        if self.iflag.is_direct && self.iflag.is_nocache
+            || self.oflag.is_direct && self.oflag.is_nocache
+        {
+            return Err(ParseError::MultipleDirectNoCache);
         }
 
         // ascii implies unblock, while ebcdic and ibm imply block. GNU merges
@@ -444,6 +451,9 @@ impl std::fmt::Display for ParseError {
             }
             Self::MultipleExclNoCreate => {
                 write!(f, "Only one ov conv=excl or conv=nocreat may be specified")
+            }
+            Self::MultipleDirectNoCache => {
+                write!(f, "cannot combine direct and nocache")
             }
             Self::FlagNoMatch(arg) => {
                 // Additional message about 'dd --help' is displayed only in this situation.

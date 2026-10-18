@@ -401,6 +401,23 @@ fn icf_creat_error() {
     assert!(Parser::new().parse(args).is_err());
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn direct_and_nocache_conflict_on_the_same_file() {
+    for operand in ["iflag=direct,nocache", "oflag=direct,nocache"] {
+        assert_eq!(
+            Parser::new().parse(&[operand]).err(),
+            Some(ParseError::MultipleDirectNoCache)
+        );
+    }
+
+    assert!(
+        Parser::new()
+            .parse(&["iflag=direct", "oflag=nocache"])
+            .is_ok()
+    );
+}
+
 #[test]
 fn parse_icf_token_ibm() {
     let args = &["conv=ibm"];

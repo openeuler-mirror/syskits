@@ -49,51 +49,123 @@ pub(crate) enum SuffixType {
 }
 
 impl SuffixType {
-    fn base_and_suffix(&self, n: u128) -> (u128, &'static str) {
-        let (bases, suffixes) = match self {
-            Self::Iec => (IEC_BASES, IEC_SUFFIXES),
-            Self::Si => (SI_BASES, SI_SUFFIXES),
-        };
+    fn properties(&self) -> (u128, &[u128], &[&'static str]) {
+        match self {
+            Self::Iec => (1_024, &IEC_BASES, &IEC_SUFFIXES),
+            Self::Si => (1_000, &SI_BASES, &SI_SUFFIXES),
+        }
+    }
+
+    fn base_and_suffix(&self, n: u128) -> (u128, &'static str, usize) {
+        let (_, bases, suffixes) = self.properties();
         let mut i = 0;
-        while bases[i + 1] - bases[i] < n && i < suffixes.len() {
+        while i + 1 < suffixes.len() && bases[i + 1] <= n {
             i += 1;
         }
-        (bases[i], suffixes[i])
+        (bases[i], suffixes[i], i)
     }
+}
+
+fn round_half_even(quotient: u128, remainder: u128, divisor: u128) -> u128 {
+    match remainder.cmp(&(divisor - remainder)) {
+        std::cmp::Ordering::Less => quotient,
+        std::cmp::Ordering::Greater => quotient + 1,
+        std::cmp::Ordering::Equal => quotient + (quotient & 1),
+    }
+}
+
+fn format_ratio(numerator: u128, denominator: u128, suffix_type: SuffixType) -> String {
+    let (unit_base, bases, suffixes) = suffix_type.properties();
+    let mut exponent = if denominator == 1 {
+        suffix_type.base_and_suffix(numerator).2
+    } else {
+        0
+    };
+    if denominator != 1 {
+        while exponent + 1 < suffixes.len() {
+            let Some(threshold) = denominator.checked_mul(bases[exponent + 1]) else {
+                break;
+            };
+            if numerator < threshold {
+                break;
+            }
+            exponent += 1;
+        }
+    }
+
+    let divisor = denominator * bases[exponent];
+    let quotient = numerator / divisor;
+    let remainder = numerator % divisor;
+
+    if exponent > 0 && quotient < 10 {
+        let remainder_tenths = remainder * 10;
+        let tenths = round_half_even(
+            quotient * 10 + remainder_tenths / divisor,
+            remainder_tenths % divisor,
+            divisor,
+        );
+        if tenths < 100 {
+            return format!("{}.{:01} {}", tenths / 10, tenths % 10, suffixes[exponent]);
+        }
+        return format!("{} {}", tenths / 10, suffixes[exponent]);
+    }
+
+    let mut amount = round_half_even(quotient, remainder, divisor);
+    if exponent + 1 < suffixes.len() && amount == unit_base {
+        exponent += 1;
+        amount = 1;
+        return format!("{amount}.0 {}", suffixes[exponent]);
+    }
+    format!("{amount} {}", suffixes[exponent])
 }
 
 /// Convert a number into a magnitude and a multi-byte unit suffix.
 ///
 /// The returned string has a maximum length of 5 chars, for example: "1.1kB", "999kB", "1MB".
 pub(crate) fn to_magnitude_and_suffix(n: u128, suffix_type: SuffixType) -> String {
-    let (base, suffix) = suffix_type.base_and_suffix(n);
-    // TODO To match dd on my machine, we would need to round like
-    // this:
-    //
-    // 1049 => 1.0 kB
-    // 1050 => 1.0 kB  # why is this different?
-    // 1051 => 1.1 kB
-    // ...
-    // 1149 => 1.1 kB
-    // 1150 => 1.2 kB
-    // ...
-    // 1250 => 1.2 kB
-    // 1251 => 1.3 kB
-    // ..
-    // 10500 => 10 kB
-    // 10501 => 11 kB
-    //
-    let quotient = (n as f64) / (base as f64);
-    if quotient < 10.0 {
-        format!("{quotient:.1} {suffix}")
-    } else {
-        format!("{} {}", quotient.round(), suffix)
+    format_ratio(n, 1, suffix_type)
+}
+
+pub(crate) fn to_rate_and_suffix(n: u128, duration_nanos: u128) -> String {
+    const NANOS_PER_SECOND: u128 = 1_000_000_000;
+
+    if duration_nanos == 0 {
+        return "Infinity B".to_string();
     }
+
+    if duration_nanos <= NANOS_PER_SECOND
+        && NANOS_PER_SECOND % duration_nanos == 0
+        && let Some(amount) = n.checked_mul(NANOS_PER_SECOND / duration_nanos)
+    {
+        return format_ratio(amount, 1, SuffixType::Si);
+    }
+    if duration_nanos % NANOS_PER_SECOND == 0 {
+        return format_ratio(n, duration_nanos / NANOS_PER_SECOND, SuffixType::Si);
+    }
+
+    // GNU falls back to floating point for a non-integral block-size ratio.
+    // Its autoscale loop selects at least the kilo prefix in that branch.
+    let (base, _, suffixes) = SuffixType::Si.properties();
+    let rate = n as f64 * (NANOS_PER_SECOND as f64 / duration_nanos as f64);
+    let mut scale = base as f64;
+    let mut exponent = 1;
+    while exponent + 1 < suffixes.len() && scale * base as f64 <= rate {
+        scale *= base as f64;
+        exponent += 1;
+    }
+    let magnitude = rate / scale;
+    let decimal = format!("{magnitude:.1}");
+    let amount = if decimal.split('.').next().unwrap_or_default().len() >= 3 {
+        format!("{magnitude:.0}")
+    } else {
+        decimal
+    };
+    format!("{amount} {}", suffixes[exponent])
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::numbers::{SuffixType, to_magnitude_and_suffix};
+    use crate::numbers::{SuffixType, to_magnitude_and_suffix, to_rate_and_suffix};
 
     #[test]
     fn test_to_magnitude_and_suffix_powers_of_1024() {
@@ -121,17 +193,24 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_to_magnitude_and_suffix_not_powers_of_1024() {
-        assert_eq!(to_magnitude_and_suffix(1, SuffixType::Si), "1.0 B");
+        assert_eq!(to_magnitude_and_suffix(1, SuffixType::Si), "1 B");
         assert_eq!(to_magnitude_and_suffix(999, SuffixType::Si), "999 B");
 
         assert_eq!(to_magnitude_and_suffix(1000, SuffixType::Si), "1.0 kB");
         assert_eq!(to_magnitude_and_suffix(1001, SuffixType::Si), "1.0 kB");
         assert_eq!(to_magnitude_and_suffix(1023, SuffixType::Si), "1.0 kB");
         assert_eq!(to_magnitude_and_suffix(1025, SuffixType::Si), "1.0 kB");
+        assert_eq!(to_magnitude_and_suffix(1050, SuffixType::Si), "1.0 kB");
+        assert_eq!(to_magnitude_and_suffix(1051, SuffixType::Si), "1.1 kB");
+        assert_eq!(to_magnitude_and_suffix(1150, SuffixType::Si), "1.2 kB");
+        assert_eq!(to_magnitude_and_suffix(10_500, SuffixType::Si), "10 kB");
+        assert_eq!(to_magnitude_and_suffix(10_501, SuffixType::Si), "11 kB");
         assert_eq!(to_magnitude_and_suffix(10_001, SuffixType::Si), "10 kB");
         assert_eq!(to_magnitude_and_suffix(999_000, SuffixType::Si), "999 kB");
 
-        assert_eq!(to_magnitude_and_suffix(999_001, SuffixType::Si), "1.0 MB");
+        assert_eq!(to_magnitude_and_suffix(999_001, SuffixType::Si), "999 kB");
+        assert_eq!(to_magnitude_and_suffix(999_499, SuffixType::Si), "999 kB");
+        assert_eq!(to_magnitude_and_suffix(999_500, SuffixType::Si), "1.0 MB");
         assert_eq!(to_magnitude_and_suffix(999_999, SuffixType::Si), "1.0 MB");
         assert_eq!(to_magnitude_and_suffix(1_000_000, SuffixType::Si), "1.0 MB");
         assert_eq!(to_magnitude_and_suffix(1_000_001, SuffixType::Si), "1.0 MB");
@@ -148,6 +227,10 @@ mod tests {
 
         assert_eq!(
             to_magnitude_and_suffix(999_000_001, SuffixType::Si),
+            "999 MB"
+        );
+        assert_eq!(
+            to_magnitude_and_suffix(999_500_000, SuffixType::Si),
             "1.0 GB"
         );
         assert_eq!(
@@ -158,5 +241,13 @@ mod tests {
             to_magnitude_and_suffix(1_000_000_001, SuffixType::Si),
             "1.0 GB"
         );
+    }
+
+    #[test]
+    fn test_rate_suffix_matches_gnu_ratio_paths() {
+        assert_eq!(to_rate_and_suffix(1, 1_000_000_000), "1 B");
+        assert_eq!(to_rate_and_suffix(1, 2_000_000_000), "0 B");
+        assert_eq!(to_rate_and_suffix(1, 1_200_000_000), "0.0 kB");
+        assert_eq!(to_rate_and_suffix(10_500, 1_000_000_000), "10 kB");
     }
 }

@@ -19,7 +19,7 @@ use std::time::Duration;
 
 use ctcore::ct_error::CTResult;
 
-use crate::numbers::{SuffixType, to_magnitude_and_suffix};
+use crate::numbers::{SuffixType, to_magnitude_and_suffix, to_rate_and_suffix};
 
 fn format_duration(duration: f64) -> String {
     if duration > 0.0 && duration < 0.0001 {
@@ -154,7 +154,7 @@ impl ProgUpdate {
     /// let mut cursor = Cursor::new(vec![]);
     /// let rewrite = false;
     /// prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
-    /// assert_eq!(cursor.get_ref(), b"0 bytes copied, 1.0 s, 0.0 B/s\n");
+    /// assert_eq!(cursor.get_ref(), b"0 bytes copied, 1.0 s, 0 B/s\n");
     /// ```
     fn write_prog_line(&self, w: &mut impl Write, rewrite: bool) -> CTResult<()> {
         // The total number of bytes written as a string, in SI and IEC format.
@@ -165,13 +165,7 @@ impl ProgUpdate {
         // 更精确的时间计算
         let duration = self.duration.as_nanos() as f64 / 1_000_000_000.0;
 
-        // 计算实际的传输速率
-        let rate = if duration > 0.0 {
-            (btotal as f64 / duration) as u128
-        } else {
-            0
-        };
-        let transfer_rate = to_magnitude_and_suffix(rate, SuffixType::Si);
+        let transfer_rate = to_rate_and_suffix(btotal, self.duration.as_nanos());
 
         // If we are rewriting the progress line, do write a carriage
         // return (`\r`) at the beginning and don't write a newline
@@ -229,7 +223,7 @@ impl ProgUpdate {
     /// let mut iter = cursor.get_ref().split(|v| *v == b'\n');
     /// assert_eq!(iter.next().unwrap(), b"0+0 records in");
     /// assert_eq!(iter.next().unwrap(), b"0+0 records out");
-    /// assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.0 s, 0.0 B/s");
+    /// assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.0 s, 0 B/s");
     /// assert_eq!(iter.next().unwrap(), b"");
     /// assert!(iter.next().is_none());
     /// ```
@@ -636,12 +630,12 @@ mod tests {
         let mut cursor = Cursor::new(vec![]);
         let rewrite = false;
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
-        assert_eq!(cursor.get_ref(), b"0 bytes copied, 1.00000 s, 0.0 B/s\n");
+        assert_eq!(cursor.get_ref(), b"0 bytes copied, 1.00000 s, 0 B/s\n");
 
         let prog_update = prog_update_write(1);
         let mut cursor = Cursor::new(vec![]);
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
-        assert_eq!(cursor.get_ref(), b"1 byte copied, 1.00000 s, 1.0 B/s\n");
+        assert_eq!(cursor.get_ref(), b"1 byte copied, 1.00000 s, 1 B/s\n");
 
         let prog_update = prog_update_write(999);
         let mut cursor = Cursor::new(vec![]);
@@ -688,7 +682,7 @@ mod tests {
         let mut iter = cursor.get_ref().split(|v| *v == b'\n');
         assert_eq!(iter.next().unwrap(), b"0+0 records in");
         assert_eq!(iter.next().unwrap(), b"0+0 records out");
-        assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.00000 s, 0.0 B/s");
+        assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.00000 s, 0 B/s");
         assert_eq!(iter.next().unwrap(), b"");
         assert!(iter.next().is_none());
     }
@@ -706,13 +700,10 @@ mod tests {
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
         prog_update.write_transfer_stats(&mut cursor, true).unwrap();
         let mut iter = cursor.get_ref().split(|v| *v == b'\n');
-        assert_eq!(
-            iter.next().unwrap(),
-            b"\r0 bytes copied, 1.00000 s, 0.0 B/s"
-        );
+        assert_eq!(iter.next().unwrap(), b"\r0 bytes copied, 1.00000 s, 0 B/s");
         assert_eq!(iter.next().unwrap(), b"0+0 records in");
         assert_eq!(iter.next().unwrap(), b"0+0 records out");
-        assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.00000 s, 0.0 B/s");
+        assert_eq!(iter.next().unwrap(), b"0 bytes copied, 1.00000 s, 0 B/s");
         assert_eq!(iter.next().unwrap(), b"");
         assert!(iter.next().is_none());
     }
@@ -723,7 +714,10 @@ mod tests {
         let mut cursor = Cursor::new(vec![]);
         let rewrite = false;
         prog_update.write_prog_line(&mut cursor, rewrite).unwrap();
-        assert_eq!(cursor.get_ref(), b"0 bytes copied, 1.2300e-07 s, 0.0 B/s\n");
+        assert_eq!(
+            cursor.get_ref(),
+            b"0 bytes copied, 1.2300e-07 s, 0.0 kB/s\n"
+        );
     }
 
     #[test]
@@ -731,7 +725,10 @@ mod tests {
         let prog_update = prog_update_duration(Duration::from_nanos(54_874));
         let mut cursor = Cursor::new(vec![]);
         prog_update.write_prog_line(&mut cursor, false).unwrap();
-        assert_eq!(cursor.get_ref(), b"0 bytes copied, 5.4874e-05 s, 0.0 B/s\n");
+        assert_eq!(
+            cursor.get_ref(),
+            b"0 bytes copied, 5.4874e-05 s, 0.0 kB/s\n"
+        );
     }
 
     #[test]
@@ -739,9 +736,6 @@ mod tests {
         let prog_update = prog_update_duration(Duration::from_nanos(100_000));
         let mut cursor = Cursor::new(vec![]);
         prog_update.write_prog_line(&mut cursor, false).unwrap();
-        assert_eq!(
-            cursor.get_ref(),
-            b"0 bytes copied, 0.000100000 s, 0.0 B/s\n"
-        );
+        assert_eq!(cursor.get_ref(), b"0 bytes copied, 0.000100000 s, 0 B/s\n");
     }
 }

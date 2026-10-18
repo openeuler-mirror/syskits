@@ -44,6 +44,7 @@ enum GroupsError {
     GetGroupsForCurrentProcessFailed(std::io::Error),
     GroupNotFound(u32),
     UserNotFound(OsString),
+    WriteFailed(std::io::Error),
 }
 
 impl Error for GroupsError {}
@@ -190,6 +191,14 @@ impl Display for GroupsError {
             Self::UserNotFound(user) => {
                 let user = groups_quote_username(user);
                 write!(f, "{}", t!("groups.errors.user_not_found", user = user))
+            }
+            Self::WriteFailed(err) => {
+                let detail = if err.raw_os_error() == Some(libc::EBADF) {
+                    t!("groups.errors.bad_file_descriptor").to_string()
+                } else {
+                    strip_errno(err)
+                };
+                write!(f, "{}: {detail}", t!("groups.errors.write_error"))
             }
         }
     }
@@ -546,7 +555,8 @@ fn groups_handle_stdout_result(result: std::io::Result<()>) -> CTResult<()> {
         Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => {
             groups_terminate_with_sigpipe()
         }
-        result => result.map_err_context(|| "write error".to_string()),
+        Err(error) => Err(Box::new(GroupsError::WriteFailed(error))),
+        Ok(()) => Ok(()),
     }
 }
 

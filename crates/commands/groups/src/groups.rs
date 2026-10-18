@@ -21,7 +21,12 @@ use rust_i18n::t;
 use std::error::Error;
 use std::fmt::{Display, Write as FmtWrite};
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
+use clap::{
+    Arg, ArgAction, Command,
+    builder::OsStringValueParser,
+    crate_version,
+    error::{ContextKind, ContextValue},
+};
 use ctcore::Tool;
 use std::ffi::{OsStr, OsString};
 use std::io::Write as IoWrite;
@@ -47,25 +52,49 @@ impl CTError for GroupsError {}
 #[derive(Debug)]
 struct GroupsClapError {
     inner: Box<dyn CTError>,
+    diagnostic: Option<String>,
     show_usage: bool,
 }
 
 impl GroupsClapError {
     fn new(error: clap::Error) -> Self {
+        let diagnostic = if error.kind() == clap::error::ErrorKind::UnknownArgument {
+            match error.get(ContextKind::InvalidArg) {
+                Some(ContextValue::String(argument)) => groups_invalid_option_diagnostic(argument),
+                _ => None,
+            }
+        } else {
+            None
+        };
         let show_usage = !matches!(
             error.kind(),
             clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
         );
         Self {
             inner: error.into(),
+            diagnostic,
             show_usage,
         }
     }
 }
 
+fn groups_invalid_option_diagnostic(argument: &str) -> Option<String> {
+    if argument.starts_with("--") {
+        Some(format!("unrecognized option '{argument}'"))
+    } else {
+        argument
+            .as_bytes()
+            .get(1)
+            .map(|option| format!("invalid option -- '{}'", char::from(*option)))
+    }
+}
+
 impl Display for GroupsClapError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.inner, f)
+        match &self.diagnostic {
+            Some(diagnostic) => f.write_str(diagnostic),
+            None => Display::fmt(&self.inner, f),
+        }
     }
 }
 
@@ -634,6 +663,7 @@ mod tests {
         use crate::{ct_app, groups_native_semantic};
 
         use clap::error::ErrorKind;
+        use ctcore::ct_error::CTError;
         use std::ffi::OsString;
 
         #[test]
@@ -673,6 +703,22 @@ mod tests {
                     .expect_err("display request");
                 assert_eq!(error.code(), 0);
                 assert!(!error.usage());
+            }
+        }
+
+        #[test]
+        fn test_invalid_option_uses_gnu_diagnostic() {
+            for (option, expected) in [
+                ("-x", "invalid option -- 'x'"),
+                ("--bad", "unrecognized option '--bad'"),
+            ] {
+                let error = ct_app()
+                    .try_get_matches_from([ctcore::ct_util_name(), option])
+                    .expect_err("invalid option");
+                let error = crate::GroupsClapError::new(error);
+                assert_eq!(error.to_string(), expected);
+                assert_eq!(error.code(), 1);
+                assert!(error.usage());
             }
         }
     }

@@ -21,7 +21,7 @@ mod progress;
 use crate::bufferedoutput::DDBufferedOutput;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use blocks::conv_block_unblock_helper;
+use blocks::{ConversionState, conv_block_unblock_helper};
 use ctcore::ct_io::CtOwnedFileDescriptorOrHandle;
 use datastructures::*;
 #[cfg(target_os = "linux")]
@@ -927,7 +927,9 @@ fn dd_copy(input: Input, output: DdOutput) -> std::io::Result<()> {
 struct CopyState<'a> {
     input: Input<'a>,
     buffer: Vec<u8>,
+    buffer_size: usize,
     swab_byte: Option<u8>,
+    conversion_state: ConversionState,
     read_stat: ReadStat,
     write_stat: WriteStat,
     start_time: Instant,
@@ -975,7 +977,9 @@ fn initialize_copy_environment<'a>(
     let state = CopyState {
         input,
         buffer,
+        buffer_size: bsize,
         swab_byte: None,
+        conversion_state: ConversionState::default(),
         read_stat,
         write_stat,
         start_time,
@@ -1024,7 +1028,7 @@ fn read_and_process_block(
         &state.read_stat,
         &state.write_stat,
         state.input.settings.ibs,
-        state.buffer.len(),
+        state.buffer_size,
     );
 
     state.start_time = Instant::now();
@@ -1033,6 +1037,7 @@ fn read_and_process_block(
         &mut state.input,
         &mut state.buffer,
         &mut state.swab_byte,
+        &mut state.conversion_state,
         loop_bsize,
     )?;
     if rstat_update.is_empty() {
@@ -1109,11 +1114,17 @@ fn finalize_copy(mut output: BlockWriter, mut state: CopyState) -> std::io::Resu
     let mut dur = state.duration;
     let start_time = Instant::now();
 
-    if let Some(byte) = state.swab_byte.take() {
-        let mut final_buf = vec![byte];
-        if let Some(ref mode) = state.input.settings.iconv.mode {
-            final_buf = conv_block_unblock_helper(final_buf, mode, &mut state.read_stat);
-        }
+    let mut final_buf: Vec<_> = state.swab_byte.take().into_iter().collect();
+    if let Some(ref mode) = state.input.settings.iconv.mode {
+        final_buf = conv_block_unblock_helper(
+            final_buf,
+            mode,
+            &mut state.read_stat,
+            &mut state.conversion_state,
+            true,
+        );
+    }
+    if !final_buf.is_empty() {
         let wstat_update = output.write_blocks(&final_buf)?;
         state.write_stat += wstat_update;
         state.write_offset += wstat_update.bytes_total;
@@ -1226,6 +1237,7 @@ fn read_helper(
     i: &mut Input,
     buf: &mut Vec<u8>,
     swab_byte: &mut Option<u8>,
+    conversion_state: &mut ConversionState,
     bsize: usize,
 ) -> std::io::Result<ReadStat> {
     // Read
@@ -1248,7 +1260,8 @@ fn read_helper(
 
     match i.settings.iconv.mode {
         Some(ref mode) => {
-            *buf = conv_block_unblock_helper(buf.clone(), mode, &mut rstat);
+            *buf =
+                conv_block_unblock_helper(buf.clone(), mode, &mut rstat, conversion_state, false);
             Ok(rstat)
         }
         None => Ok(rstat),

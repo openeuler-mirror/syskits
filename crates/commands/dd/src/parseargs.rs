@@ -252,15 +252,15 @@ impl Parser {
             || conv.fsync;
         let buffered = self.bs.is_none() || self.is_conv_specified && has_effective_conv;
 
-        let skip = self
-            .skip
-            .force_bytes_if(self.iflag.is_skip_bytes)
-            .to_bytes(ibs as u64);
+        let skip = self.skip.force_bytes_if(self.iflag.is_skip_bytes);
+        let skip = skip
+            .to_bytes(ibs as u64)
+            .ok_or_else(|| ParseError::NumberTooLarge(skip.value().to_string()))?;
 
-        let seek = self
-            .seek
-            .force_bytes_if(self.oflag.is_seek_bytes)
-            .to_bytes(obs as u64);
+        let seek = self.seek.force_bytes_if(self.oflag.is_seek_bytes);
+        let seek = seek
+            .to_bytes(obs as u64)
+            .ok_or_else(|| ParseError::NumberTooLarge(seek.value().to_string()))?;
 
         let count = self
             .count

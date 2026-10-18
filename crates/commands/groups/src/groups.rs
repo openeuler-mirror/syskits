@@ -82,16 +82,22 @@ impl GroupsClapError {
                 Some(ContextValue::String(argument))
                     if argument == "--help" || argument == "--version" =>
                 {
-                    Some(format!("option '{argument}' doesn't allow an argument").into_bytes())
+                    Some(
+                        t!("groups.errors.option_argument", option = argument)
+                            .as_bytes()
+                            .to_vec(),
+                    )
                 }
                 _ => None,
             },
             _ => None,
         };
-        let show_usage = !matches!(
-            error.kind(),
-            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
-        );
+        let diagnostic = diagnostic.map(groups_append_help_hint);
+        let show_usage = diagnostic.is_none()
+            && !matches!(
+                error.kind(),
+                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+            );
         Self {
             inner: error.into(),
             diagnostic,
@@ -103,15 +109,35 @@ impl GroupsClapError {
 fn groups_invalid_option_diagnostic(argument: &OsStr) -> Option<Vec<u8>> {
     let argument = argument.as_bytes();
     if argument.starts_with(b"--") {
-        let mut diagnostic = b"unrecognized option '".to_vec();
-        diagnostic.extend_from_slice(argument);
-        diagnostic.push(b'\'');
-        Some(diagnostic)
+        Some(groups_render_option_diagnostic(
+            &t!("groups.errors.unrecognized_option", option = "\u{1}"),
+            argument,
+        ))
     } else {
-        argument
-            .get(1)
-            .map(|option| [b"invalid option -- '".as_slice(), &[*option], b"'"].concat())
+        argument.get(1).map(|option| {
+            groups_render_option_diagnostic(
+                &t!("groups.errors.invalid_option", option = "\u{1}"),
+                &[*option],
+            )
+        })
     }
+}
+
+fn groups_render_option_diagnostic(template: &str, argument: &[u8]) -> Vec<u8> {
+    let (prefix, suffix) = template.split_once('\u{1}').unwrap_or((template, ""));
+    [prefix.as_bytes(), argument, suffix.as_bytes()].concat()
+}
+
+fn groups_append_help_hint(mut diagnostic: Vec<u8>) -> Vec<u8> {
+    diagnostic.push(b'\n');
+    diagnostic.extend_from_slice(
+        t!(
+            "groups.errors.try_help",
+            command = ctcore::ct_help_utility_name()
+        )
+        .as_bytes(),
+    );
+    diagnostic
 }
 
 impl Display for GroupsClapError {
@@ -880,7 +906,7 @@ mod tests {
 
         #[test]
         fn test_invalid_option_uses_gnu_diagnostic() {
-            for (option, expected) in [
+            for (option, diagnostic) in [
                 ("-x", "invalid option -- 'x'"),
                 ("--bad", "unrecognized option '--bad'"),
             ] {
@@ -888,9 +914,15 @@ mod tests {
                     .try_get_matches_from([ctcore::ct_util_name(), option])
                     .expect_err("invalid option");
                 let error = crate::GroupsClapError::new(error);
-                assert_eq!(error.to_string(), expected);
+                assert_eq!(
+                    error.to_string(),
+                    format!(
+                        "{diagnostic}\nTry '{} --help' for more information.",
+                        ctcore::ct_help_utility_name()
+                    )
+                );
                 assert_eq!(error.code(), 1);
-                assert!(error.usage());
+                assert!(!error.usage());
             }
         }
 
@@ -904,10 +936,14 @@ mod tests {
                 let option_name = option.split('=').next().unwrap();
                 assert_eq!(
                     error.to_string(),
-                    format!("option '{option_name}' doesn't allow an argument")
+                    format!(
+                        "option '{option_name}' doesn't allow an argument\n\
+                         Try '{} --help' for more information.",
+                        ctcore::ct_help_utility_name()
+                    )
                 );
                 assert_eq!(error.code(), 1);
-                assert!(error.usage());
+                assert!(!error.usage());
             }
         }
 

@@ -12,3 +12,7 @@ groups:
     current_process: "failed to get groups for the current process"
     group_not_found: "cannot find name for group ID %{gid}"
     user_not_found: "%{user}: no such user"
+    invalid_option: "invalid option -- '%{option}'"
+    unrecognized_option: "unrecognized option '%{option}'"
+    option_argument: "option '%{option}' doesn't allow an argument"
+    try_help: "Try '%{command} --help' for more information."

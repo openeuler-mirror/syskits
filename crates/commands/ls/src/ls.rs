@@ -2958,8 +2958,8 @@ fn display_dir_entry_size<W: Write>(
         };
         (
             display_symlink_count(mdata).len(),
-            display_uname(mdata, config).as_bytes().len(),
-            display_group(mdata, config).as_bytes().len(),
+            os_str_display_width(&display_uname(mdata, config)),
+            os_str_display_width(&display_group(mdata, config)),
             size_len,
             major_len,
             minor_len,
@@ -2978,14 +2978,21 @@ fn pad_right(string: &str, cnt: usize) -> String {
 }
 
 #[cfg(unix)]
+fn os_str_display_width(value: &OsStr) -> usize {
+    value
+        .to_str()
+        .map(UnicodeWidthStr::width)
+        .unwrap_or_else(|| value.as_bytes().len())
+}
+
+#[cfg(unix)]
 fn write_os_str_padded<W: Write>(
     output: &mut W,
     value: &OsStr,
     width: usize,
 ) -> std::io::Result<()> {
-    let bytes = value.as_bytes();
-    output.write_all(bytes)?;
-    for _ in bytes.len()..width {
+    output.write_all(value.as_bytes())?;
+    for _ in os_str_display_width(value)..width {
         output.write_all(b" ")?;
     }
     Ok(())
@@ -4673,6 +4680,15 @@ mod tests {
         let mut output = Vec::new();
         write_os_str_padded(&mut output, OsStr::from_bytes(b"u\xff"), 3).unwrap();
         assert_eq!(output, b"u\xff ");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn padded_nss_name_uses_display_width() {
+        let mut output = Vec::new();
+        write_os_str_padded(&mut output, OsStr::new("中"), 2).unwrap();
+        write_os_str_padded(&mut output, OsStr::new("aa"), 2).unwrap();
+        assert_eq!(output, "中aa".as_bytes());
     }
 
     #[test]

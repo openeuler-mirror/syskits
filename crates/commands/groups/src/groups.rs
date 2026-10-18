@@ -15,7 +15,7 @@ extern crate rust_i18n;
 use ctcore::{
     ct_display::Quotable,
     ct_entries::{CtPasswd, get_groups_gnu, gid2grp},
-    ct_error::{CTError, CTResult},
+    ct_error::{CTError, CTResult, strip_errno},
     ct_process::{getegid, getgid},
 };
 use rust_i18n::t;
@@ -35,6 +35,7 @@ mod opt_flags {
 
 enum GroupsError {
     GetGroupsFailed,
+    GetGroupsForCurrentProcessFailed(std::io::Error),
     GroupNotFound(u32),
     UserNotFound(String),
 }
@@ -46,6 +47,13 @@ impl Display for GroupsError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::GetGroupsFailed => write!(f, "failed to fetch groups"),
+            Self::GetGroupsForCurrentProcessFailed(err) => {
+                write!(
+                    f,
+                    "failed to get groups for the current process: {}",
+                    strip_errno(err)
+                )
+            }
             Self::GroupNotFound(gid) => write!(f, "cannot find name for group ID {gid}"),
             Self::UserNotFound(user) => write!(f, "{}: no such user", user.quote()),
         }
@@ -135,15 +143,24 @@ fn groups_collect_for_users(users: Vec<String>) -> CTResult<GroupsSemantic> {
     let mut exit_code = 0;
 
     if users.is_empty() {
-        let gids = groups_for_current_process(
-            getgid(),
-            getegid(),
-            get_groups_gnu(None).map_err(|_| GroupsError::GetGroupsFailed)?,
-        );
+        let rgid = getgid();
+        let egid = getegid();
+        let (gids, get_groups_error) = match get_groups_gnu(None) {
+            Ok(gids) => (groups_for_current_process(rgid, egid, gids), None),
+            Err(err) if err.kind() == std::io::ErrorKind::InvalidInput => (
+                groups_for_current_process(rgid, egid, Vec::new()),
+                Some(GroupsError::GetGroupsForCurrentProcessFailed(err)),
+            ),
+            Err(_) => return Err(GroupsError::GetGroupsFailed.into()),
+        };
         let groups = gids
             .iter()
             .map(|gid| groups_infallible_gid2grp(gid, &mut stderr_text, &mut exit_code))
             .collect();
+        if let Some(err) = get_groups_error {
+            exit_code = 1;
+            stderr_text.push_str(&format!("groups: {err}\n"));
+        }
         entries.push(GroupsEntry { user: None, groups });
     } else {
         for user in users {

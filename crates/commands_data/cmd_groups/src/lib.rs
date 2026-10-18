@@ -133,6 +133,7 @@ mod tests {
             classic_text: "root : root wheel\n".into(),
             classic_bytes: b"root : root wheel\n".to_vec(),
             stderr_text: String::new(),
+            output_events: Vec::new(),
             exit_code: 0,
         });
 

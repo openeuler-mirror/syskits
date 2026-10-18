@@ -25,6 +25,7 @@ use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version}
 use ctcore::Tool;
 use std::ffi::{OsStr, OsString};
 use std::io::Write as IoWrite;
+use std::ops::Range;
 use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 
@@ -91,11 +92,18 @@ pub struct GroupsEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GroupsOutputEvent {
+    Stdout(Range<usize>),
+    Stderr(Range<usize>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GroupsSemantic {
     pub entries: Vec<GroupsEntry>,
     pub classic_text: String,
     pub classic_bytes: Vec<u8>,
     pub stderr_text: String,
+    pub output_events: Vec<GroupsOutputEvent>,
     pub exit_code: i32,
 }
 
@@ -172,6 +180,26 @@ fn groups_render_classic_bytes(entries: &[GroupsRawEntry]) -> Vec<u8> {
     classic_bytes
 }
 
+fn groups_record_stdout_event(
+    entry: &GroupsRawEntry,
+    classic_bytes: &mut Vec<u8>,
+    output_events: &mut Vec<GroupsOutputEvent>,
+) {
+    let start = classic_bytes.len();
+    classic_bytes.extend_from_slice(&groups_render_classic_bytes(std::slice::from_ref(entry)));
+    output_events.push(GroupsOutputEvent::Stdout(start..classic_bytes.len()));
+}
+
+fn groups_record_stderr_event(
+    start: usize,
+    stderr_text: &str,
+    output_events: &mut Vec<GroupsOutputEvent>,
+) {
+    if start != stderr_text.len() {
+        output_events.push(GroupsOutputEvent::Stderr(start..stderr_text.len()));
+    }
+}
+
 fn groups_for_current_process(rgid: u32, egid: u32, groups: Vec<u32>) -> Vec<u32> {
     let mut result = Vec::with_capacity(groups.len() + usize::from(rgid != egid) + 1);
     result.push(rgid);
@@ -195,11 +223,13 @@ fn groups_for_named_user(primary_gid: u32, groups: Vec<u32>) -> Vec<u32> {
 
 fn groups_collect_for_users(users: Vec<OsString>) -> CTResult<GroupsSemantic> {
     let mut entries = Vec::new();
-    let mut raw_entries = Vec::new();
+    let mut classic_bytes = Vec::new();
     let mut stderr_text = String::new();
+    let mut output_events = Vec::new();
     let mut exit_code = 0;
 
     if users.is_empty() {
+        let stderr_start = stderr_text.len();
         let rgid = getgid();
         let egid = getegid();
         let (gids, get_groups_error) = match get_groups_gnu(None) {
@@ -222,12 +252,15 @@ fn groups_collect_for_users(users: Vec<OsString>) -> CTResult<GroupsSemantic> {
             stderr_text.push_str(&format!("groups: {err}\n"));
         }
         entries.push(GroupsEntry { user: None, groups });
-        raw_entries.push(GroupsRawEntry {
+        let raw_entry = GroupsRawEntry {
             user: None,
             groups: raw_groups,
-        });
+        };
+        groups_record_stdout_event(&raw_entry, &mut classic_bytes, &mut output_events);
+        groups_record_stderr_event(stderr_start, &stderr_text, &mut output_events);
     } else {
         for user in users {
+            let stderr_start = stderr_text.len();
             match CtPasswd::locate_name_os(&user) {
                 Ok(passwd) => {
                     let reverse_passwd = CtPasswd::locate(passwd.uid).ok();
@@ -249,26 +282,28 @@ fn groups_collect_for_users(users: Vec<OsString>) -> CTResult<GroupsSemantic> {
                         user: Some(user.to_string_lossy().into_owned()),
                         groups,
                     });
-                    raw_entries.push(GroupsRawEntry {
+                    let raw_entry = GroupsRawEntry {
                         user: Some(user),
                         groups: raw_groups,
-                    });
+                    };
+                    groups_record_stdout_event(&raw_entry, &mut classic_bytes, &mut output_events);
                 }
                 Err(_) => {
                     exit_code = 1;
                     stderr_text.push_str(&format!("groups: {}\n", GroupsError::UserNotFound(user)));
                 }
             }
+            groups_record_stderr_event(stderr_start, &stderr_text, &mut output_events);
         }
     }
 
     let classic_text = groups_render_classic_text(&entries);
-    let classic_bytes = groups_render_classic_bytes(&raw_entries);
     Ok(GroupsSemantic {
         entries,
         classic_text,
         classic_bytes,
         stderr_text,
+        output_events,
         exit_code,
     })
 }
@@ -300,13 +335,19 @@ impl Tool for Groups {
         let result = groups_native_semantic(args.iter().cloned());
         match result {
             Ok(semantic) => {
-                if !semantic.classic_bytes.is_empty() {
-                    std::io::stdout()
-                        .lock()
-                        .write_all(&semantic.classic_bytes)?;
-                }
-                if !semantic.stderr_text.is_empty() {
-                    eprint!("{}", semantic.stderr_text);
+                let mut stdout = std::io::stdout().lock();
+                let mut stderr = std::io::stderr().lock();
+                for event in &semantic.output_events {
+                    match event {
+                        GroupsOutputEvent::Stdout(range) => {
+                            stdout.write_all(&semantic.classic_bytes[range.clone()])?;
+                            stdout.flush()?;
+                        }
+                        GroupsOutputEvent::Stderr(range) => {
+                            stderr.write_all(&semantic.stderr_text.as_bytes()[range.clone()])?;
+                            stderr.flush()?;
+                        }
+                    }
                 }
 
                 if semantic.exit_code == 0 {
@@ -360,8 +401,9 @@ mod tests {
 
     mod tests_groups_main {
         use crate::{
-            GroupsRawEntry, groups_for_current_process, groups_for_named_user, groups_main,
-            groups_native_semantic, groups_quote_username, groups_render_classic_bytes,
+            GroupsOutputEvent, GroupsRawEntry, groups_for_current_process, groups_for_named_user,
+            groups_main, groups_native_semantic, groups_quote_username,
+            groups_render_classic_bytes,
         };
 
         use std::ffi::{OsStr, OsString};
@@ -434,6 +476,31 @@ mod tests {
             assert!(!result.entries[0].groups.is_empty());
             assert!(result.entries[0].groups.iter().any(|group| group == "root"));
             assert_eq!(result.classic_text, format!("{}\n", result.entries[0]));
+        }
+
+        #[test]
+        fn test_groups_output_events_follow_argument_order() {
+            let args = [
+                ctcore::ct_util_name(),
+                "groups_compat_missing_one",
+                "root",
+                "groups_compat_missing_two",
+            ];
+            let result = groups_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+            assert_eq!(result.output_events.len(), 3);
+            assert!(matches!(
+                result.output_events[0],
+                GroupsOutputEvent::Stderr(_)
+            ));
+            assert!(matches!(
+                result.output_events[1],
+                GroupsOutputEvent::Stdout(_)
+            ));
+            assert!(matches!(
+                result.output_events[2],
+                GroupsOutputEvent::Stderr(_)
+            ));
         }
 
         #[test]

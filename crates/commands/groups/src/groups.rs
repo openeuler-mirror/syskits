@@ -13,7 +13,7 @@
 
 extern crate rust_i18n;
 use ctcore::{
-    ct_entries::{CtPasswd, Locate, get_groups_gnu, gid2grp_os},
+    ct_entries::{CtPasswd, Locate, get_groups, gid2grp_os},
     ct_error::{CTError, CTResult, FromIo, strip_errno},
     ct_process::{getegid, getgid},
 };
@@ -288,11 +288,17 @@ fn groups_for_current_process(rgid: u32, egid: u32, groups: Vec<u32>) -> Vec<u32
     if egid != rgid {
         result.push(egid);
     }
-    result.extend(
-        groups
-            .into_iter()
-            .filter(|group| *group != rgid && *group != egid),
-    );
+
+    // GNU mgetgroups removes the effective GID and adjacent duplicates only.
+    let mut last_group = egid;
+    for group in groups {
+        if group != egid && group != last_group {
+            last_group = group;
+            if group != rgid {
+                result.push(group);
+            }
+        }
+    }
     result
 }
 
@@ -314,7 +320,7 @@ fn groups_collect_for_users(users: Vec<OsString>) -> CTResult<GroupsSemantic> {
         let stderr_start = stderr_text.len();
         let rgid = getgid();
         let egid = getegid();
-        let (gids, get_groups_error) = match get_groups_gnu(None) {
+        let (gids, get_groups_error) = match get_groups() {
             Ok(gids) => (groups_for_current_process(rgid, egid, gids), None),
             Err(err) => (
                 groups_for_current_process(rgid, egid, Vec::new()),
@@ -562,6 +568,19 @@ mod tests {
                 groups_for_current_process(1000, 1000, vec![1000, 10, 20]),
                 vec![1000, 10, 20]
             );
+        }
+
+        #[test]
+        fn test_groups_for_current_process_uses_gnu_duplicate_reduction() {
+            assert_eq!(
+                groups_for_current_process(0, 0, vec![1, 2, 1]),
+                vec![0, 1, 2, 1]
+            );
+            assert_eq!(
+                groups_for_current_process(0, 0, vec![1, 1, 2, 2]),
+                vec![0, 1, 2]
+            );
+            assert_eq!(groups_for_current_process(0, 0, vec![1, 0, 1]), vec![0, 1]);
         }
 
         #[test]

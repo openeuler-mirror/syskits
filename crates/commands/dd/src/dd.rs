@@ -38,6 +38,8 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_error::{CTResult, FromIo};
 use ctcore::ct_show_error;
+#[cfg(unix)]
+use nix::unistd::{Whence, lseek};
 #[cfg(target_os = "linux")]
 use nix::{
     fcntl::{PosixFadviseAdvice, posix_fadvise},
@@ -764,7 +766,13 @@ impl Dest {
 
     fn seek(&mut self, n: u64) -> io::Result<u64> {
         match self {
-            Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
+            Self::Stdout(stdout) => {
+                #[cfg(unix)]
+                if n > 0 {
+                    lseek(stdout.as_raw_fd(), 0, Whence::SeekCur).map_err(io::Error::from)?;
+                }
+                io::copy(&mut io::repeat(0).take(n), stdout)
+            }
             Self::File(f, _) => {
                 #[cfg(unix)]
                 if let Ok(Some(len)) = try_get_len_of_block_device(f) {
@@ -892,7 +900,7 @@ impl<'a> DdOutput<'a> {
             .map_err_context(|| "setting flags for 'standard output'".to_string())?;
         let mut dst = Dest::Stdout(stdout);
         dst.seek(settings.seek)
-            .map_err_context(|| "write error".to_string())?;
+            .map_err_context(|| "'standard output': cannot seek".to_string())?;
         Ok(Self { dst, settings })
     }
 

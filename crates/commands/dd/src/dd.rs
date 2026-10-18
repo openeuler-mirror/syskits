@@ -38,7 +38,6 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_error::{CTResult, FromIo};
 use ctcore::ct_show_error;
-use gcd::Gcd;
 #[cfg(target_os = "linux")]
 use nix::{
     errno::Errno,
@@ -1479,16 +1478,10 @@ fn read_helper(
     }
 }
 
-// Calculate a 'good' internal buffer size.
-// For performance of the read/write functions, the buffer should hold
-// both an integral number of reads and an integral number of writes. For
-// sane real-world memory use, it should not be too large. I believe
-// the least common multiple is a good representation of these interests.
-// https://en.wikipedia.org/wiki/Least_common_multiple#Using_the_greatest_common_divisor
-fn calc_bsize(ibs: usize, obs: usize) -> usize {
-    let gcd = Gcd::gcd(ibs, obs);
-    // calculate the lcm from gcd
-    (ibs / gcd) * obs
+// Input and output buffering are independent, so the read buffer only needs
+// to hold one input block. BlockWriter aggregates writes to obs separately.
+fn calc_bsize(ibs: usize, _obs: usize) -> usize {
+    ibs
 }
 
 // Calculate the buffer size appropriate for this loop iteration, respecting
@@ -1689,73 +1682,10 @@ mod tests {
     }
 
     #[test]
-    fn bsize_test_primes() {
-        let (n, m) = (7901, 7919);
-        let res = calc_bsize(n, m);
-        assert!(res % n == 0);
-        assert!(res % m == 0);
-
-        assert_eq!(res, n * m);
-    }
-
-    #[test]
-    fn bsize_test_rel_prime_obs_greater() {
-        let (n, m) = (7 * 5119, 13 * 5119);
-        let res = calc_bsize(n, m);
-        assert!(res % n == 0);
-        assert!(res % m == 0);
-
-        assert_eq!(res, 7 * 13 * 5119);
-    }
-
-    #[test]
-    fn bsize_test_rel_prime_ibs_greater() {
-        let (n, m) = (13 * 5119, 7 * 5119);
-        let res = calc_bsize(n, m);
-        assert!(res % n == 0);
-        assert!(res % m == 0);
-
-        assert_eq!(res, 7 * 13 * 5119);
-    }
-
-    #[test]
-    fn bsize_test_3fac_rel_prime() {
-        let (n, m) = (11 * 13 * 5119, 7 * 11 * 5119);
-        let res = calc_bsize(n, m);
-        assert!(res % n == 0);
-        assert!(res % m == 0);
-
-        assert_eq!(res, 7 * 11 * 13 * 5119);
-    }
-
-    #[test]
-    fn bsize_test_ibs_greater() {
-        let (n, m) = (512 * 1024, 256 * 1024);
-        let res = calc_bsize(n, m);
-        assert!(res % n == 0);
-        assert!(res % m == 0);
-
-        assert_eq!(res, n);
-    }
-
-    #[test]
-    fn bsize_test_obs_greater() {
-        let (n, m) = (256 * 1024, 512 * 1024);
-        let res = calc_bsize(n, m);
-        assert!(res % n == 0);
-        assert!(res % m == 0);
-
-        assert_eq!(res, m);
-    }
-
-    #[test]
-    fn bsize_test_bs_eq() {
-        let (n, m) = (1024, 1024);
-        let res = calc_bsize(n, m);
-        assert!(res % n == 0);
-        assert!(res % m == 0);
-
-        assert_eq!(res, m);
+    fn bsize_uses_one_input_block() {
+        assert_eq!(calc_bsize(65_537, 65_536), 65_537);
+        assert_eq!(calc_bsize(4, 6), 4);
+        assert_eq!(calc_bsize(6, 4), 6);
     }
 
     #[test]
@@ -1861,6 +1791,25 @@ mod dd_copy_tests {
         result_file.seek(SeekFrom::Start(0))?;
         result_file.read_to_end(&mut result)?;
         assert_eq!(&result[..], input_data);
+        Ok(())
+    }
+
+    #[test]
+    fn test_copy_with_coprime_input_and_output_block_sizes() -> CTResult<()> {
+        let options = Parser::new()
+            .parse(&["ibs=257", "obs=256", "status=none"])
+            .unwrap();
+        let input_data: Vec<u8> = (0..600).map(|n| (n % 251) as u8).collect();
+
+        let input = create_test_input(&input_data, &options)?;
+        let (output, mut result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        let mut result = Vec::new();
+        result_file.seek(SeekFrom::Start(0))?;
+        result_file.read_to_end(&mut result)?;
+        assert_eq!(result, input_data);
         Ok(())
     }
 

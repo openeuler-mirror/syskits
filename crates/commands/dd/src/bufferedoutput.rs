@@ -70,36 +70,28 @@ impl<'a> DDBufferedOutput<'a> {
     /// buffered until enough bytes have been provided to complete a
     /// block. The returned [`WriteStat`] object will include the
     /// number of blocks written during execution of this function.
-    pub(crate) fn dd_write_blocks(&mut self, buf: &[u8]) -> std::io::Result<WriteStat> {
-        // Split the incoming buffer into two parts: the bytes to write
-        // and the bytes to buffer for next time.
-        //
-        // If `buf` does not include enough bytes to form a full block,
-        // just buffer the whole thing and write zero blocks.
-        let n = self.buf.len() + buf.len();
-        let rem = n % self.inner.settings.obs;
-        let i = buf.len().saturating_sub(rem);
-        let (to_write, to_buffer) = buf.split_at(i);
+    pub(crate) fn dd_write_blocks(&mut self, mut buf: &[u8]) -> std::io::Result<WriteStat> {
+        let obs = self.inner.settings.obs;
+        let mut wstat = WriteStat::default();
 
-        // Concatenate the old partial block with the new bytes to form
-        // some number of complete blocks.
-        self.buf.extend_from_slice(to_write);
+        if !self.buf.is_empty() {
+            let consumed = std::cmp::min(obs - self.buf.len(), buf.len());
+            self.buf.extend_from_slice(&buf[..consumed]);
+            buf = &buf[consumed..];
 
-        // Write all complete blocks to the inner block writer.
-        //
-        // For example, if the output block size were 3, the buffered
-        // partial block were `b"ab"` and the new incoming bytes were
-        // `b"cdefg"`, then we would write blocks `b"abc"` and
-        // b`"def"` to the inner block writer.
-        let wstat = self.inner.write_blocks(&self.buf)?;
+            if self.buf.len() < obs {
+                return Ok(wstat);
+            }
 
-        // Buffer any remaining bytes as a partial block.
-        //
-        // Continuing the example above, the last byte `b"g"` would be
-        // buffered as a partial block until the next call to
-        // `write_blocks()`.
-        self.buf.clear();
-        self.buf.extend_from_slice(to_buffer);
+            wstat += self.inner.write_blocks(&self.buf)?;
+            self.buf.clear();
+        }
+
+        let complete_len = buf.len() - buf.len() % obs;
+        if complete_len > 0 {
+            wstat += self.inner.write_blocks(&buf[..complete_len])?;
+        }
+        self.buf.extend_from_slice(&buf[complete_len..]);
 
         Ok(wstat)
     }
@@ -306,11 +298,11 @@ mod tests_write_blocks {
         // Second write
         let wstat2 = output.dd_write_blocks(b"c").unwrap();
         assert_eq!(wstat2.writes_complete, 0, "Expected no complete writes");
-        assert_eq!(wstat2.writes_partial, 1, "Expected one partial write");
-        assert_eq!(wstat2.bytes_total, 2, "Expected 2 bytes written");
-        assert_eq!(output.buf, b"c", "Buffer should contain 'c'");
+        assert_eq!(wstat2.writes_partial, 0, "Expected no partial writes");
+        assert_eq!(wstat2.bytes_total, 0, "Expected no bytes written");
+        assert_eq!(output.buf, b"abc", "Buffer should contain 'abc'");
 
-        // Third write - completes the block and writes another
+        // Third write completes the block and buffers the remainder.
 
         let wstat3 = output.dd_write_blocks(b"def").unwrap();
 
@@ -320,11 +312,13 @@ mod tests_write_blocks {
         );
         assert_eq!(wstat3.writes_partial, 0, "Expected no partial writes");
         assert_eq!(wstat3.bytes_total, 4, "Expected 4 bytes written");
-        assert_eq!(
-            output.buf,
-            Vec::<u8>::new(),
-            "Buffer should be empty after write"
-        );
+        assert_eq!(output.buf, b"ef", "Buffer should contain 'ef'");
+
+        let final_wstat = output.flush().unwrap();
+        assert_eq!(final_wstat.writes_complete, 0);
+        assert_eq!(final_wstat.writes_partial, 1);
+        assert_eq!(final_wstat.bytes_total, 2);
+        assert!(output.buf.is_empty());
 
         println!("=== Test completed ===\n");
     }
@@ -344,29 +338,17 @@ mod tests_write_blocks {
             buf: b"ab".to_vec(),
         };
 
-        // 第一次写入：空缓冲区;
+        // An empty write must not flush an existing partial block.
         let wstat = output.dd_write_blocks(&[]).unwrap();
         assert_eq!(
             wstat.writes_complete, 0,
             "Expected no complete writes for partial buffer"
         );
-        assert_eq!(wstat.writes_partial, 1, "Expected one partial write");
-        assert_eq!(wstat.bytes_total, 2, "Expected 2 bytes written");
-        assert_eq!(
-            output.buf,
-            Vec::<u8>::new(),
-            "Buffer should be empty after write"
-        );
-
-        // 第二次写入：新的部分块
-        let wstat = output.dd_write_blocks(b"xy").unwrap();
-        assert_eq!(wstat.writes_complete, 0, "Expected no complete writes");
         assert_eq!(wstat.writes_partial, 0, "Expected no partial writes");
         assert_eq!(wstat.bytes_total, 0, "Expected no bytes written");
-        assert_eq!(output.buf, b"xy", "Buffer should contain partial block");
+        assert_eq!(output.buf, b"ab", "Buffer should preserve partial block");
 
-        // 第三次写入：补充一个字节形成完整块
-
+        // Supplying the missing byte completes exactly one output block.
         let wstat = output.dd_write_blocks(b"z").unwrap();
         assert_eq!(wstat.writes_complete, 1, "Expected one complete write");
         assert_eq!(wstat.writes_partial, 0, "Expected no partial writes");

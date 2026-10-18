@@ -12,8 +12,13 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 use std::cmp::Reverse;
+use std::error::Error;
 use std::ffi::OsString;
+use std::fmt::Display;
 use std::fs::{self, FileType, Metadata};
+use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -79,6 +84,53 @@ struct DirectVdirInvocation {
     stdout: Vec<u8>,
     stderr: Vec<u8>,
     exit_code: i32,
+}
+
+#[derive(Debug)]
+struct VdirNonUtf8OptionError {
+    diagnostic: Vec<u8>,
+}
+
+impl Display for VdirNonUtf8OptionError {
+    fn fmt(&self, _formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut stderr = std::io::stderr().lock();
+        let _ = stderr
+            .write_all(ctcore::ct_util_name().as_bytes())
+            .and_then(|_| stderr.write_all(b": "))
+            .and_then(|_| stderr.write_all(&self.diagnostic))
+            .and_then(|_| stderr.write_all(b"\n"))
+            .and_then(|_| stderr.flush());
+        Ok(())
+    }
+}
+
+impl Error for VdirNonUtf8OptionError {}
+
+impl ctcore::ct_error::CTError for VdirNonUtf8OptionError {
+    fn code(&self) -> i32 {
+        2
+    }
+}
+
+#[cfg(unix)]
+fn vdir_non_utf8_option_error(args: &[OsString]) -> Option<VdirNonUtf8OptionError> {
+    let argument = args
+        .iter()
+        .skip(1)
+        .find(|argument| argument.to_str().is_none() && argument.as_bytes().starts_with(b"-"))?;
+    let bytes = argument.as_bytes();
+    let mut diagnostic = if bytes.starts_with(b"--") {
+        [b"unrecognized option '".as_slice(), bytes, b"'"].concat()
+    } else {
+        [b"invalid option -- '".as_slice(), bytes.get(1..2)?, b"'"].concat()
+    };
+    diagnostic.extend_from_slice(b"\nTry 'vdir --help' for more information.");
+    Some(VdirNonUtf8OptionError { diagnostic })
+}
+
+#[cfg(not(unix))]
+fn vdir_non_utf8_option_error(_args: &[OsString]) -> Option<VdirNonUtf8OptionError> {
+    None
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -605,11 +657,20 @@ pub fn vdir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDa
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
+    let args: Vec<OsString> = args.collect();
     let command = ct_app();
-    let matches = command.try_get_matches_from(args).map_err(|err| {
-        let code = ct_ls::ls_clap_error_exit_code(&err);
-        err.with_exit_code(code)
-    })?;
+    let matches = match command.try_get_matches_from(args.iter().cloned()) {
+        Ok(matches) => matches,
+        Err(err) => {
+            if err.kind() == clap::error::ErrorKind::UnknownArgument
+                && let Some(error) = vdir_non_utf8_option_error(&args)
+            {
+                return Err(Box::new(error));
+            }
+            let code = ct_ls::ls_clap_error_exit_code(&err);
+            return Err(Box::new(err.with_exit_code(code)));
+        }
+    };
     let config = vdir_config_from_matches(&matches)?;
     let paths_from_args = vdir_paths_from_matches(&matches);
 
@@ -644,6 +705,22 @@ impl Tool for Vdir {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_non_utf8_option_diagnostic_preserves_original_byte() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let args = [
+            OsString::from("vdir"),
+            OsString::from_vec(b"-\xff".to_vec()),
+        ];
+        let error = vdir_non_utf8_option_error(&args).expect("non-UTF-8 option error");
+        assert_eq!(
+            error.diagnostic,
+            b"invalid option -- '\xff'\nTry 'vdir --help' for more information."
+        );
+    }
 
     #[test]
     fn test_tool_implementation() {

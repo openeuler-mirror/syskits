@@ -10,6 +10,7 @@
  */
 
 extern crate rust_i18n;
+use clap::builder::OsStringValueParser;
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
@@ -176,7 +177,7 @@ pub fn chmod_main(args: impl ctcore::Args) -> CTResult<()> {
         // command-line symlinked directories are traversed, but nested symlinks are not.
         TraverseMode::First
     };
-    let reference_file = args_match.get_one::<String>(chmod_flags::REFERENCE);
+    let reference_file = args_match.get_one::<OsString>(chmod_flags::REFERENCE);
     if parsed_cmode.is_some() && reference_file.is_some() {
         return Err(CTsageError::new(
             1,
@@ -185,12 +186,16 @@ pub fn chmod_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     let mode_reference = match reference_file {
-        Some(reference) => match fs::metadata(reference) {
+        Some(reference) => match fs::metadata(Path::new(reference)) {
             Ok(metra) => Some(metra.mode() & 0o7777),
             Err(e) => {
                 return Err(CtSimpleError::new(
                     1,
-                    format!("cannot stat attributes of {}: {}", reference.quote(), e),
+                    format!(
+                        "cannot stat attributes of {}: {}",
+                        Path::new(reference).quote(),
+                        e
+                    ),
                 ));
             }
         },
@@ -198,16 +203,15 @@ pub fn chmod_main(args: impl ctcore::Args) -> CTResult<()> {
     };
 
     let diagnose_surprises = parsed_cmode.is_some();
-    let chmod_flags_modes = args_match.get_one::<String>(chmod_flags::MODE);
+    let chmod_flags_modes = args_match.get_one::<OsString>(chmod_flags::MODE);
     let chmod = if let Some(parsed_cmode) = parsed_cmode {
-        parsed_cmode
+        OsString::from(parsed_cmode)
     } else {
-        chmod_flags_modes.unwrap().to_string() // modes 是必需的
+        chmod_flags_modes.unwrap().clone() // modes 是必需的
     };
-    // FIXME: 支持非UTF-8路径
-    let mut f: Vec<String> = args_match
-        .get_many::<String>(chmod_flags::FILE)
-        .map(|v| v.map(ToString::to_string).collect())
+    let mut f: Vec<OsString> = args_match
+        .get_many::<OsString>(chmod_flags::FILE)
+        .map(|v| v.cloned().collect())
         .unwrap_or_default();
     let cmode = if mode_reference.is_some() {
         // "--reference" 和 MODE 互斥
@@ -216,7 +220,9 @@ pub fn chmod_main(args: impl ctcore::Args) -> CTResult<()> {
         f.insert(0, chmod);
         None
     } else {
-        Some(chmod)
+        Some(chmod.into_string().map_err(|mode| {
+            CtSimpleError::new(1, format!("invalid mode: {}", Path::new(&mode).quote()))
+        })?)
     };
 
     if f.is_empty() {
@@ -328,12 +334,16 @@ fn chmod_args_init() -> Vec<Arg> {
             .action(ArgAction::SetTrue),
         Arg::new(chmod_flags::REFERENCE)
             .long("reference")
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath)
             .help(t!("chmod.clap.reference")),
-        Arg::new(chmod_flags::MODE).required_unless_present(chmod_flags::REFERENCE),
+        Arg::new(chmod_flags::MODE)
+            .required_unless_present(chmod_flags::REFERENCE)
+            .value_parser(OsStringValueParser::new()),
         Arg::new(chmod_flags::FILE)
             .required_unless_present(chmod_flags::MODE)
             .action(ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::AnyPath),
         Arg::new("help")
             .short('h')
@@ -384,19 +394,18 @@ impl Chmoder {
         }
     }
 
-    fn chmod(&self, files: &[String]) -> CTResult<()> {
+    fn chmod(&self, files: &[OsString]) -> CTResult<()> {
         let mut failed = false;
 
         for name in files {
-            let file_name = &name[..];
-            let file_path = Path::new(file_name);
+            let file_path = Path::new(name);
 
-            if self.recursive && self.preserve_root && file_name == "/" {
+            if self.recursive && self.preserve_root && file_path == Path::new("/") {
                 return Err(CtSimpleError::new(
                     1,
                     format!(
                         "it is dangerous to operate recursively on {}\nchmod: use --no-preserve-root to override this failsafe",
-                        file_name.quote()
+                        file_path.quote()
                     ),
                 ));
             }
@@ -631,7 +640,7 @@ impl Chmoder {
 mod tests {
     use super::*;
     use clap::error::ErrorKind;
-    use std::ffi::OsString;
+    use std::ffi::{OsStr, OsString};
     use std::fs::File;
     use std::fs::{self, Permissions};
     use std::io;
@@ -980,6 +989,57 @@ mod tests {
 
             assert!(result.is_err());
         }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_non_utf8_file_and_reference_paths() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let temp_dir = Builder::new()
+                .prefix("chmod_non_utf8_paths")
+                .tempdir()
+                .unwrap();
+            let file = temp_dir
+                .path()
+                .join(OsString::from_vec(b"file\xff".to_vec()));
+            File::create(&file).unwrap();
+            fs::set_permissions(&file, Permissions::from_mode(0o600)).unwrap();
+
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("644"),
+                file.clone().into_os_string(),
+            ];
+            chmod_main(args.into_iter()).unwrap();
+            assert_eq!(
+                fs::metadata(&file).unwrap().permissions().mode() & 0o777,
+                0o644
+            );
+
+            let reference = temp_dir
+                .path()
+                .join(OsString::from_vec(b"reference\xfe".to_vec()));
+            let target = temp_dir
+                .path()
+                .join(OsString::from_vec(b"target\xfd".to_vec()));
+            File::create(&reference).unwrap();
+            File::create(&target).unwrap();
+            fs::set_permissions(&reference, Permissions::from_mode(0o640)).unwrap();
+            fs::set_permissions(&target, Permissions::from_mode(0o777)).unwrap();
+
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--reference"),
+                reference.clone().into_os_string(),
+                target.clone().into_os_string(),
+            ];
+            chmod_main(args.into_iter()).unwrap();
+            assert_eq!(
+                fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+                0o640
+            );
+        }
+
         #[test]
         fn test_ctmain_arg_help() {
             // 测试用例：请求帮助信息（--help 或 -h）
@@ -1144,8 +1204,11 @@ mod tests {
         let matches = command.try_get_matches_from(args).unwrap();
 
         assert_eq!(
-            matches.get_one::<String>(chmod_flags::REFERENCE).unwrap(),
-            reference_file
+            matches
+                .get_one::<OsString>(chmod_flags::REFERENCE)
+                .unwrap()
+                .as_os_str(),
+            OsStr::new(reference_file)
         );
     }
     #[test]
@@ -1187,8 +1250,11 @@ mod tests {
         }
 
         assert_eq!(
-            matches.get_one::<String>(chmod_flags::FILE).unwrap(),
-            mode_value
+            matches
+                .get_one::<OsString>(chmod_flags::FILE)
+                .unwrap()
+                .as_os_str(),
+            OsStr::new(mode_value)
         );
     }
     #[test]
@@ -1202,10 +1268,11 @@ mod tests {
 
         assert_eq!(
             matches
-                .get_many::<String>(chmod_flags::FILE)
+                .get_many::<OsString>(chmod_flags::FILE)
                 .unwrap()
+                .map(|value| value.as_os_str())
                 .collect::<Vec<_>>(),
-            [file_path]
+            [OsStr::new(file_path)]
         );
     }
     #[test]
@@ -1219,10 +1286,11 @@ mod tests {
 
         assert_eq!(
             matches
-                .get_many::<String>(chmod_flags::FILE)
+                .get_many::<OsString>(chmod_flags::FILE)
                 .unwrap()
+                .map(|value| value.as_os_str())
                 .collect::<Vec<_>>(),
-            [file_path1, file_path2]
+            [OsStr::new(file_path1), OsStr::new(file_path2)]
         );
     }
 

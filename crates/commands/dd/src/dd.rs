@@ -1108,17 +1108,11 @@ impl BlockWriter<'_> {
     }
 
     /// Truncate the file to the final cursor location.
-    fn truncate(&mut self, allow_shrink: bool) {
-        // Calling `set_len()` may result in an error (for example,
-        // when calling it on `/dev/null`), but we don't want to
-        // terminate the process when that happens. Instead, we
-        // suppress the error by calling `Result::ok()`. This matches
-        // the behavior of GNU `dd` when given the command-line
-        // argument `of=/dev/null`.
+    fn truncate(&mut self, allow_shrink: bool) -> io::Result<()> {
         match self {
-            Self::Unbuffered(o) => o.truncate(allow_shrink).ok(),
-            Self::Buffered(o) => o.truncate(allow_shrink).ok(),
-        };
+            Self::Unbuffered(o) => o.truncate(allow_shrink),
+            Self::Buffered(o) => o.truncate(allow_shrink),
+        }
     }
 
     fn write_blocks(&mut self, buf: &[u8]) -> std::io::Result<WriteStat> {
@@ -1407,7 +1401,24 @@ fn finalize_copy(mut output: BlockWriter, mut state: CopyState) -> std::io::Resu
     // Dense writes extend the file themselves. A final size adjustment is
     // needed only after output was produced, notably for sparse seeks.
     if final_wstat.bytes_total != 0 {
-        output.truncate(!state.input.settings.oconv.is_notrunc);
+        if let Err(e) = output.truncate(!state.input.settings.oconv.is_notrunc) {
+            let final_offset = state.write_offset.saturating_add(wstat_update.bytes_total);
+            match state.input.settings.outfile.as_ref() {
+                Some(path) => ct_show_error!(
+                    "failed to truncate to {} bytes in output file {}: {}",
+                    final_offset,
+                    Path::new(path).quote(),
+                    e
+                ),
+                None => ct_show_error!(
+                    "failed to truncate to {} bytes in output file 'standard output': {}",
+                    final_offset,
+                    e
+                ),
+            }
+            #[cfg(unix)]
+            set_ct_exit_code(1);
+        }
     }
 
     dur += start_time.elapsed();

@@ -483,22 +483,25 @@ pub(crate) fn gen_prog_updater(
     print_level: Option<StatusLevel>,
 ) -> impl Fn() {
     // TODO: SIGINFO: Trigger progress line reprint. BSD-style Linux only.
-    const SIGUSR1_USIZE: usize = signal::SIGUSR1 as usize;
     fn posixly_correct() -> bool {
         env::var("POSIXLY_CORRECT").is_ok()
     }
-    fn register_linux_signal_handler(sigval: Arc<AtomicUsize>) -> Result<(), Box<dyn Error>> {
+    fn register_linux_signal_handler(signal_count: Arc<AtomicUsize>) -> Result<(), Box<dyn Error>> {
         if !posixly_correct() {
-            signal_hook::flag::register_usize(signal::SIGUSR1, sigval, SIGUSR1_USIZE)?;
+            unsafe {
+                signal_hook::low_level::register(signal::SIGUSR1, move || {
+                    signal_count.fetch_add(1, Ordering::Relaxed);
+                })?;
+            }
         }
 
         Ok(())
     }
     // --------------------------------------------------------------
     move || {
-        let sigval = Arc::new(AtomicUsize::new(0));
+        let signal_count = Arc::new(AtomicUsize::new(0));
 
-        register_linux_signal_handler(sigval.clone()).unwrap_or_else(|e| {
+        register_linux_signal_handler(signal_count.clone()).unwrap_or_else(|e| {
             if Some(StatusLevel::None) != print_level {
                 eprintln!("Internal dd Warning: Unable to register signal handler \n\t{e}");
             }
@@ -508,23 +511,33 @@ pub(crate) fn gen_prog_updater(
         // This is needed so that we know whether or not to print a newline
         // character before outputting non-progress data.
         let mut progress_printed = false;
-        while let Ok(update) = rx.recv() {
-            // Print the final read/write statistics.
-            if update.complete {
-                update.print_final_stats(print_level, progress_printed);
-                return;
+        let mut current = ProgUpdate::new(
+            ReadStat::default(),
+            WriteStat::default(),
+            Duration::ZERO,
+            false,
+        );
+        loop {
+            match rx.recv_timeout(Duration::from_millis(10)) {
+                Ok(update) => {
+                    // Print the final read/write statistics.
+                    if update.complete {
+                        update.print_final_stats(print_level, progress_printed);
+                        return;
+                    }
+                    // (Re)print status line if progress is requested.
+                    if Some(StatusLevel::Progress) == print_level {
+                        update.reprint_prog_line();
+                        progress_printed = true;
+                    }
+                    current = update;
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => return,
             }
-            // (Re)print status line if progress is requested.
-            if Some(StatusLevel::Progress) == print_level && !update.complete {
-                update.reprint_prog_line();
-                progress_printed = true;
-            }
-            // Handle signals and set the signal to un-seen.
-            // This will print a maximum of 1 time per second, even though it
-            // should be printing on every SIGUSR1.
-            if let SIGUSR1_USIZE = sigval.swap(0, Ordering::Relaxed) {
-                update.print_transfer_stats(progress_printed);
-                // Reset the progress printed, since print_transfer_stats always prints a newline.
+
+            for _ in 0..signal_count.swap(0, Ordering::Relaxed) {
+                current.print_final_stats(print_level, progress_printed);
                 progress_printed = false;
             }
         }

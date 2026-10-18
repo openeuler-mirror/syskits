@@ -814,7 +814,7 @@ impl Dest {
             Self::File(f, _) => {
                 let pos = f.stream_position()?;
                 let metadata = f.metadata()?;
-                if allow_shrink || metadata.is_file() && metadata.len() < pos {
+                if metadata.is_file() && (allow_shrink || metadata.len() < pos) {
                     f.set_len(pos)
                 } else {
                     Ok(())
@@ -915,9 +915,7 @@ impl<'a> DdOutput<'a> {
         #[cfg(target_os = "linux")]
         set_fd_flags(stdout.as_raw_fd(), make_linux_oflags(&settings.oflags))
             .map_err_context(|| "setting flags for 'standard output'".to_string())?;
-        let mut dst = Dest::Stdout(stdout);
-        dst.seek(settings.seek)
-            .map_err_context(|| "'standard output': cannot seek".to_string())?;
+        let dst = Dest::Stdout(stdout);
         Ok(Self { dst, settings })
     }
 
@@ -968,9 +966,7 @@ impl<'a> DdOutput<'a> {
         } else {
             Density::Dense
         };
-        let mut dst = Dest::File(dst, density);
-        dst.seek(settings.seek)
-            .map_err_context(|| "failed to seek in output file".to_string())?;
+        let dst = Dest::File(dst, density);
         Ok(Self { dst, settings })
     }
 
@@ -999,13 +995,20 @@ impl<'a> DdOutput<'a> {
             .append(settings.oflags.is_append);
         #[cfg(target_os = "linux")]
         opts.custom_flags(make_linux_oflags(&settings.oflags).unwrap_or(0));
-        let mut dst = Dest::Fifo(
+        let dst = Dest::Fifo(
             opts.open(filename)
                 .map_err_context(|| format!("failed to open {}", filename.quote()))?,
         );
-        dst.seek(settings.seek)
-            .map_err_context(|| format!("{}: cannot seek", filename.quote()))?;
         Ok(Self { dst, settings })
+    }
+
+    fn seek(&mut self) -> io::Result<()> {
+        self.dst.seek(self.settings.seek).map(|_| ()).map_err(|e| {
+            io_error_with_context(
+                e,
+                format!("{}: cannot seek", output_file_name(self.settings)),
+            )
+        })
     }
 
     /// Discard the system file cache for the given portion of the output.
@@ -1136,13 +1139,18 @@ impl BlockWriter<'_> {
 }
 
 /// Copy data from input to output with dd functionality
-fn dd_copy(mut input: Input, output: DdOutput) -> std::io::Result<()> {
+fn dd_copy(mut input: Input, mut output: DdOutput) -> std::io::Result<()> {
+    let copy_start = Instant::now();
+
     if input.settings.skip > 0 {
         input.skip()?;
     }
+    if output.settings.seek > 0 {
+        output.seek()?;
+    }
 
     // 初始化复制环境
-    let (mut state, mut output) = initialize_copy_environment(input, output);
+    let (mut state, mut output) = initialize_copy_environment(input, output, copy_start);
 
     // 执行主复制循环
     let copy_result = perform_copy_loop(&mut state, &mut output);
@@ -1175,6 +1183,7 @@ struct CopyState<'a> {
 fn initialize_copy_environment<'a>(
     input: Input<'a>,
     output: DdOutput<'a>,
+    copy_start: Instant,
 ) -> (CopyState<'a>, BlockWriter<'a>) {
     let bsize = calc_bsize(input.settings.ibs, output.settings.obs);
     let read_offset = input.settings.skip;
@@ -1190,8 +1199,6 @@ fn initialize_copy_environment<'a>(
 
     let read_stat = ReadStat::default();
     let write_stat = WriteStat::default();
-    let start_time = Instant::now();
-
     // 设置进度报告
     let (prog_tx, rx) = mpsc::channel();
     #[cfg(target_os = "linux")]
@@ -1214,6 +1221,8 @@ fn initialize_copy_environment<'a>(
     } else {
         BlockWriter::Unbuffered(output)
     };
+    let duration = copy_start.elapsed();
+    let start_time = Instant::now();
 
     let state = CopyState {
         input,
@@ -1224,7 +1233,7 @@ fn initialize_copy_environment<'a>(
         read_stat,
         write_stat,
         start_time,
-        duration: Duration::ZERO,
+        duration,
         prog_tx,
         output_thread,
         read_offset,

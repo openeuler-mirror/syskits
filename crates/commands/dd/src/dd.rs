@@ -518,13 +518,21 @@ impl Read for Input<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut base_idx = 0;
         let target_len = buf.len();
-        let recovery_offset = self
-            .settings
-            .iconv
-            .noerror
-            .then(|| self.src.recovery_offset(target_len));
+        let standard_input_closed = self.settings.infile.is_none() && ctcore::ct_stdin_was_closed();
+        let recovery_offset = self.settings.iconv.noerror.then(|| {
+            if standard_input_closed {
+                Err(io::Error::from_raw_os_error(libc::EBADF))
+            } else {
+                self.src.recovery_offset(target_len)
+            }
+        });
         loop {
-            match self.src.read(&mut buf[base_idx..]) {
+            let read_result = if standard_input_closed {
+                Err(io::Error::from_raw_os_error(libc::EBADF))
+            } else {
+                self.src.read(&mut buf[base_idx..])
+            };
+            match read_result {
                 Ok(0) => {
                     self.previous_read_len = 0;
                     return Ok(base_idx);
@@ -1044,6 +1052,10 @@ impl<'a> DdOutput<'a> {
     /// number of partial and complete blocks written during execution
     /// of this function.
     fn write_blocks(&mut self, buf: &[u8]) -> io::Result<WriteStat> {
+        if self.settings.outfile.is_none() && ctcore::ct_stdout_was_closed() {
+            return Err(io::Error::from_raw_os_error(libc::EBADF));
+        }
+
         let mut writes_complete = 0;
         let mut writes_partial = 0;
         let mut bytes_total = 0;
@@ -1822,6 +1834,10 @@ fn dd_main(args: impl ctcore::Args) -> CTResult<()> {
             .map(OsString::as_os_str)
             .collect::<Vec<_>>()[..],
     )?;
+    let stdin_was_closed = options.infile.is_none() && ctcore::ct_stdin_was_closed();
+    let stdout_was_closed = options.outfile.is_none() && ctcore::ct_stdout_was_closed();
+    let stderr_was_closed = ctcore::ct_stderr_was_closed();
+    let status = options.status;
 
     let i = match options.infile {
         #[cfg(unix)]
@@ -1842,7 +1858,21 @@ fn dd_main(args: impl ctcore::Args) -> CTResult<()> {
         }
         None => DdOutput::new_stdout(&options)?,
     };
-    dd_copy(i, o).map_err_context(|| "IO error".to_string())
+    let copy_result = dd_copy(i, o);
+
+    if stdin_was_closed {
+        ct_show_error!("closing input file 'standard input': Bad file descriptor");
+        set_ct_exit_code(1);
+    }
+    if stdout_was_closed {
+        ct_show_error!("closing output file 'standard output': Bad file descriptor");
+        set_ct_exit_code(1);
+    }
+    if stderr_was_closed && status != Some(StatusLevel::None) {
+        set_ct_exit_code(1);
+    }
+
+    copy_result.map_err_context(|| "IO error".to_string())
 }
 
 pub fn ct_app() -> Command {

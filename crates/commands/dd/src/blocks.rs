@@ -25,8 +25,15 @@ struct BlockState {
 }
 
 #[derive(Default)]
+struct UnblockState {
+    column: usize,
+    pending_spaces: usize,
+}
+
+#[derive(Default)]
 pub(crate) struct ConversionState {
     block: BlockState,
+    unblock: UnblockState,
 }
 
 fn finish_block_record(state: &mut BlockState, cbs: usize, output: &mut Vec<u8>) {
@@ -75,19 +82,40 @@ fn block(buf: &[u8], cbs: usize, sync: bool, rstat: &mut ReadStat) -> Vec<Vec<u8
         .collect()
 }
 
-/// Trims padding from each cbs-length partition of buf
-/// as specified by conv=unblock and cbs=N
-/// Expects ascii encoded data
-fn unblock(buf: &[u8], cbs: usize) -> Vec<u8> {
-    buf.chunks(cbs).fold(Vec::new(), |mut acc, block| {
-        if let Some(last_char_idx) = block.iter().rposition(|&e| e != SPACE) {
-            // Include text up to last space.
-            acc.extend(&block[..=last_char_idx]);
+fn unblock_stream(buf: &[u8], cbs: usize, state: &mut UnblockState, finish: bool) -> Vec<u8> {
+    let mut output = Vec::new();
+
+    for &byte in buf {
+        if state.column == cbs {
+            output.push(NEWLINE);
+            state.column = 0;
+            state.pending_spaces = 0;
         }
 
-        acc.push(NEWLINE);
-        acc
-    })
+        state.column += 1;
+        if byte == SPACE {
+            state.pending_spaces += 1;
+        } else {
+            output.extend(std::iter::repeat_n(SPACE, state.pending_spaces));
+            state.pending_spaces = 0;
+            output.push(byte);
+        }
+    }
+
+    if finish && state.column > 0 {
+        output.push(NEWLINE);
+        state.column = 0;
+        state.pending_spaces = 0;
+    }
+
+    output
+}
+
+/// Convert a complete buffer in one call, for focused conversion tests.
+#[cfg(test)]
+fn unblock(buf: &[u8], cbs: usize) -> Vec<u8> {
+    let mut state = UnblockState::default();
+    unblock_stream(buf, cbs, &mut state, true)
 }
 
 /// Apply the specified conversion, blocking, and/or unblocking in the right order.
@@ -129,20 +157,20 @@ pub(crate) fn conv_block_unblock_helper(
             block_stream(&buf, *cbs, *sync, rstat, &mut state.block, finish)
         }
         ConversionMode::UnblockThenConvert(ct, cbs) => {
-            let buf = unblock(&buf, *cbs);
+            let buf = unblock_stream(&buf, *cbs, &mut state.unblock, finish);
             apply_conversion(buf, ct).collect()
         }
         ConversionMode::ConvertThenUnblock(ct, cbs) => {
             let buf: Vec<_> = apply_conversion(buf, ct).collect();
-            unblock(&buf, *cbs)
+            unblock_stream(&buf, *cbs, &mut state.unblock, finish)
         }
-        ConversionMode::UnblockOnly(cbs) => unblock(&buf, *cbs),
+        ConversionMode::UnblockOnly(cbs) => unblock_stream(&buf, *cbs, &mut state.unblock, finish),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::blocks::{BlockState, block, block_stream, unblock};
+    use crate::blocks::{BlockState, UnblockState, block, block_stream, unblock, unblock_stream};
     use crate::progress::ReadStat;
 
     const NEWLINE: u8 = b'\n';
@@ -358,6 +386,16 @@ mod tests {
         let res = unblock(&buf, 8);
 
         assert_eq!(res, vec![0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, NEWLINE],);
+    }
+
+    #[test]
+    fn unblock_test_record_and_spaces_span_input_chunks() {
+        let mut state = UnblockState::default();
+
+        assert_eq!(unblock_stream(b"ab ", 4, &mut state, false), b"ab");
+        assert_eq!(unblock_stream(b" cd", 4, &mut state, false), b"\ncd");
+        assert!(unblock_stream(b"  ", 4, &mut state, false).is_empty());
+        assert_eq!(unblock_stream(b"", 4, &mut state, true), b"\n");
     }
 
     #[test]

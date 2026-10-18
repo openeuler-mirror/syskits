@@ -44,6 +44,43 @@ enum GroupsError {
 impl Error for GroupsError {}
 impl CTError for GroupsError {}
 
+#[derive(Debug)]
+struct GroupsClapError {
+    inner: Box<dyn CTError>,
+    show_usage: bool,
+}
+
+impl GroupsClapError {
+    fn new(error: clap::Error) -> Self {
+        let show_usage = !matches!(
+            error.kind(),
+            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+        );
+        Self {
+            inner: error.into(),
+            show_usage,
+        }
+    }
+}
+
+impl Display for GroupsClapError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.inner, f)
+    }
+}
+
+impl Error for GroupsClapError {}
+
+impl CTError for GroupsClapError {
+    fn code(&self) -> i32 {
+        self.inner.code()
+    }
+
+    fn usage(&self) -> bool {
+        self.show_usage
+    }
+}
+
 impl Display for GroupsError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -327,7 +364,9 @@ fn groups_collect_for_users(users: Vec<OsString>) -> CTResult<GroupsSemantic> {
 pub fn groups_native_semantic(args: impl ctcore::Args) -> CTResult<GroupsSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let matches = ct_app().try_get_matches_from(args)?;
+    let matches = ct_app()
+        .try_get_matches_from(args)
+        .map_err(GroupsClapError::new)?;
     let users: Vec<OsString> = matches
         .get_many::<OsString>(opt_flags::USERS)
         .map(|v| v.cloned().collect())
@@ -592,9 +631,10 @@ mod tests {
     }
 
     mod tests_ct_app {
-        use crate::ct_app;
+        use crate::{ct_app, groups_native_semantic};
 
         use clap::error::ErrorKind;
+        use std::ffi::OsString;
 
         #[test]
         fn test_ct_app_version() {
@@ -623,6 +663,17 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_abbreviated_help_and_version_do_not_request_usage_hint() {
+            for option in ["--he", "--ver"] {
+                let args = [ctcore::ct_util_name(), option];
+                let error = groups_native_semantic(args.into_iter().map(OsString::from))
+                    .expect_err("display request");
+                assert_eq!(error.code(), 0);
+                assert!(!error.usage());
+            }
         }
     }
 }

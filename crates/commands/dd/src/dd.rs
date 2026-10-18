@@ -1133,10 +1133,10 @@ fn dd_copy(mut input: Input, output: DdOutput) -> std::io::Result<()> {
     let (mut state, mut output) = initialize_copy_environment(input, output);
 
     // 执行主复制循环
-    perform_copy_loop(&mut state, &mut output)?;
+    let copy_result = perform_copy_loop(&mut state, &mut output);
 
     // 完成复制操作
-    finalize_copy(output, state)
+    finalize_copy(output, state, copy_result)
 }
 
 /// 复制操作的状态
@@ -1261,7 +1261,13 @@ fn read_and_process_block(
         &mut state.swab_byte,
         &mut state.conversion_state,
         loop_bsize,
-    )?;
+    )
+    .map_err(|e| {
+        io_error_with_context(
+            e,
+            format!("error reading {}", input_file_name(state.input.settings)),
+        )
+    })?;
     let read_error = state.input.pending_read_error.take();
     let had_read_error = read_error.is_some();
     if let Some(read_error) = read_error {
@@ -1300,7 +1306,18 @@ fn read_and_process_block(
     }
 
     // 写入数据
-    let wstat_update = output.write_blocks(&state.buffer)?;
+    let wstat_update = match output.write_blocks(&state.buffer) {
+        Ok(wstat) => wstat,
+        Err(e) => {
+            state.duration += state.start_time.elapsed();
+            state.read_stat += rstat_update;
+            state.read_offset += rstat_update.bytes_total;
+            return Err(io_error_with_context(
+                e,
+                format!("error writing {}", output_file_name(state.input.settings)),
+            ));
+        }
+    };
 
     // 判断是否遇到了文件末尾 (EOF)
     // 如果读取的字节数少于请求的缓冲区大小，说明文件已经到底了
@@ -1365,9 +1382,14 @@ fn update_progress(state: &mut CopyState) {
 }
 
 /// 完成复制操作
-fn finalize_copy(mut output: BlockWriter, mut state: CopyState) -> std::io::Result<()> {
+fn finalize_copy(
+    mut output: BlockWriter,
+    mut state: CopyState,
+    copy_result: io::Result<()>,
+) -> std::io::Result<()> {
     let mut dur = state.duration;
     let start_time = Instant::now();
+    let mut io_error = copy_result.err();
 
     let mut final_buf: Vec<_> = state.swab_byte.take().into_iter().collect();
     if let Some(ref mode) = state.input.settings.iconv.mode {
@@ -1380,14 +1402,51 @@ fn finalize_copy(mut output: BlockWriter, mut state: CopyState) -> std::io::Resu
         );
     }
     if !final_buf.is_empty() {
-        let wstat_update = output.write_blocks(&final_buf)?;
-        state.write_stat += wstat_update;
-        state.write_offset += wstat_update.bytes_total;
+        match output.write_blocks(&final_buf) {
+            Ok(wstat_update) => {
+                state.write_stat += wstat_update;
+                state.write_offset += wstat_update.bytes_total;
+            }
+            Err(e) if io_error.is_none() => {
+                io_error = Some(io_error_with_context(
+                    e,
+                    format!("error writing {}", output_file_name(state.input.settings)),
+                ));
+            }
+            Err(_) => {}
+        }
     }
 
     // 刷新输出缓冲
-    let wstat_update = output.flush()?;
-    output.sync()?;
+    let wstat_update = match output.flush() {
+        Ok(wstat) => wstat,
+        Err(e) => {
+            if io_error.is_none() {
+                io_error = Some(io_error_with_context(
+                    e,
+                    format!("error writing {}", output_file_name(state.input.settings)),
+                ));
+            }
+            WriteStat::default()
+        }
+    };
+    if let Err(e) = output.sync()
+        && io_error.is_none()
+    {
+        let operation = if state.input.settings.oconv.is_fsync {
+            "fsync"
+        } else {
+            "fdatasync"
+        };
+        io_error = Some(io_error_with_context(
+            e,
+            format!(
+                "{} failed for {}",
+                operation,
+                output_file_name(state.input.settings)
+            ),
+        ));
+    }
 
     #[cfg(target_os = "linux")]
     if state.input.settings.oflags.is_direct {
@@ -1422,6 +1481,11 @@ fn finalize_copy(mut output: BlockWriter, mut state: CopyState) -> std::io::Resu
     }
 
     dur += start_time.elapsed();
+    if let Some(e) = io_error {
+        ct_show_error!("{}", e);
+        #[cfg(unix)]
+        set_ct_exit_code(1);
+    }
     // 发送最终统计信息
     let prog_update = ProgUpdate::new(state.read_stat, final_wstat, dur, true);
     state.prog_tx.send(prog_update).unwrap_or(());
@@ -1433,6 +1497,24 @@ fn finalize_copy(mut output: BlockWriter, mut state: CopyState) -> std::io::Resu
         .expect("Failed to join with the output thread.");
 
     Ok(())
+}
+
+fn input_file_name(settings: &DdOptions) -> String {
+    match settings.infile.as_ref() {
+        Some(path) => format!("{}", Path::new(path).quote()),
+        None => "'standard input'".to_string(),
+    }
+}
+
+fn output_file_name(settings: &DdOptions) -> String {
+    match settings.outfile.as_ref() {
+        Some(path) => format!("{}", Path::new(path).quote()),
+        None => "'standard output'".to_string(),
+    }
+}
+
+fn io_error_with_context(error: io::Error, context: String) -> io::Error {
+    io::Error::new(error.kind(), format!("{context}: {error}"))
 }
 
 #[cfg(target_os = "linux")]

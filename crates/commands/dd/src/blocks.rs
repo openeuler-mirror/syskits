@@ -38,7 +38,7 @@ fn finish_block_record(state: &mut BlockState, cbs: usize, output: &mut Vec<u8>)
 fn block_stream(
     buf: &[u8],
     cbs: usize,
-    sync: bool,
+    _sync: bool,
     rstat: &mut ReadStat,
     state: &mut BlockState,
     finish: bool,
@@ -59,12 +59,7 @@ fn block_stream(
     }
 
     if finish && state.column > 0 {
-        if sync && rstat.reads_partial > 0 || state.record.iter().any(|&byte| byte != SPACE) {
-            finish_block_record(state, cbs, &mut output);
-        } else {
-            state.record.clear();
-            state.column = 0;
-        }
+        finish_block_record(state, cbs, &mut output);
     }
 
     output
@@ -173,6 +168,14 @@ mod tests {
             block_stream(b"\n", 8, false, &mut rs, &mut state, false),
             b"abcdef  "
         );
+    }
+
+    #[test]
+    fn block_test_preserves_final_space_record() {
+        let mut rs = ReadStat::default();
+        let buf = [SPACE; 4];
+
+        assert_eq!(block(&buf, 4, false, &mut rs), vec![vec![SPACE; 4]]);
     }
 
     #[test]

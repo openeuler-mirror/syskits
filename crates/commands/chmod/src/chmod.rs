@@ -14,7 +14,9 @@ use clap::builder::OsStringValueParser;
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, ExitCode, set_ct_exit_code};
+use ctcore::ct_error::{
+    CTResult, CTsageError, CtSimpleError, ExitCode, set_ct_exit_code, strip_errno,
+};
 use ctcore::ct_fs::display_permissions_unix;
 #[cfg(not(windows))]
 use ctcore::ct_mode;
@@ -763,7 +765,11 @@ impl Chmoder {
     ) -> Result<(), i32> {
         if let Err(err) = target.chmod(mode) {
             if !self.quiet {
-                ct_show_error!("{}", err);
+                ct_show_error!(
+                    "changing permissions of {}: {}",
+                    file_path.quote(),
+                    strip_errno(&err)
+                );
             }
             if self.verbose {
                 println!(

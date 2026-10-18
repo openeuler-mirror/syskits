@@ -127,6 +127,7 @@ struct GroupsRawEntry {
 }
 
 pub fn ct_app() -> Command {
+    let posixly_correct = std::env::var_os("POSIXLY_CORRECT").is_some();
     Command::new(ctcore::ct_util_name())
         .version(crate_version!())
         .about(t!("groups.about"))
@@ -137,7 +138,8 @@ pub fn ct_app() -> Command {
                 .action(ArgAction::Append)
                 .value_parser(OsStringValueParser::new())
                 .value_name(opt_flags::USERS)
-                .value_hint(clap::ValueHint::Username),
+                .value_hint(clap::ValueHint::Username)
+                .trailing_var_arg(posixly_correct),
         )
 }
 

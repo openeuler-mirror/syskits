@@ -32,7 +32,6 @@ pub enum ParseError {
     ConvFlagNoMatch(String),
     MultiplierStringParseFailure(String),
     MultiplierStringOverflow(String),
-    BlockUnblockWithoutCBS,
     StatusLevelNotRecognized(String),
     Unimplemented(String),
     BsOutOfRange(String),
@@ -179,8 +178,6 @@ impl Parser {
                     (true, true) => return Err(ParseError::MultipleBlockUnblock),
                 },
             }
-        } else if conv.block || conv.unblock {
-            return Err(ParseError::BlockUnblockWithoutCBS);
         } else {
             None
         };
@@ -227,7 +224,18 @@ impl Parser {
         // > input is copied to the output as soon as it's read, even if
         // > it is smaller than the block size.
         //
-        let buffered = self.bs.is_none() || self.is_conv_specified;
+        let has_effective_conv = block.is_some()
+            || conversion_table.is_some()
+            || conv.swab
+            || conv.sync
+            || conv.noerror
+            || conv.sparse
+            || conv.excl
+            || conv.nocreat
+            || conv.notrunc
+            || conv.fdatasync
+            || conv.fsync;
+        let buffered = self.bs.is_none() || self.is_conv_specified && has_effective_conv;
 
         let skip = self
             .skip
@@ -466,9 +474,6 @@ impl std::fmt::Display for ParseError {
                     f,
                     "Multiplier string would overflow on current system -> {arg}"
                 )
-            }
-            Self::BlockUnblockWithoutCBS => {
-                write!(f, "conv=block or conv=unblock specified without cbs=N")
             }
             Self::StatusLevelNotRecognized(arg) => {
                 write!(f, "status=LEVEL not recognized -> {arg}")

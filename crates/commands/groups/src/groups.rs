@@ -135,6 +135,13 @@ fn groups_for_current_process(rgid: u32, egid: u32, groups: Vec<u32>) -> Vec<u32
     result
 }
 
+fn groups_for_named_user(primary_gid: u32, groups: Vec<u32>) -> Vec<u32> {
+    let mut result = Vec::with_capacity(groups.len() + 1);
+    result.push(primary_gid);
+    result.extend(groups.into_iter().filter(|group| *group != primary_gid));
+    result
+}
+
 fn groups_collect_for_users(users: Vec<String>) -> CTResult<GroupsSemantic> {
     let mut entries = Vec::new();
     let mut stderr_text = String::new();
@@ -163,8 +170,8 @@ fn groups_collect_for_users(users: Vec<String>) -> CTResult<GroupsSemantic> {
         for user in users {
             match CtPasswd::locate_name(user.as_str()) {
                 Ok(passwd) => {
-                    let groups = passwd
-                        .belongs_to()
+                    let gids = groups_for_named_user(passwd.gid, passwd.belongs_to());
+                    let groups = gids
                         .iter()
                         .map(|gid| groups_infallible_gid2grp(gid, &mut stderr_text, &mut exit_code))
                         .collect();
@@ -274,7 +281,9 @@ mod tests {
     }
 
     mod tests_groups_main {
-        use crate::{groups_for_current_process, groups_main, groups_native_semantic};
+        use crate::{
+            groups_for_current_process, groups_for_named_user, groups_main, groups_native_semantic,
+        };
 
         use std::ffi::OsString;
 
@@ -312,6 +321,22 @@ mod tests {
             assert_eq!(
                 groups_for_current_process(1000, 1000, vec![1000, 10, 20]),
                 vec![1000, 10, 20]
+            );
+        }
+
+        #[test]
+        fn test_groups_for_named_user_starts_with_primary_gid() {
+            assert_eq!(
+                groups_for_named_user(1000, vec![10, 1000, 20]),
+                vec![1000, 10, 20]
+            );
+            assert_eq!(
+                groups_for_named_user(1000, vec![10, 20]),
+                vec![1000, 10, 20]
+            );
+            assert_eq!(
+                groups_for_named_user(1000, vec![1000, 10, 1000]),
+                vec![1000, 10]
             );
         }
 

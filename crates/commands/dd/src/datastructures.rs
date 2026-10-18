@@ -21,13 +21,13 @@ type Cbs = usize;
 /// ways of combining those three operations.
 #[derive(Debug, PartialEq)]
 pub(crate) enum ConversionMode {
-    ConvertOnly(&'static ConversionTable),
+    ConvertOnly(ConversionTable),
     BlockOnly(Cbs, bool),
     UnblockOnly(Cbs),
-    BlockThenConvert(&'static ConversionTable, Cbs, bool),
-    ConvertThenBlock(&'static ConversionTable, Cbs, bool),
-    UnblockThenConvert(&'static ConversionTable, Cbs),
-    ConvertThenUnblock(&'static ConversionTable, Cbs),
+    BlockThenConvert(ConversionTable, Cbs, bool),
+    ConvertThenBlock(ConversionTable, Cbs, bool),
+    UnblockThenConvert(ConversionTable, Cbs),
+    ConvertThenUnblock(ConversionTable, Cbs),
 }
 
 /// Stores all Conv Flags that apply to the input

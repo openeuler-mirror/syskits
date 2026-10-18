@@ -149,14 +149,12 @@ fn test_all_top_level_args_no_leading_dashes() {
     assert_eq!(settings.status, Some(StatusLevel::Progress));
 
     // conv=ascii,ucase
+    let ascii_upper = get_ctable(Some(Conversion::Ascii), Some(Case::Upper)).unwrap();
     assert_eq!(
         settings.iconv,
         IConvFlags {
             // ascii implies unblock
-            mode: Some(ConversionMode::ConvertThenUnblock(
-                &EBCDIC_TO_ASCII_LCASE_TO_UCASE,
-                1
-            )),
+            mode: Some(ConversionMode::ConvertThenUnblock(ascii_upper, 1)),
             ..IConvFlags::default()
         },
     );
@@ -289,13 +287,11 @@ fn test_multiple_flags_options() {
     );
 
     // conv
+    let ascii_upper = get_ctable(Some(Conversion::Ascii), Some(Case::Upper)).unwrap();
     assert_eq!(
         settings.iconv,
         IConvFlags {
-            mode: Some(ConversionMode::ConvertThenUnblock(
-                &EBCDIC_TO_ASCII_LCASE_TO_UCASE,
-                512
-            )),
+            mode: Some(ConversionMode::ConvertThenUnblock(ascii_upper, 512)),
             ..Default::default()
         }
     );
@@ -445,7 +441,7 @@ fn parse_icf_token_ibm() {
     assert_eq!(
         settings.iconv,
         IConvFlags {
-            mode: Some(ConversionMode::ConvertOnly(&ASCII_TO_IBM)),
+            mode: Some(ConversionMode::ConvertOnly(ASCII_TO_IBM)),
             ..Default::default()
         }
     );
@@ -455,11 +451,12 @@ fn parse_icf_token_ibm() {
 fn parse_icf_tokens_elu() {
     let args = &["conv=ebcdic,lcase"];
     let settings = Parser::new().parse(args).unwrap();
+    let ebcdic_lower = get_ctable(Some(Conversion::Ebcdic), Some(Case::Lower)).unwrap();
 
     assert_eq!(
         settings.iconv,
         IConvFlags {
-            mode: Some(ConversionMode::ConvertOnly(&ASCII_TO_EBCDIC_UCASE_TO_LCASE)),
+            mode: Some(ConversionMode::ConvertOnly(ebcdic_lower)),
             ..Default::default()
         }
     );
@@ -470,11 +467,8 @@ fn combined_charset_case_tables_use_gnu_composition_order() {
     for conversion in [Conversion::Ascii, Conversion::Ebcdic, Conversion::Ibm] {
         for case in [Case::Lower, Case::Upper] {
             let actual = get_ctable(Some(conversion), Some(case)).unwrap();
+            let case_table = get_ctable(None, Some(case)).unwrap();
             for byte in 0u8..=u8::MAX {
-                let case_table = match case {
-                    Case::Lower => &ASCII_UCASE_TO_LCASE,
-                    Case::Upper => &ASCII_LCASE_TO_UCASE,
-                };
                 let expected = match conversion {
                     Conversion::Ascii => case_table[EBCDIC_TO_ASCII[byte as usize] as usize],
                     Conversion::Ebcdic => ASCII_TO_EBCDIC[case_table[byte as usize] as usize],
@@ -484,6 +478,20 @@ fn combined_charset_case_tables_use_gnu_composition_order() {
             }
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn case_tables_honor_single_byte_locale() {
+    let Some(lower) = case_table_for_locale(Case::Lower, c"en_US") else {
+        return;
+    };
+    let Some(upper) = case_table_for_locale(Case::Upper, c"en_US") else {
+        return;
+    };
+
+    assert_eq!(lower[0xc0], 0xe0);
+    assert_eq!(upper[0xe0], 0xc0);
 }
 
 #[test]

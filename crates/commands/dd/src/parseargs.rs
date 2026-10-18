@@ -19,6 +19,8 @@ use ctcore::ct_error::CTError;
 use ctcore::ct_parse_size::{CtParser as SizeParser, ParseSizeError};
 use ctcore::ct_show_warning;
 use std::error::Error;
+#[cfg(target_os = "linux")]
+use std::ffi::CStr;
 use std::ffi::{OsStr, OsString};
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
@@ -167,6 +169,7 @@ impl Parser {
 
         let non_ascii = matches!(conversion, Some(Conversion::Ascii));
         let conversion_table = get_ctable(conversion, case);
+        let has_conversion_table = conversion_table.is_some();
 
         if conv.nocreat && conv.excl {
             return Err(ParseError::MultipleExclNoCreate);
@@ -237,7 +240,7 @@ impl Parser {
         // > it is smaller than the block size.
         //
         let has_effective_conv = block.is_some()
-            || conversion_table.is_some()
+            || has_conversion_table
             || conv.swab
             || conv.sync
             || conv.noerror
@@ -695,32 +698,77 @@ pub fn parse_bytes_with_opt_multiplier(s: &str) -> Result<u64, ParseError> {
     parse_bytes_with_opt_multiplier_inner(s, s)
 }
 
-fn get_ctable(
-    conversion: Option<Conversion>,
-    case: Option<Case>,
-) -> Option<&'static ConversionTable> {
+fn get_ctable(conversion: Option<Conversion>, case: Option<Case>) -> Option<ConversionTable> {
     use crate::conversion_tables::*;
 
-    Some(match (conversion, case) {
-        (None, None) => return None,
-        (Some(conv), None) => match conv {
-            Conversion::Ascii => &EBCDIC_TO_ASCII,
-            Conversion::Ebcdic => &ASCII_TO_EBCDIC,
-            Conversion::Ibm => &ASCII_TO_IBM,
-        },
-        (None, Some(case)) => match case {
-            Case::Lower => &ASCII_UCASE_TO_LCASE,
-            Case::Upper => &ASCII_LCASE_TO_UCASE,
-        },
-        (Some(conv), Some(case)) => match (conv, case) {
-            (Conversion::Ascii, Case::Upper) => &EBCDIC_TO_ASCII_LCASE_TO_UCASE,
-            (Conversion::Ascii, Case::Lower) => &EBCDIC_TO_ASCII_UCASE_TO_LCASE,
-            (Conversion::Ebcdic, Case::Upper) => &ASCII_TO_EBCDIC_LCASE_TO_UCASE,
-            (Conversion::Ebcdic, Case::Lower) => &ASCII_TO_EBCDIC_UCASE_TO_LCASE,
-            (Conversion::Ibm, Case::Upper) => &ASCII_TO_IBM_LCASE_TO_UCASE,
-            (Conversion::Ibm, Case::Lower) => &ASCII_TO_IBM_UCASE_TO_LCASE,
-        },
+    if conversion.is_none() && case.is_none() {
+        return None;
+    }
+
+    let case_table = case.map(locale_case_table);
+    let table = std::array::from_fn(|index| {
+        let mut byte = index as u8;
+        if matches!(conversion, Some(Conversion::Ascii)) {
+            byte = EBCDIC_TO_ASCII[byte as usize];
+        }
+        if let Some(case_table) = &case_table {
+            byte = case_table[byte as usize];
+        }
+        match conversion {
+            Some(Conversion::Ebcdic) => ASCII_TO_EBCDIC[byte as usize],
+            Some(Conversion::Ibm) => ASCII_TO_IBM[byte as usize],
+            _ => byte,
+        }
+    });
+
+    Some(table)
+}
+
+fn ascii_case_table(case: Case) -> ConversionTable {
+    std::array::from_fn(|index| match case {
+        Case::Lower => (index as u8).to_ascii_lowercase(),
+        Case::Upper => (index as u8).to_ascii_uppercase(),
     })
+}
+
+#[cfg(target_os = "linux")]
+fn case_table_for_locale(case: Case, locale_name: &CStr) -> Option<ConversionTable> {
+    let locale = unsafe {
+        libc::newlocale(
+            libc::LC_CTYPE_MASK,
+            locale_name.as_ptr(),
+            std::ptr::null_mut(),
+        )
+    };
+    if locale.is_null() {
+        return None;
+    }
+
+    let previous = unsafe { libc::uselocale(locale) };
+    if previous.is_null() {
+        unsafe { libc::freelocale(locale) };
+        return None;
+    }
+    let table = std::array::from_fn(|index| unsafe {
+        match case {
+            Case::Lower => libc::tolower(index as libc::c_int) as u8,
+            Case::Upper => libc::toupper(index as libc::c_int) as u8,
+        }
+    });
+    unsafe {
+        libc::uselocale(previous);
+        libc::freelocale(locale);
+    }
+    Some(table)
+}
+
+fn locale_case_table(case: Case) -> ConversionTable {
+    #[cfg(target_os = "linux")]
+    if let Some(table) = case_table_for_locale(case, c"") {
+        return table;
+    }
+
+    ascii_case_table(case)
 }
 
 /// Given the various command-line parameters, determine the conversion mode.
@@ -732,7 +780,7 @@ fn get_ctable(
 /// parameters. This function translates those settings to a
 /// [`ConversionMode`].
 fn conversion_mode(
-    ctable: Option<&'static ConversionTable>,
+    ctable: Option<ConversionTable>,
     block: Option<Block>,
     is_ascii: bool,
     is_sync: bool,

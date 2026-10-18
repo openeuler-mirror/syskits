@@ -307,12 +307,13 @@ impl Parser {
     }
 
     fn parse_status_level(val: &str) -> Result<StatusLevel, ParseError> {
-        match val {
-            "none" => Ok(StatusLevel::None),
-            "noxfer" => Ok(StatusLevel::Noxfer),
-            "progress" => Ok(StatusLevel::Progress),
-            _ => Err(ParseError::StatusLevelNotRecognized(val.to_string())),
-        }
+        val.split(',')
+            .try_fold(StatusLevel::None, |_, level| match level {
+                "none" => Ok(StatusLevel::None),
+                "noxfer" => Ok(StatusLevel::Noxfer),
+                "progress" => Ok(StatusLevel::Progress),
+                _ => Err(ParseError::StatusLevelNotRecognized(level.to_string())),
+            })
     }
 
     #[allow(clippy::cognitive_complexity)]

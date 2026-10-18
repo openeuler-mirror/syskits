@@ -623,6 +623,25 @@ fn groups_write_stdout(
     groups_handle_stdout_result(writer.flush())
 }
 
+fn groups_write_stderr(writer: &mut impl IoWrite, bytes: &[u8]) -> CTResult<()> {
+    groups_handle_stderr_result(writer.write_all(bytes))?;
+    groups_handle_stderr_result(writer.flush())
+}
+
+fn groups_handle_stderr_result(result: std::io::Result<()>) -> CTResult<()> {
+    match result {
+        Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => {
+            if groups_inherited_sigpipe_ignored() {
+                Err(1.into())
+            } else {
+                groups_terminate_with_sigpipe()
+            }
+        }
+        Err(error) => Err(error.into()),
+        Ok(()) => Ok(()),
+    }
+}
+
 fn groups_handle_stdout_result(result: std::io::Result<()>) -> CTResult<()> {
     match result {
         Err(error)
@@ -677,8 +696,10 @@ impl Tool for Groups {
                             }
                         }
                         GroupsOutputEvent::Stderr(range) => {
-                            stderr.write_all(&semantic.stderr_text.as_bytes()[range.clone()])?;
-                            stderr.flush()?;
+                            groups_write_stderr(
+                                &mut stderr,
+                                &semantic.stderr_text.as_bytes()[range.clone()],
+                            )?;
                         }
                     }
                 }

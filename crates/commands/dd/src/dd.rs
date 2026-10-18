@@ -927,6 +927,7 @@ fn dd_copy(input: Input, output: DdOutput) -> std::io::Result<()> {
 struct CopyState<'a> {
     input: Input<'a>,
     buffer: Vec<u8>,
+    swab_byte: Option<u8>,
     read_stat: ReadStat,
     write_stat: WriteStat,
     start_time: Instant,
@@ -974,6 +975,7 @@ fn initialize_copy_environment<'a>(
     let state = CopyState {
         input,
         buffer,
+        swab_byte: None,
         read_stat,
         write_stat,
         start_time,
@@ -1027,7 +1029,12 @@ fn read_and_process_block(
 
     state.start_time = Instant::now();
     // 读取数据
-    let rstat_update = read_helper(&mut state.input, &mut state.buffer, loop_bsize)?;
+    let rstat_update = read_helper(
+        &mut state.input,
+        &mut state.buffer,
+        &mut state.swab_byte,
+        loop_bsize,
+    )?;
     if rstat_update.is_empty() {
         return Ok(false);
     }
@@ -1098,9 +1105,19 @@ fn update_progress(state: &mut CopyState) {
 }
 
 /// 完成复制操作
-fn finalize_copy(mut output: BlockWriter, state: CopyState) -> std::io::Result<()> {
+fn finalize_copy(mut output: BlockWriter, mut state: CopyState) -> std::io::Result<()> {
     let mut dur = state.duration;
     let start_time = Instant::now();
+
+    if let Some(byte) = state.swab_byte.take() {
+        let mut final_buf = vec![byte];
+        if let Some(ref mode) = state.input.settings.iconv.mode {
+            final_buf = conv_block_unblock_helper(final_buf, mode, &mut state.read_stat);
+        }
+        let wstat_update = output.write_blocks(&final_buf)?;
+        state.write_stat += wstat_update;
+        state.write_offset += wstat_update.bytes_total;
+    }
 
     // 刷新输出缓冲
     let wstat_update = output.flush()?;
@@ -1180,14 +1197,37 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
 /// `conv=swab` or `conv=block` command-line arguments. This function
 /// mutates the `buf` argument in-place. The returned [`ReadStat`]
 /// indicates how many blocks were read.
-fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> std::io::Result<ReadStat> {
-    // Local Helper Fns -------------------------------------------------
-    fn perform_swab(buf: &mut [u8]) {
-        for base in (1..buf.len()).step_by(2) {
-            buf.swap(base, base - 1);
+fn perform_swab(buf: &mut Vec<u8>, saved_byte: &mut Option<u8>) {
+    let mut swapped = Vec::with_capacity(buf.len() + usize::from(saved_byte.is_some()));
+    let mut start = 0;
+
+    if let Some(previous) = saved_byte.take() {
+        if let Some(&current) = buf.first() {
+            swapped.extend_from_slice(&[current, previous]);
+            start = 1;
+        } else {
+            *saved_byte = Some(previous);
+            return;
         }
     }
-    // ------------------------------------------------------------------
+
+    let mut pairs = buf[start..].chunks_exact(2);
+    for pair in &mut pairs {
+        swapped.extend_from_slice(&[pair[1], pair[0]]);
+    }
+    if let Some(&last) = pairs.remainder().first() {
+        *saved_byte = Some(last);
+    }
+
+    *buf = swapped;
+}
+
+fn read_helper(
+    i: &mut Input,
+    buf: &mut Vec<u8>,
+    swab_byte: &mut Option<u8>,
+    bsize: usize,
+) -> std::io::Result<ReadStat> {
     // Read
     // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
     buf.resize(bsize, BUF_INIT_BYTE);
@@ -1203,7 +1243,7 @@ fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> std::io::Resul
 
     // Perform any conv=x[,x...] options
     if i.settings.iconv.is_swab {
-        perform_swab(buf);
+        perform_swab(buf, swab_byte);
     }
 
     match i.settings.iconv.mode {
@@ -1599,6 +1639,29 @@ mod dd_copy_tests {
         result_file.seek(SeekFrom::Start(0))?;
         result_file.read_to_end(&mut result)?;
         assert_eq!(&result[..], input_data);
+        Ok(())
+    }
+
+    #[test]
+    fn test_swab_carries_odd_byte_between_reads() -> CTResult<()> {
+        for (input_data, expected) in [
+            (b"abcdef".as_slice(), b"badcfe".as_slice()),
+            (b"abcde".as_slice(), b"badce".as_slice()),
+        ] {
+            let mut options = create_test_options();
+            options.ibs = 3;
+            options.obs = 3;
+            options.iconv.is_swab = true;
+
+            let input = create_test_input(input_data, &options)?;
+            let (output, mut result_file) = create_test_output(&options)?;
+            dd_copy(input, output)?;
+
+            let mut result = Vec::new();
+            result_file.seek(SeekFrom::Start(0))?;
+            result_file.read_to_end(&mut result)?;
+            assert_eq!(result, expected);
+        }
         Ok(())
     }
 

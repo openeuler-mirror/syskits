@@ -83,6 +83,32 @@ fn vdir_quotes_non_utf8_symlink_target_bytes() {
     assert!(output.stdout.ends_with(b" T link -> target\\377\n"));
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn vdir_version_sorts_original_non_utf8_name_bytes() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let lower = std::ffi::OsString::from_vec(b"v\xfe".to_vec());
+    let higher = std::ffi::OsString::from_vec(b"v\xff".to_vec());
+    fs::write(temp_dir.path().join(&lower), b"").expect("write lower fixture");
+    fs::write(temp_dir.path().join(&higher), b"").expect("write higher fixture");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args([
+            std::ffi::OsStr::new("vdir"),
+            std::ffi::OsStr::new("-1v"),
+            &higher,
+            &lower,
+        ])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert_eq!(output.stdout, b"v\\376\nv\\377\n");
+}
+
 #[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");

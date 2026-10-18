@@ -51,7 +51,7 @@ use ctcore::ct_fs::display_permissions;
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_locale::strcoll_compare;
 use ctcore::ct_parse_size::parse_size_u64;
-use ctcore::ct_version_cmp::ct_version_cmp;
+use ctcore::ct_version_cmp::ct_version_cmp_bytes;
 
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
@@ -2701,12 +2701,8 @@ fn sort_entries<W: Write>(entries: &mut [PathData], config: &LsConfig, out: &mut
         })
     } else if config.sort == LsSort::Version {
         entries.sort_by(|a, b| {
-            ct_version_cmp(&a.p_buf.to_string_lossy(), &b.p_buf.to_string_lossy()).then(
-                strcoll_compare(
-                    a.p_buf.to_string_lossy().as_bytes(),
-                    b.p_buf.to_string_lossy().as_bytes(),
-                    false,
-                ),
+            ct_version_cmp_bytes(a.display_name.as_bytes(), b.display_name.as_bytes()).then(
+                strcoll_compare(a.display_name.as_bytes(), b.display_name.as_bytes(), false),
             )
         })
     } else if config.sort == LsSort::Extension {

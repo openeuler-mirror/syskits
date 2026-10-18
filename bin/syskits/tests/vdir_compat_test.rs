@@ -109,6 +109,24 @@ fn vdir_version_sorts_original_non_utf8_name_bytes() {
     assert_eq!(output.stdout, b"v\\376\nv\\377\n");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn vdir_preserves_non_utf8_invalid_option_byte() {
+    let invalid_option = std::ffi::OsString::from_vec(b"-\xff".to_vec());
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args([std::ffi::OsStr::new("vdir"), invalid_option.as_os_str()])
+        .output()
+        .expect("run syskits vdir");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        output.stderr,
+        b"vdir: invalid option -- '\xff'\nTry 'vdir --help' for more information.\n"
+    );
+}
+
 #[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");

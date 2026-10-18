@@ -32,6 +32,7 @@ use std::ffi::{OsStr, OsString};
 use std::io::Write as IoWrite;
 use std::ops::Range;
 use std::os::unix::ffi::OsStrExt;
+use std::sync::atomic::{AtomicBool, Ordering};
 use sys_locale::get_locale;
 
 mod opt_flags {
@@ -130,6 +131,48 @@ fn groups_restore_default_sigpipe() {
 #[cfg(any(not(target_os = "linux"), test))]
 fn groups_restore_default_sigpipe() {}
 
+#[cfg(target_os = "linux")]
+static INHERITED_SIGPIPE_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" fn groups_capture_inherited_sigpipe() {
+    let mut action = std::mem::MaybeUninit::<libc::sigaction>::uninit();
+    if unsafe { libc::sigaction(libc::SIGPIPE, std::ptr::null(), action.as_mut_ptr()) } == 0 {
+        let action = unsafe { action.assume_init() };
+        INHERITED_SIGPIPE_IGNORED.store(action.sa_sigaction == libc::SIG_IGN, Ordering::Relaxed);
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static GROUPS_CAPTURE_SIGPIPE: unsafe extern "C" fn() = groups_capture_inherited_sigpipe;
+
+#[cfg(target_os = "linux")]
+fn groups_inherited_sigpipe_ignored() -> bool {
+    INHERITED_SIGPIPE_IGNORED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn groups_inherited_sigpipe_ignored() -> bool {
+    false
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn groups_restore_inherited_sigpipe() {
+    let handler = if groups_inherited_sigpipe_ignored() {
+        libc::SIG_IGN
+    } else {
+        libc::SIG_DFL
+    };
+    unsafe {
+        libc::signal(libc::SIGPIPE, handler);
+    }
+}
+
+#[cfg(any(not(target_os = "linux"), test))]
+fn groups_restore_inherited_sigpipe() {}
+
 fn groups_invalid_option_diagnostic(argument: &OsStr) -> Option<Vec<u8>> {
     let argument = argument.as_bytes();
     if argument.starts_with(b"--") {
@@ -182,7 +225,7 @@ impl Display for GroupsClapError {
             },
             None => {
                 if self.display_request {
-                    groups_restore_default_sigpipe();
+                    groups_restore_inherited_sigpipe();
                 }
                 Display::fmt(&self.inner, f)
             }
@@ -582,7 +625,10 @@ fn groups_write_stdout(
 
 fn groups_handle_stdout_result(result: std::io::Result<()>) -> CTResult<()> {
     match result {
-        Err(error) if error.kind() == std::io::ErrorKind::BrokenPipe => {
+        Err(error)
+            if error.kind() == std::io::ErrorKind::BrokenPipe
+                && !groups_inherited_sigpipe_ignored() =>
+        {
             groups_terminate_with_sigpipe()
         }
         Err(error) => Err(Box::new(GroupsError::WriteFailed(error))),
@@ -591,9 +637,9 @@ fn groups_handle_stdout_result(result: std::io::Result<()>) -> CTResult<()> {
 }
 
 fn groups_terminate_with_sigpipe() -> ! {
-    // Rust ignores SIGPIPE by default; GNU groups uses the default signal action.
+    // Rust ignores SIGPIPE by default; restore the exec-inherited default action.
     unsafe {
-        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        groups_restore_default_sigpipe();
         libc::raise(libc::SIGPIPE);
         libc::_exit(128 + libc::SIGPIPE);
     }

@@ -154,13 +154,150 @@ pub fn ct_version_cmp(mut a: &str, mut b: &str) -> Ordering {
     Ordering::Equal
 }
 
+fn ct_version_non_digit_cmp_bytes(a: &[u8], b: &[u8]) -> Ordering {
+    let mut index = 0;
+    loop {
+        match (a.get(index), b.get(index)) {
+            (Some(c1), Some(c2)) if c1 == c2 => index += 1,
+            (None, None) => return Ordering::Equal,
+            (_, Some(b'~')) => return Ordering::Greater,
+            (Some(b'~'), _) => return Ordering::Less,
+            (None, Some(_)) => return Ordering::Less,
+            (Some(_), None) => return Ordering::Greater,
+            (Some(c1), Some(c2)) if c1.is_ascii_alphabetic() && !c2.is_ascii_alphabetic() => {
+                return Ordering::Less;
+            }
+            (Some(c1), Some(c2)) if !c1.is_ascii_alphabetic() && c2.is_ascii_alphabetic() => {
+                return Ordering::Greater;
+            }
+            (Some(c1), Some(c2)) => return c1.cmp(c2),
+        }
+    }
+}
+
+fn ct_remove_file_ending_bytes(a: &[u8]) -> &[u8] {
+    let mut ending_first = None;
+    let mut previous_was_dot = false;
+    for (index, byte) in a.iter().copied().enumerate() {
+        if byte == b'.' {
+            if ending_first.is_none() || previous_was_dot {
+                ending_first = Some(index);
+            }
+            previous_was_dot = true;
+        } else if previous_was_dot {
+            previous_was_dot = false;
+            if !byte.is_ascii_alphabetic() && byte != b'~' {
+                ending_first = None;
+            }
+        } else if !byte.is_ascii_alphanumeric() && byte != b'~' {
+            ending_first = None;
+        }
+    }
+    if previous_was_dot {
+        ending_first = None;
+    }
+    ending_first.map_or(a, |start| &a[..start])
+}
+
+/// Compare version strings without requiring them to be valid UTF-8.
+pub fn ct_version_cmp_bytes(mut a: &[u8], mut b: &[u8]) -> Ordering {
+    let byte_order = a.cmp(b);
+    if byte_order == Ordering::Equal {
+        return byte_order;
+    }
+
+    match (a.is_empty(), b.is_empty()) {
+        (true, false) => return Ordering::Less,
+        (false, true) => return Ordering::Greater,
+        (true, true) => unreachable!(),
+        (false, false) => {}
+    }
+    match (a == b".", b == b".") {
+        (true, false) => return Ordering::Less,
+        (false, true) => return Ordering::Greater,
+        (true, true) => unreachable!(),
+        (false, false) => {}
+    }
+    match (a == b"..", b == b"..") {
+        (true, false) => return Ordering::Less,
+        (false, true) => return Ordering::Greater,
+        (true, true) => unreachable!(),
+        (false, false) => {}
+    }
+    match (a.starts_with(b"."), b.starts_with(b".")) {
+        (true, false) => return Ordering::Less,
+        (false, true) => return Ordering::Greater,
+        (true, true) => {
+            a = &a[1..];
+            b = &b[1..];
+        }
+        (false, false) => {}
+    }
+
+    let (mut a, mut b) = match (
+        ct_remove_file_ending_bytes(a),
+        ct_remove_file_ending_bytes(b),
+    ) {
+        (a_stripped, b_stripped) if a_stripped == b_stripped => (a, b),
+        stripped => stripped,
+    };
+
+    while !a.is_empty() || !b.is_empty() {
+        let a_digit = a.iter().position(u8::is_ascii_digit).unwrap_or(a.len());
+        let b_digit = b.iter().position(u8::is_ascii_digit).unwrap_or(b.len());
+        match ct_version_non_digit_cmp_bytes(&a[..a_digit], &b[..b_digit]) {
+            Ordering::Equal => {}
+            order => return order,
+        }
+
+        a = &a[a_digit..];
+        b = &b[b_digit..];
+        let a_end = a
+            .iter()
+            .position(|c| !c.is_ascii_digit())
+            .unwrap_or(a.len());
+        let b_end = b
+            .iter()
+            .position(|c| !c.is_ascii_digit())
+            .unwrap_or(b.len());
+        let a_number = a[..a_end]
+            .iter()
+            .position(|c| *c != b'0')
+            .map_or(&[][..], |i| &a[i..a_end]);
+        let b_number = b[..b_end]
+            .iter()
+            .position(|c| *c != b'0')
+            .map_or(&[][..], |i| &b[i..b_end]);
+
+        match a_number.len().cmp(&b_number.len()) {
+            Ordering::Equal => {}
+            order => return order,
+        }
+        match a_number.cmp(b_number) {
+            Ordering::Equal => {}
+            order => return order,
+        }
+        a = &a[a_end..];
+        b = &b[b_end..];
+    }
+
+    Ordering::Equal
+}
+
 #[cfg(test)]
 mod tests {
     use crate::ct_version_cmp::ct_remove_file_ending;
     use crate::ct_version_cmp::ct_version_cmp;
+    use crate::ct_version_cmp::ct_version_cmp_bytes;
     use crate::ct_version_cmp::ct_version_non_digit_cmp;
 
     use std::cmp::Ordering;
+
+    #[test]
+    fn test_version_cmp_preserves_non_utf8_byte_order() {
+        assert_eq!(ct_version_cmp_bytes(b"v\xfe", b"v\xff"), Ordering::Less);
+        assert_eq!(ct_version_cmp_bytes(b"v\xff", b"v\xfe"), Ordering::Greater);
+    }
     #[test]
     fn test_version_cmp() {
         // 相同的字符串

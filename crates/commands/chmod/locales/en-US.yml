@@ -19,5 +19,6 @@ chmod:
   after_help: Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.
   messages:
     retained: "mode of %{file} retained as %{mode} (%{str})"
+    inaccessible: "%{file} could not be accessed"
     failed: "failed to change mode of file %{file} from %{mode1} (%{str1}) to %{mode2} (%{str2})"
     changed: "mode of %{file} changed from %{mode1} (%{str1}) to %{mode2} (%{str2})"

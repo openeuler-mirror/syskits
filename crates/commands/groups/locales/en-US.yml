@@ -16,3 +16,5 @@ groups:
     unrecognized_option: "unrecognized option '%{option}'"
     option_argument: "option '%{option}' doesn't allow an argument"
     try_help: "Try '%{command} --help' for more information."
+    write_error: "write error"
+    bad_file_descriptor: "Bad file descriptor"

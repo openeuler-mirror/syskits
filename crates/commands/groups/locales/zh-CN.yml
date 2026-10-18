@@ -16,3 +16,5 @@ groups:
     unrecognized_option: "未识别的选项 ‘%{option}’"
     option_argument: "选项 ‘%{option}’ 不允许有参数"
     try_help: "请尝试执行 \"%{command} --help\" 来获取更多信息。"
+    write_error: "写入错误"
+    bad_file_descriptor: "错误的文件描述符"

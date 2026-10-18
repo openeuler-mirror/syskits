@@ -245,6 +245,55 @@ impl Source {
         }
     }
 
+    /// Return the input position immediately after the current record.
+    ///
+    /// A non-seekable input does not need recovery after a read error, since
+    /// there is no file offset that can be adjusted.
+    fn recovery_offset(&mut self, record_len: usize) -> io::Result<Option<u64>> {
+        let current = match self {
+            #[cfg(not(unix))]
+            Self::Stdin(_) => return Ok(None),
+            Self::File(f) => f.stream_position(),
+            #[cfg(unix)]
+            Self::StdinFile(f) => f.stream_position(),
+            #[cfg(unix)]
+            Self::Fifo(_) => return Ok(None),
+        };
+
+        let current = match current {
+            Ok(offset) => offset,
+            Err(e) => {
+                #[cfg(unix)]
+                if e.raw_os_error() == Some(libc::ESPIPE) {
+                    return Ok(None);
+                }
+                return Err(e);
+            }
+        };
+        let record_len = u64::try_from(record_len)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "input offset overflow"))?;
+        current
+            .checked_add(record_len)
+            .map(Some)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "input offset overflow"))
+    }
+
+    fn recover_after_read_error(&mut self, offset: io::Result<Option<u64>>) -> io::Result<()> {
+        let Some(offset) = offset? else {
+            return Ok(());
+        };
+
+        match self {
+            #[cfg(not(unix))]
+            Self::Stdin(_) => Ok(()),
+            Self::File(f) => f.seek(SeekFrom::Start(offset)).map(|_| ()),
+            #[cfg(unix)]
+            Self::StdinFile(f) => f.seek(SeekFrom::Start(offset)).map(|_| ()),
+            #[cfg(unix)]
+            Self::Fifo(_) => Ok(()),
+        }
+    }
+
     /// Discard the system file cache for the given portion of the data source.
     ///
     /// `offset` and `len` specify a contiguous portion of the data
@@ -288,6 +337,14 @@ struct Input<'a> {
 
     /// Configuration settings for how to read the data.
     settings: &'a DdOptions,
+
+    /// A read error suppressed by `conv=noerror` for the copy loop to handle.
+    pending_read_error: Option<InputReadError>,
+}
+
+struct InputReadError {
+    source: io::Error,
+    recovery_offset: io::Result<Option<u64>>,
 }
 
 impl<'a> Input<'a> {
@@ -307,7 +364,11 @@ impl<'a> Input<'a> {
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }
-        Ok(Self { src, settings })
+        Ok(Self {
+            src,
+            settings,
+            pending_read_error: None,
+        })
     }
 
     /// Instantiate this struct with the named file as a source.
@@ -329,7 +390,11 @@ impl<'a> Input<'a> {
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }
-        Ok(Self { src, settings })
+        Ok(Self {
+            src,
+            settings,
+            pending_read_error: None,
+        })
     }
 
     /// Instantiate this struct with the named pipe as a source.
@@ -343,7 +408,11 @@ impl<'a> Input<'a> {
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }
-        Ok(Self { src, settings })
+        Ok(Self {
+            src,
+            settings,
+            pending_read_error: None,
+        })
     }
 }
 
@@ -383,6 +452,11 @@ impl Read for Input<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut base_idx = 0;
         let target_len = buf.len();
+        let recovery_offset = self
+            .settings
+            .iconv
+            .noerror
+            .then(|| self.src.recovery_offset(target_len));
         loop {
             match self.src.read(&mut buf[base_idx..]) {
                 Ok(0) => return Ok(base_idx),
@@ -395,7 +469,13 @@ impl Read for Input<'_> {
                 }
                 Ok(len) => return Ok(len),
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-                Err(_) if self.settings.iconv.noerror => return Ok(base_idx),
+                Err(e) if self.settings.iconv.noerror => {
+                    self.pending_read_error = Some(InputReadError {
+                        source: e,
+                        recovery_offset: recovery_offset.unwrap_or(Ok(None)),
+                    });
+                    return Ok(base_idx);
+                }
                 Err(e) => return Err(e),
             }
         }
@@ -435,7 +515,18 @@ impl Input<'_> {
         let mut bytes_total = 0;
 
         for chunk in buf.chunks_mut(self.settings.ibs) {
-            match self.read(chunk)? {
+            let rlen = self.read(chunk)?;
+            if self.pending_read_error.is_some() {
+                buf.truncate(bytes_total);
+                return Ok(ReadStat {
+                    reads_complete,
+                    reads_partial,
+                    records_truncated: 0,
+                    bytes_total: bytes_total.try_into().unwrap(),
+                });
+            }
+
+            match rlen {
                 rlen if rlen == self.settings.ibs => {
                     bytes_total += rlen;
                     reads_complete += 1;
@@ -470,7 +561,24 @@ impl Input<'_> {
             let next_blk = cmp::min(base_idx + self.settings.ibs, buf.len());
             let target_len = next_blk - base_idx;
 
-            match self.read(&mut buf[base_idx..next_blk])? {
+            if self.settings.iconv.noerror {
+                buf[base_idx..next_blk].fill(pad);
+            }
+
+            let rlen = self.read(&mut buf[base_idx..next_blk])?;
+            if self.pending_read_error.is_some() {
+                reads_partial += 1;
+                base_idx = next_blk;
+                buf.truncate(base_idx);
+                return Ok(ReadStat {
+                    reads_complete,
+                    reads_partial,
+                    records_truncated: 0,
+                    bytes_total: bytes_total.try_into().unwrap(),
+                });
+            }
+
+            match rlen {
                 0 => break,
                 rlen if rlen < target_len => {
                     bytes_total += rlen;
@@ -1023,13 +1131,18 @@ fn read_and_process_block(
     output: &mut BlockWriter,
 ) -> std::io::Result<bool> {
     // 计算本次读取的缓冲区大小
-    let loop_bsize = calc_loop_bsize(
+    let mut loop_bsize = calc_loop_bsize(
         &state.input.settings.count,
         &state.read_stat,
         &state.write_stat,
         state.input.settings.ibs,
         state.buffer_size,
     );
+    if state.input.settings.iconv.noerror {
+        // Process one input record at a time so an error report reflects all
+        // successfully completed records and their corresponding writes.
+        loop_bsize = cmp::min(loop_bsize, state.input.settings.ibs);
+    }
 
     state.start_time = Instant::now();
     // 读取数据
@@ -1040,8 +1153,41 @@ fn read_and_process_block(
         &mut state.conversion_state,
         loop_bsize,
     )?;
+    let read_error = state.input.pending_read_error.take();
+    let had_read_error = read_error.is_some();
+    if let Some(read_error) = read_error {
+        let status = state.input.settings.status;
+        if status != Some(StatusLevel::None) {
+            match state.input.settings.infile.as_ref() {
+                Some(path) => ct_show_error!(
+                    "error reading {}: {}",
+                    Path::new(path).quote(),
+                    read_error.source
+                ),
+                None => ct_show_error!("error reading 'standard input': {}", read_error.source),
+            }
+        }
+
+        let elapsed = state.duration + state.start_time.elapsed();
+        ProgUpdate::new(state.read_stat, state.write_stat, elapsed, false)
+            .print_final_stats(status, false);
+
+        if let Err(e) = state
+            .input
+            .src
+            .recover_after_read_error(read_error.recovery_offset)
+        {
+            match state.input.settings.infile.as_ref() {
+                Some(path) => ct_show_error!("{}: cannot seek: {}", Path::new(path).quote(), e),
+                None => ct_show_error!("'standard input': cannot seek: {}", e),
+            }
+            #[cfg(unix)]
+            set_ct_exit_code(1);
+        }
+    }
+
     if rstat_update.is_empty() {
-        return Ok(false);
+        return Ok(had_read_error);
     }
 
     // 写入数据
@@ -1604,6 +1750,7 @@ mod dd_copy_tests {
         Ok(Input {
             src: Source::File(temp_file),
             settings,
+            pending_read_error: None,
         })
     }
 
@@ -1735,6 +1882,61 @@ mod dd_copy_tests {
         result_file.seek(SeekFrom::Start(0))?;
         result_file.read_to_end(&mut result)?;
         assert!(result.is_empty());
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_noerror_sync_pads_and_skips_a_failed_input_record() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.ibs = 4;
+        options.obs = 4;
+        options.count = Some(Num::Blocks(1));
+        options.iconv.noerror = true;
+        options.iconv.sync = Some(0);
+        options.status = Some(StatusLevel::None);
+
+        let input_dir = tempdir()?;
+        let input_file = File::open(input_dir.path())?;
+        let mut offset_observer = input_file.try_clone()?;
+        let input = Input {
+            src: Source::File(input_file),
+            settings: &options,
+            pending_read_error: None,
+        };
+        let (output, mut result_file) = create_test_output(&options)?;
+
+        dd_copy(input, output)?;
+
+        let mut result = Vec::new();
+        result_file.seek(SeekFrom::Start(0))?;
+        result_file.read_to_end(&mut result)?;
+        assert_eq!(result, vec![0; 4]);
+        assert_eq!(offset_observer.stream_position()?, 4);
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_noerror_without_sync_does_not_create_an_input_record() -> CTResult<()> {
+        let mut options = create_test_options();
+        options.ibs = 4;
+        options.iconv.noerror = true;
+
+        let input_dir = tempdir()?;
+        let input_file = File::open(input_dir.path())?;
+        let mut input = Input {
+            src: Source::File(input_file),
+            settings: &options,
+            pending_read_error: None,
+        };
+        let mut buffer = vec![BUF_INIT_BYTE; options.ibs];
+
+        let result = input.fill_consecutive(&mut buffer)?;
+
+        assert!(result.is_empty());
+        assert!(input.pending_read_error.is_some());
+        assert!(buffer.is_empty());
         Ok(())
     }
 
@@ -1952,6 +2154,7 @@ mod tests_input_additional {
                 },
                 ..Default::default()
             },
+            pending_read_error: None,
         };
 
         let mut buf = [0u8; 512];
@@ -1973,6 +2176,7 @@ mod tests_input_additional {
                 },
                 ..Default::default()
             },
+            pending_read_error: None,
         };
 
         let mut buf = [0u8; 512];

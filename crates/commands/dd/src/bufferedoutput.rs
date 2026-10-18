@@ -42,8 +42,8 @@ impl<'a> DDBufferedOutput<'a> {
         }
     }
 
-    pub(crate) fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
-        self.inner.discard_cache(offset, len);
+    pub(crate) fn discard_cache(&self, offset: libc::off_t, len: libc::off_t, report_error: bool) {
+        self.inner.discard_cache(offset, len, report_error);
     }
 
     /// Flush the partial block stored in the internal buffer.

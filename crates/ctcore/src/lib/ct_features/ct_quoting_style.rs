@@ -213,9 +213,9 @@ fn shell_without_escape(name: &str, quotes: CtQuotes, show_control_chars: bool) 
     let mut escaped_str = String::with_capacity(name.len());
 
     for c in name.chars() {
-        // Shell quoting is decided from the original name, before ls replaces
-        // non-printable characters with '?'.
-        must_quote |= c.is_control();
+        // These characters alter shell token structure even when emitted
+        // without escapes. Other control characters do not require quotes.
+        must_quote |= matches!(c, '\t' | '\n' | '\r');
 
         let escaped = {
             let ec = CtEscapedChar::new_shell(c, false, quotes);
@@ -1232,9 +1232,9 @@ mod tests {
                     "\"\\020\\021\\022\\023\\024\\025\\026\\027\\030\\031\\032\\033\\034\\035\\036\\037\"",
                     "c",
                 ),
-                ("'????????????????'", "shell"),
+                ("????????????????", "shell"),
                 (
-                    "'\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F'",
+                    "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
                     "shell-show",
                 ),
                 ("'????????????????'", "shell-always"),
@@ -1261,8 +1261,8 @@ mod tests {
                 ("\x7F", "literal-show"),
                 ("\\177", "escape"),
                 ("\"\\177\"", "c"),
-                ("'?'", "shell"),
-                ("'\x7F'", "shell-show"),
+                ("?", "shell"),
+                ("\x7F", "shell-show"),
                 ("'?'", "shell-always"),
                 ("'\x7F'", "shell-always-show"),
                 ("''$'\\177'", "shell-escape"),
@@ -1620,7 +1620,7 @@ mod tests {
                     always_quote: false,
                     show_control: false,
                 },
-                "'?'",
+                "?",
             ),
             (
                 OsStr::new("hello world"),

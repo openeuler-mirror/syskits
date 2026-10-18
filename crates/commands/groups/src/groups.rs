@@ -16,6 +16,7 @@ use ctcore::{
     ct_display::Quotable,
     ct_entries::{CtPasswd, get_groups_gnu, gid2grp},
     ct_error::{CTError, CTResult},
+    ct_process::{getegid, getgid},
 };
 use rust_i18n::t;
 use std::error::Error;
@@ -114,13 +115,31 @@ fn groups_render_classic_text(entries: &[GroupsEntry]) -> String {
     classic_text
 }
 
+fn groups_for_current_process(rgid: u32, egid: u32, groups: Vec<u32>) -> Vec<u32> {
+    let mut result = Vec::with_capacity(groups.len() + usize::from(rgid != egid) + 1);
+    result.push(rgid);
+    if egid != rgid {
+        result.push(egid);
+    }
+    result.extend(
+        groups
+            .into_iter()
+            .filter(|group| *group != rgid && *group != egid),
+    );
+    result
+}
+
 fn groups_collect_for_users(users: Vec<String>) -> CTResult<GroupsSemantic> {
     let mut entries = Vec::new();
     let mut stderr_text = String::new();
     let mut exit_code = 0;
 
     if users.is_empty() {
-        let gids = get_groups_gnu(None).map_err(|_| GroupsError::GetGroupsFailed)?;
+        let gids = groups_for_current_process(
+            getgid(),
+            getegid(),
+            get_groups_gnu(None).map_err(|_| GroupsError::GetGroupsFailed)?,
+        );
         let groups = gids
             .iter()
             .map(|gid| groups_infallible_gid2grp(gid, &mut stderr_text, &mut exit_code))
@@ -241,7 +260,7 @@ mod tests {
     }
 
     mod tests_groups_main {
-        use crate::{groups_main, groups_native_semantic};
+        use crate::{groups_for_current_process, groups_main, groups_native_semantic};
 
         use std::ffi::OsString;
 
@@ -268,6 +287,18 @@ mod tests {
             let result = groups_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_groups_for_current_process_includes_real_and_effective_gids() {
+            assert_eq!(
+                groups_for_current_process(65534, 0, vec![0, 10, 20, 65534]),
+                vec![65534, 0, 10, 20]
+            );
+            assert_eq!(
+                groups_for_current_process(1000, 1000, vec![1000, 10, 20]),
+                vec![1000, 10, 20]
+            );
         }
 
         #[test]

@@ -63,6 +63,26 @@ fn vdir_keeps_non_utf8_hidden_names_hidden() {
     assert_eq!(output.stdout, b"visible\n");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn vdir_quotes_non_utf8_symlink_target_bytes() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let target = std::ffi::OsString::from_vec(b"target\xff".to_vec());
+    std::os::unix::fs::symlink(target, temp_dir.path().join("link"))
+        .expect("create symlink fixture");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["vdir", "-ln", "--time-style=+T", "-d", "link"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert!(output.stdout.ends_with(b" T link -> target\\377\n"));
+}
+
 #[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");

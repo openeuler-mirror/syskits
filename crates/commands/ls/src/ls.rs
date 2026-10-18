@@ -4132,7 +4132,7 @@ fn display_item_name<W: Write>(
                         )
                         .is_err()
                     {
-                        name.push_str(&path.p_buf.read_link().unwrap().to_string_lossy());
+                        name.push_str(&escape_name(target.as_os_str(), &config.quoting_style));
                     } else {
                         name.push_str(&color_name(
                             escape_name(target.as_os_str(), &config.quoting_style),

@@ -968,23 +968,20 @@ impl<'a> DdOutput<'a> {
     /// Instantiate this struct with the given named pipe as a destination.
     #[cfg(unix)]
     fn new_fifo(filename: &Path, settings: &'a DdOptions) -> CTResult<Self> {
-        // We simulate seeking in a FIFO by *reading*, so we open the
-        // file for reading. But then we need to close the file and
-        // re-open it for writing.
-        if settings.seek > 0 {
-            Dest::Fifo(File::open(filename)?).seek(settings.seek)?;
-        }
         let mut opts = OpenOptions::new();
-        opts.write(true)
+        opts.read(settings.seek > 0)
+            .write(true)
             .create(!settings.oconv.is_nocreat)
             .create_new(settings.oconv.is_excl)
             .append(settings.oflags.is_append);
         #[cfg(target_os = "linux")]
         opts.custom_flags(make_linux_oflags(&settings.oflags).unwrap_or(0));
-        let dst = Dest::Fifo(
+        let mut dst = Dest::Fifo(
             opts.open(filename)
                 .map_err_context(|| format!("failed to open {}", filename.quote()))?,
         );
+        dst.seek(settings.seek)
+            .map_err_context(|| format!("{}: cannot seek", filename.quote()))?;
         Ok(Self { dst, settings })
     }
 

@@ -271,6 +271,7 @@ fn chmod_args_init() -> Vec<Arg> {
         Arg::new(chmod_flags::CHANGES)
             .long(chmod_flags::CHANGES)
             .short('c')
+            .overrides_with(chmod_flags::VERBOSE)
             .help(t!("chmod.clap.changes"))
             .action(ArgAction::SetTrue),
         Arg::new(chmod_flags::QUIET)
@@ -282,6 +283,7 @@ fn chmod_args_init() -> Vec<Arg> {
         Arg::new(chmod_flags::VERBOSE)
             .long(chmod_flags::VERBOSE)
             .short('v')
+            .overrides_with(chmod_flags::CHANGES)
             .help(t!("chmod.clap.verbose"))
             .action(ArgAction::SetTrue),
         Arg::new(chmod_flags::NO_PRESERVE_ROOT)
@@ -1050,6 +1052,22 @@ mod tests {
 
         assert!(matches.get_flag(chmod_flags::VERBOSE));
     }
+
+    #[test]
+    fn test_ct_app_verbosity_last_option_wins() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-c", "-v"])
+            .unwrap();
+        assert!(!matches.get_flag(chmod_flags::CHANGES));
+        assert!(matches.get_flag(chmod_flags::VERBOSE));
+
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-v", "-c"])
+            .unwrap();
+        assert!(matches.get_flag(chmod_flags::CHANGES));
+        assert!(!matches.get_flag(chmod_flags::VERBOSE));
+    }
+
     #[test]
     fn test_ct_app_arg_no_preserve_root() {
         let command = ct_app();

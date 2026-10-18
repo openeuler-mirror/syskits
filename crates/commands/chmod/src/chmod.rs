@@ -20,12 +20,20 @@ use ctcore::ct_fs::display_permissions_unix;
 use ctcore::ct_mode;
 use ctcore::ct_show_error;
 use ctcore::libc::mode_t;
+use nix::dir::Dir;
+use nix::fcntl::{AtFlags, OFlag};
+use nix::sys::stat::{
+    FchmodatFlags, FileStat, Mode, fchmodat, fstatat, lstat as path_lstat, stat as path_stat,
+};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
-use std::path::Path;
+use std::io;
+use std::os::fd::AsRawFd;
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::MetadataExt;
+use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
 mod chmod_flags {
@@ -367,6 +375,71 @@ enum TraverseMode {
     First,
 }
 
+#[derive(Clone, Copy)]
+enum FileTarget<'a> {
+    Path(&'a Path),
+    At { dir_fd: i32, name: &'a OsStr },
+}
+
+impl FileTarget<'_> {
+    fn metadata(self, follow_symlink: bool) -> io::Result<FileStat> {
+        let result = match self {
+            Self::Path(path) => {
+                if follow_symlink {
+                    path_stat(path)
+                } else {
+                    path_lstat(path)
+                }
+            }
+            Self::At { dir_fd, name } => fstatat(
+                Some(dir_fd),
+                name,
+                if follow_symlink {
+                    AtFlags::empty()
+                } else {
+                    AtFlags::AT_SYMLINK_NOFOLLOW
+                },
+            ),
+        };
+        result.map_err(nix_error_to_io)
+    }
+
+    fn chmod(self, mode: u32) -> io::Result<()> {
+        let result = match self {
+            Self::Path(path) => fchmodat(
+                None,
+                path,
+                Mode::from_bits_truncate(mode),
+                FchmodatFlags::FollowSymlink,
+            ),
+            Self::At { dir_fd, name } => fchmodat(
+                Some(dir_fd),
+                name,
+                Mode::from_bits_truncate(mode),
+                FchmodatFlags::FollowSymlink,
+            ),
+        };
+        result.map_err(nix_error_to_io)
+    }
+
+    fn open_directory(self, follow_symlink: bool) -> io::Result<Dir> {
+        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        if !follow_symlink {
+            flags |= OFlag::O_NOFOLLOW;
+        }
+
+        let result = match self {
+            Self::Path(path) => Dir::open(path, flags, Mode::empty()),
+            Self::At { dir_fd, name } => Dir::openat(Some(dir_fd), name, flags, Mode::empty()),
+        };
+        result.map_err(nix_error_to_io)
+    }
+}
+
+fn nix_error_to_io(error: nix::errno::Errno) -> io::Error {
+    io::Error::from_raw_os_error(error as i32)
+}
+
 struct Chmoder {
     changes: bool,
     quiet: bool,
@@ -427,8 +500,17 @@ impl Chmoder {
     }
 
     fn process_path(&self, file_path: &Path, is_cmdline: bool) -> CTResult<()> {
-        let symlink_meta = match fs::symlink_metadata(file_path) {
-            Ok(m) => m,
+        self.process_target(FileTarget::Path(file_path), file_path, is_cmdline)
+    }
+
+    fn process_target(
+        &self,
+        target: FileTarget<'_>,
+        file_path: &Path,
+        is_cmdline: bool,
+    ) -> CTResult<()> {
+        let symlink_meta = match target.metadata(false) {
+            Ok(metadata) => metadata,
             Err(err) => {
                 set_ct_exit_code(1);
                 self.describe_access_failure(file_path);
@@ -443,7 +525,7 @@ impl Chmoder {
             }
         };
 
-        let is_symlink = symlink_meta.is_symlink();
+        let is_symlink = (symlink_meta.st_mode & ctcore::libc::S_IFMT) == ctcore::libc::S_IFLNK;
 
         let should_deref = if self.no_dereference {
             false
@@ -454,8 +536,8 @@ impl Chmoder {
         };
 
         let target_meta = if is_symlink && should_deref {
-            match fs::metadata(file_path) {
-                Ok(m) => Some(m),
+            match target.metadata(true) {
+                Ok(metadata) => metadata,
                 Err(_err) => {
                     set_ct_exit_code(1);
                     self.describe_access_failure(file_path);
@@ -470,46 +552,85 @@ impl Chmoder {
                 }
             }
         } else {
-            Some(symlink_meta)
+            symlink_meta
         };
 
-        let mut r = Ok(());
+        let target_is_dir = (target_meta.st_mode & ctcore::libc::S_IFMT) == ctcore::libc::S_IFDIR;
+        let should_traverse = self.recursive
+            && target_is_dir
+            && (!is_symlink
+                || self.traverse == TraverseMode::Logical
+                || (self.traverse == TraverseMode::First && is_cmdline));
 
-        if let Some(meta) = &target_meta {
-            if !is_symlink || should_deref {
-                r = self.chmod_meta(file_path, meta).and(r);
-            } else if self.verbose && !self.changes {
+        // Open the directory before changing its mode, as GNU fts does when
+        // classifying an entry. All child operations are then relative to this fd.
+        let mut directory = if should_traverse {
+            match target.open_directory(!is_symlink || should_deref) {
+                Ok(directory) => Some(directory),
+                Err(err) => {
+                    set_ct_exit_code(1);
+                    self.describe_access_failure(file_path);
+                    return if self.quiet {
+                        Err(ExitCode::new(1))
+                    } else {
+                        Err(CtSimpleError::new(
+                            1,
+                            format!("cannot read directory {}: {}", file_path.quote(), err),
+                        ))
+                    };
+                }
+            }
+        } else {
+            None
+        };
+
+        let mut r = if !is_symlink || should_deref {
+            self.chmod_meta(target, file_path, target_meta.st_mode)
+        } else {
+            if self.verbose && !self.changes {
                 println!(
                     "neither symbolic link {} nor referent has been changed",
                     file_path.quote()
                 );
             }
-        }
+            Ok(())
+        };
 
-        if self.recursive {
-            let should_traverse = if let Some(meta) = &target_meta {
-                if meta.is_dir() {
-                    if !is_symlink {
-                        true
-                    } else {
-                        self.traverse == TraverseMode::Logical
-                            || (self.traverse == TraverseMode::First && is_cmdline)
-                    }
-                } else {
-                    false
-                }
-            } else {
-                false
-            };
+        if let Some(directory) = directory.as_mut() {
+            let dir_fd = directory.as_raw_fd();
+            for entry in directory.iter() {
+                match entry {
+                    Ok(entry) => {
+                        let name = OsStr::from_bytes(entry.file_name().to_bytes());
+                        if name == OsStr::new(".") || name == OsStr::new("..") {
+                            continue;
+                        }
 
-            if should_traverse {
-                if let Ok(entries) = fs::read_dir(file_path) {
-                    for entry in entries.flatten() {
-                        r = self.process_path(&entry.path(), false).and(r);
+                        let name = name.to_os_string();
+                        let child_path: PathBuf = file_path.join(&name);
+                        r = self
+                            .process_target(
+                                FileTarget::At {
+                                    dir_fd,
+                                    name: &name,
+                                },
+                                &child_path,
+                                false,
+                            )
+                            .and(r);
                     }
-                } else if !self.quiet {
-                    ct_show_error!("cannot read directory {}", file_path.quote());
-                    set_ct_exit_code(1);
+                    Err(error) => {
+                        set_ct_exit_code(1);
+                        if !self.quiet {
+                            ct_show_error!(
+                                "cannot read directory {}: {}",
+                                file_path.quote(),
+                                nix_error_to_io(error)
+                            );
+                        }
+                        r = Err(ExitCode::new(1));
+                        break;
+                    }
                 }
             }
         }
@@ -518,13 +639,19 @@ impl Chmoder {
     }
 
     #[cfg(unix)]
-    fn chmod_meta(&self, file_path: &Path, meta: &fs::Metadata) -> CTResult<()> {
+    fn chmod_meta(
+        &self,
+        target: FileTarget<'_>,
+        file_path: &Path,
+        file_mode: mode_t,
+    ) -> CTResult<()> {
         use ctcore::ct_mode::get_umask;
 
-        let file_perms = meta.mode() & 0o7777;
+        let file_perms = file_mode & 0o7777;
+        let is_dir = (file_mode & ctcore::libc::S_IFMT) == ctcore::libc::S_IFDIR;
 
         match self.fmode {
-            Some(mode) => self.change_file(file_perms, mode, file_path)?,
+            Some(mode) => self.change_target(target, file_perms, mode, file_path)?,
             None => {
                 let chmod_unwrapped = self.cmode.clone().unwrap();
                 let has_multiple_clauses = chmod_unwrapped.contains(',');
@@ -536,20 +663,14 @@ impl Chmoder {
                     {
                         Err(format!("invalid mode ({chmod_unwrapped})"))
                     } else if mode.chars().any(|c| c.is_ascii_digit()) {
-                        ct_mode::parse_numeric(new_mode, mode, meta.is_dir()).map(|v| (v, v))
+                        ct_mode::parse_numeric(new_mode, mode, is_dir).map(|v| (v, v))
                     } else {
-                        ct_mode::parse_symbolic(new_mode, mode, get_umask(), meta.is_dir()).map(
-                            |m| {
-                                let naive_mode = ct_mode::parse_symbolic(
-                                    naively_expected_new_mode,
-                                    mode,
-                                    0,
-                                    meta.is_dir(),
-                                )
-                                .unwrap();
-                                (m, naive_mode)
-                            },
-                        )
+                        ct_mode::parse_symbolic(new_mode, mode, get_umask(), is_dir).map(|m| {
+                            let naive_mode =
+                                ct_mode::parse_symbolic(naively_expected_new_mode, mode, 0, is_dir)
+                                    .unwrap();
+                            (m, naive_mode)
+                        })
                     };
 
                     match result {
@@ -567,7 +688,7 @@ impl Chmoder {
                     }
                 }
 
-                self.change_file(file_perms, new_mode, file_path)?;
+                self.change_target(target, file_perms, new_mode, file_path)?;
                 if self.diagnose_surprises && (new_mode & !naively_expected_new_mode) != 0 {
                     return Err(CtSimpleError::new(
                         1,
@@ -586,8 +707,14 @@ impl Chmoder {
     }
 
     #[cfg(unix)]
-    fn change_file(&self, file_perms: u32, mode: u32, file_path: &Path) -> Result<(), i32> {
-        if let Err(err) = fs::set_permissions(file_path, fs::Permissions::from_mode(mode)) {
+    fn change_target(
+        &self,
+        target: FileTarget<'_>,
+        file_perms: u32,
+        mode: u32,
+        file_path: &Path,
+    ) -> Result<(), i32> {
+        if let Err(err) = target.chmod(mode) {
             if !self.quiet {
                 ct_show_error!("{}", err);
             }
@@ -633,6 +760,11 @@ impl Chmoder {
             }
             Ok(())
         }
+    }
+
+    #[cfg(all(unix, test))]
+    fn change_file(&self, file_perms: u32, mode: u32, file_path: &Path) -> Result<(), i32> {
+        self.change_target(FileTarget::Path(file_path), file_perms, mode, file_path)
     }
 }
 

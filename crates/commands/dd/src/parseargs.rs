@@ -30,6 +30,7 @@ pub enum ParseError {
     MultipleExclNoCreate,
     MultipleDirectNoCache,
     FlagNoMatch(String),
+    OutputFlagNoMatch(String),
     ConvFlagNoMatch(String),
     MultiplierStringParseFailure(String),
     MultiplierStringOverflow(String),
@@ -387,8 +388,9 @@ impl Parser {
                 // Output-only flags
                 "append" => o.is_append = true,
                 "seek_bytes" => o.is_seek_bytes = true,
-                // GNU silently ignores iflags given as oflag.
-                "fullblock" | "count_bytes" | "skip_bytes" => {}
+                "fullblock" => return Err(ParseError::OutputFlagNoMatch(f.to_string())),
+                // GNU silently ignores these iflags when given as oflag.
+                "count_bytes" | "skip_bytes" => {}
                 _ => return Err(ParseError::FlagNoMatch(f.to_string())),
             }
         }
@@ -463,6 +465,9 @@ impl std::fmt::Display for ParseError {
                     arg,
                     ctcore::ct_execute_phrase()
                 )
+            }
+            Self::OutputFlagNoMatch(arg) => {
+                write!(f, "invalid output flag: '{}'", arg)
             }
             Self::ConvFlagNoMatch(arg) => {
                 write!(f, "Unrecognized conv=CONV -> {arg}")

@@ -508,6 +508,14 @@ fn parse_oflag_tokens() {
     );
 }
 
+#[test]
+fn fullblock_is_invalid_as_an_output_flag() {
+    assert_eq!(
+        Parser::new().parse(&["oflag=fullblock"]).err(),
+        Some(ParseError::OutputFlagNoMatch("fullblock".to_string()))
+    );
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn parse_iflag_tokens_linux() {

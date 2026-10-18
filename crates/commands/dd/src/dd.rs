@@ -1393,11 +1393,9 @@ fn finalize_copy(mut output: BlockWriter, mut state: CopyState) -> std::io::Resu
 
     let final_wstat = state.write_stat + wstat_update;
 
-    // 如果需要，截断文件
-    if !(state.input.settings.oconv.is_notrunc
-        || final_wstat.bytes_total == 0
-            && seek_bytes_stays_in_first_output_block(state.input.settings))
-    {
+    // Dense writes extend the file themselves. A final size adjustment is
+    // needed only after output was produced, notably for sparse seeks.
+    if !state.input.settings.oconv.is_notrunc && final_wstat.bytes_total != 0 {
         output.truncate();
     }
 

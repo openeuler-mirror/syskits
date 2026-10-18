@@ -19,5 +19,6 @@ chmod:
   after_help: '每个模式的格式为''[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+''.'
   messages:
     retained: "%{file} 的模式已保留为 %{mode} (%{str})"
+    inaccessible: "无法访问 %{file}"
     failed: "无法将 %{file} 的权限由 %{mode1} (%{str1}) 更改为 %{mode2} (%{str2})"
     changed: "%{file} 的模式已由 %{mode1} (%{str1}) 更改为 %{mode2} (%{str2})"

@@ -372,6 +372,18 @@ struct Chmoder {
 }
 
 impl Chmoder {
+    fn describe_access_failure(&self, file_path: &Path) {
+        if self.verbose {
+            println!(
+                "{}",
+                t!(
+                    "chmod.messages.inaccessible",
+                    file = file_path.quote().to_string()
+                )
+            );
+        }
+    }
+
     fn chmod(&self, files: &[String]) -> CTResult<()> {
         let mut r = Ok(());
 
@@ -399,6 +411,7 @@ impl Chmoder {
             Ok(m) => m,
             Err(err) => {
                 set_ct_exit_code(1);
+                self.describe_access_failure(file_path);
                 return if self.quiet {
                     Err(ExitCode::new(1))
                 } else {
@@ -425,6 +438,7 @@ impl Chmoder {
                 Ok(m) => Some(m),
                 Err(_err) => {
                     set_ct_exit_code(1);
+                    self.describe_access_failure(file_path);
                     return if self.quiet {
                         Err(ExitCode::new(1))
                     } else {

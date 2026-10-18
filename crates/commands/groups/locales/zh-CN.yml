@@ -6,6 +6,7 @@ groups:
     当前进程的组成员身份（如果组数据库已更改，则可能有所不同）。
   quote_mark: '"'
   errors:
+    real_uid: "无法获取实际用户 ID"
     current_process: "获取当前进程的组失败"
     group_not_found: "无法根据组 ID %{gid} 找到组名称"
     user_not_found: "%{user}: 无此用户"

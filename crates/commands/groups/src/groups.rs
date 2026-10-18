@@ -58,13 +58,20 @@ struct GroupsClapError {
 
 impl GroupsClapError {
     fn new(error: clap::Error) -> Self {
-        let diagnostic = if error.kind() == clap::error::ErrorKind::UnknownArgument {
-            match error.get(ContextKind::InvalidArg) {
+        let diagnostic = match error.kind() {
+            clap::error::ErrorKind::UnknownArgument => match error.get(ContextKind::InvalidArg) {
                 Some(ContextValue::String(argument)) => groups_invalid_option_diagnostic(argument),
                 _ => None,
-            }
-        } else {
-            None
+            },
+            clap::error::ErrorKind::TooManyValues => match error.get(ContextKind::InvalidArg) {
+                Some(ContextValue::String(argument))
+                    if argument == "--help" || argument == "--version" =>
+                {
+                    Some(format!("option '{argument}' doesn't allow an argument"))
+                }
+                _ => None,
+            },
+            _ => None,
         };
         let show_usage = !matches!(
             error.kind(),
@@ -851,6 +858,23 @@ mod tests {
                     .expect_err("invalid option");
                 let error = crate::GroupsClapError::new(error);
                 assert_eq!(error.to_string(), expected);
+                assert_eq!(error.code(), 1);
+                assert!(error.usage());
+            }
+        }
+
+        #[test]
+        fn test_help_and_version_arguments_use_gnu_diagnostic() {
+            for option in ["--help=x", "--version=x"] {
+                let error = ct_app()
+                    .try_get_matches_from([ctcore::ct_util_name(), option])
+                    .expect_err("option argument");
+                let error = crate::GroupsClapError::new(error);
+                let option_name = option.split('=').next().unwrap();
+                assert_eq!(
+                    error.to_string(),
+                    format!("option '{option_name}' doesn't allow an argument")
+                );
                 assert_eq!(error.code(), 1);
                 assert!(error.usage());
             }

@@ -857,7 +857,11 @@ struct DdOutput<'a> {
 impl<'a> DdOutput<'a> {
     /// Instantiate this struct with stdout as a destination.
     fn new_stdout(settings: &'a DdOptions) -> CTResult<Self> {
-        let mut dst = Dest::Stdout(io::stdout());
+        let stdout = io::stdout();
+        #[cfg(target_os = "linux")]
+        set_fd_flags(stdout.as_raw_fd(), make_linux_oflags(&settings.oflags))
+            .map_err_context(|| "setting flags for 'standard output'".to_string())?;
+        let mut dst = Dest::Stdout(stdout);
         dst.seek(settings.seek)
             .map_err_context(|| "write error".to_string())?;
         Ok(Self { dst, settings })

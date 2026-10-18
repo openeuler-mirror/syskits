@@ -599,14 +599,19 @@ impl Tool for Groups {
             Ok(semantic) => {
                 let mut stdout = std::io::stdout().lock();
                 let mut stderr = std::io::stderr().lock();
+                let mut stdout_error = None;
                 for event in &semantic.output_events {
                     match event {
                         GroupsOutputEvent::Stdout(range) => {
-                            groups_write_stdout(
-                                &mut stdout,
-                                &semantic.classic_bytes[range.clone()],
-                                ctcore::ct_stdout_was_closed(),
-                            )?;
+                            if stdout_error.is_none() {
+                                if let Err(error) = groups_write_stdout(
+                                    &mut stdout,
+                                    &semantic.classic_bytes[range.clone()],
+                                    ctcore::ct_stdout_was_closed(),
+                                ) {
+                                    stdout_error = Some(error);
+                                }
+                            }
                         }
                         GroupsOutputEvent::Stderr(range) => {
                             stderr.write_all(&semantic.stderr_text.as_bytes()[range.clone()])?;
@@ -615,7 +620,9 @@ impl Tool for Groups {
                     }
                 }
 
-                if semantic.exit_code == 0 {
+                if let Some(error) = stdout_error {
+                    Err(error)
+                } else if semantic.exit_code == 0 {
                     Ok(())
                 } else {
                     Err(semantic.exit_code.into())

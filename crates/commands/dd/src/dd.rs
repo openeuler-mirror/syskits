@@ -42,6 +42,7 @@ use ctcore::ct_show_error;
 use nix::{
     errno::Errno,
     fcntl::{PosixFadviseAdvice, posix_fadvise},
+    sys::stat::{SFlag, fstat},
 };
 use std::cmp;
 use std::env;
@@ -364,14 +365,10 @@ impl<'a> Input<'a> {
     fn new_stdin(settings: &'a DdOptions) -> CTResult<Self> {
         #[cfg(unix)]
         let mut src = Source::stdin_as_file();
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         if let Source::StdinFile(f) = &src {
-            // GNU compatibility:
-            // this will check whether stdin points to a folder or not
-            if f.metadata()?.is_file() && settings.iflags.is_directory {
-                ct_show_error!("standard input: not a directory");
-                return Err(1.into());
-            }
+            set_fd_flags(f.as_raw_fd(), make_linux_iflags(&settings.iflags))
+                .map_err_context(|| "setting flags for 'standard input'".to_string())?;
         };
         if settings.skip > 0 {
             src.skip(settings.skip)?;
@@ -432,6 +429,27 @@ impl<'a> Input<'a> {
             warn_partial_read: settings.warn_partial_read,
         })
     }
+}
+
+#[cfg(target_os = "linux")]
+fn set_fd_flags(fd: libc::c_int, add_flags: Option<libc::c_int>) -> io::Result<()> {
+    let mut flags = add_flags.unwrap_or(0) & !(libc::O_NOCTTY | libc::O_NOFOLLOW);
+    if flags == 0 {
+        return Ok(());
+    }
+
+    if flags & libc::O_DIRECTORY != 0 {
+        let stat = fstat(fd).map_err(io::Error::from)?;
+        if !SFlag::from_bits_truncate(stat.st_mode).contains(SFlag::S_IFDIR) {
+            return Err(io::Error::from_raw_os_error(libc::ENOTDIR));
+        }
+        flags &= !libc::O_DIRECTORY;
+    }
+
+    if flags != 0 {
+        nix::fcntl::fcntl(fd, F_SETFL(OFlag::from_bits_retain(flags))).map_err(io::Error::from)?;
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -900,12 +918,8 @@ impl<'a> DdOutput<'a> {
     fn new_file_from_stdout(settings: &'a DdOptions) -> CTResult<Self> {
         let fx = CtOwnedFileDescriptorOrHandle::from(io::stdout())?;
         #[cfg(target_os = "linux")]
-        if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
-            nix::fcntl::fcntl(
-                fx.as_raw().as_raw_fd(),
-                F_SETFL(OFlag::from_bits_retain(libc_flags)),
-            )?;
-        }
+        set_fd_flags(fx.as_raw().as_raw_fd(), make_linux_oflags(&settings.oflags))
+            .map_err_context(|| "setting flags for 'standard output'".to_string())?;
 
         Self::prepare_file(fx.into_file(), settings)
     }
@@ -2128,6 +2142,7 @@ mod dd_copy_tests {
 #[cfg(test)]
 mod tests_input_new_stdin {
     use super::*;
+    use tempfile::NamedTempFile;
 
     // 辅助函数：创建测试用的 DdOptions
     fn create_test_options() -> DdOptions {
@@ -2150,18 +2165,14 @@ mod tests_input_new_stdin {
     }
 
     #[test]
-    fn test_new_stdin_with_directory_flag() {
+    #[cfg(target_os = "linux")]
+    fn inherited_file_rejects_directory_flag() {
+        let file = NamedTempFile::new().unwrap();
         let mut settings = create_test_options();
         settings.iflags.is_directory = true;
-
-        #[cfg(unix)]
-        {
-            let result = Input::new_stdin(&settings);
-            assert!(
-                result.is_ok(),
-                "Should succeed when stdin is not a regular file"
-            );
-        }
+        let error =
+            set_fd_flags(file.as_raw_fd(), make_linux_iflags(&settings.iflags)).unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(libc::ENOTDIR));
     }
 }
 

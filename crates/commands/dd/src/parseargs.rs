@@ -239,18 +239,9 @@ impl Parser {
         // > input is copied to the output as soon as it's read, even if
         // > it is smaller than the block size.
         //
-        let has_effective_conv = block.is_some()
-            || has_conversion_table
-            || conv.swab
-            || conv.sync
-            || conv.noerror
-            || conv.sparse
-            || conv.excl
-            || conv.nocreat
-            || conv.notrunc
-            || conv.fdatasync
-            || conv.fsync;
-        let buffered = self.bs.is_none() || self.is_conv_specified && has_effective_conv;
+        let uses_two_buffers = self.bs.is_none()
+            || self.is_conv_specified && (block.is_some() || has_conversion_table || conv.swab);
+        let buffered = uses_two_buffers;
 
         let skip = self.skip.force_bytes_if(self.iflag.is_skip_bytes);
         let skip = skip
@@ -266,8 +257,6 @@ impl Parser {
             .count
             .map(|c| c.force_bytes_if(self.iflag.is_count_bytes));
 
-        let uses_two_buffers =
-            self.bs.is_none() || block.is_some() || has_conversion_table || conv.swab;
         let has_count_records = match count {
             Some(Num::Blocks(n)) => n > 0,
             Some(Num::Bytes(n)) => n >= ibs as u64,

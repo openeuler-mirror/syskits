@@ -134,13 +134,31 @@ impl Display for GroupsError {
 
 fn groups_quote_username(user: &OsStr) -> String {
     let quote_mark = t!("groups.quote_mark");
-    groups_quote_username_with_mark(user, &quote_mark)
+    if quote_mark == "'" && groups_locale_uses_utf8_quotes() {
+        groups_quote_username_with_marks(user, "‘", "’")
+    } else {
+        groups_quote_username_with_mark(user, &quote_mark)
+    }
 }
 
 fn groups_quote_username_with_mark(user: &OsStr, quote_mark: &str) -> String {
-    let quote_byte = quote_mark.as_bytes().first().copied().unwrap_or(b'\'');
-    let mut quoted = quote_mark.to_string();
-    for &byte in user.as_bytes() {
+    groups_quote_username_with_marks(user, quote_mark, quote_mark)
+}
+
+fn groups_quote_username_with_marks(user: &OsStr, left_quote: &str, right_quote: &str) -> String {
+    let mut quoted = left_quote.to_string();
+    let user = user.as_bytes();
+    let right_quote_bytes = right_quote.as_bytes();
+    let mut index = 0;
+    while index < user.len() {
+        if !right_quote_bytes.is_empty() && user[index..].starts_with(right_quote_bytes) {
+            quoted.push('\\');
+            quoted.push_str(right_quote);
+            index += right_quote_bytes.len();
+            continue;
+        }
+
+        let byte = user[index];
         match byte {
             b'\x07' => quoted.push_str("\\a"),
             b'\x08' => quoted.push_str("\\b"),
@@ -153,16 +171,34 @@ fn groups_quote_username_with_mark(user: &OsStr, quote_mark: &str) -> String {
                 quoted.push('\\');
                 quoted.push(char::from(byte));
             }
-            byte if byte == quote_byte => {
-                quoted.push('\\');
-                quoted.push(char::from(byte));
-            }
             b' '..=b'~' => quoted.push(char::from(byte)),
             _ => write!(quoted, "\\{byte:03o}").unwrap(),
         }
+        index += 1;
     }
-    quoted.push_str(quote_mark);
+    quoted.push_str(right_quote);
     quoted
+}
+
+fn groups_locale_uses_utf8_quotes() -> bool {
+    let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
+        .into_iter()
+        .find_map(|name| std::env::var_os(name).filter(|value| !value.is_empty()));
+    let Some(locale) = locale else {
+        return false;
+    };
+    let locale = locale.to_string_lossy();
+    let Some((_, codeset)) = locale.rsplit_once('.') else {
+        return false;
+    };
+    let normalized: String = codeset
+        .split('@')
+        .next()
+        .unwrap_or_default()
+        .chars()
+        .filter(|character| *character != '-' && *character != '_')
+        .collect();
+    normalized.eq_ignore_ascii_case("utf8")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -544,7 +580,8 @@ mod tests {
     mod tests_groups_main {
         use crate::{
             GroupsOutputEvent, GroupsRawEntry, groups_for_current_process, groups_for_named_user,
-            groups_main, groups_native_semantic, groups_quote_username_with_mark,
+            groups_main, groups_native_semantic, groups_quote_username,
+            groups_quote_username_with_mark, groups_quote_username_with_marks,
             groups_render_classic_bytes,
         };
 
@@ -624,7 +661,10 @@ mod tests {
             assert_eq!(result.exit_code, 1);
             assert_eq!(
                 result.stderr_text,
-                "groups: 'no_such_user_123': no such user\n"
+                format!(
+                    "groups: {}: no such user\n",
+                    groups_quote_username(OsStr::new("no_such_user_123"))
+                )
             );
             assert_eq!(result.entries.len(), 1);
             assert_eq!(result.entries[0].user.as_deref(), Some("root"));
@@ -673,7 +713,10 @@ mod tests {
             assert!(result.entries.is_empty());
             assert_eq!(
                 result.stderr_text,
-                format!("groups: '{}': no such user\n", numeric_name)
+                format!(
+                    "groups: {}: no such user\n",
+                    groups_quote_username(OsStr::new(&numeric_name))
+                )
             );
             assert!(result.classic_text.is_empty());
         }
@@ -681,11 +724,12 @@ mod tests {
         #[cfg(unix)]
         #[test]
         fn test_groups_non_utf8_username_uses_raw_argument_bytes() {
-            use std::os::unix::ffi::OsStringExt;
+            use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
+            let username = b"groups_compat_\xff_missing";
             let args = [
                 OsString::from(ctcore::ct_util_name()),
-                OsString::from_vec(b"groups_compat_\xff_missing".to_vec()),
+                OsString::from_vec(username.to_vec()),
             ];
             let result = groups_native_semantic(args.into_iter()).expect("semantic");
 
@@ -693,7 +737,10 @@ mod tests {
             assert!(result.entries.is_empty());
             assert_eq!(
                 result.stderr_text,
-                "groups: 'groups_compat_\\377_missing': no such user\n"
+                format!(
+                    "groups: {}: no such user\n",
+                    groups_quote_username(OsStr::from_bytes(username))
+                )
             );
         }
 
@@ -710,6 +757,14 @@ mod tests {
             assert_eq!(
                 groups_quote_username_with_mark(OsStr::new("groups_compat_missing"), "\""),
                 "\"groups_compat_missing\""
+            );
+            assert_eq!(
+                groups_quote_username_with_marks(OsStr::new("groups_compat_'_missing"), "‘", "’"),
+                "‘groups_compat_'_missing’"
+            );
+            assert_eq!(
+                groups_quote_username_with_marks(OsStr::new("name’missing"), "‘", "’"),
+                "‘name\\’missing’"
             );
         }
 

@@ -2763,11 +2763,7 @@ fn is_hidden(file_path: &DirEntry) -> bool {
     }
     #[cfg(not(windows))]
     {
-        file_path
-            .file_name()
-            .to_str()
-            .map(|res| res.starts_with('.'))
-            .unwrap_or(false)
+        file_path.file_name().as_bytes().starts_with(b".")
     }
 }
 

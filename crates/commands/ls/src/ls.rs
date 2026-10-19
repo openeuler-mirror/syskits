@@ -1105,61 +1105,81 @@ impl LsConfig {
             OsString::from("")
         };
 
-        let (file_size_block_size, block_size) = if !is_opt_si
-            && !is_opt_hr
-            && !raw_block_size.is_empty()
-        {
-            match parse_size_u64(&raw_block_size.to_string_lossy()) {
-                Ok(size) => {
-                    let s_str = raw_block_size.to_string_lossy();
-                    if !s_str.chars().next().unwrap_or('\0').is_ascii_digit() {
-                        if let Some(first_non_digit) = s_str.find(|c: char| !c.is_ascii_digit()) {
-                            size_suffix = s_str[first_non_digit..].to_string();
-                        }
-                    }
-                    match (is_env_var_blocksize, opt_kb) {
-                        (true, true) => (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE),
-                        (true, false) => (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, size),
-                        (false, true) => {
-                            // --block-size overrides -k
-                            if opt_block_size.is_some() {
-                                (size, size)
+        let (file_size_block_size, block_size) =
+            if !is_opt_si && !is_opt_hr && !raw_block_size.is_empty() {
+                match parse_size_u64(&raw_block_size.to_string_lossy()) {
+                    Ok(size) => {
+                        if size == 0 {
+                            if let Some(invalid_block_size) = opt_block_size {
+                                return Err(Box::new(LsError::LsBlockSizeParseError(
+                                    invalid_block_size.clone(),
+                                )));
+                            }
+                            let default_block_size = if env_var_posixly_correct.is_some() {
+                                LS_POSIXLY_CORRELS_BLOCK_SIZE
                             } else {
-                                (size, LS_DEFAULT_BLOCK_SIZE)
+                                LS_DEFAULT_BLOCK_SIZE
+                            };
+                            if is_env_var_blocksize {
+                                (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, default_block_size)
+                            } else {
+                                (default_block_size, default_block_size)
+                            }
+                        } else {
+                            let s_str = raw_block_size.to_string_lossy();
+                            if !s_str.chars().next().unwrap_or('\0').is_ascii_digit() {
+                                if let Some(first_non_digit) =
+                                    s_str.find(|c: char| !c.is_ascii_digit())
+                                {
+                                    size_suffix = s_str[first_non_digit..].to_string();
+                                }
+                            }
+                            match (is_env_var_blocksize, opt_kb) {
+                                (true, true) => {
+                                    (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
+                                }
+                                (true, false) => (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, size),
+                                (false, true) => {
+                                    // --block-size overrides -k
+                                    if opt_block_size.is_some() {
+                                        (size, size)
+                                    } else {
+                                        (size, LS_DEFAULT_BLOCK_SIZE)
+                                    }
+                                }
+                                (false, false) => (size, size),
                             }
                         }
-                        (false, false) => (size, size),
+                    }
+                    Err(_) => {
+                        // 只有在使用 --block-size 指定了无效的块大小时才会失败、
+                        // 忽略环境变量中的无效块大小
+                        if let Some(invalid_block_size) = opt_block_size {
+                            return Err(Box::new(LsError::LsBlockSizeParseError(
+                                invalid_block_size.clone(),
+                            )));
+                        }
+                        if is_env_var_blocksize {
+                            (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
+                        } else {
+                            (LS_DEFAULT_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
+                        }
                     }
                 }
-                Err(_) => {
-                    // 只有在使用 --block-size 指定了无效的块大小时才会失败、
-                    // 忽略环境变量中的无效块大小
-                    if let Some(invalid_block_size) = opt_block_size {
-                        return Err(Box::new(LsError::LsBlockSizeParseError(
-                            invalid_block_size.clone(),
-                        )));
-                    }
-                    if is_env_var_blocksize {
-                        (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
-                    } else {
-                        (LS_DEFAULT_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
-                    }
+            } else if env_var_posixly_correct.is_some() {
+                if opt_kb {
+                    (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
+                } else {
+                    (
+                        LS_DEFAULT_FILE_SIZE_BLOCK_SIZE,
+                        LS_POSIXLY_CORRELS_BLOCK_SIZE,
+                    )
                 }
-            }
-        } else if env_var_posixly_correct.is_some() {
-            if opt_kb {
-                (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
+            } else if is_opt_si {
+                (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
             } else {
-                (
-                    LS_DEFAULT_FILE_SIZE_BLOCK_SIZE,
-                    LS_POSIXLY_CORRELS_BLOCK_SIZE,
-                )
-            }
-        } else if is_opt_si {
-            (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
-        } else {
-            (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
-        };
+                (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
+            };
 
         let long = {
             let is_author = options.get_flag(ls_flags::LS_AUTHOR);

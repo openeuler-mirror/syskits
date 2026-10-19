@@ -604,3 +604,30 @@ fn dir_applies_normal_color_to_long_fields_and_explicit_file_color_to_names() {
     assert!(output.stdout.ends_with(b" T \x1b[m\x1b[4mplain\x1b[0m\n"));
     assert_eq!(output.stderr, b"");
 }
+
+#[test]
+fn dir_clears_to_eol_when_a_colored_long_name_crosses_the_line_edge() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let name = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo";
+    fs::write(temp_dir.path().join(name), b"").expect("create long file");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("COLUMNS", "80")
+        .env("LS_COLORS", "*.foo=0;31;42")
+        .args([
+            "dir",
+            "-og",
+            "--time-style=+T",
+            "--color=always",
+            "-d",
+            name,
+        ])
+        .output()
+        .expect("run syskits dir");
+
+    assert!(output.status.success());
+    assert!(output.stdout.ends_with(b".foo\x1b[0m\x1b[K\n"));
+    assert_eq!(output.stderr, b"");
+}

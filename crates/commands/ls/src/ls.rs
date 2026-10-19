@@ -4055,7 +4055,8 @@ fn display_item_long<W: Write>(
     any_has_acl_or_context: bool,
 ) -> CTResult<()> {
     let mut output_display = Vec::new();
-    output_display.extend_from_slice(style_manager.begin_item().as_bytes());
+    let item_prefix = style_manager.begin_item();
+    output_display.extend_from_slice(item_prefix.as_bytes());
     if ls_config.is_dired {
         output_display.extend_from_slice(b"  ");
     }
@@ -4162,8 +4163,30 @@ fn display_item_long<W: Write>(
         output_display.extend_from_slice(&display_date_bytes(md, ls_config));
         output_display.push(b' ');
 
-        let item_name =
+        let name_start_column = output_display.len().saturating_sub(item_prefix.len());
+        let style_count_before = style_manager.style_count;
+        let mut item_name =
             display_item_name(item, ls_config, None, String::new(), output, style_manager).contents;
+        let escaped_name = escape_name_with_chars(
+            &item.display_name,
+            &ls_config.quoting_style,
+            name_quoting_extra_chars(ls_config),
+        );
+        let name_byte_len =
+            escaped_name.len() + usize::from(quoted && !escaped_name.starts_with(['\'', '"']));
+        let name_used_color =
+            style_manager.normal_is_colored() || style_manager.style_count != style_count_before;
+        if !item
+            .file_type(output)
+            .is_some_and(|file_type| file_type.is_symlink())
+            && name_used_color
+            && ls_config.width != 0
+            && name_byte_len != 0
+            && name_start_column / ls_config.width
+                != (name_start_column + name_byte_len - 1) / ls_config.width
+        {
+            item_name.push_str(&style_manager.clear_to_eol);
+        }
 
         let displayed_item = if quoted && !item_name.starts_with(['\'', '"']) {
             format!(" {item_name}")
@@ -4952,6 +4975,7 @@ struct StyleManager {
     check_symlink_target: bool,
     normal_sequence: Option<String>,
     regular_file_sequence: Option<String>,
+    clear_to_eol: String,
     style_count: usize,
     raw_indicator_styles: HashMap<usize, String>,
     raw_suffix_styles: Vec<RawSuffixStyle>,
@@ -4978,6 +5002,7 @@ impl StyleManager {
             check_symlink_target: false,
             normal_sequence: None,
             regular_file_sequence: None,
+            clear_to_eol: "\x1b[K".into(),
             style_count: 0,
             raw_indicator_styles: HashMap::new(),
             raw_suffix_styles: Vec::new(),
@@ -5011,6 +5036,7 @@ impl StyleManager {
                 "rs" => manager.reset = value.into(),
                 "no" => manager.normal_sequence = Some(value.into()),
                 "fi" => manager.regular_file_sequence = Some(value.into()),
+                "cl" => manager.clear_to_eol = value.into(),
                 _ => {
                     let Some(parsed_style) = Style::from_ansi_sequence(value) else {
                         continue;

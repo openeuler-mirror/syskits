@@ -4256,21 +4256,33 @@ fn create_hyperlink(name: &str, path: &PathData) -> String {
             }
         }
     };
-    let absolute_path = absolute_path_buf.to_string_lossy();
-
-    #[cfg(target_os = "linux")]
-    let unencoded_chars = "_-.:~/";
+    #[cfg(unix)]
+    let unencoded_bytes = b"_-.:~/";
     #[cfg(target_os = "windows")]
-    let unencoded_chars = "_-.:~/\\";
+    let unencoded_bytes = b"_-.:~/\\";
 
-    // 路径的百分比编码
-    let absolute_path: String = absolute_path
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || unencoded_chars.contains(c) {
-                c.to_string()
+    #[cfg(unix)]
+    let absolute_path: String = absolute_path_buf
+        .as_os_str()
+        .as_bytes()
+        .iter()
+        .map(|byte| {
+            if byte.is_ascii_alphanumeric() || unencoded_bytes.contains(byte) {
+                char::from(*byte).to_string()
             } else {
-                format!("%{:02x}", c as u8)
+                format!("%{byte:02x}")
+            }
+        })
+        .collect();
+    #[cfg(target_os = "windows")]
+    let absolute_path: String = absolute_path_buf
+        .to_string_lossy()
+        .bytes()
+        .map(|byte| {
+            if byte.is_ascii_alphanumeric() || unencoded_bytes.contains(&byte) {
+                char::from(byte).to_string()
+            } else {
+                format!("%{byte:02x}")
             }
         })
         .collect();

@@ -289,6 +289,29 @@ fn vdir_uses_shell_aware_quoting_for_diagnostic_filenames() {
     );
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn vdir_percent_encodes_original_hyperlink_path_bytes() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("é"), b"").expect("write fixture");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["vdir", "-1", "--hyperlink=always", "-d", "é"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert!(
+        output
+            .stdout
+            .windows(b"%c3%a9\x07\\303\\251".len())
+            .any(|window| window == b"%c3%a9\x07\\303\\251")
+    );
+}
+
 #[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");

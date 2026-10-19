@@ -40,3 +40,19 @@ fn ls_accepts_separated_required_long_option_values() {
         assert_eq!(syskits.stderr, gnu.stderr, "{arguments:?}");
     }
 }
+
+#[test]
+fn ls_extensions_do_not_collide_with_gnu_value_abbreviations() {
+    let directory = TempDir::new().expect("tempdir");
+    fs::write(directory.path().join("a"), b"").expect("create fixture a");
+    fs::write(directory.path().join("b"), b"").expect("create fixture b");
+
+    for arguments in [["--format=c", "."], ["--format=co", "."], ["--sort=n", "."]] {
+        let gnu = run_gnu(&directory, &arguments);
+        let syskits = run_syskits(&directory, &arguments);
+
+        assert_eq!(syskits.status.code(), gnu.status.code(), "{arguments:?}");
+        assert_eq!(syskits.stderr, gnu.stderr, "{arguments:?}");
+        assert_eq!(syskits.stdout, gnu.stdout, "{arguments:?}");
+    }
+}

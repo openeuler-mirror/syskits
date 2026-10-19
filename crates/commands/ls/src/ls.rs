@@ -2338,13 +2338,16 @@ fn parse_abbreviated_value(value: &str, choices: &[(&str, &str)]) -> Result<Stri
 }
 
 fn parse_format_value(value: &str) -> Result<String, String> {
+    if value == "columns" {
+        return Ok(value.to_string());
+    }
+
     parse_abbreviated_value(
         value,
         &[
             ("long", "long"),
             ("verbose", "long"),
             ("single-column", "single-column"),
-            ("columns", "columns"),
             ("vertical", "columns"),
             ("across", "across"),
             ("horizontal", "across"),
@@ -2371,10 +2374,13 @@ fn parse_time_value(value: &str) -> Result<String, String> {
 }
 
 fn parse_sort_value(value: &str) -> Result<String, String> {
+    if value == "name" {
+        return Ok(value.to_string());
+    }
+
     parse_abbreviated_value(
         value,
         &[
-            ("name", "name"),
             ("none", "none"),
             ("time", "time"),
             ("size", "size"),

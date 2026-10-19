@@ -779,3 +779,34 @@ fn dir_help_and_version_display_do_not_write_stderr() {
         assert_eq!(output.stderr, b"", "unexpected stderr for {option}");
     }
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn dir_localizes_option_diagnostics_like_gnu() {
+    let locale_available = Command::new("locale")
+        .arg("-a")
+        .output()
+        .expect("list locales")
+        .stdout
+        .split(|byte| *byte == b'\n')
+        .any(|locale| locale.eq_ignore_ascii_case(b"fr_FR.utf8"));
+    if !locale_available {
+        return;
+    }
+
+    for option in ["--definitely-invalid", "--sort=bogus", "--width=bogus"] {
+        let mut gnu_command = Command::new("/usr/bin/dir");
+        gnu_command
+            .arg0("dir")
+            .env("LC_ALL", "fr_FR.UTF-8")
+            .arg(option);
+        let gnu = gnu_command.output().expect("run GNU dir");
+        let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "fr_FR.UTF-8")
+            .args(["dir", option])
+            .output()
+            .expect("run syskits dir");
+
+        assert_same_output(option, gnu, syskits);
+    }
+}

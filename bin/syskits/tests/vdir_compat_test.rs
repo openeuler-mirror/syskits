@@ -322,6 +322,36 @@ fn vdir_localizes_unknown_option_diagnostic() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn vdir_localizes_missing_file_diagnostic() {
+    let locale_available = Command::new("locale")
+        .arg("-a")
+        .output()
+        .expect("list locales")
+        .stdout
+        .split(|byte| *byte == b'\n')
+        .any(|locale| locale.eq_ignore_ascii_case(b"fr_FR.utf8"));
+    if !locale_available {
+        return;
+    }
+
+    let temp_dir = TempDir::new().expect("tempdir");
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(["vdir", "missing"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        output.stderr,
+        "vdir: impossible d'accéder à 'missing': Aucun fichier ou dossier de ce type\n".as_bytes()
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn vdir_quotes_utf8_bytes_that_are_invalid_in_c_locale() {
     let temp_dir = TempDir::new().expect("tempdir");
     fs::write(temp_dir.path().join("é"), b"").expect("write fixture");

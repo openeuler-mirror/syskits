@@ -212,6 +212,7 @@ fn ls_localized_environment_diagnostic(msgid: &str, value: Option<&OsStr>) -> St
 fn ls_localized_path_error(msgid: &str, path: &str, error: &std::io::Error) -> Option<String> {
     use std::ffi::CStr;
 
+    ls_init_gettext();
     let msgid = CString::new(msgid).ok()?;
     let path = CString::new(path).ok()?;
     let errno = error.raw_os_error()?;

@@ -1643,12 +1643,7 @@ fn ls_collect_semantic_rows_for_path(path: &Path, config: &LsConfig) -> Vec<LsSe
                 .then_with(|| strcoll_compare(a.name.as_bytes(), b.name.as_bytes(), false))
         });
     } else if config.sort == LsSort::Extension {
-        rows.sort_by(|a, b| {
-            Path::new(&a.name)
-                .extension()
-                .cmp(&Path::new(&b.name).extension())
-                .then(a.name.cmp(&b.name))
-        });
+        rows.sort_by(|a, b| compare_names_by_extension(OsStr::new(&a.name), OsStr::new(&b.name)));
     } else if config.sort == LsSort::Width {
         rows.sort_by(|a, b| {
             display_name_width(OsStr::new(&a.name), config)
@@ -2721,12 +2716,7 @@ fn sort_entries<W: Write>(entries: &mut [PathData], config: &LsConfig, out: &mut
             )
         })
     } else if config.sort == LsSort::Extension {
-        entries.sort_by(|a, b| {
-            a.p_buf
-                .extension()
-                .cmp(&b.p_buf.extension())
-                .then(a.p_buf.file_stem().cmp(&b.p_buf.file_stem()))
-        })
+        entries.sort_by(|a, b| compare_names_by_extension(&a.display_name, &b.display_name))
     } else if config.sort == LsSort::Width {
         entries.sort_by(|a, b| {
             display_name_width(&a.display_name, config)
@@ -2783,6 +2773,23 @@ pub fn display_name_width(name: &OsStr, config: &LsConfig) -> usize {
         name_quoting_extra_chars(config),
     )
     .width()
+}
+
+fn extension_from_last_dot(name: &OsStr) -> &[u8] {
+    let bytes = name.as_bytes();
+    bytes
+        .iter()
+        .rposition(|byte| *byte == b'.')
+        .map_or(b"", |position| &bytes[position..])
+}
+
+pub fn compare_names_by_extension(a: &OsStr, b: &OsStr) -> std::cmp::Ordering {
+    strcoll_compare(
+        extension_from_last_dot(a),
+        extension_from_last_dot(b),
+        false,
+    )
+    .then_with(|| strcoll_compare(a.as_bytes(), b.as_bytes(), false))
 }
 
 fn is_hidden(file_path: &DirEntry) -> bool {

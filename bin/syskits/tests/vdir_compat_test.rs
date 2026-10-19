@@ -252,6 +252,25 @@ fn vdir_quotes_literal_indicator_characters_when_indicators_are_enabled() {
 }
 
 #[test]
+fn vdir_quotes_colons_in_directory_titles() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::create_dir(temp_dir.path().join("a:b")).expect("create colon directory");
+    fs::create_dir(temp_dir.path().join("other")).expect("create other directory");
+    fs::write(temp_dir.path().join("a:b/f"), b"").expect("write fixture");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["vdir", "-1", "a:b", "other"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert!(output.stdout.starts_with(b"a\\:b:\n"));
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

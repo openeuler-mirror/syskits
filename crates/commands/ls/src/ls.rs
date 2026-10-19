@@ -4349,6 +4349,12 @@ fn display_item_name<W: Write>(
                     target.clone()
                 };
                 let target_data = PathData::new(absolute_target.clone(), None, None, config, false);
+                let escaped_target = escape_name(target.as_os_str(), &config.quoting_style);
+                let displayed_target = if config.is_hyperlink {
+                    create_hyperlink(&escaped_target, &target_data)
+                } else {
+                    escaped_target
+                };
 
                 // 我们不妨在箭头后给符号链接输出着色。
                 // 这需要额外的系统调用，但提供了重要的信息，而这些信息是运行 `ls -l -color` 的人非常感兴趣的。
@@ -4365,10 +4371,10 @@ fn display_item_name<W: Write>(
                         )
                         .is_err()
                     {
-                        name.push_str(&escape_name(target.as_os_str(), &config.quoting_style));
+                        name.push_str(&displayed_target);
                     } else {
                         name.push_str(&color_name(
-                            escape_name(target.as_os_str(), &config.quoting_style),
+                            displayed_target,
                             path,
                             ls_colors,
                             style_manager,
@@ -4377,7 +4383,7 @@ fn display_item_name<W: Write>(
                         ));
                     }
                 } else {
-                    name.push_str(&escape_name(target.as_os_str(), &config.quoting_style));
+                    name.push_str(&displayed_target);
                 }
 
                 if let Some(indicator) = indicator_char(

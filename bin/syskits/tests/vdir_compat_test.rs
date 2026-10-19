@@ -712,6 +712,41 @@ fn vdir_places_long_symlink_indicator_after_target() {
     assert!(!output.stdout.windows(9).any(|bytes| bytes == b" link@ ->"));
 }
 
+#[cfg(unix)]
+#[test]
+fn vdir_hyperlinks_both_symlink_name_and_target() {
+    use std::os::unix::fs::symlink;
+
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("target"), b"").expect("write fixture");
+    symlink("target", temp_dir.path().join("link")).expect("create symlink");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args([
+            "vdir",
+            "-ln",
+            "--full-time",
+            "--hyperlink=always",
+            "-d",
+            "link",
+        ])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert_eq!(
+        output
+            .stdout
+            .windows(b"\x1b]8;;".len())
+            .filter(|bytes| *bytes == b"\x1b]8;;")
+            .count(),
+        4
+    );
+}
+
 #[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");

@@ -276,13 +276,17 @@ impl Display for LsError {
             LsError::LsTimeStyleParseError(s, possible_time_styles) => {
                 write!(
                     formatter,
-                    "invalid --time-style argument {}\nPossible values are:",
+                    "invalid argument {} for 'time style'\nValid arguments are:",
                     s.quote()
                 )?;
                 for style in possible_time_styles {
                     write!(formatter, "\n  - {style}")?;
                 }
-                write!(formatter, "\n\nFor more information try --help")
+                write!(
+                    formatter,
+                    "\nTry '{} --help' for more information.",
+                    ctcore::ct_util_name()
+                )
             }
             LsError::LsInvalidLineWidth(s) => {
                 write!(formatter, "invalid line width: {}", s.quote())

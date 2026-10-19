@@ -127,6 +127,32 @@ fn vdir_preserves_non_utf8_invalid_option_byte() {
     );
 }
 
+#[test]
+fn vdir_reports_invalid_time_style_like_gnu() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args(["vdir", "--time-style=bogus"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        output.stderr,
+        concat!(
+            "vdir: invalid argument 'bogus' for 'time style'\n",
+            "Valid arguments are:\n",
+            "  - [posix-]full-iso\n",
+            "  - [posix-]long-iso\n",
+            "  - [posix-]iso\n",
+            "  - [posix-]locale\n",
+            "  - +FORMAT (e.g., +%H:%M) for a 'date'-style format\n",
+            "Try 'vdir --help' for more information.\n",
+        )
+        .as_bytes()
+    );
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn vdir_quotes_utf8_bytes_that_are_invalid_in_c_locale() {

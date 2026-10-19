@@ -852,3 +852,35 @@ fn dir_localizes_environment_diagnostics_like_gnu() {
         assert_same_output(variable, gnu, syskits);
     }
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn dir_localizes_file_diagnostics_like_gnu() {
+    let locale_available = Command::new("locale")
+        .arg("-a")
+        .output()
+        .expect("list locales")
+        .stdout
+        .split(|byte| *byte == b'\n')
+        .any(|locale| locale.eq_ignore_ascii_case(b"fr_FR.utf8"));
+    if !locale_available {
+        return;
+    }
+
+    let temp_dir = TempDir::new().expect("tempdir");
+    let mut gnu_command = Command::new("/usr/bin/dir");
+    gnu_command
+        .arg0("dir")
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .arg("missing");
+    let gnu = gnu_command.output().expect("run GNU dir");
+    let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(["dir", "missing"])
+        .output()
+        .expect("run syskits dir");
+
+    assert_same_output("missing file", gnu, syskits);
+}

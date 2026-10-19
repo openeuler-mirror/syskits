@@ -112,13 +112,44 @@ impl DirClapError {
             ) {
             2
         } else {
-            ct_ls::ls_clap_error_exit_code(&error)
+            dir_clap_error_exit_code(&error)
         };
 
         Self {
             inner: Box::new(error.with_exit_code(code)),
             diagnostic,
         }
+    }
+}
+
+fn dir_clap_error_exit_code(error: &clap::Error) -> i32 {
+    let invalid_enum_value = matches!(
+        error.kind(),
+        clap::error::ErrorKind::InvalidValue | clap::error::ErrorKind::ValueValidation
+    ) && matches!(
+        error.get(ContextKind::InvalidValue),
+        Some(ContextValue::String(value)) if !value.is_empty()
+    ) && matches!(
+        error.get(ContextKind::InvalidArg),
+        Some(ContextValue::String(argument))
+            if [
+                "--classify",
+                "--color",
+                "--format",
+                "--hyperlink",
+                "--indicator-style",
+                "--quoting-style",
+                "--sort",
+                "--time",
+            ]
+            .iter()
+            .any(|option| argument.starts_with(option))
+    );
+
+    if invalid_enum_value {
+        1
+    } else {
+        ct_ls::ls_clap_error_exit_code(error)
     }
 }
 

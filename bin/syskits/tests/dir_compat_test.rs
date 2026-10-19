@@ -728,3 +728,24 @@ fn dir_rejects_help_and_version_arguments_like_gnu() {
         assert_same_output(option, gnu, syskits);
     }
 }
+
+#[test]
+fn dir_uses_failure_status_for_invalid_enum_values() {
+    for option in [
+        "--quoting-style=bogus",
+        "--indicator-style=bogus",
+        "--hyperlink=bogus",
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C")
+            .args(["dir", option])
+            .output()
+            .expect("run syskits dir");
+
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "unexpected status for {option}"
+        );
+    }
+}

@@ -153,6 +153,30 @@ fn vdir_reports_invalid_time_style_like_gnu() {
     );
 }
 
+#[test]
+fn vdir_accepts_unambiguous_option_value_abbreviations() {
+    for argument in [
+        "--sort=ver",
+        "--time=acc",
+        "--format=vert",
+        "--indicator-style=cla",
+        "--color=nev",
+        "--hyperlink=nev",
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C")
+            .args(["vdir", argument, "."])
+            .output()
+            .expect("run syskits vdir");
+
+        assert!(
+            output.status.success(),
+            "{argument}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn vdir_quotes_utf8_bytes_that_are_invalid_in_c_locale() {

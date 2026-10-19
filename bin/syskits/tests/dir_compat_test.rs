@@ -1,5 +1,6 @@
 use std::fs;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::os::unix::process::CommandExt;
 use std::process::{Command, Output};
 
 use tempfile::TempDir;
@@ -653,4 +654,29 @@ fn dir_diagnoses_invalid_ls_colors_and_disables_coloring() {
         output.stderr,
         b"dir: unparsable value for LS_COLORS environment variable\n"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn dir_reports_dereference_eloop_and_uses_placeholder_metadata() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let listing_dir = temp_dir.path().join("d");
+    fs::create_dir(&listing_dir).expect("create listing directory");
+    std::os::unix::fs::symlink("loop", listing_dir.join("loop")).expect("create symlink loop");
+
+    let mut gnu_command = Command::new("/usr/bin/dir");
+    gnu_command
+        .arg0("dir")
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["-Li", "d"]);
+    let gnu = gnu_command.output().expect("run GNU dir");
+    let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["dir", "-Li", "d"])
+        .output()
+        .expect("run syskits dir");
+
+    assert_same_output("dir -Li ELOOP", gnu, syskits);
 }

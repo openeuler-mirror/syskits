@@ -137,6 +137,8 @@ pub fn dired_print_dired_output<W: Write>(
         },
         CtQuotingStyle::C { quotes } => match quotes {
             CtQuotes::None => "escape",
+            CtQuotes::Locale => "locale",
+            CtQuotes::CLocale => "clocale",
             _ => "c",
         },
     };

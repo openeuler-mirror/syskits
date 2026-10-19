@@ -481,6 +481,31 @@ fn vdir_expands_nanoseconds_in_custom_time_format() {
 }
 
 #[test]
+fn vdir_aligns_unavailable_birth_time_placeholder() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC0")
+        .args([
+            "vdir",
+            "-ln",
+            "--time=birth",
+            "--full-time",
+            "-d",
+            "/proc/self/status",
+        ])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    let line = String::from_utf8(output.stdout).expect("utf8 output");
+    let prefix = line
+        .strip_suffix(" /proc/self/status\n")
+        .expect("listed proc file");
+    assert!(prefix.ends_with(&format!("{:>35}", "?")));
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

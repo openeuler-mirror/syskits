@@ -2674,7 +2674,8 @@ pub fn list(locs: Vec<&Path>, config: &LsConfig) -> CTResult<(Vec<PathData>, Vec
         Some(padding),
     )?;
 
-    for (pos, path_data) in dirs_vec.iter().enumerate() {
+    let mut printed_directory = false;
+    for path_data in &dirs_vec {
         // 在此调用 read_dir，以符合 GNU 语义，在目录标题、名称和总数之前打印 在目录标题、名称和总数之前打印 read_dir 错误
         let read_dir = match fs::read_dir(&path_data.p_buf) {
             Err(err) => {
@@ -2692,7 +2693,7 @@ pub fn list(locs: Vec<&Path>, config: &LsConfig) -> CTResult<(Vec<PathData>, Vec
 
         // 打印目录标题 - 名称...... "总计 "出现在错误显示之后
         if initial_locs_len > 1 || config.is_recursive {
-            if pos.eq(&0usize) && files_vec.is_empty() {
+            if !printed_directory && files_vec.is_empty() {
                 if config.is_dired {
                     dired::dired_indent(&mut out)?;
                 }
@@ -2712,6 +2713,7 @@ pub fn list(locs: Vec<&Path>, config: &LsConfig) -> CTResult<(Vec<PathData>, Vec
                 writeln!(out)?;
             }
         }
+        printed_directory = true;
         let mut listed_ancestors = HashSet::new();
         listed_ancestors.insert(CtFileInformation::from_path(
             &path_data.p_buf,

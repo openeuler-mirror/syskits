@@ -446,6 +446,41 @@ fn vdir_terminates_on_broken_stdout_pipe() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn vdir_preserves_inherited_ignored_sigpipe() {
+    use std::os::unix::process::CommandExt;
+
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("f"), b"").expect("write fixture");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_syskits"));
+    command
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["vdir", "-1", "-d", "f"])
+        .stdout(Stdio::piped());
+    unsafe {
+        command.pre_exec(|| {
+            let mut pipe_fds = [0; 2];
+            if libc::pipe(pipe_fds.as_mut_ptr()) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            libc::close(pipe_fds[0]);
+            if libc::dup2(pipe_fds[1], libc::STDOUT_FILENO) < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            libc::close(pipe_fds[1]);
+            libc::signal(libc::SIGPIPE, libc::SIG_IGN);
+            Ok(())
+        });
+    }
+    let output = command.output().expect("run syskits vdir");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"vdir: write error: Broken pipe\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn vdir_quotes_utf8_bytes_that_are_invalid_in_c_locale() {
     let temp_dir = TempDir::new().expect("tempdir");
     fs::write(temp_dir.path().join("é"), b"").expect("write fixture");

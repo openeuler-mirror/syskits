@@ -174,6 +174,21 @@ const LS_DEFAULT_TERM_WIDTH: u16 = 80;
 const LS_POSIXLY_CORRELS_BLOCK_SIZE: u64 = 512;
 const LS_DEFAULT_BLOCK_SIZE: u64 = 1024;
 const LS_DEFAULT_FILE_SIZE_BLOCK_SIZE: u64 = 1;
+
+fn canonical_block_size_suffix(spec: &str) -> String {
+    let mut chars = spec.chars();
+    let Some(prefix) = chars.next() else {
+        return String::new();
+    };
+    let prefix = prefix.to_ascii_uppercase();
+
+    match chars.as_str() {
+        "" => prefix.to_string(),
+        "B" => format!("{}B", if prefix == 'K' { 'k' } else { prefix }),
+        "iB" => format!("{prefix}iB"),
+        _ => spec.to_string(),
+    }
+}
 const LS_DEFAULT_TAB_SIZE: usize = 8;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1134,12 +1149,8 @@ impl LsConfig {
                             }
                         } else {
                             let s_str = block_size_spec;
-                            if !s_str.chars().next().unwrap_or('\0').is_ascii_digit() {
-                                if let Some(first_non_digit) =
-                                    s_str.find(|c: char| !c.is_ascii_digit())
-                                {
-                                    size_suffix = s_str[first_non_digit..].to_string();
-                                }
+                            if !s_str.chars().any(|ch| ch.is_ascii_digit()) {
+                                size_suffix = canonical_block_size_suffix(s_str);
                             }
                             match (is_env_var_blocksize, opt_kb) {
                                 (true, true) => {

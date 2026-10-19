@@ -372,6 +372,35 @@ fn vdir_sorts_extensions_from_the_last_dot() {
 }
 
 #[test]
+fn vdir_ignores_reverse_when_sorting_is_disabled() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    for name in ["first", "second", "third"] {
+        fs::write(temp_dir.path().join(name), b"").expect("write fixture");
+    }
+
+    for no_sort in ["-U", "-f"] {
+        let normal = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .current_dir(temp_dir.path())
+            .env("LC_ALL", "C")
+            .args(["vdir", "-1", no_sort, "."])
+            .output()
+            .expect("run syskits vdir");
+        let reversed = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .current_dir(temp_dir.path())
+            .env("LC_ALL", "C")
+            .args(["vdir", "-1", no_sort, "-r", "."])
+            .output()
+            .expect("run reversed syskits vdir");
+
+        assert!(normal.status.success());
+        assert!(reversed.status.success());
+        assert_eq!(normal.stderr, b"");
+        assert_eq!(reversed.stderr, b"");
+        assert_eq!(reversed.stdout, normal.stdout, "mode {no_sort}");
+    }
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

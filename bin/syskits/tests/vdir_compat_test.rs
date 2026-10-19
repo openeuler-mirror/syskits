@@ -586,6 +586,30 @@ fn vdir_handles_zero_block_size_without_panicking() {
 }
 
 #[test]
+fn vdir_accepts_gnu_block_size_numeric_syntax() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("f"), b"").expect("write fixture");
+
+    for block_size in [" 3", "+3"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .current_dir(temp_dir.path())
+            .env("LC_ALL", "C")
+            .args([
+                "vdir",
+                "-s",
+                "-1",
+                &format!("--block-size={block_size}"),
+                ".",
+            ])
+            .output()
+            .expect("run syskits vdir");
+
+        assert!(output.status.success(), "block size {block_size:?}");
+        assert_eq!(output.stderr, b"", "block size {block_size:?}");
+    }
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

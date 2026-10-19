@@ -1105,9 +1105,16 @@ impl LsConfig {
             OsString::from("")
         };
 
+        let raw_block_size_text = raw_block_size.to_string_lossy();
+        let trimmed_block_size =
+            raw_block_size_text.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
+        let block_size_spec = trimmed_block_size
+            .strip_prefix('+')
+            .unwrap_or(trimmed_block_size);
+
         let (file_size_block_size, block_size) =
             if !is_opt_si && !is_opt_hr && !raw_block_size.is_empty() {
-                match parse_size_u64(&raw_block_size.to_string_lossy()) {
+                match parse_size_u64(block_size_spec) {
                     Ok(size) => {
                         if size == 0 {
                             if let Some(invalid_block_size) = opt_block_size {
@@ -1126,7 +1133,7 @@ impl LsConfig {
                                 (default_block_size, default_block_size)
                             }
                         } else {
-                            let s_str = raw_block_size.to_string_lossy();
+                            let s_str = block_size_spec;
                             if !s_str.chars().next().unwrap_or('\0').is_ascii_digit() {
                                 if let Some(first_non_digit) =
                                     s_str.find(|c: char| !c.is_ascii_digit())

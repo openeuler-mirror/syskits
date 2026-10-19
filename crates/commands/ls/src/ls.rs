@@ -3915,7 +3915,17 @@ fn unavailable_time_width(config: &LsConfig) -> usize {
         LsTimeStyle::LsFullIso => 35,
         LsTimeStyle::LsLongIso => 16,
         LsTimeStyle::LsIso => 11,
-        LsTimeStyle::LsLocale => 12,
+        LsTimeStyle::LsLocale => {
+            #[cfg(unix)]
+            {
+                ls_format_local_time_strftime(0, 0, &locale_time_format(false))
+                    .map_or(0, |formatted| UnicodeWidthStr::width(formatted.as_str()))
+            }
+            #[cfg(not(unix))]
+            {
+                12
+            }
+        }
         LsTimeStyle::LsFormat { non_recent, .. } => {
             #[cfg(unix)]
             {
@@ -3930,6 +3940,14 @@ fn unavailable_time_width(config: &LsConfig) -> usize {
                     .len()
             }
         }
+    }
+}
+
+fn locale_time_format(recent: bool) -> String {
+    if recent {
+        t!("ls.time.recent")
+    } else {
+        t!("ls.time.non_recent")
     }
 }
 
@@ -3964,6 +3982,9 @@ fn ls_format_local_time_strftime(seconds: i64, nanoseconds: u32, fmt: &str) -> O
     let mut tm: ctcore::libc::tm = unsafe { std::mem::zeroed() };
     let expanded_format = expand_nanoseconds_format(fmt, nanoseconds);
     let c_format = CString::new(expanded_format).ok()?;
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_TIME, c"".as_ptr());
+    }
     let tm_ptr = unsafe { ctcore::libc::localtime_r(&time as *const _, &mut tm as *mut _) };
     if tm_ptr.is_null() {
         return None;
@@ -4009,25 +4030,19 @@ fn display_date(metadata: &Metadata, config: &LsConfig) -> String {
                     })
                     .to_string(),
                 LsTimeStyle::LsLocale => {
-                    if rust_i18n::locale().starts_with("zh") {
-                        let fmt = if is_recent {
-                            "%_m月%e日 %H:%M"
-                        } else {
-                            "%Y年%_m月%e日"
-                        };
-                        time.format(fmt).to_string()
-                    } else {
-                        let fmt = if is_recent {
-                            "%b %e %H:%M"
-                        } else {
-                            "%b %e  %Y"
-                        };
-
-                        //在这个版本的 chrono 中可以进行翻译。函数是 chrono::datetime::DateTime::format_localized
-                        //然而，目前仍很难获得当前的 pure-rust-locale 语言。
-                        //所以还没有实现
-
-                        time.format(fmt).to_string()
+                    let fmt = locale_time_format(is_recent);
+                    #[cfg(unix)]
+                    {
+                        ls_format_local_time_strftime(
+                            time.timestamp(),
+                            time.timestamp_subsec_nanos(),
+                            &fmt,
+                        )
+                        .unwrap_or_else(|| time.format(&fmt).to_string())
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        time.format(&fmt).to_string()
                     }
                 }
                 LsTimeStyle::LsFormat { non_recent, recent } => {

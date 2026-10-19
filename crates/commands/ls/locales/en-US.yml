@@ -32,6 +32,9 @@ ls:
     dired: "generate output designed for Emacs' dired mode"
     hyperlink: "hyperlink file names"
   total: "total"
+  time:
+    non_recent: "%b %e  %Y"
+    recent: "%b %e %H:%M"
   errors:
     invalid_line_width: "invalid line width"
     io_error: "general io error"

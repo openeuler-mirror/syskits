@@ -32,6 +32,9 @@ ls:
     dired: "生成为Emacs的dired模式设计的输出"
     hyperlink: "文件名超链接"
   total: "总计"
+  time:
+    non_recent: "%Y年%b%e日"
+    recent: "%b%e日 %H:%M"
   errors:
     invalid_line_width: "无效的行宽"
     io_error: "一般IO错误"

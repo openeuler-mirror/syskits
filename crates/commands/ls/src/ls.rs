@@ -3321,7 +3321,7 @@ fn display_grid_by_format_long_type<W: Write>(
         ls_has_context(item)
             || item
                 .get_metadata(out)
-                .is_some_and(|_| ls_has_acl(item.display_name.as_os_str()))
+                .is_some_and(|_| ls_has_acl(&item.p_buf))
     });
 
     for item in items {
@@ -3653,7 +3653,7 @@ fn display_item_long<W: Write>(
         output_display.extend_from_slice(b"  ");
     }
     if let Some(md) = item.get_metadata(output) {
-        let is_acl_set = ls_has_acl(item.display_name.as_os_str());
+        let is_acl_set = ls_has_acl(&item.p_buf);
         // 修订 selinux 和 acl 情况：
         // 1. 如果没有安全上下文 ACL_T_NONE: 不显示
         // 2. 如果只有安全上下文，但没有 ACL（have_acl 为假） ACL_T_LSM_CONTEXT_ONLY: 显示‘.’

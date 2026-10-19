@@ -141,6 +141,7 @@ enum VdirSemanticSort {
     Time,
     Version,
     Extension,
+    Width,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -281,7 +282,7 @@ fn vdir_semantic_sort(matches: &ArgMatches) -> VdirSemanticSort {
             "version" => VdirSemanticSort::Version,
             "extension" => VdirSemanticSort::Extension,
             "size" => VdirSemanticSort::Size,
-            "width" => VdirSemanticSort::Name,
+            "width" => VdirSemanticSort::Width,
             _ => VdirSemanticSort::Name,
         }
     } else if matches.get_flag(ls_flags::sort::LS_TIME) {
@@ -571,6 +572,16 @@ fn vdir_collect_semantic_rows_for_path(
                     .extension()
                     .cmp(&Path::new(&b.name).extension())
                     .then(a.name.cmp(&b.name))
+            });
+        }
+        VdirSemanticSort::Width => {
+            rows.sort_by(|a, b| {
+                ct_ls::display_name_width(std::ffi::OsStr::new(&a.name), config)
+                    .cmp(&ct_ls::display_name_width(
+                        std::ffi::OsStr::new(&b.name),
+                        config,
+                    ))
+                    .then_with(|| strcoll_compare(a.name.as_bytes(), b.name.as_bytes(), false))
             });
         }
         VdirSemanticSort::None => {}

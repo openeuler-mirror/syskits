@@ -41,6 +41,7 @@ use ct_ls::{LsConfig, LsDereference, LsFormat, PathData, ls_flags};
 use ctcore::Tool;
 #[cfg(unix)]
 use ctcore::ct_entries;
+use ctcore::ct_error::strip_errno;
 use ctcore::ct_error::{CTResult, UClapError};
 use ctcore::ct_fs::display_permissions;
 use ctcore::ct_locale::strcoll_compare;
@@ -123,15 +124,16 @@ struct VdirClapError {
     diagnostic: Option<String>,
     diagnostic_includes_command: bool,
     display_request: bool,
+    exit_code: Option<i32>,
 }
 
 impl VdirClapError {
-    fn new(error: clap::Error) -> Self {
+    fn new(error: clap::Error, stdout_was_closed: bool) -> Self {
         let display_request = matches!(
             error.kind(),
             clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
         );
-        let diagnostic = match error.kind() {
+        let option_diagnostic = match error.kind() {
             clap::error::ErrorKind::UnknownArgument => match error.get(ContextKind::InvalidArg) {
                 Some(ContextValue::String(argument)) => {
                     vdir_localized_invalid_option_diagnostic(argument)
@@ -150,6 +152,14 @@ impl VdirClapError {
             },
             _ => None,
         };
+        let closed_stdout_error = display_request && stdout_was_closed;
+        let diagnostic = if closed_stdout_error {
+            Some(vdir_write_error(&std::io::Error::from_raw_os_error(
+                ctcore::libc::EBADF,
+            )))
+        } else {
+            option_diagnostic
+        };
         let code = ct_ls::ls_clap_error_exit_code(&error);
         let diagnostic_includes_command =
             error.kind() == clap::error::ErrorKind::UnknownArgument && diagnostic.is_some();
@@ -159,8 +169,13 @@ impl VdirClapError {
             diagnostic_includes_command,
             diagnostic,
             display_request,
+            exit_code: closed_stdout_error.then_some(2),
         }
     }
+}
+
+fn vdir_write_error(error: &std::io::Error) -> String {
+    format!("write error: {}", strip_errno(error))
 }
 
 #[cfg(target_os = "linux")]
@@ -488,7 +503,7 @@ impl Error for VdirClapError {}
 
 impl ctcore::ct_error::CTError for VdirClapError {
     fn code(&self) -> i32 {
-        self.inner.code()
+        self.exit_code.unwrap_or_else(|| self.inner.code())
     }
 
     fn usage(&self) -> bool {
@@ -1077,7 +1092,10 @@ pub fn vdir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDa
             {
                 return Err(Box::new(error));
             }
-            return Err(Box::new(VdirClapError::new(err)));
+            return Err(Box::new(VdirClapError::new(
+                err,
+                ctcore::ct_stdout_was_closed(),
+            )));
         }
     };
     let config = vdir_config_from_matches(&matches)?;

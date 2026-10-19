@@ -1508,6 +1508,7 @@ impl LsConfig {
             None => match stdout_terminal_width() {
                 Some(width) => width,
                 None => match std::env::var_os("COLUMNS") {
+                    Some(columns) if columns.is_empty() => LS_DEFAULT_TERM_WIDTH,
                     Some(columns) => match columns.to_str().and_then(|s| parse_width(s).ok()) {
                         Some(columns) => columns,
                         None => {

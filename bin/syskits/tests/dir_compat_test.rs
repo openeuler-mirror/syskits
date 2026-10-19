@@ -207,6 +207,26 @@ fn dir_warns_for_invalid_tabsize_environment() {
     );
 }
 
+#[test]
+fn dir_ignores_empty_columns_environment() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let listing_dir = temp_dir.path().join("d");
+    fs::create_dir(&listing_dir).expect("create listing directory");
+    fs::write(listing_dir.join("a"), b"").expect("create file");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("COLUMNS", "")
+        .args(["dir", "d"])
+        .output()
+        .expect("run syskits dir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"a\n");
+    assert_eq!(output.stderr, b"");
+}
+
 #[cfg(target_os = "linux")]
 fn set_selinux_xattr(path: &std::path::Path, value: &[u8]) -> bool {
     let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {

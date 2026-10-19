@@ -196,6 +196,25 @@ fn vdir_long_aligns_single_and_double_shell_quotes() {
 }
 
 #[test]
+fn vdir_uses_locale_specific_quoting_marks() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("a space"), b"").expect("write fixture");
+
+    for style in ["locale", "clocale"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .current_dir(temp_dir.path())
+            .env("LC_ALL", "C.UTF-8")
+            .args(["vdir", "-1", &format!("--quoting-style={style}"), "."])
+            .output()
+            .expect("run syskits vdir");
+
+        assert!(output.status.success());
+        assert_eq!(output.stderr, b"");
+        assert_eq!(output.stdout, "‘a space’\n".as_bytes());
+    }
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

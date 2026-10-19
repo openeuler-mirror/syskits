@@ -802,16 +802,17 @@ fn match_quoting_style_name(style: &str, show_control: bool) -> Option<CtQuoting
             always_quote: true,
             show_control,
         }),
-        // C 和 clocale 在行为上等价，使用双引号
-        "c" | "clocale" => Some(CtQuotingStyle::C {
+        "c" => Some(CtQuotingStyle::C {
             quotes: ct_quoting_style::CtQuotes::Double,
+        }),
+        "clocale" => Some(CtQuotingStyle::C {
+            quotes: ct_quoting_style::CtQuotes::CLocale,
         }),
         "escape" => Some(CtQuotingStyle::C {
             quotes: ct_quoting_style::CtQuotes::None,
         }),
-        // locale 在 C 环境下等价于使用单引号包裹的 C 转义风格
         "locale" => Some(CtQuotingStyle::C {
-            quotes: ct_quoting_style::CtQuotes::Single,
+            quotes: ct_quoting_style::CtQuotes::Locale,
         }),
         _ => None,
     }

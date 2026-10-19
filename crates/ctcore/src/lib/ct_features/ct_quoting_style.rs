@@ -31,7 +31,7 @@ unsafe extern "C" {
     fn iswprint(wide: crate::libc::c_uint) -> crate::libc::c_int;
 }
 
-#[cfg(unix)]
+use crate::ct_display::locale_quote_marks;
 use crate::ct_locale::{LcCategory, hard_locale};
 
 // 这些是在shell（如bash）中有特殊含义的字符。
@@ -59,7 +59,29 @@ pub enum CtQuotes {
     None,
     Single,
     Double,
-    // TODO: Locale
+    Locale,
+    CLocale,
+}
+
+impl CtQuotes {
+    fn c_escape_quotes(self) -> Self {
+        match self {
+            Self::Locale if !hard_locale(LcCategory::LcCtype) => Self::Single,
+            Self::CLocale if !hard_locale(LcCategory::LcCtype) => Self::Double,
+            quotes => quotes,
+        }
+    }
+
+    fn marks(self) -> (&'static str, &'static str) {
+        match self {
+            Self::None => ("", ""),
+            Self::Single => ("'", "'"),
+            Self::Double => ("\"", "\""),
+            Self::Locale => locale_quote_marks(),
+            Self::CLocale if hard_locale(LcCategory::LcCtype) => locale_quote_marks(),
+            Self::CLocale => ("\"", "\""),
+        }
+    }
 }
 
 // 此实现深受Rust标准库中std::char::EscapeDefault实现的启发。
@@ -338,20 +360,18 @@ pub(crate) fn uses_unibyte_locale() -> bool {
 
 #[cfg(test)]
 pub(crate) fn escape_unibyte_c_bytes(name: &[u8], quotes: CtQuotes) -> String {
+    let escape_quotes = quotes.c_escape_quotes();
     let mut escaped = String::with_capacity(name.len());
     for byte in name {
         if byte.is_ascii() {
-            escaped.extend(CtEscapedChar::new_c(char::from(*byte), quotes));
+            escaped.extend(CtEscapedChar::new_c(char::from(*byte), escape_quotes));
         } else {
             escaped.extend(CtEscapeOctal::from(char::from(*byte)));
         }
     }
 
-    match quotes {
-        CtQuotes::Single => format!("'{escaped}'"),
-        CtQuotes::Double => format!("\"{escaped}\""),
-        CtQuotes::None => escaped,
-    }
+    let (left_quote, right_quote) = quotes.marks();
+    format!("{left_quote}{escaped}{right_quote}")
 }
 
 #[cfg(test)]
@@ -761,6 +781,7 @@ fn escape_shell_byte_segments_pass(
 
 #[cfg(unix)]
 fn escape_c_name(name: &OsStr, quotes: CtQuotes) -> String {
+    let quotes = quotes.c_escape_quotes();
     if !hard_locale(LcCategory::LcCtype) {
         return name
             .as_bytes()
@@ -822,14 +843,11 @@ pub fn escape_name(name: &OsStr, style: &CtQuotingStyle) -> String {
             let escaped_str: String = name
                 .to_string_lossy()
                 .chars()
-                .flat_map(|c| CtEscapedChar::new_c(c, *quotes))
+                .flat_map(|c| CtEscapedChar::new_c(c, quotes.c_escape_quotes()))
                 .collect();
 
-            match quotes {
-                CtQuotes::Single => format!("'{escaped_str}'"),
-                CtQuotes::Double => format!("\"{escaped_str}\""),
-                CtQuotes::None => escaped_str,
-            }
+            let (left_quote, right_quote) = quotes.marks();
+            format!("{left_quote}{escaped_str}{right_quote}")
         }
         CtQuotingStyle::Shell {
             escape,
@@ -944,6 +962,8 @@ impl fmt::Display for CtQuotes {
             Self::None => f.write_str("None"),
             Self::Single => f.write_str("Single"),
             Self::Double => f.write_str("Double"),
+            Self::Locale => f.write_str("Locale"),
+            Self::CLocale => f.write_str("CLocale"),
         }
     }
 }

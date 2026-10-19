@@ -457,6 +457,30 @@ fn vdir_applies_time_style_to_its_default_long_format() {
 }
 
 #[test]
+fn vdir_expands_nanoseconds_in_custom_time_format() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let file = temp_dir.path().join("f");
+    fs::write(&file, b"").expect("write fixture");
+    filetime::set_file_mtime(
+        &file,
+        filetime::FileTime::from_unix_time(1_577_934_245, 123_456_789),
+    )
+    .expect("set fixture mtime");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC0")
+        .args(["vdir", "-ln", "--time-style=+%s.%N", "-d", "f"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert!(output.stdout.ends_with(b"1577934245.123456789 f\n"));
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

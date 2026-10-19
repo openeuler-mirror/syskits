@@ -278,7 +278,14 @@ impl Display for LsError {
             }
             LsError::LsIOError(e) => write!(formatter, "general io error: {e}"),
             LsError::LsIOErrorContext(e, p, _) => {
-                let path_str = p.to_string_lossy().to_string();
+                let path_str = escape_name(
+                    p.as_os_str(),
+                    &CtQuotingStyle::Shell {
+                        escape: true,
+                        always_quote: true,
+                        show_control: true,
+                    },
+                );
                 let error_kind = e.kind();
                 let errno = e.raw_os_error().unwrap_or(1i32);
 

@@ -271,6 +271,25 @@ fn vdir_quotes_colons_in_directory_titles() {
 }
 
 #[test]
+fn vdir_uses_shell_aware_quoting_for_diagnostic_filenames() {
+    let temp_dir = TempDir::new().expect("tempdir");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C.UTF-8")
+        .args(["vdir", "a'b"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        output.stderr,
+        b"vdir: cannot access \"a'b\": No such file or directory\n"
+    );
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

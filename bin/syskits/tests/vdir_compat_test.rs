@@ -412,6 +412,52 @@ fn vdir_reports_closed_stdout() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn vdir_localizes_stdout_write_errors() {
+    use std::os::unix::process::CommandExt;
+
+    let locale_available = Command::new("locale")
+        .arg("-a")
+        .output()
+        .expect("list locales")
+        .stdout
+        .split(|byte| *byte == b'\n')
+        .any(|locale| locale.eq_ignore_ascii_case(b"fr_FR.utf8"));
+    if !locale_available {
+        return;
+    }
+
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("f"), b"").expect("write fixture");
+    for args in [
+        ["vdir", "-1", "-d", "f"].as_slice(),
+        ["vdir", "--help"].as_slice(),
+    ] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_syskits"));
+        command
+            .current_dir(temp_dir.path())
+            .env("LC_ALL", "fr_FR.UTF-8")
+            .args(args)
+            .stdout(Stdio::piped());
+        unsafe {
+            command.pre_exec(|| {
+                libc::close(libc::STDOUT_FILENO);
+                Ok(())
+            });
+        }
+        let output = command.output().expect("run syskits vdir");
+
+        assert_eq!(output.status.code(), Some(2), "{args:?}");
+        assert_eq!(output.stdout, b"", "{args:?}");
+        assert_eq!(
+            output.stderr,
+            "vdir: erreur d'écriture: Mauvais descripteur de fichier\n".as_bytes(),
+            "{args:?}"
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn vdir_terminates_on_broken_stdout_pipe() {
     use std::os::unix::process::{CommandExt, ExitStatusExt};
 

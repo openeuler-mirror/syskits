@@ -998,8 +998,10 @@ fn extract_color(options: &clap::ArgMatches) -> bool {
 fn load_ls_colors() -> Option<LsColors> {
     match std::env::var_os("LS_COLORS") {
         Some(value) if !value.is_empty() => match value.to_str() {
-            Some(value) => Some(LsColors::from_string(value)),
-            None => {
+            Some(value) if ls_colors_is_valid(value.as_bytes()) => {
+                Some(LsColors::from_string(value))
+            }
+            _ => {
                 ct_show_error!("unparsable value for LS_COLORS environment variable");
                 None
             }
@@ -1007,6 +1009,81 @@ fn load_ls_colors() -> Option<LsColors> {
         _ if is_color_compatible_term() => Some(LsColors::default()),
         _ => None,
     }
+}
+
+fn ls_colors_is_valid(value: &[u8]) -> bool {
+    const INDICATORS: [&[u8; 2]; 24] = [
+        b"lc", b"rc", b"ec", b"rs", b"no", b"fi", b"di", b"ln", b"pi", b"so", b"bd", b"cd", b"mi",
+        b"or", b"ex", b"do", b"su", b"sg", b"st", b"ow", b"tw", b"ca", b"mh", b"cl",
+    ];
+
+    let mut position = 0;
+    while position < value.len() {
+        if value[position] == b':' {
+            position += 1;
+            continue;
+        }
+
+        if value[position] == b'*' {
+            position += 1;
+            if !ls_colors_scan_funky_string(value, &mut position, true)
+                || value.get(position) != Some(&b'=')
+            {
+                return false;
+            }
+            position += 1;
+        } else {
+            let Some(label) = value.get(position..position + 2) else {
+                return false;
+            };
+            if !INDICATORS
+                .iter()
+                .any(|indicator| indicator.as_slice() == label)
+                || value.get(position + 2) != Some(&b'=')
+            {
+                return false;
+            }
+            position += 3;
+        }
+
+        if !ls_colors_scan_funky_string(value, &mut position, false) {
+            return false;
+        }
+        if value.get(position) == Some(&b':') {
+            position += 1;
+        }
+    }
+
+    true
+}
+
+fn ls_colors_scan_funky_string(value: &[u8], position: &mut usize, stop_at_equals: bool) -> bool {
+    while let Some(byte) = value.get(*position).copied() {
+        match byte {
+            b':' => return true,
+            b'=' if stop_at_equals => return true,
+            b'\\' => {
+                *position += 1;
+                if value.get(*position).is_none() {
+                    return false;
+                }
+                *position += 1;
+            }
+            b'^' => {
+                *position += 1;
+                let Some(escaped) = value.get(*position).copied() else {
+                    return false;
+                };
+                if !(b'@'..=b'~').contains(&escaped) && escaped != b'?' {
+                    return false;
+                }
+                *position += 1;
+            }
+            _ => *position += 1,
+        }
+    }
+
+    true
 }
 
 /// 根据提供的选项提取要使用的超链接选项。
@@ -5954,6 +6031,21 @@ mod tests {
 
         assert!(!is_color_compatible_term());
         assert!(load_ls_colors().is_some());
+    }
+
+    #[test]
+    fn ls_colors_validation_rejects_malformed_entries() {
+        assert!(!ls_colors_is_valid(b"bogus"));
+        assert!(!ls_colors_is_valid(b"di=34:broken"));
+        assert!(!ls_colors_is_valid(b"di=34\\"));
+        assert!(!ls_colors_is_valid(b"zz=31"));
+    }
+
+    #[test]
+    fn ls_colors_validation_accepts_gnu_escapes() {
+        assert!(ls_colors_is_valid(b"di=01;34:*.foo=31"));
+        assert!(ls_colors_is_valid(b"lc=\\e[:rc=m:*.a\\=b=32"));
+        assert!(ls_colors_is_valid(b"no=^G::fi=0:"));
     }
 
     #[test]

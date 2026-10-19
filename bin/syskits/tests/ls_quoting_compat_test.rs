@@ -55,6 +55,23 @@ fn shell_quoting_of_newline_matches_gnu_for_ls_dir_and_vdir() {
     }
 }
 
+#[test]
+fn ls_conditional_shell_special_characters_match_gnu() {
+    let directory = TempDir::new().expect("tempdir");
+    let names = ["x=x", "x]x", "x^x", "x{x", "x}x", "{", "}"];
+    for name in names {
+        fs::write(directory.path().join(name), b"").expect("create shell quoting fixture");
+    }
+    let names = names.map(OsStr::new);
+
+    let gnu = run_gnu("ls", &directory, &names);
+    let syskits = run_syskits("ls", &directory, &names);
+
+    assert_eq!(syskits.status.code(), gnu.status.code());
+    assert_eq!(syskits.stderr, gnu.stderr);
+    assert_eq!(syskits.stdout, gnu.stdout);
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn ls_non_utf8_names_match_gnu_for_literal_and_shell_styles() {

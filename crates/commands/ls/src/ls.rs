@@ -116,11 +116,26 @@ fn ls_inherited_sigpipe_ignored() -> bool {
 
 #[cfg(target_os = "linux")]
 unsafe extern "C" {
+    fn bindtextdomain(
+        domainname: *const ctcore::libc::c_char,
+        dirname: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
     fn dgettext(
         domainname: *const ctcore::libc::c_char,
         msgid: *const ctcore::libc::c_char,
     ) -> *mut ctcore::libc::c_char;
 }
+
+#[cfg(target_os = "linux")]
+fn ls_init_gettext() {
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+        bindtextdomain(c"coreutils".as_ptr(), c"/usr/share/locale".as_ptr());
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn ls_init_gettext() {}
 
 #[cfg(target_os = "linux")]
 fn ls_gettext(msgid: &str) -> Option<String> {
@@ -144,6 +159,53 @@ fn ls_locale_quote(value: &str) -> String {
         .unwrap_or("'".into());
     let right = ls_gettext("'").unwrap_or("'".into());
     format!("{left}{value}{right}")
+}
+
+#[cfg(target_os = "linux")]
+fn ls_format_gettext_one(msgid: &str, argument: &str) -> Option<String> {
+    let msgid = CString::new(msgid).ok()?;
+    let argument = CString::new(argument).ok()?;
+    unsafe {
+        let template = dgettext(c"coreutils".as_ptr(), msgid.as_ptr());
+        if template.is_null() {
+            return None;
+        }
+        let len = ctcore::libc::snprintf(std::ptr::null_mut(), 0, template, argument.as_ptr());
+        if len < 0 {
+            return None;
+        }
+        let mut rendered = vec![0u8; len as usize + 1];
+        ctcore::libc::snprintf(
+            rendered.as_mut_ptr().cast(),
+            rendered.len(),
+            template,
+            argument.as_ptr(),
+        );
+        rendered.truncate(len as usize);
+        String::from_utf8(rendered).ok()
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn ls_format_gettext_one(_msgid: &str, _argument: &str) -> Option<String> {
+    None
+}
+
+fn ls_localized_environment_diagnostic(msgid: &str, value: Option<&OsStr>) -> String {
+    ls_init_gettext();
+    match value {
+        Some(value) => {
+            let quoted = ls_quote_environment_value(value);
+            let inner = quoted
+                .strip_prefix('\'')
+                .and_then(|quoted| quoted.strip_suffix('\''))
+                .unwrap_or(&quoted);
+            let argument = ls_locale_quote(inner);
+            ls_format_gettext_one(msgid, &argument)
+                .unwrap_or_else(|| msgid.replacen("%s", &argument, 1))
+        }
+        None => ls_gettext(msgid).unwrap_or_else(|| msgid.into()),
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -1020,7 +1082,13 @@ fn load_ls_colors() -> Option<LsColors> {
                 Some(LsColors::from_string(value))
             }
             _ => {
-                ct_show_error!("unparsable value for LS_COLORS environment variable");
+                ct_show_error!(
+                    "{}",
+                    ls_localized_environment_diagnostic(
+                        "unparsable value for LS_COLORS environment variable",
+                        None,
+                    )
+                );
                 None
             }
         },
@@ -1214,8 +1282,11 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> CtQu
                 return qs;
             }
             ct_show_error!(
-                "ignoring invalid value of environment variable QUOTING_STYLE: {}",
-                ls_quote_environment_value(&style)
+                "{}",
+                ls_localized_environment_diagnostic(
+                    "ignoring invalid value of environment variable QUOTING_STYLE: %s",
+                    Some(&style),
+                )
             );
         }
 
@@ -1348,8 +1419,11 @@ fn tab_size_from_environment(tab_size: &OsStr, format: &LsFormat) -> usize {
         Some(tab_size) => tab_size,
         None => {
             ct_show_error!(
-                "ignoring invalid tab size in environment variable TABSIZE: {}",
-                ls_quote_environment_value(tab_size)
+                "{}",
+                ls_localized_environment_diagnostic(
+                    "ignoring invalid tab size in environment variable TABSIZE: %s",
+                    Some(tab_size),
+                )
             );
             LS_DEFAULT_TAB_SIZE
         }
@@ -1608,8 +1682,11 @@ impl LsConfig {
                         Some(columns) => columns,
                         None => {
                             ct_show_error!(
-                                "ignoring invalid width in environment variable COLUMNS: {}",
-                                ls_quote_environment_value(&columns)
+                                "{}",
+                                ls_localized_environment_diagnostic(
+                                    "ignoring invalid width in environment variable COLUMNS: %s",
+                                    Some(&columns),
+                                )
                             );
                             LS_DEFAULT_TERM_WIDTH
                         }

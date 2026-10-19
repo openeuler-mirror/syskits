@@ -123,15 +123,24 @@ struct VdirClapError {
 
 impl VdirClapError {
     fn new(error: clap::Error) -> Self {
-        let diagnostic = if error.kind() == clap::error::ErrorKind::UnknownArgument {
-            match error.get(ContextKind::InvalidArg) {
+        let diagnostic = match error.kind() {
+            clap::error::ErrorKind::UnknownArgument => match error.get(ContextKind::InvalidArg) {
                 Some(ContextValue::String(argument)) => {
                     vdir_invalid_option_diagnostic(argument).map(vdir_append_help_hint)
                 }
                 _ => None,
-            }
-        } else {
-            None
+            },
+            clap::error::ErrorKind::TooManyValues => match error.get(ContextKind::InvalidArg) {
+                Some(ContextValue::String(argument))
+                    if argument == "--help" || argument == "--version" =>
+                {
+                    Some(vdir_append_help_hint(format!(
+                        "option '{argument}' doesn't allow an argument"
+                    )))
+                }
+                _ => None,
+            },
+            _ => None,
         };
         let code = ct_ls::ls_clap_error_exit_code(&error);
 

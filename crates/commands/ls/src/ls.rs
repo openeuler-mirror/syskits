@@ -192,6 +192,44 @@ fn ls_format_gettext_one(_msgid: &str, _argument: &str) -> Option<String> {
     None
 }
 
+#[cfg(target_os = "linux")]
+fn ls_format_gettext_two(msgid: &str, first: &str, second: &str) -> Option<String> {
+    let msgid = CString::new(msgid).ok()?;
+    let first = CString::new(first).ok()?;
+    let second = CString::new(second).ok()?;
+    unsafe {
+        let template = dgettext(c"coreutils".as_ptr(), msgid.as_ptr());
+        if template.is_null() {
+            return None;
+        }
+        let len = ctcore::libc::snprintf(
+            std::ptr::null_mut(),
+            0,
+            template,
+            first.as_ptr(),
+            second.as_ptr(),
+        );
+        if len < 0 {
+            return None;
+        }
+        let mut rendered = vec![0u8; len as usize + 1];
+        ctcore::libc::snprintf(
+            rendered.as_mut_ptr().cast(),
+            rendered.len(),
+            template,
+            first.as_ptr(),
+            second.as_ptr(),
+        );
+        rendered.truncate(len as usize);
+        String::from_utf8(rendered).ok()
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn ls_format_gettext_two(_msgid: &str, _first: &str, _second: &str) -> Option<String> {
+    None
+}
+
 fn ls_localized_environment_diagnostic(msgid: &str, value: Option<&OsStr>) -> String {
     ls_init_gettext();
     match value {
@@ -415,6 +453,30 @@ enum LsError {
     LsAlreadyListedError(PathBuf),
     LsTimeStyleParseError(String, Vec<String>),
     LsWriteError(std::io::Error),
+}
+
+#[derive(Debug)]
+struct LsOptionError {
+    code: i32,
+    diagnostic: String,
+}
+
+impl CTError for LsOptionError {
+    fn code(&self) -> i32 {
+        self.code
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
+impl Error for LsOptionError {}
+
+impl Display for LsOptionError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.diagnostic)
+    }
 }
 
 impl CTError for LsError {
@@ -2248,10 +2310,7 @@ pub fn ls_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData
     rust_i18n::set_locale(&lang_code);
     let command = ct_app();
 
-    let matches = command.try_get_matches_from(args).map_err(|err| {
-        let code = ls_clap_error_exit_code(&err);
-        err.with_exit_code(code)
-    })?;
+    let matches = command.try_get_matches_from(args).map_err(ls_clap_error)?;
 
     let config = LsConfig::from(&matches)?;
 
@@ -2260,6 +2319,169 @@ pub fn ls_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData
         .map(|v| v.map(Path::new).collect())
         .unwrap_or_else(|| vec![Path::new(".")]);
     list(paths_from_args, &config)
+}
+
+const LS_FORMAT_VALUE_GROUPS: &[&[&str]] = &[
+    &["verbose", "long"],
+    &["commas"],
+    &["horizontal", "across"],
+    &["vertical"],
+    &["single-column"],
+];
+const LS_SORT_VALUE_GROUPS: &[&[&str]] = &[
+    &["none"],
+    &["time"],
+    &["size"],
+    &["extension"],
+    &["version"],
+    &["width"],
+];
+const LS_TIME_VALUE_GROUPS: &[&[&str]] = &[
+    &["atime", "access", "use"],
+    &["ctime", "status"],
+    &["mtime", "modification"],
+    &["birth", "creation"],
+];
+const LS_WHEN_VALUE_GROUPS: &[&[&str]] = &[
+    &["always", "yes", "force"],
+    &["never", "no", "none"],
+    &["auto", "tty", "if-tty"],
+];
+const LS_INDICATOR_STYLE_VALUE_GROUPS: &[&[&str]] =
+    &[&["none"], &["slash"], &["file-type"], &["classify"]];
+const LS_QUOTING_STYLE_VALUE_GROUPS: &[&[&str]] = &[
+    &["literal"],
+    &["shell"],
+    &["shell-always"],
+    &["shell-escape"],
+    &["shell-escape-always"],
+    &["c"],
+    &["c-maybe"],
+    &["escape"],
+    &["locale"],
+    &["clocale"],
+];
+
+fn ls_clap_error(err: clap::Error) -> Box<dyn CTError> {
+    if let Some(diagnostic) = ls_invalid_value_diagnostic(&err) {
+        return Box::new(LsOptionError {
+            code: 1,
+            diagnostic,
+        });
+    }
+    if let Some(diagnostic) = ls_unknown_option_diagnostic(&err) {
+        return Box::new(LsOptionError {
+            code: 2,
+            diagnostic,
+        });
+    }
+
+    let code = ls_clap_error_exit_code(&err);
+    Box::new(err.with_exit_code(code))
+}
+
+fn ls_invalid_value_diagnostic(err: &clap::Error) -> Option<String> {
+    if !matches!(
+        err.kind(),
+        ClapErrorKind::InvalidValue | ClapErrorKind::ValueValidation
+    ) {
+        return None;
+    }
+
+    let arg = match err.get(ContextKind::InvalidArg)? {
+        ContextValue::String(arg) => arg,
+        _ => return None,
+    };
+    let value = match err.get(ContextKind::InvalidValue)? {
+        ContextValue::String(value) => value,
+        _ => return None,
+    };
+    let (option, groups, result) = if arg.starts_with("--format") {
+        (
+            "--format",
+            LS_FORMAT_VALUE_GROUPS,
+            parse_format_value(value),
+        )
+    } else if arg.starts_with("--sort") {
+        ("--sort", LS_SORT_VALUE_GROUPS, parse_sort_value(value))
+    } else if arg.starts_with("--time") {
+        ("--time", LS_TIME_VALUE_GROUPS, parse_time_value(value))
+    } else if arg.starts_with("--classify") {
+        ("--classify", LS_WHEN_VALUE_GROUPS, parse_when_value(value))
+    } else if arg.starts_with("--color") {
+        ("--color", LS_WHEN_VALUE_GROUPS, parse_when_value(value))
+    } else if arg.starts_with("--hyperlink") {
+        ("--hyperlink", LS_WHEN_VALUE_GROUPS, parse_when_value(value))
+    } else if arg.starts_with("--indicator-style") {
+        (
+            "--indicator-style",
+            LS_INDICATOR_STYLE_VALUE_GROUPS,
+            parse_indicator_style_value(value),
+        )
+    } else if arg.starts_with("--quoting-style") {
+        (
+            "--quoting-style",
+            LS_QUOTING_STYLE_VALUE_GROUPS,
+            parse_quoting_style(value),
+        )
+    } else {
+        return None;
+    };
+
+    let problem = if result
+        .as_ref()
+        .is_err_and(|message| message.starts_with("ambiguous"))
+    {
+        "ambiguous"
+    } else {
+        "invalid"
+    };
+    let value = ls_locale_quote(value);
+    let option = ls_locale_quote(option);
+    let message_id = if problem == "ambiguous" {
+        "ambiguous argument %s for %s"
+    } else {
+        "invalid argument %s for %s"
+    };
+    let mut diagnostic = ls_format_gettext_two(message_id, &value, &option)
+        .unwrap_or_else(|| format!("{problem} argument {value} for {option}"));
+    diagnostic.push('\n');
+    diagnostic.push_str(
+        &ls_gettext("Valid arguments are:").unwrap_or_else(|| "Valid arguments are:".into()),
+    );
+    for group in groups {
+        diagnostic.push_str("\n  - ");
+        diagnostic.push_str(
+            &group
+                .iter()
+                .map(|value| ls_locale_quote(value))
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+    }
+    Some(diagnostic)
+}
+
+fn ls_unknown_option_diagnostic(err: &clap::Error) -> Option<String> {
+    if err.kind() != ClapErrorKind::UnknownArgument {
+        return None;
+    }
+    let arg = match err.get(ContextKind::InvalidArg)? {
+        ContextValue::String(arg) => arg,
+        _ => return None,
+    };
+
+    if arg.starts_with("--") {
+        let quoted = ls_locale_quote(arg);
+        return Some(
+            ls_format_gettext_one("unrecognized option %s", &quoted)
+                .unwrap_or_else(|| format!("unrecognized option {quoted}")),
+        );
+    }
+
+    arg.strip_prefix('-')
+        .and_then(|value| value.chars().next())
+        .map(|option| format!("invalid option -- '{option}'"))
 }
 
 pub fn ls_clap_error_exit_code(err: &clap::Error) -> i32 {

@@ -80,8 +80,11 @@ struct DirClapError {
 }
 
 impl DirClapError {
-    fn new(error: clap::Error) -> Self {
-        let diagnostic = if error.kind() == clap::error::ErrorKind::UnknownArgument {
+    fn new(error: clap::Error, args: &[OsString]) -> Self {
+        let missing_argument = dir_missing_option_argument_diagnostic(&error, args);
+        let diagnostic = if missing_argument.is_some() {
+            missing_argument.map(dir_append_help_hint)
+        } else if error.kind() == clap::error::ErrorKind::UnknownArgument {
             match error.get(ContextKind::InvalidArg) {
                 Some(ContextValue::String(argument)) => {
                     dir_invalid_option_diagnostic(argument).map(dir_append_help_hint)
@@ -91,12 +94,47 @@ impl DirClapError {
         } else {
             None
         };
-        let code = ct_ls::ls_clap_error_exit_code(&error);
+        let code = if diagnostic.is_some()
+            && matches!(
+                error.kind(),
+                clap::error::ErrorKind::NoEquals | clap::error::ErrorKind::InvalidValue
+            ) {
+            2
+        } else {
+            ct_ls::ls_clap_error_exit_code(&error)
+        };
 
         Self {
             inner: Box::new(error.with_exit_code(code)),
             diagnostic,
         }
+    }
+}
+
+fn dir_missing_option_argument_diagnostic(
+    error: &clap::Error,
+    args: &[OsString],
+) -> Option<String> {
+    let missing_value = match error.kind() {
+        clap::error::ErrorKind::NoEquals => true,
+        clap::error::ErrorKind::InvalidValue => matches!(
+            error.get(ContextKind::InvalidValue),
+            Some(ContextValue::String(value)) if value.is_empty()
+        ),
+        _ => false,
+    };
+    if !missing_value {
+        return None;
+    }
+
+    let argument = args.last()?.to_str()?;
+    if argument.starts_with("--") && !argument.contains('=') {
+        Some(format!("option '{argument}' requires an argument"))
+    } else {
+        argument
+            .strip_prefix('-')
+            .and_then(|argument| argument.chars().next())
+            .map(|option| format!("option requires an argument -- '{option}'"))
     }
 }
 
@@ -650,7 +688,7 @@ pub fn dir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDat
             {
                 return Err(Box::new(error));
             }
-            return Err(Box::new(DirClapError::new(err)));
+            return Err(Box::new(DirClapError::new(err, &args)));
         }
     };
 

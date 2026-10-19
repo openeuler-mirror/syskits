@@ -380,6 +380,43 @@ fn dir_width_sort_accounts_for_shell_quote_alignment() {
     assert_same_output("width sort shell quote alignment", gnu, syskits);
 }
 
+#[test]
+fn dir_column_formats_preserve_zero_terminator_order() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let listing_dir = temp_dir.path().join("d");
+    fs::create_dir(&listing_dir).expect("create listing directory");
+    for name in ["a", "b", "line\n name"] {
+        fs::write(listing_dir.join(name), b"").expect("create file");
+    }
+
+    for options in [
+        ["--zero", "-C"],
+        ["--zero", "-x"],
+        ["-C", "--zero"],
+        ["-x", "--zero"],
+    ] {
+        let gnu = Command::new("/usr/bin/dir")
+            .current_dir(temp_dir.path())
+            .env("LC_ALL", "C")
+            .env("COLUMNS", "20")
+            .args(options)
+            .arg("d")
+            .output()
+            .expect("run GNU dir");
+        let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .current_dir(temp_dir.path())
+            .env("LC_ALL", "C")
+            .env("COLUMNS", "20")
+            .arg("dir")
+            .args(options)
+            .arg("d")
+            .output()
+            .expect("run syskits dir");
+
+        assert_same_output(&options.join(" "), gnu, syskits);
+    }
+}
+
 #[cfg(target_os = "linux")]
 fn set_selinux_xattr(path: &std::path::Path, value: &[u8]) -> bool {
     let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {

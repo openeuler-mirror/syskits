@@ -78,6 +78,52 @@ use rust_i18n::t;
 
 mod dired;
 
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn dgettext(
+        domainname: *const ctcore::libc::c_char,
+        msgid: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
+}
+
+#[cfg(target_os = "linux")]
+fn ls_localized_path_error(msgid: &str, path: &str, error: &std::io::Error) -> Option<String> {
+    use std::ffi::CStr;
+
+    let msgid = CString::new(msgid).ok()?;
+    let path = CString::new(path).ok()?;
+    let errno = error.raw_os_error()?;
+
+    unsafe {
+        let template = dgettext(c"coreutils".as_ptr(), msgid.as_ptr());
+        let detail = ctcore::libc::strerror(errno);
+        if template.is_null() || detail.is_null() {
+            return None;
+        }
+
+        let len = ctcore::libc::snprintf(std::ptr::null_mut(), 0, template, path.as_ptr());
+        if len < 0 {
+            return None;
+        }
+        let mut rendered = vec![0u8; len as usize + 1];
+        ctcore::libc::snprintf(
+            rendered.as_mut_ptr().cast(),
+            rendered.len(),
+            template,
+            path.as_ptr(),
+        );
+        rendered.truncate(len as usize);
+        rendered.extend_from_slice(b": ");
+        rendered.extend_from_slice(CStr::from_ptr(detail).to_bytes());
+        String::from_utf8(rendered).ok()
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn ls_localized_path_error(_msgid: &str, _path: &str, _error: &std::io::Error) -> Option<String> {
+    None
+}
+
 #[cfg(not(feature = "selinux"))]
 static LS_CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
@@ -309,6 +355,11 @@ impl Display for LsError {
 
                 match error_kind {
                     ErrorKind::NotFound => {
+                        if let Some(message) =
+                            ls_localized_path_error("cannot access %s", &path_str, e)
+                        {
+                            return formatter.write_str(&message);
+                        }
                         write!(
                             formatter,
                             "{}",
@@ -321,6 +372,11 @@ impl Display for LsError {
                         #[allow(clippy::wildcard_in_or_patterns)]
                         match errno {
                             1i32 => {
+                                if let Some(message) =
+                                    ls_localized_path_error("cannot access %s", &path_str, e)
+                                {
+                                    return formatter.write_str(&message);
+                                }
                                 write!(
                                     formatter,
                                     "{}",
@@ -332,6 +388,13 @@ impl Display for LsError {
                             }
                             13i32 | _ => match p.is_dir() {
                                 true => {
+                                    if let Some(message) = ls_localized_path_error(
+                                        "cannot open directory %s",
+                                        &path_str,
+                                        e,
+                                    ) {
+                                        return formatter.write_str(&message);
+                                    }
                                     write!(
                                         formatter,
                                         "{}",
@@ -342,6 +405,11 @@ impl Display for LsError {
                                     )
                                 }
                                 false => {
+                                    if let Some(message) =
+                                        ls_localized_path_error("cannot open %s", &path_str, e)
+                                    {
+                                        return formatter.write_str(&message);
+                                    }
                                     write!(
                                         formatter,
                                         "{}",
@@ -356,6 +424,11 @@ impl Display for LsError {
                     }
                     _ => {
                         if 9i32 == errno {
+                            if let Some(message) =
+                                ls_localized_path_error("cannot open directory %s", &path_str, e)
+                            {
+                                return formatter.write_str(&message);
+                            }
                             write!(
                                 formatter,
                                 "{}",

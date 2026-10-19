@@ -755,7 +755,7 @@ fn dir_config_from_matches(matches: &ArgMatches) -> CTResult<LsConfig> {
         CtQuotingStyle::Shell { show_control, .. } | CtQuotingStyle::Literal { show_control } => {
             *show_control = !matches.get_flag(ls_flags::LS_HIDE_CONTROL_CHARS);
         }
-        CtQuotingStyle::C { .. } => {}
+        CtQuotingStyle::C { .. } | CtQuotingStyle::CMaybe => {}
     }
 
     if dir_default_quoting_style(matches) {

@@ -98,6 +98,61 @@ fn ls_literal_leading_quote_does_not_enable_quote_alignment() {
     assert_eq!(syskits.stdout, gnu.stdout);
 }
 
+#[test]
+fn ls_c_maybe_quoting_style_matches_gnu_from_option_and_environment() {
+    let directory = TempDir::new().expect("tempdir");
+    for name in [
+        OsStr::new("plain"),
+        OsStr::new("space name"),
+        OsStr::new("line\nname"),
+        OsStr::new("double\"quote"),
+        OsStr::new("back\\slash"),
+    ] {
+        fs::write(directory.path().join(name), b"").expect("create c-maybe fixture");
+    }
+
+    for from_environment in [false, true] {
+        let mut gnu = Command::new("/usr/bin/ls");
+        let mut syskits = Command::new(env!("CARGO_BIN_EXE_syskits"));
+        gnu.current_dir(directory.path()).env("LC_ALL", "C");
+        syskits
+            .current_dir(directory.path())
+            .env("LC_ALL", "C")
+            .arg("ls");
+        if from_environment {
+            gnu.env("QUOTING_STYLE", "c-maybe").arg("-1");
+            syskits.env("QUOTING_STYLE", "c-maybe").arg("-1");
+        } else {
+            gnu.args(["-1", "--quoting-style=c-maybe"]);
+            syskits.args(["-1", "--quoting-style=c-maybe"]);
+        }
+
+        let gnu = gnu.output().expect("run GNU ls");
+        let syskits = syskits.output().expect("run syskits ls");
+        assert_eq!(syskits.status.code(), gnu.status.code());
+        assert_eq!(syskits.stderr, gnu.stderr);
+        assert_eq!(syskits.stdout, gnu.stdout);
+    }
+
+    let arguments = ["-C", "-T0", "-w20", "--quoting-style=c-maybe"];
+    let gnu = Command::new("/usr/bin/ls")
+        .current_dir(directory.path())
+        .env("LC_ALL", "C")
+        .args(arguments)
+        .output()
+        .expect("run GNU c-maybe grid");
+    let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(directory.path())
+        .env("LC_ALL", "C")
+        .arg("ls")
+        .args(arguments)
+        .output()
+        .expect("run syskits c-maybe grid");
+    assert_eq!(syskits.status.code(), gnu.status.code());
+    assert_eq!(syskits.stderr, gnu.stderr);
+    assert_eq!(syskits.stdout, gnu.stdout);
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn ls_non_utf8_names_match_gnu_for_literal_and_shell_styles() {

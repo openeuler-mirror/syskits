@@ -141,6 +141,7 @@ pub fn dired_print_dired_output<W: Write>(
             CtQuotes::CLocale => "clocale",
             _ => "c",
         },
+        CtQuotingStyle::CMaybe => "c-maybe",
     };
     println!("//DIRED-OPTIONS// --quoting-style={style_str}");
     Ok(())

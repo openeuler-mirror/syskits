@@ -559,6 +559,14 @@ fn ls_terminate_with_sigpipe() -> ! {
     panic!("stdout pipe is broken")
 }
 
+#[cfg(target_os = "linux")]
+#[doc(hidden)]
+pub fn ls_maybe_terminate_on_broken_pipe() {
+    if !ls_inherited_sigpipe_ignored() {
+        ls_terminate_with_sigpipe();
+    }
+}
+
 #[derive(PartialEq, Eq, Debug)]
 pub enum LsFormat {
     Columns,

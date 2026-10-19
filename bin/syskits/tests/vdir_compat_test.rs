@@ -589,7 +589,41 @@ fn vdir_help_and_version_report_closed_stdout() {
 
 #[cfg(target_os = "linux")]
 #[test]
-fn vdir_help_and_version_report_broken_stdout_pipe() {
+fn vdir_help_and_version_terminate_on_broken_stdout_pipe() {
+    use std::os::unix::process::{CommandExt, ExitStatusExt};
+
+    for option in ["--help", "--version"] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_syskits"));
+        command
+            .env("LC_ALL", "C")
+            .args(["vdir", option])
+            .stdout(Stdio::piped());
+        unsafe {
+            command.pre_exec(|| {
+                let mut pipe_fds = [0; 2];
+                if libc::pipe(pipe_fds.as_mut_ptr()) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                libc::close(pipe_fds[0]);
+                if libc::dup2(pipe_fds[1], libc::STDOUT_FILENO) < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                libc::close(pipe_fds[1]);
+                libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+                Ok(())
+            });
+        }
+        let output = command.output().expect("run syskits vdir");
+
+        assert_eq!(output.status.signal(), Some(libc::SIGPIPE), "{option}");
+        assert_eq!(output.stdout, b"", "{option}");
+        assert_eq!(output.stderr, b"", "{option}");
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn vdir_help_and_version_report_broken_stdout_pipe_when_sigpipe_is_ignored() {
     use std::os::unix::process::CommandExt;
 
     for option in ["--help", "--version"] {

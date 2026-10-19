@@ -18,6 +18,8 @@ use std::ffi::OsString;
 use std::ffi::{CStr, CString};
 use std::fmt::Display;
 use std::fs::{self, FileType, Metadata};
+#[cfg(target_os = "linux")]
+use std::io::ErrorKind;
 use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -515,6 +517,10 @@ impl Display for VdirClapError {
                     {
                         Ok(()) => Ok(()),
                         Err(error) => {
+                            #[cfg(target_os = "linux")]
+                            if error.kind() == ErrorKind::BrokenPipe {
+                                ct_ls::ls_maybe_terminate_on_broken_pipe();
+                            }
                             self.display_output_failed.store(true, Ordering::Relaxed);
                             formatter.write_str(&vdir_write_error(&error))
                         }

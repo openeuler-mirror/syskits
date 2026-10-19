@@ -1029,6 +1029,10 @@ impl LsConfig {
         Ok(())
     }
 
+    pub fn set_dired(&mut self, enabled: bool) {
+        self.is_dired = enabled && self.format == LsFormat::Long && !self.is_hyperlink;
+    }
+
     pub fn from(options: &clap::ArgMatches) -> CTResult<Self> {
         let get_last = |flag: &str| -> usize {
             if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
@@ -1440,11 +1444,9 @@ impl LsConfig {
             None
         };
 
-        let mut is_dired = options.get_flag(ls_flags::LS_DIRED);
-        if is_dired && format != LsFormat::Long {
-            is_dired = false;
-        }
-        if is_dired && format == LsFormat::Long && options.get_flag(ls_flags::LS_ZERO) {
+        let is_dired =
+            options.get_flag(ls_flags::LS_DIRED) && format == LsFormat::Long && !is_hyperlink;
+        if is_dired && options.get_flag(ls_flags::LS_ZERO) {
             return Err(Box::new(LsError::LsDiredAndZeroAreIncompatible));
         }
 

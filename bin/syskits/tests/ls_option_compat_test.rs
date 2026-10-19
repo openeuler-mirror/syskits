@@ -56,3 +56,21 @@ fn ls_extensions_do_not_collide_with_gnu_value_abbreviations() {
         assert_eq!(syskits.stdout, gnu.stdout, "{arguments:?}");
     }
 }
+
+#[test]
+fn ls_invalid_enum_values_use_gnu_failure_status() {
+    let directory = TempDir::new().expect("tempdir");
+    fs::write(directory.path().join("a"), b"").expect("create fixture");
+
+    for argument in [
+        "--hyperlink=bad",
+        "--indicator-style=bad",
+        "--quoting-style=bad",
+    ] {
+        let gnu = run_gnu(&directory, &[argument, "a"]);
+        let syskits = run_syskits(&directory, &[argument, "a"]);
+
+        assert_eq!(syskits.status.code(), gnu.status.code(), "{argument}");
+        assert_eq!(syskits.status.code(), Some(1), "{argument}");
+    }
+}

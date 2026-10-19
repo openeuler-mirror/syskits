@@ -2277,7 +2277,16 @@ fn is_invalid_ls_failure_arg(err: &clap::Error) -> bool {
     matches!(
         err.get(ContextKind::InvalidArg),
         Some(ContextValue::String(arg))
-            if ["--classify", "--color", "--format", "--sort", "--time"]
+            if [
+                "--classify",
+                "--color",
+                "--format",
+                "--hyperlink",
+                "--indicator-style",
+                "--quoting-style",
+                "--sort",
+                "--time",
+            ]
                 .iter()
                 .any(|option| arg.starts_with(option))
     )
@@ -6023,7 +6032,14 @@ mod tests {
 
     #[test]
     fn invalid_sort_time_and_format_values_exit_with_failure() {
-        for argument in ["--sort=invalid", "--time=invalid", "--format=invalid"] {
+        for argument in [
+            "--sort=invalid",
+            "--time=invalid",
+            "--format=invalid",
+            "--hyperlink=invalid",
+            "--indicator-style=invalid",
+            "--quoting-style=invalid",
+        ] {
             let err = ls_main(
                 [ctcore::ct_util_name(), argument]
                     .into_iter()

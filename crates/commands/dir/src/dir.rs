@@ -91,6 +91,17 @@ impl DirClapError {
                 }
                 _ => None,
             }
+        } else if error.kind() == clap::error::ErrorKind::TooManyValues {
+            match error.get(ContextKind::InvalidArg) {
+                Some(ContextValue::String(argument))
+                    if argument == "--help" || argument == "--version" =>
+                {
+                    Some(dir_append_help_hint(format!(
+                        "option '{argument}' doesn't allow an argument"
+                    )))
+                }
+                _ => None,
+            }
         } else {
             None
         };

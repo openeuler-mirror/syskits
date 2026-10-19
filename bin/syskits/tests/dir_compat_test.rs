@@ -326,6 +326,29 @@ fn dir_matches_gnu_multi_column_edge_layout() {
     assert_same_output("multi-column layout edge", gnu, syskits);
 }
 
+#[test]
+fn dir_classify_does_not_overquote_literal_asterisk() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let listing_dir = temp_dir.path().join("d");
+    fs::create_dir(&listing_dir).expect("create listing directory");
+    fs::write(listing_dir.join("plain*"), b"").expect("create file");
+
+    let gnu = Command::new("/usr/bin/dir")
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["-1F", "d"])
+        .output()
+        .expect("run GNU dir");
+    let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["dir", "-1F", "d"])
+        .output()
+        .expect("run syskits dir");
+
+    assert_same_output("classify literal asterisk", gnu, syskits);
+}
+
 #[cfg(target_os = "linux")]
 fn set_selinux_xattr(path: &std::path::Path, value: &[u8]) -> bool {
     let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {

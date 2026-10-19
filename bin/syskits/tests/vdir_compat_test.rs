@@ -748,6 +748,31 @@ fn vdir_hyperlinks_both_symlink_name_and_target() {
 }
 
 #[test]
+fn vdir_disables_dired_metadata_when_hyperlinks_are_enabled() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("f"), b"").expect("write fixture");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args([
+            "vdir",
+            "-ln",
+            "--full-time",
+            "--dired",
+            "--hyperlink=always",
+            "-d",
+            "f",
+        ])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert!(!output.stdout.windows(7).any(|bytes| bytes == b"//DIRED"));
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

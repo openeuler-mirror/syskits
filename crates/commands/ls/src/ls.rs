@@ -2548,7 +2548,8 @@ impl PathData {
 
 fn show_dir_name<W: Write>(path_data: &PathData, out: &mut W, config: &LsConfig) {
     // 对目录本身的完整路径 (p_buf) 应用转义样式，而不仅仅是 display_name
-    let escaped_path = escape_name(path_data.p_buf.as_os_str(), &config.quoting_style);
+    let escaped_path =
+        escape_name_with_chars(path_data.p_buf.as_os_str(), &config.quoting_style, ":");
 
     match config.is_hyperlink {
         true => {

@@ -944,3 +944,50 @@ fn dir_help_and_version_terminate_on_broken_stdout_pipe() {
         assert_eq!(output.stderr, b"", "{option}");
     }
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn dir_localizes_stdout_write_errors_like_gnu() {
+    let locale_available = Command::new("locale")
+        .arg("-a")
+        .output()
+        .expect("list locales")
+        .stdout
+        .split(|byte| *byte == b'\n')
+        .any(|locale| locale.eq_ignore_ascii_case(b"fr_FR.utf8"));
+    if !locale_available {
+        return;
+    }
+
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("f"), b"").expect("create file");
+    let mut gnu_command = Command::new("/usr/bin/dir");
+    gnu_command
+        .arg0("dir")
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(["-1", "-d", "f"])
+        .stdout(Stdio::piped());
+    unsafe {
+        gnu_command.pre_exec(|| {
+            libc::close(libc::STDOUT_FILENO);
+            Ok(())
+        });
+    }
+    let mut syskits_command = Command::new(env!("CARGO_BIN_EXE_syskits"));
+    syskits_command
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(["dir", "-1", "-d", "f"])
+        .stdout(Stdio::piped());
+    unsafe {
+        syskits_command.pre_exec(|| {
+            libc::close(libc::STDOUT_FILENO);
+            Ok(())
+        });
+    }
+
+    let gnu = gnu_command.output().expect("run GNU dir");
+    let syskits = syskits_command.output().expect("run syskits dir");
+    assert_same_output("localized write error", gnu, syskits);
+}

@@ -589,6 +589,7 @@ impl Display for LsError {
                 )
             }
             LsError::LsWriteError(error) => {
+                ls_init_gettext();
                 let message = ls_gettext("write error").unwrap_or_else(|| "write error".into());
                 write!(formatter, "{message}: {}", strip_errno(error))
             }

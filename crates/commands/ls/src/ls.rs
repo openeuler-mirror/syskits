@@ -3175,12 +3175,18 @@ fn name_quoting_extra_chars(config: &LsConfig) -> &'static str {
 }
 
 pub fn display_name_width(name: &OsStr, config: &LsConfig) -> usize {
-    escape_name_with_chars(
+    let escaped = escape_name_with_chars(
         name,
         &config.quoting_style,
         name_quoting_extra_chars(config),
-    )
-    .width()
+    );
+    let aligns_shell_outer_quotes = matches!(config.quoting_style, CtQuotingStyle::Shell { .. })
+        && (config.format == LsFormat::Long
+            || (matches!(config.format, LsFormat::Columns | LsFormat::Across)
+                && config.width != 0));
+    let needs_quote_alignment = aligns_shell_outer_quotes && !escaped.starts_with(['\'', '"']);
+
+    escaped.width() + usize::from(needs_quote_alignment)
 }
 
 fn extension_from_last_dot(name: &OsStr) -> &[u8] {

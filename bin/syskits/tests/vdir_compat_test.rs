@@ -688,6 +688,30 @@ fn vdir_accepts_gnu_tabsize_syntax_and_rejects_ptrdiff_overflow() {
     assert_eq!(overflow.status.code(), Some(2));
 }
 
+#[cfg(unix)]
+#[test]
+fn vdir_places_long_symlink_indicator_after_target() {
+    use std::os::unix::fs::{PermissionsExt, symlink};
+
+    let temp_dir = TempDir::new().expect("tempdir");
+    let target = temp_dir.path().join("target");
+    fs::write(&target, b"").expect("write fixture");
+    fs::set_permissions(&target, fs::Permissions::from_mode(0o755)).expect("chmod fixture");
+    symlink("target", temp_dir.path().join("link")).expect("create symlink");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["vdir", "-lFn", "--full-time", "-d", "link"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert!(output.stdout.ends_with(b" link -> target*\n"));
+    assert!(!output.stdout.windows(9).any(|bytes| bytes == b" link@ ->"));
+}
+
 #[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");

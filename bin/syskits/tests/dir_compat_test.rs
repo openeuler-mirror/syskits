@@ -696,3 +696,19 @@ fn dir_reports_invalid_options_like_gnu() {
         assert_same_output(option, gnu, syskits);
     }
 }
+
+#[test]
+fn dir_reports_missing_option_arguments_like_gnu() {
+    for option in ["--block-size", "-I", "--time-style"] {
+        let mut gnu_command = Command::new("/usr/bin/dir");
+        gnu_command.arg0("dir").env("LC_ALL", "C").arg(option);
+        let gnu = gnu_command.output().expect("run GNU dir");
+        let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C")
+            .args(["dir", option])
+            .output()
+            .expect("run syskits dir");
+
+        assert_same_output(option, gnu, syskits);
+    }
+}

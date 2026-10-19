@@ -194,6 +194,28 @@ Try 'vdir --help' for more information.\n"
     );
 }
 
+#[test]
+fn vdir_reports_help_and_version_arguments_like_gnu() {
+    for option in ["--help=x", "--version=x"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C")
+            .args(["vdir", option])
+            .output()
+            .expect("run syskits vdir");
+        let option_name = option.split('=').next().expect("option name");
+
+        assert_eq!(output.status.code(), Some(2));
+        assert_eq!(output.stdout, b"");
+        assert_eq!(
+            String::from_utf8(output.stderr).expect("UTF-8 diagnostic"),
+            format!(
+                "vdir: option '{option_name}' doesn't allow an argument\n\
+                 Try 'vdir --help' for more information.\n"
+            )
+        );
+    }
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn vdir_quotes_utf8_bytes_that_are_invalid_in_c_locale() {

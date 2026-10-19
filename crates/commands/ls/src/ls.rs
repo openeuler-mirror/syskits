@@ -1743,29 +1743,6 @@ impl LsConfig {
             }
         };
 
-        let width = match options.get_one::<String>(ls_flags::LS_WIDTH) {
-            Some(x) => parse_width(x)?,
-            None => match stdout_terminal_width() {
-                Some(width) => width,
-                None => match std::env::var_os("COLUMNS") {
-                    Some(columns) if columns.is_empty() => LS_DEFAULT_TERM_WIDTH,
-                    Some(columns) => match columns.to_str().and_then(|s| parse_width(s).ok()) {
-                        Some(columns) => columns,
-                        None => {
-                            ct_show_error!(
-                                "{}",
-                                ls_localized_environment_diagnostic(
-                                    "ignoring invalid width in environment variable COLUMNS: %s",
-                                    Some(&columns),
-                                )
-                            );
-                            LS_DEFAULT_TERM_WIDTH
-                        }
-                    },
-                    None => LS_DEFAULT_TERM_WIDTH,
-                },
-            },
-        };
         let tab_size = match options.get_one::<OsString>(ls_flags::format::LS_TAB_SIZE) {
             Some(tab_size) => match options.value_source(ls_flags::format::LS_TAB_SIZE) {
                 Some(clap::parser::ValueSource::EnvVariable) => {
@@ -1941,6 +1918,31 @@ impl LsConfig {
         {
             quoting_style = CtQuotingStyle::Literal { show_control };
         }
+
+        let width = match options.get_one::<String>(ls_flags::LS_WIDTH) {
+            Some(width) => parse_width(width)?,
+            None if !format_uses_tab_size(&format) && !is_needs_color => LS_DEFAULT_TERM_WIDTH,
+            None => match stdout_terminal_width() {
+                Some(width) => width,
+                None => match std::env::var_os("COLUMNS") {
+                    Some(columns) if columns.is_empty() => LS_DEFAULT_TERM_WIDTH,
+                    Some(columns) => match columns.to_str().and_then(|s| parse_width(s).ok()) {
+                        Some(columns) => columns,
+                        None => {
+                            ct_show_error!(
+                                "{}",
+                                ls_localized_environment_diagnostic(
+                                    "ignoring invalid width in environment variable COLUMNS: %s",
+                                    Some(&columns),
+                                )
+                            );
+                            LS_DEFAULT_TERM_WIDTH
+                        }
+                    },
+                    None => LS_DEFAULT_TERM_WIDTH,
+                },
+            },
+        };
 
         let color = if is_needs_color {
             load_ls_colors()

@@ -302,6 +302,24 @@ fn vdir_invalid_quoting_environment_warning_matches_gnu() {
     );
 }
 
+#[test]
+fn vdir_localizes_unknown_option_diagnostic() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(["vdir", "--definitely-invalid"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        output.stderr,
+        "vdir\u{a0}: option non reconnue '--definitely-invalid'\n\n\
+         Saisissez «\u{a0}vdir --help\u{a0}» pour plus d'informations.\n"
+            .as_bytes()
+    );
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn vdir_quotes_utf8_bytes_that_are_invalid_in_c_locale() {

@@ -14,6 +14,8 @@ use rust_i18n::t;
 use std::cmp::Reverse;
 use std::error::Error;
 use std::ffi::OsString;
+#[cfg(target_os = "linux")]
+use std::ffi::{CStr, CString};
 use std::fmt::Display;
 use std::fs::{self, FileType, Metadata};
 use std::io::Write;
@@ -119,6 +121,7 @@ impl ctcore::ct_error::CTError for VdirNonUtf8OptionError {
 struct VdirClapError {
     inner: Box<dyn ctcore::ct_error::CTError>,
     diagnostic: Option<String>,
+    diagnostic_includes_command: bool,
     display_request: bool,
 }
 
@@ -131,7 +134,7 @@ impl VdirClapError {
         let diagnostic = match error.kind() {
             clap::error::ErrorKind::UnknownArgument => match error.get(ContextKind::InvalidArg) {
                 Some(ContextValue::String(argument)) => {
-                    vdir_invalid_option_diagnostic(argument).map(vdir_append_help_hint)
+                    vdir_localized_invalid_option_diagnostic(argument)
                 }
                 _ => None,
             },
@@ -148,15 +151,167 @@ impl VdirClapError {
             _ => None,
         };
         let code = ct_ls::ls_clap_error_exit_code(&error);
+        let diagnostic_includes_command =
+            error.kind() == clap::error::ErrorKind::UnknownArgument && diagnostic.is_some();
 
         Self {
             inner: Box::new(error.with_exit_code(code)),
+            diagnostic_includes_command,
             diagnostic,
             display_request,
         }
     }
 }
 
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn bindtextdomain(
+        domainname: *const ctcore::libc::c_char,
+        dirname: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
+    fn dgettext(
+        domainname: *const ctcore::libc::c_char,
+        msgid: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
+}
+
+#[cfg(target_os = "linux")]
+fn vdir_init_gettext() {
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+        bindtextdomain(c"coreutils".as_ptr(), c"/usr/share/locale".as_ptr());
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn vdir_init_gettext() {}
+
+#[cfg(target_os = "linux")]
+fn vdir_format_gettext_three(
+    domain: &CStr,
+    msgid: &CStr,
+    first: &CStr,
+    second: &CStr,
+    third: &CStr,
+) -> Option<String> {
+    unsafe {
+        let template = dgettext(domain.as_ptr(), msgid.as_ptr());
+        if template.is_null() {
+            return None;
+        }
+        let len = ctcore::libc::snprintf(
+            std::ptr::null_mut(),
+            0,
+            template,
+            first.as_ptr(),
+            second.as_ptr(),
+            third.as_ptr(),
+        );
+        if len < 0 {
+            return None;
+        }
+        let mut rendered = vec![0u8; len as usize + 1];
+        ctcore::libc::snprintf(
+            rendered.as_mut_ptr().cast(),
+            rendered.len(),
+            template,
+            first.as_ptr(),
+            second.as_ptr(),
+            third.as_ptr(),
+        );
+        rendered.truncate(len as usize);
+        String::from_utf8(rendered).ok()
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn vdir_format_gettext_char(
+    domain: &CStr,
+    msgid: &CStr,
+    command: &CStr,
+    option: char,
+) -> Option<String> {
+    unsafe {
+        let template = dgettext(domain.as_ptr(), msgid.as_ptr());
+        if template.is_null() {
+            return None;
+        }
+        let len = ctcore::libc::snprintf(
+            std::ptr::null_mut(),
+            0,
+            template,
+            command.as_ptr(),
+            option as ctcore::libc::c_int,
+        );
+        if len < 0 {
+            return None;
+        }
+        let mut rendered = vec![0u8; len as usize + 1];
+        ctcore::libc::snprintf(
+            rendered.as_mut_ptr().cast(),
+            rendered.len(),
+            template,
+            command.as_ptr(),
+            option as ctcore::libc::c_int,
+        );
+        rendered.truncate(len as usize);
+        String::from_utf8(rendered).ok()
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn vdir_format_gettext_one(domain: &CStr, msgid: &CStr, argument: &CStr) -> Option<String> {
+    unsafe {
+        let template = dgettext(domain.as_ptr(), msgid.as_ptr());
+        if template.is_null() {
+            return None;
+        }
+        let len = ctcore::libc::snprintf(std::ptr::null_mut(), 0, template, argument.as_ptr());
+        if len < 0 {
+            return None;
+        }
+        let mut rendered = vec![0u8; len as usize + 1];
+        ctcore::libc::snprintf(
+            rendered.as_mut_ptr().cast(),
+            rendered.len(),
+            template,
+            argument.as_ptr(),
+        );
+        rendered.truncate(len as usize);
+        String::from_utf8(rendered).ok()
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn vdir_localized_invalid_option_diagnostic(argument: &str) -> Option<String> {
+    let command = CString::new(ctcore::ct_util_name()).ok()?;
+    let argument_c = CString::new(argument).ok()?;
+    let mut diagnostic = if argument.starts_with("--") {
+        vdir_format_gettext_three(
+            c"libc",
+            c"%s: unrecognized option '%s%s'\n",
+            &command,
+            c"",
+            &argument_c,
+        )?
+    } else {
+        let option = argument.strip_prefix('-')?.chars().next()?;
+        vdir_format_gettext_char(c"libc", c"%s: invalid option -- '%c'\n", &command, option)?
+    };
+    diagnostic.push_str(&vdir_format_gettext_one(
+        c"coreutils",
+        c"Try '%s --help' for more information.\n",
+        &command,
+    )?);
+    Some(diagnostic)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn vdir_localized_invalid_option_diagnostic(argument: &str) -> Option<String> {
+    vdir_invalid_option_diagnostic(argument).map(vdir_append_help_hint)
+}
+
+#[cfg(not(target_os = "linux"))]
 fn vdir_invalid_option_diagnostic(argument: &str) -> Option<String> {
     if argument.starts_with("--") {
         Some(format!("unrecognized option '{argument}'"))
@@ -178,6 +333,13 @@ fn vdir_append_help_hint(diagnostic: String) -> String {
 impl Display for VdirClapError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.diagnostic {
+            Some(diagnostic) if self.diagnostic_includes_command => {
+                let mut stderr = std::io::stderr().lock();
+                let _ = stderr
+                    .write_all(diagnostic.as_bytes())
+                    .and_then(|_| stderr.flush());
+                Ok(())
+            }
             Some(diagnostic) => formatter.write_str(diagnostic),
             None => Display::fmt(&self.inner, formatter),
         }
@@ -763,6 +925,7 @@ pub fn vdir_native_semantic(args: impl ctcore::Args) -> CTResult<VdirSemantic> {
 }
 
 pub fn vdir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData>)> {
+    vdir_init_gettext();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 

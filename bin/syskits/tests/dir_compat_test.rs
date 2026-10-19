@@ -287,6 +287,45 @@ fn dir_f_resets_long_format_to_default_columns() {
     }
 }
 
+#[test]
+fn dir_matches_gnu_multi_column_edge_layout() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let listing_dir = temp_dir.path().join("d");
+    fs::create_dir(&listing_dir).expect("create listing directory");
+    for name in [
+        "a",
+        "bb",
+        "ccc",
+        "dddd",
+        "eeeee",
+        "ffffff",
+        "ggggggg",
+        "hhhhhhhh",
+        "iiiiiiiii",
+        "jjjjjjjjjj",
+        "k space",
+        "l'quote",
+        "m*",
+    ] {
+        fs::write(listing_dir.join(name), b"").expect("create file");
+    }
+
+    let gnu = Command::new("/usr/bin/dir")
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["-T0", "--width=40", "-r", "d"])
+        .output()
+        .expect("run GNU dir");
+    let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["dir", "-T0", "--width=40", "-r", "d"])
+        .output()
+        .expect("run syskits dir");
+
+    assert_same_output("multi-column layout edge", gnu, syskits);
+}
+
 #[cfg(target_os = "linux")]
 fn set_selinux_xattr(path: &std::path::Path, value: &[u8]) -> bool {
     let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {

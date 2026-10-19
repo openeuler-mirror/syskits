@@ -3812,6 +3812,7 @@ fn grid_column_widths(cells: &[Cell], columns: usize, direction: Direction) -> V
     widths
 }
 
+#[cfg(test)]
 fn grid_required_width(widths: &[usize]) -> usize {
     match widths.split_last() {
         Some((last, leading)) => leading.iter().map(|width| width + 2).sum::<usize>() + last,
@@ -3820,9 +3821,31 @@ fn grid_required_width(widths: &[usize]) -> usize {
 }
 
 fn grid_columns_that_fit(cells: &[Cell], width: usize, direction: Direction) -> usize {
-    for columns in (1..=cells.len()).rev() {
-        let widths = grid_column_widths(cells, columns, direction);
-        if grid_required_width(&widths) < width {
+    let max_columns = cells.len().min(width.div_ceil(3));
+    for columns in (1..=max_columns).rev() {
+        let (rows, _) = grid_dimensions(cells.len(), columns);
+        let mut column_widths = vec![3usize; columns];
+        let mut line_width = columns * 3;
+        let mut fits = true;
+
+        for (index, cell) in cells.iter().enumerate() {
+            let column = match direction {
+                Direction::TopToBottom => index / rows,
+                Direction::LeftToRight => index % columns,
+            };
+            let cell_width = cell.width + usize::from(column + 1 < columns) * 2;
+
+            if column_widths[column] < cell_width {
+                line_width += cell_width - column_widths[column];
+                column_widths[column] = cell_width;
+                if line_width >= width {
+                    fits = false;
+                    break;
+                }
+            }
+        }
+
+        if fits {
             return columns;
         }
     }
@@ -5752,6 +5775,31 @@ mod tests {
     }
 
     #[test]
+    fn grid_reserves_gnu_minimum_width_for_short_last_column() {
+        let cells = [
+            ("m*", 2),
+            ("l'quote", 7),
+            ("k\\ space", 8),
+            ("jjjjjjjjjj", 10),
+            ("iiiiiiiii", 9),
+            ("hhhhhhhh", 8),
+            ("ggggggg", 7),
+            ("ffffff", 6),
+            ("eeeee", 5),
+            ("dddd", 4),
+            ("ccc", 3),
+            ("bb", 2),
+            ("a", 1),
+        ]
+        .map(|(contents, width)| Cell {
+            contents: contents.into(),
+            width,
+        });
+
+        assert_eq!(grid_columns_that_fit(&cells, 40, Direction::TopToBottom), 4);
+    }
+
+    #[test]
     fn grid_exact_terminal_width_uses_fewer_columns() {
         let cells = [
             Cell {
@@ -5764,9 +5812,11 @@ mod tests {
             },
         ];
 
-        assert_eq!(grid_columns_that_fit(&cells, 4, Direction::LeftToRight), 1);
+        assert_eq!(grid_columns_that_fit(&cells, 3, Direction::LeftToRight), 1);
+        assert_eq!(grid_columns_that_fit(&cells, 4, Direction::LeftToRight), 2);
         assert_eq!(grid_columns_that_fit(&cells, 5, Direction::LeftToRight), 2);
-        assert_eq!(render_grid(&cells, 4, Direction::LeftToRight), "a\nb\n");
+        assert_eq!(render_grid(&cells, 3, Direction::LeftToRight), "a\nb\n");
+        assert_eq!(render_grid(&cells, 4, Direction::LeftToRight), "a  b\n");
         assert_eq!(render_grid(&cells, 5, Direction::LeftToRight), "a  b\n");
     }
 
@@ -5833,7 +5883,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(String::from_utf8(output).unwrap(), "'['     x\n long   y\n");
+        assert_eq!(String::from_utf8(output).unwrap(), "'['\n long\n x\n y\n");
     }
 
     #[test]

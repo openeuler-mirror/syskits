@@ -593,7 +593,9 @@ fn vdir_collect_semantic_rows_for_path(
         rows.sort_by_key(|row| !row.is_dir);
     }
 
-    if matches.get_flag(ls_flags::LS_REVERSE) {
+    if matches.get_flag(ls_flags::LS_REVERSE)
+        && vdir_semantic_sort(matches) != VdirSemanticSort::None
+    {
         rows.reverse();
     }
 

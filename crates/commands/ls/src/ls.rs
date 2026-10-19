@@ -1652,7 +1652,7 @@ fn ls_collect_semantic_rows_for_path(path: &Path, config: &LsConfig) -> Vec<LsSe
         });
     }
 
-    if config.is_reverse {
+    if config.is_reverse && config.sort != LsSort::None {
         rows.reverse();
     }
 
@@ -2733,7 +2733,7 @@ fn sort_entries<W: Write>(entries: &mut [PathData], config: &LsConfig, out: &mut
         unreachable!("unknown sort type")
     }
 
-    if config.is_reverse {
+    if config.is_reverse && config.sort != LsSort::None {
         entries.reverse();
     }
 

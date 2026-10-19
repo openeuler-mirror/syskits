@@ -307,41 +307,6 @@ fn vdir_format_gettext_one(domain: &CStr, msgid: &CStr, argument: &CStr) -> Opti
 }
 
 #[cfg(target_os = "linux")]
-fn vdir_format_gettext_two(
-    domain: &CStr,
-    msgid: &CStr,
-    first: &CStr,
-    second: &CStr,
-) -> Option<String> {
-    unsafe {
-        let template = dgettext(domain.as_ptr(), msgid.as_ptr());
-        if template.is_null() {
-            return None;
-        }
-        let len = ctcore::libc::snprintf(
-            std::ptr::null_mut(),
-            0,
-            template,
-            first.as_ptr(),
-            second.as_ptr(),
-        );
-        if len < 0 {
-            return None;
-        }
-        let mut rendered = vec![0u8; len as usize + 1];
-        ctcore::libc::snprintf(
-            rendered.as_mut_ptr().cast(),
-            rendered.len(),
-            template,
-            first.as_ptr(),
-            second.as_ptr(),
-        );
-        rendered.truncate(len as usize);
-        String::from_utf8(rendered).ok()
-    }
-}
-
-#[cfg(target_os = "linux")]
 fn vdir_gettext(msgid: &str) -> Option<String> {
     let msgid = CString::new(msgid).ok()?;
     unsafe {
@@ -353,100 +318,6 @@ fn vdir_gettext(msgid: &str) -> Option<String> {
 #[cfg(not(target_os = "linux"))]
 fn vdir_gettext(_msgid: &str) -> Option<String> {
     None
-}
-
-#[cfg(target_os = "linux")]
-fn vdir_translate_help_chunks(help: &str) -> String {
-    let line_ends: Vec<usize> = help
-        .match_indices('\n')
-        .map(|(index, _)| index + 1)
-        .collect();
-    let mut translated = String::new();
-    let mut offset = 0;
-
-    while offset < help.len() {
-        let mut matched = None;
-        for &end in line_ends.iter().rev().filter(|&&end| end > offset) {
-            let msgid = &help[offset..end];
-            if let Some(message) = vdir_gettext(msgid)
-                && message != msgid
-            {
-                matched = Some((end, message));
-                break;
-            }
-        }
-
-        if let Some((end, message)) = matched {
-            translated.push_str(&message);
-            offset = end;
-        } else {
-            let end = line_ends
-                .iter()
-                .copied()
-                .find(|&end| end > offset)
-                .unwrap_or(help.len());
-            translated.push_str(&help[offset..end]);
-            offset = end;
-        }
-    }
-
-    translated
-}
-
-#[cfg(target_os = "linux")]
-fn vdir_localized_help() -> Option<String> {
-    const HELP: &str = include_str!("vdir-help.txt");
-    const USAGE: &str = "Usage: vdir [OPTION]... [FILE]...\n";
-    const ANCILLARY: &str =
-        "\nGNU coreutils online help: <https://www.gnu.org/software/coreutils/>\n";
-    const PROBE: &str = concat!(
-        "List information about the FILEs (the current directory by default).\n",
-        "Sort entries alphabetically if none of -cftuvSUX nor --sort is specified.\n"
-    );
-
-    if vdir_gettext(PROBE).as_deref() == Some(PROBE) {
-        return None;
-    }
-
-    let body = HELP.strip_prefix(USAGE)?.split_once(ANCILLARY)?.0;
-    let command = c"vdir";
-    let package = c"GNU coreutils";
-    let package_url = c"https://www.gnu.org/software/coreutils/";
-    let invocation = c" invocation";
-    let mut help =
-        vdir_format_gettext_one(c"coreutils", c"Usage: %s [OPTION]... [FILE]...\n", command)?;
-    help.push_str(&vdir_translate_help_chunks(body));
-    help.push_str(&vdir_format_gettext_two(
-        c"coreutils",
-        c"\n%s online help: <%s>\n",
-        package,
-        package_url,
-    )?);
-    help.push_str(&vdir_gettext(
-        "Report any translation bugs to <https://translationproject.org/team/>\n",
-    )?);
-    help.push_str(&vdir_format_gettext_two(
-        c"coreutils",
-        c"Full documentation <%s%s>\n",
-        package_url,
-        command,
-    )?);
-    help.push_str(&vdir_format_gettext_two(
-        c"coreutils",
-        c"or available locally via: info '(coreutils) %s%s'\n",
-        command,
-        invocation,
-    )?);
-    Some(help)
-}
-
-#[cfg(not(target_os = "linux"))]
-fn vdir_localized_help() -> Option<String> {
-    None
-}
-
-fn vdir_help() -> String {
-    vdir_localized_help().unwrap_or_else(|| include_str!("vdir-help.txt").to_owned())
 }
 
 #[cfg(target_os = "linux")]
@@ -1148,7 +1019,6 @@ pub fn ct_app() -> Command {
         .override_usage(t!("vdir.usage"))
         .about(t!("vdir.about"))
         .after_help(t!("vdir.after_help"))
-        .override_help(vdir_help())
 }
 
 #[derive(Default)]

@@ -784,6 +784,7 @@ pub fn ct_app() -> Command {
         .override_usage(t!("vdir.usage"))
         .about(t!("vdir.about"))
         .after_help(t!("vdir.after_help"))
+        .override_help(include_str!("vdir-help.txt"))
 }
 
 #[derive(Default)]

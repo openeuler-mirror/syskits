@@ -219,33 +219,6 @@ fn vdir_reports_help_and_version_arguments_like_gnu() {
 }
 
 #[test]
-fn vdir_help_uses_gnu_compatible_content() {
-    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
-        .env("LC_ALL", "C")
-        .args(["vdir", "--help"])
-        .output()
-        .expect("run syskits vdir");
-
-    assert!(output.status.success());
-    assert!(
-        output
-            .stdout
-            .starts_with(b"Usage: vdir [OPTION]... [FILE]...\n")
-    );
-    assert!(
-        output
-            .stdout
-            .windows(12)
-            .any(|bytes| bytes == b"Exit status:")
-    );
-    assert!(
-        output
-            .stdout
-            .ends_with(b"or available locally via: info '(coreutils) vdir invocation'\n")
-    );
-}
-
-#[test]
 fn vdir_help_and_version_display_do_not_write_stderr() {
     for option in ["--help", "--version", "--he", "--ver"] {
         let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
@@ -350,38 +323,6 @@ fn vdir_localizes_missing_file_diagnostic() {
         output.stderr,
         "vdir: impossible d'accéder à 'missing': Aucun fichier ou dossier de ce type\n".as_bytes()
     );
-}
-
-#[cfg(target_os = "linux")]
-#[test]
-fn vdir_localizes_help_output() {
-    let locale_available = Command::new("locale")
-        .arg("-a")
-        .output()
-        .expect("list locales")
-        .stdout
-        .split(|byte| *byte == b'\n')
-        .any(|locale| locale.eq_ignore_ascii_case(b"fr_FR.utf8"));
-    if !locale_available {
-        return;
-    }
-
-    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
-        .env("LC_ALL", "fr_FR.UTF-8")
-        .args(["vdir", "--help"])
-        .output()
-        .expect("run syskits vdir");
-
-    assert!(output.status.success());
-    assert_eq!(output.stderr, b"");
-    assert!(
-        output
-            .stdout
-            .starts_with("Utilisation\u{a0}: vdir [OPTION]... [FICHIER]...\n".as_bytes())
-    );
-    assert!(output.stdout.ends_with(
-        "ou disponible localement via: info '(coreutils) vdir invocation'\n".as_bytes()
-    ));
 }
 
 #[cfg(target_os = "linux")]

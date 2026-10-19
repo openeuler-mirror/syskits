@@ -32,10 +32,11 @@ unsafe extern "C" {
 }
 
 use crate::ct_display::locale_quote_marks;
-use crate::ct_locale::{LcCategory, hard_locale};
+use crate::ct_locale::{hard_locale, LcCategory};
 
 // 这些是在shell（如bash）中有特殊含义的字符。
 // 第一个常量包含仅在名称开始处出现时才有特殊含义的字符
+#[cfg(not(unix))]
 const CT_SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
 const CT_SPECIAL_SHELL_CHARS: &str = "`$&*()|[{};\\'\"<>=^?! ";
 
@@ -240,6 +241,7 @@ impl Iterator for CtEscapedChar {
     }
 }
 
+#[cfg(not(unix))]
 fn shell_without_escape(name: &str, quotes: CtQuotes, show_control_chars: bool) -> (String, bool) {
     let mut must_quote = false;
     let mut escaped_str = String::with_capacity(name.len());
@@ -276,6 +278,7 @@ fn shell_without_escape(name: &str, quotes: CtQuotes, show_control_chars: bool) 
     (escaped_str, must_quote)
 }
 
+#[cfg(not(unix))]
 fn shell_with_escape_pass(
     name: &str,
     quotes: CtQuotes,
@@ -344,6 +347,7 @@ fn shell_with_escape_pass(
     (escaped_str, must_quote, in_dollar)
 }
 
+#[cfg(not(unix))]
 fn shell_with_escape(name: &str, quotes: CtQuotes) -> (String, bool) {
     let (escaped_str, must_quote, in_dollar) = shell_with_escape_pass(name, quotes, false);
     // GNU's apostrophe-minimization rescan retains an open trailing $'...' state.
@@ -790,6 +794,142 @@ fn escape_shell_byte_segments_pass(
 }
 
 #[cfg(unix)]
+enum CtNameElement {
+    Char(char),
+    InvalidByte(u8),
+}
+
+#[cfg(unix)]
+fn for_each_name_element(name: &OsStr, mut callback: impl FnMut(CtNameElement)) {
+    let mut bytes = name.as_bytes();
+    while !bytes.is_empty() {
+        match std::str::from_utf8(bytes) {
+            Ok(valid) => {
+                valid
+                    .chars()
+                    .for_each(|character| callback(CtNameElement::Char(character)));
+                break;
+            }
+            Err(error) => {
+                let valid_len = error.valid_up_to();
+                let valid = unsafe { std::str::from_utf8_unchecked(&bytes[..valid_len]) };
+                valid
+                    .chars()
+                    .for_each(|character| callback(CtNameElement::Char(character)));
+
+                let invalid_len = error.error_len().unwrap_or(bytes.len() - valid_len);
+                bytes[valid_len..valid_len + invalid_len]
+                    .iter()
+                    .copied()
+                    .for_each(|byte| callback(CtNameElement::InvalidByte(byte)));
+                bytes = &bytes[valid_len + invalid_len..];
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+fn push_char(output: &mut Vec<u8>, character: char) {
+    let mut encoded = [0; 4];
+    output.extend_from_slice(character.encode_utf8(&mut encoded).as_bytes());
+}
+
+#[cfg(unix)]
+fn shell_without_escape_bytes(
+    name: &OsStr,
+    quotes: CtQuotes,
+    show_control_chars: bool,
+) -> (Vec<u8>, bool) {
+    let mut must_quote = false;
+    let mut escaped = Vec::with_capacity(name.as_bytes().len());
+
+    for_each_name_element(name, |element| match element {
+        CtNameElement::Char(character) => {
+            must_quote |= matches!(character, '\t' | '\n' | '\r');
+            let escaped_character = {
+                let character = CtEscapedChar::new_shell(character, false, quotes);
+                if show_control_chars {
+                    character
+                } else {
+                    character.hide_control()
+                }
+            };
+
+            match escaped_character.state {
+                CtEscapeState::Backslash('\'') => escaped.extend_from_slice(b"'\\''"),
+                CtEscapeState::ForceQuote(character) => {
+                    must_quote = true;
+                    push_char(&mut escaped, character);
+                }
+                _ => escaped_character.for_each(|character| push_char(&mut escaped, character)),
+            }
+        }
+        CtNameElement::InvalidByte(byte) => {
+            escaped.push(if show_control_chars { byte } else { b'?' });
+        }
+    });
+
+    must_quote |= name
+        .as_bytes()
+        .first()
+        .is_some_and(|byte| matches!(byte, b'~' | b'#'));
+    (escaped, must_quote)
+}
+
+#[cfg(unix)]
+fn shell_with_escape_bytes(name: &OsStr, quotes: CtQuotes) -> (Vec<u8>, bool) {
+    let mut in_dollar = false;
+    let mut must_quote = false;
+    let mut escaped = Vec::with_capacity(name.as_bytes().len());
+
+    for_each_name_element(name, |element| {
+        let escaped_character = match element {
+            CtNameElement::Char(character) => CtEscapedChar::new_shell(character, true, quotes),
+            CtNameElement::InvalidByte(byte) => CtEscapedChar {
+                state: CtEscapeState::Octal(CtEscapeOctal::from(char::from(byte))),
+            },
+        };
+
+        match escaped_character.state {
+            CtEscapeState::Char(character) => {
+                if in_dollar {
+                    escaped.extend_from_slice(b"''");
+                    in_dollar = false;
+                }
+                push_char(&mut escaped, character);
+            }
+            CtEscapeState::ForceQuote(character) => {
+                if in_dollar {
+                    escaped.extend_from_slice(b"''");
+                    in_dollar = false;
+                }
+                must_quote = true;
+                push_char(&mut escaped, character);
+            }
+            CtEscapeState::Backslash('\'') => {
+                must_quote = true;
+                in_dollar = false;
+                escaped.extend_from_slice(b"'\\''");
+            }
+            _ => {
+                if !in_dollar {
+                    escaped.extend_from_slice(b"'$'");
+                    in_dollar = true;
+                }
+                must_quote = true;
+                escaped_character.for_each(|character| push_char(&mut escaped, character));
+            }
+        }
+    });
+
+    must_quote |= name
+        .as_bytes()
+        .first()
+        .is_some_and(|byte| matches!(byte, b'~' | b'#'));
+    (escaped, must_quote)
+}
+
+#[cfg(unix)]
 fn escape_c_name(name: &OsStr, quotes: CtQuotes, extra_escaped_chars: &str) -> String {
     let quotes = quotes.c_escape_quotes();
     if !hard_locale(LcCategory::LcCtype) {
@@ -846,32 +986,58 @@ pub fn escape_name(name: &OsStr, style: &CtQuotingStyle) -> String {
     escape_name_with_chars(name, style, "")
 }
 
-pub fn escape_name_with_chars(
+pub fn escape_name_bytes(name: &OsStr, style: &CtQuotingStyle) -> Vec<u8> {
+    escape_name_bytes_with_chars(name, style, "")
+}
+
+pub fn escape_name_bytes_with_chars(
     name: &OsStr,
     style: &CtQuotingStyle,
     extra_escaped_chars: &str,
-) -> String {
+) -> Vec<u8> {
     match style {
         CtQuotingStyle::Literal { show_control } => {
-            if *show_control {
-                name.to_string_lossy().into_owned()
-            } else {
+            #[cfg(unix)]
+            {
+                if *show_control {
+                    return name.as_bytes().to_vec();
+                }
+
+                let mut escaped = Vec::with_capacity(name.as_bytes().len());
+                for_each_name_element(name, |element| match element {
+                    CtNameElement::Char(character) => CtEscapedChar::new_literal(character)
+                        .hide_control()
+                        .for_each(|character| push_char(&mut escaped, character)),
+                    CtNameElement::InvalidByte(_) => escaped.push(b'?'),
+                });
+                escaped
+            }
+            #[cfg(not(unix))]
+            {
                 name.to_string_lossy()
                     .chars()
-                    .flat_map(|c| CtEscapedChar::new_literal(c).hide_control())
-                    .collect()
+                    .flat_map(|character| {
+                        let character = CtEscapedChar::new_literal(character);
+                        if *show_control {
+                            character
+                        } else {
+                            character.hide_control()
+                        }
+                    })
+                    .collect::<String>()
+                    .into_bytes()
             }
         }
         CtQuotingStyle::C { quotes } => {
             #[cfg(unix)]
-            let escaped_str = escape_c_name(name, *quotes, extra_escaped_chars);
+            let escaped = escape_c_name(name, *quotes, extra_escaped_chars);
             #[cfg(not(unix))]
-            let escaped_str: String = name
+            let escaped: String = name
                 .to_string_lossy()
                 .chars()
-                .flat_map(|c| {
+                .flat_map(|character| {
                     CtEscapedChar::new_c_with_extra(
-                        c,
+                        character,
                         quotes.c_escape_quotes(),
                         extra_escaped_chars,
                     )
@@ -879,20 +1045,39 @@ pub fn escape_name_with_chars(
                 .collect();
 
             let (left_quote, right_quote) = quotes.marks();
-            format!("{left_quote}{escaped_str}{right_quote}")
+            [
+                left_quote.as_bytes(),
+                escaped.as_bytes(),
+                right_quote.as_bytes(),
+            ]
+            .concat()
         }
         CtQuotingStyle::Shell {
             escape,
             always_quote,
             show_control,
         } => {
-            let name = name.to_string_lossy();
-            if *escape && shell_escape_can_use_c_quotes(&name) {
-                return format!("\"{name}\"");
+            #[cfg(unix)]
+            let bytes = name.as_bytes();
+            #[cfg(not(unix))]
+            let name_text = name.to_string_lossy();
+            #[cfg(not(unix))]
+            let bytes = name_text.as_bytes();
+
+            if *escape {
+                if let Ok(name) = std::str::from_utf8(bytes) {
+                    if shell_escape_can_use_c_quotes(name) {
+                        return format!("\"{name}\"").into_bytes();
+                    }
+                }
             }
-            let (quotes, must_quote) = if name.contains(&['"', '`', '$', '\\'][..]) {
+
+            let (quotes, must_quote) = if bytes
+                .iter()
+                .any(|byte| matches!(byte, b'"' | b'`' | b'$' | b'\\'))
+            {
                 (CtQuotes::Single, true)
-            } else if name.contains('\'') && !*escape {
+            } else if bytes.contains(&b'\'') && !*escape {
                 (CtQuotes::Double, true)
             } else if *always_quote {
                 (CtQuotes::Single, true)
@@ -900,20 +1085,29 @@ pub fn escape_name_with_chars(
                 (CtQuotes::Single, false)
             };
 
-            let (escaped_str, contains_quote_chars) = if *escape {
-                shell_with_escape(&name, quotes)
+            #[cfg(unix)]
+            let (escaped, contains_quote_chars) = if *escape {
+                shell_with_escape_bytes(name, quotes)
             } else {
-                shell_without_escape(&name, quotes, *show_control)
+                shell_without_escape_bytes(name, quotes, *show_control)
+            };
+            #[cfg(not(unix))]
+            let (escaped, contains_quote_chars) = if *escape {
+                let (escaped, quoted) = shell_with_escape(&name_text, quotes);
+                (escaped.into_bytes(), quoted)
+            } else {
+                let (escaped, quoted) = shell_without_escape(&name_text, quotes, *show_control);
+                (escaped.into_bytes(), quoted)
             };
 
             let must_quote = must_quote
-                || name
-                    .chars()
-                    .any(|character| extra_escaped_chars.contains(character));
+                || bytes
+                    .iter()
+                    .any(|byte| extra_escaped_chars.as_bytes().contains(byte));
             match (must_quote | contains_quote_chars, quotes) {
-                (true, CtQuotes::Single) => format!("'{escaped_str}'"),
-                (true, CtQuotes::Double) => format!("\"{escaped_str}\""),
-                _ => escaped_str,
+                (true, CtQuotes::Single) => [b"'".as_slice(), &escaped, b"'"].concat(),
+                (true, CtQuotes::Double) => [b"\"".as_slice(), &escaped, b"\""].concat(),
+                _ => escaped,
             }
         }
     }
@@ -966,6 +1160,19 @@ fn c_and_shell_quote_compatible(character: char, index: usize) -> bool {
     )
 }
 
+pub fn escape_name_with_chars(
+    name: &OsStr,
+    style: &CtQuotingStyle,
+    extra_escaped_chars: &str,
+) -> String {
+    String::from_utf8_lossy(&escape_name_bytes_with_chars(
+        name,
+        style,
+        extra_escaped_chars,
+    ))
+    .into_owned()
+}
+
 impl fmt::Display for CtQuotingStyle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
@@ -1007,8 +1214,8 @@ impl fmt::Display for CtQuotes {
 #[cfg(test)]
 mod tests {
     use crate::ct_quoting_style::{
-        CtQuotes, CtQuotingStyle, escape_name, escape_shell_bytes_with_classifier,
-        escape_unibyte_c_bytes, escape_unibyte_shell_bytes, gnu_quote_shell, quote_locale_bytes,
+        escape_name, escape_name_bytes, escape_shell_bytes_with_classifier, escape_unibyte_c_bytes,
+        escape_unibyte_shell_bytes, gnu_quote_shell, quote_locale_bytes, CtQuotes, CtQuotingStyle,
     };
     use std::ffi::OsStr;
 
@@ -1551,9 +1758,7 @@ mod tests {
         });
         assert_eq!(
             mixed,
-            vec![
-                b'\'', 0xe2, 0x80, b'\'', b'$', b'\'', b'\\', b'2', b'1', b'3', b'\''
-            ]
+            vec![b'\'', 0xe2, 0x80, b'\'', b'$', b'\'', b'\\', b'2', b'1', b'3', b'\'']
         );
 
         // Printable ISO-8859-1 byte ff -> the same raw byte.
@@ -1784,5 +1989,52 @@ mod tests {
         for (input, style, expected_output) in test_cases {
             assert_eq!(escape_name(input, &style), expected_output);
         }
+    }
+    #[cfg(unix)]
+    #[test]
+    fn test_escape_name_c_style_preserves_non_utf8_bytes() {
+        use std::os::unix::ffi::OsStrExt;
+
+        assert_eq!(
+            escape_name(
+                OsStr::from_bytes(b"bad\xffname"),
+                &CtQuotingStyle::C {
+                    quotes: CtQuotes::None,
+                }
+            ),
+            "bad\\377name"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_escape_name_bytes_handles_non_utf8_by_style() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let name = OsStr::from_bytes(b"bad-\xff");
+        assert_eq!(
+            escape_name_bytes(name, &CtQuotingStyle::Literal { show_control: true }),
+            b"bad-\xff"
+        );
+        assert_eq!(
+            escape_name_bytes(
+                name,
+                &CtQuotingStyle::Literal {
+                    show_control: false,
+                }
+            ),
+            b"bad-?"
+        );
+        assert_eq!(
+            escape_name_bytes(
+                name,
+                &CtQuotingStyle::Shell {
+                    escape: true,
+                    always_quote: false,
+                    show_control: true,
+                }
+            ),
+            b"'bad-'$'\\377'"
+        );
     }
 }

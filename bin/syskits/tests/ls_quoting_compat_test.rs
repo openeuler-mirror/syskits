@@ -54,3 +54,37 @@ fn shell_quoting_of_newline_matches_gnu_for_ls_dir_and_vdir() {
         );
     }
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn ls_non_utf8_names_match_gnu_for_literal_and_shell_styles() {
+    let directory = TempDir::new().expect("tempdir");
+    let name = OsStr::from_bytes(b"bad-\xff");
+    fs::write(directory.path().join(name), b"").expect("create non-UTF-8 fixture");
+
+    let cases: [&[&OsStr]; 3] = [
+        &[OsStr::new("-1"), OsStr::new("--quoting-style=literal")],
+        &[OsStr::new("-q1"), OsStr::new("--quoting-style=literal")],
+        &[OsStr::new("-1"), OsStr::new("--quoting-style=shell-escape")],
+    ];
+
+    for arguments in cases {
+        let gnu = Command::new("/usr/bin/ls")
+            .current_dir(directory.path())
+            .env("LC_ALL", "C")
+            .args(arguments)
+            .output()
+            .expect("run GNU ls");
+        let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .current_dir(directory.path())
+            .env("LC_ALL", "C")
+            .arg("ls")
+            .args(arguments)
+            .output()
+            .expect("run syskits ls");
+
+        assert_eq!(syskits.status.code(), gnu.status.code(), "{arguments:?}");
+        assert_eq!(syskits.stderr, gnu.stderr, "{arguments:?}");
+        assert_eq!(syskits.stdout, gnu.stdout, "{arguments:?}");
+    }
+}

@@ -3349,6 +3349,14 @@ fn name_quoting_extra_chars(config: &LsConfig) -> &'static str {
     }
 }
 
+fn name_needs_quoting(name: &OsStr, config: &LsConfig) -> bool {
+    escape_name_bytes_with_chars(
+        name,
+        &config.quoting_style,
+        name_quoting_extra_chars(config),
+    ) != name.as_bytes()
+}
+
 pub fn display_name_width(name: &OsStr, config: &LsConfig) -> usize {
     let escaped = escape_name_bytes_with_chars(
         name,
@@ -3764,10 +3772,9 @@ fn display_items<W: Write>(
     // 显示 SELinux 安全上下文，如果没有则显示"? 当与 `-l`
     // 选项时，将在大小列的左边打印安全上下文。
 
-    let quoted = items.iter().any(|item| {
-        let name = escape_name_bytes(&item.display_name, &config.quoting_style);
-        starts_with_outer_quote(&name)
-    });
+    let quoted = items
+        .iter()
+        .any(|item| name_needs_quoting(&item.display_name, config));
 
     if config.format == LsFormat::Long {
         display_grid_by_format_long_type(

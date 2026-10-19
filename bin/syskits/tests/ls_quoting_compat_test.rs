@@ -72,6 +72,32 @@ fn ls_conditional_shell_special_characters_match_gnu() {
     assert_eq!(syskits.stdout, gnu.stdout);
 }
 
+#[test]
+fn ls_literal_leading_quote_does_not_enable_quote_alignment() {
+    let directory = TempDir::new().expect("tempdir");
+    fs::write(directory.path().join("'quote"), b"").expect("create quoted fixture");
+    fs::write(directory.path().join("normal"), b"").expect("create normal fixture");
+    let arguments = ["-C", "-T0", "-w1", "--quoting-style=literal"];
+
+    let gnu = Command::new("/usr/bin/ls")
+        .current_dir(directory.path())
+        .env("LC_ALL", "C")
+        .args(arguments)
+        .output()
+        .expect("run GNU ls");
+    let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(directory.path())
+        .env("LC_ALL", "C")
+        .arg("ls")
+        .args(arguments)
+        .output()
+        .expect("run syskits ls");
+
+    assert_eq!(syskits.status.code(), gnu.status.code());
+    assert_eq!(syskits.stderr, gnu.stderr);
+    assert_eq!(syskits.stdout, gnu.stdout);
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn ls_non_utf8_names_match_gnu_for_literal_and_shell_styles() {

@@ -27,6 +27,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
 #[cfg(unix)]
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::UNIX_EPOCH;
 rust_i18n::i18n!("locales", fallback = "en-US");
 
@@ -124,6 +125,8 @@ struct VdirClapError {
     diagnostic: Option<String>,
     diagnostic_includes_command: bool,
     display_request: bool,
+    display_output: Option<String>,
+    display_output_failed: AtomicBool,
     exit_code: Option<i32>,
 }
 
@@ -133,6 +136,7 @@ impl VdirClapError {
             error.kind(),
             clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
         );
+        let display_output = display_request.then(|| error.render().to_string());
         let option_diagnostic = match error.kind() {
             clap::error::ErrorKind::UnknownArgument => match error.get(ContextKind::InvalidArg) {
                 Some(ContextValue::String(argument)) => {
@@ -169,6 +173,8 @@ impl VdirClapError {
             diagnostic_includes_command,
             diagnostic,
             display_request,
+            display_output,
+            display_output_failed: AtomicBool::new(false),
             exit_code: closed_stdout_error.then_some(2),
         }
     }
@@ -494,7 +500,22 @@ impl Display for VdirClapError {
                 Ok(())
             }
             Some(diagnostic) => formatter.write_str(diagnostic),
-            None => Display::fmt(&self.inner, formatter),
+            None => match &self.display_output {
+                Some(output) => {
+                    let mut stdout = std::io::stdout().lock();
+                    match stdout
+                        .write_all(output.as_bytes())
+                        .and_then(|_| stdout.flush())
+                    {
+                        Ok(()) => Ok(()),
+                        Err(error) => {
+                            self.display_output_failed.store(true, Ordering::Relaxed);
+                            formatter.write_str(&vdir_write_error(&error))
+                        }
+                    }
+                }
+                None => Display::fmt(&self.inner, formatter),
+            },
         }
     }
 }
@@ -503,7 +524,13 @@ impl Error for VdirClapError {}
 
 impl ctcore::ct_error::CTError for VdirClapError {
     fn code(&self) -> i32 {
-        self.exit_code.unwrap_or_else(|| self.inner.code())
+        self.exit_code.unwrap_or_else(|| {
+            if self.display_output_failed.load(Ordering::Relaxed) {
+                2
+            } else {
+                self.inner.code()
+            }
+        })
     }
 
     fn usage(&self) -> bool {

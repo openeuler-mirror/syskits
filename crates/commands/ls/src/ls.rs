@@ -3910,6 +3910,29 @@ fn get_time(md: &Metadata, config: &LsConfig) -> Option<chrono::DateTime<chrono:
     Some(time.into())
 }
 
+fn unavailable_time_width(config: &LsConfig) -> usize {
+    match &config.time_style {
+        LsTimeStyle::LsFullIso => 35,
+        LsTimeStyle::LsLongIso => 16,
+        LsTimeStyle::LsIso => 11,
+        LsTimeStyle::LsLocale => 12,
+        LsTimeStyle::LsFormat { non_recent, .. } => {
+            #[cfg(unix)]
+            {
+                ls_format_local_time_strftime(0, 0, non_recent)
+                    .map_or(0, |formatted| UnicodeWidthStr::width(formatted.as_str()))
+            }
+            #[cfg(not(unix))]
+            {
+                chrono::DateTime::<chrono::Local>::from(UNIX_EPOCH)
+                    .format(non_recent)
+                    .to_string()
+                    .len()
+            }
+        }
+    }
+}
+
 #[cfg(unix)]
 fn expand_nanoseconds_format(fmt: &str, nanoseconds: u32) -> String {
     let nanoseconds = format!("{nanoseconds:09}");
@@ -4025,7 +4048,7 @@ fn display_date(metadata: &Metadata, config: &LsConfig) -> String {
                 }
             }
         }
-        None => "???".into(),
+        None => format!("{:>width$}", "?", width = unavailable_time_width(config)),
     }
 }
 

@@ -96,6 +96,53 @@ fn dir_accepts_non_utf8_ignore_and_time_style_values() {
 }
 
 #[cfg(target_os = "linux")]
+#[test]
+fn dir_handles_non_utf8_environment_values_like_gnu() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let listing_dir = temp_dir.path().join("d");
+    fs::create_dir(&listing_dir).expect("create listing directory");
+    fs::write(listing_dir.join("a"), b"").expect("create file");
+    let raw = std::ffi::OsString::from_vec(b"\xff".to_vec());
+
+    let cases: [(&str, &[u8]); 5] = [
+        (
+            "COLUMNS",
+            b"dir: ignoring invalid width in environment variable COLUMNS: '\\377'\n",
+        ),
+        (
+            "TABSIZE",
+            b"dir: ignoring invalid tab size in environment variable TABSIZE: '\\377'\n",
+        ),
+        (
+            "QUOTING_STYLE",
+            b"dir: ignoring invalid value of environment variable QUOTING_STYLE: '\\377'\n",
+        ),
+        ("TIME_STYLE", b""),
+        (
+            "LS_COLORS",
+            b"dir: unparsable value for LS_COLORS environment variable\n",
+        ),
+    ];
+
+    for (variable, expected_stderr) in cases {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_syskits"));
+        command
+            .current_dir(temp_dir.path())
+            .env("LC_ALL", "C")
+            .env(variable, &raw)
+            .args(["dir"]);
+        if variable == "LS_COLORS" {
+            command.args(["--color=always", "-1"]);
+        }
+        command.arg(listing_dir.as_os_str());
+
+        let output = command.output().expect("run syskits dir");
+        assert!(output.status.success(), "{variable}");
+        assert_eq!(output.stderr, expected_stderr, "{variable}");
+    }
+}
+
+#[cfg(target_os = "linux")]
 fn set_selinux_xattr(path: &std::path::Path, value: &[u8]) -> bool {
     let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
         return false;

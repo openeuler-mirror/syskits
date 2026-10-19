@@ -2620,9 +2620,9 @@ mod tests {
             assert_eq!(
                 matches
                     .unwrap()
-                    .get_one::<String>(ls_flags::format::LS_TAB_SIZE)
+                    .get_one::<OsString>(ls_flags::format::LS_TAB_SIZE)
                     .unwrap(),
-                "4"
+                &OsString::from("4")
             );
         }
 
@@ -2635,9 +2635,9 @@ mod tests {
             assert_eq!(
                 matches
                     .unwrap()
-                    .get_one::<String>(ls_flags::format::LS_TAB_SIZE)
+                    .get_one::<OsString>(ls_flags::format::LS_TAB_SIZE)
                     .unwrap(),
-                "8"
+                &OsString::from("8")
             );
         }
 

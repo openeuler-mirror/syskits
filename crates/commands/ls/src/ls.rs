@@ -60,7 +60,7 @@ use ctcore::ct_entries;
 use ctcore::ct_fs::CtFileInformation;
 use ctcore::ct_quoting_style;
 use ctcore::ct_quoting_style::CtQuotingStyle;
-use ctcore::ct_quoting_style::escape_name;
+use ctcore::ct_quoting_style::{escape_name, escape_name_with_chars};
 #[cfg(unix)]
 use ctcore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(target_os = "linux")]
@@ -4076,7 +4076,16 @@ fn display_item_name<W: Write>(
     style_manager: &mut StyleManager,
 ) -> Cell {
     // 这是我们的返回值。我们从 `&path.display_name` 开始，然后对其进行修改。
-    let mut name = escape_name(&path.display_name, &config.quoting_style);
+    let extra_escaped_chars = if config.indicator_style == LsIndicatorStyle::None {
+        ""
+    } else {
+        "*=>@|"
+    };
+    let mut name = escape_name_with_chars(
+        &path.display_name,
+        &config.quoting_style,
+        extra_escaped_chars,
+    );
 
     // 我们需要自己跟踪宽度，而不是让 term_grid
     // 因为颜色代码会扰乱 term_grid 的宽度计算。

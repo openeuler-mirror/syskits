@@ -233,6 +233,25 @@ fn vdir_honors_quoting_style_environment_variable() {
 }
 
 #[test]
+fn vdir_quotes_literal_indicator_characters_when_indicators_are_enabled() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    for name in ["plain*", "plain@", "plain|"] {
+        fs::write(temp_dir.path().join(name), b"").expect("write fixture");
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["vdir", "-1", "--file-type", "."])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert_eq!(output.stdout, b"plain\\*\nplain\\@\nplain\\|\n");
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

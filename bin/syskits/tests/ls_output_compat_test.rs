@@ -1,7 +1,22 @@
 use std::fs;
 use std::process::{Command, Output};
 
+use filetime::{FileTime, set_file_mtime};
 use tempfile::TempDir;
+
+fn installed_german_locale() -> Option<String> {
+    let output = Command::new("/usr/bin/locale").arg("-a").output().ok()?;
+    let locales = String::from_utf8(output.stdout).ok()?;
+    for candidate in ["de_DE.utf8", "de_DE.UTF-8", "de_DE"] {
+        if let Some(locale) = locales
+            .lines()
+            .find(|locale| locale.eq_ignore_ascii_case(candidate))
+        {
+            return Some(locale.to_string());
+        }
+    }
+    None
+}
 
 fn run_gnu(directory: &TempDir, arguments: &[&str]) -> Output {
     Command::new("/usr/bin/ls")
@@ -68,6 +83,40 @@ fn ls_hyperlink_normalizes_dangling_target_components() {
 
     let gnu = run_gnu(&directory, &arguments);
     let syskits = run_syskits(&directory, &arguments);
+
+    assert_eq!(syskits.status.code(), gnu.status.code());
+    assert_eq!(syskits.stderr, gnu.stderr);
+    assert_eq!(syskits.stdout, gnu.stdout);
+}
+
+#[test]
+fn ls_localized_long_output_matches_gnu() {
+    let Some(locale) = installed_german_locale() else {
+        return;
+    };
+    let directory = TempDir::new().expect("tempdir");
+    fs::create_dir(directory.path().join("d")).expect("create fixture directory");
+    let file = directory.path().join("d/old");
+    fs::write(&file, b"").expect("create fixture file");
+    set_file_mtime(&file, FileTime::from_unix_time(1_000_000_000, 0))
+        .expect("set fixture timestamp");
+    let arguments = ["-ln", "d"];
+
+    let gnu = Command::new("/usr/bin/ls")
+        .current_dir(directory.path())
+        .env("LC_ALL", &locale)
+        .env("TZ", "UTC")
+        .args(arguments)
+        .output()
+        .expect("run GNU ls");
+    let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(directory.path())
+        .env("LC_ALL", &locale)
+        .env("TZ", "UTC")
+        .arg("ls")
+        .args(arguments)
+        .output()
+        .expect("run syskits ls");
 
     assert_eq!(syskits.status.code(), gnu.status.code());
     assert_eq!(syskits.stderr, gnu.stderr);

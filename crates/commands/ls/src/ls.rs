@@ -124,6 +124,11 @@ unsafe extern "C" {
         domainname: *const ctcore::libc::c_char,
         msgid: *const ctcore::libc::c_char,
     ) -> *mut ctcore::libc::c_char;
+    fn dcgettext(
+        domainname: *const ctcore::libc::c_char,
+        msgid: *const ctcore::libc::c_char,
+        category: ctcore::libc::c_int,
+    ) -> *mut ctcore::libc::c_char;
     fn wcwidth(character: ctcore::libc::wchar_t) -> ctcore::libc::c_int;
 }
 
@@ -151,6 +156,22 @@ fn ls_gettext(msgid: &str) -> Option<String> {
 
 #[cfg(not(target_os = "linux"))]
 fn ls_gettext(_msgid: &str) -> Option<String> {
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn ls_time_gettext(msgid: &str) -> Option<String> {
+    use std::ffi::CStr;
+
+    let msgid = CString::new(msgid).ok()?;
+    unsafe {
+        let translated = dcgettext(c"coreutils".as_ptr(), msgid.as_ptr(), ctcore::libc::LC_TIME);
+        (!translated.is_null()).then(|| CStr::from_ptr(translated).to_string_lossy().into_owned())
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn ls_time_gettext(_msgid: &str) -> Option<String> {
     None
 }
 
@@ -3973,7 +3994,7 @@ fn return_total<W: Write>(
         LsSizeFormat::Binary | LsSizeFormat::Decimal => total_size,
         LsSizeFormat::Bytes => total_size.div_ceil(ls_config.block_size),
     };
-    let total_str = t!("ls.total");
+    let total_str = ls_gettext("total").unwrap_or_else(|| t!("ls.total"));
     Ok(format!(
         "{} {}{}",
         total_str,
@@ -4928,11 +4949,14 @@ fn unavailable_time_width(config: &LsConfig) -> usize {
 }
 
 fn locale_time_format(recent: bool) -> String {
-    if recent {
-        t!("ls.time.recent")
-    } else {
-        t!("ls.time.non_recent")
-    }
+    let msgid = if recent { "%b %e %H:%M" } else { "%b %e  %Y" };
+    ls_time_gettext(msgid).unwrap_or_else(|| {
+        if recent {
+            t!("ls.time.recent")
+        } else {
+            t!("ls.time.non_recent")
+        }
+    })
 }
 
 #[cfg(unix)]

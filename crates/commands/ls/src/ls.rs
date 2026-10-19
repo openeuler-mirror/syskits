@@ -2432,7 +2432,6 @@ pub fn ct_app() -> Command {
             .help("Set the display format.")
             .value_parser(parse_format_value)
             .hide_possible_values(true)
-            .require_equals(true)
             .overrides_with_all([
                 ls_flags::LS_FORMAT,
                 ls_flags::format::LS_COLUMNS,
@@ -2603,7 +2602,6 @@ pub fn ct_app() -> Command {
             .value_name("field")
             .value_parser(parse_time_value)
             .hide_possible_values(true)
-            .require_equals(true)
             .overrides_with_all([ls_flags::LS_TIME, ls_flags::time::LS_ACCESS, ls_flags::time::LS_CHANGE]),
         Arg::new(ls_flags::time::LS_CHANGE)
             .short('c')
@@ -2650,7 +2648,6 @@ pub fn ct_app() -> Command {
             .help("Sort by <field>: name, none (-U), time (-t), size (-S), extension (-X) or width")
             .value_name("field")
             .value_parser(parse_sort_value)
-            .require_equals(true)
             .overrides_with_all([
                 ls_flags::LS_SORT,
                 ls_flags::sort::LS_SIZE,
@@ -2815,7 +2812,6 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(ls_flags::size::LS_BLOCK_SIZE)
             .long(ls_flags::size::LS_BLOCK_SIZE)
-            .require_equals(true)
             .value_name("LS_BLOCK_SIZE")
             .help("scale sizes by LS_BLOCK_SIZE when printing them")
             .overrides_with_all([ls_flags::size::LS_SI, ls_flags::size::LS_HUMAN_READABLE]),

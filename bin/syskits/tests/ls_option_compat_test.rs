@@ -1,0 +1,42 @@
+use std::fs;
+use std::process::{Command, Output};
+
+use tempfile::TempDir;
+
+fn run_gnu(directory: &TempDir, arguments: &[&str]) -> Output {
+    Command::new("/usr/bin/ls")
+        .current_dir(directory.path())
+        .env("LC_ALL", "C")
+        .args(arguments)
+        .output()
+        .expect("run GNU ls")
+}
+
+fn run_syskits(directory: &TempDir, arguments: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(directory.path())
+        .env("LC_ALL", "C")
+        .arg("ls")
+        .args(arguments)
+        .output()
+        .expect("run syskits ls")
+}
+
+#[test]
+fn ls_accepts_separated_required_long_option_values() {
+    let directory = TempDir::new().expect("tempdir");
+    fs::write(directory.path().join("a"), b"").expect("create fixture");
+
+    for arguments in [
+        ["--format", "long", "."],
+        ["--sort", "size", "."],
+        ["--time", "atime", "."],
+        ["--block-size", "1", "."],
+    ] {
+        let gnu = run_gnu(&directory, &arguments);
+        let syskits = run_syskits(&directory, &arguments);
+
+        assert_eq!(syskits.status.code(), gnu.status.code(), "{arguments:?}");
+        assert_eq!(syskits.stderr, gnu.stderr, "{arguments:?}");
+    }
+}

@@ -153,7 +153,9 @@ impl DirClapError {
 }
 
 fn dir_write_error(error: &std::io::Error) -> String {
-    format!("write error: {}", strip_errno(error))
+    dir_init_gettext();
+    let message = dir_gettext("write error").unwrap_or_else(|| "write error".into());
+    format!("{message}: {}", strip_errno(error))
 }
 
 fn dir_invalid_enum_diagnostic(error: &clap::Error) -> Option<String> {

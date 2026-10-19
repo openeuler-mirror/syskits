@@ -3167,10 +3167,10 @@ fn sort_entries<W: Write>(entries: &mut [PathData], config: &LsConfig, out: &mut
 }
 
 fn name_quoting_extra_chars(config: &LsConfig) -> &'static str {
-    if config.indicator_style == LsIndicatorStyle::None {
-        ""
-    } else {
-        "*=>@|"
+    match config.indicator_style {
+        LsIndicatorStyle::None | LsIndicatorStyle::Slash => "",
+        LsIndicatorStyle::FileType => "*=>@|",
+        LsIndicatorStyle::Classify => "=>@|",
     }
 }
 

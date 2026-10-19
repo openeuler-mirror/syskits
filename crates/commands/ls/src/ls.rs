@@ -4196,7 +4196,7 @@ fn display_grid<W: Write>(
         output.write_all(&format_grid_output(
             &rendered,
             tab_size,
-            quoted || preserve_padding_spaces,
+            preserve_padding_spaces,
             line_ending,
         ))?;
     }

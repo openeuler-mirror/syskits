@@ -4,6 +4,8 @@ use std::os::unix::ffi::OsStrExt;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::process::Command;
+#[cfg(target_os = "linux")]
+use std::process::Stdio;
 
 use tempfile::TempDir;
 
@@ -380,6 +382,32 @@ fn vdir_localizes_help_output() {
     assert!(output.stdout.ends_with(
         "ou disponible localement via: info '(coreutils) vdir invocation'\n".as_bytes()
     ));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn vdir_reports_closed_stdout() {
+    use std::os::unix::process::CommandExt;
+
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("f"), b"").expect("write fixture");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_syskits"));
+    command
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["vdir", "-1", "-d", "f"])
+        .stdout(Stdio::piped());
+    unsafe {
+        command.pre_exec(|| {
+            libc::close(libc::STDOUT_FILENO);
+            Ok(())
+        });
+    }
+    let output = command.output().expect("run syskits vdir");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"vdir: write error: Bad file descriptor\n");
 }
 
 #[cfg(target_os = "linux")]

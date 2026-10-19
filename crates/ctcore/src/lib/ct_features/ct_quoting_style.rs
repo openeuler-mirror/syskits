@@ -38,7 +38,7 @@ use crate::ct_locale::{hard_locale, LcCategory};
 // 第一个常量包含仅在名称开始处出现时才有特殊含义的字符
 #[cfg(not(unix))]
 const CT_SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
-const CT_SPECIAL_SHELL_CHARS: &str = "`$&*()|[{};\\'\"<>=^?! ";
+const CT_SPECIAL_SHELL_CHARS: &str = "`$&*()|[;\\'\"<>=^?! ";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CtQuotingStyle {
@@ -274,7 +274,8 @@ fn shell_without_escape(name: &str, quotes: CtQuotes, show_control_chars: bool) 
         }
     }
 
-    must_quote = must_quote || name.starts_with(CT_SPECIAL_SHELL_CHARS_START);
+    must_quote =
+        must_quote || name.starts_with(CT_SPECIAL_SHELL_CHARS_START) || matches!(name, "{" | "}");
     (escaped_str, must_quote)
 }
 
@@ -358,7 +359,8 @@ fn shell_with_escape(name: &str, quotes: CtQuotes) -> (String, bool) {
         (escaped_str, must_quote)
     };
 
-    must_quote = must_quote || name.starts_with(CT_SPECIAL_SHELL_CHARS_START);
+    must_quote =
+        must_quote || name.starts_with(CT_SPECIAL_SHELL_CHARS_START) || matches!(name, "{" | "}");
     (escaped_str, must_quote)
 }
 
@@ -405,7 +407,8 @@ pub(crate) fn escape_unibyte_shell_bytes(name: &[u8]) -> String {
         (escaped_str, must_quote)
     };
 
-    must_quote = must_quote || matches!(name.first(), Some(b'~' | b'#'));
+    must_quote =
+        must_quote || matches!(name.first(), Some(b'~' | b'#')) || matches!(name, b"{" | b"}");
     if must_quote {
         format!("'{escaped_str}'")
     } else {
@@ -541,7 +544,7 @@ where
         (escaped, must_quote)
     };
 
-    must_quote |= matches!(name.first(), Some(b'~' | b'#'));
+    must_quote |= matches!(name.first(), Some(b'~' | b'#')) || matches!(name, b"{" | b"}");
     if must_quote {
         let mut quoted = Vec::with_capacity(escaped.len() + 2);
         quoted.push(b'\'');
@@ -873,6 +876,7 @@ fn shell_without_escape_bytes(
         .as_bytes()
         .first()
         .is_some_and(|byte| matches!(byte, b'~' | b'#'));
+    must_quote |= matches!(name.as_bytes(), b"{" | b"}");
     (escaped, must_quote)
 }
 
@@ -926,6 +930,7 @@ fn shell_with_escape_bytes(name: &OsStr, quotes: CtQuotes) -> (Vec<u8>, bool) {
         .as_bytes()
         .first()
         .is_some_and(|byte| matches!(byte, b'~' | b'#'));
+    must_quote |= matches!(name.as_bytes(), b"{" | b"}");
     (escaped, must_quote)
 }
 
@@ -1597,6 +1602,27 @@ mod tests {
             &[("some#name", "shell"), ("some#name", "shell-escape")],
         );
         check_names("name#", &[("name#", "shell"), ("name#", "shell-escape")]);
+    }
+
+    #[test]
+    fn test_conditional_shell_special_characters() {
+        for name in ["x=x", "x^x"] {
+            let quoted = format!("'{name}'");
+            check_names(
+                name,
+                &[
+                    (quoted.as_str(), "shell"),
+                    (quoted.as_str(), "shell-escape"),
+                ],
+            );
+        }
+
+        for name in ["x]x", "x{x", "x}x"] {
+            check_names(name, &[(name, "shell"), (name, "shell-escape")]);
+        }
+
+        check_names("{", &[("'{'", "shell"), ("'{'", "shell-escape")]);
+        check_names("}", &[("'}'", "shell"), ("'}'", "shell-escape")]);
     }
 
     #[test]

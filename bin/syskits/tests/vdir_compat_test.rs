@@ -420,6 +420,43 @@ fn vdir_uses_fnmatch_semantics_for_ignore_patterns() {
 }
 
 #[test]
+fn vdir_applies_time_style_to_its_default_long_format() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let file = temp_dir.path().join("f");
+    fs::write(&file, b"").expect("write fixture");
+    filetime::set_file_mtime(&file, filetime::FileTime::from_unix_time(946_782_245, 0))
+        .expect("set fixture mtime");
+
+    let cli = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC0")
+        .env_remove("TIME_STYLE")
+        .args(["vdir", "--time-style=long-iso", "-d", "f"])
+        .output()
+        .expect("run syskits vdir with time-style option");
+    let environment = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC0")
+        .env("TIME_STYLE", "full-iso")
+        .args(["vdir", "-d", "f"])
+        .output()
+        .expect("run syskits vdir with TIME_STYLE");
+
+    assert!(cli.status.success());
+    assert!(environment.status.success());
+    assert_eq!(cli.stderr, b"");
+    assert_eq!(environment.stderr, b"");
+    assert!(cli.stdout.ends_with(b"2000-01-02 03:04 f\n"));
+    assert!(
+        environment
+            .stdout
+            .ends_with(b"2000-01-02 03:04:05.000000000 +0000 f\n")
+    );
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

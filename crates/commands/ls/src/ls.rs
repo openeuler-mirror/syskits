@@ -990,6 +990,12 @@ fn stdout_terminal_width() -> Option<u16> {
 }
 
 impl LsConfig {
+    pub fn set_long_format(&mut self, options: &clap::ArgMatches) -> CTResult<()> {
+        self.format = LsFormat::Long;
+        self.time_style = ls_parse_time_style(options)?;
+        Ok(())
+    }
+
     pub fn from(options: &clap::ArgMatches) -> CTResult<Self> {
         let get_last = |flag: &str| -> usize {
             if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {

@@ -506,6 +506,27 @@ fn vdir_aligns_unavailable_birth_time_placeholder() {
 }
 
 #[test]
+fn vdir_localizes_locale_time_fields() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let file = temp_dir.path().join("f");
+    fs::write(&file, b"").expect("write fixture");
+    filetime::set_file_mtime(&file, filetime::FileTime::from_unix_time(946_782_245, 0))
+        .expect("set fixture mtime");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .env("TZ", "UTC0")
+        .args(["vdir", "-ln", "--time-style=locale", "-d", "f"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert!(output.stdout.ends_with(" 2 janv.  2000 f\n".as_bytes()));
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

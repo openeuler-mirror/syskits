@@ -1,0 +1,4 @@
+ls:
+  time:
+    non_recent: "%e %b  %Y"
+    recent: "%e %b %H:%M"

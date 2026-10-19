@@ -469,7 +469,25 @@ fn ls_flush_stdout(writer: &mut impl Write, stdout_was_closed: bool) -> CTResult
     } else {
         writer.flush()
     };
-    result.map_err(|error| Box::new(LsError::LsWriteError(error)) as Box<dyn CTError>)
+    match result {
+        Err(error) if error.kind() == ErrorKind::BrokenPipe => ls_terminate_with_sigpipe(),
+        Err(error) => Err(Box::new(LsError::LsWriteError(error))),
+        Ok(()) => Ok(()),
+    }
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn ls_terminate_with_sigpipe() -> ! {
+    unsafe {
+        ctcore::libc::signal(ctcore::libc::SIGPIPE, ctcore::libc::SIG_DFL);
+        ctcore::libc::raise(ctcore::libc::SIGPIPE);
+        ctcore::libc::_exit(128 + ctcore::libc::SIGPIPE);
+    }
+}
+
+#[cfg(any(not(target_os = "linux"), test))]
+fn ls_terminate_with_sigpipe() -> ! {
+    panic!("stdout pipe is broken")
 }
 
 #[derive(PartialEq, Eq, Debug)]

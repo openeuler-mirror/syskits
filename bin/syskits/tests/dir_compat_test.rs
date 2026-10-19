@@ -142,6 +142,25 @@ fn dir_handles_non_utf8_environment_values_like_gnu() {
     }
 }
 
+#[test]
+fn dir_honors_quoting_style_environment() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let file = temp_dir.path().join("a space");
+    fs::write(&file, b"").expect("create file");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("QUOTING_STYLE", "shell")
+        .args(["dir", "-1", "-d", "a space"])
+        .output()
+        .expect("run syskits dir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"'a space'\n");
+    assert_eq!(output.stderr, b"");
+}
+
 #[cfg(target_os = "linux")]
 fn set_selinux_xattr(path: &std::path::Path, value: &[u8]) -> bool {
     let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {

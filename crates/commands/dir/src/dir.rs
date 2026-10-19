@@ -130,7 +130,7 @@ fn dir_has_valid_quoting_style_environment() -> bool {
 }
 
 fn dir_default_format_style(matches: &ArgMatches) -> bool {
-    !matches.contains_id(ls_flags::LS_FORMAT)
+    let no_explicit_format = !matches.contains_id(ls_flags::LS_FORMAT)
         && !matches.get_flag(ls_flags::format::LS_ACROSS)
         && !matches.get_flag(ls_flags::format::LS_COLUMNS)
         && !matches.get_flag(ls_flags::format::LS_COMMAS)
@@ -140,7 +140,52 @@ fn dir_default_format_style(matches: &ArgMatches) -> bool {
         && !matches.get_flag(ls_flags::format::LS_LONG_NUMERIC_UID_GID)
         && !matches.get_flag(ls_flags::format::LS_ONE_LINE)
         && !matches.get_flag(ls_flags::LS_ZERO)
-        && !matches.get_flag(ls_flags::LS_FULL_TIME)
+        && !matches.get_flag(ls_flags::LS_FULL_TIME);
+    if no_explicit_format {
+        return true;
+    }
+
+    let last_index = |flag: &str| -> usize {
+        if matches.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
+            matches
+                .indices_of(flag)
+                .and_then(|indices| indices.max())
+                .unwrap_or(0)
+        } else {
+            0
+        }
+    };
+    let f_index = last_index(ls_flags::LS_F);
+    if f_index == 0 {
+        return false;
+    }
+
+    let format_value_is_long = matches
+        .get_one::<String>(ls_flags::LS_FORMAT)
+        .is_some_and(|format| format == "long");
+    let mut format_events = [
+        (last_index(ls_flags::format::LS_ACROSS), false),
+        (last_index(ls_flags::format::LS_COLUMNS), false),
+        (last_index(ls_flags::format::LS_COMMAS), false),
+        (last_index(ls_flags::format::LS_LONG), true),
+        (last_index(ls_flags::format::LS_LONG_NO_GROUP), true),
+        (last_index(ls_flags::format::LS_LONG_NO_OWNER), true),
+        (last_index(ls_flags::format::LS_LONG_NUMERIC_UID_GID), true),
+        (last_index(ls_flags::LS_FULL_TIME), true),
+        (last_index(ls_flags::LS_FORMAT), format_value_is_long),
+    ];
+    format_events.sort_unstable_by_key(|(index, _)| *index);
+
+    let f_resets_long = format_events
+        .iter()
+        .rev()
+        .find(|(index, _)| *index > 0 && *index < f_index)
+        .is_some_and(|(_, is_long)| *is_long);
+    let has_later_format = format_events.iter().any(|(index, _)| *index > f_index)
+        || last_index(ls_flags::format::LS_ONE_LINE) > f_index
+        || last_index(ls_flags::LS_ZERO) > f_index;
+
+    f_resets_long && !has_later_format
 }
 
 fn dir_config_from_matches(matches: &ArgMatches) -> CTResult<LsConfig> {

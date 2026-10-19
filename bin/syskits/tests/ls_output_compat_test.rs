@@ -38,3 +38,18 @@ fn ls_zero_comma_wraps_with_nul_records() {
     assert_eq!(syskits.stderr, gnu.stderr);
     assert_eq!(syskits.stdout, gnu.stdout);
 }
+
+#[test]
+fn ls_hyperlink_percent_encodes_colons_in_file_uri() {
+    let directory = TempDir::new().expect("tempdir");
+    fs::write(directory.path().join("colon:"), b"").expect("create colon fixture");
+    let arguments = ["--hyperlink=always", "-1", "colon:"];
+
+    let gnu = run_gnu(&directory, &arguments);
+    let syskits = run_syskits(&directory, &arguments);
+
+    assert_eq!(syskits.status.code(), gnu.status.code());
+    assert_eq!(syskits.stderr, gnu.stderr);
+    assert_eq!(syskits.stdout, gnu.stdout);
+    assert!(syskits.stdout.windows(3).any(|bytes| bytes == b"%3a"));
+}

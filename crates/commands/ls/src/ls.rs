@@ -3911,10 +3911,36 @@ fn get_time(md: &Metadata, config: &LsConfig) -> Option<chrono::DateTime<chrono:
 }
 
 #[cfg(unix)]
-fn ls_format_local_time_strftime(seconds: i64, fmt: &str) -> Option<String> {
+fn expand_nanoseconds_format(fmt: &str, nanoseconds: u32) -> String {
+    let nanoseconds = format!("{nanoseconds:09}");
+    let mut expanded = String::with_capacity(fmt.len());
+    let mut chars = fmt.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch != '%' {
+            expanded.push(ch);
+            continue;
+        }
+
+        expanded.push(ch);
+        if chars.peek() == Some(&'%') {
+            expanded.push(chars.next().unwrap());
+        } else if chars.peek() == Some(&'N') {
+            chars.next();
+            expanded.pop();
+            expanded.push_str(&nanoseconds);
+        }
+    }
+
+    expanded
+}
+
+#[cfg(unix)]
+fn ls_format_local_time_strftime(seconds: i64, nanoseconds: u32, fmt: &str) -> Option<String> {
     let time = ctcore::libc::time_t::try_from(seconds).ok()?;
     let mut tm: ctcore::libc::tm = unsafe { std::mem::zeroed() };
-    let c_format = CString::new(fmt).ok()?;
+    let expanded_format = expand_nanoseconds_format(fmt, nanoseconds);
+    let c_format = CString::new(expanded_format).ok()?;
     let tm_ptr = unsafe { ctcore::libc::localtime_r(&time as *const _, &mut tm as *mut _) };
     if tm_ptr.is_null() {
         return None;
@@ -3985,8 +4011,12 @@ fn display_date(metadata: &Metadata, config: &LsConfig) -> String {
                     let fmt = if is_recent { recent } else { non_recent };
                     #[cfg(unix)]
                     {
-                        ls_format_local_time_strftime(time.timestamp(), fmt)
-                            .unwrap_or_else(|| time.format(fmt).to_string())
+                        ls_format_local_time_strftime(
+                            time.timestamp(),
+                            time.timestamp_subsec_nanos(),
+                            fmt,
+                        )
+                        .unwrap_or_else(|| time.format(fmt).to_string())
                     }
                     #[cfg(not(unix))]
                     {
@@ -5310,8 +5340,17 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_ls_format_local_time_strftime_percent_z() {
-        let out = ls_format_local_time_strftime(0, "%Z").unwrap();
+        let out = ls_format_local_time_strftime(0, 0, "%Z").unwrap();
         assert!(!out.is_empty());
         assert!(!out.contains(':'));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_ls_format_local_time_strftime_nanoseconds() {
+        assert_eq!(
+            ls_format_local_time_strftime(0, 123_456_789, "%s.%N").unwrap(),
+            "0.123456789"
+        );
     }
 }

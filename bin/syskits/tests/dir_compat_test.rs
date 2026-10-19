@@ -1,7 +1,7 @@
 use std::fs;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::process::CommandExt;
-use std::process::{Command, Output};
+use std::process::{Command, Output, Stdio};
 
 use tempfile::TempDir;
 
@@ -883,4 +883,30 @@ fn dir_localizes_file_diagnostics_like_gnu() {
         .expect("run syskits dir");
 
     assert_same_output("missing file", gnu, syskits);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn dir_help_and_version_report_closed_stdout() {
+    for option in ["--help", "--version"] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_syskits"));
+        command
+            .env("LC_ALL", "C")
+            .args(["dir", option])
+            .stdout(Stdio::piped());
+        unsafe {
+            command.pre_exec(|| {
+                libc::close(libc::STDOUT_FILENO);
+                Ok(())
+            });
+        }
+        let output = command.output().expect("run syskits dir");
+
+        assert_eq!(output.status.code(), Some(2), "{option}");
+        assert_eq!(output.stdout, b"", "{option}");
+        assert_eq!(
+            output.stderr, b"dir: write error: Bad file descriptor\n",
+            "{option}"
+        );
+    }
 }

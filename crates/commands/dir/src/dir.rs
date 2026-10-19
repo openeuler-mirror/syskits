@@ -22,6 +22,7 @@ use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::process::Command as ProcessCommand;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::UNIX_EPOCH;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{
@@ -30,7 +31,7 @@ use clap::{
 };
 use ct_ls::{LsConfig, LsFormat, PathData, ls_flags};
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, UClapError};
+use ctcore::ct_error::{CTResult, UClapError, strip_errno};
 use ctcore::ct_fs::display_permissions;
 use ctcore::ct_locale::strcoll_compare;
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle};
@@ -81,14 +82,18 @@ struct DirClapError {
     diagnostic: Option<String>,
     diagnostic_includes_command: bool,
     display_request: bool,
+    display_output: Option<String>,
+    display_output_failed: AtomicBool,
+    exit_code: Option<i32>,
 }
 
 impl DirClapError {
-    fn new(error: clap::Error, args: &[OsString]) -> Self {
+    fn new(error: clap::Error, args: &[OsString], stdout_was_closed: bool) -> Self {
         let display_request = matches!(
             error.kind(),
             clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
         );
+        let display_output = display_request.then(|| error.render().to_string());
         let missing_argument = dir_missing_option_argument_diagnostic(&error, args);
         let invalid_enum = dir_invalid_enum_diagnostic(&error);
         let (diagnostic, diagnostic_includes_command) = if missing_argument.is_some() {
@@ -117,6 +122,14 @@ impl DirClapError {
         } else {
             (None, false)
         };
+        let closed_stdout_error = display_request && stdout_was_closed;
+        let diagnostic = if closed_stdout_error {
+            Some(dir_write_error(&std::io::Error::from_raw_os_error(
+                ctcore::libc::EBADF,
+            )))
+        } else {
+            diagnostic
+        };
         let code = if diagnostic.is_some()
             && matches!(
                 error.kind(),
@@ -132,8 +145,15 @@ impl DirClapError {
             diagnostic,
             diagnostic_includes_command,
             display_request,
+            display_output,
+            display_output_failed: AtomicBool::new(false),
+            exit_code: closed_stdout_error.then_some(2),
         }
     }
+}
+
+fn dir_write_error(error: &std::io::Error) -> String {
+    format!("write error: {}", strip_errno(error))
 }
 
 fn dir_invalid_enum_diagnostic(error: &clap::Error) -> Option<String> {
@@ -565,7 +585,22 @@ impl Display for DirClapError {
                 Ok(())
             }
             Some(diagnostic) => formatter.write_str(diagnostic),
-            None => Display::fmt(&self.inner, formatter),
+            None => match &self.display_output {
+                Some(output) => {
+                    let mut stdout = std::io::stdout().lock();
+                    match stdout
+                        .write_all(output.as_bytes())
+                        .and_then(|_| stdout.flush())
+                    {
+                        Ok(()) => Ok(()),
+                        Err(error) => {
+                            self.display_output_failed.store(true, Ordering::Relaxed);
+                            formatter.write_str(&dir_write_error(&error))
+                        }
+                    }
+                }
+                None => Display::fmt(&self.inner, formatter),
+            },
         }
     }
 }
@@ -574,7 +609,13 @@ impl Error for DirClapError {}
 
 impl ctcore::ct_error::CTError for DirClapError {
     fn code(&self) -> i32 {
-        self.inner.code()
+        self.exit_code.unwrap_or_else(|| {
+            if self.display_output_failed.load(Ordering::Relaxed) {
+                2
+            } else {
+                self.inner.code()
+            }
+        })
     }
 
     fn usage(&self) -> bool {
@@ -1087,7 +1128,11 @@ pub fn dir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDat
             {
                 return Err(Box::new(error));
             }
-            return Err(Box::new(DirClapError::new(err, &args)));
+            return Err(Box::new(DirClapError::new(
+                err,
+                &args,
+                ctcore::ct_stdout_was_closed(),
+            )));
         }
     };
 

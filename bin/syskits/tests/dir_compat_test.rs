@@ -349,6 +349,37 @@ fn dir_classify_does_not_overquote_literal_asterisk() {
     assert_same_output("classify literal asterisk", gnu, syskits);
 }
 
+#[test]
+fn dir_width_sort_accounts_for_shell_quote_alignment() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let listing_dir = temp_dir.path().join("d");
+    fs::create_dir(&listing_dir).expect("create listing directory");
+    for name in ["a", "bb", "ccc", "dddd", "m*"] {
+        fs::write(listing_dir.join(name), b"").expect("create file");
+    }
+
+    let gnu = Command::new("/usr/bin/dir")
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["--width=5", "--quoting-style=shell", "--sort=width", "d"])
+        .output()
+        .expect("run GNU dir");
+    let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args([
+            "dir",
+            "--width=5",
+            "--quoting-style=shell",
+            "--sort=width",
+            "d",
+        ])
+        .output()
+        .expect("run syskits dir");
+
+    assert_same_output("width sort shell quote alignment", gnu, syskits);
+}
+
 #[cfg(target_os = "linux")]
 fn set_selinux_xattr(path: &std::path::Path, value: &[u8]) -> bool {
     let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {

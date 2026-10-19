@@ -68,7 +68,7 @@ use ctcore::libc::{dev_t, major, minor};
 use ctcore::{ct_show, ct_show_error, ct_show_warning};
 use dired::DiredOutput;
 use lscolors::{LsColors, Style};
-use number_prefix::NumberPrefix;
+use number_prefix::{NumberPrefix, Prefix};
 #[cfg(unix)]
 use once_cell::sync::Lazy;
 use term_grid::{Cell, Direction};
@@ -4073,12 +4073,31 @@ fn display_date(metadata: &Metadata, config: &LsConfig) -> String {
 // 人可读的format使用幂来表示1024，但不显示 "i"。
 // 通常用来表示 Kibi、Mebi 等。
 // Kibi 和 Kilo 的表示方法不同（分别为 "k "和 "K）
-fn format_prefixed(prefixed: &NumberPrefix<f64>) -> String {
+fn next_prefix(prefix: Prefix) -> Option<&'static str> {
+    match prefix {
+        Prefix::Kilo | Prefix::Kibi => Some("M"),
+        Prefix::Mega | Prefix::Mebi => Some("G"),
+        Prefix::Giga | Prefix::Gibi => Some("T"),
+        Prefix::Tera | Prefix::Tebi => Some("P"),
+        Prefix::Peta | Prefix::Pebi => Some("E"),
+        Prefix::Exa | Prefix::Exbi => Some("Z"),
+        Prefix::Zetta | Prefix::Zebi => Some("Y"),
+        Prefix::Yotta | Prefix::Yobi => None,
+    }
+}
+
+fn format_prefixed(prefixed: &NumberPrefix<f64>, base: f64) -> String {
     match prefixed {
         NumberPrefix::Standalone(bytes) => bytes.to_string(),
         NumberPrefix::Prefixed(prefix, bytes) => {
             // 删除 "Ki"、"Mi "等中的 "i"（如果有的话）
             let prefix_str = prefix.symbol().trim_end_matches('i');
+
+            if bytes.ceil() >= base
+                && let Some(next_prefix) = next_prefix(*prefix)
+            {
+                return format!("1.0{next_prefix}");
+            }
 
             match (10.0 * bytes).ceil() >= 100.0 {
                 true => format!("{:.0}{}", bytes.ceil(), prefix_str),
@@ -4118,8 +4137,8 @@ fn display_size(size: u64, config: &LsConfig) -> String {
     // 注意：人类可读的行为与 GNU ls 不同。
     // GNU ls 默认使用二进制前缀。
     match config.size_format {
-        LsSizeFormat::Binary => format_prefixed(&NumberPrefix::binary(size as f64)),
-        LsSizeFormat::Decimal => format_prefixed(&NumberPrefix::decimal(size as f64)),
+        LsSizeFormat::Binary => format_prefixed(&NumberPrefix::binary(size as f64), 1024.0),
+        LsSizeFormat::Decimal => format_prefixed(&NumberPrefix::decimal(size as f64), 1000.0),
         LsSizeFormat::Bytes => {
             if !config.size_suffix.is_empty() {
                 format!("{}{}", size, config.size_suffix)

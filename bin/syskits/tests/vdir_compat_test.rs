@@ -640,6 +640,32 @@ fn vdir_canonicalizes_block_size_suffixes() {
 }
 
 #[test]
+fn vdir_accepts_gnu_width_numeric_syntax_and_range() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("a"), b"").expect("write fixture");
+    fs::write(temp_dir.path().join("b"), b"").expect("write fixture");
+
+    let hexadecimal = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["vdir", "-C", "--width=0x10", "."])
+        .output()
+        .expect("run syskits vdir");
+    let large_environment = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("COLUMNS", "70000")
+        .args(["vdir", "-C", "."])
+        .output()
+        .expect("run syskits vdir with COLUMNS");
+
+    assert!(hexadecimal.status.success());
+    assert_eq!(hexadecimal.stderr, b"");
+    assert!(large_environment.status.success());
+    assert_eq!(large_environment.stderr, b"");
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

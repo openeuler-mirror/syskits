@@ -65,9 +65,8 @@ use ctcore::ct_quoting_style::{escape_name, escape_name_with_chars};
 use ctcore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(target_os = "linux")]
 use ctcore::libc::{dev_t, major, minor};
-use ctcore::{ct_parse_glob, ct_show, ct_show_error, ct_show_warning};
+use ctcore::{ct_show, ct_show_error, ct_show_warning};
 use dired::DiredOutput;
-use glob::{MatchOptions, Pattern};
 use lscolors::{LsColors, Style};
 use number_prefix::NumberPrefix;
 #[cfg(unix)]
@@ -532,7 +531,7 @@ pub struct LsConfig {
     is_recursive: bool,
     is_reverse: bool,
     pub dereference: LsDereference,
-    ignore_patterns: Vec<Pattern>,
+    ignore_patterns: Vec<String>,
     size_format: LsSizeFormat,
     is_directory: bool,
     time: LsTime,
@@ -1226,11 +1225,11 @@ impl LsConfig {
         let mut quoting_style = extract_quoting_style(options, show_control);
         let ls_indicator_style = extract_indicator_style(options);
 
-        let mut ignore_patterns: Vec<Pattern> = Vec::new();
+        let mut ignore_patterns: Vec<String> = Vec::new();
 
         if options.get_flag(ls_flags::LS_IGNORE_BACKUPS) {
-            ignore_patterns.push(Pattern::new("*~").unwrap());
-            ignore_patterns.push(Pattern::new(".*~").unwrap());
+            ignore_patterns.push("*~".into());
+            ignore_patterns.push(".*~".into());
         }
 
         for pattern in options
@@ -1238,12 +1237,7 @@ impl LsConfig {
             .into_iter()
             .flatten()
         {
-            match ct_parse_glob::ct_from_str(pattern) {
-                Ok(p) => {
-                    ignore_patterns.push(p);
-                }
-                Err(_) => ct_show_warning!("Invalid pattern for ignore: {}", pattern.quote()),
-            }
+            ignore_patterns.push(pattern.clone());
         }
 
         if files == LsFiles::LsNormal {
@@ -1252,12 +1246,7 @@ impl LsConfig {
                 .into_iter()
                 .flatten()
             {
-                match ct_parse_glob::ct_from_str(pattern) {
-                    Ok(p) => {
-                        ignore_patterns.push(p);
-                    }
-                    Err(_) => ct_show_warning!("Invalid pattern for hide: {}", pattern.quote()),
-                }
+                ignore_patterns.push(pattern.clone());
             }
         }
 
@@ -2811,24 +2800,41 @@ fn should_display(entry: &DirEntry, config: &LsConfig) -> bool {
         return false;
     }
 
-    // 检查是否属于忽略模式
-    let options = MatchOptions {
-        // 设置 require_literal_leading_dot 以匹配 GNU ls 中的行为
-        require_literal_leading_dot: true,
-        require_literal_separator: false,
-        case_sensitive: true,
-    };
     let file_name = entry.file_name();
-    let file_name = if let Some(s) = file_name.to_str() {
-        s.to_string()
-    } else {
-        file_name.to_string_lossy().into_owned()
-    };
 
     !config
         .ignore_patterns
         .iter()
-        .any(|p| p.matches_with(&file_name, options))
+        .any(|pattern| ignore_pattern_matches(pattern, &file_name))
+}
+
+#[cfg(unix)]
+fn ignore_pattern_matches(pattern: &str, file_name: &OsStr) -> bool {
+    use std::ffi::CString;
+
+    let Ok(pattern) = CString::new(pattern.as_bytes()) else {
+        return false;
+    };
+    let file_name = CString::new(file_name.as_bytes()).expect("file names cannot contain NUL");
+
+    unsafe {
+        ctcore::libc::fnmatch(
+            pattern.as_ptr(),
+            file_name.as_ptr(),
+            ctcore::libc::FNM_PERIOD,
+        ) == 0
+    }
+}
+
+#[cfg(not(unix))]
+fn ignore_pattern_matches(pattern: &str, file_name: &OsStr) -> bool {
+    let options = glob::MatchOptions {
+        require_literal_leading_dot: true,
+        require_literal_separator: false,
+        case_sensitive: true,
+    };
+    glob::Pattern::new(pattern)
+        .is_ok_and(|pattern| pattern.matches_with(&file_name.to_string_lossy(), options))
 }
 
 #[allow(clippy::cognitive_complexity)]

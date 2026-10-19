@@ -3618,6 +3618,7 @@ fn display_grid_by_format_other_type<W: Write>(
                 config.width,
                 config.tab_size,
                 Direction::TopToBottom,
+                config.line_ending,
                 out,
                 quoted,
                 config.color.is_some(),
@@ -3629,6 +3630,7 @@ fn display_grid_by_format_other_type<W: Write>(
                 config.width,
                 config.tab_size,
                 Direction::LeftToRight,
+                config.line_ending,
                 out,
                 quoted,
                 config.color.is_some(),
@@ -3721,13 +3723,14 @@ fn get_block_size(md: &Metadata, config: &LsConfig) -> u64 {
     }
 }
 
-fn tabify_grid_output(rendered: &str, tab_size: usize) -> String {
+fn tabify_grid_output(rendered: &str, tab_size: usize, line_ending: CtLineEnding) -> String {
     let mut output = String::with_capacity(rendered.len());
     let mut column = 0usize;
     let mut chars = rendered.chars().peekable();
+    let record_terminator = char::from(u8::from(line_ending));
 
     while let Some(ch) = chars.next() {
-        if ch == '\n' {
+        if ch == record_terminator {
             output.push(ch);
             column = 0;
             continue;
@@ -3763,20 +3766,29 @@ fn tabify_grid_output(rendered: &str, tab_size: usize) -> String {
     output
 }
 
-fn format_grid_output(rendered: &str, tab_size: usize, preserve_spaces: bool) -> String {
+fn format_grid_output(
+    rendered: &str,
+    tab_size: usize,
+    preserve_spaces: bool,
+    line_ending: CtLineEnding,
+) -> String {
     if preserve_spaces {
         rendered.to_owned()
     } else {
-        trim_trailing_grid_padding(&tabify_grid_output(rendered, tab_size))
+        trim_trailing_grid_padding(
+            &tabify_grid_output(rendered, tab_size, line_ending),
+            line_ending,
+        )
     }
 }
 
-fn trim_trailing_grid_padding(rendered: &str) -> String {
+fn trim_trailing_grid_padding(rendered: &str, line_ending: CtLineEnding) -> String {
     let mut output = String::with_capacity(rendered.len());
-    for line in rendered.split_inclusive('\n') {
-        if let Some(line) = line.strip_suffix('\n') {
+    let record_terminator = char::from(u8::from(line_ending));
+    for line in rendered.split_inclusive(record_terminator) {
+        if let Some(line) = line.strip_suffix(record_terminator) {
             output.push_str(line.trim_end_matches([' ', '\t']));
-            output.push('\n');
+            output.push(record_terminator);
         } else {
             output.push_str(line.trim_end_matches([' ', '\t']));
         }
@@ -3859,7 +3871,12 @@ fn grid_columns_that_fit(cells: &[Cell], width: usize, direction: Direction) -> 
     1
 }
 
-fn render_grid(cells: &[Cell], width: usize, direction: Direction) -> String {
+fn render_grid(
+    cells: &[Cell],
+    width: usize,
+    direction: Direction,
+    line_ending: CtLineEnding,
+) -> String {
     let columns = grid_columns_that_fit(cells, width, direction);
     let (rows, columns) = grid_dimensions(cells.len(), columns);
     let column_widths = grid_column_widths(cells, columns, direction);
@@ -3886,7 +3903,7 @@ fn render_grid(cells: &[Cell], width: usize, direction: Direction) -> String {
                 rendered.push_str(&" ".repeat(padding));
             }
         }
-        rendered.push('\n');
+        rendered.push(char::from(u8::from(line_ending)));
     }
 
     rendered
@@ -3897,6 +3914,7 @@ fn display_grid<W: Write>(
     width: usize,
     tab_size: usize,
     direction: Direction,
+    line_ending: CtLineEnding,
     output: &mut W,
     quoted: bool,
     preserve_padding_spaces: bool,
@@ -3914,7 +3932,7 @@ fn display_grid<W: Write>(
             write!(output, "{}", name.contents)?;
         }
         if printed_something {
-            writeln!(output)?;
+            write!(output, "{line_ending}")?;
         }
     } else if !names.is_empty() {
         let names = names
@@ -3930,11 +3948,16 @@ fn display_grid<W: Write>(
                 }
             })
             .collect::<Vec<_>>();
-        let rendered = render_grid(&names, width, direction);
+        let rendered = render_grid(&names, width, direction, line_ending);
         write!(
             output,
             "{}",
-            format_grid_output(&rendered, tab_size, quoted || preserve_padding_spaces)
+            format_grid_output(
+                &rendered,
+                tab_size,
+                quoted || preserve_padding_spaces,
+                line_ending,
+            )
         )?;
     }
     Ok(())
@@ -5721,17 +5744,22 @@ mod tests {
     #[test]
     fn tabify_grid_output_uses_tabs_only_at_tab_stops() {
         assert_eq!(
-            tabify_grid_output(".  ..  .hidden1  .hidden2  .hidden_dir  file1.txt\n", 8),
+            tabify_grid_output(
+                ".  ..  .hidden1  .hidden2  .hidden_dir  file1.txt\n",
+                8,
+                CtLineEnding::Newline,
+            ),
             ".  ..  .hidden1  .hidden2  .hidden_dir\tfile1.txt\n"
         );
         assert_eq!(
-            tabify_grid_output("a.txt  b.txt  subdir\n", 8),
+            tabify_grid_output("a.txt  b.txt  subdir\n", 8, CtLineEnding::Newline),
             "a.txt  b.txt  subdir\n"
         );
         assert_eq!(
             tabify_grid_output(
                 "CLAUDE.md   LICENSE            bin        doc                      spec            testdir       testfile1  util\n",
-                8
+                8,
+                CtLineEnding::Newline
             ),
             "CLAUDE.md   LICENSE\t       bin\t  doc\t\t\t   spec\t\t   testdir\t testfile1  util\n"
         );
@@ -5739,7 +5767,10 @@ mod tests {
 
     #[test]
     fn grid_output_trims_padding_after_last_column() {
-        assert_eq!(format_grid_output("x  \n", 0, false), "x\n");
+        assert_eq!(
+            format_grid_output("x  \n", 0, false, CtLineEnding::Newline),
+            "x\n"
+        );
     }
 
     #[test]
@@ -5775,7 +5806,7 @@ mod tests {
         assert_eq!(grid_columns_that_fit(&cells, 26, Direction::TopToBottom), 2);
         assert_eq!(grid_columns_that_fit(&cells, 27, Direction::TopToBottom), 3);
         assert_eq!(
-            render_grid(&cells, 27, Direction::TopToBottom),
+            render_grid(&cells, 27, Direction::TopToBottom, CtLineEnding::Newline,),
             "aaaaaaaaaa  cc  ee\nbb          dd  ffffffffff\n"
         );
     }
@@ -5821,9 +5852,18 @@ mod tests {
         assert_eq!(grid_columns_that_fit(&cells, 3, Direction::LeftToRight), 1);
         assert_eq!(grid_columns_that_fit(&cells, 4, Direction::LeftToRight), 2);
         assert_eq!(grid_columns_that_fit(&cells, 5, Direction::LeftToRight), 2);
-        assert_eq!(render_grid(&cells, 3, Direction::LeftToRight), "a\nb\n");
-        assert_eq!(render_grid(&cells, 4, Direction::LeftToRight), "a  b\n");
-        assert_eq!(render_grid(&cells, 5, Direction::LeftToRight), "a  b\n");
+        assert_eq!(
+            render_grid(&cells, 3, Direction::LeftToRight, CtLineEnding::Newline,),
+            "a\nb\n"
+        );
+        assert_eq!(
+            render_grid(&cells, 4, Direction::LeftToRight, CtLineEnding::Newline,),
+            "a  b\n"
+        );
+        assert_eq!(
+            render_grid(&cells, 5, Direction::LeftToRight, CtLineEnding::Newline,),
+            "a  b\n"
+        );
     }
 
     #[test]
@@ -5845,7 +5885,7 @@ mod tests {
 
         assert_eq!(grid_columns_that_fit(&cells, 10, Direction::TopToBottom), 2);
         assert_eq!(
-            render_grid(&cells, 10, Direction::TopToBottom),
+            render_grid(&cells, 10, Direction::TopToBottom, CtLineEnding::Newline,),
             "..  sub\n.\n"
         );
     }
@@ -5883,6 +5923,7 @@ mod tests {
             10,
             8,
             Direction::TopToBottom,
+            CtLineEnding::Newline,
             &mut output,
             true,
             false,
@@ -5896,9 +5937,12 @@ mod tests {
     fn format_grid_output_preserves_alignment_spaces_when_requested() {
         let rendered = "'a b'   \x1b[0m\x1b[42;31mc.foo\x1b[0m\n";
 
-        assert_eq!(format_grid_output(rendered, 8, true), rendered);
         assert_eq!(
-            format_grid_output(rendered, 8, false),
+            format_grid_output(rendered, 8, true, CtLineEnding::Newline),
+            rendered
+        );
+        assert_eq!(
+            format_grid_output(rendered, 8, false, CtLineEnding::Newline),
             "'a b'\t\x1b[0m\x1b[42;31mc.foo\x1b[0m\n"
         );
     }
@@ -5926,6 +5970,7 @@ mod tests {
             20,
             8,
             Direction::LeftToRight,
+            CtLineEnding::Newline,
             &mut output,
             false,
             true,

@@ -82,8 +82,11 @@ struct DirClapError {
 impl DirClapError {
     fn new(error: clap::Error, args: &[OsString]) -> Self {
         let missing_argument = dir_missing_option_argument_diagnostic(&error, args);
+        let invalid_enum = dir_invalid_enum_diagnostic(&error);
         let diagnostic = if missing_argument.is_some() {
             missing_argument.map(dir_append_help_hint)
+        } else if invalid_enum.is_some() {
+            invalid_enum.map(dir_append_help_hint)
         } else if error.kind() == clap::error::ErrorKind::UnknownArgument {
             match error.get(ContextKind::InvalidArg) {
                 Some(ContextValue::String(argument)) => {
@@ -120,6 +123,115 @@ impl DirClapError {
             diagnostic,
         }
     }
+}
+
+fn dir_invalid_enum_diagnostic(error: &clap::Error) -> Option<String> {
+    if !matches!(
+        error.kind(),
+        clap::error::ErrorKind::InvalidValue | clap::error::ErrorKind::ValueValidation
+    ) {
+        return None;
+    }
+
+    let value = match error.get(ContextKind::InvalidValue) {
+        Some(ContextValue::String(value)) if !value.is_empty() => value,
+        _ => return None,
+    };
+    let argument = match error.get(ContextKind::InvalidArg) {
+        Some(ContextValue::String(argument)) => argument,
+        _ => return None,
+    };
+    let (option, valid_arguments): (&str, &[&str]) = if argument.starts_with("--sort") {
+        (
+            "--sort",
+            &[
+                "'none'",
+                "'time'",
+                "'size'",
+                "'extension'",
+                "'version'",
+                "'width'",
+            ],
+        )
+    } else if argument.starts_with("--color") {
+        (
+            "--color",
+            &[
+                "'always', 'yes', 'force'",
+                "'never', 'no', 'none'",
+                "'auto', 'tty', 'if-tty'",
+            ],
+        )
+    } else if argument.starts_with("--quoting-style") {
+        (
+            "--quoting-style",
+            &[
+                "'literal'",
+                "'shell'",
+                "'shell-always'",
+                "'shell-escape'",
+                "'shell-escape-always'",
+                "'c'",
+                "'c-maybe'",
+                "'escape'",
+                "'locale'",
+                "'clocale'",
+            ],
+        )
+    } else if argument.starts_with("--indicator-style") {
+        (
+            "--indicator-style",
+            &["'none'", "'slash'", "'file-type'", "'classify'"],
+        )
+    } else if argument.starts_with("--hyperlink") {
+        (
+            "--hyperlink",
+            &[
+                "'always', 'yes', 'force'",
+                "'never', 'no', 'none'",
+                "'auto', 'tty', 'if-tty'",
+            ],
+        )
+    } else if argument.starts_with("--classify") {
+        (
+            "--classify",
+            &[
+                "'always', 'yes', 'force'",
+                "'never', 'no', 'none'",
+                "'auto', 'tty', 'if-tty'",
+            ],
+        )
+    } else if argument.starts_with("--format") {
+        (
+            "--format",
+            &[
+                "'verbose', 'long'",
+                "'commas'",
+                "'horizontal', 'across'",
+                "'vertical'",
+                "'single-column'",
+            ],
+        )
+    } else if argument.starts_with("--time") {
+        (
+            "--time",
+            &[
+                "'atime', 'access', 'use'",
+                "'ctime', 'status'",
+                "'mtime', 'modification'",
+                "'birth', 'creation'",
+            ],
+        )
+    } else {
+        return None;
+    };
+
+    let mut diagnostic = format!("invalid argument '{value}' for '{option}'\nValid arguments are:");
+    for valid_argument in valid_arguments {
+        diagnostic.push_str("\n  - ");
+        diagnostic.push_str(valid_argument);
+    }
+    Some(diagnostic)
 }
 
 fn dir_clap_error_exit_code(error: &clap::Error) -> i32 {

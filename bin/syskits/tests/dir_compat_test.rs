@@ -749,3 +749,19 @@ fn dir_uses_failure_status_for_invalid_enum_values() {
         );
     }
 }
+
+#[test]
+fn dir_reports_invalid_enum_values_like_gnu() {
+    for option in ["--sort=bogus", "--color=bogus", "--quoting-style=bogus"] {
+        let mut gnu_command = Command::new("/usr/bin/dir");
+        gnu_command.arg0("dir").env("LC_ALL", "C").arg(option);
+        let gnu = gnu_command.output().expect("run GNU dir");
+        let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C")
+            .args(["dir", option])
+            .output()
+            .expect("run syskits dir");
+
+        assert_same_output(option, gnu, syskits);
+    }
+}

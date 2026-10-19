@@ -4817,11 +4817,13 @@ fn display_item_name<W: Write>(
                     name.push_str(&displayed_target);
                 }
 
-                if let Some(indicator) = indicator_char(
-                    config.indicator_style,
-                    classify_symlink_target(&absolute_target),
-                ) {
-                    name.push(indicator);
+                if config.indicator_style != LsIndicatorStyle::Slash {
+                    if let Some(indicator) = indicator_char(
+                        config.indicator_style,
+                        classify_symlink_target(&absolute_target),
+                    ) {
+                        name.push(indicator);
+                    }
                 }
             }
             Err(err) => {

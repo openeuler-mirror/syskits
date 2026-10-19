@@ -495,3 +495,24 @@ fn dir_f_color_strictly_fits_columns_like_gnu() {
         syskits,
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn dir_long_symlink_target_omits_slash_indicator() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let target = temp_dir.path().join("target");
+    let link = temp_dir.path().join("link");
+    fs::create_dir(&target).expect("create target directory");
+    std::os::unix::fs::symlink("target", &link).expect("create symlink");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["dir", "-lpn", "--time-style=+T", "-d", "link"])
+        .output()
+        .expect("run syskits dir");
+
+    assert!(output.status.success());
+    assert!(output.stdout.ends_with(b" link -> target\n"));
+    assert_eq!(output.stderr, b"");
+}

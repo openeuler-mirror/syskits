@@ -990,7 +990,11 @@ fn parse_base_zero_usize(s: &str) -> Option<usize> {
 }
 
 fn parse_tab_size(s: &str) -> Result<usize, LsError> {
-    parse_base_zero_usize(s).ok_or_else(|| LsError::LsInvalidTabSize(s.into()))
+    let value = s.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
+    match parse_base_zero_usize(value) {
+        Some(tab_size) if tab_size <= isize::MAX as usize => Ok(tab_size),
+        _ => Err(LsError::LsInvalidTabSize(s.into())),
+    }
 }
 
 fn format_uses_tab_size(format: &LsFormat) -> bool {
@@ -5014,11 +5018,30 @@ mod tests {
         let hex_config = LsConfig::from(&hex_matches).expect("hex tab size");
         assert_eq!(hex_config.tab_size, 16);
 
+        let whitespace_matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--tabsize= +020", "."])
+            .unwrap();
+        let whitespace_config = LsConfig::from(&whitespace_matches).expect("whitespace tab size");
+        assert_eq!(whitespace_config.tab_size, 16);
+
         let invalid_octal_matches = ct_app()
             .try_get_matches_from([ctcore::ct_util_name(), "--tabsize=08", "."])
             .unwrap();
         let err = match LsConfig::from(&invalid_octal_matches) {
             Ok(_) => panic!("invalid octal tab size should fail"),
+            Err(err) => err,
+        };
+        assert_eq!(err.code(), 2);
+
+        let ptrdiff_overflow_matches = ct_app()
+            .try_get_matches_from([
+                ctcore::ct_util_name(),
+                "--tabsize=18446744073709551615",
+                ".",
+            ])
+            .unwrap();
+        let err = match LsConfig::from(&ptrdiff_overflow_matches) {
+            Ok(_) => panic!("tab size above PTRDIFF_MAX should fail"),
             Err(err) => err,
         };
         assert_eq!(err.code(), 2);

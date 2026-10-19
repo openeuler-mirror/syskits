@@ -666,6 +666,29 @@ fn vdir_accepts_gnu_width_numeric_syntax_and_range() {
 }
 
 #[test]
+fn vdir_accepts_gnu_tabsize_syntax_and_rejects_ptrdiff_overflow() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("a"), b"").expect("write fixture");
+
+    let whitespace = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["vdir", "-C", "--tabsize= 3", "."])
+        .output()
+        .expect("run syskits vdir");
+    let overflow = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["vdir", "-C", "--tabsize=18446744073709551615", "."])
+        .output()
+        .expect("run syskits vdir with overflowing tab size");
+
+    assert!(whitespace.status.success());
+    assert_eq!(whitespace.stderr, b"");
+    assert_eq!(overflow.status.code(), Some(2));
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

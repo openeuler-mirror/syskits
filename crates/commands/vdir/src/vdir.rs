@@ -156,6 +156,20 @@ fn vdir_default_quoting_style(matches: &ArgMatches) -> bool {
         && !matches.get_flag(ls_flags::quoting::LS_ESCAPE)
         && !matches.get_flag(ls_flags::quoting::LS_LITERAL)
         && !matches.get_flag(ls_flags::LS_ZERO)
+        && !std::env::var("QUOTING_STYLE").is_ok_and(|style| {
+            matches!(
+                style.as_str(),
+                "literal"
+                    | "shell"
+                    | "shell-always"
+                    | "shell-escape"
+                    | "shell-escape-always"
+                    | "c"
+                    | "clocale"
+                    | "escape"
+                    | "locale"
+            )
+        })
 }
 
 fn vdir_default_format_style(matches: &ArgMatches) -> bool {

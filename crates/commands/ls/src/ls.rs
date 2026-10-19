@@ -955,7 +955,7 @@ fn extract_files(options: &clap::ArgMatches) -> LsFiles {
 /// # 返回
 ///
 /// 一个排序变量，代表要使用的排序方法。
-fn extract_sort(options: &clap::ArgMatches) -> LsSort {
+fn extract_sort(options: &clap::ArgMatches, format: &LsFormat, time: &LsTime) -> LsSort {
     if let Some(field) = options.get_one::<String>(ls_flags::LS_SORT) {
         sort_str_to_type(field.as_str())
     } else if options.get_flag(ls_flags::sort::LS_TIME) {
@@ -968,6 +968,8 @@ fn extract_sort(options: &clap::ArgMatches) -> LsSort {
         LsSort::Version
     } else if options.get_flag(ls_flags::sort::LS_EXTENSION) {
         LsSort::Extension
+    } else if format != &LsFormat::Long && time != &LsTime::LsModification {
+        LsSort::Time
     } else {
         LsSort::Name
     }
@@ -1530,8 +1532,8 @@ impl LsConfig {
             }
         }
 
-        let mut ls_sort = extract_sort(options);
         let ls_time = extract_time(options);
+        let mut ls_sort = extract_sort(options, &format, &ls_time);
         let mut is_needs_color = extract_color(options);
         let mut is_hyperlink = extract_hyperlink(options);
 
@@ -5857,6 +5859,29 @@ mod tests {
             .unwrap();
 
         assert!(LsConfig::from(&matches).is_ok());
+    }
+
+    #[test]
+    fn alternate_times_imply_sorting_only_outside_long_format() {
+        for time_option in ["-u", "-c", "--time=birth"] {
+            let matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), time_option, "-1", "."])
+                .unwrap();
+            let config = LsConfig::from(&matches).expect("non-long configuration");
+            assert_eq!(config.sort, LsSort::Time, "{time_option}");
+
+            let matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), time_option, "-l", "."])
+                .unwrap();
+            let config = LsConfig::from(&matches).expect("long configuration");
+            assert_eq!(config.sort, LsSort::Name, "{time_option} with -l");
+
+            let matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), time_option, "--sort=name", "."])
+                .unwrap();
+            let config = LsConfig::from(&matches).expect("explicit sort configuration");
+            assert_eq!(config.sort, LsSort::Name, "{time_option} with --sort=name");
+        }
     }
 
     #[test]

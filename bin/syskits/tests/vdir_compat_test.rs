@@ -215,6 +215,24 @@ fn vdir_uses_locale_specific_quoting_marks() {
 }
 
 #[test]
+fn vdir_honors_quoting_style_environment_variable() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("a space"), b"").expect("write fixture");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("QUOTING_STYLE", "shell")
+        .args(["vdir", "-1", "-d", "a space"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert_eq!(output.stdout, b"'a space'\n");
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

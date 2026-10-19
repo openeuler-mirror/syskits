@@ -22,7 +22,10 @@ use std::os::unix::ffi::OsStrExt;
 use std::process::Command as ProcessCommand;
 use std::time::UNIX_EPOCH;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{ArgMatches, Command};
+use clap::{
+    ArgMatches, Command,
+    error::{ContextKind, ContextValue},
+};
 use ct_ls::{LsConfig, LsFormat, PathData, ls_flags};
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, UClapError};
@@ -67,6 +70,79 @@ impl Error for DirNonUtf8OptionError {}
 impl ctcore::ct_error::CTError for DirNonUtf8OptionError {
     fn code(&self) -> i32 {
         2
+    }
+}
+
+#[derive(Debug)]
+struct DirClapError {
+    inner: Box<dyn ctcore::ct_error::CTError>,
+    diagnostic: Option<String>,
+}
+
+impl DirClapError {
+    fn new(error: clap::Error) -> Self {
+        let diagnostic = if error.kind() == clap::error::ErrorKind::UnknownArgument {
+            match error.get(ContextKind::InvalidArg) {
+                Some(ContextValue::String(argument)) => {
+                    dir_invalid_option_diagnostic(argument).map(dir_append_help_hint)
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
+        let code = ct_ls::ls_clap_error_exit_code(&error);
+
+        Self {
+            inner: Box::new(error.with_exit_code(code)),
+            diagnostic,
+        }
+    }
+}
+
+fn dir_invalid_option_diagnostic(argument: &str) -> Option<String> {
+    if argument == "--h" {
+        return Some(
+            "option '--h' is ambiguous; possibilities: '--human-readable' \
+             '--hide-control-chars' '--hide' '--hyperlink' '--help'"
+                .into(),
+        );
+    }
+    if argument.starts_with("--") {
+        Some(format!("unrecognized option '{argument}'"))
+    } else {
+        argument
+            .strip_prefix('-')
+            .and_then(|argument| argument.chars().next())
+            .map(|option| format!("invalid option -- '{option}'"))
+    }
+}
+
+fn dir_append_help_hint(diagnostic: String) -> String {
+    format!(
+        "{diagnostic}\nTry '{} --help' for more information.",
+        ctcore::ct_help_utility_name()
+    )
+}
+
+impl Display for DirClapError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.diagnostic {
+            Some(diagnostic) => formatter.write_str(diagnostic),
+            None => Display::fmt(&self.inner, formatter),
+        }
+    }
+}
+
+impl Error for DirClapError {}
+
+impl ctcore::ct_error::CTError for DirClapError {
+    fn code(&self) -> i32 {
+        self.inner.code()
+    }
+
+    fn usage(&self) -> bool {
+        self.diagnostic.is_none() && self.inner.usage()
     }
 }
 
@@ -574,8 +650,7 @@ pub fn dir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDat
             {
                 return Err(Box::new(error));
             }
-            let code = ct_ls::ls_clap_error_exit_code(&err);
-            return Err(Box::new(err.with_exit_code(code)));
+            return Err(Box::new(DirClapError::new(err)));
         }
     };
 

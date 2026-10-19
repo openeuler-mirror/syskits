@@ -680,3 +680,19 @@ fn dir_reports_dereference_eloop_and_uses_placeholder_metadata() {
 
     assert_same_output("dir -Li ELOOP", gnu, syskits);
 }
+
+#[test]
+fn dir_reports_invalid_options_like_gnu() {
+    for option in ["--definitely-invalid", "--h", "-Fnever"] {
+        let mut gnu_command = Command::new("/usr/bin/dir");
+        gnu_command.arg0("dir").env("LC_ALL", "C").arg(option);
+        let gnu = gnu_command.output().expect("run GNU dir");
+        let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C")
+            .args(["dir", option])
+            .output()
+            .expect("run syskits dir");
+
+        assert_same_output(option, gnu, syskits);
+    }
+}

@@ -631,3 +631,26 @@ fn dir_clears_to_eol_when_a_colored_long_name_crosses_the_line_edge() {
     assert!(output.stdout.ends_with(b".foo\x1b[0m\x1b[K\n"));
     assert_eq!(output.stderr, b"");
 }
+
+#[test]
+fn dir_diagnoses_invalid_ls_colors_and_disables_coloring() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let listing_dir = temp_dir.path().join("d");
+    fs::create_dir(&listing_dir).expect("create listing directory");
+    fs::write(listing_dir.join("a"), b"").expect("create file");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("LS_COLORS", "bogus")
+        .args(["dir", "--color=always", "-1", "d"])
+        .output()
+        .expect("run syskits dir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"a\n");
+    assert_eq!(
+        output.stderr,
+        b"dir: unparsable value for LS_COLORS environment variable\n"
+    );
+}

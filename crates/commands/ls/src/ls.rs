@@ -30,6 +30,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
 #[cfg(unix)]
 use std::sync::Mutex;
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicBool, Ordering};
 #[allow(unused_imports)]
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -78,6 +80,39 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use rust_i18n::t;
 
 mod dired;
+
+#[cfg(target_os = "linux")]
+static LS_INHERITED_SIGPIPE_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" fn ls_capture_inherited_sigpipe() {
+    let mut action = std::mem::MaybeUninit::<ctcore::libc::sigaction>::uninit();
+    if unsafe {
+        ctcore::libc::sigaction(ctcore::libc::SIGPIPE, std::ptr::null(), action.as_mut_ptr())
+    } == 0
+    {
+        let action = unsafe { action.assume_init() };
+        LS_INHERITED_SIGPIPE_IGNORED.store(
+            action.sa_sigaction == ctcore::libc::SIG_IGN,
+            Ordering::Relaxed,
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static LS_CAPTURE_SIGPIPE: unsafe extern "C" fn() = ls_capture_inherited_sigpipe;
+
+#[cfg(target_os = "linux")]
+fn ls_inherited_sigpipe_ignored() -> bool {
+    LS_INHERITED_SIGPIPE_IGNORED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn ls_inherited_sigpipe_ignored() -> bool {
+    false
+}
 
 #[cfg(target_os = "linux")]
 unsafe extern "C" {
@@ -470,7 +505,9 @@ fn ls_flush_stdout(writer: &mut impl Write, stdout_was_closed: bool) -> CTResult
         writer.flush()
     };
     match result {
-        Err(error) if error.kind() == ErrorKind::BrokenPipe => ls_terminate_with_sigpipe(),
+        Err(error) if error.kind() == ErrorKind::BrokenPipe && !ls_inherited_sigpipe_ignored() => {
+            ls_terminate_with_sigpipe()
+        }
         Err(error) => Err(Box::new(LsError::LsWriteError(error))),
         Ok(()) => Ok(()),
     }

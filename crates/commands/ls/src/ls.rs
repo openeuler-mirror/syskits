@@ -407,6 +407,14 @@ impl Display for LsError {
                 let error_kind = e.kind();
                 let errno = e.raw_os_error().unwrap_or(1i32);
 
+                if errno == ctcore::libc::ELOOP {
+                    if let Some(message) = ls_localized_path_error("cannot access %s", &path_str, e)
+                    {
+                        return formatter.write_str(&message);
+                    }
+                    return write!(formatter, "cannot access {path_str}: {e}");
+                }
+
                 match error_kind {
                     ErrorKind::NotFound => {
                         if let Some(message) =
@@ -2996,7 +3004,6 @@ impl PathData {
                     }
                 }
 
-                // 只有在使用 -L 且隐式遇到文件且错误为 ELOOP（循环链接）时，才允许静默回退
                 match get_metadata_with_deref_opt(self.p_buf.as_path(), self.is_must_dereference) {
                     Err(err) => {
                         out.flush().unwrap();
@@ -3007,11 +3014,6 @@ impl PathData {
                             if let Some(dir_entry) = &self.de {
                                 return dir_entry.metadata().ok();
                             }
-                        }
-
-                        if self.is_must_dereference && !self.is_command_line && errno == 40 {
-                            // ELOOP - 循环链接，静默获取 symlink 本身的元数据
-                            return self.p_buf.symlink_metadata().ok();
                         }
 
                         // 其他情况（dangling symlink ENOENT，或其他错误，或显式指定），报错

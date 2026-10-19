@@ -1978,6 +1978,7 @@ pub fn ct_app() -> Command {
     let command_version = crate_version!();
     let application_info = t!("ls.about");
     let usage_description = t!("ls.usage");
+    let posixly_correct = std::env::var_os("POSIXLY_CORRECT").is_some();
 
     let args = vec![
         Arg::new(ls_flags::LS_HELP)
@@ -2495,7 +2496,8 @@ pub fn ct_app() -> Command {
         Arg::new(ls_flags::LS_PATHS)
             .action(ArgAction::Append)
             .value_hint(clap::ValueHint::AnyPath)
-            .value_parser(ValueParser::os_string()),
+            .value_parser(ValueParser::os_string())
+            .trailing_var_arg(posixly_correct),
     ];
 
     Command::new(utility_name)

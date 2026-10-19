@@ -20,7 +20,7 @@ use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::fmt::{Display, Write as FmtWrite};
 use std::fs::{self, DirEntry, FileType, Metadata, ReadDir};
-use std::io::{BufWriter, ErrorKind, Write, stdout};
+use std::io::{BufWriter, ErrorKind, Write, stderr, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
@@ -68,7 +68,7 @@ use ctcore::ct_quoting_style::{escape_name, escape_name_with_chars};
 use ctcore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(target_os = "linux")]
 use ctcore::libc::{dev_t, major, minor};
-use ctcore::{ct_show, ct_show_error, ct_show_warning};
+use ctcore::{ct_show_error, ct_show_warning};
 use dired::DiredOutput;
 use lscolors::{LsColors, Style};
 use number_prefix::{NumberPrefix, Prefix};
@@ -510,6 +510,21 @@ fn ls_flush_stdout(writer: &mut impl Write, stdout_was_closed: bool) -> CTResult
         }
         Err(error) => Err(Box::new(LsError::LsWriteError(error))),
         Ok(()) => Ok(()),
+    }
+}
+
+fn ls_show_error(error: LsError) {
+    set_ct_exit_code(error.code());
+    let diagnostic = format!("{}: {error}\n", ctcore::ct_util_name());
+    let mut stderr = stderr().lock();
+    let result = stderr
+        .write_all(diagnostic.as_bytes())
+        .and_then(|_| stderr.flush());
+
+    if result.is_err_and(|error| {
+        error.kind() == ErrorKind::BrokenPipe && !ls_inherited_sigpipe_ignored()
+    }) {
+        ls_terminate_with_sigpipe();
     }
 }
 
@@ -2791,10 +2806,10 @@ impl PathData {
                             Err(err) => {
                                 // dangling symlink 跟随失败，打印错误并返回 None
                                 // 这将触发显示 "?" 并设置退出码 1
-                                ct_show!(LsError::LsIOErrorContext(
+                                ls_show_error(LsError::LsIOErrorContext(
                                     err,
                                     self.p_buf.clone(),
-                                    self.is_command_line
+                                    self.is_command_line,
                                 ));
                                 return None;
                             }
@@ -2821,10 +2836,10 @@ impl PathData {
                         }
 
                         // 其他情况（dangling symlink ENOENT，或其他错误，或显式指定），报错
-                        ct_show!(LsError::LsIOErrorContext(
+                        ls_show_error(LsError::LsIOErrorContext(
                             err,
                             self.p_buf.clone(),
-                            self.is_command_line
+                            self.is_command_line,
                         ));
                         None
                     }
@@ -2915,10 +2930,10 @@ pub fn list(locs: Vec<&Path>, config: &LsConfig) -> CTResult<(Vec<PathData>, Vec
             Err(err) => {
                 // flush stdout buffer before the error to preserve formatting and order
                 out.flush()?;
-                ct_show!(LsError::LsIOErrorContext(
+                ls_show_error(LsError::LsIOErrorContext(
                     err,
                     path_data.p_buf.clone(),
-                    path_data.is_command_line
+                    path_data.is_command_line,
                 ));
                 continue;
             }
@@ -3177,7 +3192,7 @@ fn enter_directory<W: Write>(
             Ok(path) => path,
             Err(err) => {
                 out.flush()?;
-                ct_show!(LsError::LsIOError(err));
+                ls_show_error(LsError::LsIOError(err));
                 continue;
             }
         };
@@ -3221,10 +3236,10 @@ fn enter_directory<W: Write>(
             match fs::read_dir(&e.p_buf) {
                 Err(err) => {
                     out.flush()?;
-                    ct_show!(LsError::LsIOErrorContext(
+                    ls_show_error(LsError::LsIOErrorContext(
                         err,
                         e.p_buf.clone(),
-                        e.is_command_line
+                        e.is_command_line,
                     ));
                     continue;
                 }
@@ -3265,7 +3280,7 @@ fn enter_directory<W: Write>(
                         )?);
                     } else {
                         out.flush()?;
-                        ct_show!(LsError::LsAlreadyListedError(e.p_buf.clone()));
+                        ls_show_error(LsError::LsAlreadyListedError(e.p_buf.clone()));
                     }
                 }
             }
@@ -4634,7 +4649,7 @@ fn display_item_name<W: Write>(
                 }
             }
             Err(err) => {
-                ct_show!(LsError::LsIOErrorContext(err, path.p_buf.clone(), false));
+                ls_show_error(LsError::LsIOErrorContext(err, path.p_buf.clone(), false));
             }
         }
     }
@@ -5055,7 +5070,7 @@ fn get_security_context(config: &LsConfig, p_buf: &Path, must_dereference: bool)
     let substitute_string = "?".to_string();
     if must_dereference {
         if let Err(err) = get_metadata_with_deref_opt(p_buf, must_dereference) {
-            ct_show!(LsError::LsIOErrorContext(err, p_buf.to_path_buf(), false));
+            ls_show_error(LsError::LsIOErrorContext(err, p_buf.to_path_buf(), false));
             return substitute_string;
         }
     }

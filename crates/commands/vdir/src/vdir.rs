@@ -181,7 +181,8 @@ impl VdirClapError {
 }
 
 fn vdir_write_error(error: &std::io::Error) -> String {
-    format!("write error: {}", strip_errno(error))
+    let message = vdir_gettext("write error").unwrap_or_else(|| "write error".into());
+    format!("{message}: {}", strip_errno(error))
 }
 
 #[cfg(target_os = "linux")]
@@ -345,6 +346,11 @@ fn vdir_gettext(msgid: &str) -> Option<String> {
         let translated = dgettext(c"coreutils".as_ptr(), msgid.as_ptr());
         (!translated.is_null()).then(|| CStr::from_ptr(translated).to_string_lossy().into_owned())
     }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn vdir_gettext(_msgid: &str) -> Option<String> {
+    None
 }
 
 #[cfg(target_os = "linux")]

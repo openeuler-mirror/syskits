@@ -123,6 +123,22 @@ unsafe extern "C" {
 }
 
 #[cfg(target_os = "linux")]
+fn ls_gettext(msgid: &str) -> Option<String> {
+    use std::ffi::CStr;
+
+    let msgid = CString::new(msgid).ok()?;
+    unsafe {
+        let translated = dgettext(c"coreutils".as_ptr(), msgid.as_ptr());
+        (!translated.is_null()).then(|| CStr::from_ptr(translated).to_string_lossy().into_owned())
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn ls_gettext(_msgid: &str) -> Option<String> {
+    None
+}
+
+#[cfg(target_os = "linux")]
 fn ls_localized_path_error(msgid: &str, path: &str, error: &std::io::Error) -> Option<String> {
     use std::ffi::CStr;
 
@@ -492,7 +508,8 @@ impl Display for LsError {
                 )
             }
             LsError::LsWriteError(error) => {
-                write!(formatter, "write error: {}", strip_errno(error))
+                let message = ls_gettext("write error").unwrap_or_else(|| "write error".into());
+                write!(formatter, "{message}: {}", strip_errno(error))
             }
         }
     }

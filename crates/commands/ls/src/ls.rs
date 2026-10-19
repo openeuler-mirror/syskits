@@ -1826,7 +1826,10 @@ pub fn ls_clap_error_exit_code(err: &clap::Error) -> i32 {
 }
 
 fn is_invalid_ls_failure_arg(err: &clap::Error) -> bool {
-    if err.kind() != ClapErrorKind::InvalidValue {
+    if !matches!(
+        err.kind(),
+        ClapErrorKind::InvalidValue | ClapErrorKind::ValueValidation
+    ) {
         return false;
     }
 
@@ -1873,6 +1876,102 @@ fn parse_quoting_style(s: &str) -> Result<String, String> {
     }
 }
 
+fn parse_abbreviated_value(value: &str, choices: &[(&str, &str)]) -> Result<String, String> {
+    if let Some((_, canonical)) = choices.iter().find(|(name, _)| *name == value) {
+        return Ok((*canonical).to_string());
+    }
+
+    let mut matched = None;
+    for (_, canonical) in choices.iter().filter(|(name, _)| name.starts_with(value)) {
+        match matched {
+            None => matched = Some(*canonical),
+            Some(previous) if previous == *canonical => {}
+            Some(_) => return Err(format!("ambiguous argument '{value}'")),
+        }
+    }
+
+    matched
+        .map(str::to_string)
+        .ok_or_else(|| format!("invalid argument '{value}'"))
+}
+
+fn parse_format_value(value: &str) -> Result<String, String> {
+    parse_abbreviated_value(
+        value,
+        &[
+            ("long", "long"),
+            ("verbose", "long"),
+            ("single-column", "single-column"),
+            ("columns", "columns"),
+            ("vertical", "columns"),
+            ("across", "across"),
+            ("horizontal", "across"),
+            ("commas", "commas"),
+        ],
+    )
+}
+
+fn parse_time_value(value: &str) -> Result<String, String> {
+    parse_abbreviated_value(
+        value,
+        &[
+            ("atime", "access"),
+            ("access", "access"),
+            ("use", "access"),
+            ("ctime", "ctime"),
+            ("status", "ctime"),
+            ("birth", "birth"),
+            ("creation", "birth"),
+            ("mtime", "mtime"),
+            ("modification", "mtime"),
+        ],
+    )
+}
+
+fn parse_sort_value(value: &str) -> Result<String, String> {
+    parse_abbreviated_value(
+        value,
+        &[
+            ("name", "name"),
+            ("none", "none"),
+            ("time", "time"),
+            ("size", "size"),
+            ("version", "version"),
+            ("extension", "extension"),
+            ("width", "width"),
+        ],
+    )
+}
+
+fn parse_when_value(value: &str) -> Result<String, String> {
+    parse_abbreviated_value(
+        value,
+        &[
+            ("always", "always"),
+            ("yes", "always"),
+            ("force", "always"),
+            ("auto", "auto"),
+            ("tty", "auto"),
+            ("if-tty", "auto"),
+            ("never", "never"),
+            ("no", "never"),
+            ("none", "never"),
+        ],
+    )
+}
+
+fn parse_indicator_style_value(value: &str) -> Result<String, String> {
+    parse_abbreviated_value(
+        value,
+        &[
+            ("none", "none"),
+            ("slash", "slash"),
+            ("file-type", "file-type"),
+            ("classify", "classify"),
+        ],
+    )
+}
+
 pub fn ct_app() -> Command {
     // ct_ls::ct_app()
     let utility_name = ctcore::ct_util_name();
@@ -1888,16 +1987,7 @@ pub fn ct_app() -> Command {
         Arg::new(ls_flags::LS_FORMAT)
             .long(ls_flags::LS_FORMAT)
             .help("Set the display format.")
-            .value_parser([
-                "long",
-                "verbose",
-                "single-column",
-                "columns",
-                "vertical",
-                "across",
-                "horizontal",
-                "commas",
-            ])
+            .value_parser(parse_format_value)
             .hide_possible_values(true)
             .require_equals(true)
             .overrides_with_all([
@@ -1976,9 +2066,7 @@ pub fn ct_app() -> Command {
         Arg::new(ls_flags::LS_HYPERLINK)
             .long(ls_flags::LS_HYPERLINK)
             .help("hyperlink file names WHEN")
-            .value_parser([
-                "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
-            ])
+            .value_parser(parse_when_value)
             .require_equals(true)
             .num_args(0..=1)
             .default_missing_value("always")
@@ -2069,9 +2157,7 @@ pub fn ct_app() -> Command {
                          \tbirth time: birth, creation;",
             )
             .value_name("field")
-            .value_parser([
-                "atime", "access", "use", "ctime", "status", "birth", "creation", "mtime", "modification",
-            ])
+            .value_parser(parse_time_value)
             .hide_possible_values(true)
             .require_equals(true)
             .overrides_with_all([ls_flags::LS_TIME, ls_flags::time::LS_ACCESS, ls_flags::time::LS_CHANGE]),
@@ -2117,7 +2203,7 @@ pub fn ct_app() -> Command {
             .long(ls_flags::LS_SORT)
             .help("Sort by <field>: name, none (-U), time (-t), size (-S), extension (-X) or width")
             .value_name("field")
-            .value_parser(["name", "none", "time", "size", "version", "extension", "width"])
+            .value_parser(parse_sort_value)
             .require_equals(true)
             .overrides_with_all([
                 ls_flags::LS_SORT,
@@ -2318,9 +2404,7 @@ pub fn ct_app() -> Command {
         Arg::new(ls_flags::LS_COLOR)
             .long(ls_flags::LS_COLOR)
             .help("Color output based on file type.")
-            .value_parser([
-                "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
-            ])
+            .value_parser(parse_when_value)
             .require_equals(true)
             .num_args(0..=1),
         Arg::new(ls_flags::LS_INDICATOR_STYLE)
@@ -2329,7 +2413,7 @@ pub fn ct_app() -> Command {
                 "Append indicator with style WORD to entry names: \
                  none (default),  slash (-p), file-type (--file-type), classify (-F)",
             )
-            .value_parser(["none", "slash", "file-type", "classify"])
+            .value_parser(parse_indicator_style_value)
             .overrides_with_all([
                 ls_flags::indicator_style::LS_FILE_TYPE,
                 ls_flags::indicator_style::LS_SLASH,
@@ -2353,9 +2437,7 @@ pub fn ct_app() -> Command {
                      --dereference-command-line-symlink-to-dir flags are specified.",
             )
             .value_name("when")
-            .value_parser([
-                "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
-            ])
+            .value_parser(parse_when_value)
             .default_missing_value("always")
             .require_equals(true)
             .num_args(0..=1)

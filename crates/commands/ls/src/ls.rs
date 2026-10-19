@@ -934,6 +934,7 @@ pub struct LsConfig {
     pub is_dired: bool,
     is_hyperlink: bool,
     size_suffix: String,
+    file_size_suffix: String,
 }
 
 // 可删除或添加到长format 的字段
@@ -1720,6 +1721,11 @@ impl LsConfig {
             } else {
                 (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)
             };
+        let file_size_suffix = if is_env_var_blocksize {
+            String::new()
+        } else {
+            size_suffix.clone()
+        };
 
         let long = {
             let is_author = options.get_flag(ls_flags::LS_AUTHOR);
@@ -2008,6 +2014,7 @@ impl LsConfig {
             is_dired,
             is_hyperlink,
             size_suffix,
+            file_size_suffix,
         })
     }
 }
@@ -5124,18 +5131,26 @@ fn display_len_or_rdev(mdata: &Metadata, config: &LsConfig) -> SizeOrDeviceId {
         let r = mdata.len() % config.file_size_block_size;
         if r == 0 { d } else { d + 1 }
     };
-    SizeOrDeviceId::Size(display_size(len_adjusted, config))
+    SizeOrDeviceId::Size(display_file_size(len_adjusted, config))
 }
 
 fn display_size(size: u64, config: &LsConfig) -> String {
+    display_size_with_suffix(size, config, &config.size_suffix)
+}
+
+fn display_file_size(size: u64, config: &LsConfig) -> String {
+    display_size_with_suffix(size, config, &config.file_size_suffix)
+}
+
+fn display_size_with_suffix(size: u64, config: &LsConfig, suffix: &str) -> String {
     // 注意：人类可读的行为与 GNU ls 不同。
     // GNU ls 默认使用二进制前缀。
     match config.size_format {
         LsSizeFormat::Binary => format_prefixed(&NumberPrefix::binary(size as f64), 1024.0),
         LsSizeFormat::Decimal => format_prefixed(&NumberPrefix::decimal(size as f64), 1000.0),
         LsSizeFormat::Bytes => {
-            if !config.size_suffix.is_empty() {
-                format!("{}{}", size, config.size_suffix)
+            if !suffix.is_empty() {
+                format!("{size}{suffix}")
             } else {
                 size.to_string()
             }

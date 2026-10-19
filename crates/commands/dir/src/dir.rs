@@ -594,6 +594,10 @@ impl Display for DirClapError {
                     {
                         Ok(()) => Ok(()),
                         Err(error) => {
+                            #[cfg(target_os = "linux")]
+                            if error.kind() == std::io::ErrorKind::BrokenPipe {
+                                ct_ls::ls_maybe_terminate_on_broken_pipe();
+                            }
                             self.display_output_failed.store(true, Ordering::Relaxed);
                             formatter.write_str(&dir_write_error(&error))
                         }

@@ -530,7 +530,7 @@ pub enum LsDereference {
     LsAll,
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
 enum LsIndicatorStyle {
     None,
     Slash,
@@ -4244,6 +4244,38 @@ fn classify_file<W: Write>(path: &PathData, out: &mut W) -> Option<char> {
     }
 }
 
+fn indicator_char(style: LsIndicatorStyle, symbol: Option<char>) -> Option<char> {
+    match style {
+        LsIndicatorStyle::Classify => symbol,
+        LsIndicatorStyle::FileType => symbol.filter(|symbol| *symbol != '*'),
+        LsIndicatorStyle::Slash => symbol.filter(|symbol| *symbol == '/'),
+        LsIndicatorStyle::None => None,
+    }
+}
+
+fn classify_symlink_target(target: &Path) -> Option<char> {
+    let metadata = target.metadata().ok()?;
+    let file_type = metadata.file_type();
+    if file_type.is_dir() {
+        Some('/')
+    } else {
+        #[cfg(unix)]
+        {
+            if file_type.is_socket() {
+                Some('=')
+            } else if file_type.is_fifo() {
+                Some('|')
+            } else if file_type.is_file() && file_is_executable(&metadata) {
+                Some('*')
+            } else {
+                None
+            }
+        }
+        #[cfg(not(unix))]
+        None
+    }
+}
+
 /// 接收一个 [`PathData`] 结构并返回一个带有名称的单元格，以备显示。
 ///
 /// 该函数依赖于所提供的 `&Config` 中的以下参数：
@@ -4293,58 +4325,35 @@ fn display_item_name<W: Write>(
         name = more_info + &name;
     }
 
-    if config.indicator_style != LsIndicatorStyle::None {
-        let sym = classify_file(path, out);
+    let is_long_symlink = config.format == LsFormat::Long
+        && path.file_type(out).is_some_and(FileType::is_symlink)
+        && !path.is_must_dereference;
 
-        let char_opt = match config.indicator_style {
-            LsIndicatorStyle::Classify => sym,
-            LsIndicatorStyle::FileType => {
-                // 不要添加星号。
-                match sym {
-                    Some('*') => None,
-                    _ => sym,
-                }
-            }
-            LsIndicatorStyle::Slash => {
-                // 只附加斜线。
-                match sym {
-                    Some('/') => Some('/'),
-                    _ => None,
-                }
-            }
-            LsIndicatorStyle::None => None,
-        };
-
-        if let Some(c) = char_opt {
+    if config.indicator_style != LsIndicatorStyle::None && !is_long_symlink {
+        if let Some(c) = indicator_char(config.indicator_style, classify_file(path, out)) {
             name.push(c);
             width += 1;
         }
     }
 
-    if config.format == LsFormat::Long
-        && path.file_type(out).is_some()
-        && path.file_type(out).unwrap().is_symlink()
-        && !path.is_must_dereference
-    {
+    if is_long_symlink {
         match path.p_buf.read_link() {
             Ok(target) => {
                 name.push_str(" -> ");
+
+                let absolute_target = if target.is_relative() {
+                    path.p_buf
+                        .parent()
+                        .map_or_else(|| target.clone(), |parent| parent.join(&target))
+                } else {
+                    target.clone()
+                };
+                let target_data = PathData::new(absolute_target.clone(), None, None, config, false);
 
                 // 我们不妨在箭头后给符号链接输出着色。
                 // 这需要额外的系统调用，但提供了重要的信息，而这些信息是运行 `ls -l -color` 的人非常感兴趣的。
                 // 运行 `ls -l --color` 的人非常感兴趣的重要信息。
                 if let Some(ls_colors) = &config.color {
-                    // 我们要获取绝对路径，以便构建具有有效元数据的 PathData。
-                    // 这是因为相对符号链接会导致 get_metadata 失败。
-                    let mut absolute_target = target.clone();
-                    if target.is_relative() {
-                        if let Some(parent) = path.p_buf.parent() {
-                            absolute_target = parent.join(absolute_target);
-                        }
-                    }
-
-                    let target_data = PathData::new(absolute_target, None, None, config, false);
-
                     // 如果我们有一个指向有效文件的符号链接，我们就使用该文件的元数据。
                     // 因为我们使用的是绝对路径，所以我们可以假定该文件保证存在。
                     // 否则，我们将使用 path.md()，这将保证我们根据不存在的符号链接的颜色，为其着色。
@@ -4368,9 +4377,14 @@ fn display_item_name<W: Write>(
                         ));
                     }
                 } else {
-                    // 我们要获取绝对路径，以便构建具有有效元数据的 PathData。
-                    // 这是因为相对符号链接会导致 get_metadata 失败。
                     name.push_str(&escape_name(target.as_os_str(), &config.quoting_style));
+                }
+
+                if let Some(indicator) = indicator_char(
+                    config.indicator_style,
+                    classify_symlink_target(&absolute_target),
+                ) {
+                    name.push(indicator);
                 }
             }
             Err(err) => {

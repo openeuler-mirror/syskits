@@ -4123,7 +4123,7 @@ fn display_grid_by_format_other_type<W: Write>(
                 // If the width is 0 we print one single line
                 if config.width != 0 && current_col + name_width + 1 > config.width {
                     current_col = name_width + 2;
-                    out.write_all(b",\n")?;
+                    out.write_all(&[b',', u8::from(config.line_ending)])?;
                     out.write_all(&name.contents)?;
                 } else {
                     current_col += name_width + 2;

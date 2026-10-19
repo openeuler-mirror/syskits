@@ -74,3 +74,52 @@ fn ls_invalid_enum_values_use_gnu_failure_status() {
         assert_eq!(syskits.status.code(), Some(1), "{argument}");
     }
 }
+
+fn valid_argument_lines(output: &Output) -> Vec<String> {
+    String::from_utf8_lossy(&output.stderr)
+        .lines()
+        .skip_while(|line| *line != "Valid arguments are:")
+        .take_while(|line| !line.starts_with("Try "))
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn ls_invalid_values_list_gnu_valid_arguments() {
+    let directory = TempDir::new().expect("tempdir");
+    fs::write(directory.path().join("a"), b"").expect("create fixture");
+
+    for argument in [
+        "--format=bad",
+        "--sort=bad",
+        "--time=bad",
+        "--classify=bad",
+        "--color=bad",
+        "--hyperlink=bad",
+        "--indicator-style=bad",
+        "--quoting-style=bad",
+    ] {
+        let gnu = run_gnu(&directory, &[argument, "a"]);
+        let syskits = run_syskits(&directory, &[argument, "a"]);
+
+        assert_eq!(syskits.status.code(), gnu.status.code(), "{argument}");
+        assert_eq!(
+            valid_argument_lines(&syskits),
+            valid_argument_lines(&gnu),
+            "{argument}"
+        );
+    }
+}
+
+#[test]
+fn ls_unknown_option_diagnostic_omits_clap_usage() {
+    let directory = TempDir::new().expect("tempdir");
+    let gnu = run_gnu(&directory, &["--definitely-unknown"]);
+    let syskits = run_syskits(&directory, &["--definitely-unknown"]);
+    let stderr = String::from_utf8_lossy(&syskits.stderr);
+
+    assert_eq!(syskits.status.code(), gnu.status.code());
+    assert_eq!(stderr.lines().count(), 2, "{stderr}");
+    assert!(stderr.contains("unrecognized option '--definitely-unknown'"));
+    assert!(!stderr.lines().any(|line| line.starts_with("Usage:")));
+}

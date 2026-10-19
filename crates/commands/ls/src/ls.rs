@@ -881,8 +881,8 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> CtQu
             match match_quoting_style_name(style.as_str(), show_control) {
                 Some(qs) => return qs,
                 None => eprintln!(
-                    "{}: Ignoring invalid value of environment variable QUOTING_STYLE: '{}'",
-                    std::env::args().next().unwrap_or("ls".to_string()),
+                    "{}: ignoring invalid value of environment variable QUOTING_STYLE: '{}'",
+                    ctcore::ct_util_name(),
                     style
                 ),
             }

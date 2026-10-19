@@ -179,6 +179,16 @@ impl CtEscapedChar {
         Self { state: init_state }
     }
 
+    fn new_c_with_extra(c: char, quotes: CtQuotes, extra_escaped_chars: &str) -> Self {
+        if extra_escaped_chars.contains(c) {
+            Self {
+                state: CtEscapeState::Backslash(c),
+            }
+        } else {
+            Self::new_c(c, quotes)
+        }
+    }
+
     fn new_shell(c: char, escape: bool, quotes: CtQuotes) -> Self {
         use CtEscapeState::*;
         let init_state = match c {
@@ -780,7 +790,7 @@ fn escape_shell_byte_segments_pass(
 }
 
 #[cfg(unix)]
-fn escape_c_name(name: &OsStr, quotes: CtQuotes) -> String {
+fn escape_c_name(name: &OsStr, quotes: CtQuotes, extra_escaped_chars: &str) -> String {
     let quotes = quotes.c_escape_quotes();
     if !hard_locale(LcCategory::LcCtype) {
         return name
@@ -788,7 +798,7 @@ fn escape_c_name(name: &OsStr, quotes: CtQuotes) -> String {
             .iter()
             .flat_map(|byte| {
                 if byte.is_ascii() {
-                    CtEscapedChar::new_c(char::from(*byte), quotes)
+                    CtEscapedChar::new_c_with_extra(char::from(*byte), quotes, extra_escaped_chars)
                 } else {
                     CtEscapedChar {
                         state: CtEscapeState::Octal(CtEscapeOctal::from(char::from(*byte))),
@@ -804,13 +814,21 @@ fn escape_c_name(name: &OsStr, quotes: CtQuotes) -> String {
     while !bytes.is_empty() {
         match std::str::from_utf8(bytes) {
             Ok(valid) => {
-                escaped.extend(valid.chars().flat_map(|c| CtEscapedChar::new_c(c, quotes)));
+                escaped.extend(
+                    valid.chars().flat_map(|c| {
+                        CtEscapedChar::new_c_with_extra(c, quotes, extra_escaped_chars)
+                    }),
+                );
                 break;
             }
             Err(error) => {
                 let valid_len = error.valid_up_to();
                 let valid = unsafe { std::str::from_utf8_unchecked(&bytes[..valid_len]) };
-                escaped.extend(valid.chars().flat_map(|c| CtEscapedChar::new_c(c, quotes)));
+                escaped.extend(
+                    valid.chars().flat_map(|c| {
+                        CtEscapedChar::new_c_with_extra(c, quotes, extra_escaped_chars)
+                    }),
+                );
 
                 let invalid_len = error.error_len().unwrap_or(bytes.len() - valid_len);
                 for byte in &bytes[valid_len..valid_len + invalid_len] {
@@ -825,6 +843,14 @@ fn escape_c_name(name: &OsStr, quotes: CtQuotes) -> String {
 }
 
 pub fn escape_name(name: &OsStr, style: &CtQuotingStyle) -> String {
+    escape_name_with_chars(name, style, "")
+}
+
+pub fn escape_name_with_chars(
+    name: &OsStr,
+    style: &CtQuotingStyle,
+    extra_escaped_chars: &str,
+) -> String {
     match style {
         CtQuotingStyle::Literal { show_control } => {
             if *show_control {
@@ -838,12 +864,18 @@ pub fn escape_name(name: &OsStr, style: &CtQuotingStyle) -> String {
         }
         CtQuotingStyle::C { quotes } => {
             #[cfg(unix)]
-            let escaped_str = escape_c_name(name, *quotes);
+            let escaped_str = escape_c_name(name, *quotes, extra_escaped_chars);
             #[cfg(not(unix))]
             let escaped_str: String = name
                 .to_string_lossy()
                 .chars()
-                .flat_map(|c| CtEscapedChar::new_c(c, quotes.c_escape_quotes()))
+                .flat_map(|c| {
+                    CtEscapedChar::new_c_with_extra(
+                        c,
+                        quotes.c_escape_quotes(),
+                        extra_escaped_chars,
+                    )
+                })
                 .collect();
 
             let (left_quote, right_quote) = quotes.marks();
@@ -874,6 +906,10 @@ pub fn escape_name(name: &OsStr, style: &CtQuotingStyle) -> String {
                 shell_without_escape(&name, quotes, *show_control)
             };
 
+            let must_quote = must_quote
+                || name
+                    .chars()
+                    .any(|character| extra_escaped_chars.contains(character));
             match (must_quote | contains_quote_chars, quotes) {
                 (true, CtQuotes::Single) => format!("'{escaped_str}'"),
                 (true, CtQuotes::Double) => format!("\"{escaped_str}\""),

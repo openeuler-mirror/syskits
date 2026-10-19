@@ -63,7 +63,7 @@ use ctcore::ct_entries;
 use ctcore::ct_fs::CtFileInformation;
 use ctcore::ct_quoting_style;
 use ctcore::ct_quoting_style::CtQuotingStyle;
-use ctcore::ct_quoting_style::{escape_name, escape_name_with_chars};
+use ctcore::ct_quoting_style::{escape_name, escape_name_bytes, escape_name_bytes_with_chars};
 #[cfg(unix)]
 use ctcore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 #[cfg(target_os = "linux")]
@@ -74,7 +74,7 @@ use lscolors::{LsColors, Style};
 use number_prefix::{NumberPrefix, Prefix};
 #[cfg(unix)]
 use once_cell::sync::Lazy;
-use term_grid::{Cell, Direction};
+use term_grid::Direction;
 use unicode_width::UnicodeWidthStr;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use rust_i18n::t;
@@ -667,6 +667,11 @@ enum LsSort {
     Version,
     Extension,
     Width,
+}
+
+struct Cell {
+    contents: Vec<u8>,
+    width: usize,
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -3131,15 +3136,15 @@ impl PathData {
 fn show_dir_name<W: Write>(path_data: &PathData, out: &mut W, config: &LsConfig) {
     // 对目录本身的完整路径 (p_buf) 应用转义样式，而不仅仅是 display_name
     let escaped_path =
-        escape_name_with_chars(path_data.p_buf.as_os_str(), &config.quoting_style, ":");
+        escape_name_bytes_with_chars(path_data.p_buf.as_os_str(), &config.quoting_style, ":");
 
-    match config.is_hyperlink {
-        true => {
-            let hyperlink = create_hyperlink(&escaped_path, path_data);
-            write!(out, "{hyperlink}:").unwrap()
-        }
-        false => write!(out, "{escaped_path}:").unwrap(),
-    }
+    let displayed_path = if config.is_hyperlink {
+        create_hyperlink(&escaped_path, path_data)
+    } else {
+        escaped_path
+    };
+    out.write_all(&displayed_path).unwrap();
+    out.write_all(b":").unwrap();
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -3345,7 +3350,7 @@ fn name_quoting_extra_chars(config: &LsConfig) -> &'static str {
 }
 
 pub fn display_name_width(name: &OsStr, config: &LsConfig) -> usize {
-    let escaped = escape_name_with_chars(
+    let escaped = escape_name_bytes_with_chars(
         name,
         &config.quoting_style,
         name_quoting_extra_chars(config),
@@ -3354,9 +3359,45 @@ pub fn display_name_width(name: &OsStr, config: &LsConfig) -> usize {
         && (config.format == LsFormat::Long
             || (matches!(config.format, LsFormat::Columns | LsFormat::Across)
                 && config.width != 0));
-    let needs_quote_alignment = aligns_shell_outer_quotes && !escaped.starts_with(['\'', '"']);
+    let needs_quote_alignment = aligns_shell_outer_quotes && !starts_with_outer_quote(&escaped);
 
-    escaped.width() + usize::from(needs_quote_alignment)
+    display_bytes_width(&escaped) + usize::from(needs_quote_alignment)
+}
+
+fn starts_with_outer_quote(value: &[u8]) -> bool {
+    value.starts_with(b"'") || value.starts_with(b"\"")
+}
+
+fn push_utf8(value: &mut Vec<u8>, character: char) {
+    let mut encoded = [0; 4];
+    value.extend_from_slice(character.encode_utf8(&mut encoded).as_bytes());
+}
+
+fn display_bytes_width(mut value: &[u8]) -> usize {
+    let mut width = 0;
+    while !value.is_empty() {
+        match std::str::from_utf8(value) {
+            Ok(valid) => {
+                width += valid.width();
+                break;
+            }
+            Err(error) => {
+                let valid_len = error.valid_up_to();
+                let valid = unsafe { std::str::from_utf8_unchecked(&value[..valid_len]) };
+                width += valid.width();
+                let invalid_len = error.error_len().unwrap_or(value.len() - valid_len);
+                value = &value[valid_len + invalid_len..];
+            }
+        }
+    }
+    width
+}
+
+fn trimmed_byte_len(value: &[u8]) -> usize {
+    value
+        .iter()
+        .rposition(|byte| !byte.is_ascii_whitespace())
+        .map_or(0, |position| position + 1)
 }
 
 fn extension_from_last_dot(name: &OsStr) -> &[u8] {
@@ -3724,8 +3765,8 @@ fn display_items<W: Write>(
     // 选项时，将在大小列的左边打印安全上下文。
 
     let quoted = items.iter().any(|item| {
-        let name = escape_name(&item.display_name, &config.quoting_style);
-        name.starts_with(['\'', '"'])
+        let name = escape_name_bytes(&item.display_name, &config.quoting_style);
+        starts_with_outer_quote(&name)
     });
 
     if config.format == LsFormat::Long {
@@ -3810,7 +3851,7 @@ fn display_grid_by_format_other_type<W: Write>(
             let mut current_col = 0;
             let mut names = names;
             if let Some(name) = names.next() {
-                write!(out, "{}", name.contents)?;
+                out.write_all(&name.contents)?;
                 current_col = name.width + 2;
             }
             for name in names {
@@ -3818,10 +3859,12 @@ fn display_grid_by_format_other_type<W: Write>(
                 // If the width is 0 we print one single line
                 if config.width != 0 && current_col + name_width + 1 > config.width {
                     current_col = name_width + 2;
-                    write!(out, ",\n{}", name.contents)?;
+                    out.write_all(b",\n")?;
+                    out.write_all(&name.contents)?;
                 } else {
                     current_col += name_width + 2;
-                    write!(out, ", {}", name.contents)?;
+                    out.write_all(b", ")?;
+                    out.write_all(&name.contents)?;
                 }
             }
             // 如果名称已打印，则当前 col 不再为 0。因此，我们打印一个换行符。
@@ -3831,7 +3874,8 @@ fn display_grid_by_format_other_type<W: Write>(
         }
         _ => {
             for name in names {
-                write!(out, "{}{}", name.contents, config.line_ending)?;
+                out.write_all(&name.contents)?;
+                out.write_all(&[u8::from(config.line_ending)])?;
             }
         }
     };
@@ -3893,40 +3937,52 @@ fn get_block_size(md: &Metadata, config: &LsConfig) -> u64 {
     }
 }
 
-fn tabify_grid_output(rendered: &str, tab_size: usize, line_ending: CtLineEnding) -> String {
-    let mut output = String::with_capacity(rendered.len());
+fn tabify_grid_output(rendered: &[u8], tab_size: usize, line_ending: CtLineEnding) -> Vec<u8> {
+    let mut output = Vec::with_capacity(rendered.len());
     let mut column = 0usize;
-    let mut chars = rendered.chars().peekable();
-    let record_terminator = char::from(u8::from(line_ending));
+    let mut index = 0usize;
+    let record_terminator = u8::from(line_ending);
 
-    while let Some(ch) = chars.next() {
-        if ch == record_terminator {
-            output.push(ch);
+    while index < rendered.len() {
+        let byte = rendered[index];
+        if byte == record_terminator {
+            output.push(byte);
             column = 0;
+            index += 1;
             continue;
         }
 
-        if ch != ' ' || tab_size == 0 {
-            output.push(ch);
-            column += UnicodeWidthStr::width(ch.encode_utf8(&mut [0; 4]));
+        if byte != b' ' || tab_size == 0 {
+            let unit_len = if byte.is_ascii() {
+                1
+            } else {
+                std::str::from_utf8(&rendered[index..])
+                    .ok()
+                    .and_then(|valid| valid.chars().next().map(char::len_utf8))
+                    .unwrap_or(1)
+            };
+            output.extend_from_slice(&rendered[index..index + unit_len]);
+            column += display_bytes_width(&rendered[index..index + unit_len]);
+            index += unit_len;
             continue;
         }
 
         let mut spaces = 1usize;
-        while chars.peek() == Some(&' ') {
-            chars.next();
+        index += 1;
+        while rendered.get(index) == Some(&b' ') {
             spaces += 1;
+            index += 1;
         }
 
         while spaces > 0 {
             let next_tab = ((column / tab_size) + 1) * tab_size;
             let distance = next_tab - column;
             if distance <= spaces && (distance > 1 || spaces - distance >= tab_size) {
-                output.push('\t');
+                output.push(b'\t');
                 column = next_tab;
                 spaces -= distance;
             } else {
-                output.push(' ');
+                output.push(b' ');
                 column += 1;
                 spaces -= 1;
             }
@@ -3937,13 +3993,13 @@ fn tabify_grid_output(rendered: &str, tab_size: usize, line_ending: CtLineEnding
 }
 
 fn format_grid_output(
-    rendered: &str,
+    rendered: &[u8],
     tab_size: usize,
     preserve_spaces: bool,
     line_ending: CtLineEnding,
-) -> String {
+) -> Vec<u8> {
     if preserve_spaces {
-        rendered.to_owned()
+        rendered.to_vec()
     } else {
         trim_trailing_grid_padding(
             &tabify_grid_output(rendered, tab_size, line_ending),
@@ -3952,15 +4008,23 @@ fn format_grid_output(
     }
 }
 
-fn trim_trailing_grid_padding(rendered: &str, line_ending: CtLineEnding) -> String {
-    let mut output = String::with_capacity(rendered.len());
-    let record_terminator = char::from(u8::from(line_ending));
-    for line in rendered.split_inclusive(record_terminator) {
-        if let Some(line) = line.strip_suffix(record_terminator) {
-            output.push_str(line.trim_end_matches([' ', '\t']));
-            output.push(record_terminator);
+fn trim_trailing_grid_padding(rendered: &[u8], line_ending: CtLineEnding) -> Vec<u8> {
+    let mut output = Vec::with_capacity(rendered.len());
+    let record_terminator = u8::from(line_ending);
+    for line in rendered.split_inclusive(|byte| *byte == record_terminator) {
+        let has_terminator = line.last() == Some(&record_terminator);
+        let content = if has_terminator {
+            &line[..line.len() - 1]
         } else {
-            output.push_str(line.trim_end_matches([' ', '\t']));
+            line
+        };
+        let trimmed_len = content
+            .iter()
+            .rposition(|byte| !matches!(byte, b' ' | b'\t'))
+            .map_or(0, |position| position + 1);
+        output.extend_from_slice(&content[..trimmed_len]);
+        if has_terminator {
+            output.push(record_terminator);
         }
     }
     output
@@ -4046,11 +4110,11 @@ fn render_grid(
     width: usize,
     direction: Direction,
     line_ending: CtLineEnding,
-) -> String {
+) -> Vec<u8> {
     let columns = grid_columns_that_fit(cells, width, direction);
     let (rows, columns) = grid_dimensions(cells.len(), columns);
     let column_widths = grid_column_widths(cells, columns, direction);
-    let mut rendered = String::new();
+    let mut rendered = Vec::new();
 
     for row in 0..rows {
         let mut last_column = None;
@@ -4067,13 +4131,13 @@ fn render_grid(
                 continue;
             };
 
-            rendered.push_str(&cell.contents);
+            rendered.extend_from_slice(&cell.contents);
             if Some(column) != last_column {
                 let padding = column_width.saturating_sub(cell.width) + 2;
-                rendered.push_str(&" ".repeat(padding));
+                rendered.extend(std::iter::repeat_n(b' ', padding));
             }
         }
-        rendered.push(char::from(u8::from(line_ending)));
+        rendered.push(u8::from(line_ending));
     }
 
     rendered
@@ -4096,21 +4160,24 @@ fn display_grid<W: Write>(
         let mut printed_something = false;
         for name in names {
             if printed_something {
-                write!(output, "  ")?;
+                output.write_all(b"  ")?;
             }
             printed_something = true;
-            write!(output, "{}", name.contents)?;
+            output.write_all(&name.contents)?;
         }
         if printed_something {
-            write!(output, "{line_ending}")?;
+            output.write_all(&[u8::from(line_ending)])?;
         }
     } else if !names.is_empty() {
         let names = names
             .into_iter()
             .map(|name| {
-                if quoted && !name.contents.starts_with(['\'', '"']) {
+                if quoted && !starts_with_outer_quote(&name.contents) {
+                    let mut contents = Vec::with_capacity(name.contents.len() + 1);
+                    contents.push(b' ');
+                    contents.extend_from_slice(&name.contents);
                     Cell {
-                        contents: format!(" {}", name.contents),
+                        contents,
                         width: name.width + 1,
                     }
                 } else {
@@ -4119,16 +4186,12 @@ fn display_grid<W: Write>(
             })
             .collect::<Vec<_>>();
         let rendered = render_grid(&names, width, direction, line_ending);
-        write!(
-            output,
-            "{}",
-            format_grid_output(
-                &rendered,
-                tab_size,
-                quoted || preserve_padding_spaces,
-                line_ending,
-            )
-        )?;
+        output.write_all(&format_grid_output(
+            &rendered,
+            tab_size,
+            quoted || preserve_padding_spaces,
+            line_ending,
+        ))?;
     }
     Ok(())
 }
@@ -4337,13 +4400,13 @@ fn display_item_long<W: Write>(
         let style_count_before = style_manager.style_count;
         let mut item_name =
             display_item_name(item, ls_config, None, String::new(), output, style_manager).contents;
-        let escaped_name = escape_name_with_chars(
+        let escaped_name = escape_name_bytes_with_chars(
             &item.display_name,
             &ls_config.quoting_style,
             name_quoting_extra_chars(ls_config),
         );
         let name_byte_len =
-            escaped_name.len() + usize::from(quoted && !escaped_name.starts_with(['\'', '"']));
+            escaped_name.len() + usize::from(quoted && !starts_with_outer_quote(&escaped_name));
         let name_used_color =
             style_manager.normal_is_colored() || style_manager.style_count != style_count_before;
         if !item
@@ -4355,11 +4418,14 @@ fn display_item_long<W: Write>(
             && name_start_column / ls_config.width
                 != (name_start_column + name_byte_len - 1) / ls_config.width
         {
-            item_name.push_str(&style_manager.clear_to_eol);
+            item_name.extend_from_slice(style_manager.clear_to_eol.as_bytes());
         }
 
-        let displayed_item = if quoted && !item_name.starts_with(['\'', '"']) {
-            format!(" {item_name}")
+        let displayed_item = if quoted && !starts_with_outer_quote(&item_name) {
+            let mut displayed = Vec::with_capacity(item_name.len() + 1);
+            displayed.push(b' ');
+            displayed.extend_from_slice(&item_name);
+            displayed
         } else {
             item_name
         };
@@ -4372,12 +4438,8 @@ fn display_item_long<W: Write>(
             );
             dired::dired_update_positions(dired_output, start, end);
         }
-        write!(
-            output_display,
-            "{}{}",
-            displayed_item, ls_config.line_ending
-        )
-        .unwrap();
+        output_display.extend_from_slice(&displayed_item);
+        output_display.push(u8::from(ls_config.line_ending));
     } else {
         #[cfg(unix)]
         let leading_char = {
@@ -4468,15 +4530,11 @@ fn display_item_long<W: Write>(
             dired::dired_calculate_and_update_positions(
                 dired_output,
                 output_display.len(),
-                displayed_item.trim().len(),
+                trimmed_byte_len(&displayed_item),
             );
         }
-        write!(
-            output_display,
-            "{}{}",
-            displayed_item, ls_config.line_ending
-        )
-        .unwrap();
+        output_display.extend_from_slice(&displayed_item);
+        output_display.push(u8::from(ls_config.line_ending));
     }
     output.write_all(&output_display)?;
 
@@ -4913,8 +4971,7 @@ fn classify_symlink_target(target: &Path) -> Option<char> {
 /// * `config.context`用于在使用`feat_selinux`编译时将安全上下文预输入`name`。
 /// * `config.hyperlink`决定是否超链接项目。
 ///
-/// 注意符号链接目标中的非单码序列将使用
-/// [`std::path::Path::to_string_lossy`].
+/// 文件名和符号链接目标在 Unix 上始终按原始字节写入。
 #[allow(clippy::cognitive_complexity)]
 fn display_item_name<W: Write>(
     path: &PathData,
@@ -4932,7 +4989,7 @@ fn display_item_name<W: Write>(
     let style_count_before = style_manager.style_count;
 
     // 这是我们的返回值。我们从 `&path.display_name` 开始，然后对其进行修改。
-    let mut name = escape_name_with_chars(
+    let mut name = escape_name_bytes_with_chars(
         &path.display_name,
         &config.quoting_style,
         name_quoting_extra_chars(config),
@@ -4940,7 +4997,7 @@ fn display_item_name<W: Write>(
 
     // 我们需要自己跟踪宽度，而不是让 term_grid
     // 因为颜色代码会扰乱 term_grid 的宽度计算。
-    let mut width = name.width();
+    let mut width = display_bytes_width(&name);
 
     if config.is_hyperlink {
         name = create_hyperlink(&name, path);
@@ -4954,7 +5011,9 @@ fn display_item_name<W: Write>(
         // 在此处增加宽度，因为 name 被赋予了颜色，而 name.width() 现在是错误的。
         // 显示尺寸
         width += more_info.width();
-        name = more_info + &name;
+        let mut prefixed_name = more_info.into_bytes();
+        prefixed_name.extend_from_slice(&name);
+        name = prefixed_name;
     }
 
     let is_long_symlink = config.format == LsFormat::Long
@@ -4963,7 +5022,7 @@ fn display_item_name<W: Write>(
 
     if config.indicator_style != LsIndicatorStyle::None && !is_long_symlink {
         if let Some(c) = indicator_char(config.indicator_style, classify_file(path, out)) {
-            name.push(c);
+            push_utf8(&mut name, c);
             width += 1;
         }
     }
@@ -4971,7 +5030,7 @@ fn display_item_name<W: Write>(
     if is_long_symlink {
         match path.p_buf.read_link() {
             Ok(target) => {
-                name.push_str(" -> ");
+                name.extend_from_slice(b" -> ");
 
                 let absolute_target = if target.is_relative() {
                     path.p_buf
@@ -4981,7 +5040,7 @@ fn display_item_name<W: Write>(
                     target.clone()
                 };
                 let target_data = PathData::new(absolute_target.clone(), None, None, config, false);
-                let escaped_target = escape_name(target.as_os_str(), &config.quoting_style);
+                let escaped_target = escape_name_bytes(target.as_os_str(), &config.quoting_style);
                 let displayed_target = if config.is_hyperlink {
                     create_hyperlink(&escaped_target, &target_data)
                 } else {
@@ -5005,9 +5064,9 @@ fn display_item_name<W: Write>(
                         )
                         .is_err()
                     {
-                        name.push_str(&displayed_target);
+                        name.extend_from_slice(&displayed_target);
                     } else {
-                        name.push_str(&color_name(
+                        name.extend_from_slice(&color_name(
                             displayed_target,
                             path,
                             ls_colors,
@@ -5017,7 +5076,7 @@ fn display_item_name<W: Write>(
                         ));
                     }
                 } else {
-                    name.push_str(&displayed_target);
+                    name.extend_from_slice(&displayed_target);
                 }
 
                 if config.indicator_style != LsIndicatorStyle::Slash {
@@ -5025,7 +5084,7 @@ fn display_item_name<W: Write>(
                         config.indicator_style,
                         classify_symlink_target(&absolute_target),
                     ) {
-                        name.push(indicator);
+                        push_utf8(&mut name, indicator);
                     }
                 }
             }
@@ -5044,15 +5103,21 @@ fn display_item_name<W: Write>(
                 false => pad_left(&path.security_context, pad_count),
             };
 
-            name = format!("{security_context} {name}");
-            width += security_context.len() + 1;
+            let context_width = security_context.len() + 1;
+            let mut prefixed_name = security_context.into_bytes();
+            prefixed_name.push(b' ');
+            prefixed_name.extend_from_slice(&name);
+            name = prefixed_name;
+            width += context_width;
         }
     }
 
     if style_manager.normal_is_colored() && style_manager.style_count == style_count_before {
-        name.push_str(&style_manager.reset_sequence());
+        name.extend_from_slice(style_manager.reset_sequence().as_bytes());
     }
-    name = item_prefix + &name;
+    let mut prefixed_name = item_prefix.into_bytes();
+    prefixed_name.extend_from_slice(&name);
+    name = prefixed_name;
 
     Cell {
         contents: name,
@@ -5060,7 +5125,7 @@ fn display_item_name<W: Write>(
     }
 }
 
-fn create_hyperlink(name: &str, path: &PathData) -> String {
+fn create_hyperlink(name: &[u8], path: &PathData) -> Vec<u8> {
     let hostname_osstring = hostname::get().unwrap_or(OsString::from(""));
     let hostname = hostname_osstring.to_string_lossy();
 
@@ -5128,7 +5193,10 @@ fn create_hyperlink(name: &str, path: &PathData) -> String {
         .collect();
 
     // \x1b = ESC, \x07 = BEL
-    format!("\x1b]8;;file://{hostname}{absolute_path}\x07{name}\x1b]8;;\x07")
+    let mut hyperlink = format!("\x1b]8;;file://{hostname}{absolute_path}\x07").into_bytes();
+    hyperlink.extend_from_slice(name);
+    hyperlink.extend_from_slice(b"\x1b]8;;\x07");
+    hyperlink
 }
 
 /// We need this struct to be able to store the previous style.
@@ -5321,7 +5389,7 @@ impl StyleManager {
         )
     }
 
-    fn apply_sequence(&mut self, sequence: &str, name: &str) -> String {
+    fn apply_sequence(&mut self, sequence: &str, name: &[u8]) -> Vec<u8> {
         let initial = if self.normal_is_colored() {
             format!("{}{}", self.left, self.right)
         } else if self.is_first {
@@ -5332,12 +5400,10 @@ impl StyleManager {
         self.is_first = false;
         self.used_color = true;
         self.style_count += 1;
-        format!(
-            "{initial}{}{sequence}{}{name}{}",
-            self.left,
-            self.right,
-            self.reset_sequence()
-        )
+        let mut styled = format!("{initial}{}{sequence}{}", self.left, self.right).into_bytes();
+        styled.extend_from_slice(name);
+        styled.extend_from_slice(self.reset_sequence().as_bytes());
+        styled
     }
 
     fn raw_style<'a>(&'a self, style: &Style) -> Option<&'a str> {
@@ -5351,7 +5417,7 @@ impl StyleManager {
             })
     }
 
-    fn apply_style(&mut self, new_style: &Style, name: &str) -> String {
+    fn apply_style(&mut self, new_style: &Style, name: &[u8]) -> Vec<u8> {
         if let Some(raw_style) = self.raw_style(new_style).map(str::to_owned) {
             return self.apply_sequence(&raw_style, name);
         }
@@ -5369,7 +5435,9 @@ impl StyleManager {
 
         self.used_color = true;
         self.style_count += 1;
-        term_style.paint(name).to_string()
+        let mut styled = Vec::new();
+        term_style.paint(name).write_to(&mut styled).unwrap();
+        styled
     }
 
     fn finish<W: Write>(&self, out: &mut W) -> CTResult<()> {
@@ -5425,9 +5493,9 @@ fn apply_style_based_on_metadata(
     md_option: Option<&Metadata>,
     ls_colors: &LsColors,
     style_manager: &mut StyleManager,
-    name: &str,
+    name: &[u8],
     target_symlink: Option<&PathData>,
-) -> String {
+) -> Vec<u8> {
     let owned_style;
     let mut raw_sequence = None;
     let mut style = if target_symlink.is_some() && md_option.is_none() {
@@ -5523,13 +5591,13 @@ fn regular_file_special_style<'a>(
 
 /// 根据确定的风格为提供的名称着色
 fn color_name<W: Write>(
-    name: String,
+    name: Vec<u8>,
     path: &PathData,
     ls_colors: &LsColors,
     style_manager: &mut StyleManager,
     out: &mut W,
     target_symlink: Option<&PathData>,
-) -> String {
+) -> Vec<u8> {
     if let Some(target) = target_symlink {
         let md_owned =
             get_metadata_with_deref_opt(target.p_buf.as_path(), path.is_must_dereference).ok();
@@ -6168,31 +6236,31 @@ mod tests {
     fn tabify_grid_output_uses_tabs_only_at_tab_stops() {
         assert_eq!(
             tabify_grid_output(
-                ".  ..  .hidden1  .hidden2  .hidden_dir  file1.txt\n",
+                b".  ..  .hidden1  .hidden2  .hidden_dir  file1.txt\n",
                 8,
                 CtLineEnding::Newline,
             ),
-            ".  ..  .hidden1  .hidden2  .hidden_dir\tfile1.txt\n"
+            b".  ..  .hidden1  .hidden2  .hidden_dir\tfile1.txt\n".to_vec()
         );
         assert_eq!(
-            tabify_grid_output("a.txt  b.txt  subdir\n", 8, CtLineEnding::Newline),
-            "a.txt  b.txt  subdir\n"
+            tabify_grid_output(b"a.txt  b.txt  subdir\n", 8, CtLineEnding::Newline),
+            b"a.txt  b.txt  subdir\n".to_vec()
         );
         assert_eq!(
             tabify_grid_output(
-                "CLAUDE.md   LICENSE            bin        doc                      spec            testdir       testfile1  util\n",
+                b"CLAUDE.md   LICENSE            bin        doc                      spec            testdir       testfile1  util\n",
                 8,
                 CtLineEnding::Newline
             ),
-            "CLAUDE.md   LICENSE\t       bin\t  doc\t\t\t   spec\t\t   testdir\t testfile1  util\n"
+            b"CLAUDE.md   LICENSE\t       bin\t  doc\t\t\t   spec\t\t   testdir\t testfile1  util\n".to_vec()
         );
     }
 
     #[test]
     fn grid_output_trims_padding_after_last_column() {
         assert_eq!(
-            format_grid_output("x  \n", 0, false, CtLineEnding::Newline),
-            "x\n"
+            format_grid_output(b"x  \n", 0, false, CtLineEnding::Newline),
+            b"x\n".to_vec()
         );
     }
 
@@ -6230,7 +6298,7 @@ mod tests {
         assert_eq!(grid_columns_that_fit(&cells, 27, Direction::TopToBottom), 3);
         assert_eq!(
             render_grid(&cells, 27, Direction::TopToBottom, CtLineEnding::Newline,),
-            "aaaaaaaaaa  cc  ee\nbb          dd  ffffffffff\n"
+            b"aaaaaaaaaa  cc  ee\nbb          dd  ffffffffff\n".to_vec()
         );
     }
 
@@ -6277,15 +6345,15 @@ mod tests {
         assert_eq!(grid_columns_that_fit(&cells, 5, Direction::LeftToRight), 2);
         assert_eq!(
             render_grid(&cells, 3, Direction::LeftToRight, CtLineEnding::Newline,),
-            "a\nb\n"
+            b"a\nb\n".to_vec()
         );
         assert_eq!(
             render_grid(&cells, 4, Direction::LeftToRight, CtLineEnding::Newline,),
-            "a  b\n"
+            b"a  b\n".to_vec()
         );
         assert_eq!(
             render_grid(&cells, 5, Direction::LeftToRight, CtLineEnding::Newline,),
-            "a  b\n"
+            b"a  b\n".to_vec()
         );
     }
 
@@ -6309,7 +6377,7 @@ mod tests {
         assert_eq!(grid_columns_that_fit(&cells, 10, Direction::TopToBottom), 2);
         assert_eq!(
             render_grid(&cells, 10, Direction::TopToBottom, CtLineEnding::Newline,),
-            "..  sub\n.\n"
+            b"..  sub\n.\n".to_vec()
         );
     }
 
@@ -6358,15 +6426,15 @@ mod tests {
 
     #[test]
     fn format_grid_output_preserves_alignment_spaces_when_requested() {
-        let rendered = "'a b'   \x1b[0m\x1b[42;31mc.foo\x1b[0m\n";
+        let rendered = b"'a b'   \x1b[0m\x1b[42;31mc.foo\x1b[0m\n";
 
         assert_eq!(
             format_grid_output(rendered, 8, true, CtLineEnding::Newline),
-            rendered
+            rendered.to_vec()
         );
         assert_eq!(
             format_grid_output(rendered, 8, false, CtLineEnding::Newline),
-            "'a b'\t\x1b[0m\x1b[42;31mc.foo\x1b[0m\n"
+            b"'a b'\t\x1b[0m\x1b[42;31mc.foo\x1b[0m\n".to_vec()
         );
     }
 

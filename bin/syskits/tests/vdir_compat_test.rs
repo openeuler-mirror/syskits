@@ -515,6 +515,34 @@ fn vdir_does_not_panic_on_broken_stderr_pipe() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn vdir_help_and_version_report_closed_stdout() {
+    use std::os::unix::process::CommandExt;
+
+    for option in ["--help", "--version"] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_syskits"));
+        command
+            .env("LC_ALL", "C")
+            .args(["vdir", option])
+            .stdout(Stdio::piped());
+        unsafe {
+            command.pre_exec(|| {
+                libc::close(libc::STDOUT_FILENO);
+                Ok(())
+            });
+        }
+        let output = command.output().expect("run syskits vdir");
+
+        assert_eq!(output.status.code(), Some(2), "{option}");
+        assert_eq!(output.stdout, b"", "{option}");
+        assert_eq!(
+            output.stderr, b"vdir: write error: Bad file descriptor\n",
+            "{option}"
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn vdir_quotes_utf8_bytes_that_are_invalid_in_c_locale() {
     let temp_dir = TempDir::new().expect("tempdir");
     fs::write(temp_dir.path().join("é"), b"").expect("write fixture");

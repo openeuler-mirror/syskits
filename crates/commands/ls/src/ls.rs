@@ -5434,7 +5434,7 @@ fn create_hyperlink(name: &[u8], path: &PathData) -> Vec<u8> {
         }
     };
     #[cfg(unix)]
-    let unencoded_bytes = b"_-.:~/";
+    let unencoded_bytes = b"_-.~/";
     #[cfg(target_os = "windows")]
     let unencoded_bytes = b"_-.:~/\\";
 

@@ -5,6 +5,20 @@ use std::process::{Command, Output};
 
 use tempfile::TempDir;
 
+fn installed_german_locale() -> Option<String> {
+    let output = Command::new("/usr/bin/locale").arg("-a").output().ok()?;
+    let locales = String::from_utf8(output.stdout).ok()?;
+    for candidate in ["de_DE.utf8", "de_DE.UTF-8", "de_DE"] {
+        if let Some(locale) = locales
+            .lines()
+            .find(|locale| locale.eq_ignore_ascii_case(candidate))
+        {
+            return Some(locale.to_string());
+        }
+    }
+    None
+}
+
 fn run_gnu(command: &str, directory: &TempDir, names: &[&OsStr]) -> Output {
     let mut process = Command::new(format!("/usr/bin/{command}"));
     process
@@ -151,6 +165,35 @@ fn ls_c_maybe_quoting_style_matches_gnu_from_option_and_environment() {
     assert_eq!(syskits.status.code(), gnu.status.code());
     assert_eq!(syskits.stderr, gnu.stderr);
     assert_eq!(syskits.stdout, gnu.stdout);
+}
+
+#[test]
+fn ls_locale_quote_marks_match_gnu() {
+    let Some(locale) = installed_german_locale() else {
+        return;
+    };
+    let directory = TempDir::new().expect("tempdir");
+    fs::write(directory.path().join("space name"), b"").expect("create locale quote fixture");
+
+    for style in ["locale", "clocale"] {
+        let argument = format!("--quoting-style={style}");
+        let gnu = Command::new("/usr/bin/ls")
+            .current_dir(directory.path())
+            .env("LC_ALL", &locale)
+            .args(["-1", &argument])
+            .output()
+            .expect("run GNU ls");
+        let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .current_dir(directory.path())
+            .env("LC_ALL", &locale)
+            .args(["ls", "-1", &argument])
+            .output()
+            .expect("run syskits ls");
+
+        assert_eq!(syskits.status.code(), gnu.status.code(), "{style} status");
+        assert_eq!(syskits.stderr, gnu.stderr, "{style} stderr");
+        assert_eq!(syskits.stdout, gnu.stdout, "{style} stdout");
+    }
 }
 
 #[cfg(target_os = "linux")]

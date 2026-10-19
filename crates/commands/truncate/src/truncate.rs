@@ -17,9 +17,9 @@ use std::borrow::Cow;
 use std::env;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::fs::{File, OpenOptions, metadata};
+use std::fs::{metadata, File, OpenOptions};
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
+use clap::{builder::OsStringValueParser, crate_version, Arg, ArgAction, Command};
 #[cfg(unix)]
 use std::ffi::CStr;
 #[cfg(target_os = "linux")]
@@ -35,12 +35,12 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 use std::path::Path;
 
-use ctcore::Tool;
 use ctcore::ct_display::locale_quote_marks;
-use ctcore::ct_error::{CTError, CTResult, set_ct_exit_code};
+use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult};
 use ctcore::ct_parse_size::{CtParser, ParseSizeError};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::ct_quoting_style::gnu_quote_shell;
+use ctcore::Tool;
 
 use std::ffi::{OsStr, OsString};
 
@@ -206,16 +206,16 @@ fn truncate_quote_size(size: &OsStr) -> String {
 
 fn truncate_quote_size_bytes(bytes: &[u8]) -> String {
     let (left_quote, right_quote) = truncate_size_quote_marks();
-    truncate_quote_size_with_marks(bytes, left_quote, right_quote)
+    truncate_quote_size_with_marks(bytes, &left_quote, &right_quote)
 }
 
-fn truncate_size_quote_marks() -> (&'static str, &'static str) {
+fn truncate_size_quote_marks() -> (String, String) {
     truncate_size_quote_marks_for_locale(&rust_i18n::locale())
 }
 
-fn truncate_size_quote_marks_for_locale(locale: &str) -> (&'static str, &'static str) {
+fn truncate_size_quote_marks_for_locale(locale: &str) -> (String, String) {
     if locale == "zh-CN" {
-        ("\"", "\"")
+        ("\"".into(), "\"".into())
     } else {
         locale_quote_marks()
     }
@@ -1830,7 +1830,7 @@ mod tests {
         let (left_quote, right_quote) = truncate_size_quote_marks_for_locale("zh-CN");
         assert_eq!(
             truncate_invalid_number_message_with_label(
-                truncate_quote_size_with_marks(b"invalid", left_quote, right_quote),
+                truncate_quote_size_with_marks(b"invalid", &left_quote, &right_quote),
                 "无效的数字",
             ),
             "无效的数字: \"invalid\""
@@ -2953,8 +2953,8 @@ mod tests {
     }
     #[cfg(test)]
     mod parse_mode_and_size_tests {
-        use crate::TruncateMode;
         use crate::truncate_parse_mode_and_size;
+        use crate::TruncateMode;
 
         use super::*;
 

@@ -15,12 +15,12 @@ extern crate rust_i18n;
 use clap::ArgMatches;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
-use ctcore::Tool;
+use clap::{builder::OsStringValueParser, crate_version, Arg, ArgAction, Command};
 use ctcore::ct_display::locale_quote_marks;
-use ctcore::ct_error::{CTError, CTResult, CTsageError, set_ct_exit_code};
+use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult, CTsageError};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::ct_quoting_style::gnu_quote_shell_bytes;
+use ctcore::Tool;
 use std::ffi::{CString, OsStr, OsString};
 use std::fs;
 use std::io::Write;
@@ -683,7 +683,7 @@ fn write_shell_quoted_path<W: Write>(
 fn locale_quote_bytes(bytes: &[u8]) -> Vec<u8> {
     let (left_quote, right_quote) = pathchk_locale_quote_marks();
     let mut quoted = Vec::with_capacity(bytes.len() + left_quote.len() + right_quote.len());
-    quoted.extend_from_slice(left_quote);
+    quoted.extend_from_slice(&left_quote);
 
     let mut index = 0;
     while index < bytes.len() {
@@ -728,7 +728,7 @@ fn locale_quote_bytes(bytes: &[u8]) -> Vec<u8> {
         }
         index += 1;
     }
-    quoted.extend_from_slice(right_quote);
+    quoted.extend_from_slice(&right_quote);
     quoted
 }
 
@@ -767,7 +767,7 @@ fn locale_character(bytes: &[u8], start: usize) -> (usize, bool) {
     }
 }
 
-fn pathchk_locale_quote_marks() -> (&'static [u8], &'static [u8]) {
+fn pathchk_locale_quote_marks() -> (Vec<u8>, Vec<u8>) {
     let locale = ["LC_ALL", "LC_MESSAGES", "LANG"]
         .into_iter()
         .find_map(|name| std::env::var_os(name).filter(|value| !value.is_empty()))
@@ -777,11 +777,11 @@ fn pathchk_locale_quote_marks() -> (&'static [u8], &'static [u8]) {
         .replace('-', "_")
         .to_ascii_lowercase();
     if locale.starts_with("zh_cn") {
-        return (b"\"", b"\"");
+        return (b"\"".to_vec(), b"\"".to_vec());
     }
 
     let (left_quote, right_quote) = locale_quote_marks();
-    (left_quote.as_bytes(), right_quote.as_bytes())
+    (left_quote.into_bytes(), right_quote.into_bytes())
 }
 
 #[derive(Default)]
@@ -972,10 +972,8 @@ mod tests {
             let result = pathchk_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
-            assert!(
-                output_str
-                    .contains("pathchk: non-portable character ‘#’ in file name 'special#file'")
-            );
+            assert!(output_str
+                .contains("pathchk: non-portable character ‘#’ in file name 'special#file'"));
         }
 
         #[cfg(unix)]

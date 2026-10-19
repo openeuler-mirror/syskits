@@ -27,21 +27,21 @@ use chrono::{
     TimeZone, Timelike,
 };
 use clap::builder::ValueParser;
-use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, crate_version};
-use filetime::{FileTime, set_file_times, set_symlink_file_times};
+use clap::{crate_version, Arg, ArgAction, ArgGroup, ArgMatches, Command};
+use filetime::{set_file_times, set_symlink_file_times, FileTime};
 use std::fs::{self, File, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
-use ctcore::ct_display::{Quotable, locale_quote_marks};
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, strip_errno};
+use ctcore::ct_display::{locale_quote_marks, Quotable};
+use ctcore::ct_error::{strip_errno, CTError, CTResult, CtSimpleError, FromIo};
 use ctcore::ct_parse_datetime;
 use ctcore::ct_posix::{
-    GnuGetoptCommandExt, MODERN, TRADITIONAL, ct_posix_version, posixly_correct,
+    ct_posix_version, posixly_correct, GnuGetoptCommandExt, MODERN, TRADITIONAL,
 };
 use ctcore::ct_quoting_style::gnu_quote_shell;
-use ctcore::{Tool, ct_show};
+use ctcore::{ct_show, Tool};
 
 pub mod touch_flags {
     // 需要SOURCES和sources，因为我们需要能够引用ArgGroup。
@@ -324,7 +324,7 @@ fn touch_match_time_word(value: &[u8]) -> Result<&'static str, bool> {
 
 fn touch_time_word_diagnostic_message(value: &[u8], kind: &str) -> String {
     let (left_quote, right_quote) = locale_quote_marks();
-    touch_time_word_diagnostic_message_with_marks(value, kind, left_quote, right_quote)
+    touch_time_word_diagnostic_message_with_marks(value, kind, &left_quote, &right_quote)
 }
 
 fn touch_time_word_diagnostic_message_with_marks(
@@ -402,7 +402,7 @@ fn touch_quote_argmatch_bytes_with_marks(
 
 fn touch_invalid_date_format(value: &[u8]) -> String {
     let (left_quote, right_quote) = locale_quote_marks();
-    touch_invalid_date_format_with_marks(value, left_quote, right_quote)
+    touch_invalid_date_format_with_marks(value, &left_quote, &right_quote)
 }
 
 fn touch_invalid_date_format_with_marks(
@@ -891,7 +891,11 @@ fn touch_time_to_filetime(
         TouchTime::Now => now,
         TouchTime::Omit => {
             let (access, modification) = existing.expect("omitted time requires existing metadata");
-            if is_access { access } else { modification }
+            if is_access {
+                access
+            } else {
+                modification
+            }
         }
         TouchTime::Timestamp(time) => time,
     }
@@ -1364,11 +1368,11 @@ fn touch_pathbuf_from_stdout() -> CTResult<PathBuf> {
     {
         use std::os::windows::prelude::AsRawHandle;
         use windows_sys::Win32::Foundation::{
-            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND, GetLastError,
+            GetLastError, ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
             HANDLE, MAX_PATH,
         };
         use windows_sys::Win32::Storage::FileSystem::{
-            FILE_NAME_OPENED, GetFinalPathNameByHandleW,
+            GetFinalPathNameByHandleW, FILE_NAME_OPENED,
         };
 
         let handle = std::io::stdout().lock().as_raw_handle() as HANDLE;
@@ -1442,7 +1446,7 @@ mod tests {
         use super::*;
         use chrono::Local;
         use clap::ArgMatches;
-        use filetime::{FileTime, set_file_times};
+        use filetime::{set_file_times, FileTime};
         use tempfile::tempdir;
 
         fn build_matches(args: &[&str]) -> ArgMatches {
@@ -2405,7 +2409,7 @@ mod tests {
 
     #[cfg(test)]
     mod stat_tests {
-        use std::fs::{File, create_dir};
+        use std::fs::{create_dir, File};
         use std::io::Write;
         use std::os::unix::fs::symlink;
 
@@ -3686,12 +3690,10 @@ mod tests {
     #[test]
     fn test_get_pathbuf_from_stdout_fails_if_stdout_is_not_a_file() {
         // 我们可以通过不设置stdout来触发错误（将失败，代码为1）
-        assert!(
-            super::touch_pathbuf_from_stdout()
-                .expect_err("pathbuf_from_stdout should have failed")
-                .to_string()
-                .contains("GetFinalPathNameByHandleW failed with code 1")
-        );
+        assert!(super::touch_pathbuf_from_stdout()
+            .expect_err("pathbuf_from_stdout should have failed")
+            .to_string()
+            .contains("GetFinalPathNameByHandleW failed with code 1"));
     }
 
     #[cfg(test)]

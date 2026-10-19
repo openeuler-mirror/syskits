@@ -12,13 +12,13 @@
 // spell-checker:ignore (ToDO) dyld dylib dragonflybsd optgrps libstdbuf memfd
 
 extern crate rust_i18n;
-use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::Tool;
 use ctcore::ct_display::locale_quote_marks;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, UClapError};
-use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
+use ctcore::ct_parse_size::{parse_size_u64, ParseSizeError};
+use ctcore::Tool;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::Write;
@@ -129,7 +129,7 @@ fn trim_c_whitespace_start(value: &[u8]) -> &[u8] {
 
 fn quote_mode_bytes(value: &[u8]) -> String {
     let (left_quote, right_quote) = locale_quote_marks();
-    quote_mode_bytes_with_marks(value, left_quote, right_quote)
+    quote_mode_bytes_with_marks(value, &left_quote, &right_quote)
 }
 
 fn invalid_mode_message(value: &[u8]) -> String {
@@ -572,7 +572,7 @@ impl Tool for Stdbuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clap::{ArgAction, builder::Command as ClapCommand};
+    use clap::{builder::Command as ClapCommand, ArgAction};
 
     #[test]
     fn test_tool_implementation() {

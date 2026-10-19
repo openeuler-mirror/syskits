@@ -28,6 +28,8 @@
 /// ```
 use std::env;
 use std::ffi::OsStr;
+#[cfg(target_os = "linux")]
+use std::ffi::{c_char, CStr};
 use std::io::{self, Write as IoWrite};
 
 #[cfg(unix)]
@@ -42,7 +44,7 @@ pub fn locale_quote(text: &str) -> String {
     let (left_quote, right_quote) = locale_quote_marks();
     let normalized_locale = locale_name_for_ctype().to_ascii_uppercase();
     let utf8_locale = normalized_locale.contains("UTF-8") || normalized_locale.contains("UTF8");
-    let escaped = locale_quote_escape(text, right_quote, utf8_locale);
+    let escaped = locale_quote_escape(text, &right_quote, utf8_locale);
 
     format!("{left_quote}{escaped}{right_quote}")
 }
@@ -88,18 +90,45 @@ fn is_right_quote(character: char, right_quote: &str) -> bool {
     quote_characters.next() == Some(character) && quote_characters.next().is_none()
 }
 
-/// Return the locale-sensitive opening and closing marks used by GNU diagnostics.
-pub fn locale_quote_marks() -> (&'static str, &'static str) {
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn dgettext(domainname: *const c_char, msgid: *const c_char) -> *mut c_char;
+}
+
+#[cfg(target_os = "linux")]
+fn translated_coreutils_quote(msgid: &'static CStr) -> Option<String> {
+    let translated = unsafe { dgettext(c"coreutils".as_ptr(), msgid.as_ptr()) };
+    if translated.is_null() || translated.cast_const() == msgid.as_ptr() {
+        return None;
+    }
+
+    Some(
+        unsafe { CStr::from_ptr(translated) }
+            .to_string_lossy()
+            .into_owned(),
+    )
+}
+
+pub fn locale_quote_marks() -> (String, String) {
     let locale = locale_name_for_ctype();
     let normalized = locale.to_ascii_uppercase();
 
-    if normalized.contains("UTF-8") || normalized.contains("UTF8") {
+    let fallback = if normalized.contains("UTF-8") || normalized.contains("UTF8") {
         ("‘", "’")
     } else if normalized.contains("GB18030") {
         ("\"", "\"")
     } else {
         ("'", "'")
-    }
+    };
+
+    #[cfg(target_os = "linux")]
+    return (
+        translated_coreutils_quote(c"`").unwrap_or_else(|| fallback.0.to_string()),
+        translated_coreutils_quote(c"'").unwrap_or_else(|| fallback.1.to_string()),
+    );
+
+    #[cfg(not(target_os = "linux"))]
+    (fallback.0.to_string(), fallback.1.to_string())
 }
 
 fn locale_name_for_ctype() -> String {

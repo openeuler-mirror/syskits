@@ -43,7 +43,7 @@ use crate::{
     OPT_NUMERIC_SUFFIXES_SHORT, OPT_SUFFIX_LENGTH,
 };
 use clap::ArgMatches;
-use ctcore::ct_display::{Quotable, locale_quote_marks};
+use ctcore::ct_display::{locale_quote_marks, Quotable};
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use std::ffi::{OsStr, OsString};
 use std::fmt;
@@ -129,20 +129,20 @@ fn quote_suffix_for_diagnostic(suffix: &OsStr) -> String {
     let (left_quote, right_quote) = locale_quote_marks();
     let right_quote_bytes = right_quote.as_bytes();
     let mut quoted = String::with_capacity(bytes.len() + left_quote.len() + right_quote.len());
-    quoted.push_str(left_quote);
+    quoted.push_str(&left_quote);
 
     let mut index = 0;
     while index < bytes.len() {
         if bytes[index..].starts_with(right_quote_bytes) {
             quoted.push('\\');
-            quoted.push_str(right_quote);
+            quoted.push_str(&right_quote);
             index += right_quote_bytes.len();
             continue;
         }
 
         let byte = bytes[index];
         if byte.is_ascii() {
-            push_quoted_suffix_ascii(&mut quoted, byte, right_quote);
+            push_quoted_suffix_ascii(&mut quoted, byte, &right_quote);
             index += 1;
             continue;
         }
@@ -165,7 +165,7 @@ fn quote_suffix_for_diagnostic(suffix: &OsStr) -> String {
         index += length;
     }
 
-    quoted.push_str(right_quote);
+    quoted.push_str(&right_quote);
     quoted
 }
 

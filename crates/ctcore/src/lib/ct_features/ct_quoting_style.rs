@@ -74,14 +74,14 @@ impl CtQuotes {
         }
     }
 
-    fn marks(self) -> (&'static str, &'static str) {
+    fn marks(self) -> (String, String) {
         match self {
-            Self::None => ("", ""),
-            Self::Single => ("'", "'"),
-            Self::Double => ("\"", "\""),
+            Self::None => (String::new(), String::new()),
+            Self::Single => ("'".into(), "'".into()),
+            Self::Double => ("\"".into(), "\"".into()),
             Self::Locale => locale_quote_marks(),
             Self::CLocale if hard_locale(LcCategory::LcCtype) => locale_quote_marks(),
-            Self::CLocale => ("\"", "\""),
+            Self::CLocale => ("\"".into(), "\"".into()),
         }
     }
 }
@@ -637,8 +637,8 @@ pub fn gnu_quote_locale(name: &OsStr) -> String {
     let (left_quote, right_quote) = crate::ct_display::locale_quote_marks();
     quote_locale_bytes(
         name.as_bytes(),
-        left_quote,
-        right_quote,
+        &left_quote,
+        &right_quote,
         left_quote == "‘" && right_quote == "’",
     )
 }

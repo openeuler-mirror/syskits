@@ -282,6 +282,26 @@ fn vdir_posixly_correct_stops_parsing_options_after_first_operand() {
     assert!(output.stderr.windows(4).any(|bytes| bytes == b"'-d'"));
 }
 
+#[test]
+fn vdir_invalid_quoting_environment_warning_matches_gnu() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("f"), b"").expect("write fixture");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("QUOTING_STYLE", "bogus")
+        .args(["vdir", "-1", "-d", "f"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(
+        output.stderr,
+        b"vdir: ignoring invalid value of environment variable QUOTING_STYLE: 'bogus'\n"
+    );
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn vdir_quotes_utf8_bytes_that_are_invalid_in_c_locale() {

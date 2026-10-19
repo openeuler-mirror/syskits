@@ -773,6 +773,24 @@ fn vdir_disables_dired_metadata_when_hyperlinks_are_enabled() {
 }
 
 #[test]
+fn vdir_preserves_ls_colors_control_sequences_and_sgr_order() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::create_dir(temp_dir.path().join("d")).expect("create fixture");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("LS_COLORS", "lc=LEFT:rc=RIGHT:ec=END:rs=9:di=34;01")
+        .args(["vdir", "-1", "--color=always", "."])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert_eq!(output.stdout, b"ENDLEFT34;01RIGHTdEND\nLEFTRIGHT");
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

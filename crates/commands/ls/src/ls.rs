@@ -2627,7 +2627,7 @@ pub fn list(locs: Vec<&Path>, config: &LsConfig) -> CTResult<(Vec<PathData>, Vec
     let mut dirs_vec = Vec::<PathData>::new();
     let mut out = BufWriter::new(stdout());
     let mut dired_output = DiredOutput::default();
-    let mut style_manager = StyleManager::new();
+    let mut style_manager = StyleManager::new(config.color.as_ref());
     let initial_locs_len = locs.len();
 
     for loc in locs {
@@ -2727,6 +2727,7 @@ pub fn list(locs: Vec<&Path>, config: &LsConfig) -> CTResult<(Vec<PathData>, Vec
             &mut style_manager,
         )?;
     }
+    style_manager.finish(&mut out)?;
     if config.is_dired {
         dired::dired_print_dired_output(config, &dired_output, &mut out)?;
     }
@@ -4497,14 +4498,100 @@ fn create_hyperlink(name: &str, path: &PathData) -> String {
 /// the reset
 struct StyleManager {
     is_first: bool,
+    used_color: bool,
+    left: String,
+    right: String,
+    end: Option<String>,
+    reset: String,
+    raw_indicator_styles: HashMap<usize, String>,
+    raw_suffix_styles: Vec<(Style, String)>,
 }
 
 impl StyleManager {
-    fn new() -> Self {
-        Self { is_first: true }
+    fn new(ls_colors: Option<&LsColors>) -> Self {
+        let mut manager = Self {
+            is_first: true,
+            used_color: false,
+            left: "\x1b[".into(),
+            right: "m".into(),
+            end: None,
+            reset: "0".into(),
+            raw_indicator_styles: HashMap::new(),
+            raw_suffix_styles: Vec::new(),
+        };
+
+        let Some((ls_colors, value)) = ls_colors.zip(
+            std::env::var("LS_COLORS")
+                .ok()
+                .filter(|value| !value.is_empty()),
+        ) else {
+            return manager;
+        };
+
+        for entry in value.split(':') {
+            let Some((key, value)) = entry.split_once('=') else {
+                continue;
+            };
+            match key {
+                "lc" => manager.left = value.into(),
+                "rc" => manager.right = value.into(),
+                "ec" => manager.end = Some(value.into()),
+                "rs" => manager.reset = value.into(),
+                _ => {
+                    let Some(parsed_style) = Style::from_ansi_sequence(value) else {
+                        continue;
+                    };
+                    if key.starts_with('*') {
+                        manager.raw_suffix_styles.push((parsed_style, value.into()));
+                    } else if let Some(indicator) = lscolors::Indicator::from(key)
+                        && let Some(style) = ls_colors.style_for_indicator(indicator)
+                    {
+                        manager
+                            .raw_indicator_styles
+                            .insert(style as *const Style as usize, value.into());
+                    }
+                }
+            }
+        }
+
+        manager
+    }
+
+    fn reset_sequence(&self) -> String {
+        self.end
+            .clone()
+            .unwrap_or_else(|| format!("{}{}{}", self.left, self.reset, self.right))
+    }
+
+    fn raw_style<'a>(&'a self, style: &Style) -> Option<&'a str> {
+        self.raw_indicator_styles
+            .get(&(style as *const Style as usize))
+            .map(String::as_str)
+            .or_else(|| {
+                self.raw_suffix_styles
+                    .iter()
+                    .rev()
+                    .find_map(|(candidate, raw)| (candidate == style).then_some(raw.as_str()))
+            })
     }
 
     fn apply_style(&mut self, new_style: &Style, name: &str) -> String {
+        if let Some(raw_style) = self.raw_style(new_style).map(str::to_owned) {
+            let initial = if self.is_first {
+                self.is_first = false;
+                self.reset_sequence()
+            } else {
+                String::new()
+            };
+            self.used_color = true;
+            return format!(
+                "{initial}{}{raw_style}{}{name}{}",
+                self.left,
+                self.right,
+                self.reset_sequence()
+            );
+        }
+
         let mut term_style = new_style.to_nu_ansi_term_style();
 
         if self.is_first {
@@ -4516,7 +4603,15 @@ impl StyleManager {
             term_style.prefix_with_reset = false;
         }
 
+        self.used_color = true;
         term_style.paint(name).to_string()
+    }
+
+    fn finish<W: Write>(&self, out: &mut W) -> CTResult<()> {
+        if self.used_color && (self.left != "\x1b[" || self.right != "m") {
+            write!(out, "{}{}", self.left, self.right)?;
+        }
+        Ok(())
     }
 }
 

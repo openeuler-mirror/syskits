@@ -1,5 +1,5 @@
 use std::fs;
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::process::{Command, Output};
 
 use tempfile::TempDir;
@@ -23,6 +23,24 @@ fn assert_same_output(case: &str, gnu: Output, syskits: Output) {
         "{case}: GNU stderr: {}, syskits stderr: {}",
         String::from_utf8_lossy(&gnu.stderr),
         String::from_utf8_lossy(&syskits.stderr)
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn dir_preserves_non_utf8_invalid_option_byte() {
+    let invalid_option = std::ffi::OsString::from_vec(b"-\xff".to_vec());
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args([std::ffi::OsStr::new("dir"), invalid_option.as_os_str()])
+        .output()
+        .expect("run syskits dir");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.stdout, b"");
+    assert_eq!(
+        output.stderr,
+        b"dir: invalid option -- '\xff'\nTry 'dir --help' for more information.\n"
     );
 }
 

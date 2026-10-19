@@ -77,10 +77,15 @@ impl ctcore::ct_error::CTError for DirNonUtf8OptionError {
 struct DirClapError {
     inner: Box<dyn ctcore::ct_error::CTError>,
     diagnostic: Option<String>,
+    display_request: bool,
 }
 
 impl DirClapError {
     fn new(error: clap::Error, args: &[OsString]) -> Self {
+        let display_request = matches!(
+            error.kind(),
+            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+        );
         let missing_argument = dir_missing_option_argument_diagnostic(&error, args);
         let invalid_enum = dir_invalid_enum_diagnostic(&error);
         let diagnostic = if missing_argument.is_some() {
@@ -121,6 +126,7 @@ impl DirClapError {
         Self {
             inner: Box::new(error.with_exit_code(code)),
             diagnostic,
+            display_request,
         }
     }
 }
@@ -334,7 +340,7 @@ impl ctcore::ct_error::CTError for DirClapError {
     }
 
     fn usage(&self) -> bool {
-        self.diagnostic.is_none() && self.inner.usage()
+        !self.display_request && self.diagnostic.is_none() && self.inner.usage()
     }
 }
 

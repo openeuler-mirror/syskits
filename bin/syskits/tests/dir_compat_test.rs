@@ -810,3 +810,45 @@ fn dir_localizes_option_diagnostics_like_gnu() {
         assert_same_output(option, gnu, syskits);
     }
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn dir_localizes_environment_diagnostics_like_gnu() {
+    let locale_available = Command::new("locale")
+        .arg("-a")
+        .output()
+        .expect("list locales")
+        .stdout
+        .split(|byte| *byte == b'\n')
+        .any(|locale| locale.eq_ignore_ascii_case(b"fr_FR.utf8"));
+    if !locale_available {
+        return;
+    }
+
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("a"), b"").expect("create file");
+    for variable in ["COLUMNS", "TABSIZE", "QUOTING_STYLE", "LS_COLORS"] {
+        let mut gnu_command = Command::new("/usr/bin/dir");
+        gnu_command
+            .arg0("dir")
+            .current_dir(temp_dir.path())
+            .env("LC_ALL", "fr_FR.UTF-8")
+            .env(variable, "bad");
+        let mut syskits_command = Command::new(env!("CARGO_BIN_EXE_syskits"));
+        syskits_command
+            .current_dir(temp_dir.path())
+            .env("LC_ALL", "fr_FR.UTF-8")
+            .env(variable, "bad")
+            .arg("dir");
+        if variable == "LS_COLORS" {
+            gnu_command.arg("--color=always");
+            syskits_command.arg("--color=always");
+        }
+        gnu_command.arg(".");
+        syskits_command.arg(".");
+
+        let gnu = gnu_command.output().expect("run GNU dir");
+        let syskits = syskits_command.output().expect("run syskits dir");
+        assert_same_output(variable, gnu, syskits);
+    }
+}

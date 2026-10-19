@@ -765,3 +765,17 @@ fn dir_reports_invalid_enum_values_like_gnu() {
         assert_same_output(option, gnu, syskits);
     }
 }
+
+#[test]
+fn dir_help_and_version_display_do_not_write_stderr() {
+    for option in ["--help", "--version", "--he", "--ver"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C")
+            .args(["dir", option])
+            .output()
+            .expect("run syskits dir");
+
+        assert!(output.status.success(), "failed to display {option}");
+        assert_eq!(output.stderr, b"", "unexpected stderr for {option}");
+    }
+}

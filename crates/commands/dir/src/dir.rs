@@ -124,7 +124,20 @@ fn dir_default_format_style(matches: &ArgMatches) -> bool {
 }
 
 fn dir_config_from_matches(matches: &ArgMatches) -> CTResult<LsConfig> {
+    let uses_default_format = dir_default_format_style(matches);
     let mut config = LsConfig::from(matches)?;
+
+    if uses_default_format
+        && matches.value_source(ls_flags::format::LS_TAB_SIZE)
+            == Some(clap::parser::ValueSource::EnvVariable)
+        && let Some(tab_size) = matches.get_one::<OsString>(ls_flags::format::LS_TAB_SIZE)
+        && tab_size.to_str().is_none()
+    {
+        ctcore::ct_show_error!(
+            "ignoring invalid tab size in environment variable TABSIZE: {}",
+            ct_ls::ls_quote_environment_value(tab_size)
+        );
+    }
 
     match &mut config.quoting_style {
         CtQuotingStyle::Shell { show_control, .. } | CtQuotingStyle::Literal { show_control } => {
@@ -138,7 +151,7 @@ fn dir_config_from_matches(matches: &ArgMatches) -> CTResult<LsConfig> {
             quotes: CtQuotes::None,
         };
     }
-    if dir_default_format_style(matches) {
+    if uses_default_format {
         config.format = LsFormat::Columns;
     }
 
@@ -2134,9 +2147,9 @@ mod tests {
             assert_eq!(
                 matches
                     .unwrap()
-                    .get_one::<String>(ls_flags::format::LS_TAB_SIZE)
+                    .get_one::<OsString>(ls_flags::format::LS_TAB_SIZE)
                     .unwrap(),
-                "4"
+                &OsString::from("4")
             );
         }
 
@@ -2149,9 +2162,9 @@ mod tests {
             assert_eq!(
                 matches
                     .unwrap()
-                    .get_one::<String>(ls_flags::format::LS_TAB_SIZE)
+                    .get_one::<OsString>(ls_flags::format::LS_TAB_SIZE)
                     .unwrap(),
-                "8"
+                &OsString::from("8")
             );
         }
 

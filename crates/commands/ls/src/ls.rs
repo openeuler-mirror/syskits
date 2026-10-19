@@ -960,6 +960,25 @@ fn has_usable_ls_colors() -> bool {
     has_explicit_ls_colors() || is_color_compatible_term()
 }
 
+pub fn ls_quote_environment_value(value: &OsStr) -> String {
+    let mut quoted = String::from("'");
+    #[cfg(unix)]
+    for byte in value.as_bytes() {
+        match byte {
+            b' '..=b'~' if !matches!(byte, b'\'' | b'\\') => quoted.push(char::from(*byte)),
+            b'\'' | b'\\' => {
+                quoted.push('\\');
+                quoted.push(char::from(*byte));
+            }
+            _ => write!(quoted, "\\{byte:03o}").unwrap(),
+        }
+    }
+    #[cfg(not(unix))]
+    quoted.push_str(&value.to_string_lossy());
+    quoted.push('\'');
+    quoted
+}
+
 /// 根据提供的选项提取要使用的颜色选项。
 ///
 /// # 返回
@@ -977,9 +996,15 @@ fn extract_color(options: &clap::ArgMatches) -> bool {
 }
 
 fn load_ls_colors() -> Option<LsColors> {
-    match std::env::var("LS_COLORS") {
-        Ok(value) if !value.is_empty() => Some(LsColors::from_string(&value)),
-        _ if has_usable_ls_colors() => Some(LsColors::default()),
+    match std::env::var_os("LS_COLORS") {
+        Some(value) if !value.is_empty() => match value.to_str() {
+            Some(value) => Some(LsColors::from_string(value)),
+            None => {
+                ct_show_error!("unparsable value for LS_COLORS environment variable");
+                None
+            }
+        },
+        _ if is_color_compatible_term() => Some(LsColors::default()),
         _ => None,
     }
 }
@@ -1086,15 +1111,17 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> CtQu
         CtQuotingStyle::Literal { show_control }
     } else {
         // 如果设置，QUOTING_STYLE 环境变量将指定默认样式。
-        if let Ok(style) = std::env::var("QUOTING_STYLE") {
-            match match_quoting_style_name(style.as_str(), show_control) {
-                Some(qs) => return qs,
-                None => eprintln!(
-                    "{}: ignoring invalid value of environment variable QUOTING_STYLE: '{}'",
-                    ctcore::ct_util_name(),
-                    style
-                ),
+        if let Some(style) = std::env::var_os("QUOTING_STYLE") {
+            if let Some(qs) = style
+                .to_str()
+                .and_then(|style| match_quoting_style_name(style, show_control))
+            {
+                return qs;
             }
+            ct_show_error!(
+                "ignoring invalid value of environment variable QUOTING_STYLE: {}",
+                ls_quote_environment_value(&style)
+            );
         }
 
         // 默认情况下，当写入终端文件时，`ls` 使用 Shell 转义引号样式。
@@ -1460,7 +1487,7 @@ impl LsConfig {
                         None => {
                             ct_show_error!(
                                 "ignoring invalid width in environment variable COLUMNS: {}",
-                                columns.quote()
+                                ls_quote_environment_value(&columns)
                             );
                             LS_DEFAULT_TERM_WIDTH
                         }
@@ -1469,25 +1496,32 @@ impl LsConfig {
                 },
             },
         };
-        let tab_size = match options.get_one::<String>(ls_flags::format::LS_TAB_SIZE) {
+        let tab_size = match options.get_one::<OsString>(ls_flags::format::LS_TAB_SIZE) {
             Some(tab_size) => match options.value_source(ls_flags::format::LS_TAB_SIZE) {
                 Some(clap::parser::ValueSource::EnvVariable) => {
                     if !format_uses_tab_size(&format) {
                         LS_DEFAULT_TAB_SIZE
                     } else {
-                        match parse_base_zero_usize(tab_size) {
+                        match tab_size.to_str().and_then(parse_base_zero_usize) {
                             Some(tab_size) => tab_size,
                             None => {
                                 ct_show_error!(
                                     "ignoring invalid tab size in environment variable TABSIZE: {}",
-                                    tab_size.quote()
+                                    ls_quote_environment_value(tab_size)
                                 );
                                 LS_DEFAULT_TAB_SIZE
                             }
                         }
                     }
                 }
-                _ => parse_tab_size(tab_size)?,
+                _ => match tab_size.to_str() {
+                    Some(tab_size) => parse_tab_size(tab_size)?,
+                    None => {
+                        return Err(Box::new(LsError::LsInvalidTabSize(
+                            tab_size.to_string_lossy().into_owned(),
+                        )));
+                    }
+                },
             },
             None => LS_DEFAULT_TAB_SIZE,
         };
@@ -2245,6 +2279,7 @@ pub fn ct_app() -> Command {
             .short('T')
             .long(ls_flags::format::LS_TAB_SIZE)
             .env("TABSIZE")
+            .value_parser(ValueParser::os_string())
             .value_name("COLS")
             .help("Assume tab stops at each COLS instead of 8 (unimplemented)"),
         Arg::new(ls_flags::format::LS_COMMAS)

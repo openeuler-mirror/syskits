@@ -107,6 +107,26 @@ fn dir_default_quoting_style(matches: &ArgMatches) -> bool {
         && !matches.get_flag(ls_flags::quoting::LS_ESCAPE)
         && !matches.get_flag(ls_flags::quoting::LS_LITERAL)
         && !matches.get_flag(ls_flags::LS_ZERO)
+        && !dir_has_valid_quoting_style_environment()
+}
+
+fn dir_has_valid_quoting_style_environment() -> bool {
+    std::env::var_os("QUOTING_STYLE")
+        .and_then(|style| style.into_string().ok())
+        .is_some_and(|style| {
+            matches!(
+                style.as_str(),
+                "literal"
+                    | "shell"
+                    | "shell-always"
+                    | "shell-escape"
+                    | "shell-escape-always"
+                    | "c"
+                    | "clocale"
+                    | "escape"
+                    | "locale"
+            )
+        })
 }
 
 fn dir_default_format_style(matches: &ArgMatches) -> bool {

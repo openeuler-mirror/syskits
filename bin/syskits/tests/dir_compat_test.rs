@@ -547,3 +547,34 @@ fn dir_does_not_color_long_symlink_target_for_plain_ln_style() {
     );
     assert_eq!(output.stderr, b"");
 }
+
+#[test]
+fn dir_keeps_differently_colored_extension_rules_case_sensitive() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    for name in ["img1.jpg", "IMG2.JPG", "img3.JpG"] {
+        fs::write(temp_dir.path().join(name), b"").expect("create image fixture");
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("LS_COLORS", "*.jpg=01;35:*.JPG=01;35;46")
+        .args([
+            "dir",
+            "-U1",
+            "--color=always",
+            "-d",
+            "img1.jpg",
+            "IMG2.JPG",
+            "img3.JpG",
+        ])
+        .output()
+        .expect("run syskits dir");
+
+    assert!(output.status.success());
+    assert_eq!(
+        output.stdout,
+        b"\x1b[0m\x1b[01;35mimg1.jpg\x1b[0m\n\x1b[01;35;46mIMG2.JPG\x1b[0m\nimg3.JpG\n"
+    );
+    assert_eq!(output.stderr, b"");
+}

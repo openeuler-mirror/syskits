@@ -216,6 +216,22 @@ fn vdir_reports_help_and_version_arguments_like_gnu() {
     }
 }
 
+#[test]
+fn vdir_help_uses_gnu_compatible_content() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args(["vdir", "--help"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert!(output.stdout.starts_with(b"Usage: vdir [OPTION]... [FILE]...\n"));
+    assert!(output.stdout.windows(12).any(|bytes| bytes == b"Exit status:"));
+    assert!(output.stdout.ends_with(
+        b"or available locally via: info '(coreutils) vdir invocation'\n"
+    ));
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn vdir_quotes_utf8_bytes_that_are_invalid_in_c_locale() {

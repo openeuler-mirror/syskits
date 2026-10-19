@@ -255,6 +255,38 @@ fn dir_ignores_empty_time_style_outside_long_format() {
     }
 }
 
+#[test]
+fn dir_f_resets_long_format_to_default_columns() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let listing_dir = temp_dir.path().join("d");
+    fs::create_dir(&listing_dir).expect("create listing directory");
+    for name in ["a", "b", "c", "d"] {
+        fs::write(listing_dir.join(name), b"").expect("create file");
+    }
+
+    for options in [["-lfA"], ["-flA"], ["-lf1A"], ["-l1fA"]] {
+        let gnu = Command::new("/usr/bin/dir")
+            .current_dir(temp_dir.path())
+            .env("LC_ALL", "C")
+            .env("COLUMNS", "20")
+            .args(options)
+            .arg("d")
+            .output()
+            .expect("run GNU dir");
+        let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .current_dir(temp_dir.path())
+            .env("LC_ALL", "C")
+            .env("COLUMNS", "20")
+            .arg("dir")
+            .args(options)
+            .arg("d")
+            .output()
+            .expect("run syskits dir");
+
+        assert_same_output(options[0], gnu, syskits);
+    }
+}
+
 #[cfg(target_os = "linux")]
 fn set_selinux_xattr(path: &std::path::Path, value: &[u8]) -> bool {
     let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {

@@ -232,6 +232,20 @@ fn vdir_help_uses_gnu_compatible_content() {
     ));
 }
 
+#[test]
+fn vdir_help_and_version_display_do_not_write_stderr() {
+    for option in ["--help", "--version", "--he", "--ver"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C")
+            .args(["vdir", option])
+            .output()
+            .expect("run syskits vdir");
+
+        assert!(output.status.success(), "failed to display {option}");
+        assert_eq!(output.stderr, b"", "unexpected stderr for {option}");
+    }
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn vdir_quotes_utf8_bytes_that_are_invalid_in_c_locale() {

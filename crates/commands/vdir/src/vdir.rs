@@ -119,10 +119,15 @@ impl ctcore::ct_error::CTError for VdirNonUtf8OptionError {
 struct VdirClapError {
     inner: Box<dyn ctcore::ct_error::CTError>,
     diagnostic: Option<String>,
+    display_request: bool,
 }
 
 impl VdirClapError {
     fn new(error: clap::Error) -> Self {
+        let display_request = matches!(
+            error.kind(),
+            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+        );
         let diagnostic = match error.kind() {
             clap::error::ErrorKind::UnknownArgument => match error.get(ContextKind::InvalidArg) {
                 Some(ContextValue::String(argument)) => {
@@ -147,6 +152,7 @@ impl VdirClapError {
         Self {
             inner: Box::new(error.with_exit_code(code)),
             diagnostic,
+            display_request,
         }
     }
 }
@@ -186,7 +192,7 @@ impl ctcore::ct_error::CTError for VdirClapError {
     }
 
     fn usage(&self) -> bool {
-        self.diagnostic.is_none() && self.inner.usage()
+        !self.display_request && self.diagnostic.is_none() && self.inner.usage()
     }
 }
 

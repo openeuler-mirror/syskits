@@ -352,6 +352,38 @@ fn vdir_localizes_missing_file_diagnostic() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn vdir_localizes_help_output() {
+    let locale_available = Command::new("locale")
+        .arg("-a")
+        .output()
+        .expect("list locales")
+        .stdout
+        .split(|byte| *byte == b'\n')
+        .any(|locale| locale.eq_ignore_ascii_case(b"fr_FR.utf8"));
+    if !locale_available {
+        return;
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(["vdir", "--help"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert!(
+        output
+            .stdout
+            .starts_with("Utilisation\u{a0}: vdir [OPTION]... [FICHIER]...\n".as_bytes())
+    );
+    assert!(output.stdout.ends_with(
+        "ou disponible localement via: info '(coreutils) vdir invocation'\n".as_bytes()
+    ));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn vdir_quotes_utf8_bytes_that_are_invalid_in_c_locale() {
     let temp_dir = TempDir::new().expect("tempdir");
     fs::write(temp_dir.path().join("é"), b"").expect("write fixture");

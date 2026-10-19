@@ -1608,27 +1608,7 @@ impl LsConfig {
 
         let mut is_alloc_size = options.get_flag(ls_flags::size::LS_ALLOCATION_SIZE);
         let opt_block_size = options.get_one::<String>(ls_flags::size::LS_BLOCK_SIZE);
-        let is_opt_si = opt_block_size.is_some()
-            && options
-                .get_one::<String>(ls_flags::size::LS_BLOCK_SIZE)
-                .unwrap()
-                .eq("si")
-            || options.get_flag(ls_flags::size::LS_SI);
-        let is_opt_hr = (opt_block_size.is_some()
-            && options
-                .get_one::<String>(ls_flags::size::LS_BLOCK_SIZE)
-                .unwrap()
-                .eq("human-readable"))
-            || options.get_flag(ls_flags::size::LS_HUMAN_READABLE);
         let opt_kb = options.get_flag(ls_flags::size::LS_KIBIBYTES);
-
-        let size_format = if is_opt_si {
-            LsSizeFormat::Decimal
-        } else if is_opt_hr {
-            LsSizeFormat::Binary
-        } else {
-            LsSizeFormat::Bytes
-        };
 
         let env_var_block_len = std::env::var_os("BLOCKSIZE");
         let env_var_block_size = std::env::var_os("BLOCK_SIZE");
@@ -1657,8 +1637,20 @@ impl LsConfig {
             .strip_prefix('+')
             .unwrap_or(trimmed_block_size);
 
+        let is_si = options.get_flag(ls_flags::size::LS_SI)
+            || (!is_env_var_blocksize && block_size_spec == "si");
+        let is_human_readable = options.get_flag(ls_flags::size::LS_HUMAN_READABLE)
+            || (!is_env_var_blocksize && block_size_spec == "human-readable");
+        let size_format = if is_si {
+            LsSizeFormat::Decimal
+        } else if is_human_readable {
+            LsSizeFormat::Binary
+        } else {
+            LsSizeFormat::Bytes
+        };
+
         let (file_size_block_size, block_size) =
-            if !is_opt_si && !is_opt_hr && !raw_block_size.is_empty() {
+            if !is_si && !is_human_readable && !raw_block_size.is_empty() {
                 match parse_size_u64(block_size_spec) {
                     Ok(size) => {
                         if size == 0 {
@@ -1723,7 +1715,7 @@ impl LsConfig {
                         LS_POSIXLY_CORRELS_BLOCK_SIZE,
                     )
                 }
-            } else if is_opt_si {
+            } else if is_si {
                 (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
             } else {
                 (LS_DEFAULT_FILE_SIZE_BLOCK_SIZE, LS_DEFAULT_BLOCK_SIZE)

@@ -4790,7 +4790,9 @@ fn display_item_name<W: Write>(
                 // 我们不妨在箭头后给符号链接输出着色。
                 // 这需要额外的系统调用，但提供了重要的信息，而这些信息是运行 `ls -l -color` 的人非常感兴趣的。
                 // 运行 `ls -l --color` 的人非常感兴趣的重要信息。
-                if let Some(ls_colors) = &config.color {
+                if let Some(ls_colors) = &config.color
+                    && style_manager.check_symlink_target
+                {
                     // 如果我们有一个指向有效文件的符号链接，我们就使用该文件的元数据。
                     // 因为我们使用的是绝对路径，所以我们可以假定该文件保证存在。
                     // 否则，我们将使用 path.md()，这将保证我们根据不存在的符号链接的颜色，为其着色。
@@ -4934,6 +4936,7 @@ struct StyleManager {
     end: Option<String>,
     reset: String,
     symlink_as_target: bool,
+    check_symlink_target: bool,
     raw_indicator_styles: HashMap<usize, String>,
     raw_suffix_styles: Vec<(Style, String)>,
 }
@@ -4948,6 +4951,7 @@ impl StyleManager {
             end: None,
             reset: "0".into(),
             symlink_as_target: false,
+            check_symlink_target: false,
             raw_indicator_styles: HashMap::new(),
             raw_suffix_styles: Vec::new(),
         };
@@ -4960,12 +4964,18 @@ impl StyleManager {
             return manager;
         };
 
+        let mut missing_is_colored = false;
+        let mut orphan_is_colored = false;
         for entry in value.split(':') {
             let Some((key, value)) = entry.split_once('=') else {
                 continue;
             };
             if key == "ln" {
                 manager.symlink_as_target = value == "target";
+            } else if key == "mi" {
+                missing_is_colored = !matches!(value, "" | "0" | "00");
+            } else if key == "or" {
+                orphan_is_colored = !matches!(value, "" | "0" | "00");
             }
             match key {
                 "lc" => manager.left = value.into(),
@@ -4988,6 +4998,8 @@ impl StyleManager {
                 }
             }
         }
+        manager.check_symlink_target =
+            manager.symlink_as_target || missing_is_colored || orphan_is_colored;
 
         manager
     }

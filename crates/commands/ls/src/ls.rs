@@ -10,7 +10,7 @@
  */
 
 extern crate rust_i18n;
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
 #[cfg(unix)]
 use std::collections::HashMap;
@@ -40,7 +40,7 @@ use sys_locale::get_locale;
 
 use std::{collections::HashSet, io::IsTerminal};
 
-use clap::builder::{NonEmptyStringValueParser, ValueParser};
+use clap::builder::ValueParser;
 use clap::error::{ContextKind, ContextValue, ErrorKind as ClapErrorKind};
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
@@ -619,7 +619,10 @@ enum LsTimeStyle {
     LsLongIso,
     LsIso,
     LsLocale,
-    LsFormat { non_recent: String, recent: String },
+    LsFormat {
+        non_recent: OsString,
+        recent: OsString,
+    },
 }
 
 fn is_posix_locale() -> bool {
@@ -641,7 +644,7 @@ fn ls_parse_time_style(options: &clap::ArgMatches) -> Result<LsTimeStyle, LsErro
         "[posix-]locale".to_string(),
         "+FORMAT (e.g., +%H:%M) for a 'date'-style format".to_string(),
     ];
-    if let Some(field) = options.get_one::<String>(ls_flags::LS_TIME_STYLE) {
+    if let Some(field) = options.get_one::<OsString>(ls_flags::LS_TIME_STYLE) {
         // 如果 FULL_TIME 和 TIME_STYLE 同时存在
         // 最后添加的那个占主导地位
         if options.get_flag(ls_flags::LS_FULL_TIME)
@@ -656,7 +659,30 @@ fn ls_parse_time_style(options: &clap::ArgMatches) -> Result<LsTimeStyle, LsErro
         {
             Ok(LsTimeStyle::LsFullIso)
         } else {
-            let mut field_str = field.as_str();
+            #[cfg(unix)]
+            if field.as_bytes().starts_with(b"+") {
+                let format = &field.as_bytes()[1..];
+                let mut parts = format.split(|byte| *byte == b'\n');
+                let non_recent = parts.next().unwrap_or_default();
+                let recent = parts.next().unwrap_or(non_recent);
+                if parts.next().is_some() {
+                    return Err(LsError::LsTimeStyleParseError(
+                        field.to_string_lossy().into_owned(),
+                        possible_time_styles,
+                    ));
+                }
+                return Ok(LsTimeStyle::LsFormat {
+                    non_recent: OsString::from_vec(non_recent.to_vec()),
+                    recent: OsString::from_vec(recent.to_vec()),
+                });
+            }
+
+            let Some(mut field_str) = field.to_str() else {
+                return Err(LsError::LsTimeStyleParseError(
+                    field.to_string_lossy().into_owned(),
+                    possible_time_styles,
+                ));
+            };
             while field_str.starts_with("posix-") {
                 if is_posix_locale() {
                     return Ok(LsTimeStyle::LsLocale);
@@ -678,24 +704,24 @@ fn ls_parse_time_style(options: &clap::ArgMatches) -> Result<LsTimeStyle, LsErro
                         if let Some((non_recent, recent)) = format.split_once('\n') {
                             if recent.contains('\n') {
                                 Err(LsError::LsTimeStyleParseError(
-                                    String::from(field),
+                                    field.to_string_lossy().into_owned(),
                                     possible_time_styles,
                                 ))
                             } else {
                                 Ok(LsTimeStyle::LsFormat {
-                                    non_recent: non_recent.to_string(),
-                                    recent: recent.to_string(),
+                                    non_recent: OsString::from(non_recent),
+                                    recent: OsString::from(recent),
                                 })
                             }
                         } else {
                             Ok(LsTimeStyle::LsFormat {
-                                non_recent: format.to_string(),
-                                recent: format.to_string(),
+                                non_recent: OsString::from(format),
+                                recent: OsString::from(format),
                             })
                         }
                     }
                     _ => Err(LsError::LsTimeStyleParseError(
-                        String::from(field),
+                        field.to_string_lossy().into_owned(),
                         possible_time_styles,
                     )),
                 }
@@ -733,7 +759,7 @@ pub struct LsConfig {
     is_recursive: bool,
     is_reverse: bool,
     pub dereference: LsDereference,
-    ignore_patterns: Vec<String>,
+    ignore_patterns: Vec<OsString>,
     size_format: LsSizeFormat,
     is_directory: bool,
     time: LsTime,
@@ -1478,7 +1504,7 @@ impl LsConfig {
         let mut quoting_style = extract_quoting_style(options, show_control);
         let ls_indicator_style = extract_indicator_style(options);
 
-        let mut ignore_patterns: Vec<String> = Vec::new();
+        let mut ignore_patterns: Vec<OsString> = Vec::new();
 
         if options.get_flag(ls_flags::LS_IGNORE_BACKUPS) {
             ignore_patterns.push("*~".into());
@@ -1486,7 +1512,7 @@ impl LsConfig {
         }
 
         for pattern in options
-            .get_many::<String>(ls_flags::LS_IGNORE)
+            .get_many::<OsString>(ls_flags::LS_IGNORE)
             .into_iter()
             .flatten()
         {
@@ -1495,7 +1521,7 @@ impl LsConfig {
 
         if files == LsFiles::LsNormal {
             for pattern in options
-                .get_many::<String>(ls_flags::LS_HIDE)
+                .get_many::<OsString>(ls_flags::LS_HIDE)
                 .into_iter()
                 .flatten()
             {
@@ -2368,6 +2394,7 @@ pub fn ct_app() -> Command {
         Arg::new(ls_flags::LS_HIDE)
             .long(ls_flags::LS_HIDE)
             .action(ArgAction::Append)
+            .value_parser(ValueParser::os_string())
             .value_name("PATTERN")
             .help(
                 "do not list implied entries matching shell PATTERN (overridden by -a or -A)",
@@ -2376,6 +2403,7 @@ pub fn ct_app() -> Command {
             .short('I')
             .long(ls_flags::LS_IGNORE)
             .action(ArgAction::Append)
+            .value_parser(ValueParser::os_string())
             .value_name("PATTERN")
             .help("do not list implied entries matching shell PATTERN"),
         Arg::new(ls_flags::LS_IGNORE_BACKUPS)
@@ -2657,7 +2685,7 @@ pub fn ct_app() -> Command {
             .help("time/date format with -l; see LS_TIME_STYLE below")
             .value_name("LS_TIME_STYLE")
             .env("TIME_STYLE")
-            .value_parser(NonEmptyStringValueParser::new())
+            .value_parser(ValueParser::os_string())
             .overrides_with_all([ls_flags::LS_TIME_STYLE]),
         Arg::new(ls_flags::LS_FULL_TIME)
             .long(ls_flags::LS_FULL_TIME)
@@ -3151,7 +3179,7 @@ fn should_display(entry: &DirEntry, config: &LsConfig) -> bool {
 }
 
 #[cfg(unix)]
-fn ignore_pattern_matches(pattern: &str, file_name: &OsStr) -> bool {
+fn ignore_pattern_matches(pattern: &OsStr, file_name: &OsStr) -> bool {
     use std::ffi::CString;
 
     let Ok(pattern) = CString::new(pattern.as_bytes()) else {
@@ -3169,13 +3197,13 @@ fn ignore_pattern_matches(pattern: &str, file_name: &OsStr) -> bool {
 }
 
 #[cfg(not(unix))]
-fn ignore_pattern_matches(pattern: &str, file_name: &OsStr) -> bool {
+fn ignore_pattern_matches(pattern: &OsStr, file_name: &OsStr) -> bool {
     let options = glob::MatchOptions {
         require_literal_leading_dot: true,
         require_literal_separator: false,
         case_sensitive: true,
     };
-    glob::Pattern::new(pattern)
+    glob::Pattern::new(&pattern.to_string_lossy())
         .is_ok_and(|pattern| pattern.matches_with(&file_name.to_string_lossy(), options))
 }
 
@@ -4028,7 +4056,9 @@ fn display_item_long<W: Write>(
             }
         };
 
-        write!(output_display, " {} ", display_date(md, ls_config)).unwrap();
+        output_display.push(b' ');
+        output_display.extend_from_slice(&display_date_bytes(md, ls_config));
+        output_display.push(b' ');
 
         let item_name =
             display_item_name(item, ls_config, None, String::new(), output, style_manager).contents;
@@ -4265,13 +4295,14 @@ fn unavailable_time_width(config: &LsConfig) -> usize {
         LsTimeStyle::LsFormat { non_recent, .. } => {
             #[cfg(unix)]
             {
-                ls_format_local_time_strftime(0, 0, non_recent)
-                    .map_or(0, |formatted| UnicodeWidthStr::width(formatted.as_str()))
+                ls_format_local_time_strftime_bytes(0, 0, non_recent).map_or(0, |formatted| {
+                    os_str_display_width(OsStr::from_bytes(&formatted))
+                })
             }
             #[cfg(not(unix))]
             {
                 chrono::DateTime::<chrono::Local>::from(UNIX_EPOCH)
-                    .format(non_recent)
+                    .format(&non_recent.to_string_lossy())
                     .to_string()
                     .len()
             }
@@ -4288,24 +4319,24 @@ fn locale_time_format(recent: bool) -> String {
 }
 
 #[cfg(unix)]
-fn expand_nanoseconds_format(fmt: &str, nanoseconds: u32) -> String {
+fn expand_nanoseconds_format(fmt: &[u8], nanoseconds: u32) -> Vec<u8> {
     let nanoseconds = format!("{nanoseconds:09}");
-    let mut expanded = String::with_capacity(fmt.len());
-    let mut chars = fmt.chars().peekable();
+    let mut expanded = Vec::with_capacity(fmt.len());
+    let mut bytes = fmt.iter().copied().peekable();
 
-    while let Some(ch) = chars.next() {
-        if ch != '%' {
-            expanded.push(ch);
+    while let Some(byte) = bytes.next() {
+        if byte != b'%' {
+            expanded.push(byte);
             continue;
         }
 
-        expanded.push(ch);
-        if chars.peek() == Some(&'%') {
-            expanded.push(chars.next().unwrap());
-        } else if chars.peek() == Some(&'N') {
-            chars.next();
+        expanded.push(b'%');
+        if bytes.peek() == Some(&b'%') {
+            expanded.push(bytes.next().unwrap());
+        } else if bytes.peek() == Some(&b'N') {
+            bytes.next();
             expanded.pop();
-            expanded.push_str(&nanoseconds);
+            expanded.extend_from_slice(nanoseconds.as_bytes());
         }
     }
 
@@ -4313,10 +4344,14 @@ fn expand_nanoseconds_format(fmt: &str, nanoseconds: u32) -> String {
 }
 
 #[cfg(unix)]
-fn ls_format_local_time_strftime(seconds: i64, nanoseconds: u32, fmt: &str) -> Option<String> {
+fn ls_format_local_time_strftime_bytes(
+    seconds: i64,
+    nanoseconds: u32,
+    fmt: &OsStr,
+) -> Option<Vec<u8>> {
     let time = ctcore::libc::time_t::try_from(seconds).ok()?;
     let mut tm: ctcore::libc::tm = unsafe { std::mem::zeroed() };
-    let expanded_format = expand_nanoseconds_format(fmt, nanoseconds);
+    let expanded_format = expand_nanoseconds_format(fmt.as_bytes(), nanoseconds);
     let c_format = CString::new(expanded_format).ok()?;
     unsafe {
         ctcore::libc::setlocale(ctcore::libc::LC_TIME, c"".as_ptr());
@@ -4339,14 +4374,20 @@ fn ls_format_local_time_strftime(seconds: i64, nanoseconds: u32, fmt: &str) -> O
         };
         if written > 0 {
             buf.truncate(written);
-            return String::from_utf8(buf).ok();
+            return Some(buf);
         }
         capacity *= 2;
     }
     None
 }
 
-fn display_date(metadata: &Metadata, config: &LsConfig) -> String {
+#[cfg(unix)]
+fn ls_format_local_time_strftime(seconds: i64, nanoseconds: u32, fmt: &str) -> Option<String> {
+    ls_format_local_time_strftime_bytes(seconds, nanoseconds, OsStr::new(fmt))
+        .and_then(|formatted| String::from_utf8(formatted).ok())
+}
+
+fn display_date_bytes(metadata: &Metadata, config: &LsConfig) -> Vec<u8> {
     match get_time(metadata, config) {
         Some(time) => {
             //如果日期来自过去 6 个月，则为最近日期
@@ -4356,15 +4397,19 @@ fn display_date(metadata: &Metadata, config: &LsConfig) -> String {
             let is_recent = time > now - six_months && time < now;
 
             match &config.time_style {
-                LsTimeStyle::LsFullIso => time.format("%Y-%m-%d %H:%M:%S.%f %z").to_string(),
-                LsTimeStyle::LsLongIso => time.format("%Y-%m-%d %H:%M").to_string(),
+                LsTimeStyle::LsFullIso => time
+                    .format("%Y-%m-%d %H:%M:%S.%f %z")
+                    .to_string()
+                    .into_bytes(),
+                LsTimeStyle::LsLongIso => time.format("%Y-%m-%d %H:%M").to_string().into_bytes(),
                 LsTimeStyle::LsIso => time
                     .format(if is_recent {
                         "%m-%d %H:%M"
                     } else {
                         "%Y-%m-%d "
                     })
-                    .to_string(),
+                    .to_string()
+                    .into_bytes(),
                 LsTimeStyle::LsLocale => {
                     let fmt = locale_time_format(is_recent);
                     #[cfg(unix)]
@@ -4375,32 +4420,37 @@ fn display_date(metadata: &Metadata, config: &LsConfig) -> String {
                             &fmt,
                         )
                         .unwrap_or_else(|| time.format(&fmt).to_string())
+                        .into_bytes()
                     }
                     #[cfg(not(unix))]
                     {
-                        time.format(&fmt).to_string()
+                        time.format(&fmt).to_string().into_bytes()
                     }
                 }
                 LsTimeStyle::LsFormat { non_recent, recent } => {
                     let fmt = if is_recent { recent } else { non_recent };
                     #[cfg(unix)]
                     {
-                        ls_format_local_time_strftime(
+                        ls_format_local_time_strftime_bytes(
                             time.timestamp(),
                             time.timestamp_subsec_nanos(),
                             fmt,
                         )
-                        .unwrap_or_else(|| time.format(fmt).to_string())
+                        .unwrap_or_else(|| fmt.as_bytes().to_vec())
                     }
                     #[cfg(not(unix))]
                     {
-                        time.format(fmt).to_string()
+                        time.format(&fmt.to_string_lossy()).to_string().into_bytes()
                     }
                 }
             }
         }
-        None => format!("{:>width$}", "?", width = unavailable_time_width(config)),
+        None => format!("{:>width$}", "?", width = unavailable_time_width(config)).into_bytes(),
     }
+}
+
+fn display_date(metadata: &Metadata, config: &LsConfig) -> String {
+    String::from_utf8_lossy(&display_date_bytes(metadata, config)).into_owned()
 }
 
 // GNU 格式化大小的方式有一些特殊之处：
@@ -5883,8 +5933,8 @@ mod tests {
         assert_eq!(
             ls_parse_time_style(&matches).unwrap(),
             LsTimeStyle::LsFormat {
-                non_recent: "%Y-%m-%d %H:%M:%S %z (%Z)".to_string(),
-                recent: "%Y-%m-%d %H:%M:%S %z (%Z)".to_string(),
+                non_recent: OsString::from("%Y-%m-%d %H:%M:%S %z (%Z)"),
+                recent: OsString::from("%Y-%m-%d %H:%M:%S %z (%Z)"),
             }
         );
     }
@@ -5897,8 +5947,8 @@ mod tests {
         assert_eq!(
             ls_parse_time_style(&matches).unwrap(),
             LsTimeStyle::LsFormat {
-                non_recent: "OLD".to_string(),
-                recent: "NEW".to_string(),
+                non_recent: OsString::from("OLD"),
+                recent: OsString::from("NEW"),
             }
         );
     }

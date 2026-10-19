@@ -45,6 +45,57 @@ fn dir_preserves_non_utf8_invalid_option_byte() {
 }
 
 #[cfg(target_os = "linux")]
+#[test]
+fn dir_accepts_non_utf8_ignore_and_time_style_values() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let listing_dir = temp_dir.path().join("d");
+    fs::create_dir(&listing_dir).expect("create listing directory");
+    fs::write(listing_dir.join("x"), b"").expect("create utf8 file");
+    fs::write(listing_dir.join(std::ffi::OsStr::from_bytes(b"\xff")), b"")
+        .expect("create non-UTF-8 file");
+    let timestamped = temp_dir.path().join("f");
+    fs::write(&timestamped, b"").expect("create timestamped file");
+
+    let ignore = std::ffi::OsString::from_vec(b"--ignore=\xff".to_vec());
+    let ignore_output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args([
+            std::ffi::OsStr::new("dir"),
+            ignore.as_os_str(),
+            std::ffi::OsStr::new("-1"),
+            listing_dir.as_os_str(),
+        ])
+        .output()
+        .expect("run syskits dir with non-UTF-8 ignore pattern");
+    assert!(ignore_output.status.success());
+    assert_eq!(ignore_output.stdout, b"x\n");
+    assert_eq!(ignore_output.stderr, b"");
+
+    let time_style = std::ffi::OsString::from_vec(b"--time-style=+\xff".to_vec());
+    let time_output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args([
+            std::ffi::OsStr::new("dir"),
+            std::ffi::OsStr::new("-ln"),
+            time_style.as_os_str(),
+            std::ffi::OsStr::new("-d"),
+            timestamped.as_os_str(),
+        ])
+        .output()
+        .expect("run syskits dir with non-UTF-8 time style");
+    assert!(time_output.status.success());
+    assert!(
+        time_output
+            .stdout
+            .windows(3)
+            .any(|window| window == b" \xff "),
+        "stdout: {:02x?}",
+        time_output.stdout
+    );
+    assert_eq!(time_output.stderr, b"");
+}
+
+#[cfg(target_os = "linux")]
 fn set_selinux_xattr(path: &std::path::Path, value: &[u8]) -> bool {
     let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
         return false;

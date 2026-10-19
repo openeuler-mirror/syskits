@@ -12,8 +12,13 @@
 extern crate rust_i18n;
 use rust_i18n::t;
 use std::cmp::Reverse;
+use std::error::Error;
 use std::ffi::OsString;
+use std::fmt::Display;
 use std::fs::{self, FileType, Metadata};
+use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use std::process::Command as ProcessCommand;
 use std::time::UNIX_EPOCH;
 rust_i18n::i18n!("locales", fallback = "en-US");
@@ -37,6 +42,53 @@ struct DirectDirInvocation {
     stdout: Vec<u8>,
     stderr: Vec<u8>,
     exit_code: i32,
+}
+
+#[derive(Debug)]
+struct DirNonUtf8OptionError {
+    diagnostic: Vec<u8>,
+}
+
+impl Display for DirNonUtf8OptionError {
+    fn fmt(&self, _formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut stderr = std::io::stderr().lock();
+        let _ = stderr
+            .write_all(ctcore::ct_util_name().as_bytes())
+            .and_then(|_| stderr.write_all(b": "))
+            .and_then(|_| stderr.write_all(&self.diagnostic))
+            .and_then(|_| stderr.write_all(b"\n"))
+            .and_then(|_| stderr.flush());
+        Ok(())
+    }
+}
+
+impl Error for DirNonUtf8OptionError {}
+
+impl ctcore::ct_error::CTError for DirNonUtf8OptionError {
+    fn code(&self) -> i32 {
+        2
+    }
+}
+
+#[cfg(unix)]
+fn dir_non_utf8_option_error(args: &[OsString]) -> Option<DirNonUtf8OptionError> {
+    let argument = args
+        .iter()
+        .skip(1)
+        .find(|argument| argument.to_str().is_none() && argument.as_bytes().starts_with(b"-"))?;
+    let bytes = argument.as_bytes();
+    let mut diagnostic = if bytes.starts_with(b"--") {
+        [b"unrecognized option '".as_slice(), bytes, b"'"].concat()
+    } else {
+        [b"invalid option -- '".as_slice(), bytes.get(1..2)?, b"'"].concat()
+    };
+    diagnostic.extend_from_slice(b"\nTry 'dir --help' for more information.");
+    Some(DirNonUtf8OptionError { diagnostic })
+}
+
+#[cfg(not(unix))]
+fn dir_non_utf8_option_error(_args: &[OsString]) -> Option<DirNonUtf8OptionError> {
+    None
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -445,11 +497,20 @@ pub fn dir_native_semantic(args: impl ctcore::Args) -> CTResult<DirSemantic> {
 pub fn dir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData>)> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args: Vec<OsString> = args.collect();
     let command = ct_app();
-    let matches = command.try_get_matches_from(args).map_err(|err| {
-        let code = ct_ls::ls_clap_error_exit_code(&err);
-        err.with_exit_code(code)
-    })?;
+    let matches = match command.try_get_matches_from(args.iter().cloned()) {
+        Ok(matches) => matches,
+        Err(err) => {
+            if err.kind() == clap::error::ErrorKind::UnknownArgument
+                && let Some(error) = dir_non_utf8_option_error(&args)
+            {
+                return Err(Box::new(error));
+            }
+            let code = ct_ls::ls_clap_error_exit_code(&err);
+            return Err(Box::new(err.with_exit_code(code)));
+        }
+    };
 
     let config = dir_config_from_matches(&matches)?;
     let paths_from_args = dir_paths_from_matches(&matches);
@@ -485,6 +546,19 @@ impl Tool for Dir {
 #[allow(clippy::needless_borrow)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_non_utf8_option_diagnostic_preserves_original_byte() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let args = [OsString::from("dir"), OsString::from_vec(b"-\xff".to_vec())];
+        let error = dir_non_utf8_option_error(&args).expect("non-UTF-8 option error");
+        assert_eq!(
+            error.diagnostic,
+            b"invalid option -- '\xff'\nTry 'dir --help' for more information."
+        );
+    }
 
     #[test]
     fn test_tool_implementation() {

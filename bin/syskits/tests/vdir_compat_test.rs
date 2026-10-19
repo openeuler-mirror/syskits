@@ -225,11 +225,22 @@ fn vdir_help_uses_gnu_compatible_content() {
         .expect("run syskits vdir");
 
     assert!(output.status.success());
-    assert!(output.stdout.starts_with(b"Usage: vdir [OPTION]... [FILE]...\n"));
-    assert!(output.stdout.windows(12).any(|bytes| bytes == b"Exit status:"));
-    assert!(output.stdout.ends_with(
-        b"or available locally via: info '(coreutils) vdir invocation'\n"
-    ));
+    assert!(
+        output
+            .stdout
+            .starts_with(b"Usage: vdir [OPTION]... [FILE]...\n")
+    );
+    assert!(
+        output
+            .stdout
+            .windows(12)
+            .any(|bytes| bytes == b"Exit status:")
+    );
+    assert!(
+        output
+            .stdout
+            .ends_with(b"or available locally via: info '(coreutils) vdir invocation'\n")
+    );
 }
 
 #[test]
@@ -244,6 +255,31 @@ fn vdir_help_and_version_display_do_not_write_stderr() {
         assert!(output.status.success(), "failed to display {option}");
         assert_eq!(output.stderr, b"", "unexpected stderr for {option}");
     }
+}
+
+#[test]
+fn vdir_posixly_correct_stops_parsing_options_after_first_operand() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("a"), b"").expect("write fixture");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("POSIXLY_CORRECT", "1")
+        .args(["vdir", "a", "-d"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        output.stdout.iter().filter(|&&byte| byte == b'\n').count(),
+        1
+    );
+    assert_eq!(
+        output.stderr.iter().filter(|&&byte| byte == b'\n').count(),
+        1
+    );
+    assert!(output.stderr.windows(4).any(|bytes| bytes == b"'-d'"));
 }
 
 #[cfg(target_os = "linux")]

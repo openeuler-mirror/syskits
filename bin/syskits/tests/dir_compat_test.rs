@@ -516,3 +516,34 @@ fn dir_long_symlink_target_omits_slash_indicator() {
     assert!(output.stdout.ends_with(b" link -> target\n"));
     assert_eq!(output.stderr, b"");
 }
+
+#[cfg(unix)]
+#[test]
+fn dir_does_not_color_long_symlink_target_for_plain_ln_style() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::create_dir(temp_dir.path().join("target")).expect("create target directory");
+    std::os::unix::fs::symlink("target", temp_dir.path().join("link")).expect("create symlink");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("LS_COLORS", "di=34:ln=35")
+        .args([
+            "dir",
+            "-ln",
+            "--time-style=+T",
+            "--color=always",
+            "-d",
+            "link",
+        ])
+        .output()
+        .expect("run syskits dir");
+
+    assert!(output.status.success());
+    assert!(
+        output
+            .stdout
+            .ends_with(b" \x1b[0m\x1b[35mlink\x1b[0m -> target\n")
+    );
+    assert_eq!(output.stderr, b"");
+}

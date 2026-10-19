@@ -124,6 +124,7 @@ unsafe extern "C" {
         domainname: *const ctcore::libc::c_char,
         msgid: *const ctcore::libc::c_char,
     ) -> *mut ctcore::libc::c_char;
+    fn wcwidth(character: ctcore::libc::wchar_t) -> ctcore::libc::c_int;
 }
 
 #[cfg(target_os = "linux")]
@@ -2241,6 +2242,7 @@ impl Tool for Ls {
 }
 
 pub fn ls_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathData>)> {
+    ls_init_gettext();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let command = ct_app();
@@ -3386,19 +3388,37 @@ fn display_bytes_width(mut value: &[u8]) -> usize {
     while !value.is_empty() {
         match std::str::from_utf8(value) {
             Ok(valid) => {
-                width += valid.width();
+                width += valid.chars().map(codepoint_display_width).sum::<usize>();
                 break;
             }
             Err(error) => {
                 let valid_len = error.valid_up_to();
                 let valid = unsafe { std::str::from_utf8_unchecked(&value[..valid_len]) };
-                width += valid.width();
+                width += valid.chars().map(codepoint_display_width).sum::<usize>();
                 let invalid_len = error.error_len().unwrap_or(value.len() - valid_len);
+                width += 1;
                 value = &value[valid_len + invalid_len..];
             }
         }
     }
     width
+}
+
+fn codepoint_display_width(character: char) -> usize {
+    #[cfg(target_os = "linux")]
+    {
+        let width = unsafe { wcwidth(character as ctcore::libc::wchar_t) };
+        if width < 0 {
+            usize::from(!character.is_control())
+        } else {
+            width as usize
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let mut encoded = [0; 4];
+        character.encode_utf8(&mut encoded).width()
+    }
 }
 
 fn trimmed_byte_len(value: &[u8]) -> usize {

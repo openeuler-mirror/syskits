@@ -1828,7 +1828,10 @@ fn is_invalid_ls_failure_arg(err: &clap::Error) -> bool {
 
     matches!(
         err.get(ContextKind::InvalidArg),
-        Some(ContextValue::String(arg)) if arg.starts_with("--classify") || arg.starts_with("--color")
+        Some(ContextValue::String(arg))
+            if ["--classify", "--color", "--format", "--sort", "--time"]
+                .iter()
+                .any(|option| arg.starts_with(option))
     )
 }
 
@@ -5085,6 +5088,20 @@ mod tests {
         .expect_err("invalid --color should fail");
 
         assert_eq!(err.code(), 1);
+    }
+
+    #[test]
+    fn invalid_sort_time_and_format_values_exit_with_failure() {
+        for argument in ["--sort=invalid", "--time=invalid", "--format=invalid"] {
+            let err = ls_main(
+                [ctcore::ct_util_name(), argument]
+                    .into_iter()
+                    .map(OsString::from),
+            )
+            .expect_err("invalid enum value should fail");
+
+            assert_eq!(err.code(), 1, "unexpected exit code for {argument}");
+        }
     }
 
     #[test]

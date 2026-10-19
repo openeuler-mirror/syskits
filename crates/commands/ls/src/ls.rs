@@ -4503,6 +4503,7 @@ struct StyleManager {
     right: String,
     end: Option<String>,
     reset: String,
+    symlink_as_target: bool,
     raw_indicator_styles: HashMap<usize, String>,
     raw_suffix_styles: Vec<(Style, String)>,
 }
@@ -4516,6 +4517,7 @@ impl StyleManager {
             right: "m".into(),
             end: None,
             reset: "0".into(),
+            symlink_as_target: false,
             raw_indicator_styles: HashMap::new(),
             raw_suffix_styles: Vec::new(),
         };
@@ -4532,6 +4534,9 @@ impl StyleManager {
             let Some((key, value)) = entry.split_once('=') else {
                 continue;
             };
+            if key == "ln" {
+                manager.symlink_as_target = value == "target";
+            }
             match key {
                 "lc" => manager.left = value.into(),
                 "rc" => manager.right = value.into(),
@@ -4665,6 +4670,18 @@ fn apply_style_based_on_metadata(
 ) -> String {
     let mut style = None;
     let actual_path = target_symlink.unwrap_or(path);
+    let symlink_target_metadata = if target_symlink.is_none()
+        && style_manager.symlink_as_target
+        && path
+            .p_buf
+            .symlink_metadata()
+            .is_ok_and(|metadata| metadata.file_type().is_symlink())
+    {
+        path.p_buf.metadata().ok()
+    } else {
+        None
+    };
+    let md_option = symlink_target_metadata.as_ref().or(md_option);
 
     // 能力集 (Capability) 拥有最高的颜色显示优先级，必须优先检查
     if md_option.map(|m| m.is_file()).unwrap_or(false) {

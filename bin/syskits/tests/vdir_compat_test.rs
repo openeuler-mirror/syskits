@@ -790,6 +790,28 @@ fn vdir_preserves_ls_colors_control_sequences_and_sgr_order() {
     assert_eq!(output.stdout, b"ENDLEFT34;01RIGHTdEND\nLEFTRIGHT");
 }
 
+#[cfg(unix)]
+#[test]
+fn vdir_colors_ln_target_using_symlink_target_type() {
+    use std::os::unix::fs::symlink;
+
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::create_dir(temp_dir.path().join("target")).expect("create fixture");
+    symlink("target", temp_dir.path().join("link")).expect("create symlink");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("LS_COLORS", "ln=target:di=31")
+        .args(["vdir", "-1", "--color=always", "-d", "link"])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert_eq!(output.stdout, b"\x1b[0m\x1b[31mlink\x1b[0m\n");
+}
+
 #[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");

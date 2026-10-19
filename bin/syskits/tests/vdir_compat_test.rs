@@ -332,6 +332,46 @@ fn vdir_sorts_by_rendered_display_width() {
 }
 
 #[test]
+fn vdir_sorts_extensions_from_the_last_dot() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    for name in [
+        ".leading",
+        ".profile.txt",
+        "foo.",
+        "foo..a",
+        "b.txt",
+        "c.tar.gz",
+    ] {
+        fs::write(temp_dir.path().join(name), b"").expect("write fixture");
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args([
+            "vdir",
+            "-X",
+            "-1",
+            "-d",
+            ".leading",
+            ".profile.txt",
+            "foo.",
+            "foo..a",
+            "b.txt",
+            "c.tar.gz",
+        ])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert_eq!(
+        output.stdout,
+        b"foo.\nfoo..a\nc.tar.gz\n.leading\n.profile.txt\nb.txt\n"
+    );
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

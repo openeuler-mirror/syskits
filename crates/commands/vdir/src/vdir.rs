@@ -568,10 +568,10 @@ fn vdir_collect_semantic_rows_for_path(
         }
         VdirSemanticSort::Extension => {
             rows.sort_by(|a, b| {
-                Path::new(&a.name)
-                    .extension()
-                    .cmp(&Path::new(&b.name).extension())
-                    .then(a.name.cmp(&b.name))
+                ct_ls::compare_names_by_extension(
+                    std::ffi::OsStr::new(&a.name),
+                    std::ffi::OsStr::new(&b.name),
+                )
             });
         }
         VdirSemanticSort::Width => {

@@ -170,7 +170,7 @@ pub mod ls_flags {
     pub static LS_F: &str = "f";
 }
 
-const LS_DEFAULT_TERM_WIDTH: u16 = 80;
+const LS_DEFAULT_TERM_WIDTH: usize = 80;
 const LS_POSIXLY_CORRELS_BLOCK_SIZE: u64 = 512;
 const LS_DEFAULT_BLOCK_SIZE: u64 = 1024;
 const LS_DEFAULT_FILE_SIZE_BLOCK_SIZE: u64 = 1;
@@ -558,7 +558,7 @@ pub struct LsConfig {
     file_size_block_size: u64,
     #[allow(dead_code)]
     block_size: u64,
-    width: u16,
+    width: usize,
     tab_size: usize,
     // Dir 和 vdir 需要访问该字段
     pub quoting_style: CtQuotingStyle,
@@ -938,15 +938,28 @@ fn indicator_str_to_type(field: &str) -> LsIndicatorStyle {
     }
 }
 
-fn parse_width(s: &str) -> Result<u16, LsError> {
-    let radix = match s.starts_with('0') && s.len() > 1 {
-        true => 8,
-        false => 10,
+fn parse_width(s: &str) -> Result<usize, LsError> {
+    let value = s.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
+    let value = value.strip_prefix('+').unwrap_or(value);
+    let (radix, digits) = if let Some(hex) = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
+        (16, hex)
+    } else if value.len() > 1 && value.starts_with('0') {
+        (8, &value[1..])
+    } else {
+        (10, value)
     };
-    match u16::from_str_radix(s, radix) {
-        Ok(x) => Ok(x),
+    if digits.is_empty() {
+        return Err(LsError::LsInvalidLineWidth(s.into()));
+    }
+
+    match u128::from_str_radix(digits, radix) {
+        Ok(x) if x <= isize::MAX as u128 => Ok(x as usize),
+        Ok(_) => Ok(0),
         Err(e) => match e.kind() {
-            IntErrorKind::PosOverflow => Ok(u16::MAX),
+            IntErrorKind::PosOverflow => Ok(0),
             _ => Err(LsError::LsInvalidLineWidth(s.into())),
         },
     }
@@ -987,7 +1000,7 @@ fn format_uses_tab_size(format: &LsFormat) -> bool {
     )
 }
 
-fn stdout_terminal_width() -> Option<u16> {
+fn stdout_terminal_width() -> Option<usize> {
     if !stdout().is_terminal() {
         return None;
     }
@@ -996,11 +1009,12 @@ fn stdout_terminal_width() -> Option<u16> {
     {
         use std::os::fd::AsRawFd;
 
-        terminal_size::terminal_size_using_fd(stdout().as_raw_fd()).map(|(width, _)| width.0)
+        terminal_size::terminal_size_using_fd(stdout().as_raw_fd())
+            .map(|(width, _)| usize::from(width.0))
     }
     #[cfg(not(unix))]
     {
-        terminal_size::terminal_size().map(|(width, _)| width.0)
+        terminal_size::terminal_size().map(|(width, _)| usize::from(width.0))
     }
 }
 
@@ -1220,7 +1234,7 @@ impl LsConfig {
             None => match stdout_terminal_width() {
                 Some(width) => width,
                 None => match std::env::var_os("COLUMNS") {
-                    Some(columns) => match columns.to_str().and_then(|s| s.parse().ok()) {
+                    Some(columns) => match columns.to_str().and_then(|s| parse_width(s).ok()) {
                         Some(columns) => columns,
                         None => {
                             ct_show_error!(
@@ -3258,10 +3272,10 @@ fn display_grid_by_format_other_type<W: Write>(
             let mut names = names;
             if let Some(name) = names.next() {
                 write!(out, "{}", name.contents)?;
-                current_col = name.width as u16 + 2;
+                current_col = name.width + 2;
             }
             for name in names {
-                let name_width = name.width as u16;
+                let name_width = name.width;
                 // If the width is 0 we print one single line
                 if config.width != 0 && current_col + name_width + 1 > config.width {
                     current_col = name_width + 2;
@@ -3490,7 +3504,7 @@ fn render_grid(cells: &[Cell], width: usize, direction: Direction) -> String {
 
 fn display_grid<W: Write>(
     names: impl Iterator<Item = Cell>,
-    width: u16,
+    width: usize,
     tab_size: usize,
     direction: Direction,
     output: &mut W,
@@ -3526,7 +3540,7 @@ fn display_grid<W: Write>(
                 }
             })
             .collect::<Vec<_>>();
-        let rendered = render_grid(&names, width as usize, direction);
+        let rendered = render_grid(&names, width, direction);
         write!(
             output,
             "{}",
@@ -4967,6 +4981,14 @@ mod tests {
         let config = LsConfig::from(&matches).expect("ls config");
 
         assert_eq!(config.width, 10);
+    }
+
+    #[test]
+    fn width_uses_base_zero_and_full_range_parsing() {
+        assert_eq!(parse_width("0x10").unwrap(), 16);
+        assert_eq!(parse_width("  +020").unwrap(), 16);
+        assert_eq!(parse_width("70000").unwrap(), 70000);
+        assert_eq!(parse_width("18446744073709551615").unwrap(), 0);
     }
 
     #[test]

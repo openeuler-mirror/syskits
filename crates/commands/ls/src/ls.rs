@@ -1237,6 +1237,7 @@ fn match_quoting_style_name(style: &str, show_control: bool) -> Option<CtQuoting
         "c" => Some(CtQuotingStyle::C {
             quotes: ct_quoting_style::CtQuotes::Double,
         }),
+        "c-maybe" => Some(CtQuotingStyle::CMaybe),
         "clocale" => Some(CtQuotingStyle::C {
             quotes: ct_quoting_style::CtQuotes::CLocale,
         }),
@@ -2290,6 +2291,7 @@ fn parse_quoting_style(s: &str) -> Result<String, String> {
         "shell-escape",
         "shell-escape-always",
         "c",
+        "c-maybe",
         "escape",
         "locale",
         "clocale",
@@ -3365,11 +3367,12 @@ pub fn display_name_width(name: &OsStr, config: &LsConfig) -> usize {
         &config.quoting_style,
         name_quoting_extra_chars(config),
     );
-    let aligns_shell_outer_quotes = matches!(config.quoting_style, CtQuotingStyle::Shell { .. })
-        && (config.format == LsFormat::Long
-            || (matches!(config.format, LsFormat::Columns | LsFormat::Across)
-                && config.width != 0));
-    let needs_quote_alignment = aligns_shell_outer_quotes && !starts_with_outer_quote(&escaped);
+    let aligns_variable_outer_quotes = matches!(
+        config.quoting_style,
+        CtQuotingStyle::Shell { .. } | CtQuotingStyle::CMaybe
+    ) && (config.format == LsFormat::Long
+        || (matches!(config.format, LsFormat::Columns | LsFormat::Across) && config.width != 0));
+    let needs_quote_alignment = aligns_variable_outer_quotes && !starts_with_outer_quote(&escaped);
 
     display_bytes_width(&escaped) + usize::from(needs_quote_alignment)
 }

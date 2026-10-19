@@ -50,6 +50,7 @@ pub enum CtQuotingStyle {
     C {
         quotes: CtQuotes,
     },
+    CMaybe,
     Literal {
         show_control: bool,
     },
@@ -987,6 +988,22 @@ fn escape_c_name(name: &OsStr, quotes: CtQuotes, extra_escaped_chars: &str) -> S
     escaped
 }
 
+#[cfg(unix)]
+fn c_maybe_needs_quoting(name: &OsStr, extra_escaped_chars: &str) -> bool {
+    let mut needs_quoting = false;
+    for_each_name_element(name, |element| match element {
+        CtNameElement::InvalidByte(_) => needs_quoting = true,
+        CtNameElement::Char('\\') => {}
+        CtNameElement::Char(character) => {
+            let escaped =
+                CtEscapedChar::new_c_with_extra(character, CtQuotes::Double, extra_escaped_chars);
+            needs_quoting |=
+                !matches!(escaped.state, CtEscapeState::Char(value) if value == character);
+        }
+    });
+    needs_quoting
+}
+
 pub fn escape_name(name: &OsStr, style: &CtQuotingStyle) -> String {
     escape_name_with_chars(name, style, "")
 }
@@ -1056,6 +1073,46 @@ pub fn escape_name_bytes_with_chars(
                 right_quote.as_bytes(),
             ]
             .concat()
+        }
+        CtQuotingStyle::CMaybe => {
+            #[cfg(unix)]
+            let needs_quoting = c_maybe_needs_quoting(name, extra_escaped_chars);
+            #[cfg(not(unix))]
+            let needs_quoting = name.to_string_lossy().chars().any(|character| {
+                character != '\\'
+                    && !matches!(
+                        CtEscapedChar::new_c_with_extra(
+                            character,
+                            CtQuotes::Double,
+                            extra_escaped_chars,
+                        )
+                        .state,
+                        CtEscapeState::Char(value) if value == character
+                    )
+            });
+
+            if !needs_quoting {
+                #[cfg(unix)]
+                return name.as_bytes().to_vec();
+                #[cfg(not(unix))]
+                return name.to_string_lossy().into_owned().into_bytes();
+            }
+
+            #[cfg(unix)]
+            let escaped = escape_c_name(name, CtQuotes::Double, extra_escaped_chars);
+            #[cfg(not(unix))]
+            let escaped: String = name
+                .to_string_lossy()
+                .chars()
+                .flat_map(|character| {
+                    CtEscapedChar::new_c_with_extra(
+                        character,
+                        CtQuotes::Double,
+                        extra_escaped_chars,
+                    )
+                })
+                .collect();
+            [b"\"".as_slice(), escaped.as_bytes(), b"\""].concat()
         }
         CtQuotingStyle::Shell {
             escape,
@@ -1199,6 +1256,7 @@ impl fmt::Display for CtQuotingStyle {
                 f.write_str(&style)
             }
             Self::C { .. } => f.write_str("C"),
+            Self::CMaybe => f.write_str("c-maybe"),
             Self::Literal { .. } => f.write_str("literal"),
         }
     }
@@ -1238,6 +1296,7 @@ mod tests {
             "c" => CtQuotingStyle::C {
                 quotes: CtQuotes::Double,
             },
+            "c-maybe" => CtQuotingStyle::CMaybe,
             "shell" => CtQuotingStyle::Shell {
                 escape: false,
                 always_quote: false,
@@ -1987,6 +2046,23 @@ mod tests {
                 "'a\\377\\\\\\'b'"
             );
             assert_eq!(quote_locale_bytes("中".as_bytes(), "‘", "’", true), "‘中’");
+        }
+    }
+
+    #[test]
+    fn test_escape_name_c_maybe_style() {
+        for (input, expected) in [
+            ("simple", "simple"),
+            ("space name", "space name"),
+            ("line\nname", "\"line\\nname\""),
+            ("double\"quote", "\"double\\\"quote\""),
+            ("back\\slash", "back\\slash"),
+            ("back\\slash\"quote", "\"back\\\\slash\\\"quote\""),
+        ] {
+            assert_eq!(
+                escape_name(OsStr::new(input), &CtQuotingStyle::CMaybe),
+                expected
+            );
         }
     }
 

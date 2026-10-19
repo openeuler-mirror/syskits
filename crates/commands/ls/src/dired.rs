@@ -402,6 +402,7 @@ mod tests {
             is_dired: true,
             is_hyperlink: false,
             size_suffix: String::new(),
+            file_size_suffix: String::new(),
         };
         let dired = DiredOutput {
             dired_positions: vec![DiredBytePosition { start: 0, end: 4 }],

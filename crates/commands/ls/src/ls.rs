@@ -1649,6 +1649,12 @@ fn ls_collect_semantic_rows_for_path(path: &Path, config: &LsConfig) -> Vec<LsSe
                 .cmp(&Path::new(&b.name).extension())
                 .then(a.name.cmp(&b.name))
         });
+    } else if config.sort == LsSort::Width {
+        rows.sort_by(|a, b| {
+            display_name_width(OsStr::new(&a.name), config)
+                .cmp(&display_name_width(OsStr::new(&b.name), config))
+                .then_with(|| strcoll_compare(a.name.as_bytes(), b.name.as_bytes(), false))
+        });
     }
 
     if config.is_reverse {
@@ -2723,9 +2729,8 @@ fn sort_entries<W: Write>(entries: &mut [PathData], config: &LsConfig, out: &mut
         })
     } else if config.sort == LsSort::Width {
         entries.sort_by(|a, b| {
-            a.display_name
-                .len()
-                .cmp(&b.display_name.len())
+            display_name_width(&a.display_name, config)
+                .cmp(&display_name_width(&b.display_name, config))
                 .then(strcoll_compare(
                     a.display_name.as_bytes(),
                     b.display_name.as_bytes(),
@@ -2761,6 +2766,23 @@ fn sort_entries<W: Write>(entries: &mut [PathData], config: &LsConfig, out: &mut
             }
         });
     }
+}
+
+fn name_quoting_extra_chars(config: &LsConfig) -> &'static str {
+    if config.indicator_style == LsIndicatorStyle::None {
+        ""
+    } else {
+        "*=>@|"
+    }
+}
+
+pub fn display_name_width(name: &OsStr, config: &LsConfig) -> usize {
+    escape_name_with_chars(
+        name,
+        &config.quoting_style,
+        name_quoting_extra_chars(config),
+    )
+    .width()
 }
 
 fn is_hidden(file_path: &DirEntry) -> bool {
@@ -4084,15 +4106,10 @@ fn display_item_name<W: Write>(
     style_manager: &mut StyleManager,
 ) -> Cell {
     // 这是我们的返回值。我们从 `&path.display_name` 开始，然后对其进行修改。
-    let extra_escaped_chars = if config.indicator_style == LsIndicatorStyle::None {
-        ""
-    } else {
-        "*=>@|"
-    };
     let mut name = escape_name_with_chars(
         &path.display_name,
         &config.quoting_style,
-        extra_escaped_chars,
+        name_quoting_extra_chars(config),
     );
 
     // 我们需要自己跟踪宽度，而不是让 term_grid

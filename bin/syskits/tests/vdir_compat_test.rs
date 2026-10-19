@@ -556,6 +556,36 @@ fn vdir_promotes_rounded_human_readable_sizes() {
 }
 
 #[test]
+fn vdir_handles_zero_block_size_without_panicking() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("f"), b"").expect("write fixture");
+
+    let environment = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("BLOCK_SIZE", "0")
+        .args(["vdir", "-s", "-1", "."])
+        .output()
+        .expect("run syskits vdir");
+    let option = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["vdir", "-s", "-1", "--block-size=0", "."])
+        .output()
+        .expect("run syskits vdir with zero option");
+
+    assert!(environment.status.success());
+    assert_eq!(environment.stderr, b"");
+    assert_eq!(option.status.code(), Some(2));
+    assert!(
+        option
+            .stderr
+            .starts_with(b"vdir: invalid --block-size argument")
+    );
+    assert!(!option.stderr.windows(8).any(|bytes| bytes == b"panicked"));
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

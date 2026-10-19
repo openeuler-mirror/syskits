@@ -53,3 +53,23 @@ fn ls_hyperlink_percent_encodes_colons_in_file_uri() {
     assert_eq!(syskits.stdout, gnu.stdout);
     assert!(syskits.stdout.windows(3).any(|bytes| bytes == b"%3a"));
 }
+
+#[cfg(unix)]
+#[test]
+fn ls_hyperlink_normalizes_dangling_target_components() {
+    use std::os::unix::fs::symlink;
+
+    let directory = TempDir::new().expect("tempdir");
+    fs::create_dir(directory.path().join("d")).expect("create link directory");
+    fs::create_dir(directory.path().join("other")).expect("create target directory");
+    symlink("../other/../missing", directory.path().join("d/link"))
+        .expect("create dangling symlink");
+    let arguments = ["--hyperlink=always", "-1", "d/link"];
+
+    let gnu = run_gnu(&directory, &arguments);
+    let syskits = run_syskits(&directory, &arguments);
+
+    assert_eq!(syskits.status.code(), gnu.status.code());
+    assert_eq!(syskits.stderr, gnu.stderr);
+    assert_eq!(syskits.stdout, gnu.stdout);
+}

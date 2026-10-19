@@ -227,6 +227,34 @@ fn dir_ignores_empty_columns_environment() {
     assert_eq!(output.stderr, b"");
 }
 
+#[test]
+fn dir_ignores_empty_time_style_outside_long_format() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let listing_dir = temp_dir.path().join("d");
+    fs::create_dir(&listing_dir).expect("create listing directory");
+    fs::write(listing_dir.join("a"), b"").expect("create file");
+
+    let from_environment = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("TIME_STYLE", "")
+        .args(["dir", "d"])
+        .output()
+        .expect("run syskits dir with empty TIME_STYLE");
+    let from_command_line = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .args(["dir", "--time-style=", "d"])
+        .output()
+        .expect("run syskits dir with empty --time-style");
+
+    for output in [from_environment, from_command_line] {
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"a\n");
+        assert_eq!(output.stderr, b"");
+    }
+}
+
 #[cfg(target_os = "linux")]
 fn set_selinux_xattr(path: &std::path::Path, value: &[u8]) -> bool {
     let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {

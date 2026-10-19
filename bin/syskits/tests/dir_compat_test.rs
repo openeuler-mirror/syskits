@@ -161,6 +161,29 @@ fn dir_honors_quoting_style_environment() {
     assert_eq!(output.stderr, b"");
 }
 
+#[test]
+fn dir_applies_tabsize_environment_to_default_columns() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let listing_dir = temp_dir.path().join("d");
+    fs::create_dir(&listing_dir).expect("create listing directory");
+    for name in ["a", "bbbbbb", "cccccccccc", "dddddddddddddd"] {
+        fs::write(listing_dir.join(name), b"").expect("create file");
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("COLUMNS", "40")
+        .env("TABSIZE", "3")
+        .args(["dir", "d"])
+        .output()
+        .expect("run syskits dir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"a\tbbbbbb  cccccccccc  dddddddddddddd\n");
+    assert_eq!(output.stderr, b"");
+}
+
 #[cfg(target_os = "linux")]
 fn set_selinux_xattr(path: &std::path::Path, value: &[u8]) -> bool {
     let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {

@@ -1244,6 +1244,23 @@ fn format_uses_tab_size(format: &LsFormat) -> bool {
     )
 }
 
+fn tab_size_from_environment(tab_size: &OsStr, format: &LsFormat) -> usize {
+    if !format_uses_tab_size(format) {
+        return LS_DEFAULT_TAB_SIZE;
+    }
+
+    match tab_size.to_str().and_then(parse_base_zero_usize) {
+        Some(tab_size) => tab_size,
+        None => {
+            ct_show_error!(
+                "ignoring invalid tab size in environment variable TABSIZE: {}",
+                ls_quote_environment_value(tab_size)
+            );
+            LS_DEFAULT_TAB_SIZE
+        }
+    }
+}
+
 fn stdout_terminal_width() -> Option<usize> {
     if !stdout().is_terminal() {
         return None;
@@ -1271,6 +1288,15 @@ impl LsConfig {
 
     pub fn set_dired(&mut self, enabled: bool) {
         self.is_dired = enabled && self.format == LsFormat::Long && !self.is_hyperlink;
+    }
+
+    pub fn apply_tab_size_environment(&mut self, options: &clap::ArgMatches) {
+        if options.value_source(ls_flags::format::LS_TAB_SIZE)
+            == Some(clap::parser::ValueSource::EnvVariable)
+            && let Some(tab_size) = options.get_one::<OsString>(ls_flags::format::LS_TAB_SIZE)
+        {
+            self.tab_size = tab_size_from_environment(tab_size, &self.format);
+        }
     }
 
     pub fn from(options: &clap::ArgMatches) -> CTResult<Self> {
@@ -1499,20 +1525,7 @@ impl LsConfig {
         let tab_size = match options.get_one::<OsString>(ls_flags::format::LS_TAB_SIZE) {
             Some(tab_size) => match options.value_source(ls_flags::format::LS_TAB_SIZE) {
                 Some(clap::parser::ValueSource::EnvVariable) => {
-                    if !format_uses_tab_size(&format) {
-                        LS_DEFAULT_TAB_SIZE
-                    } else {
-                        match tab_size.to_str().and_then(parse_base_zero_usize) {
-                            Some(tab_size) => tab_size,
-                            None => {
-                                ct_show_error!(
-                                    "ignoring invalid tab size in environment variable TABSIZE: {}",
-                                    ls_quote_environment_value(tab_size)
-                                );
-                                LS_DEFAULT_TAB_SIZE
-                            }
-                        }
-                    }
+                    tab_size_from_environment(tab_size, &format)
                 }
                 _ => match tab_size.to_str() {
                     Some(tab_size) => parse_tab_size(tab_size)?,

@@ -147,18 +147,6 @@ fn dir_config_from_matches(matches: &ArgMatches) -> CTResult<LsConfig> {
     let uses_default_format = dir_default_format_style(matches);
     let mut config = LsConfig::from(matches)?;
 
-    if uses_default_format
-        && matches.value_source(ls_flags::format::LS_TAB_SIZE)
-            == Some(clap::parser::ValueSource::EnvVariable)
-        && let Some(tab_size) = matches.get_one::<OsString>(ls_flags::format::LS_TAB_SIZE)
-        && tab_size.to_str().is_none()
-    {
-        ctcore::ct_show_error!(
-            "ignoring invalid tab size in environment variable TABSIZE: {}",
-            ct_ls::ls_quote_environment_value(tab_size)
-        );
-    }
-
     match &mut config.quoting_style {
         CtQuotingStyle::Shell { show_control, .. } | CtQuotingStyle::Literal { show_control } => {
             *show_control = !matches.get_flag(ls_flags::LS_HIDE_CONTROL_CHARS);
@@ -173,6 +161,7 @@ fn dir_config_from_matches(matches: &ArgMatches) -> CTResult<LsConfig> {
     }
     if uses_default_format {
         config.format = LsFormat::Columns;
+        config.apply_tab_size_environment(matches);
     }
 
     Ok(config)

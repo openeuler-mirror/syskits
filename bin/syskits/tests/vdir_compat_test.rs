@@ -812,6 +812,38 @@ fn vdir_colors_ln_target_using_symlink_target_type() {
     assert_eq!(output.stdout, b"\x1b[0m\x1b[31mlink\x1b[0m\n");
 }
 
+#[cfg(unix)]
+#[test]
+fn vdir_colors_dangling_symlink_without_diagnosing_target() {
+    use std::os::unix::fs::symlink;
+
+    let temp_dir = TempDir::new().expect("tempdir");
+    symlink("nowhere", temp_dir.path().join("link")).expect("create symlink");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("LS_COLORS", "ln=32:or=33:mi=34")
+        .args([
+            "vdir",
+            "-l",
+            "--time-style=+T",
+            "--color=always",
+            "-d",
+            "link",
+        ])
+        .output()
+        .expect("run syskits vdir");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+    assert!(
+        output
+            .stdout
+            .ends_with(b"\x1b[0m\x1b[33mlink\x1b[0m -> \x1b[34mnowhere\x1b[0m\n")
+    );
+}
+
 #[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");

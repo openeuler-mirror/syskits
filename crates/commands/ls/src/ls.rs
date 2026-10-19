@@ -4668,7 +4668,11 @@ fn apply_style_based_on_metadata(
     name: &str,
     target_symlink: Option<&PathData>,
 ) -> String {
-    let mut style = None;
+    let mut style = if target_symlink.is_some() && md_option.is_none() {
+        ls_colors.style_for_indicator(lscolors::Indicator::MissingFile)
+    } else {
+        None
+    };
     let actual_path = target_symlink.unwrap_or(path);
     let symlink_target_metadata = if target_symlink.is_none()
         && style_manager.symlink_as_target
@@ -4714,15 +4718,12 @@ fn color_name<W: Write>(
     target_symlink: Option<&PathData>,
 ) -> String {
     if let Some(target) = target_symlink {
-        // 当目标软链接是断链时，get_metadata 会失败并返回 None。
-        // 这里必须避免使用 unwrap()，以防止 exit code 101。
         let md_owned =
             get_metadata_with_deref_opt(target.p_buf.as_path(), path.is_must_dereference).ok();
-        let md_ref = md_owned.as_ref().or_else(|| target.get_metadata(out));
 
         apply_style_based_on_metadata(
             path,
-            md_ref,
+            md_owned.as_ref(),
             ls_colors,
             style_manager,
             &name,

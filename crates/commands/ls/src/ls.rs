@@ -4938,7 +4938,15 @@ struct StyleManager {
     symlink_as_target: bool,
     check_symlink_target: bool,
     raw_indicator_styles: HashMap<usize, String>,
-    raw_suffix_styles: Vec<(Style, String)>,
+    raw_suffix_styles: Vec<RawSuffixStyle>,
+}
+
+struct RawSuffixStyle {
+    suffix: String,
+    style: Style,
+    sequence: String,
+    exact_match: bool,
+    ignored: bool,
 }
 
 impl StyleManager {
@@ -4986,8 +4994,14 @@ impl StyleManager {
                     let Some(parsed_style) = Style::from_ansi_sequence(value) else {
                         continue;
                     };
-                    if key.starts_with('*') {
-                        manager.raw_suffix_styles.push((parsed_style, value.into()));
+                    if let Some(suffix) = key.strip_prefix('*') {
+                        manager.raw_suffix_styles.push(RawSuffixStyle {
+                            suffix: suffix.into(),
+                            style: parsed_style,
+                            sequence: value.into(),
+                            exact_match: false,
+                            ignored: false,
+                        });
                     } else if let Some(indicator) = lscolors::Indicator::from(key)
                         && let Some(style) = ls_colors.style_for_indicator(indicator)
                     {
@@ -5000,8 +5014,62 @@ impl StyleManager {
         }
         manager.check_symlink_target =
             manager.symlink_as_target || missing_is_colored || orphan_is_colored;
+        manager.finalize_suffix_rules();
 
         manager
+    }
+
+    fn finalize_suffix_rules(&mut self) {
+        for later in (0..self.raw_suffix_styles.len()).rev() {
+            let mut case_ignored = false;
+            for earlier in (0..later).rev() {
+                let (head, tail) = self.raw_suffix_styles.split_at_mut(later);
+                let later_rule = &mut tail[0];
+                let earlier_rule = &mut head[earlier];
+                if later_rule.ignored
+                    || earlier_rule.ignored
+                    || later_rule.suffix.len() != earlier_rule.suffix.len()
+                {
+                    continue;
+                }
+
+                if later_rule.suffix == earlier_rule.suffix {
+                    earlier_rule.ignored = true;
+                } else if later_rule.suffix.eq_ignore_ascii_case(&earlier_rule.suffix) {
+                    if case_ignored {
+                        earlier_rule.ignored = true;
+                    } else if later_rule.sequence == earlier_rule.sequence {
+                        earlier_rule.ignored = true;
+                        case_ignored = true;
+                    } else {
+                        later_rule.exact_match = true;
+                        earlier_rule.exact_match = true;
+                    }
+                }
+            }
+        }
+    }
+
+    fn suffix_style_for_path(&self, path: &Path) -> Option<&Style> {
+        #[cfg(unix)]
+        let filename = path.file_name()?.as_bytes();
+        #[cfg(windows)]
+        let filename_storage = path.file_name()?.to_string_lossy();
+        #[cfg(windows)]
+        let filename = filename_storage.as_bytes();
+
+        self.raw_suffix_styles.iter().rev().find_map(|rule| {
+            if rule.ignored || rule.suffix.len() > filename.len() {
+                return None;
+            }
+            let ending = &filename[filename.len() - rule.suffix.len()..];
+            let matches = if rule.exact_match {
+                ending == rule.suffix.as_bytes()
+            } else {
+                ending.eq_ignore_ascii_case(rule.suffix.as_bytes())
+            };
+            matches.then_some(&rule.style)
+        })
     }
 
     fn reset_sequence(&self) -> String {
@@ -5015,10 +5083,9 @@ impl StyleManager {
             .get(&(style as *const Style as usize))
             .map(String::as_str)
             .or_else(|| {
-                self.raw_suffix_styles
-                    .iter()
-                    .rev()
-                    .find_map(|(candidate, raw)| (candidate == style).then_some(raw.as_str()))
+                self.raw_suffix_styles.iter().rev().find_map(|rule| {
+                    (rule.style == *style && !rule.ignored).then_some(rule.sequence.as_str())
+                })
             })
     }
 
@@ -5110,6 +5177,7 @@ fn apply_style_based_on_metadata(
     name: &str,
     target_symlink: Option<&PathData>,
 ) -> String {
+    let owned_style;
     let mut style = if target_symlink.is_some() && md_option.is_none() {
         ls_colors.style_for_indicator(lscolors::Indicator::MissingFile)
     } else {
@@ -5140,7 +5208,21 @@ fn apply_style_based_on_metadata(
     }
 
     if style.is_none() {
-        style = ls_colors.style_for_path_with_metadata(&actual_path.p_buf, md_option);
+        if let Some(metadata) = md_option.filter(|metadata| metadata.is_file()) {
+            if let Some(special_style) = regular_file_special_style(metadata, ls_colors) {
+                style = Some(special_style);
+            } else if let Some(suffix_style) = style_manager
+                .suffix_style_for_path(&actual_path.p_buf)
+                .cloned()
+            {
+                owned_style = suffix_style;
+                style = Some(&owned_style);
+            } else {
+                style = ls_colors.style_for_indicator(lscolors::Indicator::RegularFile);
+            }
+        } else {
+            style = ls_colors.style_for_path_with_metadata(&actual_path.p_buf, md_option);
+        }
     }
 
     if let Some(s) = style {
@@ -5148,6 +5230,41 @@ fn apply_style_based_on_metadata(
     } else {
         name.to_owned()
     }
+}
+
+fn regular_file_special_style<'a>(
+    metadata: &Metadata,
+    ls_colors: &'a LsColors,
+) -> Option<&'a Style> {
+    #[cfg(unix)]
+    {
+        let mode = metadata.mode();
+        if mode & 0o4000 != 0 {
+            if let Some(style) = ls_colors.style_for_indicator(lscolors::Indicator::Setuid) {
+                return Some(style);
+            }
+        }
+        if mode & 0o2000 != 0 {
+            if let Some(style) = ls_colors.style_for_indicator(lscolors::Indicator::Setgid) {
+                return Some(style);
+            }
+        }
+    }
+
+    if file_is_executable(metadata) {
+        if let Some(style) = ls_colors.style_for_indicator(lscolors::Indicator::ExecutableFile) {
+            return Some(style);
+        }
+    }
+
+    #[cfg(unix)]
+    if metadata.nlink() > 1 {
+        if let Some(style) = ls_colors.style_for_indicator(lscolors::Indicator::MultipleHardLinks) {
+            return Some(style);
+        }
+    }
+
+    None
 }
 
 /// 根据确定的风格为提供的名称着色

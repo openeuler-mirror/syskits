@@ -202,7 +202,7 @@ fn vdir_config_from_matches(matches: &ArgMatches) -> CTResult<LsConfig> {
         };
     }
     if vdir_default_format_style(matches) {
-        config.format = LsFormat::Long;
+        config.set_long_format(matches)?;
         if matches.get_flag(ls_flags::LS_DIRED) {
             config.is_dired = true;
         }

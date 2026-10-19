@@ -610,6 +610,36 @@ fn vdir_accepts_gnu_block_size_numeric_syntax() {
 }
 
 #[test]
+fn vdir_canonicalizes_block_size_suffixes() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::File::create(temp_dir.path().join("f"))
+        .expect("create fixture")
+        .set_len(1001)
+        .expect("size fixture");
+
+    for (block_size, expected) in [("KB", "2kB"), ("k", "1K"), ("KiB", "1KiB")] {
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .current_dir(temp_dir.path())
+            .env("LC_ALL", "C")
+            .args([
+                "vdir",
+                "-ln",
+                "--full-time",
+                &format!("--block-size={block_size}"),
+                "-d",
+                "f",
+            ])
+            .output()
+            .expect("run syskits vdir");
+
+        assert!(output.status.success(), "block size {block_size}");
+        assert_eq!(output.stderr, b"", "block size {block_size}");
+        let stdout = String::from_utf8(output.stdout).expect("utf8 output");
+        assert_eq!(stdout.split_whitespace().nth(4), Some(expected));
+    }
+}
+
+#[test]
 fn vdir_sort_size_breaks_equal_sizes_by_name() {
     let temp_dir = TempDir::new().expect("tempdir");
     for name in ["c-file", "b-file", "a-file"] {

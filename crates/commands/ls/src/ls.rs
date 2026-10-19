@@ -138,6 +138,14 @@ fn ls_gettext(_msgid: &str) -> Option<String> {
     None
 }
 
+fn ls_locale_quote(value: &str) -> String {
+    let left = ls_gettext("`")
+        .filter(|quote| quote != "`")
+        .unwrap_or("'".into());
+    let right = ls_gettext("'").unwrap_or("'".into());
+    format!("{left}{value}{right}")
+}
+
 #[cfg(target_os = "linux")]
 fn ls_localized_path_error(msgid: &str, path: &str, error: &std::io::Error) -> Option<String> {
     use std::ffi::CStr;
@@ -389,7 +397,9 @@ impl Display for LsError {
                 )
             }
             LsError::LsInvalidLineWidth(s) => {
-                write!(formatter, "invalid line width: {}", s.quote())
+                let message =
+                    ls_gettext("invalid line width").unwrap_or_else(|| "invalid line width".into());
+                write!(formatter, "{message}: {}", ls_locale_quote(s))
             }
             LsError::LsInvalidTabSize(s) => {
                 write!(formatter, "invalid tab size: {}", s.quote())

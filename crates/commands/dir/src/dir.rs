@@ -14,6 +14,8 @@ use rust_i18n::t;
 use std::cmp::Reverse;
 use std::error::Error;
 use std::ffi::OsString;
+#[cfg(target_os = "linux")]
+use std::ffi::{CStr, CString};
 use std::fmt::Display;
 use std::fs::{self, FileType, Metadata};
 use std::io::Write;
@@ -77,6 +79,7 @@ impl ctcore::ct_error::CTError for DirNonUtf8OptionError {
 struct DirClapError {
     inner: Box<dyn ctcore::ct_error::CTError>,
     diagnostic: Option<String>,
+    diagnostic_includes_command: bool,
     display_request: bool,
 }
 
@@ -88,30 +91,31 @@ impl DirClapError {
         );
         let missing_argument = dir_missing_option_argument_diagnostic(&error, args);
         let invalid_enum = dir_invalid_enum_diagnostic(&error);
-        let diagnostic = if missing_argument.is_some() {
-            missing_argument.map(dir_append_help_hint)
+        let (diagnostic, diagnostic_includes_command) = if missing_argument.is_some() {
+            (missing_argument.map(dir_append_help_hint), false)
         } else if invalid_enum.is_some() {
-            invalid_enum.map(dir_append_help_hint)
+            (invalid_enum.map(dir_append_help_hint), false)
         } else if error.kind() == clap::error::ErrorKind::UnknownArgument {
             match error.get(ContextKind::InvalidArg) {
-                Some(ContextValue::String(argument)) => {
-                    dir_invalid_option_diagnostic(argument).map(dir_append_help_hint)
-                }
-                _ => None,
+                Some(ContextValue::String(argument)) => dir_option_diagnostic(argument),
+                _ => (None, false),
             }
         } else if error.kind() == clap::error::ErrorKind::TooManyValues {
             match error.get(ContextKind::InvalidArg) {
                 Some(ContextValue::String(argument))
                     if argument == "--help" || argument == "--version" =>
                 {
-                    Some(dir_append_help_hint(format!(
-                        "option '{argument}' doesn't allow an argument"
-                    )))
+                    (
+                        Some(dir_append_help_hint(format!(
+                            "option '{argument}' doesn't allow an argument"
+                        ))),
+                        false,
+                    )
                 }
-                _ => None,
+                _ => (None, false),
             }
         } else {
-            None
+            (None, false)
         };
         let code = if diagnostic.is_some()
             && matches!(
@@ -126,6 +130,7 @@ impl DirClapError {
         Self {
             inner: Box::new(error.with_exit_code(code)),
             diagnostic,
+            diagnostic_includes_command,
             display_request,
         }
     }
@@ -232,12 +237,230 @@ fn dir_invalid_enum_diagnostic(error: &clap::Error) -> Option<String> {
         return None;
     };
 
-    let mut diagnostic = format!("invalid argument '{value}' for '{option}'\nValid arguments are:");
+    let value = dir_locale_quote(value);
+    let option = dir_locale_quote(option);
+    let mut diagnostic = dir_format_coreutils_two("invalid argument %s for %s", &value, &option)
+        .unwrap_or_else(|| format!("invalid argument {value} for {option}"));
+    diagnostic.push('\n');
+    diagnostic.push_str(
+        &dir_gettext("Valid arguments are:").unwrap_or_else(|| "Valid arguments are:".into()),
+    );
     for valid_argument in valid_arguments {
         diagnostic.push_str("\n  - ");
-        diagnostic.push_str(valid_argument);
+        diagnostic.push_str(&dir_locale_quote_valid_arguments(valid_argument));
     }
     Some(diagnostic)
+}
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn bindtextdomain(
+        domainname: *const ctcore::libc::c_char,
+        dirname: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
+    fn dgettext(
+        domainname: *const ctcore::libc::c_char,
+        msgid: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
+}
+
+#[cfg(target_os = "linux")]
+fn dir_init_gettext() {
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+        bindtextdomain(c"coreutils".as_ptr(), c"/usr/share/locale".as_ptr());
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn dir_init_gettext() {}
+
+#[cfg(target_os = "linux")]
+fn dir_gettext_domain(domain: &CStr, msgid: &str) -> Option<String> {
+    let msgid = CString::new(msgid).ok()?;
+    unsafe {
+        let translated = dgettext(domain.as_ptr(), msgid.as_ptr());
+        (!translated.is_null()).then(|| CStr::from_ptr(translated).to_string_lossy().into_owned())
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn dir_gettext_domain(_domain: &str, _msgid: &str) -> Option<String> {
+    None
+}
+
+fn dir_gettext(msgid: &str) -> Option<String> {
+    #[cfg(target_os = "linux")]
+    return dir_gettext_domain(c"coreutils", msgid);
+
+    #[cfg(not(target_os = "linux"))]
+    return dir_gettext_domain("coreutils", msgid);
+}
+
+#[cfg(target_os = "linux")]
+fn dir_format_gettext(
+    domain: &CStr,
+    msgid: &CStr,
+    arguments: &[*const ctcore::libc::c_char],
+) -> Option<String> {
+    unsafe {
+        let template = dgettext(domain.as_ptr(), msgid.as_ptr());
+        if template.is_null() {
+            return None;
+        }
+        let len = match arguments {
+            [first] => ctcore::libc::snprintf(std::ptr::null_mut(), 0, template, *first),
+            [first, second] => {
+                ctcore::libc::snprintf(std::ptr::null_mut(), 0, template, *first, *second)
+            }
+            [first, second, third] => {
+                ctcore::libc::snprintf(std::ptr::null_mut(), 0, template, *first, *second, *third)
+            }
+            _ => return None,
+        };
+        if len < 0 {
+            return None;
+        }
+        let mut rendered = vec![0u8; len as usize + 1];
+        match arguments {
+            [first] => ctcore::libc::snprintf(
+                rendered.as_mut_ptr().cast(),
+                rendered.len(),
+                template,
+                *first,
+            ),
+            [first, second] => ctcore::libc::snprintf(
+                rendered.as_mut_ptr().cast(),
+                rendered.len(),
+                template,
+                *first,
+                *second,
+            ),
+            [first, second, third] => ctcore::libc::snprintf(
+                rendered.as_mut_ptr().cast(),
+                rendered.len(),
+                template,
+                *first,
+                *second,
+                *third,
+            ),
+            _ => return None,
+        };
+        rendered.truncate(len as usize);
+        String::from_utf8(rendered).ok()
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn dir_format_coreutils_one(msgid: &CStr, argument: &CStr) -> Option<String> {
+    dir_format_gettext(c"coreutils", msgid, &[argument.as_ptr()])
+}
+
+#[cfg(target_os = "linux")]
+fn dir_format_coreutils_two(msgid: &str, first: &str, second: &str) -> Option<String> {
+    let msgid = CString::new(msgid).ok()?;
+    let first = CString::new(first).ok()?;
+    let second = CString::new(second).ok()?;
+    dir_format_gettext(c"coreutils", &msgid, &[first.as_ptr(), second.as_ptr()])
+}
+
+#[cfg(not(target_os = "linux"))]
+fn dir_format_coreutils_two(_msgid: &str, _first: &str, _second: &str) -> Option<String> {
+    None
+}
+
+fn dir_locale_quote(value: &str) -> String {
+    let left = dir_gettext("`")
+        .filter(|quote| quote != "`")
+        .unwrap_or("'".into());
+    let right = dir_gettext("'").unwrap_or("'".into());
+    format!("{left}{value}{right}")
+}
+
+fn dir_locale_quote_valid_arguments(arguments: &str) -> String {
+    arguments
+        .split(", ")
+        .map(|argument| dir_locale_quote(argument.trim_matches('\'')))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+#[cfg(target_os = "linux")]
+fn dir_localized_invalid_option_diagnostic(argument: &str) -> Option<String> {
+    let command = CString::new(ctcore::ct_util_name()).ok()?;
+    let argument = CString::new(argument).ok()?;
+    let (msgid, candidates) = if argument.as_bytes() == b"--h" {
+        (
+            c"%s: option '%s%s' is ambiguous; possibilities:",
+            Some(" '--human-readable' '--hide-control-chars' '--hide' '--hyperlink' '--help'"),
+        )
+    } else if argument.as_bytes().starts_with(b"--") {
+        (c"%s: unrecognized option '%s%s'\n", None)
+    } else {
+        let option = argument.to_bytes().strip_prefix(b"-")?.first().copied()?;
+        let template =
+            unsafe { dgettext(c"libc".as_ptr(), c"%s: invalid option -- '%c'\n".as_ptr()) };
+        if template.is_null() {
+            return None;
+        }
+        let len = unsafe {
+            ctcore::libc::snprintf(
+                std::ptr::null_mut(),
+                0,
+                template,
+                command.as_ptr(),
+                option as ctcore::libc::c_int,
+            )
+        };
+        if len < 0 {
+            return None;
+        }
+        let mut rendered = vec![0u8; len as usize + 1];
+        unsafe {
+            ctcore::libc::snprintf(
+                rendered.as_mut_ptr().cast(),
+                rendered.len(),
+                template,
+                command.as_ptr(),
+                option as ctcore::libc::c_int,
+            );
+        }
+        rendered.truncate(len as usize);
+        let mut diagnostic = String::from_utf8(rendered).ok()?;
+        diagnostic.push_str(&dir_format_coreutils_one(
+            c"Try '%s --help' for more information.\n",
+            &command,
+        )?);
+        return Some(diagnostic);
+    };
+
+    let empty = c"";
+    let mut diagnostic = dir_format_gettext(
+        c"libc",
+        msgid,
+        &[command.as_ptr(), empty.as_ptr(), argument.as_ptr()],
+    )?;
+    if let Some(candidates) = candidates {
+        diagnostic.push_str(candidates);
+        diagnostic.push('\n');
+    }
+    diagnostic.push_str(&dir_format_coreutils_one(
+        c"Try '%s --help' for more information.\n",
+        &command,
+    )?);
+    Some(diagnostic)
+}
+
+fn dir_option_diagnostic(argument: &str) -> (Option<String>, bool) {
+    #[cfg(target_os = "linux")]
+    if let Some(diagnostic) = dir_localized_invalid_option_diagnostic(argument) {
+        return (Some(diagnostic), true);
+    }
+
+    (
+        dir_invalid_option_diagnostic(argument).map(dir_append_help_hint),
+        false,
+    )
 }
 
 fn dir_clap_error_exit_code(error: &clap::Error) -> i32 {
@@ -317,6 +540,14 @@ fn dir_invalid_option_diagnostic(argument: &str) -> Option<String> {
 }
 
 fn dir_append_help_hint(diagnostic: String) -> String {
+    #[cfg(target_os = "linux")]
+    if let Ok(command) = CString::new(ctcore::ct_help_utility_name())
+        && let Some(hint) =
+            dir_format_coreutils_one(c"Try '%s --help' for more information.\n", &command)
+    {
+        return format!("{diagnostic}\n{}", hint.trim_end_matches('\n'));
+    }
+
     format!(
         "{diagnostic}\nTry '{} --help' for more information.",
         ctcore::ct_help_utility_name()
@@ -326,6 +557,13 @@ fn dir_append_help_hint(diagnostic: String) -> String {
 impl Display for DirClapError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.diagnostic {
+            Some(diagnostic) if self.diagnostic_includes_command => {
+                let mut stderr = std::io::stderr().lock();
+                let _ = stderr
+                    .write_all(diagnostic.as_bytes())
+                    .and_then(|_| stderr.flush());
+                Ok(())
+            }
             Some(diagnostic) => formatter.write_str(diagnostic),
             None => Display::fmt(&self.inner, formatter),
         }
@@ -843,6 +1081,7 @@ pub fn dir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDat
     let matches = match command.try_get_matches_from(args.iter().cloned()) {
         Ok(matches) => matches,
         Err(err) => {
+            dir_init_gettext();
             if err.kind() == clap::error::ErrorKind::UnknownArgument
                 && let Some(error) = dir_non_utf8_option_error(&args)
             {
@@ -852,7 +1091,13 @@ pub fn dir_main(args: impl ctcore::Args) -> CTResult<(Vec<PathData>, Vec<PathDat
         }
     };
 
-    let config = dir_config_from_matches(&matches)?;
+    let config = match dir_config_from_matches(&matches) {
+        Ok(config) => config,
+        Err(error) => {
+            dir_init_gettext();
+            return Err(error);
+        }
+    };
     let paths_from_args = dir_paths_from_matches(&matches);
 
     ct_ls::list(paths_from_args, &config)

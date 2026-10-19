@@ -26,7 +26,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 #[allow(unused_imports)]
 use std::os::windows::fs::MetadataExt;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command as ProcessCommand;
 #[cfg(unix)]
 use std::sync::Mutex;
@@ -5397,6 +5397,21 @@ fn display_item_name<W: Write>(
     }
 }
 
+fn normalize_path_components(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir | Component::Normal(_) => normalized.push(component.as_os_str()),
+        }
+    }
+    normalized
+}
+
 fn create_hyperlink(name: &[u8], path: &PathData) -> Vec<u8> {
     let hostname_osstring = hostname::get().unwrap_or(OsString::from(""));
     let hostname = hostname_osstring.to_string_lossy();
@@ -5433,6 +5448,8 @@ fn create_hyperlink(name: &[u8], path: &PathData) -> Vec<u8> {
             }
         }
     };
+    let absolute_path_buf = normalize_path_components(&absolute_path_buf);
+
     #[cfg(unix)]
     let unencoded_bytes = b"_-.~/";
     #[cfg(target_os = "windows")]

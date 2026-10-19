@@ -47,6 +47,7 @@ use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::UClapError;
 use ctcore::ct_error::set_ct_exit_code;
+use ctcore::ct_error::strip_errno;
 use ctcore::ct_fs::display_permissions;
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_locale::strcoll_compare;
@@ -290,6 +291,7 @@ enum LsError {
     LsInvalidTabSize(String),
     LsAlreadyListedError(PathBuf),
     LsTimeStyleParseError(String, Vec<String>),
+    LsWriteError(std::io::Error),
 }
 
 impl CTError for LsError {
@@ -304,6 +306,7 @@ impl CTError for LsError {
             Self::LsInvalidTabSize(_) => 2,
             Self::LsAlreadyListedError(_) => 2,
             Self::LsTimeStyleParseError(_, _) => 2,
+            Self::LsWriteError(_) => 2,
         }
     }
 }
@@ -453,8 +456,20 @@ impl Display for LsError {
                     t!("ls.errors.already_listed")
                 )
             }
+            LsError::LsWriteError(error) => {
+                write!(formatter, "write error: {}", strip_errno(error))
+            }
         }
     }
+}
+
+fn ls_flush_stdout(writer: &mut impl Write, stdout_was_closed: bool) -> CTResult<()> {
+    let result = if stdout_was_closed {
+        Err(std::io::Error::from_raw_os_error(ctcore::libc::EBADF))
+    } else {
+        writer.flush()
+    };
+    result.map_err(|error| Box::new(LsError::LsWriteError(error)) as Box<dyn CTError>)
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -2897,6 +2912,7 @@ pub fn list(locs: Vec<&Path>, config: &LsConfig) -> CTResult<(Vec<PathData>, Vec
     if config.is_dired {
         dired::dired_print_dired_output(config, &dired_output, &mut out)?;
     }
+    ls_flush_stdout(&mut out, ctcore::ct_stdout_was_closed())?;
     Ok((files_vec, dirs_vec))
 }
 

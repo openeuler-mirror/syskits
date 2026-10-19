@@ -4055,6 +4055,7 @@ fn display_item_long<W: Write>(
     any_has_acl_or_context: bool,
 ) -> CTResult<()> {
     let mut output_display = Vec::new();
+    output_display.extend_from_slice(style_manager.begin_item().as_bytes());
     if ls_config.is_dired {
         output_display.extend_from_slice(b"  ");
     }
@@ -4730,6 +4731,13 @@ fn display_item_name<W: Write>(
     out: &mut W,
     style_manager: &mut StyleManager,
 ) -> Cell {
+    let item_prefix = if config.format == LsFormat::Long {
+        String::new()
+    } else {
+        style_manager.begin_item()
+    };
+    let style_count_before = style_manager.style_count;
+
     // 这是我们的返回值。我们从 `&path.display_name` 开始，然后对其进行修改。
     let mut name = escape_name_with_chars(
         &path.display_name,
@@ -4848,6 +4856,11 @@ fn display_item_name<W: Write>(
         }
     }
 
+    if style_manager.normal_is_colored() && style_manager.style_count == style_count_before {
+        name.push_str(&style_manager.reset_sequence());
+    }
+    name = item_prefix + &name;
+
     Cell {
         contents: name,
         width,
@@ -4937,6 +4950,9 @@ struct StyleManager {
     reset: String,
     symlink_as_target: bool,
     check_symlink_target: bool,
+    normal_sequence: Option<String>,
+    regular_file_sequence: Option<String>,
+    style_count: usize,
     raw_indicator_styles: HashMap<usize, String>,
     raw_suffix_styles: Vec<RawSuffixStyle>,
 }
@@ -4960,6 +4976,9 @@ impl StyleManager {
             reset: "0".into(),
             symlink_as_target: false,
             check_symlink_target: false,
+            normal_sequence: None,
+            regular_file_sequence: None,
+            style_count: 0,
             raw_indicator_styles: HashMap::new(),
             raw_suffix_styles: Vec::new(),
         };
@@ -4990,6 +5009,8 @@ impl StyleManager {
                 "rc" => manager.right = value.into(),
                 "ec" => manager.end = Some(value.into()),
                 "rs" => manager.reset = value.into(),
+                "no" => manager.normal_sequence = Some(value.into()),
+                "fi" => manager.regular_file_sequence = Some(value.into()),
                 _ => {
                     let Some(parsed_style) = Style::from_ansi_sequence(value) else {
                         continue;
@@ -5078,6 +5099,51 @@ impl StyleManager {
             .unwrap_or_else(|| format!("{}{}{}", self.left, self.reset, self.right))
     }
 
+    fn normal_is_colored(&self) -> bool {
+        self.normal_sequence
+            .as_deref()
+            .is_some_and(|sequence| !matches!(sequence, "" | "0" | "00"))
+    }
+
+    fn begin_item(&mut self) -> String {
+        if !self.normal_is_colored() {
+            return String::new();
+        }
+
+        let initial = if self.is_first {
+            self.is_first = false;
+            self.reset_sequence()
+        } else {
+            String::new()
+        };
+        self.used_color = true;
+        format!(
+            "{initial}{}{}{}",
+            self.left,
+            self.normal_sequence.as_deref().unwrap_or_default(),
+            self.right
+        )
+    }
+
+    fn apply_sequence(&mut self, sequence: &str, name: &str) -> String {
+        let initial = if self.normal_is_colored() {
+            format!("{}{}", self.left, self.right)
+        } else if self.is_first {
+            self.reset_sequence()
+        } else {
+            String::new()
+        };
+        self.is_first = false;
+        self.used_color = true;
+        self.style_count += 1;
+        format!(
+            "{initial}{}{sequence}{}{name}{}",
+            self.left,
+            self.right,
+            self.reset_sequence()
+        )
+    }
+
     fn raw_style<'a>(&'a self, style: &Style) -> Option<&'a str> {
         self.raw_indicator_styles
             .get(&(style as *const Style as usize))
@@ -5091,19 +5157,7 @@ impl StyleManager {
 
     fn apply_style(&mut self, new_style: &Style, name: &str) -> String {
         if let Some(raw_style) = self.raw_style(new_style).map(str::to_owned) {
-            let initial = if self.is_first {
-                self.is_first = false;
-                self.reset_sequence()
-            } else {
-                String::new()
-            };
-            self.used_color = true;
-            return format!(
-                "{initial}{}{raw_style}{}{name}{}",
-                self.left,
-                self.right,
-                self.reset_sequence()
-            );
+            return self.apply_sequence(&raw_style, name);
         }
 
         let mut term_style = new_style.to_nu_ansi_term_style();
@@ -5118,6 +5172,7 @@ impl StyleManager {
         }
 
         self.used_color = true;
+        self.style_count += 1;
         term_style.paint(name).to_string()
     }
 
@@ -5178,6 +5233,7 @@ fn apply_style_based_on_metadata(
     target_symlink: Option<&PathData>,
 ) -> String {
     let owned_style;
+    let mut raw_sequence = None;
     let mut style = if target_symlink.is_some() && md_option.is_none() {
         ls_colors.style_for_indicator(lscolors::Indicator::MissingFile)
     } else {
@@ -5218,14 +5274,16 @@ fn apply_style_based_on_metadata(
                 owned_style = suffix_style;
                 style = Some(&owned_style);
             } else {
-                style = ls_colors.style_for_indicator(lscolors::Indicator::RegularFile);
+                raw_sequence = style_manager.regular_file_sequence.clone();
             }
         } else {
             style = ls_colors.style_for_path_with_metadata(&actual_path.p_buf, md_option);
         }
     }
 
-    if let Some(s) = style {
+    if let Some(sequence) = raw_sequence {
+        style_manager.apply_sequence(&sequence, name)
+    } else if let Some(s) = style {
         style_manager.apply_style(s, name)
     } else {
         name.to_owned()

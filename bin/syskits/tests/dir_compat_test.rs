@@ -578,3 +578,29 @@ fn dir_keeps_differently_colored_extension_rules_case_sensitive() {
     );
     assert_eq!(output.stderr, b"");
 }
+
+#[test]
+fn dir_applies_normal_color_to_long_fields_and_explicit_file_color_to_names() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    fs::write(temp_dir.path().join("plain"), b"").expect("create plain file");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .env("LC_ALL", "C")
+        .env("LS_COLORS", "no=7:fi=4")
+        .args([
+            "dir",
+            "-gG",
+            "--time-style=+T",
+            "--color=always",
+            "-d",
+            "plain",
+        ])
+        .output()
+        .expect("run syskits dir");
+
+    assert!(output.status.success());
+    assert!(output.stdout.starts_with(b"\x1b[0m\x1b[7m-rw-r--r--"));
+    assert!(output.stdout.ends_with(b" T \x1b[m\x1b[4mplain\x1b[0m\n"));
+    assert_eq!(output.stderr, b"");
+}

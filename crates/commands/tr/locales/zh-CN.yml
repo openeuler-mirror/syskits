@@ -6,3 +6,11 @@ tr:
   usage: tr [选项]... 集合1 [集合2]
   about: '转换或删除字符'
   after_help: '转换、压缩和/或删除标准输入中的字符，写入到标准输出。'
+  errors:
+    missing_operand: 缺少操作对象
+    missing_operand_after: "%{operand} 后缺少操作对象"
+    two_strings_delete_squeeze: 同时指定了删除和缩减操作时，必须给定两个字符串。
+    two_strings_translate: 进行替换操作时，必须给定两个字符串。
+    extra_operand: "多余的操作对象 %{operand}"
+    only_one_delete: 指定了删除操作而未指定缩减操作时，只能给定一个字符串。
+    try_help: "请尝试执行 \"%{command} --help\" 来获取更多信息。"

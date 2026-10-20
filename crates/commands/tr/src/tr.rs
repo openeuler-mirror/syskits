@@ -214,7 +214,7 @@ impl TrFlags {
     /// 验证 sets 不为空
     fn validate_sets_not_empty(&self) -> CTResult<()> {
         if self.sets.is_empty() {
-            return Err(CTsageError::new(1, "missing operand"));
+            return Err(tr_usage_error(t!("tr.errors.missing_operand")));
         }
         Ok(())
     }
@@ -225,30 +225,45 @@ impl TrFlags {
         if self.needs_two_sets() && self.sets.len() < 2 {
             let msg = if self.is_delete_flag && self.is_squeeze_flag {
                 format!(
-                    "missing operand after {}\nTwo strings must be given when deleting and squeezing.",
-                    self.sets[0].quote()
+                    "{}\n{}",
+                    t!(
+                        "tr.errors.missing_operand_after",
+                        operand = self.sets[0].quote().to_string()
+                    ),
+                    t!("tr.errors.two_strings_delete_squeeze")
                 )
             } else {
                 format!(
-                    "missing operand after {}\nTwo strings must be given when translating.",
-                    self.sets[0].quote()
+                    "{}\n{}",
+                    t!(
+                        "tr.errors.missing_operand_after",
+                        operand = self.sets[0].quote().to_string()
+                    ),
+                    t!("tr.errors.two_strings_translate")
                 )
             };
-            return Err(CTsageError::new(1, msg));
+            return Err(tr_usage_error(msg));
         }
 
         // 检查最大数量要求
         if self.sets.len() > 1 {
             if self.is_delete_flag && !self.is_squeeze_flag {
                 let msg = format!(
-                    "extra operand {}\nOnly one string may be given when deleting without squeezing repeats.",
-                    self.sets[1].quote()
+                    "{}\n{}",
+                    t!(
+                        "tr.errors.extra_operand",
+                        operand = self.sets[1].quote().to_string()
+                    ),
+                    t!("tr.errors.only_one_delete")
                 );
-                return Err(CTsageError::new(1, msg));
+                return Err(tr_usage_error(msg));
             }
             if self.sets.len() > 2 {
-                let msg = format!("extra operand {}", self.sets[2].quote());
-                return Err(CTsageError::new(1, msg));
+                let msg = t!(
+                    "tr.errors.extra_operand",
+                    operand = self.sets[2].quote().to_string()
+                );
+                return Err(tr_usage_error(msg));
             }
         }
 
@@ -260,6 +275,14 @@ impl TrFlags {
         (!self.is_delete_flag && !self.is_squeeze_flag)
             || (self.is_delete_flag && self.is_squeeze_flag)
     }
+}
+
+fn tr_usage_error(message: impl Into<String>) -> Box<dyn ctcore::ct_error::CTError> {
+    let hint = t!(
+        "tr.errors.try_help",
+        command = ctcore::ct_help_utility_name()
+    );
+    CtSimpleError::new(1, format!("{}\n{hint}", message.into()))
 }
 
 #[derive(Default)]

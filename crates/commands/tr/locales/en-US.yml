@@ -14,3 +14,5 @@ tr:
     extra_operand: "extra operand %{operand}"
     only_one_delete: Only one string may be given when deleting without squeezing repeats.
     try_help: "Try '%{command} --help' for more information."
+    read_error: read error
+    write_error: write error

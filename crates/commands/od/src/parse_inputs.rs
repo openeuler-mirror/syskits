@@ -219,9 +219,11 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, &'static str> {
         radix = 16;
     } else {
         // 处理后缀
-        if s[start..len].ends_with('b') {
+        if let Some(suffix) = s[start..len].chars().next_back()
+            && matches!(suffix, 'b' | 'B')
+        {
             len -= 1;
-            multiply = 512; // 'b' 后缀表示乘以512
+            multiply = if suffix == 'b' { 512 } else { 1024 };
         }
         if s[start..len].ends_with('.') {
             len -= 1;
@@ -442,8 +444,11 @@ mod tests {
         assert_eq!(10, parse_offset_operand_str("10.").unwrap()); // decimal
         assert_eq!(10, parse_offset_operand_str("+10.").unwrap()); // decimal
         assert_eq!(4096, parse_offset_operand_str("10b").unwrap()); // b suffix = *512
+        assert_eq!(8192, parse_offset_operand_str("10B").unwrap()); // B suffix = *1024
         assert_eq!(4096, parse_offset_operand_str("+10b").unwrap()); // b suffix = *512
+        assert_eq!(8192, parse_offset_operand_str("+10B").unwrap()); // B suffix = *1024
         assert_eq!(5120, parse_offset_operand_str("10.b").unwrap()); // b suffix = *512
+        assert_eq!(10240, parse_offset_operand_str("10.B").unwrap()); // B suffix = *1024
         assert_eq!(5120, parse_offset_operand_str("+10.b").unwrap()); // b suffix = *512
         assert_eq!(267, parse_offset_operand_str("0x10b").unwrap()); // hex
     }

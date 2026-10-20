@@ -14,6 +14,7 @@ use std::fs::File;
 use std::io::{self, BufReader};
 
 use ctcore::ct_display::Quotable;
+use ctcore::ct_error::strip_errno;
 use ctcore::ct_show_error;
 use ctcore::libc;
 
@@ -114,7 +115,7 @@ impl OdMultifileReader<'_> {
                         return;
                     }
                     Err(e) => {
-                        ct_show_error!("{}: {}", fname.maybe_quote(), e);
+                        ct_show_error!("{}: {}", fname.maybe_quote(), strip_errno(&e));
                         self.is_any_err = true;
                     }
                 },
@@ -144,9 +145,9 @@ impl io::Read for OdMultifileReader<'_> {
                         Ok(n) => n,
                         Err(e) => {
                             if let Some(name) = curr_name {
-                                ct_show_error!("{}: {}", name.maybe_quote(), e);
+                                ct_show_error!("{}: {}", name.maybe_quote(), strip_errno(&e));
                             } else {
-                                ct_show_error!("I/O: {}", e);
+                                ct_show_error!("I/O: {}", strip_errno(&e));
                             }
                             self.is_any_err = true;
                             break;

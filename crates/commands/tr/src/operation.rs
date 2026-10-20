@@ -375,15 +375,6 @@ impl<'a> SequenceCursor<'a> {
         })
     }
 
-    fn next_byte(&mut self) -> Option<(u8, CaseClass)> {
-        self.current()?;
-        let sequence = self.sequences[self.index];
-        let byte = sequence.byte_at(self.offset);
-        let case_class = sequence.case_class();
-        self.advance();
-        Some((byte, case_class))
-    }
-
     fn advance(&mut self) {
         self.offset += 1;
         if self.offset == self.lengths[self.index] {
@@ -538,58 +529,113 @@ impl Sequence {
         let set1_len = set1
             .iter()
             .filter(|sequence| !matches!(sequence, Self::CharStar(_)))
-            .map(Self::expansion_len)
-            .fold(0usize, usize::saturating_add);
+            .map(|sequence| sequence.expansion_len() as u128)
+            .fold(0u128, u128::saturating_add);
         let set2_non_repeat_len = set2
             .iter()
             .filter(|sequence| !matches!(sequence, Self::CharStar(_)))
-            .map(Self::expansion_len)
-            .fold(0usize, usize::saturating_add);
+            .map(|sequence| sequence.expansion_len() as u128)
+            .fold(0u128, u128::saturating_add);
         let indefinite_repeat_len = set1_len.saturating_sub(set2_non_repeat_len);
-        let mut set1_cursor = SequenceCursor::new(&set1, 0);
-        let mut set2_cursor = SequenceCursor::new(&set2, indefinite_repeat_len);
         let mut translation_map = HashMap::new();
-        let mut last_set2_byte = None;
+        let set2_len = set2.iter().fold(0u128, |length, sequence| {
+            length.saturating_add(match sequence {
+                Self::CharStar(_) => indefinite_repeat_len,
+                _ => sequence.expansion_len() as u128,
+            })
+        });
+        let last_set2_byte = set2_len.checked_sub(1).and_then(|position| {
+            Self::byte_at_position(&set2, position, indefinite_repeat_len).map(|(byte, _)| byte)
+        });
 
-        while let Some((set1_byte, set1_case)) = set1_cursor.next_byte() {
-            let Some((set2_byte, set2_case)) = set2_cursor.next_byte() else {
-                if truncate_set1 {
-                    break;
-                }
-                let Some(last_set2_byte) = last_set2_byte else {
-                    return Err(BadSequence::EmptySet2WhenNotTruncatingSet1);
-                };
-                translation_map.insert(set1_byte, last_set2_byte);
+        for (set1_byte, occurrence) in Self::last_occurrences(&set1).into_iter().enumerate() {
+            let Some((position, set1_case)) = occurrence else {
                 continue;
             };
+            let (set2_byte, set2_case) =
+                match Self::byte_at_position(&set2, position, indefinite_repeat_len) {
+                    Some(target) => target,
+                    None if truncate_set1 => continue,
+                    None => {
+                        let Some(last_set2_byte) = last_set2_byte else {
+                            return Err(BadSequence::EmptySet2WhenNotTruncatingSet1);
+                        };
+                        (last_set2_byte, CaseClass::None)
+                    }
+                };
 
             match (set1_case, set2_case) {
                 (CaseClass::Lower, CaseClass::Upper) => {
                     for byte in locale_class_members(CLASS_LOWER) {
                         translation_map.insert(byte, locale_to_upper(byte));
                     }
-                    set1_cursor.skip_construct();
-                    set2_cursor.skip_construct();
                 }
                 (CaseClass::Upper, CaseClass::Lower) => {
                     for byte in locale_class_members(CLASS_UPPER) {
                         translation_map.insert(byte, locale_to_lower(byte));
                     }
-                    set1_cursor.skip_construct();
-                    set2_cursor.skip_construct();
                 }
-                (_, CaseClass::Lower | CaseClass::Upper) => {
-                    set1_cursor.skip_construct();
-                    set2_cursor.skip_construct();
-                }
+                (_, CaseClass::Lower | CaseClass::Upper) => {}
                 _ => {
-                    translation_map.insert(set1_byte, set2_byte);
-                    last_set2_byte = Some(set2_byte);
+                    translation_map.insert(set1_byte as u8, set2_byte);
                 }
             }
         }
 
         Ok(translation_map)
+    }
+
+    fn last_occurrences(set: &[Self]) -> [Option<(u128, CaseClass)>; 256] {
+        let mut occurrences = [None; 256];
+        let mut position = 0u128;
+
+        for sequence in set {
+            match sequence {
+                Self::CharRepeat(byte, count) if *count > 0 => {
+                    occurrences[usize::from(*byte)] =
+                        Some((position.saturating_add(*count as u128 - 1), CaseClass::None));
+                }
+                Self::CharStar(_) => {}
+                _ => {
+                    for offset in 0..sequence.expansion_len() {
+                        let byte = sequence.byte_at(offset);
+                        occurrences[usize::from(byte)] = Some((
+                            position.saturating_add(offset as u128),
+                            sequence.case_class(),
+                        ));
+                    }
+                }
+            }
+            position = position.saturating_add(sequence.expansion_len() as u128);
+        }
+
+        occurrences
+    }
+
+    fn byte_at_position(
+        set: &[Self],
+        position: u128,
+        indefinite_repeat_len: u128,
+    ) -> Option<(u8, CaseClass)> {
+        let mut start = 0u128;
+
+        for sequence in set {
+            let length = match sequence {
+                Self::CharStar(_) => indefinite_repeat_len,
+                _ => sequence.expansion_len() as u128,
+            };
+            let end = start.saturating_add(length);
+            if position < end {
+                let offset = match sequence {
+                    Self::CharStar(_) | Self::CharRepeat(_, _) => 0,
+                    _ => usize::try_from(position - start).ok()?,
+                };
+                return Some((sequence.byte_at(offset), sequence.case_class()));
+            }
+            start = end;
+        }
+
+        None
     }
 
     fn is_character_class(&self) -> bool {
@@ -672,7 +718,15 @@ impl Sequence {
 
     /// 处理字符集，将序列集合展开为字符向量
     fn process_char_set(set: &[Self]) -> Vec<u8> {
-        set.iter().flat_map(Self::flatten).collect()
+        set.iter()
+            .flat_map(|sequence| match sequence {
+                Self::CharRepeat(byte, count) => {
+                    Box::new(std::iter::repeat_n(*byte, (*count).min(256)))
+                        as Box<dyn Iterator<Item = u8>>
+                }
+                _ => sequence.flatten(),
+            })
+            .collect()
     }
 
     /// 在序列集合中查找并验证字符星号

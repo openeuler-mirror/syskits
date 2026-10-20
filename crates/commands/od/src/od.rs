@@ -441,6 +441,8 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
         };
     }
 
+    let _ctype_locale = OdCtypeLocale::activate();
+
     let mut input_decoder = OdInputDecoder::new(
         &mut input,
         od_settings.line_bytes,
@@ -858,7 +860,7 @@ fn od_format_line(
     input_decoder: &OdMemoryDecoder,
     formatter: &SpacedFormatterItemInfo,
     output_info: &OutputInfo,
-) -> String {
+) -> Vec<u8> {
     let mut output_text = String::new();
     let mut byte_pos = 0;
 
@@ -868,11 +870,12 @@ fn od_format_line(
         byte_pos += formatter.formatter_item_info.byte_size;
     }
 
+    let mut output_bytes = output_text.into_bytes();
     if formatter.add_ascii_dump {
-        od_add_ascii_dump(&mut output_text, input_decoder, output_info);
+        od_add_ascii_dump(&mut output_bytes, input_decoder, output_info);
     }
 
-    output_text
+    output_bytes
 }
 
 fn od_add_spacing(
@@ -917,24 +920,19 @@ fn od_format_bytes(
 }
 
 fn od_add_ascii_dump(
-    output_text: &mut String,
+    output_bytes: &mut Vec<u8>,
     input_decoder: &OdMemoryDecoder,
     output_info: &OutputInfo,
 ) {
     let missing_spacing = output_info
         .print_width_line
-        .saturating_sub(output_text.chars().count());
-    write!(
-        output_text,
-        "{:>width$}  {}",
-        "",
-        format_ascii_dump(input_decoder.get_buffer(0)),
-        width = missing_spacing
-    )
-    .unwrap();
+        .saturating_sub(output_bytes.len());
+    output_bytes.resize(output_bytes.len() + missing_spacing, b' ');
+    output_bytes.extend_from_slice(b"  ");
+    output_bytes.extend_from_slice(&format_ascii_dump(input_decoder.get_buffer(0)));
 }
 
-fn od_print_formatted_line(prefix: &str, output_text: &str, is_first: bool) -> CTResult<()> {
+fn od_print_formatted_line(prefix: &str, output_bytes: &[u8], is_first: bool) -> CTResult<()> {
     use std::io::Write as _;
     let mut stdout = std::io::stdout().lock();
 
@@ -944,11 +942,15 @@ fn od_print_formatted_line(prefix: &str, output_text: &str, is_first: bool) -> C
         write!(stdout, "{:>width$}", "", width = prefix.chars().count())
             .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
     }
-    writeln!(stdout, "{output_text}").map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+    stdout
+        .write_all(output_bytes)
+        .and_then(|()| stdout.write_all(b"\n"))
+        .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
     Ok(())
 }
 
-fn od_render_formatted_line(prefix: &str, output_text: &str, is_first: bool) -> String {
+fn od_render_formatted_line(prefix: &str, output_bytes: &[u8], is_first: bool) -> String {
+    let output_text = String::from_utf8_lossy(output_bytes);
     if is_first {
         format!("{prefix}{output_text}\n")
     } else {
@@ -968,8 +970,8 @@ fn od_print_bytes(
     let mut first = true;
 
     for formatter in output_info.spaced_formatters_iter() {
-        let output_text = od_format_line(input_decoder, formatter, output_info);
-        od_print_formatted_line(prefix, &output_text, first)?;
+        let output_bytes = od_format_line(input_decoder, formatter, output_info);
+        od_print_formatted_line(prefix, &output_bytes, first)?;
         first = false;
     }
     Ok(())
@@ -999,12 +1001,12 @@ fn od_collect_views(
     let mut first = true;
 
     for (index, formatter) in output_info.spaced_formatters_iter().enumerate() {
-        let output_text = od_format_line(input_decoder, formatter, output_info);
+        let output_bytes = od_format_line(input_decoder, formatter, output_info);
         views.push(OdView {
             spec: od_view_spec(index, formatter),
-            text: output_text.clone(),
+            text: String::from_utf8_lossy(&output_bytes).into_owned(),
         });
-        classic_text.push_str(&od_render_formatted_line(prefix, &output_text, first));
+        classic_text.push_str(&od_render_formatted_line(prefix, &output_bytes, first));
         first = false;
     }
 
@@ -1158,6 +1160,8 @@ pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
         }
         return Ok(semantic);
     }
+
+    let _ctype_locale = OdCtypeLocale::activate();
 
     let mut input_decoder = OdInputDecoder::new(
         &mut input,

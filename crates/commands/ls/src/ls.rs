@@ -5659,6 +5659,28 @@ impl StyleManager {
             return manager;
         };
 
+        for (indicator, sequence) in [
+            (lscolors::Indicator::ExecutableFile, "01;32"),
+            (lscolors::Indicator::Setgid, "30;43"),
+            (lscolors::Indicator::Setuid, "37;41"),
+            (lscolors::Indicator::Directory, "01;34"),
+            (lscolors::Indicator::Sticky, "37;44"),
+            (lscolors::Indicator::OtherWritable, "34;42"),
+            (lscolors::Indicator::StickyAndOtherWritable, "30;42"),
+            (lscolors::Indicator::SymbolicLink, "01;36"),
+            (lscolors::Indicator::BlockDevice, "01;33"),
+            (lscolors::Indicator::CharacterDevice, "01;33"),
+            (lscolors::Indicator::Door, "01;35"),
+            (lscolors::Indicator::FIFO, "33"),
+            (lscolors::Indicator::Socket, "01;35"),
+        ] {
+            if let Some(style) = ls_colors.style_for_indicator(indicator) {
+                manager
+                    .raw_indicator_styles
+                    .insert(style as *const Style as usize, sequence.into());
+            }
+        }
+
         let mut missing_is_colored = false;
         let mut orphan_is_colored = false;
         for entry in value.split(':') {
@@ -6627,6 +6649,22 @@ mod tests {
 
         assert!(!is_color_compatible_term());
         assert!(load_ls_colors().is_some());
+    }
+
+    #[test]
+    fn default_compound_color_keeps_gnu_parameter_order() {
+        let _env_lock = lock_env();
+        let _ls_colors = EnvVarGuard::set("LS_COLORS", "di=31");
+        let ls_colors = LsColors::from_string("di=31");
+        let style = ls_colors
+            .style_for_indicator(lscolors::Indicator::Setuid)
+            .expect("default setuid style");
+        let mut manager = StyleManager::new(Some(&ls_colors));
+
+        assert_eq!(
+            manager.apply_style(style, b"su"),
+            b"\x1b[0m\x1b[37;41msu\x1b[0m"
+        );
     }
 
     #[test]

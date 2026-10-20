@@ -109,6 +109,33 @@
         },
         {
             "command": "od",
+            "description": "Accept the unique --format long-option abbreviation",
+            "args": [
+                "--form=x1",
+                "input"
+            ],
+            "setup_commands": [
+                "printf 'abc' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "od --form=x1 input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
             "description": "Option -A n (No address)",
             "args": [
                 "-An",

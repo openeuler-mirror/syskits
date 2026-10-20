@@ -502,6 +502,16 @@ impl TestParser {
 /// Parse the token stream `args`, returning a `Symbol` stack representing the
 /// operations to perform in postfix order.
 pub fn test_parse(args: Vec<OsString>) -> ParseResult<Vec<TestSymbol>> {
+    if args.len() == 3 {
+        if let TestSymbol::Op(op) = TestSymbol::new(Some(args[1].clone())) {
+            return Ok(vec![
+                TestSymbol::Literal(args[0].clone()),
+                TestSymbol::Literal(args[2].clone()),
+                TestSymbol::Op(op),
+            ]);
+        }
+    }
+
     let mut p = TestParser::new(args);
     p.parse()?;
     Ok(p.stack)
@@ -526,5 +536,23 @@ mod tests {
             Err(ParseError::MissingArgument(_))
         ));
         assert!(test_parse(args(&["-a"])).is_ok());
+    }
+
+    #[test]
+    fn three_argument_binary_operator_takes_precedence() {
+        let cases = [
+            ["-n", "=", "-n"],
+            ["-a", "!=", "-a"],
+            ["!", "=", "="],
+            ["-a", "-eq", "-a"],
+            ["-e", "-ef", "-e"],
+        ];
+
+        for values in cases {
+            let stack = test_parse(args(&values)).unwrap();
+            assert_eq!(stack[0], TestSymbol::Literal(OsString::from(values[0])));
+            assert_eq!(stack[1], TestSymbol::Literal(OsString::from(values[2])));
+            assert!(matches!(stack[2], TestSymbol::Op(_)));
+        }
     }
 }

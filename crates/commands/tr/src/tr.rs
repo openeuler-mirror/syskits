@@ -30,7 +30,9 @@ use sys_locale::get_locale;
 use crate::operation::DeleteOperation;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, strip_errno};
+#[cfg(unix)]
+use std::ffi::CStr;
 use std::ffi::OsString;
 use std::io::Read;
 use std::process::{Command as ProcessCommand, Stdio};
@@ -325,6 +327,16 @@ fn tr_usage_error(message: impl Into<String>) -> Box<dyn ctcore::ct_error::CTErr
     CtSimpleError::new(1, format!("{}\n{hint}", message.into()))
 }
 
+#[cfg(all(unix, not(test)))]
+fn tr_activate_message_locale() {
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
+}
+
+#[cfg(any(not(unix), test))]
+fn tr_activate_message_locale() {}
+
 #[derive(Default)]
 pub struct Tr;
 impl Tool for Tr {
@@ -361,6 +373,7 @@ pub fn tr_main<R: BufRead, W: Write>(
     writer: &mut W,
     args: impl ctcore::Args,
 ) -> CTResult<()> {
+    tr_activate_message_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let argv: Vec<OsString> = args.collect();
@@ -455,6 +468,43 @@ struct StrictWriter<W: Write> {
     inner: W,
 }
 
+fn tr_system_error_detail(error: &std::io::Error) -> String {
+    #[cfg(unix)]
+    if let Some(errno) = error.raw_os_error() {
+        let detail = unsafe { ctcore::libc::strerror(errno) };
+        if !detail.is_null() {
+            return unsafe { CStr::from_ptr(detail) }
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+
+    strip_errno(error)
+}
+
+fn tr_io_error(
+    context: impl AsRef<str>,
+    error: &std::io::Error,
+) -> Box<dyn ctcore::ct_error::CTError> {
+    CtSimpleError::new(
+        1,
+        format!("{}: {}", context.as_ref(), tr_system_error_detail(error)),
+    )
+}
+
+#[cfg(all(unix, not(test)))]
+fn tr_exit_after_write_error(error: &std::io::Error) -> ! {
+    ctcore::ct_show_error!(
+        "{}: {}",
+        t!("tr.errors.write_error"),
+        tr_system_error_detail(error)
+    );
+    let _ = std::io::Write::flush(&mut std::io::stderr());
+    unsafe {
+        ctcore::libc::_exit(1);
+    }
+}
+
 fn translate_input_checked<T, R, W>(reader: &mut R, writer: &mut W, translator: T) -> CTResult<()>
 where
     T: SymbolTranslator,
@@ -462,13 +512,17 @@ where
     W: Write,
 {
     translate_input(reader, writer, translator).map_err(|error| match error {
-        TranslateInputError::Read(error) => CtSimpleError::new(1, format!("read error: {error}")),
+        TranslateInputError::Read(error) => tr_io_error(t!("tr.errors.read_error"), &error),
         TranslateInputError::Write(error) => {
             #[cfg(all(target_os = "linux", not(test)))]
             if error.kind() == std::io::ErrorKind::BrokenPipe && !tr_inherited_sigpipe_ignored() {
                 tr_terminate_with_sigpipe();
             }
-            CtSimpleError::new(1, format!("write error: {error}"))
+            #[cfg(all(unix, not(test)))]
+            tr_exit_after_write_error(&error);
+
+            #[cfg(any(not(unix), test))]
+            tr_io_error(t!("tr.errors.write_error"), &error)
         }
     })
 }
@@ -605,7 +659,7 @@ fn tr_process<R: BufRead, W: Write>(
 
     // 参数与集合规则验证完成后再触发输入读取，保持 GNU tr 的错误时机。
     if let Err(e) = reader.fill_buf() {
-        return Err(CtSimpleError::new(1, format!("read error: {e}")));
+        return Err(tr_io_error(t!("tr.errors.read_error"), &e));
     }
 
     if flags.is_delete_flag {

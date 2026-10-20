@@ -14,3 +14,5 @@ tr:
     extra_operand: "多余的操作对象 %{operand}"
     only_one_delete: 指定了删除操作而未指定缩减操作时，只能给定一个字符串。
     try_help: "请尝试执行 \"%{command} --help\" 来获取更多信息。"
+    read_error: 读取错误
+    write_error: 写入错误

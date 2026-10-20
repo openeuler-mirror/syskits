@@ -3489,6 +3489,8 @@ pub fn list(locs: Vec<&Path>, config: &LsConfig) -> CTResult<(Vec<PathData>, Vec
                     let dir_len = path_data.display_name.len();
                     // 添加 //SUBDIRED// 坐标
                     dired::dired_calculate_subdired(&mut dired_output, dir_len);
+                    // The initial title's trailing newline is not covered by a prior span.
+                    dired_output.padding = 1;
                     // 为目录名添加填充
                     dired::dired_add_dir_name(&mut dired_output, dir_len);
                 }

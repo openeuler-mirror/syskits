@@ -100,7 +100,7 @@ pub fn dired_calculate_subdired(dired_output: &mut DiredOutput, path_size: usize
 
     let additional_offset = match dired_output.subdired_positions.is_empty() {
         true => 0,
-        false => 2, // if we have several directories: \n\n
+        false => 1, // the previous span offset already accounts for one of "\n\n"
     };
 
     let start = offset_from_previous_line + DIRED_TRAILING_OFFSET + additional_offset;
@@ -254,7 +254,7 @@ mod tests {
                 vec![
                     DiredBytePosition { start: 5, end: 10 },
                     DiredBytePosition { start: 11, end: 16 },
-                    DiredBytePosition { start: 8, end: 14 }, // Note the additional offset calculation
+                    DiredBytePosition { start: 7, end: 13 },
                 ]
             );
         }

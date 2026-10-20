@@ -40,4 +40,22 @@ mod tests {
         assert_eq!(syskits.stderr, gnu.stderr);
         assert_eq!(syskits.stdout, gnu.stdout);
     }
+
+    #[test]
+    fn ls_recursive_dired_offsets_cover_each_filename() {
+        let directory = TempDir::new().expect("tempdir");
+        fs::create_dir_all(directory.path().join("d/sub/deep"))
+            .expect("create fixture directories");
+        fs::write(directory.path().join("d/a"), b"").expect("create top-level file");
+        fs::write(directory.path().join("d/sub/b"), b"").expect("create nested file");
+        fs::write(directory.path().join("d/sub/deep/c"), b"").expect("create deeply nested file");
+        let arguments = ["--dired", "-lnR", "--time-style=+%s", "d"];
+
+        let gnu = run_gnu(&directory, &arguments);
+        let syskits = run_syskits(&directory, &arguments);
+
+        assert_eq!(syskits.status.code(), gnu.status.code());
+        assert_eq!(syskits.stderr, gnu.stderr);
+        assert_eq!(syskits.stdout, gnu.stdout);
+    }
 }

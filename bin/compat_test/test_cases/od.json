@@ -831,6 +831,38 @@
         },
         {
             "command": "od",
+            "description": "Long double format preserves extreme values like GNU od",
+            "args": [
+                "--endian=little",
+                "-An",
+                "-v",
+                "-tfL",
+                "input"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "printf '\\001\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000\\000' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "LC_ALL=C od --endian=little -An -v -tfL input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
             "description": "Option -w (Width)",
             "args": [
                 "-w4",

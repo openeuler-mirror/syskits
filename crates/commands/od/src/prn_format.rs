@@ -16,6 +16,16 @@ use half::f16;
 use std::f32;
 use std::f64;
 
+#[cfg(unix)]
+unsafe extern "C" {
+    fn ct_od_format_long_double(
+        buffer: *mut ctcore::libc::c_char,
+        buffer_size: usize,
+        bytes: *const u8,
+        byte_size: usize,
+    ) -> ctcore::libc::c_int;
+}
+
 pub static FORMAT_ITEM_A: FormatterItemInfo = FormatterItemInfo {
     byte_size: 1,
     print_width: 4,
@@ -159,6 +169,24 @@ fn format_flo64(f: f64) -> String {
 }
 
 fn format_long_double(bytes: &[u8]) -> String {
+    #[cfg(unix)]
+    {
+        let mut buffer = [0 as ctcore::libc::c_char; 128];
+        let written = unsafe {
+            ct_od_format_long_double(
+                buffer.as_mut_ptr(),
+                buffer.len(),
+                bytes.as_ptr(),
+                bytes.len(),
+            )
+        };
+        if written >= 0 && (written as usize) < buffer.len() {
+            return unsafe { CStr::from_ptr(buffer.as_ptr()) }
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+
     if bytes.len() < 10 {
         return "nan".to_string();
     }

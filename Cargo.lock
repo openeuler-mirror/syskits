@@ -2255,6 +2255,7 @@ name = "ct_od"
 version = "3.3.8"
 dependencies = [
  "byteorder",
+ "cc",
  "clap",
  "ctcore",
  "half",

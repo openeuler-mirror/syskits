@@ -79,6 +79,7 @@ use crate::peekreader::{PeekRead, PeekReader};
 use crate::prn_format::format_ascii_dump;
 use clap::ArgAction;
 use clap::builder::ValueParser;
+use clap::error::{ContextKind, ContextValue, ErrorKind as ClapErrorKind};
 use clap::{Arg, ArgMatches, Command, crate_version, parser::ValueSource};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
@@ -519,7 +520,7 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect::<Vec<_>>();
 
-    let clap_matches = ct_app().try_get_matches_from(&args)?;
+    let clap_matches = od_parse_matches(&args)?;
 
     let od_settings = OdSettings::new(&clap_matches, &format_args)?;
     let stdin_was_closed = od_prepare_closed_stdin(&od_settings.input_strings);
@@ -847,6 +848,39 @@ pub fn ct_app() -> Command {
         .args_override_self(true)
         .disable_help_flag(true)
         .args(args)
+}
+
+fn od_parse_matches(args: &[OsString]) -> CTResult<ArgMatches> {
+    ct_app()
+        .try_get_matches_from(args.iter().cloned())
+        .map_err(od_clap_error)
+}
+
+fn od_clap_error(error: clap::Error) -> Box<dyn ctcore::ct_error::CTError> {
+    if let Some(diagnostic) = od_unknown_option_diagnostic(&error) {
+        CTsageError::new(1, diagnostic)
+    } else {
+        error.into()
+    }
+}
+
+fn od_unknown_option_diagnostic(error: &clap::Error) -> Option<String> {
+    if error.kind() != ClapErrorKind::UnknownArgument {
+        return None;
+    }
+
+    let argument = match error.get(ContextKind::InvalidArg)? {
+        ContextValue::String(argument) => argument,
+        _ => return None,
+    };
+    if argument.starts_with("--") {
+        Some(format!("unrecognized option {}", argument.quote()))
+    } else {
+        argument
+            .strip_prefix('-')
+            .and_then(|argument| argument.chars().next())
+            .map(|option| format!("invalid option -- '{option}'"))
+    }
 }
 
 fn odexec<I>(
@@ -1277,7 +1311,7 @@ pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect::<Vec<_>>();
 
-    let clap_matches = ct_app().try_get_matches_from(&args)?;
+    let clap_matches = od_parse_matches(&args)?;
     let od_settings = OdSettings::new(&clap_matches, &format_args)?;
 
     let mut input_offset =

@@ -11,11 +11,34 @@
 
 use std::fmt;
 
+const OD_FLOAT_C_BUFFER_SIZE: usize = 128;
+
+pub struct OdFloatFormatBuffer {
+    #[cfg(unix)]
+    c_buffer: [ctcore::libc::c_char; OD_FLOAT_C_BUFFER_SIZE],
+}
+
+impl Default for OdFloatFormatBuffer {
+    fn default() -> Self {
+        Self {
+            #[cfg(unix)]
+            c_buffer: [0; OD_FLOAT_C_BUFFER_SIZE],
+        }
+    }
+}
+
+impl OdFloatFormatBuffer {
+    #[cfg(unix)]
+    pub(crate) fn c_buffer_mut(&mut self) -> &mut [ctcore::libc::c_char; OD_FLOAT_C_BUFFER_SIZE] {
+        &mut self.c_buffer
+    }
+}
+
 #[allow(clippy::enum_variant_names)]
 #[derive(Copy)]
 pub enum OdFormatWriter {
     IntWriter(fn(u64) -> String),
-    FloatWriter(fn(f64) -> String),
+    FloatWriter(fn(f64, &mut String, &mut OdFloatFormatBuffer)),
     FloatBytesWriter(fn(&[u8]) -> String),
     MultibyteWriter(fn(&[u8]) -> String),
 }
@@ -96,11 +119,11 @@ mod tests {
     fn int_fmt2(n: u64) -> String {
         format!("0x{n:x}")
     }
-    fn float_fmt1(n: f64) -> String {
-        n.to_string()
+    fn float_fmt1(n: f64, output: &mut String, _buffer: &mut OdFloatFormatBuffer) {
+        output.push_str(&n.to_string());
     }
-    fn float_fmt2(n: f64) -> String {
-        format!("{n:.2}")
+    fn float_fmt2(n: f64, output: &mut String, _buffer: &mut OdFloatFormatBuffer) {
+        output.push_str(&format!("{n:.2}"));
     }
     fn float_bytes_fmt1(b: &[u8]) -> String {
         b.len().to_string()

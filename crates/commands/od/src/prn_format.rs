@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #[cfg(unix)]
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 
 use crate::formatteriteminfo::*;
 use half::f16;
@@ -103,16 +103,19 @@ pub static FORMAT_ITEM_FLD: FormatterItemInfo = FormatterItemInfo {
     formatter: OdFormatWriter::FloatBytesWriter(format_item_flo128),
 };
 
-pub fn format_item_flo16(f: f64) -> String {
-    format!(" {}", format_flo16(f16::from_f64(f)))
+pub fn format_item_flo16(f: f64, output: &mut String, _buffer: &mut OdFloatFormatBuffer) {
+    output.push(' ');
+    output.push_str(&format_flo16(f16::from_f64(f)));
 }
 
-pub fn format_item_flo32(f: f64) -> String {
-    format!(" {}", format_flo32(f as f32))
+pub fn format_item_flo32(f: f64, output: &mut String, buffer: &mut OdFloatFormatBuffer) {
+    output.push(' ');
+    format_flo32_into(output, f as f32, buffer);
 }
 
-pub fn format_item_flo64(f: f64) -> String {
-    format!(" {}", format_flo64(f))
+pub fn format_item_flo64(f: f64, output: &mut String, buffer: &mut OdFloatFormatBuffer) {
+    output.push(' ');
+    format_flo64_into(output, f, buffer);
 }
 
 pub fn format_item_flo128(bytes: &[u8]) -> String {
@@ -128,34 +131,48 @@ fn format_flo16(f: f16) -> String {
 // Formats float like GNU od's ftoastr: C %g, starting at FLT_DIG and
 // increasing precision until the text round-trips to the same f32.
 // always returns a string of 15 characters
-fn format_flo32(f: f32) -> String {
+fn format_flo32_into(output: &mut String, f: f32, buffer: &mut OdFloatFormatBuffer) {
     const WIDTH: usize = 15;
 
     #[cfg(unix)]
     {
-        format_flo32_gnu(f, WIDTH)
+        format_flo32_gnu(output, f, WIDTH, buffer);
     }
     #[cfg(not(unix))]
     {
         if f.is_subnormal() {
-            format!("{f:WIDTH$e}")
+            output.push_str(&format!("{f:WIDTH$e}"));
         } else {
-            format_float(f64::from(f), WIDTH, 8)
+            output.push_str(&format_float(f64::from(f), WIDTH, 8));
         }
     }
 }
 
-fn format_flo64(f: f64) -> String {
+fn format_flo64_into(output: &mut String, f: f64, buffer: &mut OdFloatFormatBuffer) {
     const WIDTH: usize = 24;
 
     #[cfg(unix)]
     {
-        format_flo64_gnu(f, WIDTH)
+        format_flo64_gnu(output, f, WIDTH, buffer);
     }
     #[cfg(not(unix))]
     {
-        format_float(f, WIDTH, 17)
+        output.push_str(&format_float(f, WIDTH, 17));
     }
+}
+
+#[cfg(test)]
+fn format_flo32(f: f32) -> String {
+    let mut output = String::new();
+    format_flo32_into(&mut output, f, &mut OdFloatFormatBuffer::default());
+    output
+}
+
+#[cfg(test)]
+fn format_flo64(f: f64) -> String {
+    let mut output = String::new();
+    format_flo64_into(&mut output, f, &mut OdFloatFormatBuffer::default());
+    output
 }
 
 fn format_long_double(bytes: &[u8]) -> String {
@@ -262,7 +279,7 @@ fn trim_exponent(exponent: &str) -> String {
 }
 
 #[cfg(unix)]
-fn format_flo32_gnu(f: f32, width: usize) -> String {
+fn format_flo32_gnu(output: &mut String, f: f32, width: usize, buffer: &mut OdFloatFormatBuffer) {
     let mut precision = if f != 0.0 && f.abs() < f32::MIN_POSITIVE {
         1
     } else {
@@ -270,16 +287,20 @@ fn format_flo32_gnu(f: f32, width: usize) -> String {
     };
 
     loop {
-        let s = c_format_g(f64::from(f), width, precision);
-        if precision >= 48 || c_float_roundtrips(&s, f) {
-            return s;
+        let Some(text) = c_format_g(buffer, f64::from(f), width, precision) else {
+            output.push_str(&format_float(f64::from(f), width, precision));
+            return;
+        };
+        if precision >= 48 || c_float_roundtrips(text, f) {
+            push_c_text(output, text);
+            return;
         }
         precision += 1;
     }
 }
 
 #[cfg(unix)]
-fn format_flo64_gnu(f: f64, width: usize) -> String {
+fn format_flo64_gnu(output: &mut String, f: f64, width: usize, buffer: &mut OdFloatFormatBuffer) {
     let mut precision = if f != 0.0 && f.abs() < f64::MIN_POSITIVE {
         1
     } else {
@@ -287,37 +308,40 @@ fn format_flo64_gnu(f: f64, width: usize) -> String {
     };
 
     loop {
-        let s = c_format_g(f, width, precision);
-        if precision >= 18 || c_double_roundtrips(&s, f) {
-            return s;
+        let Some(text) = c_format_g(buffer, f, width, precision) else {
+            output.push_str(&format_float(f, width, precision));
+            return;
+        };
+        if precision >= 18 || c_double_roundtrips(text, f) {
+            push_c_text(output, text);
+            return;
         }
         precision += 1;
     }
 }
 
 #[cfg(unix)]
-fn c_float_roundtrips(text: &str, expected: f32) -> bool {
-    let Ok(text) = CString::new(text) else {
-        return false;
-    };
+fn c_float_roundtrips(text: &CStr, expected: f32) -> bool {
     let mut end = std::ptr::null_mut();
     let parsed = unsafe { ctcore::libc::strtof(text.as_ptr(), &mut end) };
     parsed == expected && !end.is_null() && unsafe { *end == 0 }
 }
 
 #[cfg(unix)]
-fn c_double_roundtrips(text: &str, expected: f64) -> bool {
-    let Ok(text) = CString::new(text) else {
-        return false;
-    };
+fn c_double_roundtrips(text: &CStr, expected: f64) -> bool {
     let mut end = std::ptr::null_mut();
     let parsed = unsafe { ctcore::libc::strtod(text.as_ptr(), &mut end) };
     parsed == expected && !end.is_null() && unsafe { *end == 0 }
 }
 
 #[cfg(unix)]
-fn c_format_g(f: f64, width: usize, precision: usize) -> String {
-    let mut buf = vec![0 as ctcore::libc::c_char; 128];
+fn c_format_g(
+    buffer: &mut OdFloatFormatBuffer,
+    f: f64,
+    width: usize,
+    precision: usize,
+) -> Option<&CStr> {
+    let buf = buffer.c_buffer_mut();
     let written = unsafe {
         ctcore::libc::snprintf(
             buf.as_mut_ptr(),
@@ -329,25 +353,22 @@ fn c_format_g(f: f64, width: usize, precision: usize) -> String {
         )
     };
     if written < 0 {
-        return format_float(f, width, precision);
+        return None;
     }
     let needed = written as usize;
     if needed >= buf.len() {
-        buf.resize(needed + 1, 0);
-        unsafe {
-            ctcore::libc::snprintf(
-                buf.as_mut_ptr(),
-                buf.len(),
-                c"%*.*g".as_ptr() as *const ctcore::libc::c_char,
-                width as ctcore::libc::c_int,
-                precision as ctcore::libc::c_int,
-                f as ctcore::libc::c_double,
-            );
-        }
+        return None;
     }
-    unsafe { CStr::from_ptr(buf.as_ptr()) }
-        .to_string_lossy()
-        .into_owned()
+    Some(unsafe { CStr::from_ptr(buf.as_ptr()) })
+}
+
+#[cfg(unix)]
+fn push_c_text(output: &mut String, text: &CStr) {
+    if let Ok(text) = text.to_str() {
+        output.push_str(text);
+    } else {
+        output.push_str(&text.to_string_lossy());
+    }
 }
 
 fn format_float(f: f64, width: usize, precision: usize) -> String {

@@ -465,6 +465,70 @@
         },
         {
             "command": "od",
+            "description": "Strings mode preserves a missing-input error after reading a valid file",
+            "args": [
+                "-S1",
+                "missing",
+                "good"
+            ],
+            "setup_commands": [
+                "printf 'abc\\0' > good"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "od -S1 missing good > expected 2>/dev/null; diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "test -n \"$CMD_STDERR\"",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f good expected"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "Strings mode preserves a directory read error",
+            "args": [
+                "-S1",
+                "directory"
+            ],
+            "setup_commands": [
+                "mkdir directory"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": null,
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "od -S1 directory > expected 2>/dev/null; diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    },
+                    {
+                        "command": "test -n \"$CMD_STDERR\"",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rmdir directory",
+                "rm -f expected"
+            ]
+        },
+        {
+            "command": "od",
             "description": "Option -A n (No address)",
             "args": [
                 "-An",

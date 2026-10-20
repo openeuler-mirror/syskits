@@ -423,13 +423,18 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
 
     // 如果指定了 -S，进入专用的严格字符串扫描模式
     if let Some(min_len) = od_settings.strings_min_len {
-        return odexec_strings(
+        odexec_strings(
             &mut input,
             od_settings.radix,
             od_settings.skip_bytes,
             od_settings.read_bytes, // 把 -N 的限制传进去用于精确判断
             min_len,
-        );
+        )?;
+        return if input.has_error() {
+            Err(1.into())
+        } else {
+            Ok(())
+        };
     }
 
     let mut input_decoder = OdInputDecoder::new(
@@ -1125,13 +1130,17 @@ pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
     );
 
     if let Some(min_len) = od_settings.strings_min_len {
-        return od_collect_strings_semantic(
+        let mut semantic = od_collect_strings_semantic(
             &mut input,
             od_settings.radix,
             od_settings.skip_bytes,
             od_settings.read_bytes,
             min_len,
-        );
+        )?;
+        if input.has_error() {
+            semantic.exit_code = 1;
+        }
+        return Ok(semantic);
     }
 
     let mut input_decoder = OdInputDecoder::new(

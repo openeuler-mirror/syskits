@@ -447,14 +447,22 @@ fn tr_process<R: BufRead, W: Write>(
     // 把原始的 writer 包装进我们的防爆阀中
     let mut strict_writer = StrictWriter { inner: writer };
 
+    let is_translating = !flags.is_delete_flag && flags.sets.len() >= 2;
     let mut sets_iter = flags.sets.iter().map(|set| set.as_encoded_bytes());
+    let set1_bytes = sets_iter.next().unwrap_or_default();
+    let set2_bytes = sets_iter.next().unwrap_or_default();
+    if is_translating && Sequence::contains_equivalence_class(set2_bytes)? {
+        return Err(CtSimpleError::new(
+            1,
+            "[=c=] expressions may not appear in string2 when translating",
+        ));
+    }
     let (set1, set2) = Sequence::solve_set_characters(
-        sets_iter.next().unwrap_or_default(),
-        sets_iter.next().unwrap_or_default(),
+        set1_bytes,
+        set2_bytes,
         flags.is_truncate_set1_flag && !flags.is_complement_flag,
     )?;
 
-    let is_translating = !flags.is_delete_flag && flags.sets.len() >= 2;
     if is_translating {
         let s1 = flags.sets[0].as_encoded_bytes();
         let s2 = flags.sets[1].as_encoded_bytes();
@@ -874,6 +882,24 @@ mod tests {
 
             tr_process(&mut input, &mut output, flags).unwrap();
             assert_eq!(output, b"h122o");
+        }
+
+        #[test]
+        fn test_tr_process_rejects_equivalence_class_in_translation_set2() {
+            let mut input = Cursor::new(b"abc");
+            let mut output = Vec::new();
+            let flags = TrFlags {
+                sets: vec!["abc".into(), "[=x=]".into()],
+                ..Default::default()
+            };
+
+            let error = tr_process(&mut input, &mut output, flags).unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("expressions may not appear in string2")
+            );
+            assert!(output.is_empty());
         }
 
         #[test]

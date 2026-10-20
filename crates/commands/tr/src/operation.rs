@@ -125,6 +125,8 @@ fn printable_range_endpoint(byte: u8) -> String {
 pub enum Sequence {
     /// 单个字符
     Char(u8),
+    /// 等价类，如 [=c=]
+    Equiv(u8),
     /// 字符范围，如 'a-z'
     CharRange(u8, u8),
     /// 字符重复（无限次），如 '[a*]'
@@ -159,9 +161,15 @@ pub enum Sequence {
 
 impl Sequence {
     pub fn contains_character_class(set_str: &[u8]) -> Result<bool, BadSequence> {
-        Ok(Self::from_str(set_str)?
+        Ok(Self::from_str_impl(set_str, false)?
             .iter()
             .any(|sequence| sequence.is_character_class()))
+    }
+
+    pub fn contains_equivalence_class(set_str: &[u8]) -> Result<bool, BadSequence> {
+        Ok(Self::from_str_impl(set_str, false)?
+            .iter()
+            .any(|sequence| matches!(sequence, Self::Equiv(_))))
     }
 
     fn is_character_class(&self) -> bool {
@@ -190,7 +198,7 @@ impl Sequence {
     /// 将序列展开为字符迭代器
     pub fn flatten(&self) -> Box<dyn Iterator<Item = u8>> {
         match self {
-            Self::Char(c) => Box::new(std::iter::once(*c)),
+            Self::Char(c) | Self::Equiv(c) => Box::new(std::iter::once(*c)),
             Self::CharRange(l, r) => Box::new(*l..=*r),
             Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
             Self::CharRepeat(c, n) => Box::new(std::iter::repeat_n(*c, *n)),
@@ -314,7 +322,11 @@ impl Sequence {
 
 impl Sequence {
     pub fn from_str(input: &[u8]) -> Result<Vec<Self>, BadSequence> {
-        let input = normalize_ambiguous_octal_escapes(input);
+        Self::from_str_impl(input, true)
+    }
+
+    fn from_str_impl(input: &[u8], emit_warnings: bool) -> Result<Vec<Self>, BadSequence> {
+        let input = normalize_ambiguous_octal_escapes(input, emit_warnings);
         many0(alt((
             Self::parse_char_range,
             Self::parse_char_star,
@@ -438,7 +450,7 @@ impl Sequence {
             let operand = unquote_bracket_operand(operand);
             let equivalence = match operand.as_slice() {
                 b"" => Err(BadSequence::MissingEquivalentClassChar),
-                [byte] => Ok(Self::Char(*byte)),
+                [byte] => Ok(Self::Equiv(*byte)),
                 _ => Err(BadSequence::InvalidEquivalenceClassOperand(
                     String::from_utf8_lossy(&operand).into_owned(),
                 )),
@@ -491,7 +503,7 @@ fn unquote_bracket_operand(operand: &[u8]) -> Vec<u8> {
     unquoted
 }
 
-fn normalize_ambiguous_octal_escapes(input: &[u8]) -> Cow<'_, [u8]> {
+fn normalize_ambiguous_octal_escapes(input: &[u8], emit_warnings: bool) -> Cow<'_, [u8]> {
     let mut normalized = Vec::new();
     let mut index = 0;
 
@@ -526,15 +538,17 @@ fn normalize_ambiguous_octal_escapes(input: &[u8]) -> Cow<'_, [u8]> {
             if normalized.is_empty() {
                 normalized.extend_from_slice(&input[..index]);
             }
-            ctcore::ct_show_error!(
-                "warning: the ambiguous octal escape \\{}{}{} is being\n\tinterpreted as the 2-byte sequence \\0{}{}, {}",
-                char::from(digits[0]),
-                char::from(digits[1]),
-                char::from(digits[2]),
-                char::from(digits[0]),
-                char::from(digits[1]),
-                char::from(digits[2])
-            );
+            if emit_warnings {
+                ctcore::ct_show_error!(
+                    "warning: the ambiguous octal escape \\{}{}{} is being\n\tinterpreted as the 2-byte sequence \\0{}{}, {}",
+                    char::from(digits[0]),
+                    char::from(digits[1]),
+                    char::from(digits[2]),
+                    char::from(digits[0]),
+                    char::from(digits[1]),
+                    char::from(digits[2])
+                );
+            }
             normalized.extend_from_slice(b"\\0");
             normalized.extend_from_slice(digits);
             index += 4;
@@ -993,7 +1007,7 @@ mod tests {
             // 测试等价类
             assert!(matches!(
                 Sequence::from_str(b"[=a=]").unwrap()[0],
-                Sequence::Char(b'a')
+                Sequence::Equiv(b'a')
             ));
 
             let ambiguous_octal = Sequence::from_str(b"\\400").unwrap();

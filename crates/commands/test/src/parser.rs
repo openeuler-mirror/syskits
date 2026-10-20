@@ -579,6 +579,12 @@ pub fn test_parse(args: Vec<OsString>) -> ParseResult<Vec<TestSymbol>> {
             stack.push(TestSymbol::Bang);
             return Ok(stack);
         }
+
+        if args[0] != "(" && args[1] != "-a" && args[1] != "-o" {
+            return Err(ParseError::BinaryOperatorExpected(
+                args[1].quote().to_string(),
+            ));
+        }
     }
 
     let mut p = TestParser::new(args);
@@ -602,7 +608,7 @@ mod tests {
         ));
         assert!(matches!(
             test_parse(args(&["-e", "missing", "-o"])),
-            Err(ParseError::MissingArgument(_))
+            Err(ParseError::BinaryOperatorExpected(_))
         ));
         assert!(test_parse(args(&["-a"])).is_ok());
     }
@@ -718,5 +724,11 @@ mod tests {
             test_parse(args(&["-q", "x"])),
             Err(ParseError::UnaryOperatorExpected(operator)) if operator.contains("-q")
         ));
+    }
+
+    #[test]
+    fn unknown_three_argument_binary_operator_is_rejected() {
+        let error = test_parse(args(&["x", "-q", "y"])).unwrap_err();
+        assert_eq!(error.to_string(), "'-q': binary operator expected");
     }
 }

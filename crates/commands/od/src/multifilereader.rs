@@ -36,6 +36,8 @@ pub struct OdMultifileReader<'a> {
     curr_file: Option<Box<dyn io::Read>>,
     /// 是否至少成功打开或选择过一个输入
     has_opened_input: bool,
+    /// 当前输入的名称，用于读取错误诊断
+    curr_name: Option<&'a OsStr>,
     /// 是否发生过任何错误
     is_any_err: bool,
 }
@@ -74,6 +76,7 @@ impl OdMultifileReader<'_> {
             ni: fnames,
             curr_file: None,
             has_opened_input: false,
+            curr_name: None,
             is_any_err: false,
         };
         mf.next_file();
@@ -85,6 +88,7 @@ impl OdMultifileReader<'_> {
             match self.ni.remove(0) {
                 OdInputSource::Stdin => {
                     self.has_opened_input = true;
+                    self.curr_name = Some(OsStr::new("standard input"));
                     self.curr_file = Some(match ctcore::ct_io::injected_stdin_bytes() {
                         Some(_) => ctcore::ct_io::stdin_reader_box(),
                         None => {
@@ -105,6 +109,7 @@ impl OdMultifileReader<'_> {
                 OdInputSource::FileName(fname) => match File::open(fname) {
                     Ok(f) => {
                         self.has_opened_input = true;
+                        self.curr_name = Some(fname);
                         self.curr_file = Some(Box::new(BufReader::new(f)));
                         return;
                     }
@@ -115,11 +120,13 @@ impl OdMultifileReader<'_> {
                 },
                 OdInputSource::Stream(s) => {
                     self.has_opened_input = true;
+                    self.curr_name = None;
                     self.curr_file = Some(s);
                     return;
                 }
             }
         }
+        self.curr_name = None;
         self.curr_file = None;
     }
 }
@@ -128,6 +135,7 @@ impl io::Read for OdMultifileReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut xfrd = 0;
         'fillloop: while xfrd < buf.len() {
+            let curr_name = self.curr_name;
             match self.curr_file {
                 None => break,
                 Some(ref mut curr_file) => loop {
@@ -135,7 +143,11 @@ impl io::Read for OdMultifileReader<'_> {
                         Ok(0) => break,
                         Ok(n) => n,
                         Err(e) => {
-                            ct_show_error!("I/O: {}", e);
+                            if let Some(name) = curr_name {
+                                ct_show_error!("{}: {}", name.maybe_quote(), e);
+                            } else {
+                                ct_show_error!("I/O: {}", e);
+                            }
                             self.is_any_err = true;
                             break;
                         }

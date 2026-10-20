@@ -22,6 +22,7 @@ use ctcore::ct_process::{getegid, geteuid};
 use error::{ParseError, ParseResult};
 use parser::{TestOperator, TestSymbol, TestUnaryOperator, test_parse};
 use rust_i18n::t;
+use std::cmp::Ordering;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 #[cfg(unix)]
@@ -256,8 +257,13 @@ fn integer_is_blank(byte: u8) -> bool {
     unsafe { libc::isblank(libc::c_int::from(byte)) != 0 }
 }
 
-/// Parse an integer after trimming the leading and trailing blanks GNU accepts.
-fn parse_integer(value: &OsStr) -> ParseResult<i128> {
+struct ParsedInteger {
+    negative: bool,
+    digits: Vec<u8>,
+}
+
+/// Parse GNU test's signed decimal integer syntax without imposing a size limit.
+fn parse_integer(value: &OsStr) -> ParseResult<ParsedInteger> {
     let bytes = value.as_encoded_bytes();
     let mut start = 0;
     let mut end = bytes.len();
@@ -269,21 +275,56 @@ fn parse_integer(value: &OsStr) -> ParseResult<i128> {
         end -= 1;
     }
 
-    std::str::from_utf8(&bytes[start..end])
-        .ok()
-        .and_then(|integer| integer.parse().ok())
-        .ok_or_else(|| ParseError::InvalidInteger(value.quote().to_string()))
+    let mut negative = false;
+    if start < end {
+        match bytes[start] {
+            b'+' => start += 1,
+            b'-' => {
+                negative = true;
+                start += 1;
+            }
+            _ => {}
+        }
+    }
+
+    let digits = &bytes[start..end];
+    if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
+        return Err(ParseError::InvalidInteger(value.quote().to_string()));
+    }
+
+    let first_nonzero = digits
+        .iter()
+        .position(|digit| *digit != b'0')
+        .unwrap_or(digits.len() - 1);
+    let digits = digits[first_nonzero..].to_vec();
+    if digits == b"0" {
+        negative = false;
+    }
+
+    Ok(ParsedInteger { negative, digits })
 }
 
 /// 根据给定的操作符比较两个整数
-fn compare_integers(a: i128, b: i128, op: &str) -> ParseResult<bool> {
+fn compare_integers(a: &ParsedInteger, b: &ParsedInteger, op: &str) -> ParseResult<bool> {
+    let magnitude_ordering = a
+        .digits
+        .len()
+        .cmp(&b.digits.len())
+        .then_with(|| a.digits.cmp(&b.digits));
+    let ordering = match (a.negative, b.negative) {
+        (true, false) => Ordering::Less,
+        (false, true) => Ordering::Greater,
+        (true, true) => magnitude_ordering.reverse(),
+        (false, false) => magnitude_ordering,
+    };
+
     match op {
-        "-eq" => Ok(a == b),
-        "-ne" => Ok(a != b),
-        "-gt" => Ok(a > b),
-        "-ge" => Ok(a >= b),
-        "-lt" => Ok(a < b),
-        "-le" => Ok(a <= b),
+        "-eq" => Ok(ordering == Ordering::Equal),
+        "-ne" => Ok(ordering != Ordering::Equal),
+        "-gt" => Ok(ordering == Ordering::Greater),
+        "-ge" => Ok(ordering != Ordering::Less),
+        "-lt" => Ok(ordering == Ordering::Less),
+        "-le" => Ok(ordering != Ordering::Greater),
         _ => Err(ParseError::UnknownOperator(op.to_string())),
     }
 }
@@ -300,7 +341,7 @@ fn test_integers(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
         .ok_or_else(|| ParseError::UnknownOperator(op.quote().to_string()))?;
 
     // Compare values
-    compare_integers(left, right, operator)
+    compare_integers(&left, &right, operator)
 }
 
 /// 比较文件元数据的操作
@@ -513,6 +554,19 @@ mod tests {
         for value in ["", " ", "+", "-", "4 2", "42\n"] {
             assert!(test_integers(OsStr::new(value), OsStr::new("0"), OsStr::new("-eq")).is_err());
         }
+    }
+
+    #[test]
+    fn integer_comparisons_support_arbitrary_precision() {
+        let above_i128 = OsStr::new("170141183460469231731687303715884105728");
+        let below_i128 = OsStr::new("-170141183460469231731687303715884105729");
+        assert!(test_integers(above_i128, OsStr::new("0"), OsStr::new("-gt")).unwrap());
+        assert!(test_integers(below_i128, OsStr::new("0"), OsStr::new("-lt")).unwrap());
+
+        let huge = "184467440737095516160000000000000000000000000";
+        let padded = format!("+000{huge}");
+        assert!(test_integers(OsStr::new(huge), OsStr::new(&padded), OsStr::new("-eq")).unwrap());
+        assert!(test_integers(OsStr::new("-0"), OsStr::new("+000"), OsStr::new("-eq")).unwrap());
     }
 
     #[test]

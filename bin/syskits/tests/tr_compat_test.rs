@@ -47,6 +47,18 @@ fn assert_same_output(case: &str, gnu: Output, syskits: Output) {
 }
 
 #[test]
+fn tr_accepts_aix_c_locale_option() {
+    let gnu = run_with_stdin("/usr/bin/tr", &["-A", "a-z", "A-Z"], b"abc");
+    let syskits = run_with_stdin(
+        env!("CARGO_BIN_EXE_syskits"),
+        &["tr", "-A", "a-z", "A-Z"],
+        b"abc",
+    );
+
+    assert_same_output("AIX C locale option", gnu, syskits);
+}
+
+#[test]
 fn tr_reverse_range_is_rejected_before_reading_stdin() {
     let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .env("LC_ALL", "C")

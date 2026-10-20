@@ -35,6 +35,7 @@ use std::thread;
 
 // 1. 定义配置标志常量
 pub mod tr_flags {
+    pub const TR_AIX_C_LOCALE: &str = "aix-c-locale";
     pub const TR_COMPLEMENT: &str = "complement";
     pub const TR_DELETE: &str = "delete";
     pub const TR_SQUEEZE: &str = "squeeze-repeats";
@@ -528,6 +529,10 @@ pub fn ct_app() -> Command {
     let after_help = t!("tr.after_help");
 
     let args = vec![
+        Arg::new(tr_flags::TR_AIX_C_LOCALE)
+            .short('A')
+            .hide(true)
+            .action(ArgAction::SetTrue),
         Arg::new(tr_flags::TR_COMPLEMENT)
             .visible_short_alias('C')
             .short('c')

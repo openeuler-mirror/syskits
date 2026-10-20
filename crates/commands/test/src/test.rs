@@ -19,6 +19,7 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 #[cfg(not(windows))]
 use ctcore::ct_process::{getegid, geteuid};
+use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
 use error::{ParseError, ParseResult};
 use parser::{TestOperator, TestSymbol, TestUnaryOperator, test_parse};
 use rust_i18n::t;
@@ -284,6 +285,19 @@ struct ParsedInteger {
     digits: Vec<u8>,
 }
 
+fn quote_invalid_integer(value: &OsStr) -> String {
+    if value.to_str().is_some() {
+        value.quote().to_string()
+    } else {
+        escape_name(
+            value,
+            &CtQuotingStyle::C {
+                quotes: CtQuotes::Single,
+            },
+        )
+    }
+}
+
 /// Parse GNU test's signed decimal integer syntax without imposing a size limit.
 fn parse_integer(value: &OsStr) -> ParseResult<ParsedInteger> {
     let bytes = value.as_encoded_bytes();
@@ -311,7 +325,7 @@ fn parse_integer(value: &OsStr) -> ParseResult<ParsedInteger> {
 
     let digits = &bytes[start..end];
     if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
-        return Err(ParseError::InvalidInteger(value.quote().to_string()));
+        return Err(ParseError::InvalidInteger(quote_invalid_integer(value)));
     }
 
     let first_nonzero = digits
@@ -632,6 +646,22 @@ mod tests {
         match test_eval(&mut stack) {
             Err(ParseError::InvalidInteger(value)) => assert!(value.contains("bad")),
             result => panic!("unexpected evaluation result: {result:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn invalid_non_utf8_integer_uses_octal_quoting() {
+        use std::os::unix::ffi::OsStrExt;
+
+        for (bytes, expected) in [
+            (b"\xff".as_slice(), "'\\377'"),
+            (b"a'\xff".as_slice(), "'a\\'\\377'"),
+        ] {
+            match parse_integer(OsStr::from_bytes(bytes)) {
+                Err(ParseError::InvalidInteger(value)) => assert_eq!(value, expected),
+                _ => panic!("non-UTF-8 integer should be rejected"),
+            }
         }
     }
 

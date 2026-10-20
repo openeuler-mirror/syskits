@@ -98,10 +98,7 @@ pub fn dired_indent<W: Write>(out: &mut W) -> CTResult<()> {
 pub fn dired_calculate_subdired(dired_output: &mut DiredOutput, path_size: usize) {
     let offset_from_previous_line = get_offset_from_previous_line(&dired_output.dired_positions);
 
-    let additional_offset = match dired_output.subdired_positions.is_empty() {
-        true => 0,
-        false => 1, // the previous span offset already accounts for one of "\n\n"
-    };
+    let additional_offset = usize::from(!dired_output.dired_positions.is_empty());
 
     let start = offset_from_previous_line + DIRED_TRAILING_OFFSET + additional_offset;
     let end = start + path_size;
@@ -120,7 +117,7 @@ pub fn dired_print_dired_output<W: Write>(
     if dired_output.padding == 0 && !dired_output.dired_positions.is_empty() {
         dired_print_positions("//DIRED//", &dired_output.dired_positions);
     }
-    if ls_config.is_recursive {
+    if !dired_output.subdired_positions.is_empty() {
         dired_print_positions("//SUBDIRED//", &dired_output.subdired_positions);
     }
     let style_str = match &ls_config.quoting_style {
@@ -487,7 +484,7 @@ mod tests {
         dired_calculate_subdired(&mut dired, path_len);
         assert_eq!(
             dired.subdired_positions,
-            vec![DiredBytePosition { start: 14, end: 19 }],
+            vec![DiredBytePosition { start: 15, end: 20 }],
         );
     }
 

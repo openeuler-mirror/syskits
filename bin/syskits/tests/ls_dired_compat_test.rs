@@ -74,4 +74,26 @@ mod tests {
         assert_eq!(syskits.stderr, gnu.stderr);
         assert_eq!(syskits.stdout, gnu.stdout);
     }
+
+    #[test]
+    fn ls_dired_multiple_directories_emit_subdired_positions() {
+        let directory = TempDir::new().expect("tempdir");
+        fs::create_dir(directory.path().join("d")).expect("create first directory");
+        fs::create_dir(directory.path().join("e")).expect("create second directory");
+        fs::write(directory.path().join("d/a"), b"").expect("create first file");
+        fs::write(directory.path().join("e/z"), b"").expect("create second file");
+        fs::write(directory.path().join("file"), b"").expect("create command-line file");
+
+        for arguments in [
+            ["--dired", "-ln", "--time-style=+%s", "d", "e"].as_slice(),
+            ["--dired", "-ln", "--time-style=+%s", "file", "d", "e"].as_slice(),
+        ] {
+            let gnu = run_gnu(&directory, arguments);
+            let syskits = run_syskits(&directory, arguments);
+
+            assert_eq!(syskits.status.code(), gnu.status.code());
+            assert_eq!(syskits.stderr, gnu.stderr);
+            assert_eq!(syskits.stdout, gnu.stdout);
+        }
+    }
 }

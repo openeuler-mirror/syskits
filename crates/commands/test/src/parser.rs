@@ -552,10 +552,7 @@ fn parse_two_arguments(args: &[OsString]) -> ParseResult<Vec<TestSymbol>> {
 /// operations to perform in postfix order.
 pub fn test_parse(args: Vec<OsString>) -> ParseResult<Vec<TestSymbol>> {
     if args.len() == 2 {
-        let first = args[0].as_encoded_bytes();
-        if args[0] != "!" && !(first.len() == 2 && first[0] == b'-') {
-            return Err(ParseError::MissingArgument(args[1].quote().to_string()));
-        }
+        return parse_two_arguments(&args);
     }
 
     if args.len() == 4 && args[0] == "!" {
@@ -712,6 +709,14 @@ mod tests {
         assert!(matches!(
             test_parse(args(&["x", "y"])),
             Err(ParseError::MissingArgument(argument)) if argument.contains('y')
+        ));
+    }
+
+    #[test]
+    fn unknown_two_character_unary_operator_is_rejected() {
+        assert!(matches!(
+            test_parse(args(&["-q", "x"])),
+            Err(ParseError::UnaryOperatorExpected(operator)) if operator.contains("-q")
         ));
     }
 }

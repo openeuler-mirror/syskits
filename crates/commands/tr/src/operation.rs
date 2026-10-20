@@ -768,14 +768,13 @@ impl Sequence {
         truncate_set1_flag: bool,
         complement: bool,
     ) -> Result<(Vec<u8>, Vec<u8>), BadSequence> {
-        // Parse and validate set1
+        // GNU parses both operands before validating cross-operand semantics.
         let set1 = Self::from_str(set1_str)?;
+        let set2 = Self::from_str(set2_str)?;
+
         if set1.iter().any(|s| matches!(s, Self::CharStar(_))) {
             return Err(BadSequence::CharRepeatInSet1);
         }
-
-        // Parse and validate set2
-        let set2 = Self::from_str(set2_str)?;
         if set2
             .iter()
             .filter(|s| matches!(s, Self::CharStar(_)))

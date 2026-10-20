@@ -453,6 +453,17 @@ fn tr_process<R: BufRead, W: Write>(
     let mut sets_iter = flags.sets.iter().map(|set| set.as_encoded_bytes());
     let set1_bytes = sets_iter.next().unwrap_or_default();
     let set2_bytes = sets_iter.next().unwrap_or_default();
+    let (set1, set2) = if flags.is_complement_flag {
+        Sequence::solve_set_characters_with_complement(set1_bytes, set2_bytes, false)?
+    } else {
+        Sequence::solve_set_characters(set1_bytes, set2_bytes, flags.is_truncate_set1_flag)?
+    };
+    if !is_translating && Sequence::contains_indefinite_repeat(set2_bytes)? {
+        return Err(CtSimpleError::new(
+            1,
+            "the [c*] construct may appear in string2 only when translating",
+        ));
+    }
     if is_translating && Sequence::contains_equivalence_class(set2_bytes)? {
         return Err(CtSimpleError::new(
             1,
@@ -463,17 +474,6 @@ fn tr_process<R: BufRead, W: Write>(
         return Err(CtSimpleError::new(
             1,
             "when translating, the only character classes that may appear in\nstring2 are 'upper' and 'lower'",
-        ));
-    }
-    let (set1, set2) = if flags.is_complement_flag {
-        Sequence::solve_set_characters_with_complement(set1_bytes, set2_bytes, false)?
-    } else {
-        Sequence::solve_set_characters(set1_bytes, set2_bytes, flags.is_truncate_set1_flag)?
-    };
-    if !is_translating && Sequence::contains_indefinite_repeat(set2_bytes)? {
-        return Err(CtSimpleError::new(
-            1,
-            "the [c*] construct may appear in string2 only when translating",
         ));
     }
     if is_translating

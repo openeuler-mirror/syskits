@@ -18,6 +18,7 @@ pub enum ParseError {
     UnknownOperator(String),
     InvalidInteger(String),
     UnaryOperatorExpected(String),
+    BinaryOperatorExpected(String),
     OperatorDoesNotAcceptLength(String),
 }
 
@@ -35,6 +36,7 @@ impl std::fmt::Display for ParseError {
             Self::UnknownOperator(s) => write!(f, "unknown operator {s}"),
             Self::InvalidInteger(s) => write!(f, "invalid integer {s}"),
             Self::UnaryOperatorExpected(op) => write!(f, "{op}: unary operator expected"),
+            Self::BinaryOperatorExpected(op) => write!(f, "{op}: binary operator expected"),
             Self::OperatorDoesNotAcceptLength(op) => write!(f, "{op} does not accept -l"),
         }
     }

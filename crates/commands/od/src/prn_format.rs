@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 #[cfg(unix)]
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 
 use crate::formatteriteminfo::*;
 use half::f16;
@@ -299,7 +299,7 @@ fn format_flo32_gnu(f: f32, width: usize) -> String {
 
     loop {
         let s = c_format_g(f64::from(f), width, precision);
-        if precision >= 48 || s.trim().parse::<f32>().ok() == Some(f) {
+        if precision >= 48 || c_float_roundtrips(&s, f) {
             return s;
         }
         precision += 1;
@@ -316,11 +316,31 @@ fn format_flo64_gnu(f: f64, width: usize) -> String {
 
     loop {
         let s = c_format_g(f, width, precision);
-        if precision >= 18 || s.trim().parse::<f64>().ok() == Some(f) {
+        if precision >= 18 || c_double_roundtrips(&s, f) {
             return s;
         }
         precision += 1;
     }
+}
+
+#[cfg(unix)]
+fn c_float_roundtrips(text: &str, expected: f32) -> bool {
+    let Ok(text) = CString::new(text) else {
+        return false;
+    };
+    let mut end = std::ptr::null_mut();
+    let parsed = unsafe { ctcore::libc::strtof(text.as_ptr(), &mut end) };
+    parsed == expected && !end.is_null() && unsafe { *end == 0 }
+}
+
+#[cfg(unix)]
+fn c_double_roundtrips(text: &str, expected: f64) -> bool {
+    let Ok(text) = CString::new(text) else {
+        return false;
+    };
+    let mut end = std::ptr::null_mut();
+    let parsed = unsafe { ctcore::libc::strtod(text.as_ptr(), &mut end) };
+    parsed == expected && !end.is_null() && unsafe { *end == 0 }
 }
 
 #[cfg(unix)]

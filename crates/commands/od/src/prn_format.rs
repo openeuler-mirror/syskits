@@ -66,18 +66,15 @@ fn format_item_c(bytes: &[u8]) -> String {
     }
 }
 
-pub fn format_ascii_dump(bytes: &[u8]) -> String {
-    let mut result = String::new();
+pub fn format_ascii_dump(bytes: &[u8]) -> Vec<u8> {
+    let mut result = Vec::with_capacity(bytes.len() + 2);
 
-    result.push('>');
-    for c in bytes {
-        if *c >= 0x20 && *c <= 0x7e {
-            result.push_str(C_CHARS[*c as usize]);
-        } else {
-            result.push('.');
-        }
+    result.push(b'>');
+    for &byte in bytes {
+        let printable = unsafe { ctcore::libc::isprint(byte as ctcore::libc::c_int) != 0 };
+        result.push(if printable { byte } else { b'.' });
     }
-    result.push('<');
+    result.push(b'<');
 
     result
 }
@@ -483,10 +480,10 @@ fn test_format_item_c() {
 
 #[test]
 fn test_format_ascii_dump() {
-    assert_eq!(">.<", format_ascii_dump(&[0x00]));
+    assert_eq!(b">.<", format_ascii_dump(&[0x00]).as_slice());
     assert_eq!(
-        ">. A~.<",
-        format_ascii_dump(&[0x1f, 0x20, 0x41, 0x7e, 0x7f])
+        b">. A~.<",
+        format_ascii_dump(&[0x1f, 0x20, 0x41, 0x7e, 0x7f]).as_slice()
     );
 }
 

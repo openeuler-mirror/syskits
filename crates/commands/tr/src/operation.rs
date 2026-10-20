@@ -49,7 +49,7 @@ mod unicodes {
     pub static CR: u8 = 0xD; // 回车
     pub static SPACE: u8 = 0x20; // 空格
     pub static SPACES: &[u8] = &[HT, LF, VT, FF, CR, SPACE]; // 所有空白字符
-    pub static BLANK: &[u8] = &[SPACE, HT]; // 空格和制表符
+    pub static BLANK: &[u8] = &[HT, SPACE]; // 制表符和空格，按字节递增
 }
 
 /// 序列解析错误类型
@@ -338,28 +338,9 @@ impl Sequence {
             Self::Blank => Box::new(unicodes::BLANK.iter().cloned()),
             Self::Control => Box::new((0..=31).chain(std::iter::once(127))),
             Self::Digit => Box::new(b'0'..=b'9'),
-            Self::Graph => Box::new(
-                (48..=57) // digit
-                    .chain(65..=90) // uppercase
-                    .chain(97..=122) // lowercase
-                    // punctuations
-                    .chain(33..=47)
-                    .chain(58..=64)
-                    .chain(91..=96)
-                    .chain(123..=126),
-            ),
+            Self::Graph => Box::new(33..=126),
             Self::Lower => Box::new(b'a'..=b'z'),
-            Self::Print => Box::new(
-                (48..=57) // digit
-                    .chain(65..=90) // uppercase
-                    .chain(97..=122) // lowercase
-                    // punctuations
-                    .chain(33..=47)
-                    .chain(58..=64)
-                    .chain(91..=96)
-                    .chain(123..=126)
-                    .chain(std::iter::once(32)), // space
-            ),
+            Self::Print => Box::new(32..=126),
             Self::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
             Self::Space => Box::new(unicodes::SPACES.iter().cloned()),
             Self::Upper => Box::new(b'A'..=b'Z'),
@@ -1068,7 +1049,16 @@ mod tests {
             let blank_seq = Sequence::Blank;
             assert_eq!(
                 blank_seq.flatten().collect::<Vec<_>>(),
-                vec![unicodes::SPACE, unicodes::HT]
+                vec![unicodes::HT, unicodes::SPACE]
+            );
+
+            assert_eq!(
+                Sequence::Graph.flatten().collect::<Vec<_>>(),
+                (33..=126).collect::<Vec<_>>()
+            );
+            assert_eq!(
+                Sequence::Print.flatten().collect::<Vec<_>>(),
+                (32..=126).collect::<Vec<_>>()
             );
 
             // 测试控制字符类

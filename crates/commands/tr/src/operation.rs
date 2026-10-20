@@ -866,13 +866,19 @@ impl Sequence {
             } else if cnt_str.starts_with(b"0") {
                 match usize::from_str_radix(&s, 8) {
                     Ok(0) => Ok(Self::CharStar(c)),
-                    Ok(count) => Ok(Self::CharRepeat(c, count)),
+                    Ok(count) if count <= usize::MAX.saturating_sub(1) => {
+                        Ok(Self::CharRepeat(c, count))
+                    }
+                    Ok(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
                     Err(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
                 }
             } else {
                 match s.parse::<usize>() {
                     Ok(0) => Ok(Self::CharStar(c)),
-                    Ok(count) => Ok(Self::CharRepeat(c, count)),
+                    Ok(count) if count <= usize::MAX.saturating_sub(1) => {
+                        Ok(Self::CharRepeat(c, count))
+                    }
+                    Ok(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
                     Err(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
                 }
             };

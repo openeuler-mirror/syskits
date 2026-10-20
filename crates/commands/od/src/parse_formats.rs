@@ -183,17 +183,21 @@ fn handle_long_option(
     formats: &mut Vec<ParsedFormatterItemInfo>,
     expect_type_string: &mut bool,
 ) -> Result<(), String> {
-    // 处理 --format=value 形式
-    if arg.starts_with("--format=") {
-        let params: String = arg.chars().skip_while(|c| *c != '=').skip(1).collect();
-        let v = od_parse_type_string(&params)?;
-        formats.extend(v);
+    let Some(option) = arg.strip_prefix("--") else {
+        return Ok(());
+    };
+    let (name, value) = option
+        .split_once('=')
+        .map_or((option, None), |(name, value)| (name, Some(value)));
+
+    // getopt_long and clap both accept unambiguous long-option prefixes.
+    if !name.is_empty() && "format".starts_with(name) {
+        if let Some(params) = value {
+            formats.extend(od_parse_type_string(params)?);
+        } else {
+            *expect_type_string = true;
+        }
     }
-    // 处理 --format 形式
-    else if arg == "--format" {
-        *expect_type_string = true;
-    }
-    // 其他 -- 开头的参数忽略
 
     Ok(())
 }
@@ -592,6 +596,18 @@ fn test_long_format_next_arg() {
     assert_eq!(
         parse_format_flags_str(&["od", "--format", "f8"]).unwrap(),
         vec![FORMAT_ITEM_F64]
+    );
+}
+
+#[test]
+fn test_abbreviated_long_format() {
+    assert_eq!(
+        parse_format_flags_str(&["od", "--form=x1"]).unwrap(),
+        vec![FORMAT_ITEM_HEX8]
+    );
+    assert_eq!(
+        parse_format_flags_str(&["od", "--f", "x1"]).unwrap(),
+        vec![FORMAT_ITEM_HEX8]
     );
 }
 

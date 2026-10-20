@@ -78,6 +78,7 @@ use crate::partialreader::PartialReader;
 use crate::peekreader::{PeekRead, PeekReader};
 use crate::prn_format::format_ascii_dump;
 use clap::ArgAction;
+use clap::builder::ValueParser;
 use clap::{Arg, ArgMatches, Command, crate_version, parser::ValueSource};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
@@ -85,7 +86,7 @@ use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
 use ctcore::ct_parse_size::ParseSizeError;
 use ctcore::libc;
 use ctcore::{ct_show_error, ct_show_warning};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use sys_locale::get_locale;
 
 const OD_PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
@@ -135,7 +136,7 @@ struct OdSettings {
     skip_bytes: u64,                       // 需要跳过的字节数
     read_bytes: Option<u64>,               // 需要读取的字节数，None表示读取全部
     label: Option<u64>,                    // 地址标签的起始值
-    input_strings: Vec<String>,            // 输入文件列表
+    input_strings: Vec<OsString>,          // 输入文件列表
     formats: Vec<ParsedFormatterItemInfo>, // 输出格式列表
     line_bytes: usize,                     // 每行显示的字节数
     output_duplicates: bool,               // 是否输出重复行
@@ -410,11 +411,15 @@ fn od_parse_width_value(s: &str) -> Result<OdWidthValue, OdWidthParseError> {
 pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = od_normalize_optional_arguments(args.collect_ignore());
+    let args = od_normalize_optional_arguments(args.collect());
+    let format_args = args
+        .iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
 
     let clap_matches = ct_app().try_get_matches_from(&args)?;
 
-    let od_settings = OdSettings::new(&clap_matches, &args)?;
+    let od_settings = OdSettings::new(&clap_matches, &format_args)?;
 
     let mut input_offset =
         OdInputOffset::new(od_settings.radix, od_settings.skip_bytes, od_settings.label);
@@ -459,26 +464,28 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
     odexec(&mut input_offset, &mut input_decoder, &output_info)
 }
 
-fn od_normalize_optional_arguments(args: Vec<String>) -> Vec<String> {
+fn od_normalize_optional_arguments(args: Vec<OsString>) -> Vec<OsString> {
     let mut normalized = Vec::with_capacity(args.len());
     let mut parsing_options = true;
 
     for arg in args {
         if parsing_options {
-            if arg == "--" {
+            if arg == OsStr::new("--") {
                 parsing_options = false;
                 normalized.push(arg);
                 continue;
             }
 
-            if od_is_bare_width_long_option(&arg) {
-                normalized.push(format!("--{}=32", od_options::OD_WIDTH));
-                continue;
-            }
+            if let Some(arg_str) = arg.to_str() {
+                if od_is_bare_width_long_option(arg_str) {
+                    normalized.push(OsString::from(format!("--{}=32", od_options::OD_WIDTH)));
+                    continue;
+                }
 
-            if od_is_bare_width_short_option(&arg) {
-                normalized.push(format!("{arg}32"));
-                continue;
+                if od_is_bare_width_short_option(arg_str) {
+                    normalized.push(OsString::from(format!("{arg_str}32")));
+                    continue;
+                }
             }
         }
 
@@ -710,6 +717,7 @@ pub fn ct_app() -> Command {
         Arg::new(od_options::OD_FILENAME)
             .hide(true)
             .action(ArgAction::Append)
+            .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::FilePath),
     ];
 
@@ -1014,15 +1022,18 @@ fn od_collect_views(
 }
 
 fn od_open_input_peek_reader(
-    input_strings: &[String],
+    input_strings: &[OsString],
     skip_bytes: u64,
     read_bytes: Option<u64>,
 ) -> PeekReader<PartialReader<OdMultifileReader>> {
     let inputs = input_strings
         .iter()
-        .map(|w| match w as &str {
-            "-" => OdInputSource::Stdin,
-            x => OdInputSource::FileName(x),
+        .map(|input| {
+            if input == OsStr::new("-") {
+                OdInputSource::Stdin
+            } else {
+                OdInputSource::FileName(input.as_os_str())
+            }
         })
         .collect::<Vec<_>>();
 
@@ -1134,10 +1145,14 @@ fn od_collect_strings_semantic<R: Read>(
 pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = od_normalize_optional_arguments(args.collect_ignore());
+    let args = od_normalize_optional_arguments(args.collect());
+    let format_args = args
+        .iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
 
     let clap_matches = ct_app().try_get_matches_from(&args)?;
-    let od_settings = OdSettings::new(&clap_matches, &args)?;
+    let od_settings = OdSettings::new(&clap_matches, &format_args)?;
 
     let mut input_offset =
         OdInputOffset::new(od_settings.radix, od_settings.skip_bytes, od_settings.label);

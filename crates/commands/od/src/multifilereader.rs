@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, BufReader};
 
@@ -19,7 +20,7 @@ use ctcore::libc;
 /// 输入源的枚举类型，表示不同类型的输入来源
 pub enum OdInputSource<'a> {
     /// 文件名作为输入源
-    FileName(&'a str),
+    FileName(&'a OsStr),
     /// 标准输入作为输入源
     Stdin,
     /// 任意实现了 Read trait 的流作为输入源
@@ -264,7 +265,7 @@ mod tests {
 
         // 测试无效文件名处理
         let inputs = vec![
-            OdInputSource::FileName("nonexistent_file.txt"),
+            OdInputSource::FileName(OsStr::new("nonexistent_file.txt")),
             OdInputSource::Stream(Box::new(Cursor::new(&b"valid"[..]))),
         ];
         let reader = OdMultifileReader::new(inputs);
@@ -275,7 +276,7 @@ mod tests {
         // 测试混合输入源
         let inputs = vec![
             OdInputSource::Stream(Box::new(Cursor::new(&b"stream"[..]))),
-            OdInputSource::FileName("nonexistent_file.txt"),
+            OdInputSource::FileName(OsStr::new("nonexistent_file.txt")),
             OdInputSource::Stream(Box::new(Cursor::new(&b"another"[..]))),
         ];
         let mut reader = OdMultifileReader::new(inputs);

@@ -146,8 +146,8 @@ impl OdSettings {
     fn new(matches: &ArgMatches, args: &[String]) -> CTResult<Self> {
         let byte_order = if let Some(s) = matches.get_one::<String>(od_options::OD_ENDIAN) {
             match s.as_str() {
-                "little" => ByteOrder::Little,
-                "big" => ByteOrder::Big,
+                value if !value.is_empty() && "little".starts_with(value) => ByteOrder::Little,
+                value if !value.is_empty() && "big".starts_with(value) => ByteOrder::Big,
                 _ => {
                     return Err(CtSimpleError::new(
                         1,
@@ -555,7 +555,6 @@ pub fn ct_app() -> Command {
         Arg::new(od_options::OD_ENDIAN)
             .long(od_options::OD_ENDIAN)
             .help(t!("od.clap.od_endian"))
-            .value_parser(["big", "little"])
             .value_name("big|little"),
         Arg::new(od_options::OD_STRINGS)
             .long(od_options::OD_STRINGS)
@@ -1270,6 +1269,25 @@ mod tests {
 
             assert_eq!(settings.byte_order, ByteOrder::Little);
             assert_eq!(settings.skip_bytes, 100);
+        }
+
+        #[test]
+        fn test_new_accepts_endian_abbreviations() {
+            for (value, expected) in [("b", ByteOrder::Big), ("bi", ByteOrder::Big)] {
+                let arg = format!("--endian={value}");
+                let args = vec!["od".to_string(), arg.clone()];
+                let matches = ct_app().try_get_matches_from(&args).unwrap();
+                let settings = OdSettings::new(&matches, &args).unwrap();
+                assert_eq!(settings.byte_order, expected);
+            }
+
+            for value in ["l", "li", "littl"] {
+                let arg = format!("--endian={value}");
+                let args = vec!["od".to_string(), arg.clone()];
+                let matches = ct_app().try_get_matches_from(&args).unwrap();
+                let settings = OdSettings::new(&matches, &args).unwrap();
+                assert_eq!(settings.byte_order, ByteOrder::Little);
+            }
         }
     }
 

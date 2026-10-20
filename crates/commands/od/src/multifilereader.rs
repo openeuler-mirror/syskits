@@ -10,8 +10,11 @@
  */
 
 use std::ffi::OsStr;
-use std::fs::File;
-use std::io::{self, BufReader};
+use std::fs::{File, Metadata};
+use std::io::{self, BufReader, Read, Seek, SeekFrom};
+
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::strip_errno;
@@ -34,13 +37,43 @@ pub struct OdMultifileReader<'a> {
     /// 待处理的输入源列表
     ni: Vec<OdInputSource<'a>>,
     /// 当前正在读取的文件
-    curr_file: Option<Box<dyn io::Read>>,
+    curr_file: Option<OdCurrentInput>,
     /// 是否至少成功打开或选择过一个输入
     has_opened_input: bool,
     /// 当前输入的名称，用于读取错误诊断
     curr_name: Option<&'a OsStr>,
     /// 是否发生过任何错误
     is_any_err: bool,
+}
+
+enum OdCurrentInput {
+    RegularFile(BufReader<File>),
+    Stream(Box<dyn Read>),
+}
+
+impl Read for OdCurrentInput {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::RegularFile(file) => file.read(buf),
+            Self::Stream(stream) => stream.read(buf),
+        }
+    }
+}
+
+fn has_usable_regular_file_size(metadata: &Metadata) -> bool {
+    if !metadata.is_file() {
+        return false;
+    }
+
+    #[cfg(unix)]
+    {
+        metadata.len() > metadata.blksize()
+    }
+
+    #[cfg(not(unix))]
+    {
+        metadata.len() > 8192
+    }
 }
 
 /// 错误状态检查接口
@@ -90,28 +123,30 @@ impl OdMultifileReader<'_> {
                 OdInputSource::Stdin => {
                     self.has_opened_input = true;
                     self.curr_name = Some(OsStr::new("standard input"));
-                    self.curr_file = Some(match ctcore::ct_io::injected_stdin_bytes() {
-                        Some(_) => ctcore::ct_io::stdin_reader_box(),
-                        None => {
-                            #[cfg(unix)]
-                            {
-                                // 使用无缓冲的标准输入，避免 over-read
-                                Box::new(UnbufferedStdin) as Box<dyn io::Read>
+                    self.curr_file = Some(OdCurrentInput::Stream(
+                        match ctcore::ct_io::injected_stdin_bytes() {
+                            Some(_) => ctcore::ct_io::stdin_reader_box(),
+                            None => {
+                                #[cfg(unix)]
+                                {
+                                    // 使用无缓冲的标准输入，避免 over-read
+                                    Box::new(UnbufferedStdin) as Box<dyn io::Read>
+                                }
+                                #[cfg(not(unix))]
+                                {
+                                    // Windows 等非 Unix 系统暂退回标准 stdin
+                                    Box::new(std::io::stdin()) as Box<dyn io::Read>
+                                }
                             }
-                            #[cfg(not(unix))]
-                            {
-                                // Windows 等非 Unix 系统暂退回标准 stdin
-                                Box::new(std::io::stdin()) as Box<dyn io::Read>
-                            }
-                        }
-                    });
+                        },
+                    ));
                     return;
                 }
                 OdInputSource::FileName(fname) => match File::open(fname) {
                     Ok(f) => {
                         self.has_opened_input = true;
                         self.curr_name = Some(fname);
-                        self.curr_file = Some(Box::new(BufReader::new(f)));
+                        self.curr_file = Some(OdCurrentInput::RegularFile(BufReader::new(f)));
                         return;
                     }
                     Err(e) => {
@@ -122,13 +157,44 @@ impl OdMultifileReader<'_> {
                 OdInputSource::Stream(s) => {
                     self.has_opened_input = true;
                     self.curr_name = None;
-                    self.curr_file = Some(s);
+                    self.curr_file = Some(OdCurrentInput::Stream(s));
                     return;
                 }
             }
         }
         self.curr_name = None;
         self.curr_file = None;
+    }
+
+    pub fn skip_regular_files(&mut self, mut bytes: u64) -> u64 {
+        while bytes > 0 {
+            let Some(OdCurrentInput::RegularFile(file)) = self.curr_file.as_mut() else {
+                break;
+            };
+            let Ok(metadata) = file.get_ref().metadata() else {
+                break;
+            };
+            if !has_usable_regular_file_size(&metadata) {
+                break;
+            }
+            let Ok(position) = file.stream_position() else {
+                break;
+            };
+            let available = metadata.len().saturating_sub(position);
+
+            if available < bytes {
+                bytes -= available;
+                self.next_file();
+                continue;
+            }
+
+            if file.seek(SeekFrom::Start(position + bytes)).is_ok() {
+                bytes = 0;
+            }
+            break;
+        }
+
+        bytes
     }
 }
 
@@ -179,6 +245,24 @@ mod tests {
     use super::*;
     use crate::mockstream::*;
     use std::io::{Cursor, ErrorKind, Read};
+
+    #[test]
+    fn test_skip_large_regular_file() {
+        let path =
+            std::env::temp_dir().join(format!("syskits-od-seek-skip-{}", std::process::id()));
+        let file = File::create(&path).unwrap();
+        file.set_len(1024 * 1024).unwrap();
+        drop(file);
+
+        let mut reader = OdMultifileReader::new(vec![OdInputSource::FileName(path.as_os_str())]);
+        assert_eq!(reader.skip_regular_files(1024 * 1024 - 1), 0);
+        let mut byte = [1];
+        assert_eq!(reader.read(&mut byte).unwrap(), 1);
+        assert_eq!(byte, [0]);
+
+        drop(reader);
+        std::fs::remove_file(path).unwrap();
+    }
 
     #[test]
     fn test_multi_file_reader_one_read() {

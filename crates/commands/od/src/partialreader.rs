@@ -26,6 +26,7 @@ pub struct PartialReader<R> {
     inner: R,
     skip: u64,
     limit: Option<u64>,
+    fast_skip: Option<fn(&mut R, u64) -> u64>,
 }
 
 impl<R> PartialReader<R> {
@@ -35,8 +36,28 @@ impl<R> PartialReader<R> {
     /// * `inner` - 被包装的读取器
     /// * `skip` - 需要跳过的字节数
     /// * `limit` - 限制读取的字节数，设置为 `None` 表示无限制
+    #[cfg(test)]
     pub fn new(inner: R, skip: u64, limit: Option<u64>) -> Self {
-        Self { inner, skip, limit }
+        Self {
+            inner,
+            skip,
+            limit,
+            fast_skip: None,
+        }
+    }
+
+    pub fn with_fast_skip(
+        inner: R,
+        skip: u64,
+        limit: Option<u64>,
+        fast_skip: fn(&mut R, u64) -> u64,
+    ) -> Self {
+        Self {
+            inner,
+            skip,
+            limit,
+            fast_skip: Some(fast_skip),
+        }
     }
 }
 
@@ -52,6 +73,12 @@ impl<R: Read> Read for PartialReader<R> {
         if self.skip > 0 {
             let mut bytes = [0; MAX_SKIP_BUFFER];
             while self.skip > 0 {
+                if let Some(fast_skip) = self.fast_skip {
+                    self.skip = fast_skip(&mut self.inner, self.skip);
+                    if self.skip == 0 {
+                        break;
+                    }
+                }
                 let skip_count = cmp::min(self.skip as usize, MAX_SKIP_BUFFER);
                 match self.inner.read(&mut bytes[..skip_count])? {
                     0 => {
@@ -103,6 +130,13 @@ mod tests {
     use crate::mockstream::*;
     use std::io::{Cursor, ErrorKind, Read};
 
+    fn cursor_fast_skip(reader: &mut Cursor<&[u8]>, bytes: u64) -> u64 {
+        let available = reader.get_ref().len() as u64 - reader.position();
+        let skipped = cmp::min(available, bytes);
+        reader.set_position(reader.position() + skipped);
+        bytes - skipped
+    }
+
     #[test]
     fn test_read_without_limits() {
         let mut v = [0; 10];
@@ -127,6 +161,16 @@ mod tests {
     fn test_read_skipping_bytes() {
         let mut v = [0; 10];
         let mut sut = PartialReader::new(Cursor::new(&b"abcdefgh"[..]), 2, None);
+
+        assert_eq!(sut.read(v.as_mut()).unwrap(), 6);
+        assert_eq!(v, [0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn test_read_uses_fast_skip_before_reading() {
+        let mut v = [0; 10];
+        let input = Cursor::new(&b"abcdefgh"[..]);
+        let mut sut = PartialReader::with_fast_skip(input, 2, None, cursor_fast_skip);
 
         assert_eq!(sut.read(v.as_mut()).unwrap(), 6);
         assert_eq!(v, [0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0, 0, 0, 0]);

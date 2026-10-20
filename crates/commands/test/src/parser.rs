@@ -388,7 +388,11 @@ impl TestParser {
 
             // BoolOp by itself interpreted as Literal
             if let TestSymbol::None = self.peek() {
-                self.literal(symbol.into_literal())?;
+                if self.stack.is_empty() {
+                    self.literal(symbol.into_literal())?;
+                } else {
+                    return Err(ParseError::MissingArgument(symbol.to_string()));
+                }
             } else {
                 self.boolop(symbol)?;
                 self.maybe_boolop()?;
@@ -501,4 +505,26 @@ pub fn test_parse(args: Vec<OsString>) -> ParseResult<Vec<TestSymbol>> {
     let mut p = TestParser::new(args);
     p.parse()?;
     Ok(p.stack)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(values: &[&str]) -> Vec<OsString> {
+        values.iter().map(OsString::from).collect()
+    }
+
+    #[test]
+    fn trailing_boolean_operator_requires_a_right_operand() {
+        assert!(matches!(
+            test_parse(args(&["x", "-a"])),
+            Err(ParseError::MissingArgument(_))
+        ));
+        assert!(matches!(
+            test_parse(args(&["-e", "missing", "-o"])),
+            Err(ParseError::MissingArgument(_))
+        ));
+        assert!(test_parse(args(&["-a"])).is_ok());
+    }
 }

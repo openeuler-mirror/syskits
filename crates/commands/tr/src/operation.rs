@@ -31,6 +31,7 @@ use nom::{
     sequence::{delimited, preceded, separated_pair},
 };
 use std::{
+    borrow::Cow,
     collections::{HashMap, HashSet},
     error::Error,
     fmt::{Debug, Display},
@@ -304,6 +305,7 @@ impl Sequence {
 
 impl Sequence {
     pub fn from_str(input: &[u8]) -> Result<Vec<Self>, BadSequence> {
+        let input = normalize_ambiguous_octal_escapes(input);
         many0(alt((
             Self::parse_char_range,
             Self::parse_char_star,
@@ -312,7 +314,7 @@ impl Sequence {
             Self::parse_char_equal,
             // NOTE: This must be the last one
             map(Self::parse_backslash_or_char, |s| Ok(Self::Char(s))),
-        )))(input)
+        )))(input.as_ref())
         .map(|(_, r)| r)
         .unwrap()
         .into_iter()
@@ -436,6 +438,69 @@ impl Sequence {
             )),
             tag("=]"),
         )(input)
+    }
+}
+
+fn normalize_ambiguous_octal_escapes(input: &[u8]) -> Cow<'_, [u8]> {
+    let mut normalized = Vec::new();
+    let mut index = 0;
+
+    while index < input.len() {
+        if input[index] != b'\\' {
+            if !normalized.is_empty() {
+                normalized.push(input[index]);
+            }
+            index += 1;
+            continue;
+        }
+
+        if index + 1 < input.len() && input[index + 1] == b'\\' {
+            if !normalized.is_empty() {
+                normalized.extend_from_slice(&input[index..index + 2]);
+            }
+            index += 2;
+            continue;
+        }
+
+        let ambiguous = input
+            .get(index + 1..index + 4)
+            .filter(|digits| digits.iter().all(|digit| matches!(digit, b'0'..=b'7')))
+            .filter(|digits| {
+                digits
+                    .iter()
+                    .fold(0u16, |value, digit| value * 8 + u16::from(*digit - b'0'))
+                    > u16::from(u8::MAX)
+            });
+
+        if let Some(digits) = ambiguous {
+            if normalized.is_empty() {
+                normalized.extend_from_slice(&input[..index]);
+            }
+            ctcore::ct_show_error!(
+                "warning: the ambiguous octal escape \\{}{}{} is being\n\tinterpreted as the 2-byte sequence \\0{}{}, {}",
+                char::from(digits[0]),
+                char::from(digits[1]),
+                char::from(digits[2]),
+                char::from(digits[0]),
+                char::from(digits[1]),
+                char::from(digits[2])
+            );
+            normalized.extend_from_slice(b"\\0");
+            normalized.extend_from_slice(digits);
+            index += 4;
+            continue;
+        }
+
+        if !normalized.is_empty() {
+            normalized.push(input[index]);
+        }
+        index += 1;
+    }
+
+    if normalized.is_empty() {
+        Cow::Borrowed(input)
+    } else {
+        Cow::Owned(normalized)
     }
 }
 
@@ -876,6 +941,10 @@ mod tests {
                 Sequence::from_str(b"[=a=]").unwrap()[0],
                 Sequence::Char(b'a')
             ));
+
+            let ambiguous_octal = Sequence::from_str(b"\\400").unwrap();
+            assert!(matches!(ambiguous_octal[0], Sequence::Char(b' ')));
+            assert!(matches!(ambiguous_octal[1], Sequence::Char(b'0')));
         }
 
         #[test]

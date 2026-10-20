@@ -14,7 +14,10 @@
 extern crate rust_i18n;
 mod operation;
 
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{
+    Arg, ArgAction, ArgMatches, Command, crate_version,
+    error::{ContextKind, ContextValue, ErrorKind as ClapErrorKind},
+};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_show;
@@ -321,8 +324,9 @@ pub fn tr_main<R: BufRead, W: Write>(
 ) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let argv: Vec<OsString> = args.collect();
     // 1. 解析命令行参数
-    let matches = ct_app().try_get_matches_from(args)?;
+    let matches = parse_tr_matches(&argv)?;
 
     // 2. 创建配置对象
     let flags = TrFlags::new(&matches)?;
@@ -336,7 +340,7 @@ pub fn tr_native_semantic(args: impl ctcore::Args) -> CTResult<TrSemantic> {
     rust_i18n::set_locale(&lang_code);
 
     let argv: Vec<OsString> = args.collect();
-    let matches = ct_app().try_get_matches_from(argv.clone())?;
+    let matches = parse_tr_matches(&argv)?;
     let flags = TrFlags::new(&matches)?;
 
     let mut stdin_bytes = Vec::new();
@@ -358,6 +362,47 @@ pub fn tr_native_semantic(args: impl ctcore::Args) -> CTResult<TrSemantic> {
         stderr_text: String::from_utf8_lossy(&direct.stderr).into_owned(),
         exit_code: direct.exit_code,
     })
+}
+
+fn parse_tr_matches(args: &[OsString]) -> CTResult<ArgMatches> {
+    ct_app()
+        .try_get_matches_from(args.iter().cloned())
+        .map_err(|error| match tr_option_error_diagnostic(&error, args) {
+            Some(diagnostic) => CTsageError::new(1, diagnostic),
+            None => error.into(),
+        })
+}
+
+fn tr_option_error_diagnostic(error: &clap::Error, args: &[OsString]) -> Option<String> {
+    if error.kind() == ClapErrorKind::UnknownArgument {
+        let argument = match error.get(ContextKind::InvalidArg)? {
+            ContextValue::String(argument) => argument,
+            _ => return None,
+        };
+        return if argument.starts_with("--") {
+            Some(format!("unrecognized option '{argument}'"))
+        } else {
+            argument
+                .strip_prefix('-')
+                .and_then(|argument| argument.chars().next())
+                .map(|option| format!("invalid option -- '{option}'"))
+        };
+    }
+
+    if error.kind() == ClapErrorKind::TooManyValues {
+        let option = args.iter().skip(1).find_map(|argument| {
+            let argument = argument.to_str()?;
+            let (option, _) = argument.split_once('=')?;
+            matches!(
+                option,
+                "--complement" | "--delete" | "--squeeze-repeats" | "--truncate-set1"
+            )
+            .then_some(option)
+        })?;
+        return Some(format!("option '{option}' doesn't allow an argument"));
+    }
+
+    None
 }
 
 struct StrictWriter<W: Write> {

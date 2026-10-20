@@ -36,6 +36,46 @@ use std::io::Read;
 use std::process::{Command as ProcessCommand, Stdio};
 use std::thread;
 
+#[cfg(all(target_os = "linux", not(test)))]
+use std::sync::atomic::{AtomicBool, Ordering};
+
+#[cfg(all(target_os = "linux", not(test)))]
+static TR_INHERITED_SIGPIPE_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(all(target_os = "linux", not(test)))]
+unsafe extern "C" fn tr_capture_inherited_sigpipe() {
+    let mut action = std::mem::MaybeUninit::<ctcore::libc::sigaction>::uninit();
+    if unsafe {
+        ctcore::libc::sigaction(ctcore::libc::SIGPIPE, std::ptr::null(), action.as_mut_ptr())
+    } == 0
+    {
+        let action = unsafe { action.assume_init() };
+        TR_INHERITED_SIGPIPE_IGNORED.store(
+            action.sa_sigaction == ctcore::libc::SIG_IGN,
+            Ordering::Relaxed,
+        );
+    }
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static TR_CAPTURE_SIGPIPE: unsafe extern "C" fn() = tr_capture_inherited_sigpipe;
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn tr_inherited_sigpipe_ignored() -> bool {
+    TR_INHERITED_SIGPIPE_IGNORED.load(Ordering::Relaxed)
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn tr_terminate_with_sigpipe() -> ! {
+    unsafe {
+        ctcore::libc::signal(ctcore::libc::SIGPIPE, ctcore::libc::SIG_DFL);
+        ctcore::libc::raise(ctcore::libc::SIGPIPE);
+        ctcore::libc::_exit(128 + ctcore::libc::SIGPIPE);
+    }
+}
+
 // 1. 定义配置标志常量
 pub mod tr_flags {
     pub const TR_AIX_C_LOCALE: &str = "aix-c-locale";
@@ -423,23 +463,23 @@ where
 {
     translate_input(reader, writer, translator).map_err(|error| match error {
         TranslateInputError::Read(error) => CtSimpleError::new(1, format!("read error: {error}")),
-        TranslateInputError::Write(error) => CtSimpleError::new(1, format!("write error: {error}")),
+        TranslateInputError::Write(error) => {
+            #[cfg(all(target_os = "linux", not(test)))]
+            if error.kind() == std::io::ErrorKind::BrokenPipe && !tr_inherited_sigpipe_ignored() {
+                tr_terminate_with_sigpipe();
+            }
+            CtSimpleError::new(1, format!("write error: {error}"))
+        }
     })
 }
 
 impl<W: Write> Write for StrictWriter<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.inner.write(buf).map_err(|e| {
-            ctcore::ct_show_error!("write error: {}", e);
-            std::process::exit(1); // 遭遇写入失败 (如 ENOSPC)，强行阻断死循环
-        })
+        self.inner.write(buf)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.inner.flush().map_err(|e| {
-            ctcore::ct_show_error!("write error: {}", e);
-            std::process::exit(1);
-        })
+        self.inner.flush()
     }
 }
 

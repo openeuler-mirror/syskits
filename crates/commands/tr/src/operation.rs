@@ -25,7 +25,7 @@ use nom::{
     IResult,
     branch::alt,
     bytes::complete::{tag, take, take_until},
-    character::complete::{digit1, one_of},
+    character::complete::one_of,
     combinator::{map, map_opt, recognize},
     multi::{many_m_n, many0},
     sequence::{delimited, preceded, separated_pair},
@@ -826,12 +826,16 @@ impl Sequence {
     fn parse_char_repeat(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
         delimited(
             tag("["),
-            separated_pair(Self::parse_backslash_or_char, tag("*"), digit1),
+            separated_pair(Self::parse_backslash_or_char, tag("*"), take_until("]")),
             tag("]"),
         )(input)
         .map(|(l, (c, cnt_str))| {
             let s = String::from_utf8_lossy(cnt_str);
-            let result = if cnt_str.starts_with(b"0") {
+            let result = if cnt_str.is_empty() {
+                Ok(Self::CharStar(c))
+            } else if !cnt_str.iter().all(u8::is_ascii_digit) {
+                Err(BadSequence::InvalidRepeatCount(s.into_owned()))
+            } else if cnt_str.starts_with(b"0") {
                 match usize::from_str_radix(&s, 8) {
                     Ok(0) => Ok(Self::CharStar(c)),
                     Ok(count) => Ok(Self::CharRepeat(c, count)),
@@ -1494,6 +1498,15 @@ mod tests {
             assert!(matches!(
                 Sequence::from_str(b"z-a").unwrap_err(),
                 BadSequence::ReverseCollatingRange(b'z', b'a')
+            ));
+
+            assert!(matches!(
+                Sequence::from_str(b"[x*foo]").unwrap_err(),
+                BadSequence::InvalidRepeatCount(count) if count == "foo"
+            ));
+            assert!(matches!(
+                Sequence::from_str(b"[x*08]").unwrap_err(),
+                BadSequence::InvalidRepeatCount(count) if count == "08"
             ));
         }
 

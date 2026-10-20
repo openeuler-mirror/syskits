@@ -63,7 +63,7 @@ use rust_i18n::t;
 use std::cmp;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::fmt::Write;
-use std::io::Read; // <--- 新增引用
+use std::io::{BufWriter, Read, Write as IoWrite};
 
 use crate::byteorder_io::ByteOrder;
 use crate::formatteriteminfo::OdFormatWriter;
@@ -538,6 +538,8 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
         od_settings.skip_bytes,
         od_settings.read_bytes,
     );
+    let stdout = std::io::stdout();
+    let mut output = BufWriter::new(stdout.lock());
 
     // 如果指定了 -S，进入专用的严格字符串扫描模式
     if let Some(min_len) = od_settings.strings_min_len {
@@ -547,7 +549,9 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
             od_settings.skip_bytes,
             od_settings.read_bytes, // 把 -N 的限制传进去用于精确判断
             min_len,
+            &mut output,
         );
+        od_handle_stdout_result(output.flush());
         if stdin_was_closed {
             ct_show_error!("standard input: Bad file descriptor");
         }
@@ -573,7 +577,13 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
         od_settings.output_duplicates,
     );
 
-    let result = odexec(&mut input_offset, &mut input_decoder, &output_info);
+    let result = odexec(
+        &mut input_offset,
+        &mut input_decoder,
+        &output_info,
+        &mut output,
+    );
+    od_handle_stdout_result(output.flush());
     if stdin_was_closed {
         ct_show_error!("standard input: Bad file descriptor");
     }
@@ -676,12 +686,13 @@ fn od_allocate_string_buffer(min_len: usize) -> CTResult<Vec<u8>> {
 }
 
 // --- 专门用于处理 -S (--strings) 的执行循环 ---
-fn odexec_strings<R: Read>(
+fn odexec_strings<R: Read, W: IoWrite>(
     input: &mut R,
     radix: OdRadix,
     skip_bytes: u64,
     read_bytes: Option<u64>,
     min_len: usize,
+    output: &mut W,
 ) -> CTResult<()> {
     let _ctype_locale = OdCtypeLocale::activate();
     let mut buffer = od_allocate_string_buffer(min_len)?;
@@ -710,7 +721,7 @@ fn odexec_strings<R: Read>(
             } else {
                 // GNU 规范：字符串必须以 NUL (\0) 字节结尾才算合法！
                 if buffer.len() >= min_len && b == 0 {
-                    print_string_record(string_start, radix, &buffer)?;
+                    print_string_record(output, string_start, radix, &buffer)?;
                 }
                 buffer.clear();
             }
@@ -722,7 +733,7 @@ fn odexec_strings<R: Read>(
     if buffer.len() > min_len {
         if let Some(limit) = read_bytes {
             if bytes_read_total == limit {
-                print_string_record(string_start.wrapping_sub(1), radix, &buffer)?;
+                print_string_record(output, string_start.wrapping_sub(1), radix, &buffer)?;
             }
         }
     }
@@ -730,10 +741,12 @@ fn odexec_strings<R: Read>(
     Ok(())
 }
 
-fn print_string_record(offset: u64, radix: OdRadix, buffer: &[u8]) -> CTResult<()> {
-    use std::io::Write as _;
-    let mut stdout = std::io::stdout().lock();
-
+fn print_string_record<W: IoWrite>(
+    output: &mut W,
+    offset: u64,
+    radix: OdRadix,
+    buffer: &[u8],
+) -> CTResult<()> {
     let address = match radix {
         OdRadix::Octal => format!("{offset:07o}"),
         OdRadix::Decimal => format!("{offset:07}"),
@@ -742,12 +755,12 @@ fn print_string_record(offset: u64, radix: OdRadix, buffer: &[u8]) -> CTResult<(
     };
 
     if !address.is_empty() {
-        od_handle_stdout_result(write!(stdout, "{address} "));
+        od_handle_stdout_result(write!(output, "{address} "));
     }
     od_handle_stdout_result(
-        stdout
+        output
             .write_all(buffer)
-            .and_then(|()| stdout.write_all(b"\n")),
+            .and_then(|()| output.write_all(b"\n")),
     );
     Ok(())
 }
@@ -911,18 +924,20 @@ fn od_unknown_option_diagnostic(error: &clap::Error) -> Option<String> {
     }
 }
 
-fn odexec<I>(
+fn odexec<I, W>(
     input_offset: &mut OdInputOffset,
     input_decoder: &mut OdInputDecoder<I>,
     output_info: &OutputInfo,
+    output: &mut W,
 ) -> CTResult<()>
 where
     I: PeekRead + HasError,
+    W: IoWrite,
 {
     let mut state = DuplicateState::new();
 
     loop {
-        match od_process_next_line(input_offset, input_decoder, output_info, &mut state)? {
+        match od_process_next_line(input_offset, input_decoder, output_info, &mut state, output)? {
             LineProcessResult::EndOfFile => break,
             LineProcessResult::Continue => continue,
         }
@@ -954,11 +969,12 @@ enum LineProcessResult {
     Continue,
 }
 
-fn od_process_next_line<I: PeekRead + HasError>(
+fn od_process_next_line<I: PeekRead + HasError, W: IoWrite>(
     input_offset: &mut OdInputOffset,
     input_decoder: &mut OdInputDecoder<I>,
     output_info: &OutputInfo,
     state: &mut DuplicateState,
+    output: &mut W,
 ) -> CTResult<LineProcessResult> {
     match input_decoder.od_peek_read() {
         Ok(mut memory_decoder) => {
@@ -966,7 +982,7 @@ fn od_process_next_line<I: PeekRead + HasError>(
 
             if length == 0 {
                 if input_decoder.has_input() {
-                    od_handle_stdout_result(input_offset.print_final_offset());
+                    od_handle_stdout_result(input_offset.write_final_offset(output));
                 }
                 return Ok(LineProcessResult::EndOfFile);
             }
@@ -979,6 +995,7 @@ fn od_process_next_line<I: PeekRead + HasError>(
                 output_info,
                 state,
                 length,
+                output,
             )?;
 
             Ok(LineProcessResult::Continue)
@@ -988,7 +1005,7 @@ fn od_process_next_line<I: PeekRead + HasError>(
                 ct_show_error!("cannot skip past end of combined input");
             } else {
                 ct_show_error!("{}", e);
-                od_handle_stdout_result(input_offset.print_final_offset());
+                od_handle_stdout_result(input_offset.write_final_offset(output));
             }
             Err(1.into())
         }
@@ -1006,20 +1023,18 @@ fn od_handle_incomplete_line(
     }
 }
 
-fn od_process_line_content(
+fn od_process_line_content<W: IoWrite>(
     input_offset: &mut OdInputOffset,
     memory_decoder: &mut OdMemoryDecoder,
     output_info: &OutputInfo,
     state: &mut DuplicateState,
     length: usize,
+    output: &mut W,
 ) -> CTResult<()> {
-    use std::io::Write as _;
-    let mut stdout = std::io::stdout().lock();
-
     if is_duplicate_line(memory_decoder, output_info, state, length) {
         if !state.is_duplicate {
             state.is_duplicate = true;
-            od_handle_stdout_result(writeln!(stdout, "*"));
+            od_handle_stdout_result(writeln!(output, "*"));
         }
     } else {
         state.is_duplicate = false;
@@ -1030,6 +1045,7 @@ fn od_process_line_content(
             &input_offset.format_byte_offset(),
             memory_decoder,
             output_info,
+            output,
         )?;
     }
     input_offset.increase_position(length as u64);
@@ -1123,24 +1139,26 @@ fn od_add_ascii_dump(
     output_bytes.extend_from_slice(&format_ascii_dump(input_decoder.get_buffer(0)));
 }
 
-fn od_print_formatted_line(prefix: &str, output_bytes: &[u8], is_first: bool) -> CTResult<()> {
-    use std::io::Write as _;
-    let mut stdout = std::io::stdout().lock();
-
+fn od_print_formatted_line<W: IoWrite>(
+    output: &mut W,
+    prefix: &str,
+    output_bytes: &[u8],
+    is_first: bool,
+) -> CTResult<()> {
     if is_first {
-        od_handle_stdout_result(write!(stdout, "{prefix}"));
+        od_handle_stdout_result(write!(output, "{prefix}"));
     } else {
         od_handle_stdout_result(write!(
-            stdout,
+            output,
             "{:>width$}",
             "",
             width = prefix.chars().count()
         ));
     }
     od_handle_stdout_result(
-        stdout
+        output
             .write_all(output_bytes)
-            .and_then(|()| stdout.write_all(b"\n")),
+            .and_then(|()| output.write_all(b"\n")),
     );
     Ok(())
 }
@@ -1158,16 +1176,17 @@ fn od_render_formatted_line(prefix: &str, output_bytes: &[u8], is_first: bool) -
     }
 }
 
-fn od_print_bytes(
+fn od_print_bytes<W: IoWrite>(
     prefix: &str,
     input_decoder: &OdMemoryDecoder,
     output_info: &OutputInfo,
+    output: &mut W,
 ) -> CTResult<()> {
     let mut first = true;
 
     for formatter in output_info.spaced_formatters_iter() {
         let output_bytes = od_format_line(input_decoder, formatter, output_info);
-        od_print_formatted_line(prefix, &output_bytes, first)?;
+        od_print_formatted_line(output, prefix, &output_bytes, first)?;
         first = false;
     }
     Ok(())
@@ -1679,7 +1698,16 @@ mod tests {
                     .unwrap();
             let output_info = OutputInfo::new(16, &[], false);
 
-            assert!(odexec(&mut input_offset, &mut input_decoder, &output_info).is_ok());
+            let mut output = Vec::new();
+            assert!(
+                odexec(
+                    &mut input_offset,
+                    &mut input_decoder,
+                    &output_info,
+                    &mut output,
+                )
+                .is_ok()
+            );
         }
 
         #[test]

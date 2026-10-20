@@ -370,6 +370,17 @@ fn od_parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, St
                         params.quote()
                     )
                 })?;
+                if byte_size == 0 {
+                    let type_name = if type_cat == FormatTypeCategory::Float {
+                        "floating point"
+                    } else {
+                        "integral"
+                    };
+                    return Err(format!(
+                        "invalid type string {};\nthis system doesn't provide a 0-byte {type_name} type",
+                        params.quote()
+                    ));
+                }
             }
         }
 
@@ -711,6 +722,10 @@ mod tests {
         // 测试无效的格式组合
         assert!(od_parse_type_string("xC1").is_err());
         assert!(od_parse_type_string("x1C").is_err());
+
+        for type_string in ["x0", "d00", "f000"] {
+            assert!(od_parse_type_string(type_string).is_err(), "{type_string}");
+        }
     }
 
     #[test]

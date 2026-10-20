@@ -136,6 +136,90 @@
         },
         {
             "command": "od",
+            "description": "Reject explicit zero-sized integral formats",
+            "args": [
+                "-t",
+                "x0",
+                "input"
+            ],
+            "setup_commands": [
+                "printf 'abc' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q '0-byte'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "Reject explicit zero-sized decimal formats",
+            "args": [
+                "-t",
+                "d0",
+                "input"
+            ],
+            "setup_commands": [
+                "printf 'abc' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q '0-byte'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "Reject explicit zero-sized floating formats",
+            "args": [
+                "-t",
+                "f0",
+                "input"
+            ],
+            "setup_commands": [
+                "printf 'abc' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q '0-byte'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input"
+            ]
+        },
+        {
+            "command": "od",
             "description": "Option -A n (No address)",
             "args": [
                 "-An",

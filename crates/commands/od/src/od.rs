@@ -528,6 +528,7 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
     let od_settings = OdSettings::new(&clap_matches, &format_args)?;
     let stdin_was_closed = od_prepare_closed_stdin(&od_settings.input_strings);
     od_exit_for_closed_stdout();
+    let _locale = OdCtypeLocale::activate();
 
     let mut input_offset =
         OdInputOffset::new(od_settings.radix, od_settings.skip_bytes, od_settings.label);
@@ -557,8 +558,6 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
             Ok(())
         };
     }
-
-    let _ctype_locale = OdCtypeLocale::activate();
 
     let mut input_decoder = OdInputDecoder::new(
         &mut input,
@@ -635,7 +634,7 @@ struct OdCtypeLocale {
 
 impl OdCtypeLocale {
     fn activate() -> Option<Self> {
-        let category_mask = libc::LC_CTYPE_MASK | libc::LC_NUMERIC_MASK;
+        let category_mask = libc::LC_CTYPE_MASK | libc::LC_NUMERIC_MASK | libc::LC_MESSAGES_MASK;
         let locale = unsafe { libc::newlocale(category_mask, c"".as_ptr(), std::ptr::null_mut()) };
         if locale.is_null() {
             return None;
@@ -1342,6 +1341,7 @@ pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
 
     let clap_matches = od_parse_matches(&args)?;
     let od_settings = OdSettings::new(&clap_matches, &format_args)?;
+    let _locale = OdCtypeLocale::activate();
 
     let mut input_offset =
         OdInputOffset::new(od_settings.radix, od_settings.skip_bytes, od_settings.label);
@@ -1364,8 +1364,6 @@ pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
         }
         return Ok(semantic);
     }
-
-    let _ctype_locale = OdCtypeLocale::activate();
 
     let mut input_decoder = OdInputDecoder::new(
         &mut input,

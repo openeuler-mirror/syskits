@@ -697,6 +697,23 @@ impl Sequence {
         set2_str: &[u8],
         truncate_set1_flag: bool,
     ) -> Result<(Vec<u8>, Vec<u8>), BadSequence> {
+        Self::solve_set_characters_for_domain(set1_str, set2_str, truncate_set1_flag, false)
+    }
+
+    pub fn solve_set_characters_with_complement(
+        set1_str: &[u8],
+        set2_str: &[u8],
+        truncate_set1_flag: bool,
+    ) -> Result<(Vec<u8>, Vec<u8>), BadSequence> {
+        Self::solve_set_characters_for_domain(set1_str, set2_str, truncate_set1_flag, true)
+    }
+
+    fn solve_set_characters_for_domain(
+        set1_str: &[u8],
+        set2_str: &[u8],
+        truncate_set1_flag: bool,
+        complement: bool,
+    ) -> Result<(Vec<u8>, Vec<u8>), BadSequence> {
         // Parse and validate set1
         let set1 = Self::from_str(set1_str)?;
         if set1.iter().any(|s| matches!(s, Self::CharStar(_))) {
@@ -716,6 +733,11 @@ impl Sequence {
 
         // Process set1
         let mut set1_solved = Self::process_char_set(&set1);
+        let set1_domain_len = if complement {
+            Self::complement_cardinality(&set1_solved)
+        } else {
+            set1_solved.len()
+        };
 
         // Process set2
         let set2_solved = if let Some(char_star) = Self::find_char_star(&set2) {
@@ -733,7 +755,7 @@ impl Sequence {
                 .filter(|s| !matches!(s, Self::CharStar(_)))
                 .flat_map(Self::flatten)
                 .count();
-            let repeat_len = set1_solved.len().saturating_sub(non_star_len);
+            let repeat_len = set1_domain_len.saturating_sub(non_star_len);
             result.extend(std::iter::repeat_n(char_star, repeat_len));
             // Add right part if exists
             if let Some(right) = parts.next() {

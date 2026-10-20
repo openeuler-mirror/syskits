@@ -5944,19 +5944,15 @@ fn apply_style_based_on_metadata(
     };
     let md_option = symlink_target_metadata.as_ref().or(md_option);
 
-    // 能力集 (Capability) 拥有最高的颜色显示优先级，必须优先检查
-    if md_option.map(|m| m.is_file()).unwrap_or(false) {
-        if let Some(cap_style) = ls_colors.style_for_indicator(lscolors::Indicator::Capabilities) {
-            // 只有当环境变量配置了 'ca' 颜色时，才执行较重的系统调用探测扩展属性
-            if has_capability(&actual_path.p_buf) {
-                style = Some(cap_style);
-            }
-        }
-    }
-
     if style.is_none() {
         if let Some(metadata) = md_option.filter(|metadata| metadata.is_file()) {
-            if let Some(special_style) = regular_file_special_style(metadata, ls_colors) {
+            let has_capabilities = ls_colors
+                .style_for_indicator(lscolors::Indicator::Capabilities)
+                .is_some()
+                && has_capability(&actual_path.p_buf);
+            if let Some(special_style) =
+                regular_file_special_style(metadata, ls_colors, has_capabilities)
+            {
                 style = Some(special_style);
             } else if let Some(suffix_style) = style_manager
                 .suffix_style_for_path(&actual_path.p_buf)
@@ -5984,6 +5980,7 @@ fn apply_style_based_on_metadata(
 fn regular_file_special_style<'a>(
     metadata: &Metadata,
     ls_colors: &'a LsColors,
+    has_capabilities: bool,
 ) -> Option<&'a Style> {
     #[cfg(unix)]
     {
@@ -5997,6 +5994,12 @@ fn regular_file_special_style<'a>(
             if let Some(style) = ls_colors.style_for_indicator(lscolors::Indicator::Setgid) {
                 return Some(style);
             }
+        }
+    }
+
+    if has_capabilities {
+        if let Some(style) = ls_colors.style_for_indicator(lscolors::Indicator::Capabilities) {
+            return Some(style);
         }
     }
 
@@ -6665,6 +6668,28 @@ mod tests {
             manager.apply_style(style, b"su"),
             b"\x1b[0m\x1b[37;41msu\x1b[0m"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn setuid_color_precedes_capability_color() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path =
+            std::env::temp_dir().join(format!("ct-ls-color-priority-{}", std::process::id()));
+        fs::write(&path, b"").expect("create color priority fixture");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o4755))
+            .expect("set setuid fixture mode");
+        let metadata = fs::metadata(&path).expect("read fixture metadata");
+        let ls_colors = LsColors::from_string("su=31:ca=32:ex=33:fi=34");
+        let selected = regular_file_special_style(&metadata, &ls_colors, true)
+            .expect("setuid style should be selected");
+        let setuid = ls_colors
+            .style_for_indicator(lscolors::Indicator::Setuid)
+            .expect("setuid style");
+        fs::remove_file(path).expect("remove color priority fixture");
+
+        assert_eq!(selected, setuid);
     }
 
     #[test]

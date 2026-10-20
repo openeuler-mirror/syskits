@@ -83,6 +83,7 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
 use ctcore::ct_parse_size::ParseSizeError;
+use ctcore::libc;
 use ctcore::{ct_show_error, ct_show_warning};
 use std::ffi::OsString;
 use sys_locale::get_locale;
@@ -492,6 +493,42 @@ fn od_is_bare_width_short_option(arg: &str) -> bool {
     !short_options.is_empty() && !short_options.starts_with('-') && short_options.ends_with('w')
 }
 
+struct OdCtypeLocale {
+    locale: libc::locale_t,
+    previous: libc::locale_t,
+}
+
+impl OdCtypeLocale {
+    fn activate() -> Option<Self> {
+        let locale =
+            unsafe { libc::newlocale(libc::LC_CTYPE_MASK, c"".as_ptr(), std::ptr::null_mut()) };
+        if locale.is_null() {
+            return None;
+        }
+
+        let previous = unsafe { libc::uselocale(locale) };
+        if previous.is_null() {
+            unsafe { libc::freelocale(locale) };
+            return None;
+        }
+
+        Some(Self { locale, previous })
+    }
+}
+
+impl Drop for OdCtypeLocale {
+    fn drop(&mut self) {
+        unsafe {
+            libc::uselocale(self.previous);
+            libc::freelocale(self.locale);
+        }
+    }
+}
+
+fn od_is_printable(byte: u8) -> bool {
+    unsafe { libc::isprint(byte as libc::c_int) != 0 }
+}
+
 // --- 专门用于处理 -S (--strings) 的执行循环 ---
 fn odexec_strings<R: Read>(
     input: &mut R,
@@ -500,6 +537,7 @@ fn odexec_strings<R: Read>(
     read_bytes: Option<u64>,
     min_len: usize,
 ) -> CTResult<()> {
+    let _ctype_locale = OdCtypeLocale::activate();
     let mut buffer = Vec::new();
     let mut current_offset = skip_bytes;
     let mut string_start = current_offset;
@@ -518,8 +556,7 @@ fn odexec_strings<R: Read>(
 
         for &b in &chunk[..n] {
             bytes_read_total += 1;
-            // 筛选可打印的 ASCII 图形字符 (0x20 空格 到 0x7E 波浪号)
-            if (0x20..=0x7E).contains(&b) {
+            if od_is_printable(b) {
                 if buffer.is_empty() {
                     string_start = current_offset;
                 }
@@ -558,14 +595,13 @@ fn print_string_record(offset: u64, radix: OdRadix, buffer: &[u8]) -> CTResult<(
         OdRadix::NoPrefix => String::new(),
     };
 
-    // 因为我们已经提前过滤了 0x20..=0x7E，它必定是合法的 UTF-8
-    let s = unsafe { std::str::from_utf8_unchecked(buffer) };
-
-    if address.is_empty() {
-        writeln!(stdout, "{s}").map_err(|e| CtSimpleError::new(1, e.to_string()))?;
-    } else {
-        writeln!(stdout, "{address} {s}").map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+    if !address.is_empty() {
+        write!(stdout, "{address} ").map_err(|e| CtSimpleError::new(1, e.to_string()))?;
     }
+    stdout
+        .write_all(buffer)
+        .and_then(|()| stdout.write_all(b"\n"))
+        .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
     Ok(())
 }
 
@@ -979,7 +1015,7 @@ fn od_string_classic_line(offset: u64, radix: OdRadix, buffer: &[u8]) -> String 
         OdRadix::Hexadecimal => format!("{offset:06x}"),
         OdRadix::NoPrefix => String::new(),
     };
-    let s = unsafe { std::str::from_utf8_unchecked(buffer) };
+    let s = String::from_utf8_lossy(buffer);
     if address.is_empty() {
         format!("{s}\n")
     } else {
@@ -994,6 +1030,7 @@ fn od_collect_strings_semantic<R: Read>(
     read_bytes: Option<u64>,
     min_len: usize,
 ) -> CTResult<OdSemantic> {
+    let _ctype_locale = OdCtypeLocale::activate();
     let mut rows = Vec::new();
     let mut classic_text = String::new();
     let mut current_offset = skip_bytes;
@@ -1018,7 +1055,7 @@ fn od_collect_strings_semantic<R: Read>(
 
         for &b in &chunk[..n] {
             bytes_read_total += 1;
-            if (0x20..=0x7E).contains(&b) {
+            if od_is_printable(b) {
                 if buffer.is_empty() {
                     string_start = current_offset;
                 }
@@ -1034,7 +1071,7 @@ fn od_collect_strings_semantic<R: Read>(
                         bytes: buffer.clone(),
                         views: vec![OdView {
                             spec: "string".into(),
-                            text: unsafe { std::str::from_utf8_unchecked(&buffer) }.to_string(),
+                            text: String::from_utf8_lossy(&buffer).into_owned(),
                         }],
                     });
                 }
@@ -1058,7 +1095,7 @@ fn od_collect_strings_semantic<R: Read>(
             bytes: buffer.clone(),
             views: vec![OdView {
                 spec: "string".into(),
-                text: unsafe { std::str::from_utf8_unchecked(&buffer) }.to_string(),
+                text: String::from_utf8_lossy(&buffer).into_owned(),
             }],
         });
     }

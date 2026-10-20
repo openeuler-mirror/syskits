@@ -580,7 +580,7 @@ pub fn test_parse(args: Vec<OsString>) -> ParseResult<Vec<TestSymbol>> {
             return Ok(stack);
         }
 
-        if args[0] != "(" && args[1] != "-a" && args[1] != "-o" {
+        if !(args[0] == "(" && args[2] == ")") && args[1] != "-a" && args[1] != "-o" {
             return Err(ParseError::BinaryOperatorExpected(
                 args[1].quote().to_string(),
             ));
@@ -730,5 +730,11 @@ mod tests {
     fn unknown_three_argument_binary_operator_is_rejected() {
         let error = test_parse(args(&["x", "-q", "y"])).unwrap_err();
         assert_eq!(error.to_string(), "'-q': binary operator expected");
+    }
+
+    #[test]
+    fn unmatched_three_argument_parenthesis_uses_arity_dispatch() {
+        let error = test_parse(args(&["(", "x", "y"])).unwrap_err();
+        assert_eq!(error.to_string(), "'x': binary operator expected");
     }
 }

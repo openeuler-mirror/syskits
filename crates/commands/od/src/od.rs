@@ -229,9 +229,13 @@ impl OdSettings {
                 let value = od_parse_number_of_bytes(s).map_err(|_| {
                     CtSimpleError::new(1, format!("invalid -S argument {}", s.quote()))
                 })?;
-                return usize::try_from(value).map(Some).map_err(|_| {
+                let min_len = usize::try_from(value).map_err(|_| {
                     CtSimpleError::new(1, format!("invalid -S argument {}", s.quote()))
-                });
+                })?;
+                min_len.checked_add(1).ok_or_else(|| {
+                    CtSimpleError::new(1, format!("invalid -S argument {}", s.quote()))
+                })?;
+                return Ok(Some(min_len));
             }
         }
 
@@ -534,6 +538,18 @@ fn od_is_printable(byte: u8) -> bool {
     unsafe { libc::isprint(byte as libc::c_int) != 0 }
 }
 
+fn od_allocate_string_buffer(min_len: usize) -> CTResult<Vec<u8>> {
+    let capacity = min_len
+        .checked_add(1)
+        .map(|size| cmp::max(100, size))
+        .ok_or_else(|| CtSimpleError::new(1, "memory allocation failed"))?;
+    let mut buffer = Vec::new();
+    buffer
+        .try_reserve_exact(capacity)
+        .map_err(|_| CtSimpleError::new(1, "memory allocation failed"))?;
+    Ok(buffer)
+}
+
 // --- 专门用于处理 -S (--strings) 的执行循环 ---
 fn odexec_strings<R: Read>(
     input: &mut R,
@@ -543,7 +559,7 @@ fn odexec_strings<R: Read>(
     min_len: usize,
 ) -> CTResult<()> {
     let _ctype_locale = OdCtypeLocale::activate();
-    let mut buffer = Vec::new();
+    let mut buffer = od_allocate_string_buffer(min_len)?;
     let mut current_offset = skip_bytes;
     let mut string_start = current_offset;
     let mut chunk = [0u8; 8192];
@@ -1040,7 +1056,7 @@ fn od_collect_strings_semantic<R: Read>(
     let mut classic_text = String::new();
     let mut current_offset = skip_bytes;
     let mut string_start = current_offset;
-    let mut buffer = Vec::new();
+    let mut buffer = od_allocate_string_buffer(min_len)?;
     let mut chunk = [0u8; 8192];
     let mut bytes_read_total = 0u64;
 
@@ -1409,6 +1425,10 @@ mod tests {
                     "{value}"
                 );
             }
+
+            let value = format!("-S{}", usize::MAX);
+            let matches = ct_app().try_get_matches_from(["od", &value]).unwrap();
+            assert!(OdSettings::parse_strings_min_len(&matches).is_err());
         }
     }
 
@@ -1437,6 +1457,11 @@ mod tests {
                 od_collect_strings_semantic(&mut longer, OdRadix::Octal, 0, Some(10), 9).unwrap();
             assert_eq!(semantic.rows.len(), 1);
             assert_eq!(semantic.rows[0].offset, u64::MAX);
+        }
+
+        #[test]
+        fn test_strings_buffer_rejects_impossible_capacity() {
+            assert!(od_allocate_string_buffer(usize::MAX).is_err());
         }
     }
 

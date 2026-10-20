@@ -39,9 +39,9 @@ impl OdInputOffset {
 
     /// 增加 `byte_pos`，如果使用了标签，也增加标签值
     pub fn increase_position(&mut self, n: u64) {
-        self.byte_pos += n;
+        self.byte_pos = self.byte_pos.wrapping_add(n);
         if let Some(l) = self.label {
-            self.label = Some(l + n);
+            self.label = Some(l.wrapping_add(n));
         }
     }
 
@@ -129,4 +129,14 @@ fn test_input_offset_with_label() {
     sut.increase_position(10);
     sut.set_radix(OdRadix::Octal);
     assert_eq!("0000036 (0000050)", &sut.format_byte_offset());
+}
+
+#[test]
+fn test_input_offset_wraps_like_gnu() {
+    let mut sut = OdInputOffset::new(OdRadix::Octal, u64::MAX, Some(u64::MAX));
+    sut.increase_position(1);
+
+    assert_eq!(0, sut.byte_pos());
+    assert_eq!(Some(0), sut.label());
+    assert_eq!("0000000 (0000000)", sut.format_byte_offset());
 }

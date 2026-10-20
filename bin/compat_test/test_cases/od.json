@@ -1746,6 +1746,30 @@
         ]
       },
       "cleanup_commands": ["rm -f expected"]
+    },
+    {
+      "tstdin": "A",
+      "command": "od",
+      "description": "LC_ALL=C下执行od --traditional 0 1777777777777777777777；标签递增越过u64上限时应回绕并匹配GNU；迁移原Cargo用例od_traditional_label_wraparound_matches_gnu",
+      "args": ["--traditional", "0", "1777777777777777777777"],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "printf 'A' | LC_ALL=C od --traditional 0 1777777777777777777777 > expected && diff expected $CMD_STDOUT",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f expected"]
     }
     ]
 }

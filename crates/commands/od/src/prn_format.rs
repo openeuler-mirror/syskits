@@ -146,7 +146,16 @@ fn format_flo32(f: f32) -> String {
 }
 
 fn format_flo64(f: f64) -> String {
-    format_float(f, 24, 17)
+    const WIDTH: usize = 24;
+
+    #[cfg(unix)]
+    {
+        format_flo64_gnu(f, WIDTH)
+    }
+    #[cfg(not(unix))]
+    {
+        format_float(f, WIDTH, 17)
+    }
 }
 
 fn format_long_double(bytes: &[u8]) -> String {
@@ -263,6 +272,23 @@ fn format_flo32_gnu(f: f32, width: usize) -> String {
     loop {
         let s = c_format_g(f64::from(f), width, precision);
         if precision >= 48 || s.trim().parse::<f32>().ok() == Some(f) {
+            return s;
+        }
+        precision += 1;
+    }
+}
+
+#[cfg(unix)]
+fn format_flo64_gnu(f: f64, width: usize) -> String {
+    let mut precision = if f != 0.0 && f.abs() < f64::MIN_POSITIVE {
+        1
+    } else {
+        f64::DIGITS as usize
+    };
+
+    loop {
+        let s = c_format_g(f, width, precision);
+        if precision >= 18 || s.trim().parse::<f64>().ok() == Some(f) {
             return s;
         }
         precision += 1;
@@ -514,31 +540,25 @@ fn test_format_flo32() {
 #[test]
 #[allow(clippy::cognitive_complexity)]
 fn test_format_flo64() {
-    assert_eq!(format_flo64(1.0), "      1.0000000000000000");
-    assert_eq!(format_flo64(10.0), "      10.000000000000000");
-    assert_eq!(format_flo64(1000000000000000.0), "      1000000000000000.0");
-    assert_eq!(
-        format_flo64(10000000000000000.0),
-        "       10000000000000000"
-    );
-    assert_eq!(
-        format_flo64(100000000000000000.0),
-        "   1.0000000000000000e17"
-    );
+    assert_eq!(format_flo64(1.0).trim(), "1");
+    assert_eq!(format_flo64(10.0).trim(), "10");
+    assert_eq!(format_flo64(1000000000000000.0).trim(), "1e+15");
+    assert_eq!(format_flo64(10000000000000000.0).trim(), "1e+16");
+    assert_eq!(format_flo64(100000000000000000.0).trim(), "1e+17");
 
-    assert_eq!(format_flo64(-0.1), "    -0.10000000000000001");
-    assert_eq!(format_flo64(-0.01), "  -1.0000000000000000e-2");
+    assert_eq!(format_flo64(-0.1).trim(), "-0.1");
+    assert_eq!(format_flo64(-0.01).trim(), "-0.01");
 
     assert_eq!(
-        format_flo64(-2.2250738585072014e-308),
+        format_flo64(-2.2250738585072014e-308).trim(),
         "-2.2250738585072014e-308"
     );
-    assert_eq!(format_flo64(4e-320), "                  4e-320");
-    assert_eq!(format_flo64(f64::NAN), "                     NaN");
-    assert_eq!(format_flo64(f64::INFINITY), "                     inf");
-    assert_eq!(format_flo64(f64::NEG_INFINITY), "                    -inf");
-    assert_eq!(format_flo64(-0.0), "                      -0");
-    assert_eq!(format_flo64(0.0), "                       0");
+    assert_eq!(format_flo64(4e-320).trim(), "4e-320");
+    assert_eq!(format_flo64(f64::NAN).trim(), "nan");
+    assert_eq!(format_flo64(f64::INFINITY).trim(), "inf");
+    assert_eq!(format_flo64(f64::NEG_INFINITY).trim(), "-inf");
+    assert_eq!(format_flo64(-0.0).trim(), "-0");
+    assert_eq!(format_flo64(0.0).trim(), "0");
 }
 
 #[test]

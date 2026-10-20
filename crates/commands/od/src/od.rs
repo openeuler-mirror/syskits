@@ -536,10 +536,10 @@ fn odexec_strings<R: Read>(
     }
 
     // 文件流结尾时的特殊处理
-    if buffer.len() >= min_len {
+    if buffer.len() > min_len {
         if let Some(limit) = read_bytes {
             if bytes_read_total == limit {
-                print_string_record(string_start, radix, &buffer)?;
+                print_string_record(string_start.wrapping_sub(1), radix, &buffer)?;
             }
         }
     }
@@ -1044,14 +1044,15 @@ fn od_collect_strings_semantic<R: Read>(
         }
     }
 
-    if buffer.len() >= min_len
+    if buffer.len() > min_len
         && let Some(limit) = read_bytes
         && bytes_read_total == limit
     {
-        classic_text.push_str(&od_string_classic_line(string_start, radix, &buffer));
+        let boundary_start = string_start.wrapping_sub(1);
+        classic_text.push_str(&od_string_classic_line(boundary_start, radix, &buffer));
         rows.push(OdRow {
             row_kind: "string".into(),
-            offset: string_start,
+            offset: boundary_start,
             label: None,
             byte_len: buffer.len(),
             bytes: buffer.clone(),
@@ -1376,6 +1377,20 @@ mod tests {
             let output_info = OutputInfo::new(16, &[], false);
 
             assert!(odexec(&mut input_offset, &mut input_decoder, &output_info).is_ok());
+        }
+
+        #[test]
+        fn test_strings_read_limit_boundary() {
+            let mut exact = std::io::Cursor::new(b"abcdefghij");
+            let semantic =
+                od_collect_strings_semantic(&mut exact, OdRadix::Octal, 0, Some(10), 10).unwrap();
+            assert!(semantic.rows.is_empty());
+
+            let mut longer = std::io::Cursor::new(b"abcdefghij");
+            let semantic =
+                od_collect_strings_semantic(&mut longer, OdRadix::Octal, 0, Some(10), 9).unwrap();
+            assert_eq!(semantic.rows.len(), 1);
+            assert_eq!(semantic.rows[0].offset, u64::MAX);
         }
     }
 

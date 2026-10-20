@@ -380,6 +380,91 @@
         },
         {
             "command": "od",
+            "description": "Strings read limit rejects a string exactly at the minimum",
+            "args": [
+                "-S10",
+                "-N10",
+                "input"
+            ],
+            "setup_commands": [
+                "printf 'abcdefghij' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "od -S10 -N10 input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "Strings read limit emits a string longer than the minimum",
+            "args": [
+                "-S9",
+                "-N10",
+                "input"
+            ],
+            "setup_commands": [
+                "printf 'abcdefghij' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "od -S9 -N10 input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "Strings read boundary accounts for skipped bytes",
+            "args": [
+                "-S1",
+                "-j2",
+                "-N2",
+                "input"
+            ],
+            "setup_commands": [
+                "printf 'abcdefghij' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "od -S1 -j2 -N2 input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
             "description": "Option -A n (No address)",
             "args": [
                 "-An",

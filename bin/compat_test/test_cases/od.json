@@ -82,6 +82,33 @@
         },
         {
             "command": "od",
+            "description": "Parse an option after a file operand",
+            "args": [
+                "input",
+                "-x"
+            ],
+            "setup_commands": [
+                "printf 'abcdef' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "od input -x > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
             "description": "Option -A n (No address)",
             "args": [
                 "-An",

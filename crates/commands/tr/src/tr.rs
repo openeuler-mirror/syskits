@@ -53,7 +53,7 @@ struct TrFlags {
     is_delete_flag: bool,
     is_squeeze_flag: bool,
     is_truncate_set1_flag: bool,
-    sets: Vec<String>,
+    sets: Vec<OsString>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -193,10 +193,10 @@ impl TrFlags {
             is_squeeze_flag: matches.get_flag(tr_flags::TR_SQUEEZE),
             is_truncate_set1_flag: matches.get_flag(tr_flags::TR_TRUNCATE_SET1),
             sets: matches
-                .get_many::<String>(tr_flags::TR_SETS)
+                .get_many::<OsString>(tr_flags::TR_SETS)
                 .into_iter()
                 .flatten()
-                .map(ToOwned::to_owned)
+                .cloned()
                 .collect(),
         };
 
@@ -276,8 +276,8 @@ impl TrFlags {
     }
 }
 
-fn has_trailing_unescaped_backslash(set: &str) -> bool {
-    set.as_bytes()
+fn has_trailing_unescaped_backslash(set: &OsString) -> bool {
+    set.as_encoded_bytes()
         .iter()
         .rev()
         .take_while(|&&byte| byte == b'\\')
@@ -355,8 +355,14 @@ pub fn tr_native_semantic(args: impl ctcore::Args) -> CTResult<TrSemantic> {
         delete: flags.is_delete_flag,
         squeeze: flags.is_squeeze_flag,
         truncate_set1: flags.is_truncate_set1_flag,
-        set1: flags.sets.first().cloned(),
-        set2: flags.sets.get(1).cloned(),
+        set1: flags
+            .sets
+            .first()
+            .map(|set| set.to_string_lossy().into_owned()),
+        set2: flags
+            .sets
+            .get(1)
+            .map(|set| set.to_string_lossy().into_owned()),
         rows: tr_rows_from_output(&direct.stdout),
         classic_text,
         stderr_text: String::from_utf8_lossy(&direct.stderr).into_owned(),
@@ -441,17 +447,17 @@ fn tr_process<R: BufRead, W: Write>(
     // 把原始的 writer 包装进我们的防爆阀中
     let mut strict_writer = StrictWriter { inner: writer };
 
-    let mut sets_iter = flags.sets.iter().map(|c| c.as_str());
+    let mut sets_iter = flags.sets.iter().map(|set| set.as_encoded_bytes());
     let (set1, set2) = Sequence::solve_set_characters(
-        sets_iter.next().unwrap_or_default().as_bytes(),
-        sets_iter.next().unwrap_or_default().as_bytes(),
+        sets_iter.next().unwrap_or_default(),
+        sets_iter.next().unwrap_or_default(),
         flags.is_truncate_set1_flag && !flags.is_complement_flag,
     )?;
 
     let is_translating = !flags.is_delete_flag && flags.sets.len() >= 2;
     if is_translating {
-        let s1 = &flags.sets[0];
-        let s2 = &flags.sets[1];
+        let s1 = flags.sets[0].as_encoded_bytes();
+        let s2 = flags.sets[1].as_encoded_bytes();
         let set1_len = if flags.is_complement_flag {
             Sequence::complement_cardinality(&set1)
         } else {
@@ -475,7 +481,7 @@ fn tr_process<R: BufRead, W: Write>(
                 "[:xdigit:]",
             ]
             .iter()
-            .any(|cls| s2.ends_with(cls));
+            .any(|class| s2.ends_with(class.as_bytes()));
 
             if set2.is_empty() {
                 return Err(CtSimpleError::new(
@@ -493,7 +499,7 @@ fn tr_process<R: BufRead, W: Write>(
         }
 
         // 2. GNU tr 仅在补集翻译且 string1 包含字符类时要求 string2 同质映射。
-        if flags.is_complement_flag && Sequence::contains_character_class(s1.as_bytes())? {
+        if flags.is_complement_flag && Sequence::contains_character_class(s1)? {
             let is_homogeneous = set2
                 .first()
                 .is_some_and(|first| set2.iter().all(|c| c == first));
@@ -511,9 +517,9 @@ fn tr_process<R: BufRead, W: Write>(
         }
 
         // 3. GNU tr 的大小写字符类对齐检查
-        if (s1 == "A-Y[:lower:]" && s2 == "a-z[:upper:]")
-            || (s1 == "A-Z[:lower:]" && s2 == "[:lower:][:upper:]")
-            || (s1 == "A-Z[:lower:]" && s2 == "[:lower:]A-Z")
+        if (s1 == b"A-Y[:lower:]" && s2 == b"a-z[:upper:]")
+            || (s1 == b"A-Z[:lower:]" && s2 == b"[:lower:][:upper:]")
+            || (s1 == b"A-Z[:lower:]" && s2 == b"[:lower:]A-Z")
         {
             return Err(CtSimpleError::new(
                 1,
@@ -610,6 +616,7 @@ pub fn ct_app() -> Command {
         Arg::new(tr_flags::TR_SETS)
             .hide(true)
             .action(ArgAction::Append)
+            .value_parser(clap::builder::OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
     ];
 
@@ -783,7 +790,7 @@ mod tests {
             let flags = TrFlags {
                 is_delete_flag: true,
                 is_squeeze_flag: true,
-                sets: vec!["set1".to_string()],
+                sets: vec!["set1".into()],
                 ..Default::default()
             };
             assert!(matches!(
@@ -793,7 +800,7 @@ mod tests {
 
             // 测试翻译时需要两个集合
             let flags = TrFlags {
-                sets: vec!["set1".to_string()],
+                sets: vec!["set1".into()],
                 ..Default::default()
             };
             assert!(matches!(
@@ -804,7 +811,7 @@ mod tests {
             // 测试仅删除时不能有第二个集合
             let flags = TrFlags {
                 is_delete_flag: true,
-                sets: vec!["set1".to_string(), "set2".to_string()],
+                sets: vec!["set1".into(), "set2".into()],
                 ..Default::default()
             };
             assert!(matches!(
@@ -814,7 +821,7 @@ mod tests {
 
             // 测试不能有第三个集合
             let flags = TrFlags {
-                sets: vec!["set1".to_string(), "set2".to_string(), "set3".to_string()],
+                sets: vec!["set1".into(), "set2".into(), "set3".into()],
                 ..Default::default()
             };
             assert!(matches!(
@@ -827,7 +834,7 @@ mod tests {
         fn test_validate_backslash_ending() {
             // 测试反斜杠结尾的警告
             let flags = TrFlags {
-                sets: vec!["set1\\".to_string()],
+                sets: vec!["set1\\".into()],
                 ..Default::default()
             };
             assert!(flags.validate_backslash_ending().is_ok());
@@ -846,7 +853,7 @@ mod tests {
             // 测试删除操作
             let flags = TrFlags {
                 is_delete_flag: true,
-                sets: vec!["aeiou".to_string()],
+                sets: vec!["aeiou".into()],
                 ..Default::default()
             };
 
@@ -861,7 +868,7 @@ mod tests {
 
             // 测试转换操作
             let flags = TrFlags {
-                sets: vec!["el".to_string(), "12".to_string()],
+                sets: vec!["el".into(), "12".into()],
                 ..Default::default()
             };
 
@@ -877,7 +884,7 @@ mod tests {
             // 测试压缩操作
             let flags = TrFlags {
                 is_squeeze_flag: true,
-                sets: vec![" ".to_string()],
+                sets: vec![" ".into()],
                 ..Default::default()
             };
 
@@ -894,7 +901,7 @@ mod tests {
             let flags = TrFlags {
                 is_delete_flag: true,
                 is_squeeze_flag: true,
-                sets: vec!["aeiou".to_string(), " ".to_string()],
+                sets: vec!["aeiou".into(), " ".into()],
                 ..Default::default()
             };
 
@@ -910,7 +917,7 @@ mod tests {
             // 测试补集操作
             let flags = TrFlags {
                 is_complement_flag: true,
-                sets: vec!["0-9".to_string(), "x".to_string()],
+                sets: vec!["0-9".into(), "x".into()],
                 ..Default::default()
             };
 
@@ -925,7 +932,7 @@ mod tests {
 
             let flags = TrFlags {
                 is_complement_flag: true,
-                sets: vec!["a-z".to_string(), "A-Z".to_string()],
+                sets: vec!["a-z".into(), "A-Z".into()],
                 ..Default::default()
             };
 
@@ -940,7 +947,7 @@ mod tests {
 
             let flags = TrFlags {
                 is_complement_flag: true,
-                sets: vec!["[:lower:]".to_string(), "X".to_string()],
+                sets: vec!["[:lower:]".into(), "X".into()],
                 ..Default::default()
             };
 
@@ -955,7 +962,7 @@ mod tests {
 
             let flags = TrFlags {
                 is_complement_flag: true,
-                sets: vec!["[:lower:]".to_string(), "A-Z".to_string()],
+                sets: vec!["[:lower:]".into(), "A-Z".into()],
                 ..Default::default()
             };
 
@@ -974,7 +981,7 @@ mod tests {
             // 测试截断操作
             let flags = TrFlags {
                 is_truncate_set1_flag: true,
-                sets: vec!["helo".to_string(), "123".to_string()],
+                sets: vec!["helo".into(), "123".into()],
                 ..Default::default()
             };
 

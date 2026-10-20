@@ -6,3 +6,11 @@ tr:
   usage: tr [OPTION]... SET1 [SET2]
   about: Translate or delete characters
   after_help: Translate, squeeze, and/or delete characters from standard input, writing to standard output.
+  errors:
+    missing_operand: missing operand
+    missing_operand_after: "missing operand after %{operand}"
+    two_strings_delete_squeeze: Two strings must be given when deleting and squeezing.
+    two_strings_translate: Two strings must be given when translating.
+    extra_operand: "extra operand %{operand}"
+    only_one_delete: Only one string may be given when deleting without squeezing repeats.
+    try_help: "Try '%{command} --help' for more information."

@@ -799,6 +799,38 @@
         },
         {
             "command": "od",
+            "description": "Double format uses the shortest text that round-trips like GNU od",
+            "args": [
+                "--endian=little",
+                "-An",
+                "-v",
+                "-tfD",
+                "input"
+            ],
+            "setup_commands": [
+                "export LC_ALL='C'",
+                "export LANG='C'",
+                "printf '\\000\\000\\000\\000\\000\\000\\360\\077\\232\\231\\231\\231\\231\\231\\271\\077\\000\\000\\000\\000\\000\\000\\020\\000' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "LC_ALL=C od --endian=little -An -v -tfD input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
             "description": "Option -w (Width)",
             "args": [
                 "-w4",

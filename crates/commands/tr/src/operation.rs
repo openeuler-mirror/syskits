@@ -172,6 +172,12 @@ impl Sequence {
             .any(|sequence| matches!(sequence, Self::Equiv(_))))
     }
 
+    pub fn contains_restricted_character_class(set_str: &[u8]) -> Result<bool, BadSequence> {
+        Ok(Self::from_str_impl(set_str, false)?.iter().any(|sequence| {
+            sequence.is_character_class() && !matches!(sequence, Self::Lower | Self::Upper)
+        }))
+    }
+
     fn is_character_class(&self) -> bool {
         matches!(
             self,

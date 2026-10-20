@@ -457,6 +457,12 @@ fn tr_process<R: BufRead, W: Write>(
             "[=c=] expressions may not appear in string2 when translating",
         ));
     }
+    if is_translating && Sequence::contains_restricted_character_class(set2_bytes)? {
+        return Err(CtSimpleError::new(
+            1,
+            "when translating, the only character classes that may appear in\nstring2 are 'upper' and 'lower'",
+        ));
+    }
     let (set1, set2) = Sequence::solve_set_characters(
         set1_bytes,
         set2_bytes,
@@ -898,6 +904,24 @@ mod tests {
                 error
                     .to_string()
                     .contains("expressions may not appear in string2")
+            );
+            assert!(output.is_empty());
+        }
+
+        #[test]
+        fn test_tr_process_rejects_restricted_character_class_in_translation_set2() {
+            let mut input = Cursor::new(b"123");
+            let mut output = Vec::new();
+            let flags = TrFlags {
+                sets: vec!["abc".into(), "[:digit:]".into()],
+                ..Default::default()
+            };
+
+            let error = tr_process(&mut input, &mut output, flags).unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("only character classes that may appear")
             );
             assert!(output.is_empty());
         }

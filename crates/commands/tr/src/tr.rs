@@ -470,6 +470,12 @@ fn tr_process<R: BufRead, W: Write>(
         set2_bytes,
         flags.is_truncate_set1_flag && !flags.is_complement_flag,
     )?;
+    if !is_translating && Sequence::contains_indefinite_repeat(set2_bytes)? {
+        return Err(CtSimpleError::new(
+            1,
+            "the [c*] construct may appear in string2 only when translating",
+        ));
+    }
     if is_translating
         && !Sequence::case_classes_are_aligned(set1_bytes, set2_bytes, flags.is_complement_flag)?
     {

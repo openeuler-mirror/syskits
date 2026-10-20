@@ -416,6 +416,12 @@ impl Sequence {
         }))
     }
 
+    pub fn contains_indefinite_repeat(set_str: &[u8]) -> Result<bool, BadSequence> {
+        Ok(Self::from_str_impl(set_str, false)?
+            .iter()
+            .any(|sequence| matches!(sequence, Self::CharStar(_))))
+    }
+
     pub fn case_classes_are_aligned(
         set1_str: &[u8],
         set2_str: &[u8],

@@ -427,12 +427,15 @@ impl OdSettings {
                 Some(b'x') => Ok(OdRadix::Hexadecimal),
                 Some(b'o') => Ok(OdRadix::Octal),
                 Some(b'n') => Ok(OdRadix::NoPrefix),
-                _ => Err(CtSimpleError::new(
-                    1,
-                    format!(
-                        "invalid output address radix '{s}'; it must be one character from [doxn]"
-                    ),
-                )),
+                invalid => {
+                    let invalid = invalid.unwrap_or(b'\0') as char;
+                    Err(CtSimpleError::new(
+                        1,
+                        format!(
+                            "invalid output address radix '{invalid}'; it must be one character from [doxn]"
+                        ),
+                    ))
+                }
             },
         }
     }

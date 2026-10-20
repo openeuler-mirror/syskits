@@ -370,6 +370,15 @@ impl TestParser {
                         self.expr()?;
                         self.stack.push(TestSymbol::Bang);
                     }
+                    [
+                        TestSymbol::Literal(_),
+                        TestSymbol::BoolOp(_),
+                        TestSymbol::Literal(_),
+                        TestSymbol::Literal(close),
+                    ] if close == ")" => {
+                        self.expr()?;
+                        self.stack.push(TestSymbol::Bang);
+                    }
                     _ => {
                         self.term()?;
                         self.stack.push(TestSymbol::Bang);
@@ -662,5 +671,17 @@ mod tests {
             test_parse(args(&["(", "!", "!", ")"])).unwrap(),
             vec![TestSymbol::Literal(OsString::from("!")), TestSymbol::Bang,]
         );
+    }
+
+    #[test]
+    fn closing_parenthesis_does_not_shrink_bang_scope() {
+        for op in ["-a", "-o"] {
+            let stack = test_parse(args(&["(", "!", "x", op, "", ")"])).unwrap();
+            assert_eq!(stack.last(), Some(&TestSymbol::Bang));
+            assert_eq!(
+                stack[stack.len() - 2],
+                TestSymbol::BoolOp(OsString::from(op))
+            );
+        }
     }
 }

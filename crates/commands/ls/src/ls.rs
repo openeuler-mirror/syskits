@@ -6080,7 +6080,8 @@ impl StyleManager {
             }
         } else if file_type.is_symlink() {
             if !path.exists()
-                && self.indicator_is_colored(lscolors::Indicator::OrphanedSymbolicLink)
+                && (self.symlink_as_target
+                    || self.indicator_is_colored(lscolors::Indicator::OrphanedSymbolicLink))
             {
                 lscolors::Indicator::OrphanedSymbolicLink
             } else {
@@ -6101,6 +6102,17 @@ impl StyleManager {
         self.raw_indicator_sequences
             .get(&indicator)
             .map(Vec::as_slice)
+    }
+
+    fn raw_missing_target_sequence(&self) -> Option<&[u8]> {
+        [
+            lscolors::Indicator::MissingFile,
+            lscolors::Indicator::OrphanedSymbolicLink,
+        ]
+        .into_iter()
+        .find(|indicator| self.indicator_is_colored(*indicator))
+        .and_then(|indicator| self.raw_indicator_sequences.get(&indicator))
+        .map(Vec::as_slice)
     }
 
     fn reset_sequence(&self) -> String {
@@ -6254,12 +6266,18 @@ fn apply_style_based_on_metadata(
     name: &[u8],
     target_symlink: Option<&PathData>,
 ) -> Vec<u8> {
+    if target_symlink.is_some() && md_option.is_none() {
+        return match style_manager
+            .raw_missing_target_sequence()
+            .map(<[u8]>::to_vec)
+        {
+            Some(sequence) => style_manager.apply_sequence(&sequence, name),
+            None => name.to_owned(),
+        };
+    }
+
     let mut raw_sequence = None;
-    let mut style = if target_symlink.is_some() && md_option.is_none() {
-        ls_colors.style_for_indicator(lscolors::Indicator::MissingFile)
-    } else {
-        None
-    };
+    let mut style = None;
     let actual_path = target_symlink.unwrap_or(path);
     let symlink_target_metadata = if target_symlink.is_none()
         && style_manager.symlink_as_target

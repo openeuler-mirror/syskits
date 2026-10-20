@@ -103,6 +103,36 @@ fn ls_hyperlink_normalizes_dangling_target_components() {
     assert_eq!(syskits.stdout, gnu.stdout);
 }
 
+#[cfg(unix)]
+#[test]
+fn ls_ln_target_leaves_unconfigured_dangling_link_uncolored() {
+    use std::os::unix::fs::symlink;
+
+    let directory = TempDir::new().expect("tempdir");
+    symlink("missing", directory.path().join("orphan")).expect("create dangling symlink");
+    let arguments = ["--color=always", "-ln", "--time-style=+%s", "orphan"];
+    let gnu = Command::new("/usr/bin/ls")
+        .current_dir(directory.path())
+        .env("LC_ALL", "C")
+        .env("LS_COLORS", "ln=target:fi=32")
+        .args(arguments)
+        .output()
+        .expect("run GNU ls");
+    let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(directory.path())
+        .env("LC_ALL", "C")
+        .env("LS_COLORS", "ln=target:fi=32")
+        .arg("ls")
+        .args(arguments)
+        .output()
+        .expect("run syskits ls");
+
+    assert_eq!(syskits.status.code(), gnu.status.code());
+    assert_eq!(syskits.stderr, gnu.stderr);
+    assert_eq!(syskits.stdout, gnu.stdout);
+    assert!(!syskits.stdout.contains(&b'\x1b'));
+}
+
 #[test]
 fn ls_localized_long_output_matches_gnu() {
     let Some(locale) = installed_german_locale() else {

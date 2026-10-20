@@ -4193,12 +4193,20 @@ fn display_grid_by_format_long_type<W: Write>(
             let more_info =
                 display_additional_leading_info(item, &padding_collection, config, out)?;
 
+            if config.is_dired {
+                dired::dired_indent(out)?;
+                dired.padding += 2 + more_info.len();
+            }
             write!(out, "{more_info}")?;
         }
         #[cfg(not(unix))]
         if config.is_alloc_size {
             let more_info =
                 display_additional_leading_info(item, &padding_collection, config, out)?;
+            if config.is_dired {
+                dired::dired_indent(out)?;
+                dired.padding += 2 + more_info.len();
+            }
             write!(out, "{more_info}")?;
         }
         display_item_long(
@@ -4579,7 +4587,11 @@ fn display_item_long<W: Write>(
     let mut output_display = Vec::new();
     let item_prefix = style_manager.begin_item();
     output_display.extend_from_slice(item_prefix.as_bytes());
-    if ls_config.is_dired {
+    #[cfg(unix)]
+    let has_leading_info = ls_config.is_inode || ls_config.is_alloc_size;
+    #[cfg(not(unix))]
+    let has_leading_info = ls_config.is_alloc_size;
+    if ls_config.is_dired && !has_leading_info {
         output_display.extend_from_slice(b"  ");
     }
     if let Some(md) = item.get_metadata(output) {

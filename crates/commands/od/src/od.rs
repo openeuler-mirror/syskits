@@ -511,8 +511,8 @@ struct OdCtypeLocale {
 
 impl OdCtypeLocale {
     fn activate() -> Option<Self> {
-        let locale =
-            unsafe { libc::newlocale(libc::LC_CTYPE_MASK, c"".as_ptr(), std::ptr::null_mut()) };
+        let category_mask = libc::LC_CTYPE_MASK | libc::LC_NUMERIC_MASK;
+        let locale = unsafe { libc::newlocale(category_mask, c"".as_ptr(), std::ptr::null_mut()) };
         if locale.is_null() {
             return None;
         }

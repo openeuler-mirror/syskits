@@ -5621,6 +5621,7 @@ struct StyleManager {
     clear_to_eol: String,
     style_count: usize,
     raw_indicator_styles: HashMap<usize, String>,
+    raw_indicator_sequences: HashMap<lscolors::Indicator, String>,
     raw_suffix_styles: Vec<RawSuffixStyle>,
     #[cfg(target_os = "linux")]
     signal_guard: Option<ColorSignalGuard>,
@@ -5717,7 +5718,6 @@ impl Drop for ColorSignalGuard {
 
 struct RawSuffixStyle {
     suffix: String,
-    style: Style,
     sequence: String,
     exact_match: bool,
     ignored: bool,
@@ -5739,6 +5739,21 @@ impl StyleManager {
             clear_to_eol: "\x1b[K".into(),
             style_count: 0,
             raw_indicator_styles: HashMap::new(),
+            raw_indicator_sequences: HashMap::from([
+                (lscolors::Indicator::ExecutableFile, "01;32".into()),
+                (lscolors::Indicator::Setgid, "30;43".into()),
+                (lscolors::Indicator::Setuid, "37;41".into()),
+                (lscolors::Indicator::Directory, "01;34".into()),
+                (lscolors::Indicator::Sticky, "37;44".into()),
+                (lscolors::Indicator::OtherWritable, "34;42".into()),
+                (lscolors::Indicator::StickyAndOtherWritable, "30;42".into()),
+                (lscolors::Indicator::SymbolicLink, "01;36".into()),
+                (lscolors::Indicator::BlockDevice, "01;33".into()),
+                (lscolors::Indicator::CharacterDevice, "01;33".into()),
+                (lscolors::Indicator::Door, "01;35".into()),
+                (lscolors::Indicator::FIFO, "33".into()),
+                (lscolors::Indicator::Socket, "01;35".into()),
+            ]),
             raw_suffix_styles: Vec::new(),
             #[cfg(target_os = "linux")]
             signal_guard: None,
@@ -5796,23 +5811,22 @@ impl StyleManager {
                 "fi" => manager.regular_file_sequence = Some(value.into()),
                 "cl" => manager.clear_to_eol = value.into(),
                 _ => {
-                    let Some(parsed_style) = Style::from_ansi_sequence(value) else {
-                        continue;
-                    };
                     if let Some(suffix) = key.strip_prefix('*') {
                         manager.raw_suffix_styles.push(RawSuffixStyle {
                             suffix: suffix.into(),
-                            style: parsed_style,
                             sequence: value.into(),
                             exact_match: false,
                             ignored: false,
                         });
-                    } else if let Some(indicator) = lscolors::Indicator::from(key)
-                        && let Some(style) = ls_colors.style_for_indicator(indicator)
-                    {
+                    } else if let Some(indicator) = lscolors::Indicator::from(key) {
                         manager
-                            .raw_indicator_styles
-                            .insert(style as *const Style as usize, value.into());
+                            .raw_indicator_sequences
+                            .insert(indicator, value.into());
+                        if let Some(style) = ls_colors.style_for_indicator(indicator) {
+                            manager
+                                .raw_indicator_styles
+                                .insert(style as *const Style as usize, value.into());
+                        }
                     }
                 }
             }
@@ -5855,7 +5869,7 @@ impl StyleManager {
         }
     }
 
-    fn suffix_style_for_path(&self, path: &Path) -> Option<&Style> {
+    fn suffix_sequence_for_path(&self, path: &Path) -> Option<&str> {
         #[cfg(unix)]
         let filename = path.file_name()?.as_bytes();
         #[cfg(windows)]
@@ -5873,8 +5887,87 @@ impl StyleManager {
             } else {
                 ending.eq_ignore_ascii_case(rule.suffix.as_bytes())
             };
-            matches.then_some(&rule.style)
+            matches.then_some(rule.sequence.as_str())
         })
+    }
+
+    fn indicator_is_colored(&self, indicator: lscolors::Indicator) -> bool {
+        self.raw_indicator_sequences
+            .get(&indicator)
+            .is_some_and(|sequence| !matches!(sequence.as_str(), "" | "0" | "00"))
+    }
+
+    #[cfg(unix)]
+    fn raw_regular_special_sequence(&self, metadata: &Metadata, path: &Path) -> Option<&str> {
+        let mode = metadata.mode();
+        let indicator =
+            if mode & 0o4000 != 0 && self.indicator_is_colored(lscolors::Indicator::Setuid) {
+                Some(lscolors::Indicator::Setuid)
+            } else if mode & 0o2000 != 0 && self.indicator_is_colored(lscolors::Indicator::Setgid) {
+                Some(lscolors::Indicator::Setgid)
+            } else if self.indicator_is_colored(lscolors::Indicator::Capabilities)
+                && has_capability(path)
+            {
+                Some(lscolors::Indicator::Capabilities)
+            } else if file_is_executable(metadata)
+                && self.indicator_is_colored(lscolors::Indicator::ExecutableFile)
+            {
+                Some(lscolors::Indicator::ExecutableFile)
+            } else if metadata.nlink() > 1
+                && self.indicator_is_colored(lscolors::Indicator::MultipleHardLinks)
+            {
+                Some(lscolors::Indicator::MultipleHardLinks)
+            } else {
+                None
+            }?;
+
+        self.raw_indicator_sequences
+            .get(&indicator)
+            .map(String::as_str)
+    }
+
+    #[cfg(unix)]
+    fn raw_non_regular_sequence(&self, metadata: &Metadata, path: &Path) -> Option<&str> {
+        let file_type = metadata.file_type();
+        let indicator = if file_type.is_dir() {
+            let mode = metadata.mode();
+            if mode & 0o1000 != 0
+                && mode & 0o0002 != 0
+                && self.indicator_is_colored(lscolors::Indicator::StickyAndOtherWritable)
+            {
+                lscolors::Indicator::StickyAndOtherWritable
+            } else if mode & 0o0002 != 0
+                && self.indicator_is_colored(lscolors::Indicator::OtherWritable)
+            {
+                lscolors::Indicator::OtherWritable
+            } else if mode & 0o1000 != 0 && self.indicator_is_colored(lscolors::Indicator::Sticky) {
+                lscolors::Indicator::Sticky
+            } else {
+                lscolors::Indicator::Directory
+            }
+        } else if file_type.is_symlink() {
+            if !path.exists()
+                && self.indicator_is_colored(lscolors::Indicator::OrphanedSymbolicLink)
+            {
+                lscolors::Indicator::OrphanedSymbolicLink
+            } else {
+                lscolors::Indicator::SymbolicLink
+            }
+        } else if file_type.is_fifo() {
+            lscolors::Indicator::FIFO
+        } else if file_type.is_socket() {
+            lscolors::Indicator::Socket
+        } else if file_type.is_block_device() {
+            lscolors::Indicator::BlockDevice
+        } else if file_type.is_char_device() {
+            lscolors::Indicator::CharacterDevice
+        } else {
+            return None;
+        };
+
+        self.raw_indicator_sequences
+            .get(&indicator)
+            .map(String::as_str)
     }
 
     fn reset_sequence(&self) -> String {
@@ -5944,11 +6037,6 @@ impl StyleManager {
         self.raw_indicator_styles
             .get(&(style as *const Style as usize))
             .map(String::as_str)
-            .or_else(|| {
-                self.raw_suffix_styles.iter().rev().find_map(|rule| {
-                    (rule.style == *style && !rule.ignored).then_some(rule.sequence.as_str())
-                })
-            })
     }
 
     fn apply_style(&mut self, new_style: &Style, name: &[u8]) -> Vec<u8> {
@@ -6030,7 +6118,6 @@ fn apply_style_based_on_metadata(
     name: &[u8],
     target_symlink: Option<&PathData>,
 ) -> Vec<u8> {
-    let owned_style;
     let mut raw_sequence = None;
     let mut style = if target_symlink.is_some() && md_option.is_none() {
         ls_colors.style_for_indicator(lscolors::Indicator::MissingFile)
@@ -6053,22 +6140,24 @@ fn apply_style_based_on_metadata(
 
     if style.is_none() {
         if let Some(metadata) = md_option.filter(|metadata| metadata.is_file()) {
-            let has_capabilities = ls_colors
-                .style_for_indicator(lscolors::Indicator::Capabilities)
-                .is_some()
-                && has_capability(&actual_path.p_buf);
-            if let Some(special_style) =
-                regular_file_special_style(metadata, ls_colors, has_capabilities)
+            if let Some(sequence) =
+                style_manager.raw_regular_special_sequence(metadata, &actual_path.p_buf)
             {
-                style = Some(special_style);
-            } else if let Some(suffix_style) = style_manager
-                .suffix_style_for_path(&actual_path.p_buf)
-                .cloned()
+                raw_sequence = Some(sequence.into());
+            } else if let Some(sequence) =
+                style_manager.suffix_sequence_for_path(&actual_path.p_buf)
             {
-                owned_style = suffix_style;
-                style = Some(&owned_style);
+                raw_sequence = Some(sequence.into());
             } else {
                 raw_sequence = style_manager.regular_file_sequence.clone();
+            }
+        } else if let Some(metadata) = md_option {
+            if let Some(sequence) =
+                style_manager.raw_non_regular_sequence(metadata, &actual_path.p_buf)
+            {
+                raw_sequence = Some(sequence.into());
+            } else {
+                style = ls_colors.style_for_path_with_metadata(&actual_path.p_buf, md_option);
             }
         } else {
             style = ls_colors.style_for_path_with_metadata(&actual_path.p_buf, md_option);
@@ -6082,48 +6171,6 @@ fn apply_style_based_on_metadata(
     } else {
         name.to_owned()
     }
-}
-
-fn regular_file_special_style<'a>(
-    metadata: &Metadata,
-    ls_colors: &'a LsColors,
-    has_capabilities: bool,
-) -> Option<&'a Style> {
-    #[cfg(unix)]
-    {
-        let mode = metadata.mode();
-        if mode & 0o4000 != 0 {
-            if let Some(style) = ls_colors.style_for_indicator(lscolors::Indicator::Setuid) {
-                return Some(style);
-            }
-        }
-        if mode & 0o2000 != 0 {
-            if let Some(style) = ls_colors.style_for_indicator(lscolors::Indicator::Setgid) {
-                return Some(style);
-            }
-        }
-    }
-
-    if has_capabilities {
-        if let Some(style) = ls_colors.style_for_indicator(lscolors::Indicator::Capabilities) {
-            return Some(style);
-        }
-    }
-
-    if file_is_executable(metadata) {
-        if let Some(style) = ls_colors.style_for_indicator(lscolors::Indicator::ExecutableFile) {
-            return Some(style);
-        }
-    }
-
-    #[cfg(unix)]
-    if metadata.nlink() > 1 {
-        if let Some(style) = ls_colors.style_for_indicator(lscolors::Indicator::MultipleHardLinks) {
-            return Some(style);
-        }
-    }
-
-    None
 }
 
 /// 根据确定的风格为提供的名称着色
@@ -6782,6 +6829,8 @@ mod tests {
     fn setuid_color_precedes_capability_color() {
         use std::os::unix::fs::PermissionsExt;
 
+        let _env_lock = lock_env();
+        let _ls_colors = EnvVarGuard::set("LS_COLORS", "su=31:ca=32:ex=33:fi=34");
         let path =
             std::env::temp_dir().join(format!("ct-ls-color-priority-{}", std::process::id()));
         fs::write(&path, b"").expect("create color priority fixture");
@@ -6789,14 +6838,47 @@ mod tests {
             .expect("set setuid fixture mode");
         let metadata = fs::metadata(&path).expect("read fixture metadata");
         let ls_colors = LsColors::from_string("su=31:ca=32:ex=33:fi=34");
-        let selected = regular_file_special_style(&metadata, &ls_colors, true)
-            .expect("setuid style should be selected");
-        let setuid = ls_colors
-            .style_for_indicator(lscolors::Indicator::Setuid)
-            .expect("setuid style");
+        let manager = StyleManager::new(Some(&ls_colors));
+        let selected = manager
+            .raw_regular_special_sequence(&metadata, &path)
+            .expect("setuid sequence should be selected");
         fs::remove_file(path).expect("remove color priority fixture");
 
-        assert_eq!(selected, setuid);
+        assert_eq!(selected, "31");
+    }
+
+    #[test]
+    fn opaque_indicator_sequence_is_preserved() {
+        let _env_lock = lock_env();
+        let _ls_colors = EnvVarGuard::set("LS_COLORS", "lc=[:rc=]:di=D");
+        let ls_colors = LsColors::from_string("lc=[:rc=]:di=D");
+        let mut manager = StyleManager::new(Some(&ls_colors));
+
+        assert_eq!(
+            manager.apply_sequence(
+                manager
+                    .raw_indicator_sequences
+                    .get(&lscolors::Indicator::Directory)
+                    .expect("raw directory sequence")
+                    .clone()
+                    .as_str(),
+                b"sub",
+            ),
+            b"[0][D]sub[0]"
+        );
+    }
+
+    #[test]
+    fn opaque_suffix_sequence_is_preserved() {
+        let _env_lock = lock_env();
+        let _ls_colors = EnvVarGuard::set("LS_COLORS", "*.opaque=D");
+        let ls_colors = LsColors::from_string("*.opaque=D");
+        let manager = StyleManager::new(Some(&ls_colors));
+
+        assert_eq!(
+            manager.suffix_sequence_for_path(Path::new("file.opaque")),
+            Some("D")
+        );
     }
 
     #[test]

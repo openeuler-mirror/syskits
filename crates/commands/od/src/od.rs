@@ -56,7 +56,6 @@ mod parse_formats;
 mod parse_inputs;
 mod parse_nrofbytes;
 mod partialreader;
-mod peekreader;
 mod prn_format;
 
 use rust_i18n::t;
@@ -75,7 +74,6 @@ use crate::parse_formats::{ParsedFormatterItemInfo, od_parse_format_flags};
 use crate::parse_inputs::{CommandLineInputs, od_parse_inputs};
 use crate::parse_nrofbytes::od_parse_number_of_bytes;
 use crate::partialreader::PartialReader;
-use crate::peekreader::{PeekRead, PeekReader};
 use crate::prn_format::format_ascii_dump;
 use clap::ArgAction;
 use clap::builder::ValueParser;
@@ -92,8 +90,6 @@ use sys_locale::get_locale;
 
 #[cfg(all(target_os = "linux", not(test)))]
 use std::sync::atomic::{AtomicBool, Ordering};
-
-const OD_PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
 
 #[cfg(all(target_os = "linux", not(test)))]
 static OD_INHERITED_SIGPIPE_IGNORED: AtomicBool = AtomicBool::new(false);
@@ -533,7 +529,7 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
     let mut input_offset =
         OdInputOffset::new(od_settings.radix, od_settings.skip_bytes, od_settings.label);
 
-    let mut input = od_open_input_peek_reader(
+    let mut input = od_open_input_reader(
         &od_settings.input_strings,
         od_settings.skip_bytes,
         od_settings.read_bytes,
@@ -563,13 +559,9 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
         };
     }
 
-    let mut input_decoder = OdInputDecoder::new(
-        &mut input,
-        od_settings.line_bytes,
-        OD_PEEK_BUFFER_SIZE,
-        od_settings.byte_order,
-    )
-    .map_err(|_| CtSimpleError::new(1, "memory exhausted"))?;
+    let mut input_decoder =
+        OdInputDecoder::new(&mut input, od_settings.line_bytes, od_settings.byte_order)
+            .map_err(|_| CtSimpleError::new(1, "memory exhausted"))?;
 
     let output_info = OutputInfo::new(
         od_settings.line_bytes,
@@ -931,7 +923,7 @@ fn odexec<I, W>(
     output: &mut W,
 ) -> CTResult<()>
 where
-    I: PeekRead + HasError,
+    I: Read + HasError,
     W: IoWrite,
 {
     let mut state = DuplicateState::new();
@@ -952,14 +944,12 @@ where
 
 struct DuplicateState {
     is_duplicate: bool,
-    previous_bytes: Vec<u8>,
 }
 
 impl DuplicateState {
     fn new() -> Self {
         Self {
             is_duplicate: false,
-            previous_bytes: Vec::new(),
         }
     }
 }
@@ -969,14 +959,14 @@ enum LineProcessResult {
     Continue,
 }
 
-fn od_process_next_line<I: PeekRead + HasError, W: IoWrite>(
+fn od_process_next_line<I: Read + HasError, W: IoWrite>(
     input_offset: &mut OdInputOffset,
     input_decoder: &mut OdInputDecoder<I>,
     output_info: &OutputInfo,
     state: &mut DuplicateState,
     output: &mut W,
 ) -> CTResult<LineProcessResult> {
-    match input_decoder.od_peek_read() {
+    match input_decoder.od_read_block() {
         Ok(mut memory_decoder) => {
             let length = memory_decoder.length();
 
@@ -1031,16 +1021,13 @@ fn od_process_line_content<W: IoWrite>(
     length: usize,
     output: &mut W,
 ) -> CTResult<()> {
-    if is_duplicate_line(memory_decoder, output_info, state, length) {
+    if is_duplicate_line(memory_decoder, output_info, length) {
         if !state.is_duplicate {
             state.is_duplicate = true;
             od_handle_stdout_result(writeln!(output, "*"));
         }
     } else {
         state.is_duplicate = false;
-        if length == output_info.byte_size_line {
-            memory_decoder.clone_buffer(&mut state.previous_bytes);
-        }
         od_print_bytes(
             &input_offset.format_byte_offset(),
             memory_decoder,
@@ -1055,12 +1042,11 @@ fn od_process_line_content<W: IoWrite>(
 fn is_duplicate_line(
     memory_decoder: &OdMemoryDecoder,
     output_info: &OutputInfo,
-    state: &DuplicateState,
     length: usize,
 ) -> bool {
     !output_info.output_duplicates
         && length == output_info.byte_size_line
-        && memory_decoder.get_buffer(0) == &state.previous_bytes[..]
+        && memory_decoder.previous_buffer() == Some(memory_decoder.get_buffer(0))
 }
 
 fn od_format_line(
@@ -1129,7 +1115,7 @@ fn od_format_bytes(
             output_text.push_str(&func(&value));
         }
         OdFormatWriter::MultibyteWriter(func) => {
-            output_text.push_str(&func(input_decoder.get_full_buffer(byte_pos)));
+            output_text.push_str(&func(input_decoder.get_buffer(byte_pos)));
         }
     }
 }
@@ -1236,11 +1222,11 @@ fn od_collect_views(
     (views, classic_text)
 }
 
-fn od_open_input_peek_reader(
+fn od_open_input_reader(
     input_strings: &[OsString],
     skip_bytes: u64,
     read_bytes: Option<u64>,
-) -> PeekReader<PartialReader<OdMultifileReader>> {
+) -> PartialReader<OdMultifileReader> {
     let inputs = input_strings
         .iter()
         .map(|input| {
@@ -1259,7 +1245,7 @@ fn od_open_input_peek_reader(
         read_bytes,
         OdMultifileReader::skip_regular_files,
     );
-    PeekReader::new(pr)
+    pr
 }
 
 fn od_string_classic_line(offset: u64, radix: OdRadix, buffer: &[u8]) -> String {
@@ -1377,7 +1363,7 @@ pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
 
     let mut input_offset =
         OdInputOffset::new(od_settings.radix, od_settings.skip_bytes, od_settings.label);
-    let mut input = od_open_input_peek_reader(
+    let mut input = od_open_input_reader(
         &od_settings.input_strings,
         od_settings.skip_bytes,
         od_settings.read_bytes,
@@ -1397,13 +1383,9 @@ pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
         return Ok(semantic);
     }
 
-    let mut input_decoder = OdInputDecoder::new(
-        &mut input,
-        od_settings.line_bytes,
-        OD_PEEK_BUFFER_SIZE,
-        od_settings.byte_order,
-    )
-    .map_err(|_| CtSimpleError::new(1, "memory exhausted"))?;
+    let mut input_decoder =
+        OdInputDecoder::new(&mut input, od_settings.line_bytes, od_settings.byte_order)
+            .map_err(|_| CtSimpleError::new(1, "memory exhausted"))?;
     let output_info = OutputInfo::new(
         od_settings.line_bytes,
         &od_settings.formats[..],
@@ -1415,7 +1397,7 @@ pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
     let mut state = DuplicateState::new();
 
     loop {
-        match input_decoder.od_peek_read() {
+        match input_decoder.od_read_block() {
             Ok(mut memory_decoder) => {
                 let length = memory_decoder.length();
 
@@ -1442,7 +1424,7 @@ pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
 
                 od_handle_incomplete_line(&mut memory_decoder, length, &output_info);
 
-                if is_duplicate_line(&memory_decoder, &output_info, &state, length) {
+                if is_duplicate_line(&memory_decoder, &output_info, length) {
                     if !state.is_duplicate {
                         state.is_duplicate = true;
                         classic_text.push_str("*\n");
@@ -1457,9 +1439,6 @@ pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
                     }
                 } else {
                     state.is_duplicate = false;
-                    if length == output_info.byte_size_line {
-                        memory_decoder.clone_buffer(&mut state.previous_bytes);
-                    }
                     let prefix = input_offset.format_byte_offset();
                     let bytes = memory_decoder.get_buffer(0)[..length].to_vec();
                     let (views, rendered) =
@@ -1705,10 +1684,8 @@ mod tests {
         #[test]
         fn test_odexec_empty_input() {
             let mut input_offset = OdInputOffset::new(OdRadix::Octal, 0, None);
-            let mut input = od_open_input_peek_reader(&[], 0, None);
-            let mut input_decoder =
-                OdInputDecoder::new(&mut input, 16, OD_PEEK_BUFFER_SIZE, ByteOrder::Native)
-                    .unwrap();
+            let mut input = od_open_input_reader(&[], 0, None);
+            let mut input_decoder = OdInputDecoder::new(&mut input, 16, ByteOrder::Native).unwrap();
             let output_info = OutputInfo::new(16, &[], false);
 
             let mut output = Vec::new();

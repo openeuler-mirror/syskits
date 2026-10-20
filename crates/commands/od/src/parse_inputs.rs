@@ -101,6 +101,8 @@ fn has_offset_incompatible_options(matches: &dyn CommandLineOpts) -> bool {
         od_options::OD_ADDRESS_RADIX,
         od_options::OD_READ_BYTES,
         od_options::OD_SKIP_BYTES,
+        od_options::OD_STRINGS,
+        od_options::OD_STRINGS_SHORT,
         od_options::OD_FORMAT,
         od_options::OD_OUTPUT_DUPLICATES,
         od_options::OD_WIDTH,
@@ -500,6 +502,20 @@ mod tests {
             result,
             CommandLineInputs::FileNames(vec!["file1".to_string(), "+xyz".to_string()])
         );
+    }
+
+    #[test]
+    fn test_strings_option_disables_old_style_offset() {
+        for option in [od_options::OD_STRINGS_SHORT, od_options::OD_STRINGS] {
+            let mut mock_opts = MockCommandLineOpts::new();
+            mock_opts.set_inputs(vec!["+10"]);
+            mock_opts.opts = vec![option];
+
+            assert_eq!(
+                od_parse_inputs(&mock_opts).unwrap(),
+                CommandLineInputs::FileNames(vec!["+10".to_string()])
+            );
+        }
     }
 
     #[test]

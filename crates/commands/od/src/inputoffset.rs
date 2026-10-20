@@ -8,6 +8,8 @@
  * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+use std::io::{self, Write};
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum OdRadix {
     Decimal,     // 十进制
@@ -74,10 +76,12 @@ impl OdInputOffset {
 
     /// 打印字节偏移量后跟换行符，如果设置了 `Radix::NoPrefix` 且没有使用标签（--traditional），
     /// 则不打印任何内容。
-    pub fn print_final_offset(&self) {
+    pub fn print_final_offset(&self) -> io::Result<()> {
         if self.radix != OdRadix::NoPrefix || self.label.is_some() {
-            println!("{}", self.format_byte_offset());
+            let mut stdout = io::stdout().lock();
+            writeln!(stdout, "{}", self.format_byte_offset())?;
         }
+        Ok(())
     }
 }
 

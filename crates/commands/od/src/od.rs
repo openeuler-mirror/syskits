@@ -82,7 +82,7 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgMatches, Command, crate_version, parser::ValueSource};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, strip_errno};
 use ctcore::ct_parse_size::ParseSizeError;
 use ctcore::libc;
 use ctcore::{ct_show_error, ct_show_warning};
@@ -143,17 +143,32 @@ fn od_prepare_closed_stdin(_inputs: &[OsString]) -> bool {
     false
 }
 
+fn od_exit_after_stdout_error(error: std::io::Error) -> ! {
+    ct_show_error!("write error: {}", strip_errno(&error));
+    let _ = std::io::Write::flush(&mut std::io::stderr());
+
+    #[cfg(unix)]
+    unsafe {
+        libc::_exit(1);
+    }
+
+    #[cfg(not(unix))]
+    std::process::exit(1);
+}
+
+fn od_handle_stdout_result(result: std::io::Result<()>) {
+    if let Err(error) = result {
+        od_exit_after_stdout_error(error);
+    }
+}
+
 #[cfg(unix)]
 fn od_exit_for_closed_stdout() {
     if !ctcore::ct_stdout_was_closed() {
         return;
     }
 
-    ct_show_error!("write error: Bad file descriptor");
-    let _ = std::io::Write::flush(&mut std::io::stderr());
-    unsafe {
-        libc::_exit(1);
-    }
+    od_exit_after_stdout_error(std::io::Error::from_raw_os_error(libc::EBADF));
 }
 
 #[cfg(not(unix))]
@@ -705,12 +720,13 @@ fn print_string_record(offset: u64, radix: OdRadix, buffer: &[u8]) -> CTResult<(
     };
 
     if !address.is_empty() {
-        write!(stdout, "{address} ").map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+        od_handle_stdout_result(write!(stdout, "{address} "));
     }
-    stdout
-        .write_all(buffer)
-        .and_then(|()| stdout.write_all(b"\n"))
-        .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+    od_handle_stdout_result(
+        stdout
+            .write_all(buffer)
+            .and_then(|()| stdout.write_all(b"\n")),
+    );
     Ok(())
 }
 
@@ -866,7 +882,7 @@ fn od_process_next_line<I: PeekRead + HasError>(
 
             if length == 0 {
                 if input_decoder.has_input() {
-                    input_offset.print_final_offset();
+                    od_handle_stdout_result(input_offset.print_final_offset());
                 }
                 return Ok(LineProcessResult::EndOfFile);
             }
@@ -888,7 +904,7 @@ fn od_process_next_line<I: PeekRead + HasError>(
                 ct_show_error!("cannot skip past end of combined input");
             } else {
                 ct_show_error!("{}", e);
-                input_offset.print_final_offset();
+                od_handle_stdout_result(input_offset.print_final_offset());
             }
             Err(1.into())
         }
@@ -919,7 +935,7 @@ fn od_process_line_content(
     if is_duplicate_line(memory_decoder, output_info, state, length) {
         if !state.is_duplicate {
             state.is_duplicate = true;
-            writeln!(stdout, "*").map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+            od_handle_stdout_result(writeln!(stdout, "*"));
         }
     } else {
         state.is_duplicate = false;
@@ -1028,15 +1044,20 @@ fn od_print_formatted_line(prefix: &str, output_bytes: &[u8], is_first: bool) ->
     let mut stdout = std::io::stdout().lock();
 
     if is_first {
-        write!(stdout, "{prefix}").map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+        od_handle_stdout_result(write!(stdout, "{prefix}"));
     } else {
-        write!(stdout, "{:>width$}", "", width = prefix.chars().count())
-            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+        od_handle_stdout_result(write!(
+            stdout,
+            "{:>width$}",
+            "",
+            width = prefix.chars().count()
+        ));
     }
-    stdout
-        .write_all(output_bytes)
-        .and_then(|()| stdout.write_all(b"\n"))
-        .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+    od_handle_stdout_result(
+        stdout
+            .write_all(output_bytes)
+            .and_then(|()| stdout.write_all(b"\n")),
+    );
     Ok(())
 }
 

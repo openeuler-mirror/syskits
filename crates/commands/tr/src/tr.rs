@@ -339,6 +339,7 @@ fn tr_activate_message_locale() {}
 
 #[derive(Default)]
 pub struct Tr;
+
 impl Tool for Tr {
     fn name(&self) -> &'static str {
         "tr"
@@ -355,6 +356,7 @@ impl Tool for Tr {
         // 用 StrictWriter 把 stdout 的 BufWriter 包装起来再传给底层
         let mut buffered_writer = StrictWriter {
             inner: BufWriter::new(stdout),
+            initially_closed: ctcore::ct_stdout_was_closed(),
         };
         tr_main(&mut stdin, &mut buffered_writer, args.iter().cloned())
     }
@@ -466,6 +468,17 @@ fn tr_option_error_diagnostic(error: &clap::Error, args: &[OsString]) -> Option<
 
 struct StrictWriter<W: Write> {
     inner: W,
+    initially_closed: bool,
+}
+
+#[cfg(unix)]
+fn tr_closed_stdout_error() -> std::io::Error {
+    std::io::Error::from_raw_os_error(ctcore::libc::EBADF)
+}
+
+#[cfg(not(unix))]
+fn tr_closed_stdout_error() -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::BrokenPipe, "standard output is closed")
 }
 
 fn tr_system_error_detail(error: &std::io::Error) -> String {
@@ -529,10 +542,16 @@ where
 
 impl<W: Write> Write for StrictWriter<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if self.initially_closed {
+            return Err(tr_closed_stdout_error());
+        }
         self.inner.write(buf)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
+        if self.initially_closed {
+            return Err(tr_closed_stdout_error());
+        }
         self.inner.flush()
     }
 }
@@ -551,7 +570,10 @@ fn tr_process<R: BufRead, W: Write>(
     flags: TrFlags,
 ) -> CTResult<()> {
     // 把原始的 writer 包装进我们的防爆阀中
-    let mut strict_writer = StrictWriter { inner: writer };
+    let mut strict_writer = StrictWriter {
+        inner: writer,
+        initially_closed: false,
+    };
 
     let is_translating = !flags.is_delete_flag && flags.sets.len() >= 2;
     let mut sets_iter = flags.sets.iter().map(|set| set.as_encoded_bytes());
@@ -655,6 +677,14 @@ fn tr_process<R: BufRead, W: Write>(
                 ));
             }
         }
+    }
+
+    // Rust may sanitize a closed descriptor to /dev/null and then report EOF.
+    // Preserve GNU's EBADF after all argument and set validation has completed.
+    #[cfg(unix)]
+    if ctcore::ct_stdin_was_closed() {
+        let error = std::io::Error::from_raw_os_error(ctcore::libc::EBADF);
+        return Err(tr_io_error(t!("tr.errors.read_error"), &error));
     }
 
     // 参数与集合规则验证完成后再触发输入读取，保持 GNU tr 的错误时机。

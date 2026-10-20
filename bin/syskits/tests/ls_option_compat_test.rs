@@ -123,3 +123,40 @@ fn ls_unknown_option_diagnostic_omits_clap_usage() {
     assert!(stderr.contains("unrecognized option '--definitely-unknown'"));
     assert!(!stderr.lines().any(|line| line.starts_with("Usage:")));
 }
+
+#[test]
+fn ls_unknown_color_prefix_reports_prefix_before_parse_failure() {
+    let directory = TempDir::new().expect("tempdir");
+    fs::write(directory.path().join("a"), b"").expect("create fixture");
+    let gnu = Command::new("/usr/bin/ls")
+        .current_dir(directory.path())
+        .env("LC_ALL", "C")
+        .env("LS_COLORS", "xx=31")
+        .args(["--color=always", "-1", "a"])
+        .output()
+        .expect("run GNU ls");
+    let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(directory.path())
+        .env("LC_ALL", "C")
+        .env("LS_COLORS", "xx=31")
+        .args(["ls", "--color=always", "-1", "a"])
+        .output()
+        .expect("run syskits ls");
+    let messages = |output: &Output| {
+        String::from_utf8_lossy(&output.stderr)
+            .lines()
+            .map(|line| line.split_once(": ").map_or(line, |(_, message)| message))
+            .map(str::to_owned)
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(syskits.status.code(), gnu.status.code());
+    assert_eq!(messages(&syskits), messages(&gnu));
+    assert_eq!(
+        messages(&syskits),
+        [
+            "unrecognized prefix: 'xx'",
+            "unparsable value for LS_COLORS environment variable"
+        ]
+    );
+}

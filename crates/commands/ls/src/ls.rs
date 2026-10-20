@@ -1171,27 +1171,53 @@ fn extract_color(options: &clap::ArgMatches) -> bool {
 
 fn load_ls_colors() -> Option<LsColors> {
     match std::env::var_os("LS_COLORS") {
-        Some(value) if !value.is_empty() => match value.to_str() {
-            Some(value) if ls_colors_is_valid(value.as_bytes()) => {
-                Some(LsColors::from_string(value))
+        Some(value) if !value.is_empty() => {
+            let parsed = value
+                .to_str()
+                .ok_or(LsColorsValidationError::Unparsable)
+                .and_then(|value| {
+                    ls_colors_validate(value.as_bytes()).map(|()| LsColors::from_string(value))
+                });
+            match parsed {
+                Ok(colors) => Some(colors),
+                Err(error) => {
+                    if let LsColorsValidationError::UnrecognizedPrefix(prefix) = error {
+                        ct_show_error!(
+                            "{}",
+                            ls_localized_environment_diagnostic(
+                                "unrecognized prefix: %s",
+                                Some(OsStr::from_bytes(&prefix)),
+                            )
+                        );
+                    }
+                    ct_show_error!(
+                        "{}",
+                        ls_localized_environment_diagnostic(
+                            "unparsable value for LS_COLORS environment variable",
+                            None,
+                        )
+                    );
+                    None
+                }
             }
-            _ => {
-                ct_show_error!(
-                    "{}",
-                    ls_localized_environment_diagnostic(
-                        "unparsable value for LS_COLORS environment variable",
-                        None,
-                    )
-                );
-                None
-            }
-        },
+        }
         _ if is_color_compatible_term() => Some(LsColors::default()),
         _ => None,
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum LsColorsValidationError {
+    UnrecognizedPrefix([u8; 2]),
+    Unparsable,
+}
+
+#[cfg(test)]
 fn ls_colors_is_valid(value: &[u8]) -> bool {
+    ls_colors_validate(value).is_ok()
+}
+
+fn ls_colors_validate(value: &[u8]) -> Result<(), LsColorsValidationError> {
     const INDICATORS: [&[u8; 2]; 24] = [
         b"lc", b"rc", b"ec", b"rs", b"no", b"fi", b"di", b"ln", b"pi", b"so", b"bd", b"cd", b"mi",
         b"or", b"ex", b"do", b"su", b"sg", b"st", b"ow", b"tw", b"ca", b"mh", b"cl",
@@ -1209,32 +1235,36 @@ fn ls_colors_is_valid(value: &[u8]) -> bool {
             if !ls_colors_scan_funky_string(value, &mut position, true)
                 || value.get(position) != Some(&b'=')
             {
-                return false;
+                return Err(LsColorsValidationError::Unparsable);
             }
             position += 1;
         } else {
             let Some(label) = value.get(position..position + 2) else {
-                return false;
+                return Err(LsColorsValidationError::Unparsable);
             };
+            if value.get(position + 2) != Some(&b'=') {
+                return Err(LsColorsValidationError::Unparsable);
+            }
             if !INDICATORS
                 .iter()
                 .any(|indicator| indicator.as_slice() == label)
-                || value.get(position + 2) != Some(&b'=')
             {
-                return false;
+                return Err(LsColorsValidationError::UnrecognizedPrefix([
+                    label[0], label[1],
+                ]));
             }
             position += 3;
         }
 
         if !ls_colors_scan_funky_string(value, &mut position, false) {
-            return false;
+            return Err(LsColorsValidationError::Unparsable);
         }
         if value.get(position) == Some(&b':') {
             position += 1;
         }
     }
 
-    true
+    Ok(())
 }
 
 fn ls_colors_scan_funky_string(value: &[u8], position: &mut usize, stop_at_equals: bool) -> bool {
@@ -7041,6 +7071,14 @@ mod tests {
         assert!(!ls_colors_is_valid(b"di=34:broken"));
         assert!(!ls_colors_is_valid(b"di=34\\"));
         assert!(!ls_colors_is_valid(b"zz=31"));
+        assert_eq!(
+            ls_colors_validate(b"xx=31"),
+            Err(LsColorsValidationError::UnrecognizedPrefix(*b"xx"))
+        );
+        assert_eq!(
+            ls_colors_validate(b"x=31"),
+            Err(LsColorsValidationError::Unparsable)
+        );
     }
 
     #[test]

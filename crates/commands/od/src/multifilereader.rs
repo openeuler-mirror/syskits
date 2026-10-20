@@ -34,6 +34,8 @@ pub struct OdMultifileReader<'a> {
     ni: Vec<OdInputSource<'a>>,
     /// 当前正在读取的文件
     curr_file: Option<Box<dyn io::Read>>,
+    /// 是否至少成功打开或选择过一个输入
+    has_opened_input: bool,
     /// 是否发生过任何错误
     is_any_err: bool,
 }
@@ -42,6 +44,9 @@ pub struct OdMultifileReader<'a> {
 pub trait HasError {
     /// 检查是否发生过错误
     fn has_error(&self) -> bool;
+
+    /// 检查是否至少成功打开或选择过一个输入
+    fn has_input(&self) -> bool;
 }
 
 #[cfg(unix)]
@@ -68,6 +73,7 @@ impl OdMultifileReader<'_> {
         let mut mf = OdMultifileReader {
             ni: fnames,
             curr_file: None,
+            has_opened_input: false,
             is_any_err: false,
         };
         mf.next_file();
@@ -78,6 +84,7 @@ impl OdMultifileReader<'_> {
         while !self.ni.is_empty() {
             match self.ni.remove(0) {
                 OdInputSource::Stdin => {
+                    self.has_opened_input = true;
                     self.curr_file = Some(match ctcore::ct_io::injected_stdin_bytes() {
                         Some(_) => ctcore::ct_io::stdin_reader_box(),
                         None => {
@@ -97,6 +104,7 @@ impl OdMultifileReader<'_> {
                 }
                 OdInputSource::FileName(fname) => match File::open(fname) {
                     Ok(f) => {
+                        self.has_opened_input = true;
                         self.curr_file = Some(Box::new(BufReader::new(f)));
                         return;
                     }
@@ -106,6 +114,7 @@ impl OdMultifileReader<'_> {
                     }
                 },
                 OdInputSource::Stream(s) => {
+                    self.has_opened_input = true;
                     self.curr_file = Some(s);
                     return;
                 }
@@ -145,6 +154,10 @@ impl io::Read for OdMultifileReader<'_> {
 impl HasError for OdMultifileReader<'_> {
     fn has_error(&self) -> bool {
         self.is_any_err
+    }
+
+    fn has_input(&self) -> bool {
+        self.has_opened_input
     }
 }
 

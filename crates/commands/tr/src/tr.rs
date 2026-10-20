@@ -468,6 +468,14 @@ fn tr_process<R: BufRead, W: Write>(
         set2_bytes,
         flags.is_truncate_set1_flag && !flags.is_complement_flag,
     )?;
+    if is_translating
+        && !Sequence::case_classes_are_aligned(set1_bytes, set2_bytes, flags.is_complement_flag)?
+    {
+        return Err(CtSimpleError::new(
+            1,
+            "misaligned [:upper:] and/or [:lower:] construct",
+        ));
+    }
 
     if is_translating {
         let s1 = flags.sets[0].as_encoded_bytes();
@@ -528,17 +536,6 @@ fn tr_process<R: BufRead, W: Write>(
                     "when translating with complemented character classes,\nstring2 must map all characters in the domain to one",
                 ));
             }
-        }
-
-        // 3. GNU tr 的大小写字符类对齐检查
-        if (s1 == b"A-Y[:lower:]" && s2 == b"a-z[:upper:]")
-            || (s1 == b"A-Z[:lower:]" && s2 == b"[:lower:][:upper:]")
-            || (s1 == b"A-Z[:lower:]" && s2 == b"[:lower:]A-Z")
-        {
-            return Err(CtSimpleError::new(
-                1,
-                "misaligned [:upper:] and/or [:lower:] construct",
-            ));
         }
     }
 

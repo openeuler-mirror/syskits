@@ -159,6 +159,56 @@ pub enum Sequence {
     Xdigit,
 }
 
+struct SequenceCursor<'a> {
+    sequences: &'a [Sequence],
+    lengths: Vec<usize>,
+    index: usize,
+    offset: usize,
+}
+
+impl<'a> SequenceCursor<'a> {
+    fn new(sequences: &'a [Sequence], indefinite_repeat_len: usize) -> Self {
+        let lengths = sequences
+            .iter()
+            .map(|sequence| match sequence {
+                Sequence::CharStar(_) => indefinite_repeat_len,
+                _ => sequence.expansion_len(),
+            })
+            .collect();
+        Self {
+            sequences,
+            lengths,
+            index: 0,
+            offset: 0,
+        }
+    }
+
+    fn current(&mut self) -> Option<(bool, bool)> {
+        while self.index < self.sequences.len() && self.lengths[self.index] == 0 {
+            self.index += 1;
+            self.offset = 0;
+        }
+        self.sequences.get(self.index).map(|sequence| {
+            (
+                self.offset == 0,
+                matches!(sequence, Sequence::Lower | Sequence::Upper),
+            )
+        })
+    }
+
+    fn advance(&mut self) {
+        self.offset += 1;
+        if self.offset == self.lengths[self.index] {
+            self.skip_construct();
+        }
+    }
+
+    fn skip_construct(&mut self) {
+        self.index += 1;
+        self.offset = 0;
+    }
+}
+
 impl Sequence {
     pub fn contains_character_class(set_str: &[u8]) -> Result<bool, BadSequence> {
         Ok(Self::from_str_impl(set_str, false)?
@@ -178,6 +228,61 @@ impl Sequence {
         }))
     }
 
+    pub fn case_classes_are_aligned(
+        set1_str: &[u8],
+        set2_str: &[u8],
+        complement: bool,
+    ) -> Result<bool, BadSequence> {
+        if complement {
+            return Ok(true);
+        }
+
+        let set1 = Self::from_str_impl(set1_str, false)?;
+        let set2 = Self::from_str_impl(set2_str, false)?;
+        if !set2
+            .iter()
+            .any(|sequence| matches!(sequence, Self::Lower | Self::Upper))
+        {
+            return Ok(true);
+        }
+
+        let set1_len = set1
+            .iter()
+            .filter(|sequence| !matches!(sequence, Self::CharStar(_)))
+            .map(Self::expansion_len)
+            .fold(0usize, usize::saturating_add);
+        let set2_non_repeat_len = set2
+            .iter()
+            .filter(|sequence| !matches!(sequence, Self::CharStar(_)))
+            .map(Self::expansion_len)
+            .fold(0usize, usize::saturating_add);
+        let indefinite_repeat_len = set1_len.saturating_sub(set2_non_repeat_len);
+        let mut set1_cursor = SequenceCursor::new(&set1, 0);
+        let mut set2_cursor = SequenceCursor::new(&set2, indefinite_repeat_len);
+
+        loop {
+            let set1_state = set1_cursor.current();
+            let Some((set2_new_construct, set2_case_class)) = set2_cursor.current() else {
+                return Ok(true);
+            };
+
+            if set2_new_construct && set2_case_class && !matches!(set1_state, Some((true, true))) {
+                return Ok(false);
+            }
+            if set1_state.is_none() {
+                return Ok(true);
+            }
+
+            if set2_case_class {
+                set1_cursor.skip_construct();
+                set2_cursor.skip_construct();
+            } else {
+                set1_cursor.advance();
+                set2_cursor.advance();
+            }
+        }
+    }
+
     fn is_character_class(&self) -> bool {
         matches!(
             self,
@@ -194,6 +299,26 @@ impl Sequence {
                 | Self::Upper
                 | Self::Xdigit
         )
+    }
+
+    fn expansion_len(&self) -> usize {
+        match self {
+            Self::Char(_) | Self::Equiv(_) => 1,
+            Self::CharRange(first, last) => usize::from(last - first) + 1,
+            Self::CharStar(_) => 0,
+            Self::CharRepeat(_, count) => *count,
+            Self::Alnum => 62,
+            Self::Alpha => 52,
+            Self::Blank => 2,
+            Self::Control => 33,
+            Self::Digit => 10,
+            Self::Graph => 94,
+            Self::Lower | Self::Upper => 26,
+            Self::Print => 95,
+            Self::Punct => 32,
+            Self::Space => 6,
+            Self::Xdigit => 22,
+        }
     }
 
     pub fn complement_cardinality(set: &[u8]) -> usize {
@@ -1078,6 +1203,19 @@ mod tests {
             let (set1, set2) = Sequence::solve_set_characters(b"abc", b"1[x*]3", false).unwrap();
             assert_eq!(set1, vec![b'a', b'b', b'c']);
             assert_eq!(set2, vec![b'1', b'x', b'3']);
+        }
+
+        #[test]
+        fn test_case_class_alignment() {
+            assert!(!Sequence::case_classes_are_aligned(b"abc", b"[:lower:]", false).unwrap());
+            assert!(
+                !Sequence::case_classes_are_aligned(b"a[:lower:]", b"[:upper:]x", false).unwrap()
+            );
+            assert!(
+                Sequence::case_classes_are_aligned(b"a[:lower:]", b"x[:upper:]", false).unwrap()
+            );
+            assert!(Sequence::case_classes_are_aligned(b"[:lower:]", b"[:upper:]", false).unwrap());
+            assert!(Sequence::case_classes_are_aligned(b"abc", b"[:upper:]", true).unwrap());
         }
 
         #[test]

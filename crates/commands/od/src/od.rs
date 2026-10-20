@@ -66,7 +66,7 @@ use std::fmt::Write;
 use std::io::{BufWriter, Read, Write as IoWrite};
 
 use crate::byteorder_io::ByteOrder;
-use crate::formatteriteminfo::OdFormatWriter;
+use crate::formatteriteminfo::{OdFloatFormatBuffer, OdFormatWriter};
 use crate::inputdecoder::{OdInputDecoder, OdMemoryDecoder};
 use crate::inputoffset::{OdInputOffset, OdRadix};
 use crate::multifilereader::{HasError, OdInputSource, OdMultifileReader};
@@ -1069,11 +1069,18 @@ fn od_format_line(
     output_info: &OutputInfo,
 ) -> Vec<u8> {
     let mut output_text = String::new();
+    let mut float_buffer = OdFloatFormatBuffer::default();
     let mut byte_pos = 0;
 
     while byte_pos < input_decoder.length() {
         od_add_spacing(&mut output_text, formatter, byte_pos, output_info);
-        od_format_bytes(&mut output_text, input_decoder, formatter, byte_pos);
+        od_format_bytes(
+            &mut output_text,
+            input_decoder,
+            formatter,
+            byte_pos,
+            &mut float_buffer,
+        );
         byte_pos += formatter.formatter_item_info.byte_size;
     }
 
@@ -1105,6 +1112,7 @@ fn od_format_bytes(
     input_decoder: &OdMemoryDecoder,
     formatter: &SpacedFormatterItemInfo,
     byte_pos: usize,
+    float_buffer: &mut OdFloatFormatBuffer,
 ) {
     match &formatter.formatter_item_info.formatter {
         OdFormatWriter::IntWriter(func) => {
@@ -1113,7 +1121,7 @@ fn od_format_bytes(
         }
         OdFormatWriter::FloatWriter(func) => {
             let value = input_decoder.read_float(byte_pos, formatter.formatter_item_info.byte_size);
-            output_text.push_str(&func(value));
+            func(value, output_text, float_buffer);
         }
         OdFormatWriter::FloatBytesWriter(func) => {
             let value =

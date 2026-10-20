@@ -407,6 +407,25 @@ impl TestParser {
     /// expression like `foo -o '' -a ''`, the and subexpression is evaluated
     /// first.
     fn boolop(&mut self, op: TestSymbol) -> ParseResult<()> {
+        if self.tokens.len() == 1 {
+            let operand = self.tokens.peek().unwrap();
+            let symbol = TestSymbol::new(Some(operand.clone()));
+
+            if matches!(
+                symbol,
+                TestSymbol::Bang | TestSymbol::LParen | TestSymbol::UnaryOp(_)
+            ) {
+                return Err(ParseError::MissingArgument(operand.quote().to_string()));
+            }
+
+            let bytes = operand.as_encoded_bytes();
+            if bytes.len() == 2 && bytes[0] == b'-' {
+                return Err(ParseError::UnaryOperatorExpected(
+                    operand.quote().to_string(),
+                ));
+            }
+        }
+
         if op == TestSymbol::BoolOp(OsString::from("-a")) {
             self.term()?;
         } else {
@@ -597,5 +616,20 @@ mod tests {
                 TestSymbol::Bang,
             ]
         );
+    }
+
+    #[test]
+    fn boolean_operator_requires_a_complete_right_operand() {
+        for operand in ["-n", "-e", "!", "("] {
+            assert!(matches!(
+                test_parse(args(&["x", "-a", operand])),
+                Err(ParseError::MissingArgument(_))
+            ));
+        }
+
+        assert!(matches!(
+            test_parse(args(&["x", "-a", "-l"])),
+            Err(ParseError::UnaryOperatorExpected(_))
+        ));
     }
 }

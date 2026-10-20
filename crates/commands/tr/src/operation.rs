@@ -32,11 +32,186 @@ use nom::{
 };
 use std::{
     borrow::Cow,
+    cell::RefCell,
     collections::{HashMap, HashSet},
     error::Error,
+    ffi::CString,
     fmt::{Debug, Display},
     io::{BufRead, Write},
 };
+
+const CLASS_ALNUM: usize = 0;
+const CLASS_ALPHA: usize = 1;
+const CLASS_BLANK: usize = 2;
+const CLASS_CONTROL: usize = 3;
+const CLASS_DIGIT: usize = 4;
+const CLASS_GRAPH: usize = 5;
+const CLASS_LOWER: usize = 6;
+const CLASS_PRINT: usize = 7;
+const CLASS_PUNCT: usize = 8;
+const CLASS_SPACE: usize = 9;
+const CLASS_UPPER: usize = 10;
+const CLASS_XDIGIT: usize = 11;
+const CLASS_COUNT: usize = 12;
+
+#[derive(Clone)]
+struct LocaleByteTables {
+    members: [[bool; 256]; CLASS_COUNT],
+    lower: [u8; 256],
+    upper: [u8; 256],
+}
+
+impl LocaleByteTables {
+    fn ascii() -> Self {
+        let mut tables = Self {
+            members: [[false; 256]; CLASS_COUNT],
+            lower: [0; 256],
+            upper: [0; 256],
+        };
+        for byte in u8::MIN..=u8::MAX {
+            let index = usize::from(byte);
+            tables.members[CLASS_ALNUM][index] = byte.is_ascii_alphanumeric();
+            tables.members[CLASS_ALPHA][index] = byte.is_ascii_alphabetic();
+            tables.members[CLASS_BLANK][index] = matches!(byte, b'\t' | b' ');
+            tables.members[CLASS_CONTROL][index] = byte.is_ascii_control();
+            tables.members[CLASS_DIGIT][index] = byte.is_ascii_digit();
+            tables.members[CLASS_GRAPH][index] = byte.is_ascii_graphic();
+            tables.members[CLASS_LOWER][index] = byte.is_ascii_lowercase();
+            tables.members[CLASS_PRINT][index] = byte == b' ' || byte.is_ascii_graphic();
+            tables.members[CLASS_PUNCT][index] = byte.is_ascii_punctuation();
+            tables.members[CLASS_SPACE][index] = byte.is_ascii_whitespace();
+            tables.members[CLASS_UPPER][index] = byte.is_ascii_uppercase();
+            tables.members[CLASS_XDIGIT][index] = byte.is_ascii_hexdigit();
+            tables.lower[index] = byte.to_ascii_lowercase();
+            tables.upper[index] = byte.to_ascii_uppercase();
+        }
+        tables
+    }
+
+    #[cfg(target_os = "linux")]
+    fn for_locale(locale_name: &[u8]) -> Option<Self> {
+        let locale_name = CString::new(locale_name).ok()?;
+        let locale = unsafe {
+            ctcore::libc::newlocale(
+                ctcore::libc::LC_CTYPE_MASK,
+                locale_name.as_ptr(),
+                std::ptr::null_mut(),
+            )
+        };
+        if locale.is_null() {
+            return None;
+        }
+
+        let mut tables = Self {
+            members: [[false; 256]; CLASS_COUNT],
+            lower: [0; 256],
+            upper: [0; 256],
+        };
+        for byte in u8::MIN..=u8::MAX {
+            let value = i32::from(byte);
+            let index = usize::from(byte);
+            unsafe {
+                tables.members[CLASS_ALNUM][index] = isalnum_l(value, locale) != 0;
+                tables.members[CLASS_ALPHA][index] = isalpha_l(value, locale) != 0;
+                tables.members[CLASS_BLANK][index] = isblank_l(value, locale) != 0;
+                tables.members[CLASS_CONTROL][index] = iscntrl_l(value, locale) != 0;
+                tables.members[CLASS_DIGIT][index] = isdigit_l(value, locale) != 0;
+                tables.members[CLASS_GRAPH][index] = isgraph_l(value, locale) != 0;
+                tables.members[CLASS_LOWER][index] = islower_l(value, locale) != 0;
+                tables.members[CLASS_PRINT][index] = isprint_l(value, locale) != 0;
+                tables.members[CLASS_PUNCT][index] = ispunct_l(value, locale) != 0;
+                tables.members[CLASS_SPACE][index] = isspace_l(value, locale) != 0;
+                tables.members[CLASS_UPPER][index] = isupper_l(value, locale) != 0;
+                tables.members[CLASS_XDIGIT][index] = isxdigit_l(value, locale) != 0;
+                tables.lower[index] = u8::try_from(tolower_l(value, locale)).unwrap_or(byte);
+                tables.upper[index] = u8::try_from(toupper_l(value, locale)).unwrap_or(byte);
+            }
+        }
+        unsafe {
+            ctcore::libc::freelocale(locale);
+        }
+        Some(tables)
+    }
+}
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn isalnum_l(value: ctcore::libc::c_int, locale: ctcore::libc::locale_t)
+    -> ctcore::libc::c_int;
+    fn isalpha_l(value: ctcore::libc::c_int, locale: ctcore::libc::locale_t)
+    -> ctcore::libc::c_int;
+    fn isblank_l(value: ctcore::libc::c_int, locale: ctcore::libc::locale_t)
+    -> ctcore::libc::c_int;
+    fn iscntrl_l(value: ctcore::libc::c_int, locale: ctcore::libc::locale_t)
+    -> ctcore::libc::c_int;
+    fn isdigit_l(value: ctcore::libc::c_int, locale: ctcore::libc::locale_t)
+    -> ctcore::libc::c_int;
+    fn isgraph_l(value: ctcore::libc::c_int, locale: ctcore::libc::locale_t)
+    -> ctcore::libc::c_int;
+    fn islower_l(value: ctcore::libc::c_int, locale: ctcore::libc::locale_t)
+    -> ctcore::libc::c_int;
+    fn isprint_l(value: ctcore::libc::c_int, locale: ctcore::libc::locale_t)
+    -> ctcore::libc::c_int;
+    fn ispunct_l(value: ctcore::libc::c_int, locale: ctcore::libc::locale_t)
+    -> ctcore::libc::c_int;
+    fn isspace_l(value: ctcore::libc::c_int, locale: ctcore::libc::locale_t)
+    -> ctcore::libc::c_int;
+    fn isupper_l(value: ctcore::libc::c_int, locale: ctcore::libc::locale_t)
+    -> ctcore::libc::c_int;
+    fn isxdigit_l(
+        value: ctcore::libc::c_int,
+        locale: ctcore::libc::locale_t,
+    ) -> ctcore::libc::c_int;
+    fn tolower_l(value: ctcore::libc::c_int, locale: ctcore::libc::locale_t)
+    -> ctcore::libc::c_int;
+    fn toupper_l(value: ctcore::libc::c_int, locale: ctcore::libc::locale_t)
+    -> ctcore::libc::c_int;
+}
+
+thread_local! {
+    static LOCALE_BYTE_TABLES: RefCell<LocaleByteTables> = RefCell::new(LocaleByteTables::ascii());
+}
+
+pub fn configure_locale(force_c_locale: bool) {
+    #[cfg(target_os = "linux")]
+    let tables = {
+        let locale_name = if force_c_locale {
+            b"C".to_vec()
+        } else {
+            ["LC_ALL", "LC_CTYPE", "LANG"]
+                .iter()
+                .find_map(|name| {
+                    std::env::var_os(name)
+                        .filter(|value| !value.is_empty())
+                        .map(|value| value.as_encoded_bytes().to_vec())
+                })
+                .unwrap_or_else(|| b"C".to_vec())
+        };
+        LocaleByteTables::for_locale(&locale_name).unwrap_or_else(LocaleByteTables::ascii)
+    };
+
+    #[cfg(not(target_os = "linux"))]
+    let tables = LocaleByteTables::ascii();
+
+    LOCALE_BYTE_TABLES.with(|current| *current.borrow_mut() = tables);
+}
+
+fn locale_class_members(class_index: usize) -> Vec<u8> {
+    LOCALE_BYTE_TABLES.with(|tables| {
+        let tables = tables.borrow();
+        (u8::MIN..=u8::MAX)
+            .filter(|byte| tables.members[class_index][usize::from(*byte)])
+            .collect()
+    })
+}
+
+fn locale_to_lower(byte: u8) -> u8 {
+    LOCALE_BYTE_TABLES.with(|tables| tables.borrow().lower[usize::from(byte)])
+}
+
+fn locale_to_upper(byte: u8) -> u8 {
+    LOCALE_BYTE_TABLES.with(|tables| tables.borrow().upper[usize::from(byte)])
+}
 
 /// Unicode 字符常量定义
 mod unicodes {
@@ -47,9 +222,6 @@ mod unicodes {
     pub static VT: u8 = 0xB; // 垂直制表符
     pub static FF: u8 = 0xC; // 换页
     pub static CR: u8 = 0xD; // 回车
-    pub static SPACE: u8 = 0x20; // 空格
-    pub static SPACES: &[u8] = &[HT, LF, VT, FF, CR, SPACE]; // 所有空白字符
-    pub static BLANK: &[u8] = &[HT, SPACE]; // 制表符和空格，按字节递增
 }
 
 /// 序列解析错误类型
@@ -159,6 +331,13 @@ pub enum Sequence {
     Xdigit,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CaseClass {
+    None,
+    Lower,
+    Upper,
+}
+
 struct SequenceCursor<'a> {
     sequences: &'a [Sequence],
     lengths: Vec<usize>,
@@ -194,6 +373,15 @@ impl<'a> SequenceCursor<'a> {
                 matches!(sequence, Sequence::Lower | Sequence::Upper),
             )
         })
+    }
+
+    fn next_byte(&mut self) -> Option<(u8, CaseClass)> {
+        self.current()?;
+        let sequence = self.sequences[self.index];
+        let byte = sequence.byte_at(self.offset);
+        let case_class = sequence.case_class();
+        self.advance();
+        Some((byte, case_class))
     }
 
     fn advance(&mut self) {
@@ -283,41 +471,177 @@ impl Sequence {
         }
     }
 
+    pub fn effective_translation_lengths(
+        set1_str: &[u8],
+        set2_str: &[u8],
+        complement: bool,
+    ) -> Result<(usize, usize), BadSequence> {
+        let set1 = Self::from_str_impl(set1_str, false)?;
+        let set2 = Self::from_str_impl(set2_str, false)?;
+        let mut set1_len = set1
+            .iter()
+            .filter(|sequence| !matches!(sequence, Self::CharStar(_)))
+            .map(Self::expansion_len)
+            .fold(0usize, usize::saturating_add);
+        if complement {
+            let expanded = Self::process_char_set(&set1);
+            set1_len = Self::complement_cardinality(&expanded);
+        }
+        let set2_non_repeat_len = set2
+            .iter()
+            .filter(|sequence| !matches!(sequence, Self::CharStar(_)))
+            .map(Self::expansion_len)
+            .fold(0usize, usize::saturating_add);
+        let indefinite_repeat_len = set1_len.saturating_sub(set2_non_repeat_len);
+        let repeat_len = set2
+            .iter()
+            .filter(|sequence| matches!(sequence, Self::CharStar(_)))
+            .count()
+            .saturating_mul(indefinite_repeat_len);
+        let mut set2_len = set2_non_repeat_len.saturating_add(repeat_len);
+
+        if complement {
+            return Ok((set1_len, set2_len));
+        }
+
+        let mut set1_cursor = SequenceCursor::new(&set1, 0);
+        let mut set2_cursor = SequenceCursor::new(&set2, indefinite_repeat_len);
+        while let (Some((set1_new, set1_case)), Some((set2_new, set2_case))) =
+            (set1_cursor.current(), set2_cursor.current())
+        {
+            if set2_new && set2_case && set1_new && set1_case {
+                set1_len -= set1_cursor.lengths[set1_cursor.index] - 1;
+                set2_len -= set2_cursor.lengths[set2_cursor.index] - 1;
+                set1_cursor.skip_construct();
+                set2_cursor.skip_construct();
+            } else {
+                set1_cursor.advance();
+                set2_cursor.advance();
+            }
+        }
+        Ok((set1_len, set2_len))
+    }
+
+    pub fn standard_translation_map(
+        set1_str: &[u8],
+        set2_str: &[u8],
+        truncate_set1: bool,
+    ) -> Result<HashMap<u8, u8>, BadSequence> {
+        let set1 = Self::from_str_impl(set1_str, false)?;
+        let set2 = Self::from_str_impl(set2_str, false)?;
+        let set1_len = set1
+            .iter()
+            .filter(|sequence| !matches!(sequence, Self::CharStar(_)))
+            .map(Self::expansion_len)
+            .fold(0usize, usize::saturating_add);
+        let set2_non_repeat_len = set2
+            .iter()
+            .filter(|sequence| !matches!(sequence, Self::CharStar(_)))
+            .map(Self::expansion_len)
+            .fold(0usize, usize::saturating_add);
+        let indefinite_repeat_len = set1_len.saturating_sub(set2_non_repeat_len);
+        let mut set1_cursor = SequenceCursor::new(&set1, 0);
+        let mut set2_cursor = SequenceCursor::new(&set2, indefinite_repeat_len);
+        let mut translation_map = HashMap::new();
+        let mut last_set2_byte = None;
+
+        while let Some((set1_byte, set1_case)) = set1_cursor.next_byte() {
+            let Some((set2_byte, set2_case)) = set2_cursor.next_byte() else {
+                if truncate_set1 {
+                    break;
+                }
+                let Some(last_set2_byte) = last_set2_byte else {
+                    return Err(BadSequence::EmptySet2WhenNotTruncatingSet1);
+                };
+                translation_map.insert(set1_byte, last_set2_byte);
+                continue;
+            };
+
+            match (set1_case, set2_case) {
+                (CaseClass::Lower, CaseClass::Upper) => {
+                    for byte in locale_class_members(CLASS_LOWER) {
+                        translation_map.insert(byte, locale_to_upper(byte));
+                    }
+                    set1_cursor.skip_construct();
+                    set2_cursor.skip_construct();
+                }
+                (CaseClass::Upper, CaseClass::Lower) => {
+                    for byte in locale_class_members(CLASS_UPPER) {
+                        translation_map.insert(byte, locale_to_lower(byte));
+                    }
+                    set1_cursor.skip_construct();
+                    set2_cursor.skip_construct();
+                }
+                (_, CaseClass::Lower | CaseClass::Upper) => {
+                    set1_cursor.skip_construct();
+                    set2_cursor.skip_construct();
+                }
+                _ => {
+                    translation_map.insert(set1_byte, set2_byte);
+                    last_set2_byte = Some(set2_byte);
+                }
+            }
+        }
+
+        Ok(translation_map)
+    }
+
     fn is_character_class(&self) -> bool {
-        matches!(
-            self,
-            Self::Alnum
-                | Self::Alpha
-                | Self::Blank
-                | Self::Control
-                | Self::Digit
-                | Self::Graph
-                | Self::Lower
-                | Self::Print
-                | Self::Punct
-                | Self::Space
-                | Self::Upper
-                | Self::Xdigit
-        )
+        self.character_class_index().is_some()
+    }
+
+    fn character_class_index(&self) -> Option<usize> {
+        match self {
+            Self::Alnum => Some(CLASS_ALNUM),
+            Self::Alpha => Some(CLASS_ALPHA),
+            Self::Blank => Some(CLASS_BLANK),
+            Self::Control => Some(CLASS_CONTROL),
+            Self::Digit => Some(CLASS_DIGIT),
+            Self::Graph => Some(CLASS_GRAPH),
+            Self::Lower => Some(CLASS_LOWER),
+            Self::Print => Some(CLASS_PRINT),
+            Self::Punct => Some(CLASS_PUNCT),
+            Self::Space => Some(CLASS_SPACE),
+            Self::Upper => Some(CLASS_UPPER),
+            Self::Xdigit => Some(CLASS_XDIGIT),
+            _ => None,
+        }
+    }
+
+    fn case_class(&self) -> CaseClass {
+        match self {
+            Self::Lower => CaseClass::Lower,
+            Self::Upper => CaseClass::Upper,
+            _ => CaseClass::None,
+        }
+    }
+
+    fn byte_at(&self, offset: usize) -> u8 {
+        match self {
+            Self::Char(byte)
+            | Self::Equiv(byte)
+            | Self::CharStar(byte)
+            | Self::CharRepeat(byte, _) => *byte,
+            Self::CharRange(first, _) => *first + u8::try_from(offset).expect("range offset"),
+            _ => {
+                let class_index = self
+                    .character_class_index()
+                    .expect("byte_at called for a character class");
+                locale_class_members(class_index)[offset]
+            }
+        }
     }
 
     fn expansion_len(&self) -> usize {
+        if let Some(class_index) = self.character_class_index() {
+            return locale_class_members(class_index).len();
+        }
         match self {
             Self::Char(_) | Self::Equiv(_) => 1,
             Self::CharRange(first, last) => usize::from(last - first) + 1,
             Self::CharStar(_) => 0,
             Self::CharRepeat(_, count) => *count,
-            Self::Alnum => 62,
-            Self::Alpha => 52,
-            Self::Blank => 2,
-            Self::Control => 33,
-            Self::Digit => 10,
-            Self::Graph => 94,
-            Self::Lower | Self::Upper => 26,
-            Self::Print => 95,
-            Self::Punct => 32,
-            Self::Space => 6,
-            Self::Xdigit => 22,
+            _ => unreachable!("character classes were handled above"),
         }
     }
 
@@ -328,23 +652,15 @@ impl Sequence {
 
     /// 将序列展开为字符迭代器
     pub fn flatten(&self) -> Box<dyn Iterator<Item = u8>> {
+        if let Some(class_index) = self.character_class_index() {
+            return Box::new(locale_class_members(class_index).into_iter());
+        }
         match self {
             Self::Char(c) | Self::Equiv(c) => Box::new(std::iter::once(*c)),
             Self::CharRange(l, r) => Box::new(*l..=*r),
             Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
             Self::CharRepeat(c, n) => Box::new(std::iter::repeat_n(*c, *n)),
-            Self::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
-            Self::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
-            Self::Blank => Box::new(unicodes::BLANK.iter().cloned()),
-            Self::Control => Box::new((0..=31).chain(std::iter::once(127))),
-            Self::Digit => Box::new(b'0'..=b'9'),
-            Self::Graph => Box::new(33..=126),
-            Self::Lower => Box::new(b'a'..=b'z'),
-            Self::Print => Box::new(32..=126),
-            Self::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
-            Self::Space => Box::new(unicodes::SPACES.iter().cloned()),
-            Self::Upper => Box::new(b'A'..=b'Z'),
-            Self::Xdigit => Box::new((b'0'..=b'9').chain(b'A'..=b'F').chain(b'a'..=b'f')),
+            _ => unreachable!("character classes were handled above"),
         }
     }
 
@@ -871,6 +1187,10 @@ impl TranslateOperation {
             Ok(Self::Standard(TranslateOperationStandard::new(set1, set2)?))
         }
     }
+
+    pub fn from_standard_map(translation_map: HashMap<u8, u8>) -> Self {
+        Self::Standard(TranslateOperationStandard { translation_map })
+    }
 }
 
 impl SymbolTranslator for TranslateOperation {
@@ -1049,7 +1369,7 @@ mod tests {
             let blank_seq = Sequence::Blank;
             assert_eq!(
                 blank_seq.flatten().collect::<Vec<_>>(),
-                vec![unicodes::HT, unicodes::SPACE]
+                vec![unicodes::HT, b' ']
             );
 
             assert_eq!(

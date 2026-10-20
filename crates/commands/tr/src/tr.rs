@@ -22,7 +22,8 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_show;
 use operation::{
-    Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation, translate_input,
+    Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation, configure_locale,
+    translate_input,
 };
 use std::io::{BufRead, BufWriter, Write, stdin, stdout};
 use sys_locale::get_locale;
@@ -327,6 +328,7 @@ pub fn tr_main<R: BufRead, W: Write>(
     let argv: Vec<OsString> = args.collect();
     // 1. 解析命令行参数
     let matches = parse_tr_matches(&argv)?;
+    configure_locale(matches.get_flag(tr_flags::TR_AIX_C_LOCALE));
 
     // 2. 创建配置对象
     let flags = TrFlags::new(&matches)?;
@@ -476,18 +478,24 @@ fn tr_process<R: BufRead, W: Write>(
             "misaligned [:upper:] and/or [:lower:] construct",
         ));
     }
+    let standard_translation_map = if is_translating && !flags.is_complement_flag {
+        Some(Sequence::standard_translation_map(
+            set1_bytes,
+            set2_bytes,
+            flags.is_truncate_set1_flag,
+        )?)
+    } else {
+        None
+    };
 
     if is_translating {
         let s1 = flags.sets[0].as_encoded_bytes();
         let s2 = flags.sets[1].as_encoded_bytes();
-        let set1_len = if flags.is_complement_flag {
-            Sequence::complement_cardinality(&set1)
-        } else {
-            set1.len()
-        };
+        let (set1_len, set2_len) =
+            Sequence::effective_translation_lengths(s1, s2, flags.is_complement_flag)?;
 
         // 1. string1 大于 string2 且 string2 以字符类结尾
-        if set1_len > set2.len() && !flags.is_truncate_set1_flag {
+        if set1_len > set2_len && !flags.is_truncate_set1_flag {
             let is_ending_with_class = [
                 "[:alnum:]",
                 "[:alpha:]",
@@ -559,11 +567,15 @@ fn tr_process<R: BufRead, W: Write>(
             translate_input(reader, &mut strict_writer, squeeze_op);
         } else {
             let translate_op = TranslateOperation::new_with_truncate(
-                set1,
+                set1.clone(),
                 set2.clone(),
                 flags.is_complement_flag,
                 flags.is_truncate_set1_flag,
             )?;
+            let translate_op = standard_translation_map
+                .as_ref()
+                .map(|map| TranslateOperation::from_standard_map(map.clone()))
+                .unwrap_or(translate_op);
             let squeeze_op = SqueezeOperation::new(set2, false);
             translate_input(reader, &mut strict_writer, translate_op.chain(squeeze_op));
         }
@@ -574,6 +586,9 @@ fn tr_process<R: BufRead, W: Write>(
             flags.is_complement_flag,
             flags.is_truncate_set1_flag,
         )?;
+        let translate_op = standard_translation_map
+            .map(TranslateOperation::from_standard_map)
+            .unwrap_or(translate_op);
         translate_input(reader, &mut strict_writer, translate_op);
     }
     Ok(())

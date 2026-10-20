@@ -10,21 +10,22 @@
  */
 use super::od_options;
 use clap::ArgMatches;
-use ctcore::ct_display::locale_quote;
+use ctcore::ct_display::{Quotable, locale_quote};
+use std::ffi::{OsStr, OsString};
 
 /// 命令行选项抽象接口
 pub trait CommandLineOpts {
     /// 返回所有不属于选项的命令行参数
-    fn inputs(&self) -> Vec<&str>;
+    fn inputs(&self) -> Vec<&OsStr>;
     /// 测试指定的选项是否存在
     fn opts_present(&self, _: &[&str]) -> bool;
 }
 
 /// 为 `ArgMatches` 实现 CommandLineOpts 接口
 impl CommandLineOpts for ArgMatches {
-    fn inputs(&self) -> Vec<&str> {
-        self.get_many::<String>(od_options::OD_FILENAME)
-            .map(|values| values.map(|s| s.as_str()).collect())
+    fn inputs(&self) -> Vec<&OsStr> {
+        self.get_many::<OsString>(od_options::OD_FILENAME)
+            .map(|values| values.map(OsString::as_os_str).collect())
             .unwrap_or_default()
     }
 
@@ -43,8 +44,8 @@ impl CommandLineOpts for ArgMatches {
 /// 但偏移量可能为0。
 #[derive(PartialEq, Eq, Debug)]
 pub enum CommandLineInputs {
-    FileNames(Vec<String>),
-    FileAndOffset((String, u64, Option<u64>)),
+    FileNames(Vec<OsString>),
+    FileAndOffset((OsString, u64, Option<u64>)),
 }
 
 /// 解析 od 的命令行输入
@@ -63,18 +64,18 @@ pub fn od_parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInput
 
     // 如果没有输入，使用标准输入
     if input_strings.is_empty() {
-        input_strings.push("-");
+        input_strings.push(OsStr::new("-"));
     }
 
     Ok(CommandLineInputs::FileNames(
-        input_strings.iter().map(|&s| s.to_string()).collect(),
+        input_strings.iter().map(|s| OsString::from(*s)).collect(),
     ))
 }
 
 /// 尝试解析偏移量
 fn try_parse_offset(
     matches: &dyn CommandLineOpts,
-    input_strings: &[&str],
+    input_strings: &[&OsStr],
 ) -> Option<CommandLineInputs> {
     // 只有在有1-2个参数时才尝试解析偏移量
     if input_strings.len() != 1 && input_strings.len() != 2 {
@@ -110,15 +111,20 @@ fn has_offset_incompatible_options(matches: &dyn CommandLineOpts) -> bool {
 }
 
 /// 根据输入参数和偏移量创建 CommandLineInputs
-fn create_offset_input(input_strings: &[&str], offset: u64) -> Option<CommandLineInputs> {
+fn create_offset_input(input_strings: &[&OsStr], offset: u64) -> Option<CommandLineInputs> {
     match input_strings.len() {
-        1 if input_strings[0].starts_with('+') => Some(CommandLineInputs::FileAndOffset((
-            "-".to_string(),
-            offset,
-            None,
-        ))),
+        1 if input_strings[0]
+            .to_str()
+            .is_some_and(|input| input.starts_with('+')) =>
+        {
+            Some(CommandLineInputs::FileAndOffset((
+                OsString::from("-"),
+                offset,
+                None,
+            )))
+        }
         2 => Some(CommandLineInputs::FileAndOffset((
-            input_strings[0].to_string(),
+            OsString::from(input_strings[0]),
             offset,
             None,
         ))),
@@ -127,73 +133,89 @@ fn create_offset_input(input_strings: &[&str], offset: u64) -> Option<CommandLin
 }
 
 /// 当命令行包含 --traditional 时解析输入
-pub fn od_parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInputs, String> {
+pub fn od_parse_inputs_traditional<S: AsRef<OsStr>>(
+    input_strings: &[S],
+) -> Result<CommandLineInputs, String> {
     match input_strings.len() {
         0 => Ok(create_stdin_input()),
         1 => parse_traditional_single_arg(input_strings),
         2 => parse_traditional_two_args(input_strings),
         3 => parse_traditional_three_args(input_strings),
-        _ => Err(traditional_extra_operand_error(input_strings[1])),
+        _ => Err(traditional_extra_operand_error(input_strings[1].as_ref())),
     }
 }
 
 /// 创建标准输入的 CommandLineInputs
 fn create_stdin_input() -> CommandLineInputs {
-    CommandLineInputs::FileNames(vec!["-".to_string()])
+    CommandLineInputs::FileNames(vec![OsString::from("-")])
 }
 
 /// 解析传统模式下的单个参数
-fn parse_traditional_single_arg(input_strings: &[&str]) -> Result<CommandLineInputs, String> {
-    let offset = parse_old_style_offset_operand(input_strings[0]);
+fn parse_traditional_single_arg<S: AsRef<OsStr>>(
+    input_strings: &[S],
+) -> Result<CommandLineInputs, String> {
+    let input = input_strings[0].as_ref();
+    let offset = parse_old_style_offset_operand(input);
     Ok(match offset {
-        Ok(n) => CommandLineInputs::FileAndOffset(("-".to_string(), n, None)),
-        _ => CommandLineInputs::FileNames(vec![input_strings[0].to_string()]),
+        Ok(n) => CommandLineInputs::FileAndOffset((OsString::from("-"), n, None)),
+        _ => CommandLineInputs::FileNames(vec![OsString::from(input)]),
     })
 }
 
 /// 解析传统模式下的两个参数
-fn parse_traditional_two_args(input_strings: &[&str]) -> Result<CommandLineInputs, String> {
-    let offset0 = parse_old_style_offset_operand(input_strings[0]);
-    let offset1 = parse_old_style_offset_operand(input_strings[1]);
+fn parse_traditional_two_args<S: AsRef<OsStr>>(
+    input_strings: &[S],
+) -> Result<CommandLineInputs, String> {
+    let first = input_strings[0].as_ref();
+    let second = input_strings[1].as_ref();
+    let offset0 = parse_old_style_offset_operand(first);
+    let offset1 = parse_old_style_offset_operand(second);
 
     match (offset0, offset1) {
         (Ok(n), Ok(m)) => Ok(CommandLineInputs::FileAndOffset((
-            "-".to_string(),
+            OsString::from("-"),
             n,
             Some(m),
         ))),
         (_, Ok(m)) => Ok(CommandLineInputs::FileAndOffset((
-            input_strings[0].to_string(),
+            OsString::from(first),
             m,
             None,
         ))),
-        _ => Err(traditional_extra_operand_error(input_strings[1])),
+        _ => Err(traditional_extra_operand_error(second)),
     }
 }
 
 /// 解析传统模式下的三个参数
-fn parse_traditional_three_args(input_strings: &[&str]) -> Result<CommandLineInputs, String> {
-    let offset = parse_old_style_offset_operand(input_strings[1]);
-    let label = parse_old_style_offset_operand(input_strings[2]);
+fn parse_traditional_three_args<S: AsRef<OsStr>>(
+    input_strings: &[S],
+) -> Result<CommandLineInputs, String> {
+    let offset = parse_old_style_offset_operand(input_strings[1].as_ref());
+    let label = parse_old_style_offset_operand(input_strings[2].as_ref());
 
     match (offset, label) {
         (Ok(n), Ok(m)) => Ok(CommandLineInputs::FileAndOffset((
-            input_strings[0].to_string(),
+            OsString::from(input_strings[0].as_ref()),
             n,
             Some(m),
         ))),
-        _ => Err(traditional_extra_operand_error(input_strings[1])),
+        _ => Err(traditional_extra_operand_error(input_strings[1].as_ref())),
     }
 }
 
-fn traditional_extra_operand_error(operand: &str) -> String {
+fn traditional_extra_operand_error(operand: &OsStr) -> String {
+    let quoted = operand
+        .to_str()
+        .map(locale_quote)
+        .unwrap_or_else(|| operand.quote().to_string());
     format!(
         "extra operand {}\nod: compatibility mode supports at most one file",
-        locale_quote(operand)
+        quoted
     )
 }
 
-fn parse_old_style_offset_operand(s: &str) -> Result<u64, &'static str> {
+fn parse_old_style_offset_operand(s: &OsStr) -> Result<u64, &'static str> {
+    let s = s.to_str().ok_or("解析失败")?;
     if s.contains('.') {
         return Err("解析失败");
     }
@@ -246,31 +268,27 @@ mod tests {
     #[test]
     fn test_parse_inputs_normal() {
         assert_eq!(
-            CommandLineInputs::FileNames(vec!["-".to_string()]),
+            CommandLineInputs::FileNames(vec!["-".into()]),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od"])).unwrap()
         );
 
         assert_eq!(
-            CommandLineInputs::FileNames(vec!["-".to_string()]),
+            CommandLineInputs::FileNames(vec!["-".into()]),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "-"])).unwrap()
         );
 
         assert_eq!(
-            CommandLineInputs::FileNames(vec!["file1".to_string()]),
+            CommandLineInputs::FileNames(vec!["file1".into()]),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "file1"])).unwrap()
         );
 
         assert_eq!(
-            CommandLineInputs::FileNames(vec!["file1".to_string(), "file2".to_string()]),
+            CommandLineInputs::FileNames(vec!["file1".into(), "file2".into()]),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "file1", "file2"])).unwrap()
         );
 
         assert_eq!(
-            CommandLineInputs::FileNames(vec![
-                "-".to_string(),
-                "file1".to_string(),
-                "file2".to_string(),
-            ]),
+            CommandLineInputs::FileNames(vec!["-".into(), "file1".into(), "file2".into(),]),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "-", "file1", "file2"])).unwrap()
         );
     }
@@ -280,59 +298,59 @@ mod tests {
     fn test_parse_inputs_with_offset() {
         // offset is found without filename, so stdin will be used.
         assert_eq!(
-            CommandLineInputs::FileAndOffset(("-".to_string(), 8, None)),
+            CommandLineInputs::FileAndOffset(("-".into(), 8, None)),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "+10"])).unwrap()
         );
 
         // offset must start with "+" if no input is specified.
         assert_eq!(
-            CommandLineInputs::FileNames(vec!["10".to_string()]),
+            CommandLineInputs::FileNames(vec!["10".into()]),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "10"])).unwrap()
         );
 
         // offset is not valid, so it is considered a filename.
         assert_eq!(
-            CommandLineInputs::FileNames(vec!["+10a".to_string()]),
+            CommandLineInputs::FileNames(vec!["+10a".into()]),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "+10a"])).unwrap()
         );
 
         // if -j is included in the command line, there cannot be an offset.
         assert_eq!(
-            CommandLineInputs::FileNames(vec!["+10".to_string()]),
+            CommandLineInputs::FileNames(vec!["+10".into()]),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "-j10", "+10"])).unwrap()
         );
 
         // if -v is included in the command line, there cannot be an offset.
         assert_eq!(
-            CommandLineInputs::FileNames(vec!["+10".to_string()]),
+            CommandLineInputs::FileNames(vec!["+10".into()]),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "-o", "-v", "+10"])).unwrap()
         );
 
         assert_eq!(
-            CommandLineInputs::FileAndOffset(("file1".to_string(), 8, None)),
+            CommandLineInputs::FileAndOffset(("file1".into(), 8, None)),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "file1", "+10"])).unwrap()
         );
 
         // offset does not need to start with "+" if a filename is included.
         assert_eq!(
-            CommandLineInputs::FileAndOffset(("file1".to_string(), 8, None)),
+            CommandLineInputs::FileAndOffset(("file1".into(), 8, None)),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "file1", "10"])).unwrap()
         );
 
         assert_eq!(
-            CommandLineInputs::FileNames(vec!["file1".to_string(), "+10a".to_string()]),
+            CommandLineInputs::FileNames(vec!["file1".into(), "+10a".into()]),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "file1", "+10a"])).unwrap()
         );
 
         assert_eq!(
-            CommandLineInputs::FileNames(vec!["file1".to_string(), "+10".to_string()]),
+            CommandLineInputs::FileNames(vec!["file1".into(), "+10".into()]),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "-j10", "file1", "+10"]))
                 .unwrap()
         );
 
         // offset must be last on the command line
         assert_eq!(
-            CommandLineInputs::FileNames(vec!["+10".to_string(), "file1".to_string()]),
+            CommandLineInputs::FileNames(vec!["+10".into(), "file1".into()]),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "+10", "file1"])).unwrap()
         );
     }
@@ -341,31 +359,31 @@ mod tests {
     fn test_parse_inputs_traditional() {
         // it should not return FileAndOffset to signal no offset was entered on the command line.
         assert_eq!(
-            CommandLineInputs::FileNames(vec!["-".to_string()]),
+            CommandLineInputs::FileNames(vec!["-".into()]),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "--traditional"])).unwrap()
         );
 
         assert_eq!(
-            CommandLineInputs::FileNames(vec!["file1".to_string()]),
+            CommandLineInputs::FileNames(vec!["file1".into()]),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "--traditional", "file1"]))
                 .unwrap()
         );
 
         // offset does not need to start with a +
         assert_eq!(
-            CommandLineInputs::FileAndOffset(("-".to_string(), 8, None)),
+            CommandLineInputs::FileAndOffset(("-".into(), 8, None)),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "--traditional", "10"])).unwrap()
         );
 
         // valid offset and valid label
         assert_eq!(
-            CommandLineInputs::FileAndOffset(("-".to_string(), 8, Some(8))),
+            CommandLineInputs::FileAndOffset(("-".into(), 8, Some(8))),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "--traditional", "10", "10"]))
                 .unwrap()
         );
 
         assert_eq!(
-            CommandLineInputs::FileAndOffset(("file1".to_string(), 8, None)),
+            CommandLineInputs::FileAndOffset(("file1".into(), 8, None)),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "--traditional", "file1", "10"]))
                 .unwrap()
         );
@@ -375,7 +393,7 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(
-            CommandLineInputs::FileAndOffset(("file1".to_string(), 8, Some(8))),
+            CommandLineInputs::FileAndOffset(("file1".into(), 8, Some(8))),
             od_parse_inputs(&ct_app().get_matches_from(vec![
                 "od",
                 "--traditional",
@@ -462,22 +480,19 @@ mod tests {
         // 测试空输入（应该返回标准输入）
         mock_opts.set_inputs(vec![]);
         let result = od_parse_inputs(&mock_opts).unwrap();
-        assert_eq!(result, CommandLineInputs::FileNames(vec!["-".to_string()]));
+        assert_eq!(result, CommandLineInputs::FileNames(vec!["-".into()]));
 
         // 测试单个文件
         mock_opts.set_inputs(vec!["file1"]);
         let result = od_parse_inputs(&mock_opts).unwrap();
-        assert_eq!(
-            result,
-            CommandLineInputs::FileNames(vec!["file1".to_string()])
-        );
+        assert_eq!(result, CommandLineInputs::FileNames(vec!["file1".into()]));
 
         // 测试多个文件
         mock_opts.set_inputs(vec!["file1", "file2"]);
         let result = od_parse_inputs(&mock_opts).unwrap();
         assert_eq!(
             result,
-            CommandLineInputs::FileNames(vec!["file1".to_string(), "file2".to_string()])
+            CommandLineInputs::FileNames(vec!["file1".into(), "file2".into()])
         );
     }
 
@@ -490,7 +505,7 @@ mod tests {
         let result = od_parse_inputs(&mock_opts).unwrap();
         assert_eq!(
             result,
-            CommandLineInputs::FileAndOffset(("-".to_string(), 8, None))
+            CommandLineInputs::FileAndOffset(("-".into(), 8, None))
         );
 
         // 测试带偏移量的文件
@@ -498,7 +513,7 @@ mod tests {
         let result = od_parse_inputs(&mock_opts).unwrap();
         assert_eq!(
             result,
-            CommandLineInputs::FileAndOffset(("file1".to_string(), 8, None))
+            CommandLineInputs::FileAndOffset(("file1".into(), 8, None))
         );
 
         // 测试无效偏移量
@@ -506,7 +521,7 @@ mod tests {
         let result = od_parse_inputs(&mock_opts).unwrap();
         assert_eq!(
             result,
-            CommandLineInputs::FileNames(vec!["file1".to_string(), "+xyz".to_string()])
+            CommandLineInputs::FileNames(vec!["file1".into(), "+xyz".into()])
         );
     }
 
@@ -519,7 +534,7 @@ mod tests {
 
             assert_eq!(
                 od_parse_inputs(&mock_opts).unwrap(),
-                CommandLineInputs::FileNames(vec!["+10".to_string()])
+                CommandLineInputs::FileNames(vec!["+10".into()])
             );
         }
     }
@@ -527,35 +542,32 @@ mod tests {
     #[test]
     fn test_od_parse_inputs_traditional() {
         // 测试空输入
-        let result = od_parse_inputs_traditional(&[]).unwrap();
-        assert_eq!(result, CommandLineInputs::FileNames(vec!["-".to_string()]));
+        let result = od_parse_inputs_traditional(&[] as &[&str]).unwrap();
+        assert_eq!(result, CommandLineInputs::FileNames(vec!["-".into()]));
 
         // 测试单个文件
         let result = od_parse_inputs_traditional(&["file1"]).unwrap();
-        assert_eq!(
-            result,
-            CommandLineInputs::FileNames(vec!["file1".to_string()])
-        );
+        assert_eq!(result, CommandLineInputs::FileNames(vec!["file1".into()]));
 
         // 测试偏移量
         let result = od_parse_inputs_traditional(&["10"]).unwrap();
         assert_eq!(
             result,
-            CommandLineInputs::FileAndOffset(("-".to_string(), 8, None))
+            CommandLineInputs::FileAndOffset(("-".into(), 8, None))
         );
 
         // 测试文件和偏移量
         let result = od_parse_inputs_traditional(&["file1", "10"]).unwrap();
         assert_eq!(
             result,
-            CommandLineInputs::FileAndOffset(("file1".to_string(), 8, None))
+            CommandLineInputs::FileAndOffset(("file1".into(), 8, None))
         );
 
         // 测试带标签的偏移量
         let result = od_parse_inputs_traditional(&["file1", "10", "20"]).unwrap();
         assert_eq!(
             result,
-            CommandLineInputs::FileAndOffset(("file1".to_string(), 8, Some(16)))
+            CommandLineInputs::FileAndOffset(("file1".into(), 8, Some(16)))
         );
     }
 
@@ -594,8 +606,8 @@ mod tests {
     }
 
     impl CommandLineOpts for MockCommandLineOpts {
-        fn inputs(&self) -> Vec<&str> {
-            self.inputs.clone()
+        fn inputs(&self) -> Vec<&OsStr> {
+            self.inputs.iter().map(AsRef::as_ref).collect()
         }
 
         fn opts_present(&self, opts: &[&str]) -> bool {

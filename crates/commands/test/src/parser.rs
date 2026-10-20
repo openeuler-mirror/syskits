@@ -489,22 +489,23 @@ impl TestParser {
                 TestSymbol::None => {
                     return Err(ParseError::MissingArgument(format!("{op}")));
                 }
-                TestSymbol::Literal(s)
-                    if s == "-l"
-                        && matches!(
-                            op,
-                            TestSymbol::Op(TestOperator::Int(_))
-                                | TestSymbol::Op(TestOperator::File(_))
-                        )
-                        && self.tokens.peek().is_some() =>
-                {
+                TestSymbol::Literal(s) if s == "-l" && self.tokens.peek().is_some() => {
                     match self.next_token() {
                         TestSymbol::None => {
                             return Err(ParseError::MissingArgument("-l".quote().to_string()));
                         }
-                        token => self
-                            .stack
-                            .push(TestSymbol::LengthOperand(Self::symbol_value(token))),
+                        token => match &op {
+                            TestSymbol::Op(TestOperator::Int(_))
+                            | TestSymbol::Op(TestOperator::File(_)) => self
+                                .stack
+                                .push(TestSymbol::LengthOperand(Self::symbol_value(token))),
+                            TestSymbol::Op(TestOperator::String(op)) => {
+                                self.stack.pop();
+                                self.stack.push(TestSymbol::Literal(op.clone()));
+                                self.stack.push(token.into_literal());
+                            }
+                            _ => unreachable!(),
+                        },
                     }
                 }
                 token => self.stack.push(token.into_literal()),
@@ -681,6 +682,20 @@ mod tests {
             assert_eq!(
                 stack[stack.len() - 2],
                 TestSymbol::BoolOp(OsString::from(op))
+            );
+        }
+    }
+
+    #[test]
+    fn string_comparison_consumes_right_length_operand() {
+        for op in ["=", "!="] {
+            assert_eq!(
+                test_parse(args(&["abc", op, "-l", "="])).unwrap(),
+                vec![
+                    TestSymbol::Literal(OsString::from(op)),
+                    TestSymbol::Literal(OsString::from("=")),
+                    TestSymbol::Op(TestOperator::String(OsString::from(op))),
+                ]
             );
         }
     }

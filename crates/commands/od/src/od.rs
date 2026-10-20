@@ -1245,7 +1245,12 @@ fn od_open_input_peek_reader(
         .collect::<Vec<_>>();
 
     let mf = OdMultifileReader::new(inputs);
-    let pr = PartialReader::new(mf, skip_bytes, read_bytes);
+    let pr = PartialReader::with_fast_skip(
+        mf,
+        skip_bytes,
+        read_bytes,
+        OdMultifileReader::skip_regular_files,
+    );
     PeekReader::new(pr)
 }
 

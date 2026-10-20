@@ -276,6 +276,28 @@
         },
         {
             "command": "od",
+            "description": "Strings mode treats a plus-prefixed operand as a file",
+            "args": [
+                "-S1",
+                "+2"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q 'No such file or directory'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": []
+        },
+        {
+            "command": "od",
             "description": "Option -A n (No address)",
             "args": [
                 "-An",

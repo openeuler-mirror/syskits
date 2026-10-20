@@ -311,45 +311,90 @@ impl BytesWriter {
 
 /// 专门用于 shred 的文件大小解析，支持 0x 和 0 前缀
 fn parse_shred_size(size_str: &str) -> Result<u64, ()> {
-    let s = size_str.trim();
-    if s.starts_with('-') {
+    let s = size_str.trim_start_matches(|c: char| c.is_ascii_whitespace());
+    let had_leading_whitespace = s.len() != size_str.len();
+    let (unsigned, had_sign) = if let Some(value) = s.strip_prefix('+') {
+        (value, true)
+    } else if s.starts_with('-') {
+        return Err(());
+    } else {
+        (s, false)
+    };
+    if unsigned.is_empty() {
         return Err(());
     }
 
-    // 将数字部分与后缀部分(如 K, M, B)分离
-    let split_idx = s
-        .find(|c: char| !c.is_ascii_hexdigit() && c != 'x' && c != 'X')
-        .unwrap_or(s.len());
-    let (num_str, suffix) = s.split_at(split_idx);
-
-    if num_str.is_empty() {
-        return ctcore::ct_parse_size::parse_size_u64(s).map_err(|_| ());
-    }
-
-    // 判断进制
-    let radix = if num_str.starts_with("0x") || num_str.starts_with("0X") {
-        16
-    } else if num_str.starts_with('0') && num_str.len() > 1 {
-        8
+    let bytes = unsigned.as_bytes();
+    let has_hex_prefix = bytes.len() > 2
+        && bytes[0] == b'0'
+        && matches!(bytes[1], b'x' | b'X')
+        && bytes[2].is_ascii_hexdigit();
+    let (radix, digit_start) = if has_hex_prefix {
+        (16, 2)
+    } else if bytes[0] == b'0' {
+        (8, 0)
     } else {
-        10
+        (10, 0)
+    };
+    let digit_end = bytes[digit_start..]
+        .iter()
+        .position(|byte| match radix {
+            8 => !matches!(byte, b'0'..=b'7'),
+            10 => !byte.is_ascii_digit(),
+            16 => !byte.is_ascii_hexdigit(),
+            _ => unreachable!(),
+        })
+        .map_or(bytes.len(), |offset| digit_start + offset);
+
+    let (number, suffix) = if digit_end == digit_start {
+        if had_sign || had_leading_whitespace {
+            return Err(());
+        }
+        (1, unsigned)
+    } else {
+        let digits = &unsigned[digit_start..digit_end];
+        let number = u64::from_str_radix(digits, radix).map_err(|_| ())?;
+        (number, &unsigned[digit_end..])
     };
 
-    let num_str_clean = if radix == 16 { &num_str[2..] } else { num_str };
-
-    // 尝试按照识别的进制解析，如果失败（比如包含了 B 导致误判为 Hex），则 fallback 到默认解析
-    let num = match u64::from_str_radix(num_str_clean, radix) {
-        Ok(n) => n,
-        Err(_) => return ctcore::ct_parse_size::parse_size_u64(s).map_err(|_| ()),
-    };
-
-    // 如果没有后缀，直接返回；如果有，拼接成十进制格式交给底层库处理单位换算
-    if suffix.is_empty() {
-        Ok(num)
-    } else {
-        let decimal_str = format!("{num}{suffix}");
-        ctcore::ct_parse_size::parse_size_u64(&decimal_str).map_err(|_| ())
+    let scaled = scale_shred_size(number, suffix)?;
+    if scaled > i64::MAX as u64 {
+        return Err(());
     }
+    Ok(scaled)
+}
+
+fn scale_shred_size(mut value: u64, suffix: &str) -> Result<u64, ()> {
+    match suffix.as_bytes() {
+        b"" | b"c" => return Ok(value),
+        b"b" => return value.checked_mul(512).ok_or(()),
+        b"B" => return value.checked_mul(1024).ok_or(()),
+        _ => {}
+    }
+
+    let bytes = suffix.as_bytes();
+    let power = match bytes.first() {
+        Some(b'k' | b'K') => 1,
+        Some(b'M') => 2,
+        Some(b'G') => 3,
+        Some(b'T') => 4,
+        Some(b'P') => 5,
+        Some(b'E') => 6,
+        Some(b'Z') => 7,
+        Some(b'Y') => 8,
+        Some(b'R') => 9,
+        Some(b'Q') => 10,
+        _ => return Err(()),
+    };
+    let base = match &bytes[1..] {
+        b"" | b"iB" => 1024,
+        b"B" | b"D" => 1000,
+        _ => return Err(()),
+    };
+    for _ in 0..power {
+        value = value.checked_mul(base).ok_or(())?;
+    }
+    Ok(value)
 }
 
 /// 文件擦除的配置选项
@@ -1176,6 +1221,47 @@ mod tests {
         assert_eq!(parse_remove_method("wipes").unwrap(), "wipesync");
         assert!(parse_remove_method("wip").is_err());
         assert!(parse_remove_method("unknown").is_err());
+    }
+
+    #[test]
+    fn test_parse_shred_size_gnu_syntax() {
+        let valid = [
+            ("+1", 1),
+            ("  +0x10", 16),
+            ("010", 8),
+            ("K", 1024),
+            ("1c", 1),
+            ("1b", 512),
+            ("1B", 1024),
+            ("1kB", 1000),
+            ("1KiB", 1024),
+            ("1KD", 1000),
+            ("1M", 1024 * 1024),
+            ("0Q", 0),
+            ("9223372036854775807", i64::MAX as u64),
+            ("0x7fffffffffffffff", i64::MAX as u64),
+        ];
+        for (value, expected) in valid {
+            assert_eq!(parse_shred_size(value), Ok(expected), "value: {value}");
+        }
+    }
+
+    #[test]
+    fn test_parse_shred_size_rejects_gnu_invalid_values() {
+        for value in [
+            " K",
+            "+K",
+            "1m",
+            "1g",
+            "1t",
+            "1 ",
+            "09",
+            "1Q",
+            "9223372036854775808",
+            "0x8000000000000000",
+        ] {
+            assert!(parse_shred_size(value).is_err(), "value: {value}");
+        }
     }
 
     mod pattern_tests {

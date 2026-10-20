@@ -9,6 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
+use std::collections::VecDeque;
 use std::ffi::OsStr;
 use std::fs::{File, Metadata};
 use std::io::{self, BufReader, Read, Seek, SeekFrom};
@@ -35,7 +36,7 @@ pub enum OdInputSource<'a> {
 /// 多文件读取器 - 将所有输入（文件或标准输入）连接在一起
 pub struct OdMultifileReader<'a> {
     /// 待处理的输入源列表
-    ni: Vec<OdInputSource<'a>>,
+    ni: VecDeque<OdInputSource<'a>>,
     /// 当前正在读取的文件
     curr_file: Option<OdCurrentInput>,
     /// 是否至少成功打开或选择过一个输入
@@ -107,7 +108,7 @@ impl OdMultifileReader<'_> {
     /// 创建新的多文件读取器
     pub fn new(fnames: Vec<OdInputSource>) -> OdMultifileReader {
         let mut mf = OdMultifileReader {
-            ni: fnames,
+            ni: fnames.into(),
             curr_file: None,
             has_opened_input: false,
             curr_name: None,
@@ -118,8 +119,8 @@ impl OdMultifileReader<'_> {
     }
 
     fn next_file(&mut self) {
-        while !self.ni.is_empty() {
-            match self.ni.remove(0) {
+        while let Some(input) = self.ni.pop_front() {
+            match input {
                 OdInputSource::Stdin => {
                     self.has_opened_input = true;
                     self.curr_name = Some(OsStr::new("standard input"));

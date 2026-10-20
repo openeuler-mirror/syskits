@@ -126,6 +126,39 @@ fn od_restore_inherited_sigpipe() {
 #[cfg(any(not(target_os = "linux"), test))]
 fn od_restore_inherited_sigpipe() {}
 
+#[cfg(unix)]
+fn od_prepare_closed_stdin(inputs: &[OsString]) -> bool {
+    let stdin_was_closed =
+        ctcore::ct_stdin_was_closed() && inputs.iter().any(|input| input == OsStr::new("-"));
+    if stdin_was_closed {
+        unsafe {
+            libc::close(libc::STDIN_FILENO);
+        }
+    }
+    stdin_was_closed
+}
+
+#[cfg(not(unix))]
+fn od_prepare_closed_stdin(_inputs: &[OsString]) -> bool {
+    false
+}
+
+#[cfg(unix)]
+fn od_exit_for_closed_stdout() {
+    if !ctcore::ct_stdout_was_closed() {
+        return;
+    }
+
+    ct_show_error!("write error: Bad file descriptor");
+    let _ = std::io::Write::flush(&mut std::io::stderr());
+    unsafe {
+        libc::_exit(1);
+    }
+}
+
+#[cfg(not(unix))]
+fn od_exit_for_closed_stdout() {}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OdView {
     pub spec: String,
@@ -456,6 +489,8 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
     let clap_matches = ct_app().try_get_matches_from(&args)?;
 
     let od_settings = OdSettings::new(&clap_matches, &format_args)?;
+    let stdin_was_closed = od_prepare_closed_stdin(&od_settings.input_strings);
+    od_exit_for_closed_stdout();
 
     let mut input_offset =
         OdInputOffset::new(od_settings.radix, od_settings.skip_bytes, od_settings.label);
@@ -468,13 +503,17 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
 
     // 如果指定了 -S，进入专用的严格字符串扫描模式
     if let Some(min_len) = od_settings.strings_min_len {
-        odexec_strings(
+        let result = odexec_strings(
             &mut input,
             od_settings.radix,
             od_settings.skip_bytes,
             od_settings.read_bytes, // 把 -N 的限制传进去用于精确判断
             min_len,
-        )?;
+        );
+        if stdin_was_closed {
+            ct_show_error!("standard input: Bad file descriptor");
+        }
+        result?;
         return if input.has_error() {
             Err(1.into())
         } else {
@@ -497,7 +536,11 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
         od_settings.output_duplicates,
     );
 
-    odexec(&mut input_offset, &mut input_decoder, &output_info)
+    let result = odexec(&mut input_offset, &mut input_decoder, &output_info);
+    if stdin_was_closed {
+        ct_show_error!("standard input: Bad file descriptor");
+    }
+    result
 }
 
 fn od_normalize_optional_arguments(args: Vec<OsString>) -> Vec<OsString> {

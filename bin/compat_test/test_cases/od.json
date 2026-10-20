@@ -220,6 +220,62 @@
         },
         {
             "command": "od",
+            "description": "Reject strings mode with an explicit type format",
+            "args": [
+                "-S1",
+                "-tx1",
+                "input"
+            ],
+            "setup_commands": [
+                "printf 'abc\\0' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q 'no type may be specified when dumping strings'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "Reject long strings mode with an explicit type format",
+            "args": [
+                "--strings=1",
+                "-x",
+                "input"
+            ],
+            "setup_commands": [
+                "printf 'abc\\0' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": null
+                },
+                "verifications": [
+                    {
+                        "command": "echo \"$CMD_STDERR\" | grep -q 'no type may be specified when dumping strings'",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input"
+            ]
+        },
+        {
+            "command": "od",
             "description": "Option -A n (No address)",
             "args": [
                 "-An",

@@ -201,6 +201,12 @@ impl OdSettings {
         let radix = Self::parse_radix(matches)?;
 
         let strings_min_len = Self::parse_strings_min_len(matches)?;
+        if strings_min_len.is_some() && Self::has_explicit_format(matches) {
+            return Err(CtSimpleError::new(
+                1,
+                "no type may be specified when dumping strings",
+            ));
+        }
 
         Ok(Self {
             byte_order,
@@ -226,6 +232,35 @@ impl OdSettings {
         }
 
         Ok(None)
+    }
+
+    fn has_explicit_format(matches: &ArgMatches) -> bool {
+        const FORMAT_OPTIONS: &[&str] = &[
+            "a",
+            "b",
+            "c",
+            "d",
+            "D",
+            "o",
+            "I",
+            "L",
+            "i",
+            "l",
+            "x",
+            "h",
+            "O",
+            "s",
+            "X",
+            "H",
+            "e",
+            "f",
+            "F",
+            od_options::OD_FORMAT,
+        ];
+
+        FORMAT_OPTIONS
+            .iter()
+            .any(|option| matches.value_source(option) == Some(ValueSource::CommandLine))
     }
 
     fn parse_line_width(matches: &ArgMatches) -> CTResult<usize> {
@@ -1288,6 +1323,23 @@ mod tests {
                 let settings = OdSettings::new(&matches, &args).unwrap();
                 assert_eq!(settings.byte_order, ByteOrder::Little);
             }
+        }
+
+        #[test]
+        fn test_new_rejects_strings_with_explicit_formats() {
+            for args in [vec!["od", "-S1", "-tx1"], vec!["od", "--strings=1", "-x"]] {
+                let owned_args: Vec<String> = args.iter().map(ToString::to_string).collect();
+                let matches = ct_app().try_get_matches_from(&owned_args).unwrap();
+                let error = match OdSettings::new(&matches, &owned_args) {
+                    Ok(_) => panic!("strings and type format should conflict"),
+                    Err(error) => error,
+                };
+                assert!(error.to_string().contains("no type may be specified"));
+            }
+
+            let args = vec!["od".to_string(), "-S1".to_string()];
+            let matches = ct_app().try_get_matches_from(&args).unwrap();
+            assert!(OdSettings::new(&matches, &args).is_ok());
         }
     }
 

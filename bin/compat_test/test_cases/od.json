@@ -1693,6 +1693,31 @@
         ]
       },
       "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "command": "od",
+      "description": "LC_ALL=C下执行od --traditional input 1B 2B；传统offset与label接受大写B并按1024倍解释；迁移原Cargo用例od_traditional_offsets_accept_uppercase_block_suffix_like_gnu",
+      "args": ["--traditional", "input", "1B", "2B"],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "dd if=/dev/zero of=input bs=2048 count=1 2>/dev/null"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": null,
+          "stderr": ""
+        },
+        "verifications": [
+          {
+            "command": "LC_ALL=C od --traditional input 1B 2B > expected && diff expected $CMD_STDOUT",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f input expected"]
     }
     ]
 }

@@ -1323,6 +1323,34 @@
       }
     },
     {
+      "command": "od",
+      "description": "A later valid input still produces the final offset after an earlier open error",
+      "args": ["missing", "good"],
+      "setup_commands": [
+        "export LC_ALL='C'",
+        "export LANG='C'",
+        "printf 'abc' > good"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": null,
+          "stderr": null
+        },
+        "verifications": [
+          {
+            "command": "LC_ALL=C od missing good > expected 2>/dev/null; diff expected $CMD_STDOUT",
+            "expected_exit": 0
+          },
+          {
+            "command": "test -n \"$CMD_STDERR\"",
+            "expected_exit": 0
+          }
+        ]
+      },
+      "cleanup_commands": ["rm -f good expected"]
+    },
+    {
       "tstdin": "",
       "command": "od",
       "description": "LC_ALL=C、LANG=C下执行od --strings testfile；stdin为0字节；输入fixture为9字节内容testfile加换行的普通文件testfile；预期--strings不吞掉后续文件操作数，RC=0且stdout、stderr均为空；迁移原Cargo用例od_long_strings_without_bytes_keeps_following_operand_as_file",

@@ -786,7 +786,7 @@ fn od_process_next_line<I: PeekRead + HasError>(
             let length = memory_decoder.length();
 
             if length == 0 {
-                if !input_decoder.has_error() {
+                if input_decoder.has_input() {
                     input_offset.print_final_offset();
                 }
                 return Ok(LineProcessResult::EndOfFile);
@@ -1200,31 +1200,23 @@ pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
                 let length = memory_decoder.length();
 
                 if length == 0 {
-                    if !input_decoder.has_error() {
-                        let final_offset = input_offset.format_byte_offset();
-                        if !final_offset.is_empty() {
-                            classic_text.push_str(&format!("{final_offset}\n"));
-                            rows.push(OdRow {
-                                row_kind: "final_offset".into(),
-                                offset: input_offset.byte_pos(),
-                                label: input_offset.label(),
-                                byte_len: 0,
-                                bytes: Vec::new(),
-                                views: Vec::new(),
-                            });
-                        }
-                        return Ok(OdSemantic {
-                            rows,
-                            classic_text,
-                            stderr_text: String::new(),
-                            exit_code: 0,
+                    let final_offset = input_offset.format_byte_offset();
+                    if input_decoder.has_input() && !final_offset.is_empty() {
+                        classic_text.push_str(&format!("{final_offset}\n"));
+                        rows.push(OdRow {
+                            row_kind: "final_offset".into(),
+                            offset: input_offset.byte_pos(),
+                            label: input_offset.label(),
+                            byte_len: 0,
+                            bytes: Vec::new(),
+                            views: Vec::new(),
                         });
                     }
                     return Ok(OdSemantic {
                         rows,
                         classic_text,
                         stderr_text: String::new(),
-                        exit_code: 1,
+                        exit_code: i32::from(input_decoder.has_error()),
                     });
                 }
 

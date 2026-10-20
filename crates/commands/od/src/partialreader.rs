@@ -91,6 +91,10 @@ impl<R: HasError> HasError for PartialReader<R> {
     fn has_error(&self) -> bool {
         self.inner.has_error()
     }
+
+    fn has_input(&self) -> bool {
+        self.inner.has_input()
+    }
 }
 
 #[cfg(test)]

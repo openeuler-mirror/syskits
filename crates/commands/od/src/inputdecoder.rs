@@ -95,6 +95,10 @@ where
     fn has_error(&self) -> bool {
         self.input.has_error()
     }
+
+    fn has_input(&self) -> bool {
+        self.input.has_input()
+    }
 }
 
 /// 提供以各种格式访问内部数据的功能

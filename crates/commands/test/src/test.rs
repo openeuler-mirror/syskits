@@ -387,7 +387,19 @@ fn older_than(a: Option<&fs::Metadata>, b: Option<&fs::Metadata>) -> bool {
 
 /// 检查文件描述符是否为终端
 fn isatty(fd: &OsStr) -> ParseResult<bool> {
-    fd.to_str()
+    let bytes = fd.as_encoded_bytes();
+    let mut start = 0;
+    let mut end = bytes.len();
+
+    while start < end && integer_is_blank(bytes[start]) {
+        start += 1;
+    }
+    while start < end && integer_is_blank(bytes[end - 1]) {
+        end -= 1;
+    }
+
+    std::str::from_utf8(&bytes[start..end])
+        .ok()
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| ParseError::InvalidInteger(fd.quote().to_string()))
         .map(|i| unsafe { libc::isatty(i) == 1 })
@@ -567,6 +579,13 @@ mod tests {
         let padded = format!("+000{huge}");
         assert!(test_integers(OsStr::new(huge), OsStr::new(&padded), OsStr::new("-eq")).unwrap());
         assert!(test_integers(OsStr::new("-0"), OsStr::new("+000"), OsStr::new("-eq")).unwrap());
+    }
+
+    #[test]
+    fn tty_file_descriptors_accept_surrounding_blanks() {
+        assert!(!isatty(OsStr::new(" -1 ")).unwrap());
+        assert!(!isatty(OsStr::new("\t-1\t")).unwrap());
+        assert!(isatty(OsStr::new("-1\n")).is_err());
     }
 
     #[test]

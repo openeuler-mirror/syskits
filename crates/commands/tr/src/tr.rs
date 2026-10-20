@@ -21,8 +21,8 @@ use clap::{
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use operation::{
-    Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation, configure_locale,
-    translate_input,
+    Sequence, SqueezeOperation, SymbolTranslator, TranslateInputError, TranslateOperation,
+    configure_locale, translate_input,
 };
 use std::io::{BufRead, BufWriter, Write, stdin, stdout};
 use sys_locale::get_locale;
@@ -415,6 +415,18 @@ struct StrictWriter<W: Write> {
     inner: W,
 }
 
+fn translate_input_checked<T, R, W>(reader: &mut R, writer: &mut W, translator: T) -> CTResult<()>
+where
+    T: SymbolTranslator,
+    R: BufRead,
+    W: Write,
+{
+    translate_input(reader, writer, translator).map_err(|error| match error {
+        TranslateInputError::Read(error) => CtSimpleError::new(1, format!("read error: {error}")),
+        TranslateInputError::Write(error) => CtSimpleError::new(1, format!("write error: {error}")),
+    })
+}
+
 impl<W: Write> Write for StrictWriter<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.inner.write(buf).map_err(|e| {
@@ -560,15 +572,15 @@ fn tr_process<R: BufRead, W: Write>(
         if flags.is_squeeze_flag {
             let delete_op = DeleteOperation::new(set1, flags.is_complement_flag);
             let squeeze_op = SqueezeOperation::new(set2, false);
-            translate_input(reader, &mut strict_writer, delete_op.chain(squeeze_op));
+            translate_input_checked(reader, &mut strict_writer, delete_op.chain(squeeze_op))?;
         } else {
             let delete_op = DeleteOperation::new(set1, flags.is_complement_flag);
-            translate_input(reader, &mut strict_writer, delete_op);
+            translate_input_checked(reader, &mut strict_writer, delete_op)?;
         }
     } else if flags.is_squeeze_flag {
         if flags.sets.len() < 2 {
             let squeeze_op = SqueezeOperation::new(set1, flags.is_complement_flag);
-            translate_input(reader, &mut strict_writer, squeeze_op);
+            translate_input_checked(reader, &mut strict_writer, squeeze_op)?;
         } else {
             let translate_op = TranslateOperation::new_with_truncate(
                 set1.clone(),
@@ -581,7 +593,7 @@ fn tr_process<R: BufRead, W: Write>(
                 .map(|map| TranslateOperation::from_standard_map(map.clone()))
                 .unwrap_or(translate_op);
             let squeeze_op = SqueezeOperation::new(set2, false);
-            translate_input(reader, &mut strict_writer, translate_op.chain(squeeze_op));
+            translate_input_checked(reader, &mut strict_writer, translate_op.chain(squeeze_op))?;
         }
     } else {
         let translate_op = TranslateOperation::new_with_truncate(
@@ -593,7 +605,7 @@ fn tr_process<R: BufRead, W: Write>(
         let translate_op = standard_translation_map
             .map(TranslateOperation::from_standard_map)
             .unwrap_or(translate_op);
-        translate_input(reader, &mut strict_writer, translate_op);
+        translate_input_checked(reader, &mut strict_writer, translate_op)?;
     }
     Ok(())
 }

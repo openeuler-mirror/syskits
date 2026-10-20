@@ -232,10 +232,10 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, &'static str> {
     }
 
     // 解析数值
-    match u64::from_str_radix(&s[start..len], radix) {
-        Ok(i) => Ok(i * multiply),
-        Err(_) => Err("解析失败"),
-    }
+    u64::from_str_radix(&s[start..len], radix)
+        .ok()
+        .and_then(|value| value.checked_mul(multiply))
+        .ok_or("解析失败")
 }
 
 #[cfg(test)]
@@ -430,6 +430,7 @@ mod tests {
         parse_offset_operand_str("-").unwrap_err();
         parse_offset_operand_str("-1").unwrap_err();
         parse_offset_operand_str("1e10").unwrap_err();
+        parse_offset_operand_str("10000000000000000000b").unwrap_err();
     }
 
     #[test]

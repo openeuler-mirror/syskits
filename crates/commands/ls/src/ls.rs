@@ -31,7 +31,7 @@ use std::process::Command as ProcessCommand;
 #[cfg(unix)]
 use std::sync::Mutex;
 #[cfg(target_os = "linux")]
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 #[allow(unused_imports)]
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -5622,6 +5622,97 @@ struct StyleManager {
     style_count: usize,
     raw_indicator_styles: HashMap<usize, String>,
     raw_suffix_styles: Vec<RawSuffixStyle>,
+    #[cfg(target_os = "linux")]
+    signal_guard: Option<ColorSignalGuard>,
+}
+
+#[cfg(target_os = "linux")]
+static LS_COLOR_RESTORE_PTR: AtomicPtr<u8> = AtomicPtr::new(std::ptr::null_mut());
+#[cfg(target_os = "linux")]
+static LS_COLOR_RESTORE_LEN: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(target_os = "linux")]
+extern "C" fn ls_color_signal_handler(signal: ctcore::libc::c_int) {
+    let mut pointer = LS_COLOR_RESTORE_PTR.load(Ordering::Relaxed);
+    let mut remaining = LS_COLOR_RESTORE_LEN.load(Ordering::Relaxed);
+    while remaining != 0 && !pointer.is_null() {
+        let written =
+            unsafe { ctcore::libc::write(ctcore::libc::STDOUT_FILENO, pointer.cast(), remaining) };
+        if written <= 0 {
+            break;
+        }
+        let written = written as usize;
+        pointer = unsafe { pointer.add(written) };
+        remaining -= written;
+    }
+
+    unsafe {
+        ctcore::libc::kill(ctcore::libc::getpid(), signal);
+    }
+}
+
+#[cfg(target_os = "linux")]
+struct ColorSignalGuard {
+    _restore_sequence: Box<[u8]>,
+    previous_actions: Vec<(ctcore::libc::c_int, ctcore::libc::sigaction)>,
+}
+
+#[cfg(target_os = "linux")]
+impl ColorSignalGuard {
+    fn install(restore_sequence: Vec<u8>) -> Option<Self> {
+        if unsafe { ctcore::libc::tcgetpgrp(ctcore::libc::STDOUT_FILENO) } < 0 {
+            return None;
+        }
+
+        let restore_sequence = restore_sequence.into_boxed_slice();
+        LS_COLOR_RESTORE_PTR.store(restore_sequence.as_ptr().cast_mut(), Ordering::Relaxed);
+        LS_COLOR_RESTORE_LEN.store(restore_sequence.len(), Ordering::Relaxed);
+
+        let mut previous_actions = Vec::new();
+        for signal in [
+            ctcore::libc::SIGALRM,
+            ctcore::libc::SIGHUP,
+            ctcore::libc::SIGINT,
+            ctcore::libc::SIGPIPE,
+            ctcore::libc::SIGQUIT,
+            ctcore::libc::SIGTERM,
+        ] {
+            let mut previous = unsafe { std::mem::zeroed::<ctcore::libc::sigaction>() };
+            if unsafe { ctcore::libc::sigaction(signal, std::ptr::null(), &mut previous) } != 0
+                || previous.sa_sigaction == ctcore::libc::SIG_IGN
+            {
+                continue;
+            }
+
+            let mut action = unsafe { std::mem::zeroed::<ctcore::libc::sigaction>() };
+            action.sa_sigaction = ls_color_signal_handler as usize;
+            action.sa_flags = ctcore::libc::SA_RESETHAND | ctcore::libc::SA_RESTART;
+            unsafe {
+                ctcore::libc::sigfillset(&mut action.sa_mask);
+            }
+            if unsafe { ctcore::libc::sigaction(signal, &action, std::ptr::null_mut()) } == 0 {
+                previous_actions.push((signal, previous));
+            }
+        }
+
+        Some(Self {
+            _restore_sequence: restore_sequence,
+            previous_actions,
+        })
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for ColorSignalGuard {
+    fn drop(&mut self) {
+        for (signal, previous) in &self.previous_actions {
+            unsafe {
+                ctcore::libc::sigaction(*signal, previous, std::ptr::null_mut());
+            }
+        }
+        LS_COLOR_RESTORE_LEN.store(0, Ordering::Relaxed);
+        LS_COLOR_RESTORE_PTR.store(std::ptr::null_mut(), Ordering::Relaxed);
+    }
 }
 
 struct RawSuffixStyle {
@@ -5649,6 +5740,8 @@ impl StyleManager {
             style_count: 0,
             raw_indicator_styles: HashMap::new(),
             raw_suffix_styles: Vec::new(),
+            #[cfg(target_os = "linux")]
+            signal_guard: None,
         };
 
         let Some((ls_colors, value)) = ls_colors.zip(
@@ -5796,6 +5889,20 @@ impl StyleManager {
             .is_some_and(|sequence| !matches!(sequence, "" | "0" | "00"))
     }
 
+    fn start_color_output(&mut self) {
+        if self.used_color {
+            return;
+        }
+        self.used_color = true;
+
+        #[cfg(target_os = "linux")]
+        {
+            let mut restore_sequence = self.left.as_bytes().to_vec();
+            restore_sequence.extend_from_slice(self.right.as_bytes());
+            self.signal_guard = ColorSignalGuard::install(restore_sequence);
+        }
+    }
+
     fn begin_item(&mut self) -> String {
         if !self.normal_is_colored() {
             return String::new();
@@ -5807,7 +5914,7 @@ impl StyleManager {
         } else {
             String::new()
         };
-        self.used_color = true;
+        self.start_color_output();
         format!(
             "{initial}{}{}{}",
             self.left,
@@ -5825,7 +5932,7 @@ impl StyleManager {
             String::new()
         };
         self.is_first = false;
-        self.used_color = true;
+        self.start_color_output();
         self.style_count += 1;
         let mut styled = format!("{initial}{}{sequence}{}", self.left, self.right).into_bytes();
         styled.extend_from_slice(name);
@@ -5860,7 +5967,7 @@ impl StyleManager {
             term_style.prefix_with_reset = false;
         }
 
-        self.used_color = true;
+        self.start_color_output();
         self.style_count += 1;
         let mut styled = Vec::new();
         term_style.paint(name).write_to(&mut styled).unwrap();

@@ -4960,6 +4960,74 @@ fn locale_time_format(recent: bool) -> String {
 }
 
 #[cfg(unix)]
+fn align_locale_month_format(seconds: i64, fmt: &str) -> Option<Vec<u8>> {
+    use std::ffi::CStr;
+
+    let fmt_bytes = fmt.as_bytes();
+    let mut percent_b = None;
+    let mut index = 0;
+    while index + 1 < fmt_bytes.len() {
+        if fmt_bytes[index] == b'%' {
+            if fmt_bytes[index + 1] == b'b' {
+                percent_b = Some(index);
+                break;
+            }
+            if fmt_bytes[index + 1] == b'%' {
+                index += 1;
+            }
+        }
+        index += 1;
+    }
+    let percent_b = percent_b?;
+
+    let month_items = [
+        ctcore::libc::ABMON_1,
+        ctcore::libc::ABMON_2,
+        ctcore::libc::ABMON_3,
+        ctcore::libc::ABMON_4,
+        ctcore::libc::ABMON_5,
+        ctcore::libc::ABMON_6,
+        ctcore::libc::ABMON_7,
+        ctcore::libc::ABMON_8,
+        ctcore::libc::ABMON_9,
+        ctcore::libc::ABMON_10,
+        ctcore::libc::ABMON_11,
+        ctcore::libc::ABMON_12,
+    ];
+    let mut months = Vec::with_capacity(month_items.len());
+    let mut month_width = 0;
+    for item in month_items {
+        let month = unsafe { CStr::from_ptr(ctcore::libc::nl_langinfo(item)) }.to_bytes();
+        if month.contains(&b'%') {
+            return None;
+        }
+        month_width = month_width.max(os_str_display_width(OsStr::from_bytes(month)));
+        months.push(month.to_vec());
+    }
+
+    let time = ctcore::libc::time_t::try_from(seconds).ok()?;
+    let mut tm: ctcore::libc::tm = unsafe { std::mem::zeroed() };
+    let tm_ptr = unsafe { ctcore::libc::localtime_r(&time as *const _, &mut tm as *mut _) };
+    if tm_ptr.is_null() || !(0..12).contains(&tm.tm_mon) {
+        return None;
+    }
+    let month = &months[tm.tm_mon as usize];
+    let padding = month_width.saturating_sub(os_str_display_width(OsStr::from_bytes(month)));
+
+    let mut aligned = Vec::with_capacity(fmt_bytes.len() + padding + month.len());
+    aligned.extend_from_slice(&fmt_bytes[..percent_b]);
+    if month.first().is_some_and(u8::is_ascii_digit) {
+        aligned.extend(std::iter::repeat_n(b' ', padding));
+        aligned.extend_from_slice(month);
+    } else {
+        aligned.extend_from_slice(month);
+        aligned.extend(std::iter::repeat_n(b' ', padding));
+    }
+    aligned.extend_from_slice(&fmt_bytes[percent_b + 2..]);
+    Some(aligned)
+}
+
+#[cfg(unix)]
 fn expand_nanoseconds_format(fmt: &[u8], nanoseconds: u32) -> Vec<u8> {
     let nanoseconds = format!("{nanoseconds:09}");
     let mut expanded = Vec::with_capacity(fmt.len());
@@ -5055,13 +5123,14 @@ fn display_date_bytes(metadata: &Metadata, config: &LsConfig) -> Vec<u8> {
                     let fmt = locale_time_format(is_recent);
                     #[cfg(unix)]
                     {
-                        ls_format_local_time_strftime(
+                        let aligned_fmt = align_locale_month_format(time.timestamp(), &fmt)
+                            .unwrap_or_else(|| fmt.as_bytes().to_vec());
+                        ls_format_local_time_strftime_bytes(
                             time.timestamp(),
                             time.timestamp_subsec_nanos(),
-                            &fmt,
+                            OsStr::from_bytes(&aligned_fmt),
                         )
-                        .unwrap_or_else(|| time.format(&fmt).to_string())
-                        .into_bytes()
+                        .unwrap_or_else(|| time.format(&fmt).to_string().into_bytes())
                     }
                     #[cfg(not(unix))]
                     {

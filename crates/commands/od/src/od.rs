@@ -622,8 +622,6 @@ pub fn ct_app() -> Command {
         .about(t!("od.about"))
         .override_usage(t!("od.usage"))
         .after_help(t!("od.after_help"))
-        .trailing_var_arg(true)
-        .dont_delimit_trailing_values(true)
         .infer_long_args(true)
         .args_override_self(true)
         .disable_help_flag(true)

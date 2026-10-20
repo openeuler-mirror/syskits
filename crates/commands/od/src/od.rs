@@ -247,7 +247,14 @@ impl OdSettings {
         let mut skip_bytes = match matches.get_one::<String>(od_options::OD_SKIP_BYTES) {
             None => 0,
             Some(s) => od_parse_number_of_bytes(s).map_err(|e| {
-                CtSimpleError::new(1, od_format_error_message(&e, s, od_options::OD_SKIP_BYTES))
+                CtSimpleError::new(
+                    1,
+                    od_format_error_message(
+                        &e,
+                        s,
+                        od_numeric_option_name(args, 'j', od_options::OD_SKIP_BYTES),
+                    ),
+                )
             })?,
         };
 
@@ -282,7 +289,7 @@ impl OdSettings {
         }
 
         let output_duplicates = matches.get_flag(od_options::OD_OUTPUT_DUPLICATES);
-        let read_bytes = Self::parse_read_bytes(matches)?;
+        let read_bytes = Self::parse_read_bytes(matches, args)?;
         let radix = Self::parse_radix(matches)?;
 
         let strings_min_len = Self::parse_strings_min_len(matches)?;
@@ -391,11 +398,18 @@ impl OdSettings {
         }
     }
 
-    fn parse_read_bytes(matches: &ArgMatches) -> CTResult<Option<u64>> {
+    fn parse_read_bytes(matches: &ArgMatches, args: &[String]) -> CTResult<Option<u64>> {
         match matches.get_one::<String>(od_options::OD_READ_BYTES) {
             None => Ok(None),
             Some(s) => od_parse_number_of_bytes(s).map(Some).map_err(|e| {
-                CtSimpleError::new(1, od_format_error_message(&e, s, od_options::OD_READ_BYTES))
+                CtSimpleError::new(
+                    1,
+                    od_format_error_message(
+                        &e,
+                        s,
+                        od_numeric_option_name(args, 'N', od_options::OD_READ_BYTES),
+                    ),
+                )
             }),
         }
     }
@@ -746,11 +760,13 @@ pub fn ct_app() -> Command {
             .short('j')
             .long(od_options::OD_SKIP_BYTES)
             .help(t!("od.clap.od_skip_bytes"))
+            .allow_negative_numbers(true)
             .value_name("BYTES"),
         Arg::new(od_options::OD_READ_BYTES)
             .short('N')
             .long(od_options::OD_READ_BYTES)
             .help(t!("od.clap.od_read_bytes"))
+            .allow_negative_numbers(true)
             .value_name("BYTES"),
         Arg::new(od_options::OD_ENDIAN)
             .long(od_options::OD_ENDIAN)
@@ -767,6 +783,7 @@ pub fn ct_app() -> Command {
             .short('S')
             .hide(true)
             .num_args(1)
+            .allow_negative_numbers(true)
             .value_name("BYTES"),
         Arg::new("a").short('a').help(t!("od.clap.a")).action(ArgAction::SetTrue),
         Arg::new("b").short('b').help(t!("od.clap.b")).action(ArgAction::SetTrue),
@@ -1379,13 +1396,50 @@ pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
     }
 }
 
+fn od_numeric_option_name(args: &[String], short: char, long: &'static str) -> &'static str {
+    let mut used_short = false;
+    let mut parsing_options = true;
+
+    for arg in args.iter().skip(1) {
+        if !parsing_options {
+            continue;
+        }
+        if arg == "--" {
+            parsing_options = false;
+        } else if let Some(name) = arg.strip_prefix("--") {
+            let name = name.split_once('=').map_or(name, |(name, _)| name);
+            if !name.is_empty() && long.starts_with(name) {
+                used_short = false;
+            }
+        } else if let Some(options) = arg.strip_prefix('-')
+            && options.contains(short)
+        {
+            used_short = true;
+        }
+    }
+
+    if used_short {
+        match short {
+            'j' => "-j",
+            'N' => "-N",
+            _ => unreachable!(),
+        }
+    } else {
+        match long {
+            od_options::OD_SKIP_BYTES => "--skip-bytes",
+            od_options::OD_READ_BYTES => "--read-bytes",
+            _ => unreachable!(),
+        }
+    }
+}
+
 fn od_format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
     match error {
         ParseSizeError::InvalidSuffix(_) => {
-            format!("invalid suffix in --{} argument {}", option, s.quote())
+            format!("invalid suffix in {option} argument {}", s.quote())
         }
-        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument {}", option, s.quote()),
-        ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
+        ParseSizeError::ParseFailure(_) => format!("invalid {option} argument {}", s.quote()),
+        ParseSizeError::SizeTooBig(_) => format!("{option} argument {} too large", s.quote()),
     }
 }
 

@@ -234,9 +234,13 @@ impl OdSettings {
                 value if !value.is_empty() && "little".starts_with(value) => ByteOrder::Little,
                 value if !value.is_empty() && "big".starts_with(value) => ByteOrder::Big,
                 _ => {
-                    return Err(CtSimpleError::new(
+                    return Err(CTsageError::new(
                         1,
-                        format!("Invalid argument --endian={s}"),
+                        format!(
+                            "invalid argument {} for '--endian'\n\
+                             Valid arguments are:\n  - 'little'\n  - 'big'",
+                            s.quote()
+                        ),
                     ));
                 }
             }

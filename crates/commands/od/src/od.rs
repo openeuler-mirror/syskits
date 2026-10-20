@@ -543,7 +543,8 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
         od_settings.line_bytes,
         OD_PEEK_BUFFER_SIZE,
         od_settings.byte_order,
-    );
+    )
+    .map_err(|_| CtSimpleError::new(1, "memory exhausted"))?;
 
     let output_info = OutputInfo::new(
         od_settings.line_bytes,
@@ -1287,7 +1288,8 @@ pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
         od_settings.line_bytes,
         OD_PEEK_BUFFER_SIZE,
         od_settings.byte_order,
-    );
+    )
+    .map_err(|_| CtSimpleError::new(1, "memory exhausted"))?;
     let output_info = OutputInfo::new(
         od_settings.line_bytes,
         &od_settings.formats[..],
@@ -1554,7 +1556,8 @@ mod tests {
             let mut input_offset = OdInputOffset::new(OdRadix::Octal, 0, None);
             let mut input = od_open_input_peek_reader(&[], 0, None);
             let mut input_decoder =
-                OdInputDecoder::new(&mut input, 16, OD_PEEK_BUFFER_SIZE, ByteOrder::Native);
+                OdInputDecoder::new(&mut input, 16, OD_PEEK_BUFFER_SIZE, ByteOrder::Native)
+                    .unwrap();
             let output_info = OutputInfo::new(16, &[], false);
 
             assert!(odexec(&mut input_offset, &mut input_decoder, &output_info).is_ok());

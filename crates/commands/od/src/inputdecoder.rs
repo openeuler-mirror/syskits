@@ -47,17 +47,24 @@ impl<I> OdInputDecoder<'_, I> {
         normal_length: usize,
         peek_length: usize,
         byte_order: ByteOrder,
-    ) -> OdInputDecoder<I> {
-        let bytes = vec![0; normal_length + peek_length];
+    ) -> io::Result<OdInputDecoder<I>> {
+        let capacity = normal_length
+            .checked_add(peek_length)
+            .ok_or_else(|| io::Error::other("memory exhausted"))?;
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(capacity)
+            .map_err(|_| io::Error::other("memory exhausted"))?;
+        bytes.resize(capacity, 0);
 
-        OdInputDecoder {
+        Ok(OdInputDecoder {
             input,
             data: bytes,
             reserved_peek_length: peek_length,
             used_normal_length: 0,
             used_peek_length: 0,
             byte_order,
-        }
+        })
     }
 }
 
@@ -194,7 +201,7 @@ mod tests {
     fn smoke_test() {
         let data = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0xff, 0xff];
         let mut input = PeekReader::new(Cursor::new(&data));
-        let mut sut = OdInputDecoder::new(&mut input, 8, 2, ByteOrder::Little);
+        let mut sut = OdInputDecoder::new(&mut input, 8, 2, ByteOrder::Little).unwrap();
 
         // Peek normal length
         let mut mem = sut.od_peek_read().unwrap();

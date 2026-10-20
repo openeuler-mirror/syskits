@@ -27,7 +27,7 @@ use sys_locale::get_locale;
 use crate::operation::DeleteOperation;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CtSimpleError};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
 use std::ffi::OsString;
 use std::io::Read;
 use std::process::{Command as ProcessCommand, Stdio};
@@ -212,7 +212,7 @@ impl TrFlags {
     /// 验证 sets 不为空
     fn validate_sets_not_empty(&self) -> CTResult<()> {
         if self.sets.is_empty() {
-            return Err(CtSimpleError::new(1, "missing operand"));
+            return Err(CTsageError::new(1, "missing operand"));
         }
         Ok(())
     }
@@ -232,7 +232,7 @@ impl TrFlags {
                     self.sets[0].quote()
                 )
             };
-            return Err(CtSimpleError::new(1, msg));
+            return Err(CTsageError::new(1, msg));
         }
 
         // 检查最大数量要求
@@ -242,11 +242,11 @@ impl TrFlags {
                     "extra operand {}\nOnly one string may be given when deleting without squeezing repeats.",
                     self.sets[1].quote()
                 );
-                return Err(CtSimpleError::new(1, msg));
+                return Err(CTsageError::new(1, msg));
             }
             if self.sets.len() > 2 {
                 let msg = format!("extra operand {}", self.sets[2].quote());
-                return Err(CtSimpleError::new(1, msg));
+                return Err(CTsageError::new(1, msg));
             }
         }
 

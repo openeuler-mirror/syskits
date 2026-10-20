@@ -551,6 +551,13 @@ fn parse_two_arguments(args: &[OsString]) -> ParseResult<Vec<TestSymbol>> {
 /// Parse the token stream `args`, returning a `Symbol` stack representing the
 /// operations to perform in postfix order.
 pub fn test_parse(args: Vec<OsString>) -> ParseResult<Vec<TestSymbol>> {
+    if args.len() == 2 {
+        let first = args[0].as_encoded_bytes();
+        if args[0] != "!" && !(first.len() == 2 && first[0] == b'-') {
+            return Err(ParseError::MissingArgument(args[1].quote().to_string()));
+        }
+    }
+
     if args.len() == 4 && args[0] == "!" {
         let mut stack = test_parse(args[1..].to_vec())?;
         stack.push(TestSymbol::Bang);
@@ -698,5 +705,13 @@ mod tests {
                 ]
             );
         }
+    }
+
+    #[test]
+    fn ordinary_two_argument_form_reports_missing_argument() {
+        assert!(matches!(
+            test_parse(args(&["x", "y"])),
+            Err(ParseError::MissingArgument(argument)) if argument.contains('y')
+        ));
     }
 }

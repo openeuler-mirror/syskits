@@ -131,6 +131,26 @@ pub fn test_main(mut args: impl ctcore::Args) -> CTResult<()> {
 }
 
 /// 评估符号栈并返回布尔结果
+fn postfix_expression_start(stack: &[TestSymbol]) -> Option<usize> {
+    let mut needed = 1_usize;
+
+    for (index, symbol) in stack.iter().enumerate().rev() {
+        let arity = match symbol {
+            TestSymbol::Bang | TestSymbol::UnaryOp(_) => 1,
+            TestSymbol::Op(_) | TestSymbol::BoolOp(_) => 2,
+            TestSymbol::Literal(_) | TestSymbol::LengthOperand(_) | TestSymbol::None => 0,
+            TestSymbol::LParen => return None,
+        };
+
+        needed = needed.checked_sub(1)?.checked_add(arity)?;
+        if needed == 0 {
+            return Some(index);
+        }
+    }
+
+    None
+}
+
 fn test_eval(stack: &mut Vec<TestSymbol>) -> ParseResult<bool> {
     macro_rules! pop_literal {
         () => {
@@ -226,8 +246,10 @@ fn test_eval(stack: &mut Vec<TestSymbol>) -> ParseResult<bool> {
                 return Err(ParseError::UnaryOperatorExpected(op.quote().to_string()));
             }
 
-            let b = test_eval(stack)?;
+            let right_start = postfix_expression_start(stack).ok_or(ParseError::ExpectedValue)?;
+            let mut right = stack.split_off(right_start);
             let a = test_eval(stack)?;
+            let b = test_eval(&mut right)?;
 
             Ok(if op == "-a" { a && b } else { a || b })
         }
@@ -593,6 +615,24 @@ mod tests {
         assert!(!isatty(OsStr::new("2147483648")).unwrap());
         assert!(!isatty(OsStr::new("999999999999999999999999999999")).unwrap());
         assert!(!isatty(OsStr::new("-2147483649")).unwrap());
+    }
+
+    #[test]
+    fn boolean_operators_evaluate_the_left_operand_first() {
+        let mut stack = vec![
+            TestSymbol::Literal(OsString::from("bad")),
+            TestSymbol::Literal(OsString::from("0")),
+            TestSymbol::Op(TestOperator::Int(OsString::from("-eq"))),
+            TestSymbol::Literal(OsString::from("worse")),
+            TestSymbol::Literal(OsString::from("0")),
+            TestSymbol::Op(TestOperator::Int(OsString::from("-eq"))),
+            TestSymbol::BoolOp(OsString::from("-a")),
+        ];
+
+        match test_eval(&mut stack) {
+            Err(ParseError::InvalidInteger(value)) => assert!(value.contains("bad")),
+            result => panic!("unexpected evaluation result: {result:?}"),
+        }
     }
 
     #[test]

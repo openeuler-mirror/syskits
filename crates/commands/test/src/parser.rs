@@ -541,6 +541,12 @@ fn parse_two_arguments(args: &[OsString]) -> ParseResult<Vec<TestSymbol>> {
 /// Parse the token stream `args`, returning a `Symbol` stack representing the
 /// operations to perform in postfix order.
 pub fn test_parse(args: Vec<OsString>) -> ParseResult<Vec<TestSymbol>> {
+    if args.len() == 4 && args[0] == "!" {
+        let mut stack = test_parse(args[1..].to_vec())?;
+        stack.push(TestSymbol::Bang);
+        return Ok(stack);
+    }
+
     if args.len() == 3 {
         if let TestSymbol::Op(op) = TestSymbol::new(Some(args[1].clone())) {
             return Ok(vec![
@@ -631,5 +637,18 @@ mod tests {
             test_parse(args(&["x", "-a", "-l"])),
             Err(ParseError::UnaryOperatorExpected(_))
         ));
+    }
+
+    #[test]
+    fn four_argument_bang_negates_the_three_argument_expression() {
+        assert_eq!(
+            test_parse(args(&["!", "x", "-o", "="])).unwrap(),
+            vec![
+                TestSymbol::Literal(OsString::from("x")),
+                TestSymbol::Literal(OsString::from("=")),
+                TestSymbol::BoolOp(OsString::from("-o")),
+                TestSymbol::Bang,
+            ]
+        );
     }
 }

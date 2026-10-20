@@ -336,7 +336,7 @@ fn od_parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, St
         // 解析格式类型字符（如 'x'、'd'、'f' 等）
         let type_char = format_type(type_char).ok_or_else(|| {
             format!(
-                "unexpected char '{}' in format specification {}",
+                "invalid character '{}' in type string {}",
                 type_char,
                 params.quote()
             )

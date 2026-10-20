@@ -404,7 +404,8 @@ impl Sequence {
 
     fn parse_class(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
         delimited(tag("[:"), take_until(":]"), tag(":]"))(input).map(|(remaining, name)| {
-            let class = match name {
+            let name = unquote_class_name(name);
+            let class = match name.as_slice() {
                 b"" => Err(BadSequence::MissingCharClassName),
                 b"alnum" => Ok(Self::Alnum),
                 b"alpha" => Ok(Self::Alpha),
@@ -419,7 +420,7 @@ impl Sequence {
                 b"upper" => Ok(Self::Upper),
                 b"xdigit" => Ok(Self::Xdigit),
                 _ => Err(BadSequence::InvalidCharacterClass(
-                    String::from_utf8_lossy(name).into_owned(),
+                    String::from_utf8_lossy(&name).into_owned(),
                 )),
             };
             (remaining, class)
@@ -439,6 +440,49 @@ impl Sequence {
             tag("=]"),
         )(input)
     }
+}
+
+fn unquote_class_name(name: &[u8]) -> Vec<u8> {
+    let mut unquoted = Vec::with_capacity(name.len());
+    let mut index = 0;
+
+    while index < name.len() {
+        if name[index] != b'\\' || index + 1 == name.len() {
+            unquoted.push(name[index]);
+            index += 1;
+            continue;
+        }
+
+        let escaped = name[index + 1];
+        if matches!(escaped, b'0'..=b'7') {
+            let mut value = 0u8;
+            let mut digits = 0;
+            while digits < 3
+                && index + 1 + digits < name.len()
+                && matches!(name[index + 1 + digits], b'0'..=b'7')
+            {
+                value = value * 8 + (name[index + 1 + digits] - b'0');
+                digits += 1;
+            }
+            unquoted.push(value);
+            index += digits + 1;
+            continue;
+        }
+
+        unquoted.push(match escaped {
+            b'a' => unicodes::BEL,
+            b'b' => unicodes::BS,
+            b'f' => unicodes::FF,
+            b'n' => unicodes::LF,
+            b'r' => unicodes::CR,
+            b't' => unicodes::HT,
+            b'v' => unicodes::VT,
+            byte => byte,
+        });
+        index += 2;
+    }
+
+    unquoted
 }
 
 fn normalize_ambiguous_octal_escapes(input: &[u8]) -> Cow<'_, [u8]> {
@@ -907,6 +951,10 @@ mod tests {
             assert!(matches!(
                 Sequence::from_str(b"[:digit:]").unwrap()[0],
                 Sequence::Digit
+            ));
+            assert!(matches!(
+                Sequence::from_str(b"[:a\\lpha:]").unwrap()[0],
+                Sequence::Alpha
             ));
 
             // 测试转义序列

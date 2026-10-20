@@ -20,7 +20,6 @@ use clap::{
 };
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::ct_show;
 use operation::{
     Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation, configure_locale,
     translate_input,
@@ -209,7 +208,6 @@ impl TrFlags {
     fn validate(&self) -> CTResult<()> {
         self.validate_sets_not_empty()?;
         self.validate_sets_count()?;
-        self.validate_backslash_ending()?;
         Ok(())
     }
 
@@ -262,29 +260,6 @@ impl TrFlags {
         (!self.is_delete_flag && !self.is_squeeze_flag)
             || (self.is_delete_flag && self.is_squeeze_flag)
     }
-
-    /// 验证反斜杠结尾
-    fn validate_backslash_ending(&self) -> CTResult<()> {
-        for set in &self.sets {
-            if has_trailing_unescaped_backslash(set) {
-                ct_show!(CtSimpleError::new(
-                    0,
-                    "warning: an unescaped backslash at end of string is not portable"
-                ));
-            }
-        }
-        Ok(())
-    }
-}
-
-fn has_trailing_unescaped_backslash(set: &OsString) -> bool {
-    set.as_encoded_bytes()
-        .iter()
-        .rev()
-        .take_while(|&&byte| byte == b'\\')
-        .count()
-        % 2
-        == 1
 }
 
 #[derive(Default)]
@@ -860,16 +835,6 @@ mod tests {
                 flags.validate_sets_count().unwrap_err().to_string(),
                 s if s.contains("extra operand")
             ));
-        }
-
-        #[test]
-        fn test_validate_backslash_ending() {
-            // 测试反斜杠结尾的警告
-            let flags = TrFlags {
-                sets: vec!["set1\\".into()],
-                ..Default::default()
-            };
-            assert!(flags.validate_backslash_ending().is_ok());
         }
     }
 

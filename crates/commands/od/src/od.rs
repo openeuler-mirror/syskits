@@ -805,8 +805,12 @@ fn od_process_next_line<I: PeekRead + HasError>(
             Ok(LineProcessResult::Continue)
         }
         Err(e) => {
-            ct_show_error!("{}", e);
-            input_offset.print_final_offset();
+            if e.kind() == std::io::ErrorKind::UnexpectedEof {
+                ct_show_error!("cannot skip past end of combined input");
+            } else {
+                ct_show_error!("{}", e);
+                input_offset.print_final_offset();
+            }
             Err(1.into())
         }
     }

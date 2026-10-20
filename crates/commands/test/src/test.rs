@@ -252,11 +252,26 @@ fn pop_file_operand(stack: &mut Vec<TestSymbol>, op: &OsStr) -> ParseResult<OsSt
     }
 }
 
-/// 将字符串解析为整数，处理可能的错误
+fn integer_is_blank(byte: u8) -> bool {
+    unsafe { libc::isblank(libc::c_int::from(byte)) != 0 }
+}
+
+/// Parse an integer after trimming the leading and trailing blanks GNU accepts.
 fn parse_integer(value: &OsStr) -> ParseResult<i128> {
-    value
-        .to_str()
-        .and_then(|s| s.parse().ok())
+    let bytes = value.as_encoded_bytes();
+    let mut start = 0;
+    let mut end = bytes.len();
+
+    while start < end && integer_is_blank(bytes[start]) {
+        start += 1;
+    }
+    while start < end && integer_is_blank(bytes[end - 1]) {
+        end -= 1;
+    }
+
+    std::str::from_utf8(&bytes[start..end])
+        .ok()
+        .and_then(|integer| integer.parse().ok())
         .ok_or_else(|| ParseError::InvalidInteger(value.quote().to_string()))
 }
 
@@ -479,6 +494,25 @@ mod tests {
         let a = OsStr::new("42");
         let b = OsStr::new("42");
         assert!(!test_integers(a, b, OsStr::new("-ne")).unwrap());
+    }
+
+    #[test]
+    fn integer_operands_accept_surrounding_blanks() {
+        for value in [" 42", "42 ", "\t42\t", " \t+00042\t "] {
+            assert!(test_integers(OsStr::new(value), OsStr::new("42"), OsStr::new("-eq")).unwrap());
+        }
+        assert!(
+            test_integers(
+                OsStr::new(" \t-00042\t"),
+                OsStr::new("-41"),
+                OsStr::new("-lt")
+            )
+            .unwrap()
+        );
+
+        for value in ["", " ", "+", "-", "4 2", "42\n"] {
+            assert!(test_integers(OsStr::new(value), OsStr::new("0"), OsStr::new("-eq")).is_err());
+        }
     }
 
     #[test]

@@ -499,6 +499,26 @@ impl TestParser {
     }
 }
 
+fn parse_two_arguments(args: &[OsString]) -> ParseResult<Vec<TestSymbol>> {
+    debug_assert_eq!(args.len(), 2);
+
+    if args[0] == "!" {
+        return Ok(vec![TestSymbol::Literal(args[1].clone()), TestSymbol::Bang]);
+    }
+
+    let operator = args[0].as_encoded_bytes();
+    if operator.len() == 2 && operator[0] == b'-' {
+        return match TestSymbol::new(Some(args[0].clone())) {
+            unary @ TestSymbol::UnaryOp(_) => Ok(vec![TestSymbol::Literal(args[1].clone()), unary]),
+            _ => Err(ParseError::UnaryOperatorExpected(
+                args[0].quote().to_string(),
+            )),
+        };
+    }
+
+    Err(ParseError::MissingArgument(args[1].quote().to_string()))
+}
+
 /// Parse the token stream `args`, returning a `Symbol` stack representing the
 /// operations to perform in postfix order.
 pub fn test_parse(args: Vec<OsString>) -> ParseResult<Vec<TestSymbol>> {
@@ -509,6 +529,12 @@ pub fn test_parse(args: Vec<OsString>) -> ParseResult<Vec<TestSymbol>> {
                 TestSymbol::Literal(args[2].clone()),
                 TestSymbol::Op(op),
             ]);
+        }
+
+        if args[0] == "!" {
+            let mut stack = parse_two_arguments(&args[1..])?;
+            stack.push(TestSymbol::Bang);
+            return Ok(stack);
         }
     }
 
@@ -554,5 +580,22 @@ mod tests {
             assert_eq!(stack[1], TestSymbol::Literal(OsString::from(values[2])));
             assert!(matches!(stack[2], TestSymbol::Op(_)));
         }
+    }
+
+    #[test]
+    fn three_argument_bang_uses_two_argument_dispatch() {
+        assert!(matches!(
+            test_parse(args(&["!", "-a", "x"])),
+            Err(ParseError::UnaryOperatorExpected(_))
+        ));
+
+        assert_eq!(
+            test_parse(args(&["!", "-n", "x"])).unwrap(),
+            vec![
+                TestSymbol::Literal(OsString::from("x")),
+                TestSymbol::UnaryOp(TestUnaryOperator::StrlenOp(OsString::from("-n"))),
+                TestSymbol::Bang,
+            ]
+        );
     }
 }

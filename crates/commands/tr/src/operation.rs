@@ -24,7 +24,7 @@ use ctcore::ct_error::CTError;
 use nom::{
     IResult,
     branch::alt,
-    bytes::complete::{tag, take},
+    bytes::complete::{tag, take, take_until},
     character::complete::{digit1, one_of},
     combinator::{map, map_opt, peek, recognize, value},
     multi::{many_m_n, many0},
@@ -59,6 +59,8 @@ pub enum BadSequence {
     MissingCharClassName,
     /// 缺少等价类字符，如 '[==]'
     MissingEquivalentClassChar,
+    /// 无效字符类名称
+    InvalidCharacterClass(String),
     /// SET2 中包含多个重复构造
     MultipleCharRepeatInSet2,
     /// SET1 中包含重复构造
@@ -78,6 +80,7 @@ impl Display for BadSequence {
             Self::MissingEquivalentClassChar => {
                 write!(f, "missing equivalence class character '[==]'")
             }
+            Self::InvalidCharacterClass(name) => write!(f, "invalid character class '{name}'"),
             Self::MultipleCharRepeatInSet2 => {
                 write!(f, "only one [c*] repeat construct may appear in string2")
             }
@@ -400,30 +403,27 @@ impl Sequence {
     }
 
     fn parse_class(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
-        delimited(
-            tag("[:"),
-            alt((
-                map(
-                    alt((
-                        value(Self::Alnum, tag("alnum")),
-                        value(Self::Alpha, tag("alpha")),
-                        value(Self::Blank, tag("blank")),
-                        value(Self::Control, tag("cntrl")),
-                        value(Self::Digit, tag("digit")),
-                        value(Self::Graph, tag("graph")),
-                        value(Self::Lower, tag("lower")),
-                        value(Self::Print, tag("print")),
-                        value(Self::Punct, tag("punct")),
-                        value(Self::Space, tag("space")),
-                        value(Self::Upper, tag("upper")),
-                        value(Self::Xdigit, tag("xdigit")),
-                    )),
-                    Ok,
-                ),
-                value(Err(BadSequence::MissingCharClassName), tag("")),
-            )),
-            tag(":]"),
-        )(input)
+        delimited(tag("[:"), take_until(":]"), tag(":]"))(input).map(|(remaining, name)| {
+            let class = match name {
+                b"" => Err(BadSequence::MissingCharClassName),
+                b"alnum" => Ok(Self::Alnum),
+                b"alpha" => Ok(Self::Alpha),
+                b"blank" => Ok(Self::Blank),
+                b"cntrl" => Ok(Self::Control),
+                b"digit" => Ok(Self::Digit),
+                b"graph" => Ok(Self::Graph),
+                b"lower" => Ok(Self::Lower),
+                b"print" => Ok(Self::Print),
+                b"punct" => Ok(Self::Punct),
+                b"space" => Ok(Self::Space),
+                b"upper" => Ok(Self::Upper),
+                b"xdigit" => Ok(Self::Xdigit),
+                _ => Err(BadSequence::InvalidCharacterClass(
+                    String::from_utf8_lossy(name).into_owned(),
+                )),
+            };
+            (remaining, class)
+        })
     }
 
     fn parse_char_equal(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
@@ -953,6 +953,11 @@ mod tests {
             assert!(matches!(
                 Sequence::from_str(b"[==]").unwrap_err(),
                 BadSequence::MissingEquivalentClassChar
+            ));
+
+            assert!(matches!(
+                Sequence::from_str(b"[:bogus:]").unwrap_err(),
+                BadSequence::InvalidCharacterClass(name) if name == "bogus"
             ));
 
             // 测试 SET1 中的重复构造

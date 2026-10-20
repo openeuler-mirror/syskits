@@ -3496,6 +3496,13 @@ pub fn list(locs: Vec<&Path>, config: &LsConfig) -> CTResult<(Vec<PathData>, Vec
                 }
             } else {
                 writeln!(out)?;
+                if config.is_dired {
+                    dired_output.padding = 2;
+                    dired::dired_indent(&mut out)?;
+                    let dir_len = path_data.display_name.len();
+                    dired::dired_calculate_subdired(&mut dired_output, dir_len);
+                    dired::dired_add_dir_name(&mut dired_output, dir_len);
+                }
                 show_dir_name(path_data, &mut out, config);
                 writeln!(out)?;
             }

@@ -298,6 +298,88 @@
         },
         {
             "command": "od",
+            "description": "Strings length accepts hexadecimal syntax",
+            "args": [
+                "-S0x1",
+                "input"
+            ],
+            "setup_commands": [
+                "printf 'abc\\0' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "od -S0x1 input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "Strings length accepts octal syntax",
+            "args": [
+                "-S01",
+                "input"
+            ],
+            "setup_commands": [
+                "printf 'abc\\0' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "od -S01 input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "Strings length accepts the 512-byte b suffix",
+            "args": [
+                "-S1b",
+                "input"
+            ],
+            "setup_commands": [
+                "head -c 512 /dev/zero | tr '\\0' a > input",
+                "printf '\\0' >> input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "od -S1b input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
             "description": "Option -A n (No address)",
             "args": [
                 "-An",

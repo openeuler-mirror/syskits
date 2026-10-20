@@ -225,7 +225,10 @@ impl OdSettings {
     fn parse_strings_min_len(matches: &ArgMatches) -> CTResult<Option<usize>> {
         for option in [od_options::OD_STRINGS_SHORT, od_options::OD_STRINGS] {
             if let Some(s) = matches.get_one::<String>(option) {
-                return s.parse::<usize>().map(Some).map_err(|_| {
+                let value = od_parse_number_of_bytes(s).map_err(|_| {
+                    CtSimpleError::new(1, format!("invalid -S argument {}", s.quote()))
+                })?;
+                return usize::try_from(value).map(Some).map_err(|_| {
                     CtSimpleError::new(1, format!("invalid -S argument {}", s.quote()))
                 });
             }
@@ -1340,6 +1343,25 @@ mod tests {
             let args = vec!["od".to_string(), "-S1".to_string()];
             let matches = ct_app().try_get_matches_from(&args).unwrap();
             assert!(OdSettings::new(&matches, &args).is_ok());
+        }
+
+        #[test]
+        fn test_parse_strings_min_len_uses_gnu_number_syntax() {
+            for (value, expected) in [
+                ("0x10", 16),
+                ("010", 8),
+                ("1b", 512),
+                ("1KB", 1000),
+                ("1KiB", 1024),
+            ] {
+                let arg = format!("-S{value}");
+                let matches = ct_app().try_get_matches_from(["od", &arg]).unwrap();
+                assert_eq!(
+                    OdSettings::parse_strings_min_len(&matches).unwrap(),
+                    Some(expected),
+                    "{value}"
+                );
+            }
         }
     }
 

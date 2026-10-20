@@ -76,10 +76,9 @@ impl OdInputOffset {
 
     /// 打印字节偏移量后跟换行符，如果设置了 `Radix::NoPrefix` 且没有使用标签（--traditional），
     /// 则不打印任何内容。
-    pub fn print_final_offset(&self) -> io::Result<()> {
+    pub fn write_final_offset<W: Write>(&self, output: &mut W) -> io::Result<()> {
         if self.radix != OdRadix::NoPrefix || self.label.is_some() {
-            let mut stdout = io::stdout().lock();
-            writeln!(stdout, "{}", self.format_byte_offset())?;
+            writeln!(output, "{}", self.format_byte_offset())?;
         }
         Ok(())
     }

@@ -831,7 +831,13 @@ impl Sequence {
 
 impl Sequence {
     pub fn from_str(input: &[u8]) -> Result<Vec<Self>, BadSequence> {
-        Self::from_str_impl(input, true)
+        let result = Self::from_str_impl(input, true);
+        if result.is_ok() && has_trailing_unescaped_backslash(input) {
+            ctcore::ct_show_error!(
+                "warning: an unescaped backslash at end of string is not portable"
+            );
+        }
+        result
     }
 
     fn from_str_impl(input: &[u8], emit_warnings: bool) -> Result<Vec<Self>, BadSequence> {
@@ -1085,6 +1091,16 @@ fn normalize_ambiguous_octal_escapes(input: &[u8], emit_warnings: bool) -> Cow<'
     } else {
         Cow::Owned(normalized)
     }
+}
+
+fn has_trailing_unescaped_backslash(input: &[u8]) -> bool {
+    input
+        .iter()
+        .rev()
+        .take_while(|&&byte| byte == b'\\')
+        .count()
+        % 2
+        == 1
 }
 
 /// 符号转换器特征

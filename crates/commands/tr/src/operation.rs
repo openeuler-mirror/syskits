@@ -26,7 +26,7 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take, take_until},
     character::complete::{digit1, one_of},
-    combinator::{map, map_opt, peek, recognize, value},
+    combinator::{map, map_opt, recognize},
     multi::{many_m_n, many0},
     sequence::{delimited, preceded, separated_pair},
 };
@@ -61,6 +61,8 @@ pub enum BadSequence {
     MissingEquivalentClassChar,
     /// 无效字符类名称
     InvalidCharacterClass(String),
+    /// 等价类操作数不是单字节
+    InvalidEquivalenceClassOperand(String),
     /// SET2 中包含多个重复构造
     MultipleCharRepeatInSet2,
     /// SET1 中包含重复构造
@@ -81,6 +83,10 @@ impl Display for BadSequence {
                 write!(f, "missing equivalence class character '[==]'")
             }
             Self::InvalidCharacterClass(name) => write!(f, "invalid character class '{name}'"),
+            Self::InvalidEquivalenceClassOperand(operand) => write!(
+                f,
+                "{operand}: equivalence class operand must be a single character"
+            ),
             Self::MultipleCharRepeatInSet2 => {
                 write!(f, "only one [c*] repeat construct may appear in string2")
             }
@@ -404,7 +410,7 @@ impl Sequence {
 
     fn parse_class(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
         delimited(tag("[:"), take_until(":]"), tag(":]"))(input).map(|(remaining, name)| {
-            let name = unquote_class_name(name);
+            let name = unquote_bracket_operand(name);
             let class = match name.as_slice() {
                 b"" => Err(BadSequence::MissingCharClassName),
                 b"alnum" => Ok(Self::Alnum),
@@ -428,40 +434,40 @@ impl Sequence {
     }
 
     fn parse_char_equal(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
-        delimited(
-            tag("[="),
-            alt((
-                value(
-                    Err(BadSequence::MissingEquivalentClassChar),
-                    peek(tag("=]")),
-                ),
-                map(Self::parse_backslash_or_char, |c| Ok(Self::Char(c))),
-            )),
-            tag("=]"),
-        )(input)
+        delimited(tag("[="), take_until("=]"), tag("=]"))(input).map(|(remaining, operand)| {
+            let operand = unquote_bracket_operand(operand);
+            let equivalence = match operand.as_slice() {
+                b"" => Err(BadSequence::MissingEquivalentClassChar),
+                [byte] => Ok(Self::Char(*byte)),
+                _ => Err(BadSequence::InvalidEquivalenceClassOperand(
+                    String::from_utf8_lossy(&operand).into_owned(),
+                )),
+            };
+            (remaining, equivalence)
+        })
     }
 }
 
-fn unquote_class_name(name: &[u8]) -> Vec<u8> {
-    let mut unquoted = Vec::with_capacity(name.len());
+fn unquote_bracket_operand(operand: &[u8]) -> Vec<u8> {
+    let mut unquoted = Vec::with_capacity(operand.len());
     let mut index = 0;
 
-    while index < name.len() {
-        if name[index] != b'\\' || index + 1 == name.len() {
-            unquoted.push(name[index]);
+    while index < operand.len() {
+        if operand[index] != b'\\' || index + 1 == operand.len() {
+            unquoted.push(operand[index]);
             index += 1;
             continue;
         }
 
-        let escaped = name[index + 1];
+        let escaped = operand[index + 1];
         if matches!(escaped, b'0'..=b'7') {
             let mut value = 0u8;
             let mut digits = 0;
             while digits < 3
-                && index + 1 + digits < name.len()
-                && matches!(name[index + 1 + digits], b'0'..=b'7')
+                && index + 1 + digits < operand.len()
+                && matches!(operand[index + 1 + digits], b'0'..=b'7')
             {
-                value = value * 8 + (name[index + 1 + digits] - b'0');
+                value = value * 8 + (operand[index + 1 + digits] - b'0');
                 digits += 1;
             }
             unquoted.push(value);
@@ -1001,6 +1007,10 @@ mod tests {
             assert!(matches!(
                 Sequence::from_str(b"[==]").unwrap_err(),
                 BadSequence::MissingEquivalentClassChar
+            ));
+            assert!(matches!(
+                Sequence::from_str(b"[=ab=]").unwrap_err(),
+                BadSequence::InvalidEquivalenceClassOperand(operand) if operand == "ab"
             ));
 
             assert!(matches!(

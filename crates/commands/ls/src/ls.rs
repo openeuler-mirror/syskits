@@ -1266,6 +1266,117 @@ fn ls_colors_scan_funky_string(value: &[u8], position: &mut usize, stop_at_equal
     true
 }
 
+fn ls_colors_decode_funky_string(
+    value: &[u8],
+    position: &mut usize,
+    stop_at_equals: bool,
+) -> Option<Vec<u8>> {
+    let mut decoded = Vec::new();
+    while let Some(byte) = value.get(*position).copied() {
+        match byte {
+            b':' => break,
+            b'=' if stop_at_equals => break,
+            b'\\' => {
+                *position += 1;
+                let escaped = value.get(*position).copied()?;
+                match escaped {
+                    b'0'..=b'7' => {
+                        let mut number = escaped - b'0';
+                        *position += 1;
+                        while let Some(digit @ b'0'..=b'7') = value.get(*position).copied() {
+                            number = number.wrapping_mul(8).wrapping_add(digit - b'0');
+                            *position += 1;
+                        }
+                        decoded.push(number);
+                    }
+                    b'x' | b'X' => {
+                        let mut number = 0u8;
+                        *position += 1;
+                        while let Some(digit) = value.get(*position).copied() {
+                            let Some(digit) = char::from(digit).to_digit(16) else {
+                                break;
+                            };
+                            number = number.wrapping_mul(16).wrapping_add(digit as u8);
+                            *position += 1;
+                        }
+                        decoded.push(number);
+                    }
+                    _ => {
+                        decoded.push(match escaped {
+                            b'a' => b'\x07',
+                            b'b' => b'\x08',
+                            b'e' => b'\x1b',
+                            b'f' => b'\x0c',
+                            b'n' => b'\n',
+                            b'r' => b'\r',
+                            b't' => b'\t',
+                            b'v' => b'\x0b',
+                            b'?' => b'\x7f',
+                            b'_' => b' ',
+                            _ => escaped,
+                        });
+                        *position += 1;
+                    }
+                }
+            }
+            b'^' => {
+                *position += 1;
+                let escaped = value.get(*position).copied()?;
+                if (b'@'..=b'~').contains(&escaped) {
+                    decoded.push(escaped & 0x1f);
+                } else if escaped == b'?' {
+                    decoded.push(0x7f);
+                } else {
+                    return None;
+                }
+                *position += 1;
+            }
+            _ => {
+                decoded.push(byte);
+                *position += 1;
+            }
+        }
+    }
+    Some(decoded)
+}
+
+fn ls_colors_parse_entries(value: &[u8]) -> Option<Vec<(Vec<u8>, Vec<u8>)>> {
+    let mut entries = Vec::new();
+    let mut position = 0;
+    while position < value.len() {
+        if value[position] == b':' {
+            position += 1;
+            continue;
+        }
+
+        let key = if value[position] == b'*' {
+            position += 1;
+            let mut key = vec![b'*'];
+            key.extend(ls_colors_decode_funky_string(value, &mut position, true)?);
+            key
+        } else {
+            let key = value.get(position..position + 2)?.to_vec();
+            position += 2;
+            key
+        };
+        if value.get(position) != Some(&b'=') {
+            return None;
+        }
+        position += 1;
+        let sequence = ls_colors_decode_funky_string(value, &mut position, false)?;
+        entries.push((key, sequence));
+        if value.get(position) == Some(&b':') {
+            position += 1;
+        }
+    }
+
+    Some(entries)
+}
+
+fn ls_color_sequence_is_colored(sequence: &[u8]) -> bool {
+    !matches!(sequence, b"" | b"0" | b"00")
+}
+
 /// 根据提供的选项提取要使用的超链接选项。
 ///
 /// # Returns
@@ -5617,11 +5728,11 @@ struct StyleManager {
     symlink_as_target: bool,
     check_symlink_target: bool,
     normal_sequence: Option<String>,
-    regular_file_sequence: Option<String>,
+    regular_file_sequence: Option<Vec<u8>>,
     clear_to_eol: String,
     style_count: usize,
-    raw_indicator_styles: HashMap<usize, String>,
-    raw_indicator_sequences: HashMap<lscolors::Indicator, String>,
+    raw_indicator_styles: HashMap<usize, Vec<u8>>,
+    raw_indicator_sequences: HashMap<lscolors::Indicator, Vec<u8>>,
     raw_suffix_styles: Vec<RawSuffixStyle>,
     #[cfg(target_os = "linux")]
     signal_guard: Option<ColorSignalGuard>,
@@ -5717,8 +5828,8 @@ impl Drop for ColorSignalGuard {
 }
 
 struct RawSuffixStyle {
-    suffix: String,
-    sequence: String,
+    suffix: Vec<u8>,
+    sequence: Vec<u8>,
     exact_match: bool,
     ignored: bool,
 }
@@ -5740,19 +5851,22 @@ impl StyleManager {
             style_count: 0,
             raw_indicator_styles: HashMap::new(),
             raw_indicator_sequences: HashMap::from([
-                (lscolors::Indicator::ExecutableFile, "01;32".into()),
-                (lscolors::Indicator::Setgid, "30;43".into()),
-                (lscolors::Indicator::Setuid, "37;41".into()),
-                (lscolors::Indicator::Directory, "01;34".into()),
-                (lscolors::Indicator::Sticky, "37;44".into()),
-                (lscolors::Indicator::OtherWritable, "34;42".into()),
-                (lscolors::Indicator::StickyAndOtherWritable, "30;42".into()),
-                (lscolors::Indicator::SymbolicLink, "01;36".into()),
-                (lscolors::Indicator::BlockDevice, "01;33".into()),
-                (lscolors::Indicator::CharacterDevice, "01;33".into()),
-                (lscolors::Indicator::Door, "01;35".into()),
-                (lscolors::Indicator::FIFO, "33".into()),
-                (lscolors::Indicator::Socket, "01;35".into()),
+                (lscolors::Indicator::ExecutableFile, b"01;32".to_vec()),
+                (lscolors::Indicator::Setgid, b"30;43".to_vec()),
+                (lscolors::Indicator::Setuid, b"37;41".to_vec()),
+                (lscolors::Indicator::Directory, b"01;34".to_vec()),
+                (lscolors::Indicator::Sticky, b"37;44".to_vec()),
+                (lscolors::Indicator::OtherWritable, b"34;42".to_vec()),
+                (
+                    lscolors::Indicator::StickyAndOtherWritable,
+                    b"30;42".to_vec(),
+                ),
+                (lscolors::Indicator::SymbolicLink, b"01;36".to_vec()),
+                (lscolors::Indicator::BlockDevice, b"01;33".to_vec()),
+                (lscolors::Indicator::CharacterDevice, b"01;33".to_vec()),
+                (lscolors::Indicator::Door, b"01;35".to_vec()),
+                (lscolors::Indicator::FIFO, b"33".to_vec()),
+                (lscolors::Indicator::Socket, b"01;35".to_vec()),
             ]),
             raw_suffix_styles: Vec::new(),
             #[cfg(target_os = "linux")]
@@ -5785,47 +5899,66 @@ impl StyleManager {
             if let Some(style) = ls_colors.style_for_indicator(indicator) {
                 manager
                     .raw_indicator_styles
-                    .insert(style as *const Style as usize, sequence.into());
+                    .insert(style as *const Style as usize, sequence.as_bytes().to_vec());
             }
         }
 
         let mut missing_is_colored = false;
         let mut orphan_is_colored = false;
-        for entry in value.split(':') {
-            let Some((key, value)) = entry.split_once('=') else {
-                continue;
-            };
-            if key == "ln" {
-                manager.symlink_as_target = value == "target";
-            } else if key == "mi" {
-                missing_is_colored = !matches!(value, "" | "0" | "00");
-            } else if key == "or" {
-                orphan_is_colored = !matches!(value, "" | "0" | "00");
+        let Some(entries) = ls_colors_parse_entries(value.as_bytes()) else {
+            return manager;
+        };
+        for (key, value) in entries {
+            if key == b"ln" {
+                manager.symlink_as_target = value == b"target";
+            } else if key == b"mi" {
+                missing_is_colored = ls_color_sequence_is_colored(&value);
+            } else if key == b"or" {
+                orphan_is_colored = ls_color_sequence_is_colored(&value);
             }
-            match key {
-                "lc" => manager.left = value.into(),
-                "rc" => manager.right = value.into(),
-                "ec" => manager.end = Some(value.into()),
-                "rs" => manager.reset = value.into(),
-                "no" => manager.normal_sequence = Some(value.into()),
-                "fi" => manager.regular_file_sequence = Some(value.into()),
-                "cl" => manager.clear_to_eol = value.into(),
+            match key.as_slice() {
+                b"lc" => {
+                    if let Ok(value) = String::from_utf8(value) {
+                        manager.left = value;
+                    }
+                }
+                b"rc" => {
+                    if let Ok(value) = String::from_utf8(value) {
+                        manager.right = value;
+                    }
+                }
+                b"ec" => manager.end = String::from_utf8(value).ok(),
+                b"rs" => {
+                    if let Ok(value) = String::from_utf8(value) {
+                        manager.reset = value;
+                    }
+                }
+                b"no" => manager.normal_sequence = String::from_utf8(value).ok(),
+                b"fi" => manager.regular_file_sequence = Some(value),
+                b"cl" => {
+                    if let Ok(value) = String::from_utf8(value) {
+                        manager.clear_to_eol = value;
+                    }
+                }
                 _ => {
-                    if let Some(suffix) = key.strip_prefix('*') {
+                    if let Some(suffix) = key.strip_prefix(b"*") {
                         manager.raw_suffix_styles.push(RawSuffixStyle {
                             suffix: suffix.into(),
-                            sequence: value.into(),
+                            sequence: value,
                             exact_match: false,
                             ignored: false,
                         });
-                    } else if let Some(indicator) = lscolors::Indicator::from(key) {
+                    } else if let Some(indicator) = std::str::from_utf8(&key)
+                        .ok()
+                        .and_then(lscolors::Indicator::from)
+                    {
                         manager
                             .raw_indicator_sequences
-                            .insert(indicator, value.into());
+                            .insert(indicator, value.clone());
                         if let Some(style) = ls_colors.style_for_indicator(indicator) {
                             manager
                                 .raw_indicator_styles
-                                .insert(style as *const Style as usize, value.into());
+                                .insert(style as *const Style as usize, value);
                         }
                     }
                 }
@@ -5869,7 +6002,7 @@ impl StyleManager {
         }
     }
 
-    fn suffix_sequence_for_path(&self, path: &Path) -> Option<&str> {
+    fn suffix_sequence_for_path(&self, path: &Path) -> Option<&[u8]> {
         #[cfg(unix)]
         let filename = path.file_name()?.as_bytes();
         #[cfg(windows)]
@@ -5883,22 +6016,22 @@ impl StyleManager {
             }
             let ending = &filename[filename.len() - rule.suffix.len()..];
             let matches = if rule.exact_match {
-                ending == rule.suffix.as_bytes()
+                ending == rule.suffix.as_slice()
             } else {
-                ending.eq_ignore_ascii_case(rule.suffix.as_bytes())
+                ending.eq_ignore_ascii_case(&rule.suffix)
             };
-            matches.then_some(rule.sequence.as_str())
+            matches.then_some(rule.sequence.as_slice())
         })
     }
 
     fn indicator_is_colored(&self, indicator: lscolors::Indicator) -> bool {
         self.raw_indicator_sequences
             .get(&indicator)
-            .is_some_and(|sequence| !matches!(sequence.as_str(), "" | "0" | "00"))
+            .is_some_and(|sequence| ls_color_sequence_is_colored(sequence))
     }
 
     #[cfg(unix)]
-    fn raw_regular_special_sequence(&self, metadata: &Metadata, path: &Path) -> Option<&str> {
+    fn raw_regular_special_sequence(&self, metadata: &Metadata, path: &Path) -> Option<&[u8]> {
         let mode = metadata.mode();
         let indicator =
             if mode & 0o4000 != 0 && self.indicator_is_colored(lscolors::Indicator::Setuid) {
@@ -5923,11 +6056,11 @@ impl StyleManager {
 
         self.raw_indicator_sequences
             .get(&indicator)
-            .map(String::as_str)
+            .map(Vec::as_slice)
     }
 
     #[cfg(unix)]
-    fn raw_non_regular_sequence(&self, metadata: &Metadata, path: &Path) -> Option<&str> {
+    fn raw_non_regular_sequence(&self, metadata: &Metadata, path: &Path) -> Option<&[u8]> {
         let file_type = metadata.file_type();
         let indicator = if file_type.is_dir() {
             let mode = metadata.mode();
@@ -5967,7 +6100,7 @@ impl StyleManager {
 
         self.raw_indicator_sequences
             .get(&indicator)
-            .map(String::as_str)
+            .map(Vec::as_slice)
     }
 
     fn reset_sequence(&self) -> String {
@@ -6016,7 +6149,7 @@ impl StyleManager {
         )
     }
 
-    fn apply_sequence(&mut self, sequence: &str, name: &[u8]) -> Vec<u8> {
+    fn apply_sequence(&mut self, sequence: &[u8], name: &[u8]) -> Vec<u8> {
         let initial = if self.normal_is_colored() {
             format!("{}{}", self.left, self.right)
         } else if self.is_first {
@@ -6027,20 +6160,23 @@ impl StyleManager {
         self.is_first = false;
         self.start_color_output();
         self.style_count += 1;
-        let mut styled = format!("{initial}{}{sequence}{}", self.left, self.right).into_bytes();
+        let mut styled = initial.into_bytes();
+        styled.extend_from_slice(self.left.as_bytes());
+        styled.extend_from_slice(sequence);
+        styled.extend_from_slice(self.right.as_bytes());
         styled.extend_from_slice(name);
         styled.extend_from_slice(self.reset_sequence().as_bytes());
         styled
     }
 
-    fn raw_style<'a>(&'a self, style: &Style) -> Option<&'a str> {
+    fn raw_style<'a>(&'a self, style: &Style) -> Option<&'a [u8]> {
         self.raw_indicator_styles
             .get(&(style as *const Style as usize))
-            .map(String::as_str)
+            .map(Vec::as_slice)
     }
 
     fn apply_style(&mut self, new_style: &Style, name: &[u8]) -> Vec<u8> {
-        if let Some(raw_style) = self.raw_style(new_style).map(str::to_owned) {
+        if let Some(raw_style) = self.raw_style(new_style).map(<[u8]>::to_vec) {
             return self.apply_sequence(&raw_style, name);
         }
 
@@ -6844,7 +6980,7 @@ mod tests {
             .expect("setuid sequence should be selected");
         fs::remove_file(path).expect("remove color priority fixture");
 
-        assert_eq!(selected, "31");
+        assert_eq!(selected, b"31");
     }
 
     #[test]
@@ -6861,7 +6997,7 @@ mod tests {
                     .get(&lscolors::Indicator::Directory)
                     .expect("raw directory sequence")
                     .clone()
-                    .as_str(),
+                    .as_slice(),
                 b"sub",
             ),
             b"[0][D]sub[0]"
@@ -6877,7 +7013,7 @@ mod tests {
 
         assert_eq!(
             manager.suffix_sequence_for_path(Path::new("file.opaque")),
-            Some("D")
+            Some(b"D".as_slice())
         );
     }
 
@@ -6894,6 +7030,19 @@ mod tests {
         assert!(ls_colors_is_valid(b"di=01;34:*.foo=31"));
         assert!(ls_colors_is_valid(b"lc=\\e[:rc=m:*.a\\=b=32"));
         assert!(ls_colors_is_valid(b"no=^G::fi=0:"));
+    }
+
+    #[test]
+    fn ls_colors_parser_decodes_escaped_delimiter_once() {
+        let entries = ls_colors_parse_entries(b"di=31\\:1:fi=32").expect("parse LS_COLORS");
+
+        assert_eq!(
+            entries,
+            vec![
+                (b"di".to_vec(), b"31:1".to_vec()),
+                (b"fi".to_vec(), b"32".to_vec())
+            ]
+        );
     }
 
     #[test]

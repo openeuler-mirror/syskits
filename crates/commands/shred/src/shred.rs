@@ -388,9 +388,12 @@ impl<'a> ShredSettings<'a> {
         };
 
         // 获取删除方法
-        let remove_method = if matches.get_flag(shred_options::SHRED_WIPESYNC) {
-            RemoveMethod::WipeSync
-        } else if matches.contains_id(shred_options::SHRED_REMOVE) {
+        let short_remove_index = matches
+            .get_flag(shred_options::SHRED_WIPESYNC)
+            .then(|| matches.index_of(shred_options::SHRED_WIPESYNC))
+            .flatten();
+        let long_remove_index = matches.index_of(shred_options::SHRED_REMOVE);
+        let remove_method = if long_remove_index > short_remove_index {
             match matches
                 .get_one::<String>(shred_options::SHRED_REMOVE)
                 .unwrap()
@@ -401,6 +404,8 @@ impl<'a> ShredSettings<'a> {
                 shred_options::shred_remove::SHRED_WIPESYNC => RemoveMethod::WipeSync,
                 _ => unreachable!(),
             }
+        } else if short_remove_index.is_some() {
+            RemoveMethod::WipeSync
         } else {
             RemoveMethod::None
         };
@@ -451,6 +456,30 @@ impl<'a> ShredSettings<'a> {
     }
 }
 
+fn parse_remove_method(value: &str) -> Result<String, String> {
+    let methods = [
+        shred_options::shred_remove::SHRED_UNLINK,
+        shred_options::shred_remove::SHRED_WIPE,
+        shred_options::shred_remove::SHRED_WIPESYNC,
+    ];
+
+    if methods.contains(&value) {
+        return Ok(value.to_string());
+    }
+
+    let mut matches = methods
+        .into_iter()
+        .filter(|method| method.starts_with(value));
+    let Some(method) = matches.next() else {
+        return Err(format!("invalid remove method: {value}"));
+    };
+    if matches.next().is_some() {
+        return Err(format!("ambiguous remove method: {value}"));
+    }
+
+    Ok(method.to_string())
+}
+
 pub fn shred_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -494,11 +523,7 @@ pub fn ct_app() -> Command {
         Arg::new(shred_options::SHRED_REMOVE)
             .long(shred_options::SHRED_REMOVE)
             .value_name("HOW")
-            .value_parser([
-                shred_options::shred_remove::SHRED_UNLINK,
-                shred_options::shred_remove::SHRED_WIPE,
-                shred_options::shred_remove::SHRED_WIPESYNC,
-            ])
+            .value_parser(parse_remove_method)
             .num_args(0..=1)
             .require_equals(true)
             .default_missing_value(shred_options::shred_remove::SHRED_WIPESYNC)
@@ -1124,6 +1149,33 @@ mod tests {
             matches.get_one::<String>(shred_options::SHRED_RANDOM_SOURCE),
             Some(&"/dev/zero".to_string())
         );
+    }
+
+    #[test]
+    fn test_remove_options_use_last_occurrence() -> CTResult<()> {
+        let matches = ct_app()
+            .try_get_matches_from(["shred", "-u", "--remove=unlink", "testfile"])
+            .unwrap();
+        let settings = ShredSettings::new(&matches)?;
+        assert!(settings[0].remove_method == RemoveMethod::Unlink);
+
+        let matches = ct_app()
+            .try_get_matches_from(["shred", "--remove=unlink", "-u", "testfile"])
+            .unwrap();
+        let settings = ShredSettings::new(&matches)?;
+        assert!(settings[0].remove_method == RemoveMethod::WipeSync);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_remove_method_unique_abbreviations() {
+        assert_eq!(parse_remove_method("u").unwrap(), "unlink");
+        assert_eq!(parse_remove_method("unl").unwrap(), "unlink");
+        assert_eq!(parse_remove_method("wipe").unwrap(), "wipe");
+        assert_eq!(parse_remove_method("wipes").unwrap(), "wipesync");
+        assert!(parse_remove_method("wip").is_err());
+        assert!(parse_remove_method("unknown").is_err());
     }
 
     mod pattern_tests {

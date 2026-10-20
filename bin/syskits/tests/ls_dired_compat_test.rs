@@ -58,4 +58,20 @@ mod tests {
         assert_eq!(syskits.stderr, gnu.stderr);
         assert_eq!(syskits.stdout, gnu.stdout);
     }
+
+    #[test]
+    fn ls_dired_indentation_precedes_inode_and_block_prefixes() {
+        let directory = TempDir::new().expect("tempdir");
+        fs::create_dir(directory.path().join("d")).expect("create fixture directory");
+        fs::write(directory.path().join("d/a"), b"").expect("create first file");
+        fs::write(directory.path().join("d/b"), b"").expect("create second file");
+        let arguments = ["--dired", "-lnis", "--time-style=+%s", "d"];
+
+        let gnu = run_gnu(&directory, &arguments);
+        let syskits = run_syskits(&directory, &arguments);
+
+        assert_eq!(syskits.status.code(), gnu.status.code());
+        assert_eq!(syskits.stderr, gnu.stderr);
+        assert_eq!(syskits.stdout, gnu.stdout);
+    }
 }

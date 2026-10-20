@@ -547,6 +547,10 @@ pub fn test_parse(args: Vec<OsString>) -> ParseResult<Vec<TestSymbol>> {
         return Ok(stack);
     }
 
+    if args.len() == 4 && args[0] == "(" && args[3] == ")" {
+        return parse_two_arguments(&args[1..3]);
+    }
+
     if args.len() == 3 {
         if let TestSymbol::Op(op) = TestSymbol::new(Some(args[1].clone())) {
             return Ok(vec![
@@ -649,6 +653,14 @@ mod tests {
                 TestSymbol::BoolOp(OsString::from("-o")),
                 TestSymbol::Bang,
             ]
+        );
+    }
+
+    #[test]
+    fn four_argument_parentheses_use_two_argument_dispatch() {
+        assert_eq!(
+            test_parse(args(&["(", "!", "!", ")"])).unwrap(),
+            vec![TestSymbol::Literal(OsString::from("!")), TestSymbol::Bang,]
         );
     }
 }

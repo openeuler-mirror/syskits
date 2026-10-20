@@ -4520,9 +4520,11 @@ fn ls_has_acl<P: AsRef<Path>>(file: P) -> bool {
             ACL_SUPPORTED.store(1, std::sync::atomic::Ordering::Relaxed);
         }
 
-        use exacl::getfacl;
+        use exacl::{AclEntryKind, getfacl};
         match getfacl(file, None) {
-            Ok(acls) => acls.iter().any(|acl| !acl.name.is_empty()),
+            Ok(acls) => acls
+                .iter()
+                .any(|acl| !acl.name.is_empty() || acl.kind == AclEntryKind::Mask),
             Err(_e) => false,
         }
     }

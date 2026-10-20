@@ -170,3 +170,30 @@ fn ls_chinese_long_time_pads_numeric_month() {
     assert_eq!(syskits.stderr, gnu.stderr);
     assert_eq!(syskits.stdout, gnu.stdout);
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn ls_long_marks_acl_containing_only_an_added_mask() {
+    let directory = TempDir::new().expect("tempdir");
+    let file = directory.path().join("f");
+    fs::write(&file, b"").expect("create fixture file");
+    let Ok(setfacl) = Command::new("/usr/bin/setfacl")
+        .args(["-m", "m::r--"])
+        .arg(&file)
+        .output()
+    else {
+        return;
+    };
+    if !setfacl.status.success() {
+        return;
+    }
+    let arguments = ["-l", "--time-style=+%s", "f"];
+
+    let gnu = run_gnu(&directory, &arguments);
+    let syskits = run_syskits(&directory, &arguments);
+
+    assert_eq!(syskits.status.code(), gnu.status.code());
+    assert_eq!(syskits.stderr, gnu.stderr);
+    assert_eq!(syskits.stdout, gnu.stdout);
+    assert!(syskits.stdout.starts_with(b"-rw-r--r--+"));
+}

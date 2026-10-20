@@ -313,6 +313,64 @@
         },
         {
             "command": "od",
+            "description": "Accept unique endian value abbreviation: big",
+            "args": [
+                "--endian=b",
+                "-An",
+                "-tx2",
+                "input"
+            ],
+            "setup_commands": [
+                "printf '\\001\\002' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "od --endian=b -An -tx2 input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
+            "description": "Accept unique endian value abbreviation: little",
+            "args": [
+                "--endian=l",
+                "-An",
+                "-tx2",
+                "input"
+            ],
+            "setup_commands": [
+                "printf '\\001\\002' > input"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "od --endian=l -An -tx2 input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
             "description": "Option -w (Width)",
             "args": [
                 "-w4",

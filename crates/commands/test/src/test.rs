@@ -387,22 +387,22 @@ fn older_than(a: Option<&fs::Metadata>, b: Option<&fs::Metadata>) -> bool {
 
 /// 检查文件描述符是否为终端
 fn isatty(fd: &OsStr) -> ParseResult<bool> {
-    let bytes = fd.as_encoded_bytes();
-    let mut start = 0;
-    let mut end = bytes.len();
-
-    while start < end && integer_is_blank(bytes[start]) {
-        start += 1;
-    }
-    while start < end && integer_is_blank(bytes[end - 1]) {
-        end -= 1;
+    let parsed = parse_integer(fd)?;
+    if parsed.negative {
+        return Ok(false);
     }
 
-    std::str::from_utf8(&bytes[start..end])
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .ok_or_else(|| ParseError::InvalidInteger(fd.quote().to_string()))
-        .map(|i| unsafe { libc::isatty(i) == 1 })
+    let max_fd = libc::c_int::MAX.to_string();
+    if parsed.digits.len() > max_fd.len()
+        || (parsed.digits.len() == max_fd.len() && parsed.digits.as_slice() > max_fd.as_bytes())
+    {
+        return Ok(false);
+    }
+
+    let fd = parsed.digits.iter().fold(0, |value, digit| {
+        value * 10 + libc::c_int::from(digit - b'0')
+    });
+    Ok(unsafe { libc::isatty(fd) == 1 })
 }
 
 #[derive(Eq, PartialEq)]
@@ -586,6 +586,13 @@ mod tests {
         assert!(!isatty(OsStr::new(" -1 ")).unwrap());
         assert!(!isatty(OsStr::new("\t-1\t")).unwrap());
         assert!(isatty(OsStr::new("-1\n")).is_err());
+    }
+
+    #[test]
+    fn tty_file_descriptors_outside_int_range_are_false() {
+        assert!(!isatty(OsStr::new("2147483648")).unwrap());
+        assert!(!isatty(OsStr::new("999999999999999999999999999999")).unwrap());
+        assert!(!isatty(OsStr::new("-2147483649")).unwrap());
     }
 
     #[test]

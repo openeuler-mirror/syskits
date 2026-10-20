@@ -4721,7 +4721,7 @@ fn display_item_long<W: Write>(
             let (start, end) = dired::dired_calculate(
                 &dired_output.dired_positions,
                 output_display.len(),
-                displayed_item.len(),
+                name_byte_len,
             );
             dired::dired_update_positions(dired_output, start, end);
         }

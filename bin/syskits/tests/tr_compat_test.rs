@@ -59,6 +59,20 @@ fn tr_accepts_aix_c_locale_option() {
 }
 
 #[test]
+fn tr_operand_count_errors_include_usage_hint() {
+    for args in [&["tr"][..], &["tr", "a"][..], &["tr", "-d", "a", "b"][..]] {
+        let output = run_with_stdin(env!("CARGO_BIN_EXE_syskits"), args, b"");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        assert_eq!(output.status.code(), Some(1), "args: {args:?}");
+        assert!(
+            stderr.ends_with("Try 'tr --help' for more information.\n"),
+            "args: {args:?}, stderr: {stderr}"
+        );
+    }
+}
+
+#[test]
 fn tr_reverse_range_is_rejected_before_reading_stdin() {
     let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .env("LC_ALL", "C")

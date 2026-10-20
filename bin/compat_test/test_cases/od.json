@@ -529,6 +529,41 @@
         },
         {
             "command": "od",
+            "description": "Character format handles each high-bit byte independently",
+            "args": [
+                "-An",
+                "-v",
+                "-c",
+                "input"
+            ],
+            "setup_commands": [
+                "printf '\\200\\303\\237' > input"
+            ],
+            "environment": {
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C"
+                }
+            },
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": null,
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "LC_ALL=C od -An -v -c input > expected && diff expected $CMD_STDOUT",
+                        "expected_exit": 0
+                    }
+                ]
+            },
+            "cleanup_commands": [
+                "rm -f input expected"
+            ]
+        },
+        {
+            "command": "od",
             "description": "Option -A n (No address)",
             "args": [
                 "-An",

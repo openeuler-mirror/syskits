@@ -853,14 +853,40 @@ pub fn ct_app() -> Command {
 fn od_parse_matches(args: &[OsString]) -> CTResult<ArgMatches> {
     ct_app()
         .try_get_matches_from(args.iter().cloned())
-        .map_err(od_clap_error)
+        .map_err(|error| od_clap_error(error, args))
 }
 
-fn od_clap_error(error: clap::Error) -> Box<dyn ctcore::ct_error::CTError> {
-    if let Some(diagnostic) = od_unknown_option_diagnostic(&error) {
+fn od_clap_error(error: clap::Error, args: &[OsString]) -> Box<dyn ctcore::ct_error::CTError> {
+    if let Some(diagnostic) = od_missing_option_argument_diagnostic(&error, args) {
+        CTsageError::new(1, diagnostic)
+    } else if let Some(diagnostic) = od_unknown_option_diagnostic(&error) {
         CTsageError::new(1, diagnostic)
     } else {
         error.into()
+    }
+}
+
+fn od_missing_option_argument_diagnostic(error: &clap::Error, args: &[OsString]) -> Option<String> {
+    let missing_value = match error.kind() {
+        ClapErrorKind::NoEquals => true,
+        ClapErrorKind::InvalidValue => matches!(
+            error.get(ContextKind::InvalidValue),
+            Some(ContextValue::String(value)) if value.is_empty()
+        ),
+        _ => false,
+    };
+    if !missing_value {
+        return None;
+    }
+
+    let argument = args.last()?.to_str()?;
+    if argument.starts_with("--") && !argument.contains('=') {
+        Some(format!("option {} requires an argument", argument.quote()))
+    } else {
+        argument
+            .strip_prefix('-')
+            .and_then(|argument| argument.chars().last())
+            .map(|option| format!("option requires an argument -- '{option}'"))
     }
 }
 

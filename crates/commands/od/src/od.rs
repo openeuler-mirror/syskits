@@ -89,7 +89,42 @@ use ctcore::{ct_show_error, ct_show_warning};
 use std::ffi::{OsStr, OsString};
 use sys_locale::get_locale;
 
+#[cfg(all(target_os = "linux", not(test)))]
+use std::sync::atomic::{AtomicBool, Ordering};
+
 const OD_PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
+
+#[cfg(all(target_os = "linux", not(test)))]
+static OD_INHERITED_SIGPIPE_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(all(target_os = "linux", not(test)))]
+unsafe extern "C" fn od_capture_inherited_sigpipe() {
+    let mut action = std::mem::MaybeUninit::<libc::sigaction>::uninit();
+    if unsafe { libc::sigaction(libc::SIGPIPE, std::ptr::null(), action.as_mut_ptr()) } == 0 {
+        let action = unsafe { action.assume_init() };
+        OD_INHERITED_SIGPIPE_IGNORED.store(action.sa_sigaction == libc::SIG_IGN, Ordering::Relaxed);
+    }
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static OD_CAPTURE_SIGPIPE: unsafe extern "C" fn() = od_capture_inherited_sigpipe;
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn od_restore_inherited_sigpipe() {
+    let handler = if OD_INHERITED_SIGPIPE_IGNORED.load(Ordering::Relaxed) {
+        libc::SIG_IGN
+    } else {
+        libc::SIG_DFL
+    };
+    unsafe {
+        libc::signal(libc::SIGPIPE, handler);
+    }
+}
+
+#[cfg(any(not(target_os = "linux"), test))]
+fn od_restore_inherited_sigpipe() {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OdView {
@@ -409,6 +444,7 @@ fn od_parse_width_value(s: &str) -> Result<OdWidthValue, OdWidthParseError> {
 }
 
 pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
+    od_restore_inherited_sigpipe();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = od_normalize_optional_arguments(args.collect());

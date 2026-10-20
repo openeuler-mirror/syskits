@@ -1395,7 +1395,17 @@ impl SymbolTranslator for SqueezeOperation {
 /// * `input` - 输入流
 /// * `output` - 输出流
 /// * `translator` - 转换器
-pub fn translate_input<T, R, W>(input: &mut R, output: &mut W, mut translator: T)
+#[derive(Debug)]
+pub enum TranslateInputError {
+    Read(std::io::Error),
+    Write(std::io::Error),
+}
+
+pub fn translate_input<T, R, W>(
+    input: &mut R,
+    output: &mut W,
+    mut translator: T,
+) -> Result<(), TranslateInputError>
 where
     T: SymbolTranslator,
     R: BufRead,
@@ -1412,10 +1422,7 @@ where
         let length = match input.read(&mut buf) {
             Ok(0) => break,
             Ok(n) => n,
-            Err(e) => {
-                eprintln!("Error reading input: {e}");
-                break;
-            }
+            Err(error) => return Err(TranslateInputError::Read(error)),
         };
 
         output_buf.clear();
@@ -1425,16 +1432,12 @@ where
                 .filter_map(|&c| translator.translate(c)),
         );
 
-        // 写入数据。如果底层是 /dev/full，tr.rs 里的 StrictWriter 会捕获并直接 exit(1)
-        if let Err(e) = output.write_all(&output_buf) {
-            eprintln!("Error writing output: {e}");
-            break;
-        }
+        output
+            .write_all(&output_buf)
+            .map_err(TranslateInputError::Write)?;
     }
 
-    if let Err(e) = output.flush() {
-        eprintln!("Error flushing output: {e}");
-    }
+    output.flush().map_err(TranslateInputError::Write)
 }
 
 #[cfg(test)]
@@ -2160,7 +2163,7 @@ mod tests {
             let op = TranslateOperation::new(vec![b'o'], vec![b'0'], false).unwrap();
 
             // 执行转换
-            translate_input(&mut Cursor::new(input), &mut output, op);
+            translate_input(&mut Cursor::new(input), &mut output, op).unwrap();
 
             // 验证结果
             assert_eq!(output, b"hell0\nw0rld\n");
@@ -2182,7 +2185,7 @@ mod tests {
             .unwrap();
 
             let op = delete_op.chain(translate_op);
-            translate_input(&mut Cursor::new(input), &mut output, op);
+            translate_input(&mut Cursor::new(input), &mut output, op).unwrap();
 
             assert_eq!(output, b"h2ll4\nw4rld\nt2st\n");
         }
@@ -2194,7 +2197,7 @@ mod tests {
             let mut output = Vec::new();
             let op = DeleteOperation::new(vec![b'a'], false);
 
-            translate_input(&mut Cursor::new(input), &mut output, op);
+            translate_input(&mut Cursor::new(input), &mut output, op).unwrap();
             assert_eq!(output, b"");
         }
 
@@ -2205,7 +2208,7 @@ mod tests {
             let mut output = Vec::new();
             let op = TranslateOperation::new(vec![b'o'], vec![b'0'], false).unwrap();
 
-            translate_input(&mut Cursor::new(input), &mut output, op);
+            translate_input(&mut Cursor::new(input), &mut output, op).unwrap();
             assert_eq!(output, b"hell0");
         }
 
@@ -2228,7 +2231,7 @@ mod tests {
             .unwrap();
 
             // 执行转换
-            translate_input(&mut Cursor::new(&input), &mut output, op);
+            translate_input(&mut Cursor::new(&input), &mut output, op).unwrap();
 
             // 验证结果
             assert_eq!(output.len(), input.len());
@@ -2249,7 +2252,7 @@ mod tests {
                 .unwrap();
 
             // 执行转换
-            translate_input(&mut Cursor::new(&input), &mut output, op);
+            translate_input(&mut Cursor::new(&input), &mut output, op).unwrap();
 
             // 验证结果
             assert_eq!(output.len(), input.len());
@@ -2281,7 +2284,7 @@ mod tests {
             let squeeze_op = SqueezeOperation::new(vec![b'l'], false);
 
             let op = delete_op.chain(translate_op).chain(squeeze_op);
-            translate_input(&mut Cursor::new(input), &mut output, op);
+            translate_input(&mut Cursor::new(input), &mut output, op).unwrap();
 
             // 验证结果：空格被删除，元音变大写，重复的'l'被压缩
             assert_eq!(output, b"hElOwOrld\ntEst\n");

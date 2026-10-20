@@ -538,6 +538,7 @@ pub fn ct_app() -> Command {
         .about(t!("shred.about"))
         .after_help(t!("shred.after_help"))
         .override_usage(t!("shred.usage"))
+        .args_override_self(true)
         .infer_long_args(true)
         .args(&args)
 }
@@ -1087,6 +1088,42 @@ mod tests {
         assert_eq!(setting.path_str, "testfile.txt", "文件路径应该正确设置");
 
         Ok(())
+    }
+
+    #[test]
+    fn test_repeated_options_use_last_value() {
+        let matches = ct_app()
+            .try_get_matches_from([
+                "shred",
+                "-n",
+                "1",
+                "-n",
+                "2",
+                "-s",
+                "1",
+                "-s",
+                "2",
+                "-v",
+                "-v",
+                "--random-source=/dev/zero",
+                "--random-source=/dev/zero",
+                "testfile",
+            ])
+            .unwrap();
+
+        assert_eq!(
+            matches.get_one::<String>(shred_options::SHRED_ITERATIONS),
+            Some(&"2".to_string())
+        );
+        assert_eq!(
+            matches.get_one::<String>(shred_options::SHRED_SIZE),
+            Some(&"2".to_string())
+        );
+        assert!(matches.get_flag(shred_options::SHRED_VERBOSE));
+        assert_eq!(
+            matches.get_one::<String>(shred_options::SHRED_RANDOM_SOURCE),
+            Some(&"/dev/zero".to_string())
+        );
     }
 
     mod pattern_tests {

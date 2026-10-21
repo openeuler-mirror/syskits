@@ -397,6 +397,21 @@ fn scale_shred_size(mut value: u64, suffix: &str) -> Result<u64, ()> {
     Ok(value)
 }
 
+fn parse_shred_iterations(value: &str) -> Result<usize, ()> {
+    let value = value.trim_start_matches(|c: char| c.is_ascii_whitespace());
+    let value = value.strip_prefix('+').unwrap_or(value);
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(());
+    }
+
+    let iterations = value.parse::<usize>().map_err(|_| ())?;
+    let max_iterations = usize::MAX / std::mem::size_of::<i32>();
+    if iterations > max_iterations {
+        return Err(());
+    }
+    Ok(iterations)
+}
+
 /// 文件擦除的配置选项
 ///
 /// # 字段说明
@@ -426,7 +441,7 @@ impl<'a> ShredSettings<'a> {
     fn new(matches: &'a clap::ArgMatches) -> CTResult<Vec<Self>> {
         // 获取迭代次数
         let n_passes = match matches.get_one::<String>(shred_options::SHRED_ITERATIONS) {
-            Some(s) => s.parse::<usize>().map_err(|_| {
+            Some(s) => parse_shred_iterations(s).map_err(|_| {
                 CtSimpleError::new(1, format!("invalid number of passes: {}", s.quote()))
             })?,
             None => unreachable!(),
@@ -1261,6 +1276,35 @@ mod tests {
             "0x8000000000000000",
         ] {
             assert!(parse_shred_size(value).is_err(), "value: {value}");
+        }
+    }
+
+    #[test]
+    fn test_parse_shred_iterations_gnu_syntax() {
+        let max_iterations = usize::MAX / std::mem::size_of::<i32>();
+        for (value, expected) in [
+            ("1", 1usize),
+            (" 1", 1usize),
+            ("\t+1", 1usize),
+            ("01", 1usize),
+            ("0", 0usize),
+        ] {
+            assert_eq!(
+                parse_shred_iterations(value),
+                Ok(expected),
+                "value: {value}"
+            );
+        }
+
+        let max_value = max_iterations.to_string();
+        assert_eq!(parse_shred_iterations(&max_value), Ok(max_iterations));
+        assert!(parse_shred_iterations(&(max_iterations + 1).to_string()).is_err());
+    }
+
+    #[test]
+    fn test_parse_shred_iterations_rejects_trailing_or_signed_whitespace() {
+        for value in ["1 ", "+ 1", "-1", "1e2", ""] {
+            assert!(parse_shred_iterations(value).is_err(), "value: {value}");
         }
     }
 

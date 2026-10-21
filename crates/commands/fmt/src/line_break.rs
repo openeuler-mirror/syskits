@@ -332,12 +332,27 @@ fn core_write_space<W: ?Sized + Write>(
     Ok(())
 }
 
+fn core_write_indent<W: ?Sized + Write>(
+    indent: &str,
+    indent_len: usize,
+    fmt_opts: &FmtConfigs,
+    tabs_seen: bool,
+    out_stream: &mut W,
+) -> std::io::Result<()> {
+    if tabs_seen && fmt_opts.prefix_option.is_none() {
+        core_write_space(indent_len, 0, fmt_opts.tab_width, true, out_stream)
+    } else {
+        out_stream.write_all(indent.as_bytes())
+    }
+}
+
 fn fmt_break_coreutils_paragraph<W: ?Sized + Write>(
     para_graph: &FmtParagraph,
     fmt_opts: &FmtConfigs,
     out_stream: &mut W,
 ) -> std::io::Result<()> {
-    let (words, tabs_seen) = core_collect_words(para_graph, fmt_opts);
+    let (words, paragraph_tabs_seen) = core_collect_words(para_graph, fmt_opts);
+    let tabs_seen = para_graph.tabs_seen || paragraph_tabs_seen;
     let n = words.len();
     if n == 0 {
         return out_stream.write_all(b"\n");
@@ -404,9 +419,22 @@ fn fmt_break_coreutils_paragraph<W: ?Sized + Write>(
     while start < n {
         let end = next_break[start];
         if is_first_line {
-            out_stream.write_all(init_indent_str.as_bytes())?;
+            core_write_indent(
+                init_indent_str,
+                init_indent_len,
+                fmt_opts,
+                tabs_seen,
+                out_stream,
+            )?;
         } else {
-            fmt_write_newline(other_indent_str, out_stream)?;
+            out_stream.write_all(b"\n")?;
+            core_write_indent(
+                other_indent_str,
+                other_indent_len,
+                fmt_opts,
+                tabs_seen,
+                out_stream,
+            )?;
         }
 
         let mut out_col = if is_first_line {
@@ -1068,6 +1096,7 @@ mod tests {
             FmtParagraph {
                 lines: vec![],
                 indent_ends: vec![],
+                tabs_seen: false,
                 init_str: "   ".to_string(), // Assume 3 spaces
                 init_len: 3,
                 init_end: 3,

@@ -1461,6 +1461,23 @@ fn preprocess_sort_args(args: Vec<OsString>) -> Vec<OsString> {
             idx += 1;
             continue;
         }
+        if let Some(value) = arg.strip_prefix("-y") {
+            if !value.is_empty() && value.chars().all(|c| c.is_ascii_digit()) {
+                idx += 1;
+                continue;
+            }
+            if value.is_empty()
+                && args
+                    .get(idx + 1)
+                    .and_then(|next| next.to_str())
+                    .is_some_and(|next| {
+                        !next.is_empty() && next.chars().all(|c| c.is_ascii_digit())
+                    })
+            {
+                idx += 2;
+                continue;
+            }
+        }
 
         if traditional_sort_usage() {
             if let Some(start) = parse_obsolete_key_spec(arg, true) {

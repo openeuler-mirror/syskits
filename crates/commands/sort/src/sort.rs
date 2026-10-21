@@ -1505,7 +1505,12 @@ fn preprocess_sort_args(args: Vec<OsString>) -> Vec<OsString> {
             }
         }
 
-        if traditional_sort_usage() {
+        let traditional_pair = !env::var_os("POSIXLY_CORRECT").is_some()
+            && args
+                .get(idx + 1)
+                .and_then(|next| next.to_str())
+                .is_some_and(|next| parse_obsolete_key_spec(next, false).is_some());
+        if traditional_sort_usage() || traditional_pair {
             if let Some(start) = parse_obsolete_key_spec(arg, true) {
                 let mut key = start;
                 if idx + 1 < args.len() {

@@ -672,7 +672,8 @@ pub fn cp_main(args: impl ctcore::Args) -> CTResult<i32> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args: Vec<OsString> = args.collect();
-    let args_match = ct_app().try_get_matches_from(args.clone());
+    let parse_args = cp_prepare_posix_args(&args);
+    let args_match = ct_app().try_get_matches_from(parse_args.clone());
 
     // 在此处解析错误，因为我们不希望版本信息或帮助信息被打印到标准错误输出（stderr）。
     if let Err(e) = args_match {
@@ -686,7 +687,7 @@ pub fn cp_main(args: impl ctcore::Args) -> CTResult<i32> {
             _ => return Err(Box::new(e.with_exit_code(1))),
         };
     } else if let Ok(mut args_matches) = args_match {
-        let cp_options = CpOptions::cp_from_matches_with_args(&args_matches, &args)?;
+        let cp_options = CpOptions::cp_from_matches_with_args(&args_matches, &parse_args)?;
 
         if cp_options.overwrite == CpOverwriteMode::NoClobber
             && cp_options.backup != CtBackupMode::NoBackup
@@ -713,6 +714,73 @@ pub fn cp_main(args: impl ctcore::Args) -> CTResult<i32> {
     }
 
     Ok(0)
+}
+
+fn cp_prepare_posix_args(args: &[OsString]) -> Vec<OsString> {
+    if env::var_os("POSIXLY_CORRECT").is_none() {
+        return args.to_vec();
+    }
+
+    let mut prepared = Vec::with_capacity(args.len() + 1);
+    let mut end_of_options = false;
+    let mut skip_next = false;
+    prepared.push(args[0].clone());
+
+    for arg in args.iter().skip(1) {
+        if skip_next {
+            prepared.push(arg.clone());
+            skip_next = false;
+            continue;
+        }
+        if end_of_options {
+            prepared.push(arg.clone());
+            continue;
+        }
+
+        let value = arg.to_string_lossy();
+        if value == "--" {
+            prepared.push(arg.clone());
+            end_of_options = true;
+            continue;
+        }
+        if value == "-" || !value.starts_with('-') {
+            prepared.push(OsString::from("--"));
+            prepared.push(arg.clone());
+            end_of_options = true;
+            continue;
+        }
+
+        prepared.push(arg.clone());
+        if let Some(long) = value.strip_prefix("--") {
+            let (name, attached_value) = long
+                .split_once('=')
+                .map_or((long, None), |(name, value)| (name, Some(value)));
+            if attached_value.is_none()
+                && matches!(
+                    name,
+                    "no-preserve" | "sparse" | "target-directory" | "suffix"
+                )
+            {
+                skip_next = true;
+            }
+            continue;
+        }
+
+        let Some(short) = value.strip_prefix('-') else {
+            continue;
+        };
+        let mut chars = short.chars();
+        while let Some(option) = chars.next() {
+            if matches!(option, 'S' | 't') {
+                if chars.next().is_none() {
+                    skip_next = true;
+                }
+                break;
+            }
+        }
+    }
+
+    prepared
 }
 
 impl CpClobberMode {

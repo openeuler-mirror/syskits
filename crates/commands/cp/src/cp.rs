@@ -682,7 +682,8 @@ impl Tool for Cp {
 pub fn cp_main(args: impl ctcore::Args) -> CTResult<i32> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args_match = ct_app().try_get_matches_from(args);
+    let args: Vec<OsString> = args.collect();
+    let args_match = ct_app().try_get_matches_from(args.clone());
 
     // 在此处解析错误，因为我们不希望版本信息或帮助信息被打印到标准错误输出（stderr）。
     if let Err(e) = args_match {
@@ -696,7 +697,7 @@ pub fn cp_main(args: impl ctcore::Args) -> CTResult<i32> {
             _ => return Err(Box::new(e.with_exit_code(1))),
         };
     } else if let Ok(mut args_matches) = args_match {
-        let cp_options = CpOptions::cp_from_matches(&args_matches)?;
+        let cp_options = CpOptions::cp_from_matches_with_args(&args_matches, &args)?;
 
         if cp_options.overwrite == CpOverwriteMode::NoClobber
             && cp_options.backup != CtBackupMode::NoBackup
@@ -883,6 +884,18 @@ impl CpAttributes {
 impl CpOptions {
     #[allow(clippy::cognitive_complexity)]
     fn cp_from_matches(args_match: &ArgMatches) -> CopyResult<Self> {
+        Self::cp_from_matches_impl(args_match, None)
+    }
+
+    fn cp_from_matches_with_args(args_match: &ArgMatches, args: &[OsString]) -> CopyResult<Self> {
+        Self::cp_from_matches_impl(args_match, Some(args))
+    }
+
+    #[allow(clippy::cognitive_complexity)]
+    fn cp_from_matches_impl(
+        args_match: &ArgMatches,
+        ordered_args: Option<&[OsString]>,
+    ) -> CopyResult<Self> {
         let not_implemented_opts = vec![
             #[cfg(not(any(windows, unix)))]
             opt_flags::ONE_FILE_SYSTEM,
@@ -934,7 +947,11 @@ impl CpOptions {
         let mut attributes = Self::cp_get_attributes(args_match)?;
 
         // 处理不保留选项并调整属性
-        if let Some(attribute_strs) = args_match.get_many::<String>(opt_flags::NO_PRESERVE) {
+        if let Some(args) = ordered_args {
+            if let Some(ordered_attributes) = Self::cp_parse_ordered_attributes(args)? {
+                attributes = ordered_attributes;
+            }
+        } else if let Some(attribute_strs) = args_match.get_many::<String>(opt_flags::NO_PRESERVE) {
             if attribute_strs.len() > 0 {
                 let no_preserve_attributes = CpAttributes::cp_parse_iter(attribute_strs)?;
                 if matches!(no_preserve_attributes.links, CpPreserve::Yes { .. }) {
@@ -1032,6 +1049,157 @@ impl CpOptions {
         };
 
         Ok(cp_options)
+    }
+
+    fn cp_parse_ordered_attributes(args: &[OsString]) -> CopyResult<Option<CpAttributes>> {
+        let mut attributes = CpAttributes::NONE;
+        let mut found = false;
+        let mut skip_next = false;
+        let mut end_of_options = false;
+
+        for (index, arg) in args.iter().enumerate().skip(1) {
+            if skip_next {
+                skip_next = false;
+                continue;
+            }
+
+            let value = arg.to_string_lossy();
+            if end_of_options {
+                continue;
+            }
+            if value == "--" {
+                end_of_options = true;
+                continue;
+            }
+
+            if let Some(long) = value.strip_prefix("--") {
+                let (name, attached_value) = long
+                    .split_once('=')
+                    .map_or((long, None), |(name, value)| (name, Some(value)));
+
+                match name {
+                    "archive" => {
+                        found = true;
+                        attributes = CpAttributes::ALL;
+                    }
+                    "preserve-default-attributes" => {
+                        found = true;
+                        attributes.ownership = CpPreserve::Yes { required: true };
+                        attributes.mode = CpPreserve::Yes { required: true };
+                        attributes.timestamps = CpPreserve::Yes { required: true };
+                        attributes.xattr = CpPreserve::Yes { required: true };
+                    }
+                    "preserve" => {
+                        found = true;
+                        if let Some(value) = attached_value {
+                            Self::cp_apply_ordered_attribute_list(&mut attributes, value, true)?;
+                        } else {
+                            Self::cp_apply_ordered_default_attributes(&mut attributes, true);
+                        }
+                    }
+                    "no-preserve" => {
+                        found = true;
+                        let value = if let Some(value) = attached_value {
+                            value.to_owned()
+                        } else {
+                            skip_next = index + 1 < args.len();
+                            args.get(index + 1)
+                                .map(|value| value.to_string_lossy().into_owned())
+                                .unwrap_or_default()
+                        };
+                        Self::cp_apply_ordered_attribute_list(&mut attributes, &value, false)?;
+                    }
+                    "target-directory" | "suffix" => {
+                        if attached_value.is_none() {
+                            skip_next = true;
+                        }
+                    }
+                    _ => {}
+                }
+                continue;
+            }
+
+            if let Some(short) = value.strip_prefix('-') {
+                if short.is_empty() {
+                    continue;
+                }
+                let mut chars = short.chars();
+                while let Some(option) = chars.next() {
+                    match option {
+                        'a' => {
+                            found = true;
+                            attributes = CpAttributes::ALL;
+                        }
+                        'd' => {
+                            found = true;
+                            attributes.links = CpPreserve::Yes { required: true };
+                        }
+                        'p' => {
+                            found = true;
+                            Self::cp_apply_ordered_default_attributes(&mut attributes, true);
+                        }
+                        'S' | 't' => {
+                            if chars.next().is_none() {
+                                skip_next = true;
+                            }
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        Ok(found.then_some(attributes))
+    }
+
+    fn cp_apply_ordered_default_attributes(attributes: &mut CpAttributes, preserve: bool) {
+        let value = if preserve {
+            CpPreserve::Yes { required: true }
+        } else {
+            CpPreserve::No { explicit: true }
+        };
+        #[cfg(unix)]
+        {
+            attributes.ownership = value;
+        }
+        attributes.mode = value;
+        attributes.timestamps = value;
+        attributes.xattr = value;
+    }
+
+    fn cp_apply_ordered_attribute_list(
+        attributes: &mut CpAttributes,
+        values: &str,
+        preserve: bool,
+    ) -> CopyResult<()> {
+        for value in values.split(',') {
+            let parsed = CpAttributes::cp_parse_single_string(value)?;
+            let yes = CpPreserve::Yes { required: true };
+            let no = CpPreserve::No {
+                explicit: matches!(parsed.mode, CpPreserve::Yes { .. }),
+            };
+            #[cfg(unix)]
+            if matches!(parsed.ownership, CpPreserve::Yes { .. }) {
+                attributes.ownership = if preserve { yes } else { no };
+            }
+            if matches!(parsed.mode, CpPreserve::Yes { .. }) {
+                attributes.mode = if preserve { yes } else { no };
+            }
+            if matches!(parsed.timestamps, CpPreserve::Yes { .. }) {
+                attributes.timestamps = if preserve { yes } else { no };
+            }
+            if matches!(parsed.context, CpPreserve::Yes { .. }) {
+                attributes.context = if preserve { yes } else { no };
+            }
+            if matches!(parsed.links, CpPreserve::Yes { .. }) {
+                attributes.links = if preserve { yes } else { no };
+            }
+            if matches!(parsed.xattr, CpPreserve::Yes { .. }) {
+                attributes.xattr = if preserve { yes } else { no };
+            }
+        }
+        Ok(())
     }
 
     // 解析要保留的属性

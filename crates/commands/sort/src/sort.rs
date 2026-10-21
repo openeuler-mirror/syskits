@@ -1492,12 +1492,15 @@ fn sort_handle_settings(
     settings.threads = sort_get_settings_threads(&matches)?;
     settings.buffer_size = sort_get_settings_buffer_size(&matches)?;
 
-    let tmp_dir = TmpDirWrapper::new(
-        matches
-            .get_one::<String>(sort_flags::SORT_TMP_DIR)
-            .map(PathBuf::from)
-            .unwrap_or_else(env::temp_dir),
-    );
+    let mut tmp_dirs = matches
+        .get_many::<String>(sort_flags::SORT_TMP_DIR)
+        .map(|values| values.map(PathBuf::from).collect())
+        .unwrap_or_else(|| vec![env::temp_dir()]);
+    let tmp_dir = if tmp_dirs.len() == 1 {
+        TmpDirWrapper::new(tmp_dirs.pop().unwrap())
+    } else {
+        TmpDirWrapper::new_many(tmp_dirs)
+    };
 
     settings.compress_prog = sort_get_settings_compress_prog(&matches)?;
     settings.merge_batch_size = sort_get_settings_merge_batch_size(&matches)?;
@@ -2057,6 +2060,7 @@ pub fn ct_app() -> Command {
             .short('T')
             .long(sort_flags::SORT_TMP_DIR)
             .help(t!("sort.clap.sort_tmp_dir"))
+            .action(ArgAction::Append)
             .value_name("DIR")
             .value_hint(clap::ValueHint::DirPath),
         Arg::new(sort_flags::SORT_COMPRESS_PROG)

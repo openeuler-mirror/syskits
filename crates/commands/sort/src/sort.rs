@@ -130,6 +130,7 @@ unsafe extern "C" {
     fn iswblank(character: ctcore::libc::c_uint) -> ctcore::libc::c_int;
     fn iswalnum(character: ctcore::libc::c_uint) -> ctcore::libc::c_int;
     fn iswprint(character: ctcore::libc::c_uint) -> ctcore::libc::c_int;
+    fn towupper(character: ctcore::libc::c_uint) -> ctcore::libc::c_uint;
 }
 
 pub(crate) fn sort_is_blank(character: char) -> bool {
@@ -160,6 +161,16 @@ fn sort_is_printable(character: char) -> bool {
 
     #[cfg(not(target_os = "linux"))]
     !character.is_control()
+}
+
+fn sort_to_upper(character: char) -> char {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        return char::from_u32(towupper(u32::from(character))).unwrap_or(character);
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    character.to_uppercase().next().unwrap_or(character)
 }
 
 // 选择更大的缓冲区大小并不会提高性能
@@ -2507,7 +2518,7 @@ fn sort_default_cmp(a: &str, b: &str, settings: &SortKeySettings) -> Ordering {
         }
 
         if settings.is_ignore_case {
-            s_a.extend(c.to_uppercase());
+            s_a.push(sort_to_upper(c));
         } else {
             s_a.push(c);
         }
@@ -2524,7 +2535,7 @@ fn sort_default_cmp(a: &str, b: &str, settings: &SortKeySettings) -> Ordering {
         }
 
         if settings.is_ignore_case {
-            s_b.extend(c.to_uppercase());
+            s_b.push(sort_to_upper(c));
         } else {
             s_b.push(c);
         }

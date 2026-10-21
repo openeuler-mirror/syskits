@@ -1546,7 +1546,7 @@ fn sort_handle_settings(
     // 检查用户是否指定了一个以零结尾的文件列表作为输入，否则从参数中读取文件
     let mut files: Vec<OsString> = sort_get_settings_files(&matches)?;
 
-    let (mode, is_salt) = sort_get_settings_mode(&matches);
+    let (mode, is_salt) = sort_get_settings_mode(&matches)?;
     settings.mode = mode;
     if is_salt {
         settings.salt = Some(sort_resolve_random_salt(random_source)?);
@@ -1554,6 +1554,13 @@ fn sort_handle_settings(
 
     settings.is_dictionary_order = matches.get_flag(sort_flags::SORT_DICTIONARY_ORDER);
     settings.is_ignore_non_printing = matches.get_flag(sort_flags::SORT_IGNORE_NONPRINTING);
+    if let Err(message) = SortKeySettings::check_compatibility(
+        settings.mode,
+        settings.is_ignore_non_printing,
+        settings.is_dictionary_order,
+    ) {
+        return Err(CTsageError::new(2, message));
+    }
     settings.threads = sort_get_settings_threads(&matches)?;
     settings.buffer_size = sort_get_settings_buffer_size(&matches)?;
 
@@ -1920,55 +1927,58 @@ fn sort_get_settings_files(matches: &ArgMatches) -> Result<Vec<OsString>, Box<dy
     }
 }
 
-fn sort_get_settings_mode(matches: &ArgMatches) -> (SortMode, bool) {
-    let mut is_salt = false;
-    if matches.get_flag(sort_flags::modes::SORT_HUMAN_NUMERIC)
-        || matches
-            .get_one::<String>(sort_flags::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("human-numeric")
-    {
-        (SortMode::SortHumanNumeric, is_salt)
-    } else if matches.get_flag(sort_flags::modes::SORT_MONTH)
-        || matches
-            .get_one::<String>(sort_flags::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("month")
-    {
-        (SortMode::SortMonth, is_salt)
-    } else if matches.get_flag(sort_flags::modes::SORT_GENERAL_NUMERIC)
-        || matches
-            .get_one::<String>(sort_flags::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("general-numeric")
-    {
-        (SortMode::SortGeneralNumeric, is_salt)
-    } else if matches.get_flag(sort_flags::modes::SORT_NUMERIC)
-        || matches
-            .get_one::<String>(sort_flags::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("numeric")
-    {
-        (SortMode::SortNumeric, is_salt)
-    } else if matches.get_flag(sort_flags::modes::SORT_VERSION)
-        || matches
-            .get_one::<String>(sort_flags::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("version")
-    {
-        (SortMode::SortVersion, is_salt)
-    } else if matches.get_flag(sort_flags::modes::SORT_RANDOM)
-        || matches
-            .get_one::<String>(sort_flags::modes::SORT)
-            .map(|s| s.as_str())
-            == Some("random")
-    {
-        is_salt = true;
-        // settings.salt = Some(get_rand_string());
-        (SortMode::SortRandom, is_salt)
-    } else {
-        (SortMode::SortDefault, is_salt)
+fn sort_get_settings_mode(matches: &ArgMatches) -> CTResult<(SortMode, bool)> {
+    let mut mode = SortMode::SortDefault;
+    let mut select_mode = |candidate: SortMode| -> CTResult<()> {
+        if mode != SortMode::SortDefault && mode != candidate {
+            return Err(CTsageError::new(
+                2,
+                format!(
+                    "options '-{}{}' are incompatible",
+                    mode.get_short_name().unwrap(),
+                    candidate.get_short_name().unwrap()
+                ),
+            ));
+        }
+        mode = candidate;
+        Ok(())
+    };
+
+    if let Some(values) = matches.get_many::<String>(sort_flags::modes::SORT) {
+        for value in values {
+            let candidate = match value.as_str() {
+                "general-numeric" => SortMode::SortGeneralNumeric,
+                "human-numeric" => SortMode::SortHumanNumeric,
+                "month" => SortMode::SortMonth,
+                "numeric" => SortMode::SortNumeric,
+                "version" => SortMode::SortVersion,
+                "random" => SortMode::SortRandom,
+                _ => unreachable!("sort mode was validated by clap"),
+            };
+            select_mode(candidate)?;
+        }
     }
+
+    for (flag, candidate) in [
+        (
+            sort_flags::modes::SORT_HUMAN_NUMERIC,
+            SortMode::SortHumanNumeric,
+        ),
+        (sort_flags::modes::SORT_MONTH, SortMode::SortMonth),
+        (
+            sort_flags::modes::SORT_GENERAL_NUMERIC,
+            SortMode::SortGeneralNumeric,
+        ),
+        (sort_flags::modes::SORT_NUMERIC, SortMode::SortNumeric),
+        (sort_flags::modes::SORT_VERSION, SortMode::SortVersion),
+        (sort_flags::modes::SORT_RANDOM, SortMode::SortRandom),
+    ] {
+        if matches.get_flag(flag) {
+            select_mode(candidate)?;
+        }
+    }
+
+    Ok((mode, mode == SortMode::SortRandom))
 }
 
 pub fn ct_app() -> Command {
@@ -1988,6 +1998,7 @@ pub fn ct_app() -> Command {
             .action(ArgAction::Version),
         Arg::new(sort_flags::modes::SORT)
             .long(sort_flags::modes::SORT)
+            .action(ArgAction::Append)
             .value_parser(CtShortcutValueParser::new([
                 "general-numeric",
                 "human-numeric",

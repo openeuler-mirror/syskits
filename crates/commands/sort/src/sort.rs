@@ -1693,6 +1693,26 @@ fn sort_get_setting_check(matches: &ArgMatches) -> CTResult<(bool, bool)> {
     }
 }
 
+#[cfg(target_family = "unix")]
+fn sort_max_merge_batch_size() -> Option<usize> {
+    let mut limit = std::mem::MaybeUninit::<ctcore::libc::rlimit>::uninit();
+    let result =
+        unsafe { ctcore::libc::getrlimit(ctcore::libc::RLIMIT_NOFILE, limit.as_mut_ptr()) };
+    if result != 0 {
+        return None;
+    }
+
+    let limit = unsafe { limit.assume_init() };
+    usize::try_from(limit.rlim_cur)
+        .ok()
+        .map(|open_max| open_max.saturating_sub(3))
+}
+
+#[cfg(not(target_family = "unix"))]
+fn sort_max_merge_batch_size() -> Option<usize> {
+    None
+}
+
 fn sort_get_settings_merge_batch_size(matches: &ArgMatches) -> CTResult<usize> {
     if let Some(n_merge) = matches.get_one::<String>(sort_flags::SORT_BATCH_SIZE) {
         let numeric = n_merge.trim_start_matches(|c: char| c.is_ascii_whitespace());
@@ -1712,6 +1732,20 @@ fn sort_get_settings_merge_batch_size(matches: &ArgMatches) -> CTResult<usize> {
                     "invalid --batch-size argument {}\n{}: minimum --batch-size argument is '2'",
                     n_merge.quote(),
                     ctcore::ct_util_name()
+                ),
+            ));
+        }
+
+        if let Some(max_batch_size) = sort_max_merge_batch_size()
+            && merge_batch_size > max_batch_size
+        {
+            return Err(CTsageError::new(
+                2,
+                format!(
+                    "--batch-size argument {} too large\n{}: maximum --batch-size argument with current rlimit is {}",
+                    n_merge.quote(),
+                    ctcore::ct_util_name(),
+                    max_batch_size.to_string().quote()
                 ),
             ));
         }
@@ -10767,6 +10801,27 @@ mod tests {
                 .try_get_matches_from([ctcore::ct_util_name(), "--batch-size=2 "])
                 .unwrap();
             assert!(sort_get_settings_merge_batch_size(&matches).is_err());
+        }
+
+        #[test]
+        #[cfg(target_family = "unix")]
+        fn test_sort_get_settings_merge_batch_size_respects_fd_limit() {
+            let max_batch_size = sort_max_merge_batch_size().unwrap();
+            let Some(invalid_batch_size) = max_batch_size.checked_add(1) else {
+                return;
+            };
+            let argument = format!("--batch-size={invalid_batch_size}");
+            let matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), &argument])
+                .unwrap();
+
+            let error = sort_get_settings_merge_batch_size(&matches).unwrap_err();
+            assert_eq!(error.code(), 2);
+            assert!(
+                error
+                    .to_string()
+                    .contains("maximum --batch-size argument with current rlimit")
+            );
         }
 
         #[test]

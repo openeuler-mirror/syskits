@@ -948,6 +948,9 @@ impl SortKeyPosition {
             .next()
             .ok_or_else(|| format!("invalid key {}", key.quote()))?;
         let char_option = field_and_char.next();
+        if field_and_char.next().is_some() {
+            return Err("stray character in field spec".to_string());
+        }
 
         // 处理超过 usize::MAX 的极大数值，按 GNU 规则静默截断为 usize::MAX
         let field = field.parse::<usize>().or_else(|e| {
@@ -1023,6 +1026,13 @@ impl SortFieldSelector {
         let mut from_to = key.split(',');
         let (from, from_options) = Self::split_key_options(from_to.next().unwrap());
         let to = from_to.next().map(Self::split_key_options);
+        if from_to.next().is_some() {
+            return Err(SortError::SortParseKeyError {
+                key: key.to_owned(),
+                msg: "stray character in field spec".to_string(),
+            }
+            .into());
+        }
         let options_are_empty = from_options.is_empty() && matches!(to, None | Some((_, "")));
 
         if options_are_empty {
@@ -3959,6 +3969,16 @@ mod tests {
             let global_settings = SortGlobalConfigs::default();
             let result = SortFieldSelector::parse("1", &global_settings);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_parse_rejects_trailing_key_components() {
+            let global_settings = SortGlobalConfigs::default();
+
+            for key in ["2,2,1", "1.2.3"] {
+                let error = SortFieldSelector::parse(key, &global_settings).unwrap_err();
+                assert!(error.to_string().contains("stray character in field spec"));
+            }
         }
 
         #[test]

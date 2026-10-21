@@ -498,6 +498,34 @@ fn sort_general_numeric_uses_only_locale_decimal_point() {
 
 #[test]
 #[cfg(target_family = "unix")]
+fn sort_general_numeric_classifies_special_values_like_strtold() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("general-numeric-special");
+    fs::write(
+        &input,
+        b"invalid\nnan\n+nan\n-nan\ninf\n+inf\n-inf\n1e99999\n-1e99999\n0\n",
+    )
+    .expect("write special value input");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args(["sort", "-gs", input.to_str().expect("utf8 path")])
+        .output()
+        .expect("run general numeric special value sort");
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.stdout,
+        b"invalid\n-nan\nnan\n+nan\n-inf\n-1e99999\n0\ninf\n+inf\n1e99999\n"
+    );
+}
+
+#[test]
+#[cfg(target_family = "unix")]
 fn sort_field_separator_uses_c_locale_bytes() {
     let temp_dir = TempDir::new().expect("tempdir");
     let utf8_input = temp_dir.path().join("utf8-input");

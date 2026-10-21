@@ -21,7 +21,7 @@ use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use line_break::fmt_break_lines;
 use para_split::FmtParagraphStream;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::{BufReader, BufWriter, Read, Write};
 use sys_locale::get_locale;
 
@@ -201,12 +201,12 @@ impl FmtConfigs {
 ///
 /// `UResult<()>` 表示成功或失败。
 fn fmt_process_file_core<W: ?Sized + Write>(
-    file_name: &str,
+    file_name: &OsStr,
     fmt_configs: &FmtConfigs,
     output_stream: &mut W,
     stderr_text: &mut String,
 ) -> CTResult<bool> {
-    let mut fp = if file_name == "-" {
+    let mut fp = if file_name == OsStr::new("-") {
         BufReader::new(ctcore::ct_io::stdin_reader_box())
     } else {
         match File::open(file_name) {
@@ -216,7 +216,10 @@ fn fmt_process_file_core<W: ?Sized + Write>(
                 // 提前拦截可以防止底层的段落解析器将读取错误误当成 EOF 吞掉。
                 if let Ok(metadata) = f.metadata() {
                     if metadata.is_dir() {
-                        stderr_text.push_str(&format!("fmt: {file_name}: Is a directory\n"));
+                        stderr_text.push_str(&format!(
+                            "fmt: {}: Is a directory\n",
+                            file_name.to_string_lossy()
+                        ));
                         return Ok(false);
                     }
                 }
@@ -225,7 +228,7 @@ fn fmt_process_file_core<W: ?Sized + Write>(
             Err(e) => {
                 stderr_text.push_str(&format!(
                     "fmt: cannot open {} for reading: {}\n",
-                    file_name.quote(),
+                    file_name.to_string_lossy().quote(),
                     io_error_message(&e)
                 ));
                 return Ok(false);
@@ -264,7 +267,12 @@ fn fmt_process_file<W: ?Sized + Write>(
     output_stream: &mut W,
 ) -> CTResult<bool> {
     let mut stderr_text = String::new();
-    let result = fmt_process_file_core(file_name, fmt_configs, output_stream, &mut stderr_text)?;
+    let result = fmt_process_file_core(
+        OsStr::new(file_name),
+        fmt_configs,
+        output_stream,
+        &mut stderr_text,
+    )?;
     if !stderr_text.is_empty() {
         eprint!("{stderr_text}");
     }
@@ -307,10 +315,10 @@ pub fn fmt_native_semantic(args: impl ctcore::Args) -> CTResult<FmtSemantic> {
     let processed_args = preprocess_legacy_width_syntax(raw_args)?;
     let matches = ct_app().try_get_matches_from(processed_args)?;
 
-    let files: Vec<String> = matches
-        .get_many::<String>(fmt_flags::FMT_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or(vec!["-".into()]);
+    let files: Vec<OsString> = matches
+        .get_many::<OsString>(fmt_flags::FMT_FILES)
+        .map(|values| values.cloned().collect())
+        .unwrap_or_else(|| vec![OsString::from("-")]);
 
     let fmt_opts = FmtConfigs::from_matches(&matches)?;
     let mut output = BufWriter::new(Vec::new());
@@ -318,7 +326,12 @@ pub fn fmt_native_semantic(args: impl ctcore::Args) -> CTResult<FmtSemantic> {
     let mut all_ok = true;
 
     for file_name in &files {
-        all_ok &= fmt_process_file_core(file_name, &fmt_opts, &mut output, &mut stderr_text)?;
+        all_ok &= fmt_process_file_core(
+            file_name.as_os_str(),
+            &fmt_opts,
+            &mut output,
+            &mut stderr_text,
+        )?;
     }
 
     let output =
@@ -552,6 +565,7 @@ pub fn ct_app() -> Command {
             .value_name("TABWIDTH"),
         Arg::new(fmt_flags::FMT_FILES)
             .action(ArgAction::Append)
+            .value_parser(clap::builder::OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
     ];
     Command::new(utility_name)

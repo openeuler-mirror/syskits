@@ -195,6 +195,8 @@ impl Iterator for FmtFileLines<'_> {
                 .chars()
                 .all(is_fmt_whitespace)
         {
+            let prefix_end = p_offset + self.opts.prefix_option.as_ref().map_or(0, |s| s.len());
+            n.truncate(prefix_end);
             return Some(FmtLine::NoFormatLine(n, false));
         }
 

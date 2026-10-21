@@ -13,6 +13,7 @@
 // 忽略`Chunk`中的`borrow_buffer`未使用警告
 
 use std::{
+    borrow::Cow,
     io::{ErrorKind, Read},
     sync::mpsc::SyncSender,
 };
@@ -22,7 +23,10 @@ use self_cell::self_cell;
 
 use ctcore::ct_error::{CTResult, CtSimpleError};
 
-use crate::{SortGeneralF64ParseResult, SortGlobalConfigs, SortLine, numeric_str_cmp::NumInfo};
+use crate::{
+    SortGeneralF64ParseResult, SortGlobalConfigs, SortLine, numeric_str_cmp::NumInfo,
+    sort_field_separator_raw_byte, sort_raw_field_separator,
+};
 
 self_cell!(
     /// 在线程之间传递的块。
@@ -47,6 +51,22 @@ pub struct ChunkLineData<'a> {
     pub selections: Vec<&'a str>,
     pub num_infos: Vec<NumInfo>,
     pub parsed_floats: Vec<SortGeneralF64ParseResult>,
+}
+
+fn sort_lossy_text(raw: &[u8], field_separator: Option<char>) -> Cow<'_, str> {
+    let Some(raw_separator) = field_separator.and_then(sort_field_separator_raw_byte) else {
+        return String::from_utf8_lossy(raw);
+    };
+
+    let marker = sort_raw_field_separator(raw_separator);
+    let mut text = String::with_capacity(raw.len());
+    for (index, part) in raw.split(|byte| *byte == raw_separator).enumerate() {
+        if index != 0 {
+            text.push(marker);
+        }
+        text.push_str(&String::from_utf8_lossy(part));
+    }
+    Cow::Owned(text)
 }
 
 impl Chunk {
@@ -180,7 +200,7 @@ pub fn chunk_read<T: Read>(
         let lossy_len = {
             let (raw_part, target_part) = buffer.split_at_mut(read);
 
-            let lossy_string = String::from_utf8_lossy(raw_part);
+            let lossy_string = sort_lossy_text(raw_part, settings.separator);
             let lossy_bytes = lossy_string.as_bytes();
             let len = lossy_bytes.len();
 

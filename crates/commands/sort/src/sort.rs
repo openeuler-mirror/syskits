@@ -123,6 +123,7 @@ const SORT_DECIMAL_PT: char = '.';
 
 const SORT_NEGATIVE: char = '-';
 const SORT_POSITIVE: char = '+';
+const SORT_RAW_FIELD_SEPARATOR_BASE: u32 = 0xE000;
 
 // 选择更大的缓冲区大小并不会提高性能
 // 至少在我的机器上不会）。TODO: 在未来，我们还应该考虑可用内存的大小，而不是仅仅依赖于这个常数。
@@ -522,6 +523,31 @@ fn current_collate_locale_name() -> String {
             CStr::from_ptr(locale).to_string_lossy().into_owned()
         }
     }
+}
+
+fn sort_ctype_is_single_byte() -> bool {
+    unsafe {
+        let locale = ctcore::libc::setlocale(ctcore::libc::LC_CTYPE, std::ptr::null());
+        if locale.is_null() {
+            return true;
+        }
+        matches!(CStr::from_ptr(locale).to_bytes(), b"C" | b"POSIX")
+    }
+}
+
+pub(crate) fn sort_raw_field_separator(byte: u8) -> char {
+    char::from_u32(SORT_RAW_FIELD_SEPARATOR_BASE + u32::from(byte)).unwrap()
+}
+
+pub(crate) fn sort_field_separator_raw_byte(separator: char) -> Option<u8> {
+    if !sort_ctype_is_single_byte() {
+        return None;
+    }
+    let value = u32::from(separator);
+    let byte = value.checked_sub(SORT_RAW_FIELD_SEPARATOR_BASE)?;
+    (u32::from(u8::MAX - 127)..=u32::from(u8::MAX))
+        .contains(&byte)
+        .then(|| byte as u8)
 }
 
 fn sort_locale_decimal_point() -> char {
@@ -1761,28 +1787,48 @@ fn sort_get_settings_sparator(matches: &ArgMatches) -> CTResult<Option<char>> {
     let mut parsed_separator = None;
     if let Some(values) = matches.get_many::<OsString>(sort_flags::SORT_SEPARATOR) {
         for arg in values {
-            let mut separator = arg.to_str().ok_or_else(|| {
-                CTsageError::new(
-                    2,
-                    format!("separator is not valid unicode: {}", arg.quote()),
-                )
-            })?;
-            if separator == "\\0" {
-                separator = "\0";
-            }
-            // 这将拒绝非 ASCII 编码点，但也许我们不必这样做。
-            // 另一方面，GNU 接受任何单字节，无论是否为有效的 unicode。
-            // 支持多字节字符需要修改 tokenize_with_separator()）。
-            if separator.chars().count() != 1 {
-                return Err(CTsageError::new(
-                    2,
-                    format!(
-                        "separator must be exactly one character long: {}",
-                        separator.quote()
-                    ),
-                ));
-            }
-            let separator = separator.chars().next().unwrap();
+            let separator = if arg == "\\0" {
+                '\0'
+            } else if sort_ctype_is_single_byte() {
+                #[cfg(target_family = "unix")]
+                let bytes = {
+                    use std::os::unix::ffi::OsStrExt;
+                    arg.as_os_str().as_bytes()
+                };
+                #[cfg(not(target_family = "unix"))]
+                let separator_text = arg.to_string_lossy();
+                #[cfg(not(target_family = "unix"))]
+                let bytes = separator_text.as_bytes();
+
+                if bytes.len() != 1 {
+                    return Err(CTsageError::new(
+                        2,
+                        format!("separator must be exactly one byte long: {}", arg.quote()),
+                    ));
+                }
+                if bytes[0].is_ascii() {
+                    char::from(bytes[0])
+                } else {
+                    sort_raw_field_separator(bytes[0])
+                }
+            } else {
+                let separator = arg.to_str().ok_or_else(|| {
+                    CTsageError::new(
+                        2,
+                        format!("separator is not valid unicode: {}", arg.quote()),
+                    )
+                })?;
+                if separator.chars().count() != 1 {
+                    return Err(CTsageError::new(
+                        2,
+                        format!(
+                            "separator must be exactly one character long: {}",
+                            separator.quote()
+                        ),
+                    ));
+                }
+                separator.chars().next().unwrap()
+            };
             if parsed_separator.is_some_and(|previous| previous != separator) {
                 return Err(CTsageError::new(2, "incompatible tabs"));
             }

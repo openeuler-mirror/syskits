@@ -272,3 +272,44 @@ fn sort_accepts_non_utf8_option_paths() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+#[test]
+#[cfg(target_family = "unix")]
+fn sort_field_separator_uses_c_locale_bytes() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let utf8_input = temp_dir.path().join("utf8-input");
+    fs::write(&utf8_input, b"b\xc3\xa9c\na\xc3\xa9b\n").expect("write UTF-8 input");
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args([
+            OsString::from("sort"),
+            OsString::from("-t"),
+            OsString::from_vec(b"\xc3\xa9".to_vec()),
+            OsString::from("-k2,2"),
+            utf8_input.into_os_string(),
+        ])
+        .output()
+        .expect("run sort with multibyte C-locale separator");
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.stdout, b"");
+
+    let raw_input = temp_dir.path().join("raw-input");
+    fs::write(&raw_input, b"b\xffc\na\xffb\n").expect("write raw input");
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args([
+            OsString::from("sort"),
+            OsString::from("-t"),
+            OsString::from_vec(vec![0xff]),
+            OsString::from("-k2,2"),
+            raw_input.into_os_string(),
+        ])
+        .output()
+        .expect("run sort with raw C-locale separator");
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"a\xffb\nb\xffc\n");
+}

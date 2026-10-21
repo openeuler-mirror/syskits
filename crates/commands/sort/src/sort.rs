@@ -2126,15 +2126,15 @@ fn sort_exec(
     output: SortOutput,
     tmp_dir: &mut TmpDirWrapper,
 ) -> CTResult<()> {
-    if settings.is_merge {
-        let file_merger = merge::merge(files, settings, output.as_output_name(), tmp_dir)?;
-        file_merger.write_all(settings, output)
-    } else if settings.is_check {
+    if settings.is_check {
         if files.len() > 1 {
             Err(CTsageError::new(2, "only one file allowed with -c"))
         } else {
             check::check(files.first().unwrap(), settings)
         }
+    } else if settings.is_merge {
+        let file_merger = merge::merge(files, settings, output.as_output_name(), tmp_dir)?;
+        file_merger.write_all(settings, output)
     } else {
         let mut lines = files.iter().map(sort_open);
         ext_sort(&mut lines, settings, output, tmp_dir)

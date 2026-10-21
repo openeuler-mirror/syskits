@@ -14,6 +14,7 @@ use rust_i18n::t;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 rust_i18n::i18n!("locales", fallback = "en-US");
+#[cfg(not(target_family = "unix"))]
 use bigdecimal::BigDecimal;
 use std::env;
 use std::error::Error;
@@ -24,6 +25,7 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdout};
 use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
+#[cfg(not(target_family = "unix"))]
 use std::str::FromStr;
 use std::str::Utf8Error;
 use std::sync::{Arc, Mutex};
@@ -119,6 +121,7 @@ mod sort_flags {
     pub const SORT_FILES: &str = "files";
 }
 
+#[cfg(not(target_family = "unix"))]
 const SORT_DECIMAL_PT: char = '.';
 
 const SORT_NEGATIVE: char = '-';
@@ -131,7 +134,14 @@ unsafe extern "C" {
     fn iswalnum(character: ctcore::libc::c_uint) -> ctcore::libc::c_int;
     fn iswprint(character: ctcore::libc::c_uint) -> ctcore::libc::c_int;
     fn towupper(character: ctcore::libc::c_uint) -> ctcore::libc::c_uint;
-    fn ct_sort_general_numeric_classify(text: *const ctcore::libc::c_char) -> ctcore::libc::c_int;
+    fn ct_sort_general_numeric_parse(
+        text: *const ctcore::libc::c_char,
+        result: *mut ctcore::libc::c_uchar,
+    ) -> ctcore::libc::c_int;
+    fn ct_sort_general_numeric_compare(
+        left: *const ctcore::libc::c_uchar,
+        right: *const ctcore::libc::c_uchar,
+    ) -> ctcore::libc::c_int;
 }
 
 pub(crate) fn sort_is_blank(character: char) -> bool {
@@ -2699,6 +2709,9 @@ pub enum SortGeneralF64ParseResult {
     SortNegNaN,
     SortNaN,
     SortNegInfinity,
+    #[cfg(target_family = "unix")]
+    SortNumber([u8; 16]),
+    #[cfg(not(target_family = "unix"))]
     SortNumber(BigDecimal),
     SortInfinity,
 }
@@ -2707,24 +2720,20 @@ pub enum SortGeneralF64ParseResult {
 /// 必须使用 GeneralF64ParseResult 而不是 f64 才能正确排序浮点数。
 #[inline(always)]
 fn sort_general_f64_parse(a: &str) -> SortGeneralF64ParseResult {
-    let decimal_point = sort_locale_decimal_point();
-    let normalized = if decimal_point == SORT_DECIMAL_PT {
-        a.to_owned()
-    } else {
-        a.replace(decimal_point, ".")
-    };
-    let normalized = normalized.trim();
-
     #[cfg(target_family = "unix")]
     {
         let mut nul_terminated = a.as_bytes().to_vec();
         nul_terminated.push(0);
-        let class = unsafe { ct_sort_general_numeric_classify(nul_terminated.as_ptr().cast()) };
+        let mut number = [0_u8; 16];
+        let class = unsafe {
+            ct_sort_general_numeric_parse(nul_terminated.as_ptr().cast(), number.as_mut_ptr())
+        };
         match class {
             0 => return SortGeneralF64ParseResult::SortInvalid,
             1 => return SortGeneralF64ParseResult::SortNegNaN,
             2 => return SortGeneralF64ParseResult::SortNaN,
             3 => return SortGeneralF64ParseResult::SortNegInfinity,
+            4 => return SortGeneralF64ParseResult::SortNumber(number),
             5 => return SortGeneralF64ParseResult::SortInfinity,
             _ => {}
         }
@@ -2732,6 +2741,14 @@ fn sort_general_f64_parse(a: &str) -> SortGeneralF64ParseResult {
 
     #[cfg(not(target_family = "unix"))]
     {
+        let decimal_point = sort_locale_decimal_point();
+        let normalized = if decimal_point == SORT_DECIMAL_PT {
+            a.to_owned()
+        } else {
+            a.replace(decimal_point, ".")
+        };
+        let normalized = normalized.trim();
+
         if normalized.eq_ignore_ascii_case("nan") || normalized.eq_ignore_ascii_case("+nan") {
             return SortGeneralF64ParseResult::SortNaN;
         } else if normalized.eq_ignore_ascii_case("-nan") {
@@ -2746,12 +2763,15 @@ fn sort_general_f64_parse(a: &str) -> SortGeneralF64ParseResult {
         {
             return SortGeneralF64ParseResult::SortNegInfinity;
         }
+
+        match BigDecimal::from_str(normalized) {
+            Ok(val) => SortGeneralF64ParseResult::SortNumber(val),
+            Err(_) => SortGeneralF64ParseResult::SortInvalid,
+        }
     }
 
-    match BigDecimal::from_str(normalized) {
-        Ok(val) => SortGeneralF64ParseResult::SortNumber(val),
-        Err(_) => SortGeneralF64ParseResult::SortInvalid,
-    }
+    #[cfg(target_family = "unix")]
+    SortGeneralF64ParseResult::SortInvalid
 }
 
 /// 比较两个浮点数，误差和非数字假定为-inf。
@@ -2795,7 +2815,15 @@ fn sort_general_numeric_compare(
         (
             SortGeneralF64ParseResult::SortNumber(num_a),
             SortGeneralF64ParseResult::SortNumber(num_b),
-        ) => num_a.cmp(num_b),
+        ) => {
+            #[cfg(target_family = "unix")]
+            unsafe {
+                return ct_sort_general_numeric_compare(num_a.as_ptr(), num_b.as_ptr()).cmp(&0);
+            }
+
+            #[cfg(not(target_family = "unix"))]
+            num_a.cmp(num_b)
+        }
     }
 }
 
@@ -3335,20 +3363,18 @@ mod tests {
 
         #[test]
         fn test_general_f64_parse_valid_number() {
-            assert_eq!(
+            assert!(matches!(
                 sort_general_f64_parse("123.45"),
-                SortGeneralF64ParseResult::SortNumber(BigDecimal::from_str("123.45").unwrap()),
-                "Test case 1 failed for input: '123.45'"
-            );
+                SortGeneralF64ParseResult::SortNumber(_)
+            ));
         }
 
         #[test]
         fn test_general_f64_parse_negative_number() {
-            assert_eq!(
+            assert!(matches!(
                 sort_general_f64_parse("-123.45"),
-                SortGeneralF64ParseResult::SortNumber(BigDecimal::from_str("-123.45").unwrap()),
-                "Test case 2 failed for input: '-123.45'"
-            );
+                SortGeneralF64ParseResult::SortNumber(_)
+            ));
         }
 
         #[test]
@@ -3599,16 +3625,12 @@ mod tests {
             let a_line_data = ChunkLineData {
                 selections: vec![],
                 num_infos: vec![],
-                parsed_floats: vec![SortGeneralF64ParseResult::SortNumber(
-                    BigDecimal::from_str("3.141592653589793").unwrap(),
-                )],
+                parsed_floats: vec![sort_general_f64_parse("3.141592653589793")],
             };
             let b_line_data = ChunkLineData {
                 selections: vec![],
                 num_infos: vec![],
-                parsed_floats: vec![SortGeneralF64ParseResult::SortNumber(
-                    BigDecimal::from_str("2.718281828459045").unwrap(),
-                )],
+                parsed_floats: vec![sort_general_f64_parse("2.718281828459045")],
             };
 
             let result = sort_compare_by(&a, &b, &global_settings, &a_line_data, &b_line_data);

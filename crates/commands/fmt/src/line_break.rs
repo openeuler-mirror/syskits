@@ -146,14 +146,19 @@ fn core_collect_words(para_graph: &FmtParagraph, fmt_opts: &FmtConfigs) -> (Vec<
     let mut tabs_seen = false;
 
     for (line_idx, raw_line) in para_graph.lines.iter().enumerate() {
+        let indent_end = para_graph
+            .indent_ends
+            .get(line_idx)
+            .copied()
+            .unwrap_or(para_graph.indent_end);
         let (start, mut col) = if line_idx == 0 {
             if fmt_opts.is_crown || fmt_opts.is_tagged {
                 (para_graph.init_end, para_graph.init_len)
             } else {
-                (para_graph.indent_end, para_graph.indent_len)
+                (indent_end, para_graph.indent_len)
             }
         } else {
-            (para_graph.indent_end, para_graph.indent_len)
+            (indent_end, para_graph.indent_len)
         };
 
         let line = &raw_line[start..];
@@ -1062,6 +1067,7 @@ mod tests {
         fn create_paragraph() -> FmtParagraph {
             FmtParagraph {
                 lines: vec![],
+                indent_ends: vec![],
                 init_str: "   ".to_string(), // Assume 3 spaces
                 init_len: 3,
                 init_end: 3,

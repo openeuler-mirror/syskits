@@ -224,6 +224,8 @@ impl Iterator for FmtFileLines<'_> {
 pub struct FmtParagraph {
     /// 文件的行数
     pub lines: Vec<String>,
+    /// 每一行正文开始的字节位置
+    pub indent_ends: Vec<usize>,
     /// 表示初始值的字符串，即第一行的缩进值
     pub init_str: String,
     /// 考虑到 TABWIDTH，初始字符串的可打印长度
@@ -318,8 +320,8 @@ impl Iterator for FmtParagraphStream<'_> {
         let mut indent_end = 0;
         let mut indent_len = 0;
         let mut prefix_len = 0;
-        let mut prefix_indent_end = 0;
         let mut p_lines = Vec::new();
+        let mut p_indent_ends = Vec::new();
 
         let mut is_in_mail = false;
         let mut is_second_done = false; // 当我们使用冠模式或标记模式时
@@ -356,7 +358,6 @@ impl Iterator for FmtParagraphStream<'_> {
 
                     // 保存这些内容，以检查是否有匹配的行
                     prefix_len = fl.prefix_len;
-                    prefix_indent_end = fl.prefix_indent_end;
 
                     // 在标记模式下，默认情况下增加 4 个额外的缩进空格（gnu fmt 的行为与此不同：它似乎会找到最靠近
                     // indent_end 的一列，且该列能被 3 整除。也许更好的默认值是 1 TABWIDTH？不过这也太大了。
@@ -376,15 +377,12 @@ impl Iterator for FmtParagraphStream<'_> {
                 // 现在我们有足够的信息来处理冠状边缘和标记模式
 
                 // 在冠状边缘和标记模式下，我们都要求前缀_len 相同
-                if prefix_len != fl.prefix_len || prefix_indent_end != fl.prefix_indent_end {
+                if prefix_len != fl.prefix_len {
                     break;
                 }
 
                 // 在标记模式下，后面几行的缩进必须*different*。
-                if self.opts.is_tagged
-                    && indent_len - 4 == fl.indent_len
-                    && indent_end == fl.indent_end
-                {
+                if self.opts.is_tagged && indent_len - 4 == fl.indent_len {
                     break;
                 }
 
@@ -397,16 +395,14 @@ impl Iterator for FmtParagraphStream<'_> {
                 is_second_done = true;
             } else {
                 // 检测不匹配
-                if indent_end != fl.indent_end
-                    || prefix_indent_end != fl.prefix_indent_end
-                    || indent_len != fl.indent_len
-                    || prefix_len != fl.prefix_len
-                {
+                if indent_len != fl.indent_len || prefix_len != fl.prefix_len {
                     break;
                 }
             }
 
-            p_lines.push(self.lines.next().unwrap().get_format_line().line);
+            let line = self.lines.next().unwrap().get_format_line();
+            p_indent_ends.push(line.indent_end);
+            p_lines.push(line.line);
 
             // 当我们处于纯分割模式时，我们从不连接行，所以到此为止
             if self.opts.is_split_only {
@@ -420,6 +416,7 @@ impl Iterator for FmtParagraphStream<'_> {
 
         Some(Ok(FmtParagraph {
             lines: p_lines,
+            indent_ends: p_indent_ends,
             init_str,
             init_len,
             init_end,
@@ -475,19 +472,29 @@ impl<'a> FmtParaWords<'a> {
                     FmtWordSplit::new(self.opts, &self.para.lines[0][self.para.init_end..])
                 } else {
                     // 否则，我们从缩进处开始切分
-                    FmtWordSplit::new(self.opts, &self.para.lines[0][self.para.indent_end..])
+                    let indent_end = self
+                        .para
+                        .indent_ends
+                        .first()
+                        .copied()
+                        .unwrap_or(self.para.indent_end);
+                    FmtWordSplit::new(self.opts, &self.para.lines[0][indent_end..])
                 });
 
             if self.para.lines.len() > 1 {
-                let indent_end = self.para.indent_end;
                 let opts = self.opts;
-                self.words.extend(
-                    self.para
-                        .lines
-                        .iter()
-                        .skip(1)
-                        .flat_map(|x| FmtWordSplit::new(opts, &x[indent_end..])),
-                );
+                self.words
+                    .extend(self.para.lines.iter().enumerate().skip(1).flat_map(
+                        |(index, line)| {
+                            let indent_end = self
+                                .para
+                                .indent_ends
+                                .get(index)
+                                .copied()
+                                .unwrap_or(self.para.indent_end);
+                            FmtWordSplit::new(opts, &line[indent_end..])
+                        },
+                    ));
             }
         }
     }
@@ -1158,8 +1165,10 @@ mod tests {
             init_len: usize,
             indent_len: usize,
         ) -> FmtParagraph {
+            let indent_ends = vec![indent_len; lines.len()];
             FmtParagraph {
                 lines: lines.iter().map(|&line| line.to_string()).collect(),
+                indent_ends,
                 init_str: String::new(),
                 init_len,
                 init_end: init_len,

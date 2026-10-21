@@ -318,11 +318,12 @@ fn core_write_space<W: ?Sized + Write>(
 ) -> std::io::Result<()> {
     let target = out_col + space;
     if tabs_seen {
-        let mut tab_target = (out_col / tab_width + 1) * tab_width;
-        while tab_target <= target {
-            out_stream.write_all(b"\t")?;
-            out_col = tab_target;
-            tab_target = (out_col / tab_width + 1) * tab_width;
+        let tab_target = target / tab_width * tab_width;
+        if out_col + 1 < tab_target {
+            while out_col < tab_target {
+                out_stream.write_all(b"\t")?;
+                out_col = (out_col / tab_width + 1) * tab_width;
+            }
         }
     }
     while out_col < target {

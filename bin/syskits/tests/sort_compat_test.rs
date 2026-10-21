@@ -296,6 +296,34 @@ fn sort_stable_and_unique_compare_non_utf8_record_bytes() {
 }
 
 #[test]
+fn sort_external_spill_preserves_non_utf8_record_bytes() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("input");
+    let mut records = Vec::new();
+    for byte in (0x80_u8..=0xff).rev() {
+        records.extend_from_slice(&[byte, b'\n']);
+    }
+    fs::write(&input, records).expect("write non-UTF-8 input");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args(["sort", "-S1b", input.to_str().expect("utf8 input path")])
+        .output()
+        .expect("run external sort with non-UTF-8 records");
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let mut expected = Vec::new();
+    for byte in 0x80_u8..=0xff {
+        expected.extend_from_slice(&[byte, b'\n']);
+    }
+    assert_eq!(output.stdout, expected);
+}
+
+#[test]
 #[cfg(target_family = "unix")]
 fn sort_field_separator_uses_c_locale_bytes() {
     let temp_dir = TempDir::new().expect("tempdir");

@@ -27,41 +27,53 @@ use crate::SortError;
 /// 失败，因为当已有处理程序时，`ctrlc::set_handler()` 会失败。
 /// 只有在请求第一个文件后才会创建目录。
 pub struct TmpDirWrapper {
-    temp_dir: Option<TempDir>,
-    parent_path: PathBuf,
+    temp_dirs: Vec<Option<TempDir>>,
+    parent_paths: Vec<PathBuf>,
+    next_parent: usize,
     size: usize,
     lock: Arc<Mutex<()>>,
+    cleanup_paths: Arc<Mutex<Vec<PathBuf>>>,
 }
 
 impl TmpDirWrapper {
     pub fn new(path: PathBuf) -> Self {
+        Self::new_many(vec![path])
+    }
+
+    pub fn new_many(parent_paths: Vec<PathBuf>) -> Self {
+        assert!(!parent_paths.is_empty());
         Self {
-            parent_path: path,
+            temp_dirs: parent_paths.iter().map(|_| None).collect(),
+            parent_paths,
+            next_parent: 0,
             size: 0,
-            temp_dir: None,
             lock: Arc::default(),
+            cleanup_paths: Arc::default(),
         }
     }
 
-    fn init_tmp_dir(&mut self) -> CTResult<()> {
-        assert!(self.temp_dir.is_none());
-        assert_eq!(self.size, 0);
-        self.temp_dir = Some(
+    fn init_tmp_dir(&mut self, index: usize) -> CTResult<()> {
+        assert!(self.temp_dirs[index].is_none());
+        self.temp_dirs[index] = Some(
             tempfile::Builder::new()
                 .prefix("cttils_sort")
-                .tempdir_in(&self.parent_path)
+                .tempdir_in(&self.parent_paths[index])
                 .map_err(|_| SortError::SortTmpDirCreationFailed)?,
         );
 
-        let tmp_dir = self.temp_dir.as_ref().unwrap();
+        let tmp_dir = self.temp_dirs[index].as_ref().unwrap();
         let path_buf = tmp_dir.path().to_owned();
+        self.cleanup_paths.lock().unwrap().push(path_buf);
         let lock = self.lock.clone();
+        let cleanup_paths = self.cleanup_paths.clone();
         if let Err(e) = ctrlc::set_handler(move || {
             // 加锁，这样 `next_file_path` 就不会返回新的文件路径、
             // 并且程序不会在处理程序结束前终止
             let _lock = lock.lock().unwrap();
-            if let Err(e) = tmp_dir_remove_tmp_dir(&path_buf) {
-                ct_show_error!("failed to delete temporary directory: {}", e);
+            for path in cleanup_paths.lock().unwrap().iter() {
+                if let Err(e) = tmp_dir_remove_tmp_dir(path) {
+                    ct_show_error!("failed to delete temporary directory: {}", e);
+                }
             }
             std::process::exit(2)
         }) {
@@ -76,14 +88,16 @@ impl TmpDirWrapper {
     }
 
     pub fn next_file(&mut self) -> CTResult<(File, PathBuf)> {
-        if self.temp_dir.is_none() {
-            self.init_tmp_dir()?;
+        let index = self.next_parent;
+        self.next_parent = (self.next_parent + 1) % self.parent_paths.len();
+        if self.temp_dirs[index].is_none() {
+            self.init_tmp_dir(index)?;
         }
 
         let _lock = self.lock.lock().unwrap();
         let file_name_string = self.size.to_string();
         self.size += 1;
-        let tmp_dir = self.temp_dir.as_ref().unwrap();
+        let tmp_dir = self.temp_dirs[index].as_ref().unwrap();
         let path = tmp_dir.path().join(file_name_string);
         Ok((
             File::create(&path).map_err(|error| SortError::SortOpenTmpFileFailed { error })?,
@@ -127,9 +141,9 @@ mod tests {
         fn test_tmp_dir_wrapper_new() {
             let path = PathBuf::from("/tmp");
             let wrapper = TmpDirWrapper::new(path.clone());
-            assert_eq!(wrapper.parent_path, path);
+            assert_eq!(wrapper.parent_paths, vec![path]);
             assert_eq!(wrapper.size, 0);
-            assert!(wrapper.temp_dir.is_none());
+            assert!(wrapper.temp_dirs.iter().all(Option::is_none));
             // test that lock is initialized
             assert!(wrapper.lock.lock().is_ok());
         }
@@ -137,7 +151,7 @@ mod tests {
         #[test]
         fn test_tmp_dir_wrapper_next_file() {
             let mut wrapper = TmpDirWrapper::new(PathBuf::from("/tmp"));
-            let _ = wrapper.init_tmp_dir();
+            let _ = wrapper.init_tmp_dir(0);
 
             let (_file1, path1) = wrapper.next_file().unwrap();
             let (_file2, path2) = wrapper.next_file().unwrap();
@@ -145,6 +159,24 @@ mod tests {
             assert_ne!(path1, path2);
             assert!(!path1.starts_with("/tmp/cttils_sort"));
             assert!(!path2.starts_with("/tmp/cttils_sort"));
+        }
+
+        #[test]
+        fn test_tmp_dir_wrapper_rotates_parent_paths() {
+            let first = tempdir().unwrap();
+            let second = tempdir().unwrap();
+            let first_path = first.path().to_owned();
+            let second_path = second.path().to_owned();
+            let mut wrapper =
+                TmpDirWrapper::new_many(vec![first_path.clone(), second_path.clone()]);
+
+            let (_file1, path1) = wrapper.next_file().unwrap();
+            let (_file2, path2) = wrapper.next_file().unwrap();
+            let (_file3, path3) = wrapper.next_file().unwrap();
+
+            assert!(path1.starts_with(&first_path));
+            assert!(path2.starts_with(&second_path));
+            assert!(path3.starts_with(&first_path));
         }
 
         #[test]

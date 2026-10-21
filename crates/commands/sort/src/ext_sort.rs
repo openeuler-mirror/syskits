@@ -1744,7 +1744,7 @@ mod tests {
             // Prepare output
             let output_path = temp_dir.path().join("output");
             let output = SortOutput {
-                file: Some(output_path.to_string_lossy().to_string()),
+                file: Some(output_path.into_os_string()),
             };
 
             // Call the reader_writer function
@@ -1803,7 +1803,7 @@ mod tests {
             let output_path = temp_dir.path().join("output");
             let _output_file = File::create(&output_path).unwrap();
             let output = SortOutput {
-                file: Some("output".to_string()),
+                file: Some("output".into()),
             };
 
             // Call the reader_writer function
@@ -1839,7 +1839,7 @@ mod tests {
             let output_path = tmp_dir.path().join("output.txt");
             let _output_file = File::create(&output_path).unwrap();
             let output = SortOutput {
-                file: Some("output.txt".to_string()),
+                file: Some("output.txt".into()),
             };
 
             let result = ext_sort_reader_writer::<_, MergeWriteablePlainTmpFile>(
@@ -1873,7 +1873,7 @@ mod tests {
             let output_path = tmp_dir.path().join("output.txt");
             let _output_file = File::create(&output_path).unwrap();
             let output = SortOutput {
-                file: Some("output.txt".to_string()),
+                file: Some("output.txt".into()),
             };
 
             let result = ext_sort_reader_writer::<_, MergeWriteablePlainTmpFile>(
@@ -1910,7 +1910,7 @@ mod tests {
             let output_path = tmp_dir.path().join("output.txt");
             let _output_file = File::create(&output_path).unwrap();
             let output = SortOutput {
-                file: Some("output.txt".to_string()),
+                file: Some("output.txt".into()),
             };
 
             let result = ext_sort_reader_writer::<_, MergeWriteablePlainTmpFile>(
@@ -1945,7 +1945,7 @@ mod tests {
             let output_path = tmp_dir.path().join("output.txt");
             let _output_file = File::create(&output_path).unwrap();
             let output = SortOutput {
-                file: Some("output.txt".to_string()),
+                file: Some("output.txt".into()),
             };
 
             let result = ext_sort_reader_writer::<_, MergeWriteableCompressedTmpFile>(
@@ -1979,7 +1979,7 @@ mod tests {
             let output_path = tmp_dir.path().join("output.txt");
             let _output_file = File::create(&output_path).unwrap();
             let output = SortOutput {
-                file: Some("output.txt".to_string()),
+                file: Some("output.txt".into()),
             };
 
             let result = ext_sort_reader_writer::<_, MergeWriteableCompressedTmpFile>(
@@ -2016,7 +2016,7 @@ mod tests {
             let output_path = tmp_dir.path().join("output.txt");
             let _output_file = File::create(&output_path).unwrap();
             let output = SortOutput {
-                file: Some("output.txt".to_string()),
+                file: Some("output.txt".into()),
             };
 
             let result = ext_sort_reader_writer::<_, MergeWriteableCompressedTmpFile>(

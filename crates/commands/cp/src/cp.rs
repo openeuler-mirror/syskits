@@ -465,6 +465,7 @@ fn cp_args_init() -> Vec<Arg> {
             .short('t')
             .conflicts_with(opt_flags::NO_TARGET_DIRECTORY)
             .long(opt_flags::TARGET_DIRECTORY)
+            .action(ArgAction::Append)
             .value_name(opt_flags::TARGET_DIRECTORY)
             .value_hint(clap::ValueHint::DirPath)
             .value_parser(ValueParser::path_buf())
@@ -919,9 +920,16 @@ impl CpOptions {
 
         // 解析目标目录选项
         let no_target_dir = args_match.get_flag(opt_flags::NO_TARGET_DIRECTORY);
-        let target_dir = args_match
-            .get_one::<PathBuf>(opt_flags::TARGET_DIRECTORY)
-            .cloned();
+        let target_dirs: Vec<PathBuf> = args_match
+            .get_many::<PathBuf>(opt_flags::TARGET_DIRECTORY)
+            .map(|dirs| dirs.cloned().collect())
+            .unwrap_or_default();
+        if target_dirs.len() > 1 {
+            return Err(CpError::InvalidArgument(
+                "multiple target directories specified".to_string(),
+            ));
+        }
+        let target_dir = target_dirs.into_iter().next();
 
         if let Some(dir) = &target_dir {
             if !dir.is_dir() {
@@ -9680,7 +9688,7 @@ mod tests {
     }
     #[cfg(test)]
     mod tests_ct_app {
-        use crate::{ct_app, opt_flags};
+        use crate::{CpOptions, ct_app, opt_flags};
         use clap::error::ErrorKind;
         use std::fs;
         use std::fs::File;
@@ -15528,6 +15536,22 @@ mod tests {
                 &sub_dir_path1
             );
         }
+
+        #[test]
+        fn test_ct_app_rejects_repeated_target_directory() {
+            let matches = ct_app()
+                .try_get_matches_from([
+                    ctcore::ct_util_name(),
+                    "-t",
+                    "one",
+                    "--target-directory=two",
+                    "source",
+                ])
+                .unwrap();
+
+            assert!(CpOptions::cp_from_matches(&matches).is_err());
+        }
+
         #[test]
         fn test_ct_app_arfviuln_whole_target_directory_whole_valid_input() {
             let temp_dir = Builder::new().prefix("test_ct_app").tempdir().unwrap();

@@ -31,6 +31,39 @@ mod para_split;
 const FMT_MAX_WIDTH: usize = 2500;
 const FMT_DEFAULT_GOAL: usize = 70;
 const FMT_DEFAULT_WIDTH: usize = 75;
+const BYTE_ESCAPE_BASE: u32 = 0xE000;
+
+pub(crate) fn encode_input_bytes(bytes: &[u8]) -> String {
+    let mut encoded = String::with_capacity(bytes.len());
+    for &byte in bytes {
+        if byte.is_ascii() {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push(char::from_u32(BYTE_ESCAPE_BASE + u32::from(byte)).unwrap());
+        }
+    }
+    encoded
+}
+
+pub(crate) fn escaped_byte(c: char) -> Option<u8> {
+    let value = c as u32;
+    (BYTE_ESCAPE_BASE..BYTE_ESCAPE_BASE + 256)
+        .contains(&value)
+        .then(|| (value - BYTE_ESCAPE_BASE) as u8)
+}
+
+fn decode_output_bytes(encoded: &str) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(encoded.len());
+    for c in encoded.chars() {
+        if let Some(byte) = escaped_byte(c) {
+            bytes.push(byte);
+        } else {
+            let mut utf8 = [0; 4];
+            bytes.extend_from_slice(c.encode_utf8(&mut utf8).as_bytes());
+        }
+    }
+    bytes
+}
 
 mod fmt_flags {
     pub const FMT_CROWN_MARGIN: &str = "crown-margin";
@@ -54,6 +87,7 @@ pub type FmtFileOrStdReader = BufReader<Box<dyn Read + 'static>>;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FmtSemantic {
     pub output: String,
+    pub output_bytes: Vec<u8>,
     pub stderr_text: String,
     pub exit_code: i32,
 }
@@ -98,10 +132,11 @@ impl FmtConfigs {
 
         let prefix_option = arg_matches
             .get_many::<String>(fmt_flags::FMT_PREFIX)
-            .and_then(|mut values| values.next_back().cloned());
+            .and_then(|mut values| values.next_back())
+            .map(|value| encode_input_bytes(value.as_bytes()));
         let anti_prefix_option = arg_matches
             .get_one::<String>(fmt_flags::FMT_SKIP_PREFIX)
-            .map(String::from);
+            .map(|value| encode_input_bytes(value.as_bytes()));
 
         let (width, goal) = Self::parse_width_and_goal(arg_matches)?;
         let tab_width = Self::parse_tab_width(arg_matches)?;
@@ -267,12 +302,18 @@ fn fmt_process_file<W: ?Sized + Write>(
     output_stream: &mut W,
 ) -> CTResult<bool> {
     let mut stderr_text = String::new();
+    let mut encoded_output = Vec::new();
     let result = fmt_process_file_core(
         OsStr::new(file_name),
         fmt_configs,
-        output_stream,
+        &mut encoded_output,
         &mut stderr_text,
     )?;
+    let encoded_output = String::from_utf8(encoded_output)
+        .expect("fmt test output should use the internal byte encoding");
+    output_stream
+        .write_all(&decode_output_bytes(&encoded_output))
+        .map_err_context(|| "failed to write output".to_string())?;
     if !stderr_text.is_empty() {
         eprint!("{stderr_text}");
     }
@@ -297,7 +338,9 @@ impl Tool for Fmt {
 
 pub fn fmt_main(args: impl ctcore::Args) -> CTResult<()> {
     let semantic = fmt_native_semantic(args)?;
-    print!("{}", semantic.output);
+    std::io::stdout()
+        .write_all(&semantic.output_bytes)
+        .map_err_context(|| "failed to write output".to_string())?;
     if !semantic.stderr_text.is_empty() {
         eprint!("{}", semantic.stderr_text);
     }
@@ -334,14 +377,17 @@ pub fn fmt_native_semantic(args: impl ctcore::Args) -> CTResult<FmtSemantic> {
         )?;
     }
 
-    let output =
+    let encoded_output =
         String::from_utf8(output.into_inner().map_err(|err| {
             CtSimpleError::new(1, format!("failed to collect fmt output: {err}"))
         })?)
         .expect("fmt output should be utf-8");
+    let output_bytes = decode_output_bytes(&encoded_output);
+    let output = String::from_utf8_lossy(&output_bytes).into_owned();
 
     Ok(FmtSemantic {
         output,
+        output_bytes,
         stderr_text,
         exit_code: if all_ok { 0 } else { 1 },
     })

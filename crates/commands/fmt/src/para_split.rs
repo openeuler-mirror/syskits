@@ -15,8 +15,8 @@ use std::slice::Iter;
 
 use unicode_width::UnicodeWidthChar;
 
-use crate::FmtConfigs;
 use crate::FmtFileOrStdReader;
+use crate::{FmtConfigs, encode_input_bytes};
 
 #[inline]
 fn is_fmt_whitespace(c: char) -> bool {
@@ -161,14 +161,14 @@ impl Iterator for FmtFileLines<'_> {
     type Item = FmtLine;
 
     fn next(&mut self) -> Option<FmtLine> {
-        // 使用底层读取+有损转换，防止因为非法的 UTF-8 字节导致迭代器异常中止
+        // Internally escape non-ASCII bytes so arbitrary input remains lossless.
         let mut buf = Vec::new();
         match self.reader.read_until(b'\n', &mut buf) {
             Ok(0) | Err(_) => return None, // 遇到 EOF 或不可恢复的 IO 错误时退出
             Ok(_) => {}
         }
 
-        let mut n = String::from_utf8_lossy(&buf).into_owned();
+        let mut n = encode_input_bytes(&buf);
         if n.ends_with('\n') {
             n.pop();
         }

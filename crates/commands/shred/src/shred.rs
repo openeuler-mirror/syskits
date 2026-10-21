@@ -50,7 +50,9 @@ use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, Read, Seek, Write};
 #[cfg(unix)]
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
+use std::os::fd::AsRawFd;
+#[cfg(unix)]
+use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
@@ -645,25 +647,13 @@ fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
         return shred_exec_stdout(settings);
     }
 
-    // 验证文件是否存在且是普通文件
     let path = settings.path;
-    if !path.exists() {
-        return Err(CtSimpleError::new(
-            1,
-            format!("{}: No such file or directory", path.maybe_quote()),
-        ));
-    }
-    if !path.is_file() {
-        return Err(CtSimpleError::new(
-            1,
-            format!("{}: Not a file", path.maybe_quote()),
-        ));
-    }
-
-    // 执行擦除
-    let metadata = fs::metadata(path).map_err_context(String::new)?;
+    let mut file = shred_open_for_writing(path, settings.force)?;
+    let metadata = file
+        .metadata()
+        .map_err_context(|| format!("{}: fstat failed", path.maybe_quote()))?;
+    validate_file_type(&file, path, &metadata)?;
     let size = shred_target_size(settings, &metadata);
-    let mut file = shred_open_for_writing(path, &metadata, settings.force)?;
 
     shred_run_passes(&mut file, settings.path, settings, size, true)?;
 
@@ -711,11 +701,12 @@ fn round_up_to_block_size(size: u64, block_size: u64) -> u64 {
     }
 }
 
-fn shred_open_for_writing(path: &Path, metadata: &fs::Metadata, force: bool) -> CTResult<File> {
+fn shred_open_for_writing(path: &Path, force: bool) -> CTResult<File> {
     match OpenOptions::new().write(true).truncate(false).open(path) {
         Ok(file) => Ok(file),
         Err(err) if force && err.kind() == io::ErrorKind::PermissionDenied => {
-            shred_force_writable(path, metadata)?;
+            let metadata = fs::metadata(path).map_err_context(String::new)?;
+            shred_force_writable(path, &metadata)?;
             OpenOptions::new()
                 .write(true)
                 .truncate(false)
@@ -725,6 +716,24 @@ fn shred_open_for_writing(path: &Path, metadata: &fs::Metadata, force: bool) -> 
         Err(err) => Err(err)
             .map_err_context(|| format!("{}: failed to open for writing", path.maybe_quote())),
     }
+}
+
+#[cfg(unix)]
+fn validate_file_type(file: &File, path: &Path, metadata: &fs::Metadata) -> CTResult<()> {
+    let file_type = metadata.file_type();
+    let is_tty = file_type.is_char_device() && unsafe { libc::isatty(file.as_raw_fd()) == 1 };
+    if is_tty || file_type.is_fifo() || file_type.is_socket() {
+        return Err(CtSimpleError::new(
+            1,
+            format!("{}: invalid file type", path.maybe_quote()),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn validate_file_type(_file: &File, _path: &Path, _metadata: &fs::Metadata) -> CTResult<()> {
+    Ok(())
 }
 
 fn shred_force_writable(path: &Path, metadata: &fs::Metadata) -> CTResult<()> {
@@ -1180,6 +1189,19 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_accepts_non_tty_character_device() -> CTResult<()> {
+        shred_main(
+            [
+                OsString::from("shred"),
+                OsString::from("-n0"),
+                OsString::from("/dev/null"),
+            ]
+            .into_iter(),
+        )
     }
 
     #[test]

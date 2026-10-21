@@ -829,8 +829,11 @@ fn shred_exec_stdout(settings: &ShredSettings, random_source: &mut RandomSource)
     validate_stdout_fd(stat.st_mode)?;
 
     let current_size = u64::try_from(stat.st_size).unwrap_or(0);
-    let size = settings.size.unwrap_or(current_size);
     let stdout_is_regular = stdout_file_type(stat.st_mode) == libc::S_IFREG;
+    let mut size = settings.size.unwrap_or(current_size);
+    if settings.size.is_none() && !settings.exact && stdout_is_regular {
+        size = round_up_to_block_size(size, u64::try_from(stat.st_blksize).unwrap_or(1).max(1));
+    }
 
     let mut file = OpenOptions::new()
         .write(true)

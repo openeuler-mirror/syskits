@@ -1726,7 +1726,7 @@ fn sort_get_settings_files(matches: &ArgMatches) -> Result<Vec<OsString>, Box<dy
 
         let files0_from: Vec<OsString> = matches
             .get_many::<OsString>(sort_flags::SORT_FILES0_FROM)
-            .map(|v| v.map(ToOwned::to_owned).collect())
+            .map(|v| v.last().cloned().into_iter().collect())
             .unwrap_or_default();
 
         let mut files = Vec::new();

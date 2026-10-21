@@ -313,3 +313,25 @@ fn sort_field_separator_uses_c_locale_bytes() {
     );
     assert_eq!(output.stdout, b"a\xffb\nb\xffc\n");
 }
+
+#[test]
+fn sort_files0_from_rejects_dash_in_regular_file() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let list = temp_dir.path().join("list");
+    fs::write(&list, b"-\0").expect("write file list");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .arg("sort")
+        .arg(format!("--files0-from={}", list.display()))
+        .output()
+        .expect("run sort --files0-from");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.stdout, b"");
+    assert!(
+        output.stderr.ends_with(b"no file name of '-' allowed\n"),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

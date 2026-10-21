@@ -1999,10 +1999,7 @@ fn sort_get_settings_files(matches: &ArgMatches) -> Result<Vec<OsString>, Box<dy
                     ));
                 }
 
-                let file_name_string = String::from_utf8_lossy(line_slice).into_owned();
-
-                // 捕捉 stdin 里嵌套读取 stdin 的死循环异常
-                if is_stdin && file_name_string == "-" {
+                if line_slice == b"-" {
                     return Err(CtSimpleError::new(
                         2,
                         "when reading file names from stdin, no file name of '-' allowed"
@@ -2018,6 +2015,7 @@ fn sort_get_settings_files(matches: &ArgMatches) -> Result<Vec<OsString>, Box<dy
                 }
                 #[cfg(not(unix))]
                 {
+                    let file_name_string = String::from_utf8_lossy(line_slice).into_owned();
                     files.push(OsString::from(file_name_string));
                 }
 

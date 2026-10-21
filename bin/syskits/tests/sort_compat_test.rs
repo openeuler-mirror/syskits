@@ -440,6 +440,36 @@ fn sort_c_locale_key_character_offsets_count_bytes() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn sort_numeric_modes_use_locale_separators() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let cases: [(&[u8], &[&str], &[u8]); 3] = [
+        (b"1,5\n1,25\n", &["-ns"], b"1,25\n1,5\n"),
+        (b"1.000\n20\n", &["-n"], b"20\n1.000\n"),
+        (b"1,5K\n1,25K\n", &["-hs"], b"1,25K\n1,5K\n"),
+    ];
+
+    for (index, (records, options, expected)) in cases.into_iter().enumerate() {
+        let input = temp_dir.path().join(format!("input-{index}"));
+        fs::write(&input, records).expect("write locale numeric input");
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "de_DE.utf8")
+            .arg("sort")
+            .args(options)
+            .arg(&input)
+            .output()
+            .expect("run locale numeric sort");
+
+        assert!(
+            output.status.success(),
+            "case {index}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stdout, expected, "case {index}");
+    }
+}
+
+#[test]
 #[cfg(target_family = "unix")]
 fn sort_field_separator_uses_c_locale_bytes() {
     let temp_dir = TempDir::new().expect("tempdir");

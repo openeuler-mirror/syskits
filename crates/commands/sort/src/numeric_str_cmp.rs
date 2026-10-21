@@ -18,8 +18,7 @@
 //! 更具体地说，可以将指数理解为原始数字的 (1..10)*10^exponent 值。
 //! 由此得出该算法的限制条件： 它能够比较 ±(1*10^[i64::MIN]..10*10^[i64::MAX]) 范围内的数字。
 
-use ctcore::ct_locale::hard_locale_numeric;
-use std::{cmp::Ordering, ops::Range};
+use std::{cmp::Ordering, ffi::CStr, ops::Range};
 
 use crate::sort_is_blank;
 
@@ -44,25 +43,33 @@ pub struct NumInfoParseSettings {
 
 impl Default for NumInfoParseSettings {
     fn default() -> Self {
-        // 根据locale设置默认的数值格式
-        if hard_locale_numeric() {
-            // 对于非C locale，可能需要不同的数值格式
-            // 例如：某些欧洲locale使用逗号作为小数点，点作为千分位分隔符
-            // 这里提供一个基本的示例，实际实现可能需要更复杂的locale检测
-            Self {
-                accept_si_units: false,
-                thousands_separator: Some(' '), // 使用空格作为千分位分隔符（ISO标准）
-                decimal_pt: Some('.'),          // 保持点作为小数点（可根据需要调整）
+        unsafe {
+            let locale = ctcore::libc::localeconv();
+            if locale.is_null() {
+                return Self {
+                    accept_si_units: false,
+                    thousands_separator: None,
+                    decimal_pt: Some('.'),
+                };
             }
-        } else {
-            // C/POSIX locale使用标准格式
+
             Self {
                 accept_si_units: false,
-                thousands_separator: None,
-                decimal_pt: Some('.'),
+                thousands_separator: locale_numeric_char((*locale).thousands_sep),
+                decimal_pt: locale_numeric_char((*locale).decimal_point).or(Some('.')),
             }
         }
     }
+}
+
+unsafe fn locale_numeric_char(value: *const ctcore::libc::c_char) -> Option<char> {
+    if value.is_null() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(unsafe { CStr::from_ptr(value) }.to_bytes());
+    let mut chars = text.chars();
+    let character = chars.next()?;
+    chars.next().is_none().then_some(character)
 }
 
 impl NumInfo {

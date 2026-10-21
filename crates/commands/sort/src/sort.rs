@@ -2559,6 +2559,14 @@ fn sort_compare_by<'a>(
             }
             SortMode::SortMonth => sort_month_compare(a_str, b_str),
             SortMode::SortVersion => ct_version_cmp(a_str, b_str),
+            SortMode::SortDefault
+                if !field_selector.is_needs_selection
+                    && !settings.is_dictionary_order
+                    && !settings.is_ignore_non_printing
+                    && !settings.is_ignore_case =>
+            {
+                strcoll_compare(a.raw_bytes, b.raw_bytes, false)
+            }
             SortMode::SortDefault => sort_default_cmp(a_str, b_str, settings),
         };
         if cmp != Ordering::Equal {

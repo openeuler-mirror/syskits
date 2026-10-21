@@ -274,6 +274,28 @@ fn sort_accepts_non_utf8_option_paths() {
 }
 
 #[test]
+fn sort_stable_and_unique_compare_non_utf8_record_bytes() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("input");
+    fs::write(&input, b"\xff\n\xfe\n").expect("write non-UTF-8 input");
+
+    for option in ["-s", "-su"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C")
+            .args(["sort", option, input.to_str().expect("utf8 path")])
+            .output()
+            .expect("run sort with non-UTF-8 records");
+
+        assert!(
+            output.status.success(),
+            "{option}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stdout, b"\xfe\n\xff\n", "{option}");
+    }
+}
+
+#[test]
 #[cfg(target_family = "unix")]
 fn sort_field_separator_uses_c_locale_bytes() {
     let temp_dir = TempDir::new().expect("tempdir");

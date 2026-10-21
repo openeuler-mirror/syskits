@@ -197,29 +197,33 @@ impl Iterator for ShredFilenameIter {
     }
 }
 
-/// 用于生成擦除数据的写入器
-///
-/// # 变体说明
-/// * `Random` - 生成随机数据
-///   - `rng`: 随机数生成器
-/// * `FileRandom` - 从文件读取随机数据
-///   - `reader`: 文件读取器
-///   - `buffer`: 数据缓冲区
-/// * `Pattern` - 生成固定模式数据
-///   - `offset`: 当前偏移量
-///   - `buffer`: 预填充的模式缓冲区
-///   
-/// # 实现说明
-/// 为了提高效率，Pattern 模式使用扩展缓冲区。
-/// 通过调整偏移量，可以从任意位置开始获取模式数据，
-/// 避免了重复填充缓冲区的开销。
-enum BytesWriter {
+enum RandomSource {
+    Entropy(Box<StdRng>),
+    File(BufReader<File>),
+}
+
+impl RandomSource {
+    fn new(path: Option<&Path>) -> io::Result<Self> {
+        match path {
+            Some(path) => Ok(Self::File(BufReader::new(File::open(path)?))),
+            None => Ok(Self::Entropy(Box::new(StdRng::from_entropy()))),
+        }
+    }
+
+    fn fill(&mut self, bytes: &mut [u8]) -> io::Result<()> {
+        match self {
+            Self::Entropy(rng) => {
+                rng.fill(bytes);
+                Ok(())
+            }
+            Self::File(reader) => reader.read_exact(bytes),
+        }
+    }
+}
+
+enum BytesWriter<'a> {
     Random {
-        rng: Box<StdRng>,
-        buffer: Box<[u8; SHRED_BLOCK_SIZE]>,
-    },
-    FileRandom {
-        reader: BufReader<File>,
+        source: &'a mut RandomSource,
         buffer: Box<[u8; SHRED_BLOCK_SIZE]>,
     },
     Pattern {
@@ -228,36 +232,16 @@ enum BytesWriter {
     },
 }
 
-impl BytesWriter {
-    fn from_pass_type_with_random_source(
-        pass: &PassType,
-        random_source: Option<&Path>,
-    ) -> Result<Self, io::Error> {
+impl<'a> BytesWriter<'a> {
+    fn from_pass_type(pass: &PassType, random_source: &'a mut RandomSource) -> Self {
         match pass {
-            // 创建随机数据生成器
-            PassType::Random => {
-                if let Some(source_path) = random_source {
-                    // 从文件读取随机数据
-                    let file = File::open(source_path)?;
-                    let reader = BufReader::new(file);
-                    Ok(Self::FileRandom {
-                        reader,
-                        buffer: Box::new([0; SHRED_BLOCK_SIZE]),
-                    })
-                } else {
-                    // 使用默认随机数生成器
-                    Ok(Self::Random {
-                        rng: Box::new(StdRng::from_entropy()),
-                        buffer: Box::new([0; SHRED_BLOCK_SIZE]),
-                    })
-                }
-            }
-            // 创建固定模式生成器
+            PassType::Random => Self::Random {
+                source: random_source,
+                buffer: Box::new([0; SHRED_BLOCK_SIZE]),
+            },
             PassType::Pattern(pattern) => {
                 let buffer = match pattern {
-                    // 单字节模式：重复填充
                     Pattern::Single(byte) => [*byte; SHRED_PATTERN_BUFFER_SIZE],
-                    // 多字节模式：按模式长度重复填充
                     Pattern::Multi(bytes) => {
                         let mut buf = [0; SHRED_PATTERN_BUFFER_SIZE];
                         for chunk in buf.chunks_exact_mut(SHRED_PATTERN_LENGTH) {
@@ -266,47 +250,23 @@ impl BytesWriter {
                         buf
                     }
                 };
-                Ok(Self::Pattern {
+                Self::Pattern {
                     offset: 0,
                     buffer: Box::new(buffer),
-                })
+                }
             }
         }
     }
 
     fn bytes_for_pass(&mut self, size: usize) -> Result<&[u8], io::Error> {
         match self {
-            // 生成随机数据
-            Self::Random { rng, buffer } => {
+            Self::Random { source, buffer } => {
                 let bytes = &mut buffer[..size];
-                rng.fill(bytes);
+                source.fill(bytes)?;
                 Ok(bytes)
             }
-            // 从文件读取随机数据
-            Self::FileRandom { reader, buffer } => {
-                let bytes = &mut buffer[..size];
-                let mut total_read = 0;
-
-                while total_read < size {
-                    match reader.read(&mut bytes[total_read..]) {
-                        Ok(0) => {
-                            return Err(io::Error::new(
-                                io::ErrorKind::UnexpectedEof,
-                                "random source EOF",
-                            ));
-                        }
-                        Ok(n) => {
-                            total_read += n;
-                        }
-                        Err(e) => return Err(e),
-                    }
-                }
-                Ok(bytes)
-            }
-            // 从预填充的缓冲区获取数据
             Self::Pattern { offset, buffer } => {
                 let bytes = &buffer[*offset..size + *offset];
-                // 更新偏移量，确保模式正确对齐
                 *offset = (*offset + size) % SHRED_PATTERN_LENGTH;
                 Ok(bytes)
             }
@@ -555,20 +515,23 @@ pub fn shred_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     let settings = ShredSettings::new(&matches)?;
-    validate_random_source(settings.first().and_then(|setting| setting.random_source))?;
+    let mut random_source =
+        open_random_source(settings.first().and_then(|setting| setting.random_source))?;
 
     for setting in settings {
-        ct_show_if_err!(shred_exec(&setting));
+        ct_show_if_err!(shred_exec_with_random_source(&setting, &mut random_source));
     }
 
     Ok(())
 }
 
-fn validate_random_source(random_source: Option<&Path>) -> CTResult<()> {
-    if let Some(path) = random_source {
-        File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
-    }
-    Ok(())
+fn open_random_source(random_source: Option<&Path>) -> CTResult<RandomSource> {
+    RandomSource::new(random_source).map_err_context(|| {
+        random_source.map_or_else(
+            || "getrandom".to_string(),
+            |path| path.maybe_quote().to_string(),
+        )
+    })
 }
 
 pub fn ct_app() -> Command {
@@ -652,9 +615,18 @@ fn pass_name(pass_type: &PassType) -> String {
 }
 
 /// 执行文件擦除操作
+#[cfg(test)]
 fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
+    let mut random_source = open_random_source(settings.random_source)?;
+    shred_exec_with_random_source(settings, &mut random_source)
+}
+
+fn shred_exec_with_random_source(
+    settings: &ShredSettings,
+    random_source: &mut RandomSource,
+) -> CTResult<()> {
     if settings.path == Path::new("-") {
-        return shred_exec_stdout(settings);
+        return shred_exec_stdout(settings, random_source);
     }
 
     let path = settings.path;
@@ -665,7 +637,14 @@ fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
     validate_file_type(&file, path, &metadata)?;
     let size = shred_target_size(settings, &metadata);
 
-    shred_run_passes(&mut file, settings.path, settings, size, true)?;
+    shred_run_passes(
+        &mut file,
+        settings.path,
+        settings,
+        size,
+        true,
+        random_source,
+    )?;
 
     // 如果需要，删除文件
     if settings.remove_method != RemoveMethod::None {
@@ -758,7 +737,7 @@ fn shred_force_writable(path: &Path, metadata: &fs::Metadata) -> CTResult<()> {
 }
 
 #[cfg(unix)]
-fn shred_exec_stdout(settings: &ShredSettings) -> CTResult<()> {
+fn shred_exec_stdout(settings: &ShredSettings, random_source: &mut RandomSource) -> CTResult<()> {
     let stat = stdout_stat()?;
     validate_stdout_fd(stat.st_mode)?;
 
@@ -772,7 +751,14 @@ fn shred_exec_stdout(settings: &ShredSettings) -> CTResult<()> {
         .open("/proc/self/fd/1")
         .map_err_context(|| "-: failed to open for writing".to_string())?;
 
-    shred_run_passes(&mut file, Path::new("-"), settings, size, stdout_is_regular)?;
+    shred_run_passes(
+        &mut file,
+        Path::new("-"),
+        settings,
+        size,
+        stdout_is_regular,
+        random_source,
+    )?;
 
     if settings.remove_method != RemoveMethod::None {
         file.set_len(0)
@@ -783,7 +769,7 @@ fn shred_exec_stdout(settings: &ShredSettings) -> CTResult<()> {
 }
 
 #[cfg(not(unix))]
-fn shred_exec_stdout(_settings: &ShredSettings) -> CTResult<()> {
+fn shred_exec_stdout(_settings: &ShredSettings, _random_source: &mut RandomSource) -> CTResult<()> {
     Err(CtSimpleError::new(1, "-: invalid file type"))
 }
 
@@ -839,6 +825,7 @@ fn shred_run_passes(
     settings: &ShredSettings,
     size: u64,
     sync_data: bool,
+    random_source: &mut RandomSource,
 ) -> CTResult<()> {
     let pass_sequence = shred_pass_sequence(settings, size);
     let total_passes = pass_sequence.len();
@@ -855,22 +842,9 @@ fn shred_run_passes(
             );
         }
         let pass_result = if sync_data {
-            shred_do_pass(
-                file,
-                &pass_type,
-                settings.exact,
-                size,
-                settings.random_source,
-            )
+            shred_do_pass(file, &pass_type, settings.exact, size, random_source)
         } else {
-            shred_do_pass_impl(
-                file,
-                &pass_type,
-                settings.exact,
-                size,
-                settings.random_source,
-                false,
-            )
+            shred_do_pass_impl(file, &pass_type, settings.exact, size, random_source, false)
         };
         ct_show_if_err!(
             pass_result.map_err_context(|| format!(
@@ -947,7 +921,7 @@ fn shred_do_pass(
     pass_type: &PassType,
     _exact: bool,
     file_size: u64,
-    random_source: Option<&Path>,
+    random_source: &mut RandomSource,
 ) -> Result<(), io::Error> {
     shred_do_pass_impl(file, pass_type, _exact, file_size, random_source, true)
 }
@@ -957,13 +931,13 @@ fn shred_do_pass_impl(
     pass_type: &PassType,
     _exact: bool,
     file_size: u64,
-    random_source: Option<&Path>,
+    random_source: &mut RandomSource,
     sync_data: bool,
 ) -> Result<(), io::Error> {
     // 重置文件指针到开始位置
     file.rewind()?;
 
-    let mut writer = BytesWriter::from_pass_type_with_random_source(pass_type, random_source)?;
+    let mut writer = BytesWriter::from_pass_type(pass_type, random_source);
 
     // 按块写入数据
     for _ in 0..(file_size / SHRED_BLOCK_SIZE as u64) {
@@ -1434,10 +1408,8 @@ mod tests {
 
         #[test]
         fn test_bytes_writer_random() -> Result<(), io::Error> {
-            let mut writer = BytesWriter::Random {
-                rng: Box::new(StdRng::from_entropy()),
-                buffer: Box::new([0; SHRED_BLOCK_SIZE]),
-            };
+            let mut source = RandomSource::new(None)?;
+            let mut writer = BytesWriter::from_pass_type(&PassType::Random, &mut source);
 
             let block1 = writer.bytes_for_pass(10)?.to_vec();
             let block2 = writer.bytes_for_pass(10)?.to_vec();
@@ -1459,10 +1431,8 @@ mod tests {
             temp_file.flush().unwrap();
 
             // 使用文件作为随机源
-            let mut writer = BytesWriter::from_pass_type_with_random_source(
-                &PassType::Random,
-                Some(temp_file.path()),
-            )?;
+            let mut source = RandomSource::new(Some(temp_file.path()))?;
+            let mut writer = BytesWriter::from_pass_type(&PassType::Random, &mut source);
 
             let block = writer.bytes_for_pass(10)?;
             assert_eq!(block.len(), 10, "应该生成请求的长度");
@@ -1476,21 +1446,41 @@ mod tests {
             use tempfile::NamedTempFile;
 
             let temp_file = NamedTempFile::new().unwrap();
-            let mut writer = BytesWriter::from_pass_type_with_random_source(
-                &PassType::Random,
-                Some(temp_file.path()),
-            )
-            .unwrap();
+            let mut source = RandomSource::new(Some(temp_file.path())).unwrap();
+            let mut writer = BytesWriter::from_pass_type(&PassType::Random, &mut source);
 
             let error = writer.bytes_for_pass(1).unwrap_err();
             assert_eq!(error.kind(), io::ErrorKind::UnexpectedEof);
         }
 
         #[test]
+        fn test_bytes_writer_reuses_random_stream() -> Result<(), io::Error> {
+            use tempfile::NamedTempFile;
+
+            let mut temp_file = NamedTempFile::new().unwrap();
+            temp_file.write_all(b"AAAABBBB").unwrap();
+            temp_file.flush().unwrap();
+            let mut source = RandomSource::new(Some(temp_file.path()))?;
+
+            let first = {
+                let mut writer = BytesWriter::from_pass_type(&PassType::Random, &mut source);
+                writer.bytes_for_pass(4)?.to_vec()
+            };
+            let second = {
+                let mut writer = BytesWriter::from_pass_type(&PassType::Random, &mut source);
+                writer.bytes_for_pass(4)?.to_vec()
+            };
+
+            assert_eq!(first, b"AAAA");
+            assert_eq!(second, b"BBBB");
+            Ok(())
+        }
+
+        #[test]
         fn test_bytes_writer_with_random_source_none() -> Result<(), io::Error> {
             // 当没有提供随机源时，应该使用默认随机数生成器
-            let mut writer =
-                BytesWriter::from_pass_type_with_random_source(&PassType::Random, None)?;
+            let mut source = RandomSource::new(None)?;
+            let mut writer = BytesWriter::from_pass_type(&PassType::Random, &mut source);
 
             let block1 = writer.bytes_for_pass(10)?.to_vec();
             let block2 = writer.bytes_for_pass(10)?.to_vec();
@@ -1745,7 +1735,8 @@ mod tests {
             fs::write(&file_path, "test data").unwrap();
 
             let mut file = File::create(&file_path).unwrap();
-            let result = shred_do_pass(&mut file, &PassType::Random, true, 10, None);
+            let mut random_source = RandomSource::new(None).unwrap();
+            let result = shred_do_pass(&mut file, &PassType::Random, true, 10, &mut random_source);
 
             assert!(result.is_ok(), "随机写入应该成功");
             assert_eq!(
@@ -1762,12 +1753,13 @@ mod tests {
             fs::write(&file_path, "test data").unwrap();
 
             let mut file = File::create(&file_path).unwrap();
+            let mut random_source = RandomSource::new(None).unwrap();
             let result = shred_do_pass(
                 &mut file,
                 &PassType::Pattern(Pattern::Single(0xFF)),
                 true,
                 5,
-                None,
+                &mut random_source,
             );
 
             assert!(result.is_ok(), "模式写入应该成功");

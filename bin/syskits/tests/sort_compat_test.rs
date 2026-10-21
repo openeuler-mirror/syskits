@@ -1,6 +1,11 @@
 use std::fs;
 use std::process::Command;
 
+#[cfg(target_family = "unix")]
+use std::ffi::OsString;
+#[cfg(target_family = "unix")]
+use std::os::unix::ffi::OsStringExt;
+
 use tempfile::TempDir;
 
 #[test]
@@ -189,4 +194,81 @@ fn sort_invalid_sort_and_zero_parallel_exit_codes_match_gnu() {
             );
         }
     }
+}
+
+#[test]
+#[cfg(target_family = "unix")]
+fn sort_accepts_non_utf8_option_paths() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("input");
+    fs::write(&input, b"b\na\n").expect("write input");
+
+    let output_path = temp_dir
+        .path()
+        .join(OsString::from_vec(b"output-\xff".to_vec()));
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args([
+            OsString::from("sort"),
+            OsString::from("-o"),
+            output_path.clone().into_os_string(),
+            input.clone().into_os_string(),
+        ])
+        .output()
+        .expect("run sort with non-UTF-8 output path");
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(fs::read(&output_path).expect("read output"), b"a\nb\n");
+
+    let random_path = temp_dir
+        .path()
+        .join(OsString::from_vec(b"random-\xfe".to_vec()));
+    fs::write(&random_path, [0_u8; 16]).expect("write random source");
+    let mut random_arg = OsString::from("--random-source=");
+    random_arg.push(&random_path);
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args([
+            OsString::from("sort"),
+            OsString::from("-R"),
+            random_arg,
+            input.clone().into_os_string(),
+        ])
+        .output()
+        .expect("run sort with non-UTF-8 random source path");
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let spill_input = temp_dir.path().join("spill-input");
+    let records = (1..=1000)
+        .rev()
+        .map(|value| format!("{value}\n"))
+        .collect::<String>();
+    fs::write(&spill_input, records).expect("write spill input");
+    let temporary_path = temp_dir
+        .path()
+        .join(OsString::from_vec(b"temporary-\xfd".to_vec()));
+    fs::create_dir(&temporary_path).expect("create temporary directory");
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args([
+            OsString::from("sort"),
+            OsString::from("-S1b"),
+            OsString::from("-T"),
+            temporary_path.into_os_string(),
+            spill_input.into_os_string(),
+        ])
+        .output()
+        .expect("run sort with non-UTF-8 temporary path");
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }

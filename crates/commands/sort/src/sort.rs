@@ -258,7 +258,7 @@ impl SortMode {
 }
 
 pub struct SortOutput {
-    file: Option<String>,
+    file: Option<OsString>,
 }
 
 thread_local! {
@@ -284,9 +284,9 @@ impl Write for SortBufferedWriter {
 }
 
 impl SortOutput {
-    fn new(name: Option<&str>) -> CTResult<Self> {
+    fn new(name: Option<&OsStr>) -> CTResult<Self> {
         Ok(Self {
-            file: name.map(|s| s.to_owned()),
+            file: name.map(OsStr::to_owned),
         })
     }
 
@@ -315,7 +315,7 @@ impl SortOutput {
         BufWriter::new(w)
     }
 
-    fn as_output_name(&self) -> Option<&str> {
+    fn as_output_name(&self) -> Option<&OsStr> {
         self.file.as_deref()
     }
 }
@@ -1355,7 +1355,7 @@ fn sort_validate_inputs(files: &[OsString], output: &SortOutput) -> CTResult<()>
             // 使用 append(true) 仅作写权限探测，避免提前 truncate 清空目标文件
             if let Err(error) = OpenOptions::new().append(true).open(out_path) {
                 return Err(SortError::SortOpenFailed {
-                    path: out_name.to_string(),
+                    path: out_name.to_string_lossy().into_owned(),
                     error,
                 }
                 .into());
@@ -1551,8 +1551,8 @@ fn sort_handle_settings(
 ) -> CTResult<(SortGlobalConfigs, Vec<OsString>, TmpDirWrapper, SortOutput)> {
     let mut settings = SortGlobalConfigs::default();
     let random_source = matches
-        .get_one::<String>(sort_flags::SORT_RANDOM_SOURCE)
-        .map(String::as_str);
+        .get_one::<OsString>(sort_flags::SORT_RANDOM_SOURCE)
+        .map(OsString::as_os_str);
 
     // 检查用户是否指定了一个以零结尾的文件列表作为输入，否则从参数中读取文件
     let mut files: Vec<OsString> = sort_get_settings_files(&matches)?;
@@ -1576,7 +1576,7 @@ fn sort_handle_settings(
     settings.buffer_size = sort_get_settings_buffer_size(&matches)?;
 
     let mut tmp_dirs = matches
-        .get_many::<String>(sort_flags::SORT_TMP_DIR)
+        .get_many::<OsString>(sort_flags::SORT_TMP_DIR)
         .map(|values| values.map(PathBuf::from).collect())
         .unwrap_or_else(|| vec![env::temp_dir()]);
     let tmp_dir = if tmp_dirs.len() == 1 {
@@ -1640,8 +1640,8 @@ fn sort_handle_settings(
     }
 
     // 提取所有的 -o 参数
-    let outputs: Vec<&String> = matches
-        .get_many::<String>(sort_flags::SORT_OUTPUT)
+    let outputs: Vec<&OsString> = matches
+        .get_many::<OsString>(sort_flags::SORT_OUTPUT)
         .unwrap_or_default()
         .collect();
 
@@ -1653,7 +1653,7 @@ fn sort_handle_settings(
         return Err(CTsageError::new(2, "multiple output files specified"));
     }
 
-    let output = SortOutput::new(outputs.first().map(|s| s.as_str()))?;
+    let output = SortOutput::new(outputs.first().map(|s| s.as_os_str()))?;
     if settings.is_debug {
         if settings.is_check {
             let check_option = if settings.is_check_silent { 'C' } else { 'c' };
@@ -2107,6 +2107,7 @@ pub fn ct_app() -> Command {
             .long(sort_flags::SORT_RANDOM_SOURCE)
             .help("get random bytes from FILE")
             .value_name("FILE")
+            .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(sort_flags::SORT_DICTIONARY_ORDER)
             .short('d')
@@ -2172,6 +2173,7 @@ pub fn ct_app() -> Command {
             .help(t!("sort.clap.sort_output"))
             .value_name("FILENAME")
             .action(ArgAction::Append)
+            .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(sort_flags::SORT_REVERSE)
             .short('r')
@@ -2221,6 +2223,7 @@ pub fn ct_app() -> Command {
             .help(t!("sort.clap.sort_tmp_dir"))
             .action(ArgAction::Append)
             .value_name("DIR")
+            .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::DirPath),
         Arg::new(sort_flags::SORT_COMPRESS_PROG)
             .long(sort_flags::SORT_COMPRESS_PROG)
@@ -2348,7 +2351,9 @@ pub fn sort_native_semantic(args: impl ctcore::Args) -> CTResult<SortSemantic> {
     let (settings, mut files, mut tmp_dir, output) = sort_handle_settings(matches)?;
     sort_validate_inputs(&files, &output)?;
 
-    let output_file = output.as_output_name().map(str::to_owned);
+    let output_file = output
+        .as_output_name()
+        .map(|path| path.to_string_lossy().into_owned());
     let buffer_stdout = output_file.is_none();
     let source_count = files.len();
     let stderr_text = sort_debug_diagnostic_text(&settings);
@@ -2677,9 +2682,9 @@ fn sort_get_rand_string() -> [u8; 16] {
     thread_rng().sample(rand::distributions::Standard)
 }
 
-fn sort_get_random_salt_from_file(path: &str) -> CTResult<[u8; 16]> {
+fn sort_get_random_salt_from_file(path: &OsStr) -> CTResult<[u8; 16]> {
     let mut file = File::open(path).map_err(|error| SortError::SortOpenFailed {
-        path: path.to_string(),
+        path: path.to_string_lossy().into_owned(),
         error,
     })?;
 
@@ -2693,7 +2698,7 @@ fn sort_get_random_salt_from_file(path: &str) -> CTResult<[u8; 16]> {
     Ok(salt)
 }
 
-fn sort_resolve_random_salt(random_source: Option<&str>) -> CTResult<[u8; 16]> {
+fn sort_resolve_random_salt(random_source: Option<&OsStr>) -> CTResult<[u8; 16]> {
     if let Some(path) = random_source {
         return sort_get_random_salt_from_file(path);
     }
@@ -5206,7 +5211,7 @@ mod tests {
         fn test_output_new_with_file() {
             let test_file_name = "test_output_file.txt";
             let _ = fs::remove_file(test_file_name); // Ensure the file does not exist before the test
-            let output = SortOutput::new(Some(test_file_name)).unwrap();
+            let output = SortOutput::new(Some(OsStr::new(test_file_name))).unwrap();
             assert!(output.file.is_some());
             // File is not created until into_write is called
             assert!(!Path::new(test_file_name).exists());
@@ -5216,7 +5221,7 @@ mod tests {
         fn test_output_new_failure() {
             // SortOutput::new now only stores the filename, it doesn't try to open the file
             // so invalid paths don't cause errors at creation time
-            let output = SortOutput::new(Some("/invalid/path/to/file.txt"));
+            let output = SortOutput::new(Some(OsStr::new("/invalid/path/to/file.txt")));
             // Now it succeeds because validation happens later in into_write
             assert!(output.is_ok());
         }
@@ -5234,7 +5239,7 @@ mod tests {
             writeln!(file, "Some initial data").unwrap();
             assert!(fs::metadata(test_file_name).unwrap().len() > 0);
 
-            let output = SortOutput::new(Some(test_file_name)).unwrap();
+            let output = SortOutput::new(Some(OsStr::new(test_file_name))).unwrap();
             let _writer = output.into_write();
             // Check if the file has been truncated
             assert_eq!(fs::metadata(test_file_name).unwrap().len(), 0);
@@ -5251,8 +5256,8 @@ mod tests {
         #[test]
         fn test_as_output_name_some() {
             let test_file_name = "test_name.txt";
-            let output = SortOutput::new(Some(test_file_name)).unwrap();
-            assert_eq!(output.as_output_name(), Some(test_file_name));
+            let output = SortOutput::new(Some(OsStr::new(test_file_name))).unwrap();
+            assert_eq!(output.as_output_name(), Some(OsStr::new(test_file_name)));
 
             let _ = fs::remove_file(test_file_name);
         }
@@ -5260,8 +5265,8 @@ mod tests {
         #[test]
         fn test_output_new() {
             // Test with a file name
-            let output = SortOutput::new(Some("test.txt")).unwrap();
-            assert_eq!(output.as_output_name(), Some("test.txt"));
+            let output = SortOutput::new(Some(OsStr::new("test.txt"))).unwrap();
+            assert_eq!(output.as_output_name(), Some(OsStr::new("test.txt")));
 
             // Test without a file name
             let output = SortOutput::new(None).unwrap();
@@ -5271,7 +5276,7 @@ mod tests {
         #[test]
         fn test_output_into_write() {
             // Test with a file name
-            let output = SortOutput::new(Some("test_output_into_write.txt")).unwrap();
+            let output = SortOutput::new(Some(OsStr::new("test_output_into_write.txt"))).unwrap();
             let mut buf_writer = output.into_write();
             buf_writer.write_all(b"Hello, world!").unwrap();
 
@@ -5299,7 +5304,7 @@ mod tests {
             permissions.set_readonly(true);
             fs::set_permissions(&test_file_path, permissions).unwrap();
 
-            let output = SortOutput::new(Some(test_file_name));
+            let output = SortOutput::new(Some(OsStr::new(test_file_name)));
             let is_root = unsafe { libc::geteuid() == 0 };
             if is_root {
                 assert!(output.is_ok());
@@ -5317,7 +5322,7 @@ mod tests {
         #[test]
         fn test_output_new_long_file_name() {
             let test_file_name = "a".repeat(255); // Lengthy file name
-            let output = SortOutput::new(Some(&test_file_name));
+            let output = SortOutput::new(Some(OsStr::new(&test_file_name)));
             assert!(output.is_ok());
             let _ = fs::remove_file(test_file_name);
         }
@@ -5338,7 +5343,7 @@ mod tests {
             permissions.set_readonly(true);
             fs::set_permissions(&test_file_path, permissions).unwrap();
 
-            let output = SortOutput::new(Some(test_file_name));
+            let output = SortOutput::new(Some(OsStr::new(test_file_name)));
             let is_root = unsafe { libc::geteuid() == 0 };
             if is_root {
                 let output = output.unwrap();
@@ -5362,9 +5367,9 @@ mod tests {
         #[test]
         fn test_consistent_output_name() {
             let test_file_name = "consistent_name_test.txt";
-            let output = SortOutput::new(Some(test_file_name)).unwrap();
-            assert_eq!(output.as_output_name(), Some(test_file_name));
-            assert_eq!(output.as_output_name(), Some(test_file_name)); // Re-check for consistency
+            let output = SortOutput::new(Some(OsStr::new(test_file_name))).unwrap();
+            assert_eq!(output.as_output_name(), Some(OsStr::new(test_file_name)));
+            assert_eq!(output.as_output_name(), Some(OsStr::new(test_file_name))); // Re-check for consistency
 
             let _ = fs::remove_file(test_file_name);
         }
@@ -10927,7 +10932,7 @@ mod tests {
             let expected = *b"0123456789abcdef";
             std::fs::write(&random_path, expected).unwrap();
 
-            let salt = sort_resolve_random_salt(Some(random_path.to_str().unwrap())).unwrap();
+            let salt = sort_resolve_random_salt(Some(random_path.as_os_str())).unwrap();
             assert_eq!(salt, expected);
         }
 

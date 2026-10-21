@@ -16,7 +16,7 @@
 //！从上一次读取的文件中读取下一个数据块。从sort返回到阅读器的通道有两个目的： 允许阅读器重用内存分配，并告诉阅读器下一步读取哪个文件。
 
 use std::cmp::Ordering;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
 use std::io::{BufWriter, Read, Write};
 use std::iter;
@@ -39,7 +39,7 @@ use crate::{sort_compare_by, sort_open};
 /// 并用该副本替换输入文件中出现的输出文件。
 fn merge_replace_output_file_in_input_files(
     files: &mut [OsString],
-    output: Option<&str>,
+    output: Option<&OsStr>,
     tmp_dir: &mut TmpDirWrapper,
 ) -> CTResult<()> {
     let mut copy: Option<PathBuf> = None;
@@ -83,7 +83,7 @@ fn merge_replace_output_file_in_input_files(
 pub fn merge<'a>(
     files: &mut [OsString],
     settings: &'a SortGlobalConfigs,
-    output: Option<&str>,
+    output: Option<&OsStr>,
     tmp_dir: &mut TmpDirWrapper,
 ) -> CTResult<MergeFileMerger<'a>> {
     merge_replace_output_file_in_input_files(files, output, tmp_dir)?;
@@ -1070,7 +1070,7 @@ mod tests {
             let result = merge(
                 &mut files,
                 &settings,
-                Some("/path/to/output.txt"),
+                Some(OsStr::new("/path/to/output.txt")),
                 &mut tmp_dir,
             );
             assert!(result.is_ok());
@@ -1088,7 +1088,7 @@ mod tests {
             let result = merge(
                 &mut files,
                 &settings,
-                Some("/path/to/output.txt"),
+                Some(OsStr::new("/path/to/output.txt")),
                 &mut tmp_dir,
             );
             assert!(result.is_err());
@@ -2399,7 +2399,7 @@ mod tests {
             assert!(
                 merge_replace_output_file_in_input_files(
                     &mut files,
-                    Some("/path/to/output.txt"),
+                    Some(OsStr::new("/path/to/output.txt")),
                     &mut tmp_dir,
                 )
                 .is_ok()
@@ -2417,7 +2417,7 @@ mod tests {
             assert!(
                 merge_replace_output_file_in_input_files(
                     &mut files,
-                    Some("/path/to/output.txt"),
+                    Some(OsStr::new("/path/to/output.txt")),
                     &mut tmp_dir,
                 )
                 .is_ok()
@@ -2437,7 +2437,7 @@ mod tests {
             assert!(
                 merge_replace_output_file_in_input_files(
                     &mut files,
-                    Some("/path/to/output.txt"),
+                    Some(OsStr::new("/path/to/output.txt")),
                     &mut tmp_dir,
                 )
                 .is_ok()
@@ -2458,7 +2458,7 @@ mod tests {
             // Simulate failure by not setting `temp_dir`
             if let Err(e) = merge_replace_output_file_in_input_files(
                 &mut files,
-                Some("/path/to/output.txt"),
+                Some(OsStr::new("/path/to/output.txt")),
                 &mut tmp_dir,
             ) {
                 assert_eq!(e.to_string(), "Temporary directory creation failed");
@@ -2569,7 +2569,7 @@ mod tests {
             writeln!(file, "Hello, world!").unwrap();
 
             let mut files = vec![file_path.clone().into_os_string()];
-            let output = Some("/path/not/in/list");
+            let output = Some(OsStr::new("/path/not/in/list"));
 
             let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
 
@@ -2594,7 +2594,7 @@ mod tests {
                 file1_path.clone().into_os_string(),
                 file2_path.clone().into_os_string(),
             ];
-            let output = Some(file2_path.to_str().unwrap());
+            let output = Some(file2_path.as_os_str());
 
             let mut tmp_dir_wrapper = TmpDirWrapper::new(temp_dir.path().to_path_buf());
 

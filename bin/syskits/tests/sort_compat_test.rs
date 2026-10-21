@@ -629,6 +629,35 @@ fn sort_check_propagates_reader_errors() {
 
 #[test]
 #[cfg(target_family = "unix")]
+fn sort_propagates_stdout_write_errors() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("write-error");
+    fs::write(&input, b"a\n").expect("write input");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args([
+            "sort",
+            "-o",
+            "/dev/full",
+            input.to_str().expect("utf8 path"),
+        ])
+        .output()
+        .expect("run sort with full output device");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(output.stdout, b"");
+    assert!(
+        output
+            .stderr
+            .ends_with(b"sort: write error: No space left on device\n"),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+#[cfg(target_family = "unix")]
 fn sort_field_separator_uses_c_locale_bytes() {
     let temp_dir = TempDir::new().expect("tempdir");
     let utf8_input = temp_dir.path().join("utf8-input");

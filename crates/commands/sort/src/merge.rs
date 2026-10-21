@@ -338,12 +338,27 @@ impl MergeFileMerger<'_> {
         settings: &SortGlobalConfigs,
         out: &mut impl Write,
     ) -> CTResult<()> {
-        while self.write_next(settings, out) {}
+        let write_result = loop {
+            match self.write_next(settings, out) {
+                Ok(true) => continue,
+                Ok(false) => break Ok(()),
+                Err(error) => break Err(error),
+            }
+        };
         drop(self.request_sender);
-        self.reader_join_handle.join().unwrap()
+        drop(self.heap);
+        drop(self.prev);
+        let reader_result = self.reader_join_handle.join().map_err(|_| {
+            ctcore::ct_error::CtSimpleError::new(2, "merge reader thread terminated unexpectedly")
+        })?;
+        write_result?;
+        reader_result?;
+        out.flush()
+            .map_err(|error| SortError::SortWriteFailed { error })?;
+        Ok(())
     }
 
-    fn write_next(&mut self, settings: &SortGlobalConfigs, out: &mut impl Write) -> bool {
+    fn write_next(&mut self, settings: &SortGlobalConfigs, out: &mut impl Write) -> CTResult<bool> {
         if let Some(file) = self.heap.peek() {
             let prev = self.prev.replace(MergePreviousLine {
                 chunk: file.current_chunk.clone(),
@@ -351,7 +366,7 @@ impl MergeFileMerger<'_> {
                 file_number: file.file_number,
             });
 
-            file.current_chunk.with_dependent(|_, contents| {
+            let print_result = file.current_chunk.with_dependent(|_, contents| {
                 let current_line = &contents.lines[file.line_idx];
                 if settings.is_unique {
                     if let Some(prev) = &prev {
@@ -363,12 +378,15 @@ impl MergeFileMerger<'_> {
                             file.current_chunk.line_data(),
                         );
                         if cmp == Ordering::Equal {
-                            return;
+                            return Ok(());
                         }
                     }
                 }
-                current_line.print(out, settings);
+                current_line
+                    .print(out, settings)
+                    .map_err(|error| SortError::SortWriteFailed { error })
             });
+            print_result?;
 
             let was_last_line_for_file = file.current_chunk.lines().len() == file.line_idx + 1;
 
@@ -398,7 +416,7 @@ impl MergeFileMerger<'_> {
                 }
             }
         }
-        !self.heap.is_empty()
+        Ok(!self.heap.is_empty())
     }
 }
 
@@ -488,7 +506,10 @@ impl MergeWriteableTmpFile for MergeWriteablePlainTmpFile {
         })
     }
 
-    fn finished_writing(self) -> CTResult<Self::Closed> {
+    fn finished_writing(mut self) -> CTResult<Self::Closed> {
+        self.file
+            .flush()
+            .map_err(|error| SortError::SortWriteFailed { error })?;
         Ok(MergeClosedPlainTmpFile { path: self.path })
     }
 
@@ -566,7 +587,10 @@ impl MergeWriteableTmpFile for MergeWriteableCompressedTmpFile {
         })
     }
 
-    fn finished_writing(self) -> CTResult<Self::Closed> {
+    fn finished_writing(mut self) -> CTResult<Self::Closed> {
+        self.child_stdin
+            .flush()
+            .map_err(|error| SortError::SortWriteFailed { error })?;
         drop(self.child_stdin);
         merge_check_child_success(self.child, &self.compress_prog)?;
         Ok(MergeClosedCompressedTmpFile {
@@ -760,7 +784,7 @@ mod tests {
             // Further checks to ensure merged output is correct
             let mut merger = result.unwrap();
             let mut output = Vec::new();
-            while merger.write_next(&settings, &mut output) {}
+            while merger.write_next(&settings, &mut output).unwrap() {}
             assert_eq!(String::from_utf8(output).unwrap(), "Hello\nWorld\n");
         }
 
@@ -796,7 +820,7 @@ mod tests {
             // Check if single file contents are processed correctly
             let mut merger = result.unwrap();
             let mut output = Vec::new();
-            while merger.write_next(&settings, &mut output) {}
+            while merger.write_next(&settings, &mut output).unwrap() {}
             assert_eq!(String::from_utf8(output).unwrap(), "Only one file\n");
         }
 
@@ -821,7 +845,7 @@ mod tests {
 
             let mut merger = result.unwrap();
             let mut output = Vec::new();
-            while merger.write_next(&settings, &mut output) {}
+            while merger.write_next(&settings, &mut output).unwrap() {}
             assert_eq!(String::from_utf8(output).unwrap(), "Hello\nWorld\n");
         }
 
@@ -846,7 +870,7 @@ mod tests {
 
             let mut merger = result.unwrap();
             let mut output = Vec::new();
-            while merger.write_next(&settings, &mut output) {}
+            while merger.write_next(&settings, &mut output).unwrap() {}
             // The expected output should be checked against a valid sorted order if applicable
         }
 
@@ -873,7 +897,7 @@ mod tests {
 
             let mut merger = result.unwrap();
             let mut output = Vec::new();
-            while merger.write_next(&settings, &mut output) {}
+            while merger.write_next(&settings, &mut output).unwrap() {}
             assert!(!output.is_empty(), "Output should be large but is empty");
         }
     }

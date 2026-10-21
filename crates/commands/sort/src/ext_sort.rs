@@ -119,10 +119,10 @@ fn ext_sort_reader_writer<
                     }),
                     sort_settings,
                     sort_output,
-                );
+                )?;
             }
             false => {
-                sort_print_sorted(chunk.lines().iter(), sort_settings, sort_output);
+                sort_print_sorted(chunk.lines().iter(), sort_settings, sort_output)?;
             }
         },
         ExtSortReadResult::SortedTwoChunks([a, b]) => {
@@ -149,14 +149,14 @@ fn ext_sort_reader_writer<
                             .map(|(line, _)| line),
                         sort_settings,
                         sort_output,
-                    );
+                    )?;
                 }
                 false => {
                     sort_print_sorted(
                         merged_iter.map(|(line, _)| line),
                         sort_settings,
                         sort_output,
-                    );
+                    )?;
                 }
             }
         }
@@ -293,15 +293,21 @@ fn ext_sort_write<I: MergeWriteableTmpFile>(
     separator: u8,
 ) -> CTResult<I::Closed> {
     let mut tmp_file = I::create(file, compress_prog)?;
-    ext_sort_write_lines(chunk.lines(), tmp_file.as_write(), separator);
+    ext_sort_write_lines(chunk.lines(), tmp_file.as_write(), separator)
+        .map_err(|error| crate::SortError::SortWriteFailed { error })?;
     tmp_file.finished_writing()
 }
 
-fn ext_sort_write_lines<T: Write>(lines: &[SortLine], w: &mut T, separator: u8) {
+fn ext_sort_write_lines<T: Write>(
+    lines: &[SortLine],
+    w: &mut T,
+    separator: u8,
+) -> std::io::Result<()> {
     for s in lines {
-        w.write_all(s.raw_bytes).unwrap();
-        w.write_all(&[separator]).unwrap();
+        w.write_all(s.raw_bytes)?;
+        w.write_all(&[separator])?;
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -3426,7 +3432,7 @@ mod tests {
             ];
 
             let mut writer = Cursor::new(Vec::new());
-            ext_sort_write_lines(&lines, &mut writer, b'\n');
+            ext_sort_write_lines(&lines, &mut writer, b'\n').unwrap();
             let result = String::from_utf8(writer.into_inner()).unwrap();
 
             assert_eq!(result, "Hello\nWorld\nRust\n");
@@ -3437,7 +3443,7 @@ mod tests {
             let lines: &[SortLine] = &[];
 
             let mut writer = Cursor::new(Vec::new());
-            ext_sort_write_lines(lines, &mut writer, b'\n');
+            ext_sort_write_lines(lines, &mut writer, b'\n').unwrap();
             let result = String::from_utf8(writer.into_inner()).unwrap();
 
             assert_eq!(result, "");
@@ -3452,7 +3458,7 @@ mod tests {
             }];
 
             let mut writer = Cursor::new(Vec::new());
-            ext_sort_write_lines(&lines, &mut writer, b'\n');
+            ext_sort_write_lines(&lines, &mut writer, b'\n').unwrap();
             let result = String::from_utf8(writer.into_inner()).unwrap();
 
             assert_eq!(result, "Hello\n");
@@ -3479,7 +3485,7 @@ mod tests {
             ];
 
             let mut writer = Cursor::new(Vec::new());
-            ext_sort_write_lines(&lines, &mut writer, b'\n');
+            ext_sort_write_lines(&lines, &mut writer, b'\n').unwrap();
             let result = String::from_utf8(writer.into_inner()).unwrap();
 
             assert_eq!(result, "Hello\nWorld\nRust\n");
@@ -3506,7 +3512,7 @@ mod tests {
             ];
 
             let mut writer = Cursor::new(Vec::new());
-            ext_sort_write_lines(&lines, &mut writer, b';');
+            ext_sort_write_lines(&lines, &mut writer, b';').unwrap();
             let result = String::from_utf8(writer.into_inner()).unwrap();
 
             assert_eq!(result, "Hello;World;Rust;");
@@ -3520,7 +3526,7 @@ mod tests {
                 index: 2,
             }];
             let mut writer = Cursor::new(Vec::new());
-            ext_sort_write_lines(&lines, &mut writer, b'\n');
+            ext_sort_write_lines(&lines, &mut writer, b'\n').unwrap();
             let result = String::from_utf8(writer.into_inner()).unwrap();
             assert_eq!(result, "Hello\n");
         }
@@ -3545,7 +3551,7 @@ mod tests {
                 },
             ];
             let mut writer = Cursor::new(Vec::new());
-            ext_sort_write_lines(&lines, &mut writer, b'\n');
+            ext_sort_write_lines(&lines, &mut writer, b'\n').unwrap();
             let result = String::from_utf8(writer.into_inner()).unwrap();
             assert_eq!(result, "\n\n\n");
         }
@@ -3570,7 +3576,7 @@ mod tests {
                 },
             ];
             let mut writer = Cursor::new(Vec::new());
-            ext_sort_write_lines(&lines, &mut writer, b' ');
+            ext_sort_write_lines(&lines, &mut writer, b' ').unwrap();
             let result = String::from_utf8(writer.into_inner()).unwrap();
             assert_eq!(result, "Hello World Rust ");
         }
@@ -3579,7 +3585,7 @@ mod tests {
         fn test_write_lines_no_lines() {
             let lines: Vec<SortLine> = Vec::new();
             let mut writer = Cursor::new(Vec::new());
-            ext_sort_write_lines(&lines, &mut writer, b'\n');
+            ext_sort_write_lines(&lines, &mut writer, b'\n').unwrap();
             let result = String::from_utf8(writer.into_inner()).unwrap();
             assert_eq!(result, "");
         }

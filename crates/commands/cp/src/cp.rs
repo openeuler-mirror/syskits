@@ -38,6 +38,7 @@ use ctcore::ct_fs::{
     CtFileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file, canonicalize,
     is_symlink_loop, path_ends_with_terminator, paths_refer_to_same_file,
 };
+use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 use ctcore::{ct_backup_control, ct_update_control};
 pub use ctcore::{ct_backup_control::CtBackupMode, ct_update_control::CtUpdateMode};
 use ctcore::{ct_prompt_yes, ct_show_error, ct_show_warning};
@@ -401,22 +402,14 @@ static CP_PRESERVABLE_ATTRIBUTES: &[&str] = &[
     "ownership",
     "timestamps",
     "context",
-    "link",
     "links",
     "xattr",
     "all",
 ];
 
 #[cfg(not(unix))]
-static CP_PRESERVABLE_ATTRIBUTES: &[&str] = &[
-    "mode",
-    "timestamps",
-    "context",
-    "link",
-    "links",
-    "xattr",
-    "all",
-];
+static CP_PRESERVABLE_ATTRIBUTES: &[&str] =
+    &["mode", "timestamps", "context", "links", "xattr", "all"];
 
 pub fn ct_app() -> Command {
     let command_version = crate_version!();
@@ -541,7 +534,8 @@ fn cp_args_init() -> Vec<Arg> {
         ct_backup_control::arguments::backup(),
         ct_backup_control::arguments::backup_no_args(),
         ct_backup_control::arguments::suffix(),
-        ct_update_control::arguments::update(),
+        ct_update_control::arguments::update()
+            .value_parser(CtShortcutValueParser::new(["none", "all", "older"])),
         ct_update_control::arguments::update_no_args(),
         Arg::new(opt_flags::REFLINK)
             .long(opt_flags::REFLINK)
@@ -549,7 +543,7 @@ fn cp_args_init() -> Vec<Arg> {
             .overrides_with_all(MODE_ARGS)
             .require_equals(true)
             .default_missing_value("always")
-            .value_parser(["auto", "always", "never"])
+            .value_parser(CtShortcutValueParser::new(["auto", "always", "never"]))
             .num_args(0..=1)
             .help(t!("cp.clap.reflink")),
         Arg::new(opt_flags::ATTRIBUTES_ONLY)
@@ -597,15 +591,13 @@ fn cp_args_init() -> Vec<Arg> {
         Arg::new(opt_flags::SPARSE)
             .long(opt_flags::SPARSE)
             .value_name("WHEN")
-            .value_parser(["never", "auto", "always"])
+            .value_parser(CtShortcutValueParser::new(["never", "auto", "always"]))
             .help(t!("cp.clap.sparse")),
         Arg::new(opt_flags::PRESERVE)
             .long(opt_flags::PRESERVE)
             .action(ArgAction::Append)
             .use_value_delimiter(true)
-            .value_parser(clap::builder::PossibleValuesParser::new(
-                CP_PRESERVABLE_ATTRIBUTES,
-            ))
+            .value_parser(CtShortcutValueParser::new(CP_PRESERVABLE_ATTRIBUTES))
             .num_args(0..)
             .require_equals(true)
             .value_name("ATTR_LIST")
@@ -9734,6 +9726,42 @@ mod tests {
 
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().kind(), ErrorKind::DisplayHelp);
+        }
+
+        #[test]
+        fn test_ct_app_accepts_enum_value_abbreviations() {
+            let cases = [
+                ("--sparse=al", opt_flags::SPARSE, "always"),
+                ("--reflink=au", opt_flags::REFLINK, "auto"),
+                (
+                    "--update=o",
+                    ctcore::ct_update_control::arguments::OPT_UPDATE,
+                    "older",
+                ),
+                ("--preserve=t", opt_flags::PRESERVE, "timestamps"),
+            ];
+
+            for (argument, id, expected) in cases {
+                let matches = ct_app()
+                    .try_get_matches_from([ctcore::ct_util_name(), argument, "source", "target"])
+                    .unwrap();
+
+                assert_eq!(
+                    matches.get_one::<String>(id).map(String::as_str),
+                    Some(expected)
+                );
+            }
+        }
+
+        #[test]
+        fn test_ct_app_rejects_ambiguous_enum_value_abbreviations() {
+            for argument in ["--sparse=a", "--reflink=a"] {
+                let error = ct_app()
+                    .try_get_matches_from([ctcore::ct_util_name(), argument, "source", "target"])
+                    .unwrap_err();
+
+                assert_eq!(error.kind(), ErrorKind::InvalidValue);
+            }
         }
 
         #[test]

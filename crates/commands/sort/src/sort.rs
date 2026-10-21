@@ -1773,13 +1773,31 @@ fn sort_get_settings_compress_prog(matches: &ArgMatches) -> CTResult<Option<Stri
 
 fn sort_get_settings_threads(matches: &ArgMatches) -> CTResult<String> {
     if matches.contains_id(sort_flags::SORT_PARALLEL) {
-        let threads = matches
+        let argument = matches
             .get_one::<String>(sort_flags::SORT_PARALLEL)
             .map(String::from)
             .unwrap_or_else(|| "0".to_string());
-        if threads == "0" {
+        let numeric = argument
+            .trim_start_matches(|c: char| c.is_ascii_whitespace())
+            .strip_prefix('+')
+            .unwrap_or_else(|| argument.trim_start_matches(|c: char| c.is_ascii_whitespace()));
+        if numeric.is_empty() || !numeric.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err(CtSimpleError::new(
+                2,
+                format!("invalid --parallel argument {}", argument.quote()),
+            ));
+        }
+
+        let threads = numeric.parse::<usize>().map_err(|_| {
+            CtSimpleError::new(
+                2,
+                format!("invalid --parallel argument {}", argument.quote()),
+            )
+        })?;
+        if threads == 0 {
             return Err(CtSimpleError::new(2, "number in parallel must be nonzero"));
         }
+        let threads = threads.to_string();
         unsafe { env::set_var("RAYON_NUM_THREADS", &threads) };
         Ok(threads)
     } else {
@@ -10577,6 +10595,31 @@ mod tests {
             let error = sort_get_settings_threads(&matches).unwrap_err();
             assert_eq!(error.code(), 2);
             assert_eq!(error.to_string(), "number in parallel must be nonzero");
+        }
+
+        #[test]
+        fn test_sort_get_settings_threads_validates_argument() {
+            for argument in ["x", "-1", "1x", "999999999999999999999999999"] {
+                let matches = ct_app()
+                    .try_get_matches_from([
+                        ctcore::ct_util_name(),
+                        &format!("--parallel={argument}"),
+                    ])
+                    .unwrap();
+                let error = sort_get_settings_threads(&matches).unwrap_err();
+                assert_eq!(error.code(), 2);
+                assert!(error.to_string().starts_with("invalid --parallel argument"));
+            }
+
+            for (argument, expected) in [("+2", "2"), (" 2", "2")] {
+                let matches = ct_app()
+                    .try_get_matches_from([
+                        ctcore::ct_util_name(),
+                        &format!("--parallel={argument}"),
+                    ])
+                    .unwrap();
+                assert_eq!(sort_get_settings_threads(&matches).unwrap(), expected);
+            }
         }
 
         #[test]

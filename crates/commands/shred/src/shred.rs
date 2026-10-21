@@ -697,11 +697,13 @@ fn shred_exec_with_random_source(
         .map_err_context(|| format!("{}: fstat failed", path.maybe_quote()))?;
     validate_file_type(&file, path, &metadata)?;
     let size = shred_target_size(settings, &metadata);
+    let inode_size = shred_inode_pass_size(settings, &metadata, size);
 
     shred_run_passes(
         &mut file,
         settings.path,
         settings,
+        inode_size,
         size,
         true,
         random_source,
@@ -725,6 +727,30 @@ fn shred_target_size(settings: &ShredSettings, metadata: &fs::Metadata) -> u64 {
         round_up_to_block_size(size, shred_file_system_block_size(metadata))
     } else {
         size
+    }
+}
+
+fn shred_inode_pass_size(
+    settings: &ShredSettings,
+    metadata: &fs::Metadata,
+    target_size: u64,
+) -> u64 {
+    if !metadata.is_file() {
+        return 0;
+    }
+
+    let original_size = metadata.len();
+    let block_size = shred_file_system_block_size(metadata);
+    if settings.size.is_none() {
+        if !settings.exact && original_size < block_size {
+            original_size
+        } else {
+            0
+        }
+    } else if original_size < block_size.min(target_size) {
+        original_size
+    } else {
+        0
     }
 }
 
@@ -816,6 +842,7 @@ fn shred_exec_stdout(settings: &ShredSettings, random_source: &mut RandomSource)
         &mut file,
         Path::new("-"),
         settings,
+        0,
         size,
         stdout_is_regular,
         random_source,
@@ -929,6 +956,7 @@ fn shred_run_passes(
     file: &mut File,
     display_name: &Path,
     settings: &ShredSettings,
+    inode_size: u64,
     size: u64,
     sync_data: bool,
     random_source: &mut RandomSource,
@@ -939,33 +967,43 @@ fn shred_run_passes(
             |path| path.maybe_quote().to_string(),
         )
     })?;
-    if size == 0 {
+    if inode_size == 0 && size == 0 {
         return Ok(());
     }
     let total_passes = pass_sequence.len();
 
-    for (i, pass_type) in pass_sequence.into_iter().enumerate() {
-        if settings.verbose {
-            let pass_name = pass_name(&pass_type);
-            ct_show_error!(
-                "{}: pass {}/{} ({})...",
-                display_name.maybe_quote(),
-                i + 1,
-                total_passes,
-                pass_name
-            );
+    for (pass_size, verbose) in [(inode_size, false), (size, settings.verbose)] {
+        if pass_size == 0 {
+            continue;
         }
-        let pass_result = if sync_data {
-            shred_do_pass(file, &pass_type, settings.exact, size, random_source)
-        } else {
-            shred_do_pass_impl(file, &pass_type, settings.exact, size, random_source, false)
-        };
-        ct_show_if_err!(
-            pass_result.map_err_context(|| format!(
+        for (i, pass_type) in pass_sequence.iter().enumerate() {
+            if verbose {
+                let pass_name = pass_name(pass_type);
+                ct_show_error!(
+                    "{}: pass {}/{} ({})...",
+                    display_name.maybe_quote(),
+                    i + 1,
+                    total_passes,
+                    pass_name
+                );
+            }
+            let pass_result = if sync_data {
+                shred_do_pass(file, pass_type, settings.exact, pass_size, random_source)
+            } else {
+                shred_do_pass_impl(
+                    file,
+                    pass_type,
+                    settings.exact,
+                    pass_size,
+                    random_source,
+                    false,
+                )
+            };
+            ct_show_if_err!(pass_result.map_err_context(|| format!(
                 "{}: File write pass failed",
                 display_name.maybe_quote()
-            ))
-        );
+            )));
+        }
     }
 
     Ok(())
@@ -1559,6 +1597,33 @@ mod tests {
     #[test]
     fn test_zero_pass_name_uses_six_hex_digits() {
         assert_eq!(pass_name(&PassType::Zero), "000000");
+    }
+
+    #[test]
+    fn test_small_regular_file_gets_inode_pass_before_rounded_pass() -> CTResult<()> {
+        let dir = tempdir().unwrap();
+        let target = dir.path().join("target");
+        let source = dir.path().join("source");
+        fs::write(&target, b"0123456789abcdef").unwrap();
+        let mut source_data = vec![b'A'; 16];
+        source_data.extend(vec![b'B'; 8192]);
+        fs::write(&source, source_data).unwrap();
+
+        shred_main(
+            [
+                OsString::from("shred"),
+                OsString::from("-n1"),
+                OsString::from("--random-source"),
+                source.into_os_string(),
+                target.clone().into_os_string(),
+            ]
+            .into_iter(),
+        )?;
+
+        let data = fs::read(target).unwrap();
+        assert!(data.len() > 16);
+        assert_eq!(&data[..16], b"BBBBBBBBBBBBBBBB");
+        Ok(())
     }
 
     mod pattern_tests {

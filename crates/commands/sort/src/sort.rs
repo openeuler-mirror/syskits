@@ -129,6 +129,7 @@ const SORT_RAW_FIELD_SEPARATOR_BASE: u32 = 0xE000;
 unsafe extern "C" {
     fn iswblank(character: ctcore::libc::c_uint) -> ctcore::libc::c_int;
     fn iswalnum(character: ctcore::libc::c_uint) -> ctcore::libc::c_int;
+    fn iswprint(character: ctcore::libc::c_uint) -> ctcore::libc::c_int;
 }
 
 pub(crate) fn sort_is_blank(character: char) -> bool {
@@ -149,6 +150,16 @@ fn sort_is_alphanumeric(character: char) -> bool {
 
     #[cfg(not(target_os = "linux"))]
     character.is_alphanumeric()
+}
+
+fn sort_is_printable(character: char) -> bool {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        return iswprint(u32::from(character)) != 0;
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    !character.is_control()
 }
 
 // 选择更大的缓冲区大小并不会提高性能
@@ -2491,7 +2502,7 @@ fn sort_default_cmp(a: &str, b: &str, settings: &SortKeySettings) -> Ordering {
             if !sort_is_alphanumeric(c) && !sort_is_blank(c) {
                 continue;
             }
-        } else if settings.is_ignore_non_printing && c.is_control() {
+        } else if settings.is_ignore_non_printing && !sort_is_printable(c) {
             continue;
         }
 
@@ -2508,7 +2519,7 @@ fn sort_default_cmp(a: &str, b: &str, settings: &SortKeySettings) -> Ordering {
             if !sort_is_alphanumeric(c) && !sort_is_blank(c) {
                 continue;
             }
-        } else if settings.is_ignore_non_printing && c.is_control() {
+        } else if settings.is_ignore_non_printing && !sort_is_printable(c) {
             continue;
         }
 

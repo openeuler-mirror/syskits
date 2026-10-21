@@ -345,7 +345,7 @@ pub fn fmt_main(args: impl ctcore::Args) -> CTResult<()> {
     let semantic = fmt_native_semantic(args)?;
     std::io::stdout()
         .write_all(&semantic.output_bytes)
-        .map_err_context(|| "failed to write output".to_string())?;
+        .map_err_context(|| "write error".to_string())?;
     if !semantic.stderr_text.is_empty() {
         eprint!("{}", semantic.stderr_text);
     }

@@ -1685,9 +1685,9 @@ fn sort_get_settings_threads(matches: &ArgMatches) -> CTResult<String> {
 }
 
 fn sort_get_settings_buffer_size(matches: &ArgMatches) -> CTResult<usize> {
-    matches
-        .get_one::<String>(sort_flags::SORT_BUF_SIZE)
-        .map_or(Ok(SORT_DEFAULT_BUF_SIZE), |s| {
+    let mut max_size: Option<usize> = None;
+    if let Some(values) = matches.get_many::<String>(sort_flags::SORT_BUF_SIZE) {
+        for s in values {
             SortGlobalConfigs::parse_byte_count(s)
                 .map_err(|e| {
                     CtSimpleError::new(
@@ -1696,10 +1696,15 @@ fn sort_get_settings_buffer_size(matches: &ArgMatches) -> CTResult<usize> {
                     )
                 })
                 .map(|size| {
-                    // 核心修复：防止缓冲区过小导致 ext_sort 陷入死循环
-                    std::cmp::max(size, 1024)
-                })
-        })
+                    max_size = Some(max_size.map_or(size, |previous| previous.max(size)));
+                })?;
+        }
+    }
+
+    Ok(max_size.map_or(SORT_DEFAULT_BUF_SIZE, |size| {
+        // 核心修复：防止缓冲区过小导致 ext_sort 陷入死循环
+        std::cmp::max(size, 1024)
+    }))
 }
 
 fn sort_get_settings_files(matches: &ArgMatches) -> Result<Vec<OsString>, Box<dyn CTError>> {
@@ -2046,6 +2051,7 @@ pub fn ct_app() -> Command {
             .short('S')
             .long(sort_flags::SORT_BUF_SIZE)
             .help(t!("sort.clap.sort_buf_size"))
+            .action(ArgAction::Append)
             .value_name("SIZE"),
         Arg::new(sort_flags::SORT_TMP_DIR)
             .short('T')

@@ -353,6 +353,32 @@ fn sort_uses_locale_blank_classification() {
 }
 
 #[test]
+fn sort_dictionary_order_uses_locale_character_classes() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let cases: [(&[u8], &[u8]); 2] = [
+        (b"\x0bZ\n A\n", b" A\n\x0bZ\n"),
+        (b"\xc3\xa42\na10\n", b"\xc3\xa42\na10\n"),
+    ];
+
+    for (index, (records, expected)) in cases.into_iter().enumerate() {
+        let input = temp_dir.path().join(format!("input-{index}"));
+        fs::write(&input, records).expect("write dictionary input");
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C")
+            .args(["sort", "-d", input.to_str().expect("utf8 path")])
+            .output()
+            .expect("run dictionary sort");
+
+        assert!(
+            output.status.success(),
+            "case {index}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stdout, expected, "case {index}");
+    }
+}
+
+#[test]
 #[cfg(target_family = "unix")]
 fn sort_field_separator_uses_c_locale_bytes() {
     let temp_dir = TempDir::new().expect("tempdir");

@@ -962,6 +962,56 @@ impl CpOptions {
             }
         }
 
+        let reflink_mode = if let Some(reflink) = args_match.get_one::<String>(opt_flags::REFLINK) {
+            match reflink.as_str() {
+                "always" => CpReflinkMode::Always,
+                "auto" => CpReflinkMode::Auto,
+                "never" => CpReflinkMode::Never,
+                value => {
+                    return Err(CpError::InvalidArgument(format!(
+                        "invalid argument {} for \'reflink\'",
+                        value.quote()
+                    )));
+                }
+            }
+        } else {
+            #[cfg(target_os = "linux")]
+            {
+                CpReflinkMode::Auto
+            }
+            #[cfg(target_os = "windows")]
+            {
+                CpReflinkMode::Never
+            }
+        };
+
+        let sparse_mode = if let Some(val) = args_match.get_one::<String>(opt_flags::SPARSE) {
+            match val.as_str() {
+                "always" => CpSparseMode::Always,
+                "auto" => CpSparseMode::Auto,
+                "never" => CpSparseMode::Never,
+                _ => {
+                    return Err(CpError::InvalidArgument(format!(
+                        "invalid argument {val} for \'sparse\'"
+                    )));
+                }
+            }
+        } else {
+            CpSparseMode::Auto
+        };
+
+        if reflink_mode == CpReflinkMode::Always && sparse_mode != CpSparseMode::Auto {
+            return Err(CpError::InvalidArgument(
+                "--reflink can be used only with --sparse=auto".to_string(),
+            ));
+        }
+        let reflink_mode =
+            if reflink_mode == CpReflinkMode::Auto && sparse_mode == CpSparseMode::Never {
+                CpReflinkMode::Never
+            } else {
+                reflink_mode
+            };
+
         let cp_options = Self {
             attributes_only: args_match.get_flag(opt_flags::ATTRIBUTES_ONLY),
             copy_contents: args_match.get_flag(opt_flags::COPY_CONTENTS),
@@ -987,46 +1037,8 @@ impl CpOptions {
             verbose: args_match.get_flag(opt_flags::VERBOSE)
                 || args_match.get_flag(opt_flags::DEBUG),
             strip_trailing_slashes: args_match.get_flag(opt_flags::STRIP_TRAILING_SLASHES),
-            reflink_mode: {
-                if let Some(reflink) = args_match.get_one::<String>(opt_flags::REFLINK) {
-                    match reflink.as_str() {
-                        "always" => CpReflinkMode::Always,
-                        "auto" => CpReflinkMode::Auto,
-                        "never" => CpReflinkMode::Never,
-                        value => {
-                            return Err(CpError::InvalidArgument(format!(
-                                "invalid argument {} for \'reflink\'",
-                                value.quote()
-                            )));
-                        }
-                    }
-                } else {
-                    #[cfg(target_os = "linux")]
-                    {
-                        CpReflinkMode::Auto
-                    }
-                    #[cfg(target_os = "windows")]
-                    {
-                        CpReflinkMode::Never
-                    }
-                }
-            },
-            sparse_mode: {
-                if let Some(val) = args_match.get_one::<String>(opt_flags::SPARSE) {
-                    match val.as_str() {
-                        "always" => CpSparseMode::Always,
-                        "auto" => CpSparseMode::Auto,
-                        "never" => CpSparseMode::Never,
-                        _ => {
-                            return Err(CpError::InvalidArgument(format!(
-                                "invalid argument {val} for \'sparse\'"
-                            )));
-                        }
-                    }
-                } else {
-                    CpSparseMode::Auto
-                }
-            },
+            reflink_mode,
+            sparse_mode,
             backup: ct_backup_mode,
             backup_suffix,
             overwrite,

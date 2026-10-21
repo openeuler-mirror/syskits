@@ -391,7 +391,8 @@ impl SortGlobalConfigs {
     /// 单位可以是 k、K、m、M、g、G、t、T、P、E、Z、Y（1024 的幂次）、1 的 b，或物理内存百分比 %。
     /// 默认为 K。
     fn parse_byte_count(input: &str) -> Result<usize, ParseSizeError> {
-        let input = input.trim();
+        let input = input.trim_start_matches(|c: char| c.is_ascii_whitespace());
+        let input = input.strip_prefix('+').unwrap_or(input);
         if let Some(size) = parse_percent_sort_size(input)? {
             return Ok(size);
         }
@@ -5111,9 +5112,11 @@ mod tests {
         }
 
         #[test]
-        fn test_parse_byte_count_with_spaces() {
-            assert_eq!(SortGlobalConfigs::parse_byte_count(" 1K ").unwrap(), 1024);
-            // assert_eq!(GlobalSettings::parse_byte_count("1 K").unwrap(), 1024);
+        fn test_parse_byte_count_sign_and_spaces() {
+            for input in ["+1K", " 1K", " +1K"] {
+                assert_eq!(SortGlobalConfigs::parse_byte_count(input).unwrap(), 1024);
+            }
+            assert!(SortGlobalConfigs::parse_byte_count("1K ").is_err());
         }
 
         #[cfg(target_family = "unix")]
@@ -5124,6 +5127,7 @@ mod tests {
                 .expect("1 percent of physical memory should fit usize");
 
             assert_eq!(SortGlobalConfigs::parse_byte_count("1%"), Ok(expected));
+            assert_eq!(SortGlobalConfigs::parse_byte_count("+1%"), Ok(expected));
         }
 
         #[test]

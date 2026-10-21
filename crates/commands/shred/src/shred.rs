@@ -42,17 +42,19 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo, strip_errno};
-use ctcore::{ct_show_error, ct_show_if_err};
+use ctcore::{ct_show, ct_show_error, ct_show_if_err};
 #[cfg(unix)]
 use libc::S_IWUSR;
 use rand::{Rng, SeedableRng, rngs::StdRng};
-use std::ffi::{CString, OsString};
+#[cfg(target_os = "linux")]
+use std::ffi::CString;
+use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, Read, Seek, Write};
 #[cfg(unix)]
 use std::mem::ManuallyDrop;
 #[cfg(unix)]
-use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
@@ -703,7 +705,7 @@ fn shred_exec_with_random_source(
     let size = shred_target_size(settings, &metadata);
     let inode_size = shred_inode_pass_size(settings, &metadata, size);
 
-    shred_run_passes(
+    let pass_result = shred_run_passes(
         &mut file,
         settings.path,
         settings,
@@ -711,17 +713,25 @@ fn shred_exec_with_random_source(
         size,
         true,
         random_source,
-    )?;
+    );
+
+    let truncate_result = if pass_result.is_ok() && settings.remove_method != RemoveMethod::None {
+        match file.set_len(0) {
+            Err(err) if metadata.is_file() => Err(err),
+            _ => Ok(()),
+        }
+    } else {
+        Ok(())
+    };
+    let close_result = shred_close_file(file);
+
+    pass_result?;
+    truncate_result
+        .map_err_context(|| format!("{}: error truncating", settings.path.maybe_quote()))?;
+    close_result.map_err_context(|| format!("{}: failed to close", settings.path.maybe_quote()))?;
 
     // 如果需要，删除文件
     if settings.remove_method != RemoveMethod::None {
-        if let Err(err) = file.set_len(0) {
-            if metadata.is_file() {
-                return Err(err).map_err_context(|| {
-                    format!("{}: error truncating", settings.path.maybe_quote())
-                });
-            }
-        }
         shred_do_remove(
             path,
             settings.path,
@@ -729,6 +739,21 @@ fn shred_exec_with_random_source(
             settings.remove_method,
         )?;
     }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn shred_close_file(file: File) -> io::Result<()> {
+    let fd = file.into_raw_fd();
+    if unsafe { libc::close(fd) } == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+#[cfg(not(unix))]
+fn shred_close_file(_file: File) -> io::Result<()> {
     Ok(())
 }
 
@@ -982,6 +1007,7 @@ fn shred_run_passes(
         return Ok(());
     }
     let total_passes = pass_sequence.len();
+    let mut pass_failed = false;
 
     for (pass_size, verbose) in [(inode_size, false), (size, settings.verbose)] {
         if pass_size == 0 {
@@ -1010,14 +1036,19 @@ fn shred_run_passes(
                     false,
                 )
             };
-            ct_show_if_err!(pass_result.map_err_context(|| format!(
-                "{}: File write pass failed",
-                display_name.maybe_quote()
-            )));
+            if let Err(err) = pass_result.map_err_context(|| display_name.maybe_quote().to_string())
+            {
+                ct_show!(err);
+                pass_failed = true;
+            }
         }
     }
 
-    Ok(())
+    if pass_failed {
+        Err(CtSimpleError::new(1, String::new()))
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(unix)]
@@ -1101,18 +1132,20 @@ fn shred_do_pass_impl(
     file.rewind()?;
 
     let mut writer = BytesWriter::from_pass_type(pass_type, random_source);
+    let mut offset = 0u64;
 
     // 按块写入数据
     for _ in 0..(file_size / SHRED_BLOCK_SIZE as u64) {
         let block = writer.bytes_for_pass(SHRED_BLOCK_SIZE)?;
-        file.write_all(block)?;
+        shred_write_all(file, block, offset)?;
+        offset += block.len() as u64;
     }
 
     // 处理剩余字节
     let bytes_left = (file_size % SHRED_BLOCK_SIZE as u64) as usize;
     if bytes_left > 0 {
         let block = writer.bytes_for_pass(bytes_left)?;
-        file.write_all(block)?;
+        shred_write_all(file, block, offset)?;
     }
 
     // 确保数据写入磁盘
@@ -1120,6 +1153,30 @@ fn shred_do_pass_impl(
         file.sync_data()?;
     }
 
+    Ok(())
+}
+
+fn shred_write_all(file: &mut File, mut bytes: &[u8], mut offset: u64) -> io::Result<()> {
+    while !bytes.is_empty() {
+        match file.write(bytes) {
+            Ok(0) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::WriteZero,
+                    format!("error writing at offset {offset}"),
+                ));
+            }
+            Ok(written) => {
+                bytes = &bytes[written..];
+                offset += written as u64;
+            }
+            Err(err) => {
+                return Err(io::Error::new(
+                    err.kind(),
+                    format!("error writing at offset {offset}: {}", strip_errno(&err)),
+                ));
+            }
+        }
+    }
     Ok(())
 }
 

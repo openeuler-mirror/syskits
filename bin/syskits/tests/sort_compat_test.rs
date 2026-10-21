@@ -324,6 +324,35 @@ fn sort_external_spill_preserves_non_utf8_record_bytes() {
 }
 
 #[test]
+fn sort_uses_locale_blank_classification() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let cases: [(&[u8], &[&str], &[u8]); 3] = [
+        (b"a\x0b2\nb\x0b1\n", &["-k2,2"], b"a\x0b2\nb\x0b1\n"),
+        (b"\x0bZ\n A\n", &["-b"], b"\x0bZ\n A\n"),
+        (b"\x0b9\n 1\n", &["-n"], b"\x0b9\n 1\n"),
+    ];
+
+    for (index, (records, options, expected)) in cases.into_iter().enumerate() {
+        let input = temp_dir.path().join(format!("input-{index}"));
+        fs::write(&input, records).expect("write blank classification input");
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", "C")
+            .arg("sort")
+            .args(options)
+            .arg(&input)
+            .output()
+            .expect("run sort blank classification case");
+
+        assert!(
+            output.status.success(),
+            "case {index}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stdout, expected, "case {index}");
+    }
+}
+
+#[test]
 #[cfg(target_family = "unix")]
 fn sort_field_separator_uses_c_locale_bytes() {
     let temp_dir = TempDir::new().expect("tempdir");

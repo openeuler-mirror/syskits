@@ -125,6 +125,21 @@ const SORT_NEGATIVE: char = '-';
 const SORT_POSITIVE: char = '+';
 const SORT_RAW_FIELD_SEPARATOR_BASE: u32 = 0xE000;
 
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn iswblank(character: ctcore::libc::c_uint) -> ctcore::libc::c_int;
+}
+
+pub(crate) fn sort_is_blank(character: char) -> bool {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        return iswblank(u32::from(character)) != 0;
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    matches!(character, ' ' | '\t')
+}
+
 // 选择更大的缓冲区大小并不会提高性能
 // 至少在我的机器上不会）。TODO: 在未来，我们还应该考虑可用内存的大小，而不是仅仅依赖于这个常数。
 // 可用内存的大小，而不是仅仅依赖这个常数。
@@ -928,7 +943,7 @@ fn tokenize_default(line: &str, token_buf: &mut Vec<Field>) {
     // 假装行前有空格
     let mut previous_was_whitespace = true;
     for (idx, char) in line.char_indices() {
-        if char.is_whitespace() {
+        if sort_is_blank(char) {
             if !previous_was_whitespace {
                 token_buf.last_mut().unwrap().end = idx;
                 token_buf.push(idx..0);
@@ -1229,7 +1244,7 @@ impl SortFieldSelector {
                 if position.is_ignore_blanks {
                     idx += line[idx..]
                         .char_indices()
-                        .find(|(_, c)| !c.is_whitespace())
+                        .find(|(_, c)| !sort_is_blank(*c))
                         .map_or(line[idx..].len(), |(idx, _)| idx);
                 }
                 // 应用字符索引

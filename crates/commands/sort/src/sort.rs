@@ -2573,10 +2573,29 @@ fn sort_by<'a>(
     }
 }
 
+fn sort_locale_cmp_bytes(a: &[u8], b: &[u8]) -> Ordering {
+    let mut a_segments = a.split(|byte| *byte == 0);
+    let mut b_segments = b.split(|byte| *byte == 0);
+
+    loop {
+        match (a_segments.next(), b_segments.next()) {
+            (Some(a_segment), Some(b_segment)) => {
+                let ordering = strcoll_compare(a_segment, b_segment, false);
+                if ordering != Ordering::Equal {
+                    return ordering;
+                }
+            }
+            (Some(_), None) => return Ordering::Greater,
+            (None, Some(_)) => return Ordering::Less,
+            (None, None) => return Ordering::Equal,
+        }
+    }
+}
+
 fn sort_default_cmp(a: &str, b: &str, settings: &SortKeySettings) -> Ordering {
     if !settings.is_dictionary_order && !settings.is_ignore_non_printing && !settings.is_ignore_case
     {
-        return strcoll_compare(a.as_bytes(), b.as_bytes(), false);
+        return sort_locale_cmp_bytes(a.as_bytes(), b.as_bytes());
     }
 
     let mut s_a = String::with_capacity(a.len());
@@ -2613,7 +2632,7 @@ fn sort_default_cmp(a: &str, b: &str, settings: &SortKeySettings) -> Ordering {
         }
     }
 
-    strcoll_compare(s_a.as_bytes(), s_b.as_bytes(), false)
+    sort_locale_cmp_bytes(s_a.as_bytes(), s_b.as_bytes())
 }
 
 fn sort_compare_by<'a>(
@@ -2685,7 +2704,7 @@ fn sort_compare_by<'a>(
                     && !settings.is_ignore_non_printing
                     && !settings.is_ignore_case =>
             {
-                strcoll_compare(a.raw_bytes, b.raw_bytes, false)
+                sort_locale_cmp_bytes(a.raw_bytes, b.raw_bytes)
             }
             SortMode::SortDefault => sort_default_cmp(a_str, b_str, settings),
         };
@@ -2704,7 +2723,7 @@ fn sort_compare_by<'a>(
     } else {
         // 底层 strcoll 是 C 语言函数，直接支持特定语种（如 fr_FR 的 ISO-8859-1）
         // 因此必须传入原始字节进行比较，而不能传带有  的容错字符串！
-        strcoll_compare(a.raw_bytes, b.raw_bytes, false)
+        sort_locale_cmp_bytes(a.raw_bytes, b.raw_bytes)
     };
 
     if global_settings.is_reverse {

@@ -1508,7 +1508,7 @@ fn sort_handle_settings(
         CtLineEnding::from_zero_flag(matches.get_flag(sort_flags::SORT_ZERO_TERMINATED));
     settings.is_merge = matches.get_flag(sort_flags::SORT_MERGE);
 
-    (settings.is_check, settings.is_check_silent) = sort_get_setting_check(&matches);
+    (settings.is_check, settings.is_check_silent) = sort_get_setting_check(&matches)?;
 
     settings.is_ignore_case = matches.get_flag(sort_flags::SORT_IGNORE_CASE);
     settings.is_ignore_leading_blanks = matches.get_flag(sort_flags::SORT_IGNORE_LEADING_BLANKS);
@@ -1576,8 +1576,14 @@ fn sort_handle_settings(
     Ok((settings, files, tmp_dir, output))
 }
 
-fn sort_get_setting_check(matches: &ArgMatches) -> (bool, bool) {
-    if matches.get_flag(sort_flags::check::SORT_CHECK_SILENT)
+fn sort_get_setting_check(matches: &ArgMatches) -> CTResult<(bool, bool)> {
+    let has_check = matches.contains_id(sort_flags::check::SORT_CHECK);
+    let has_silent_check = matches.get_flag(sort_flags::check::SORT_CHECK_SILENT);
+    if has_check && has_silent_check {
+        return Err(CTsageError::new(2, "options '-cC' are incompatible"));
+    }
+
+    if has_silent_check
         || matches!(
             matches
                 .get_one::<String>(sort_flags::check::SORT_CHECK)
@@ -1587,9 +1593,9 @@ fn sort_get_setting_check(matches: &ArgMatches) -> (bool, bool) {
     {
         let check_silent = true;
         let check = true;
-        (check, check_silent)
+        Ok((check, check_silent))
     } else {
-        (matches.contains_id(sort_flags::check::SORT_CHECK), false)
+        Ok((has_check, false))
     }
 }
 

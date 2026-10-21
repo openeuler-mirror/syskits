@@ -1427,6 +1427,19 @@ fn sort_clap_error_exit_code(error: &clap::Error) -> i32 {
 }
 
 fn sort_validate_inputs(files: &[OsString], output: &SortOutput) -> CTResult<()> {
+    if let Some(out_name) = output.as_output_name() {
+        // GNU sort validates and creates a named output before consuming any input.
+        // Do not truncate here: merge mode may still need to preserve an aliased input.
+        OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(out_name)
+            .map_err(|error| SortError::SortOpenFailed {
+                path: out_name.to_string_lossy().into_owned(),
+                error,
+            })?;
+    }
+
     // 前置可用性扫描 (Early Validation)
     // 扫描所有输入文件是否可读，如果有不可读的直接报错，决不提前触碰 stdin
     for file in files {
@@ -1434,20 +1447,6 @@ fn sort_validate_inputs(files: &[OsString], output: &SortOutput) -> CTResult<()>
             if let Err(error) = File::open(file) {
                 return Err(SortError::SortReadFailed {
                     path: PathBuf::from(file),
-                    error,
-                }
-                .into());
-            }
-        }
-    }
-
-    if let Some(out_name) = output.as_output_name() {
-        let out_path = Path::new(out_name);
-        if out_path.exists() {
-            // 使用 append(true) 仅作写权限探测，避免提前 truncate 清空目标文件
-            if let Err(error) = OpenOptions::new().append(true).open(out_path) {
-                return Err(SortError::SortOpenFailed {
-                    path: out_name.to_string_lossy().into_owned(),
                     error,
                 }
                 .into());

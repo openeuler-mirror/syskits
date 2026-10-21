@@ -1571,6 +1571,18 @@ fn sort_handle_settings(
     }
 
     let output = SortOutput::new(outputs.first().map(|s| s.as_str()))?;
+    if settings.is_debug {
+        if settings.is_check {
+            let check_option = if settings.is_check_silent { 'C' } else { 'c' };
+            return Err(CTsageError::new(
+                2,
+                format!("options '-{check_option} --debug' are incompatible"),
+            ));
+        }
+        if output.as_output_name().is_some() {
+            return Err(CTsageError::new(2, "options '-o --debug' are incompatible"));
+        }
+    }
 
     settings.init_precomputed();
     Ok((settings, files, tmp_dir, output))

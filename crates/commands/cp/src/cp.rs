@@ -1012,24 +1012,36 @@ impl CpOptions {
                 reflink_mode
             };
 
-        let cp_options = Self {
-            attributes_only: args_match.get_flag(opt_flags::ATTRIBUTES_ONLY),
-            copy_contents: args_match.get_flag(opt_flags::COPY_CONTENTS),
-            cli_dereference: args_match.get_flag(opt_flags::CLI_SYMBOLIC_LINKS),
-            copy_mode: CpCopyMode::cp_from_matches(args_match),
-            dereference: if args_match.get_flag(opt_flags::DEREFERENCE) {
+        let (dereference, cli_dereference) = if let Some(args) = ordered_args {
+            Self::cp_parse_dereference_options(
+                args,
+                recursive,
+                args_match.get_flag(opt_flags::LINK),
+            )
+        } else {
+            let cli_dereference = args_match.get_flag(opt_flags::CLI_SYMBOLIC_LINKS);
+            let dereference = if args_match.get_flag(opt_flags::DEREFERENCE) {
                 true
             } else if args_match.get_flag(opt_flags::NO_DEREFERENCE)
                 || args_match.get_flag(opt_flags::NO_DEREFERENCE_PRESERVE_LINKS)
                 || args_match.get_flag(opt_flags::ARCHIVE)
-                || args_match.get_flag(opt_flags::CLI_SYMBOLIC_LINKS)
+                || cli_dereference
             {
                 false
             } else if args_match.get_flag(opt_flags::LINK) {
-                true // --link 的优先级高于 recursive 的默认不展开
+                true
             } else {
                 !recursive
-            },
+            };
+            (dereference, cli_dereference)
+        };
+
+        let cp_options = Self {
+            attributes_only: args_match.get_flag(opt_flags::ATTRIBUTES_ONLY),
+            copy_contents: args_match.get_flag(opt_flags::COPY_CONTENTS),
+            cli_dereference,
+            copy_mode: CpCopyMode::cp_from_matches(args_match),
+            dereference,
             one_file_system: args_match.get_flag(opt_flags::ONE_FILE_SYSTEM),
             parents: args_match.get_flag(opt_flags::PARENTS),
             update: update_mode,
@@ -1050,6 +1062,93 @@ impl CpOptions {
         };
 
         Ok(cp_options)
+    }
+
+    fn cp_parse_dereference_options(
+        args: &[OsString],
+        recursive: bool,
+        hard_link: bool,
+    ) -> (bool, bool) {
+        let mut last = None;
+        let mut last_was_command_line = false;
+        let mut skip_next = false;
+        let mut end_of_options = false;
+
+        for (index, arg) in args.iter().enumerate().skip(1) {
+            if skip_next {
+                skip_next = false;
+                continue;
+            }
+
+            let value = arg.to_string_lossy();
+            if end_of_options {
+                continue;
+            }
+            if value == "--" {
+                end_of_options = true;
+                continue;
+            }
+
+            if let Some(long) = value.strip_prefix("--") {
+                let (name, attached_value) = long
+                    .split_once('=')
+                    .map_or((long, None), |(name, value)| (name, Some(value)));
+                match name {
+                    "archive" | "no-dereference-preserve-links" | "no-dereference" => {
+                        last = Some(false);
+                        last_was_command_line = false;
+                    }
+                    "dereference" => {
+                        last = Some(true);
+                        last_was_command_line = false;
+                    }
+                    "target-directory" | "suffix" => {
+                        if attached_value.is_none() {
+                            skip_next = true;
+                        }
+                    }
+                    _ => {}
+                }
+                continue;
+            }
+
+            if let Some(short) = value.strip_prefix('-') {
+                if short.is_empty() {
+                    continue;
+                }
+                let mut chars = short.chars();
+                while let Some(option) = chars.next() {
+                    match option {
+                        'H' => {
+                            last = Some(false);
+                            last_was_command_line = true;
+                        }
+                        'L' => {
+                            last = Some(true);
+                            last_was_command_line = false;
+                        }
+                        'P' | 'a' | 'd' => {
+                            last = Some(false);
+                            last_was_command_line = false;
+                        }
+                        'S' | 't' => {
+                            if chars.next().is_none() && index + 1 < args.len() {
+                                skip_next = true;
+                            }
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        match last {
+            Some(true) => (true, false),
+            Some(false) if last_was_command_line => (false, true),
+            Some(false) => (false, false),
+            None => ((!recursive || hard_link), false),
+        }
     }
 
     fn cp_parse_ordered_attributes(args: &[OsString]) -> CopyResult<Option<CpAttributes>> {

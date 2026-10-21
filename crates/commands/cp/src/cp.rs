@@ -2762,7 +2762,7 @@ fn cp_handle_copy_mode(
     let copy_debug = match cp_opts.copy_mode {
         CpCopyMode::Link => {
             // 处理目标路径已存在的情况，包括备份和强制覆盖
-            if dest_path.exists() {
+            if cp_file_or_link_exists(dest_path) {
                 let backup_path = ct_backup_control::get_backup_path(
                     cp_opts.backup,
                     dest_path,
@@ -2770,7 +2770,11 @@ fn cp_handle_copy_mode(
                 );
                 if let Some(backup_path) = backup_path {
                     cp_backup_dest(dest_path, &backup_path, true)?;
-                } else if cp_opts.overwrite == CpOverwriteMode::Clobber(CpClobberMode::Force) {
+                } else if matches!(
+                    cp_opts.overwrite,
+                    CpOverwriteMode::Clobber(CpClobberMode::Force)
+                        | CpOverwriteMode::Interactive(_)
+                ) {
                     fs::remove_file(dest_path)?;
                 }
             }

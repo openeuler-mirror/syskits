@@ -559,6 +559,7 @@ fn cp_args_init() -> Vec<Arg> {
         Arg::new(opt_flags::PARENTS)
             .long(opt_flags::PARENTS)
             .alias(opt_flags::PARENT)
+            .alias("path")
             .help(t!("cp.clap.parents"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::NO_DEREFERENCE)
@@ -11213,6 +11214,16 @@ mod tests {
 
             assert!(result.is_ok());
         }
+
+        #[test]
+        fn test_ct_app_deprecated_path_alias() {
+            let matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "--path", "source", "target"])
+                .unwrap();
+
+            assert!(matches.get_flag(opt_flags::PARENTS));
+        }
+
         #[test]
         fn test_ct_app_p_parents_valid_input() {
             let temp_dir = Builder::new().prefix("tests_file1").tempdir().unwrap();

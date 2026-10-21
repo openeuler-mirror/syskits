@@ -555,7 +555,7 @@ pub fn shred_main(args: impl ctcore::Args) -> CTResult<()> {
     let settings = ShredSettings::new(&matches)?;
 
     for setting in settings {
-        shred_exec(&setting)?;
+        ct_show_if_err!(shred_exec(&setting));
     }
 
     Ok(())
@@ -1202,6 +1202,27 @@ mod tests {
             ]
             .into_iter(),
         )
+    }
+
+    #[test]
+    fn test_continues_after_file_error() -> CTResult<()> {
+        let dir = tempdir().unwrap();
+        let second = dir.path().join("second");
+        fs::write(&second, b"data").unwrap();
+
+        shred_main(
+            [
+                OsString::from("shred"),
+                OsString::from("-n0"),
+                OsString::from("--remove=unlink"),
+                dir.path().join("missing").into_os_string(),
+                second.clone().into_os_string(),
+            ]
+            .into_iter(),
+        )?;
+
+        assert!(!second.exists());
+        Ok(())
     }
 
     #[test]

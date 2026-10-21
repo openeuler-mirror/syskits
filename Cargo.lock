@@ -2477,7 +2477,6 @@ version = "3.3.8"
 dependencies = [
  "bigdecimal",
  "binary-heap-plus",
- "cc",
  "clap",
  "compare",
  "ctcore",

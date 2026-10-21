@@ -526,6 +526,34 @@ fn sort_general_numeric_classifies_special_values_like_strtold() {
 
 #[test]
 #[cfg(target_family = "unix")]
+fn sort_general_numeric_uses_long_double_precision_and_range() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("general-numeric-long-double");
+    fs::write(
+        &input,
+        b"1.00000000000000000001\n1.00000000000000000000\n1e-99999\n0\n",
+    )
+    .expect("write long double input");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args(["sort", "-gs", input.to_str().expect("utf8 path")])
+        .output()
+        .expect("run long double general numeric sort");
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.stdout,
+        b"1e-99999\n0\n1.00000000000000000001\n1.00000000000000000000\n"
+    );
+}
+
+#[test]
+#[cfg(target_family = "unix")]
 fn sort_field_separator_uses_c_locale_bytes() {
     let temp_dir = TempDir::new().expect("tempdir");
     let utf8_input = temp_dir.path().join("utf8-input");

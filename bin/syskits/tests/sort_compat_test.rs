@@ -554,6 +554,27 @@ fn sort_general_numeric_uses_long_double_precision_and_range() {
 
 #[test]
 #[cfg(target_family = "unix")]
+fn sort_month_names_come_only_from_current_locale() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("locale-months");
+    fs::write(&input, b"MAY\nFEB\nMAI\n").expect("write locale month input");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "de_DE.utf8")
+        .args(["sort", "-Ms", input.to_str().expect("utf8 path")])
+        .output()
+        .expect("run locale month sort");
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"MAY\nFEB\nMAI\n");
+}
+
+#[test]
+#[cfg(target_family = "unix")]
 fn sort_field_separator_uses_c_locale_bytes() {
     let temp_dir = TempDir::new().expect("tempdir");
     let utf8_input = temp_dir.path().join("utf8-input");

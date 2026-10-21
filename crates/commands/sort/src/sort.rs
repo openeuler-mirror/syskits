@@ -44,7 +44,7 @@ use ctcore::ct_error::{
     CTError, CTResult, CTsageError, CtSimpleError, set_ct_exit_code, strip_errno,
 };
 use ctcore::ct_line_ending::CtLineEnding;
-use ctcore::ct_locale::{LcCategory, hard_locale, hard_locale_time, strcoll_compare};
+use ctcore::ct_locale::{LcCategory, hard_locale, strcoll_compare};
 use ctcore::ct_parse_size::{CtParser, ParseSizeError};
 use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 use ctcore::ct_version_cmp::ct_version_cmp;
@@ -2926,61 +2926,12 @@ fn sort_month_parse(line: &str) -> SortMonth {
     let line = line.trim();
     let line_upper = line.to_uppercase();
 
-    // 英文月份名称（C/POSIX locale），作为基础保底
-    const MONTHS_EN: [(&str, SortMonth); 12] = [
-        ("JAN", SortMonth::January),
-        ("FEB", SortMonth::February),
-        ("MAR", SortMonth::March),
-        ("APR", SortMonth::April),
-        ("MAY", SortMonth::May),
-        ("JUN", SortMonth::June),
-        ("JUL", SortMonth::July),
-        ("AUG", SortMonth::August),
-        ("SEP", SortMonth::September),
-        ("OCT", SortMonth::October),
-        ("NOV", SortMonth::November),
-        ("DEC", SortMonth::December),
-    ];
-
-    for (month_str, month) in &MONTHS_EN {
-        if line_upper.starts_with(month_str) {
-            return *month;
-        }
+    #[cfg(unix)]
+    {
+        return get_locale_month_abbr(&line_upper);
     }
 
-    // 如果使用非 C locale，尝试向系统请求本地化月份名称
-    if hard_locale_time() {
-        #[cfg(unix)]
-        {
-            let m = get_locale_month_abbr(&line_upper);
-            if m != SortMonth::Unknown {
-                return m;
-            }
-        }
-
-        // 保留你原有的中文兜底
-        const MONTHS_ZH: [(&str, SortMonth); 12] = [
-            ("一月", SortMonth::January),
-            ("二月", SortMonth::February),
-            ("三月", SortMonth::March),
-            ("四月", SortMonth::April),
-            ("五月", SortMonth::May),
-            ("六月", SortMonth::June),
-            ("七月", SortMonth::July),
-            ("八月", SortMonth::August),
-            ("九月", SortMonth::September),
-            ("十月", SortMonth::October),
-            ("十一月", SortMonth::November),
-            ("十二月", SortMonth::December),
-        ];
-
-        for (month_str, month) in &MONTHS_ZH {
-            if line.starts_with(month_str) {
-                return *month;
-            }
-        }
-    }
-
+    #[cfg(not(unix))]
     SortMonth::Unknown
 }
 
@@ -11173,130 +11124,6 @@ mod tests {
             for input in &invalid_input {
                 assert!(SortGlobalConfigs::parse_byte_count(input).is_err());
             }
-        }
-    }
-
-    #[cfg(test)]
-    mod locale_tests {
-        use super::*;
-        use std::env;
-        use std::sync::Mutex;
-
-        static LOCALE_TEST_LOCK: Mutex<()> = Mutex::new(());
-
-        struct LocaleGuard {
-            previous_lc_time: Option<String>,
-            previous_lc_all: Option<String>,
-        }
-
-        impl LocaleGuard {
-            fn new(value: Option<&str>) -> Self {
-                let previous_lc_time = env::var("LC_TIME").ok();
-                let previous_lc_all = env::var("LC_ALL").ok();
-                unsafe {
-                    // LC_ALL has higher precedence than LC_TIME. Clear it to make
-                    // LC_TIME-based assertions deterministic for these tests.
-                    env::remove_var("LC_ALL");
-                    match value {
-                        Some(val) => env::set_var("LC_TIME", val),
-                        None => env::remove_var("LC_TIME"),
-                    }
-                }
-                Self {
-                    previous_lc_time,
-                    previous_lc_all,
-                }
-            }
-        }
-
-        impl Drop for LocaleGuard {
-            fn drop(&mut self) {
-                unsafe {
-                    match &self.previous_lc_time {
-                        Some(val) => env::set_var("LC_TIME", val),
-                        None => env::remove_var("LC_TIME"),
-                    }
-                    match &self.previous_lc_all {
-                        Some(val) => env::set_var("LC_ALL", val),
-                        None => env::remove_var("LC_ALL"),
-                    }
-                }
-            }
-        }
-
-        #[test]
-        fn test_sort_month_parse_chinese_locale() {
-            let _lock = LOCALE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-            let _guard = LocaleGuard::new(Some("zh_CN.UTF-8"));
-            // 模拟中文locale环境
-
-            // 测试中文月份名称
-            assert_eq!(sort_month_parse("一月"), SortMonth::January);
-            assert_eq!(sort_month_parse("二月"), SortMonth::February);
-            assert_eq!(sort_month_parse("三月"), SortMonth::March);
-            assert_eq!(sort_month_parse("十二月"), SortMonth::December);
-
-            // 英文月份仍然应该工作
-            assert_eq!(sort_month_parse("JAN"), SortMonth::January);
-            assert_eq!(sort_month_parse("feb"), SortMonth::February);
-        }
-
-        #[test]
-        fn test_sort_month_parse_c_locale() {
-            let _lock = LOCALE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-            let _guard = LocaleGuard::new(Some("C"));
-            // 模拟C locale环境
-
-            // 只有英文月份应该工作
-            assert_eq!(sort_month_parse("JAN"), SortMonth::January);
-            assert_eq!(sort_month_parse("feb"), SortMonth::February);
-
-            // 中文月份应该返回Unknown
-            assert_eq!(sort_month_parse("一月"), SortMonth::Unknown);
-        }
-
-        #[test]
-        fn test_sort_month_compare_with_locale() {
-            let _lock = LOCALE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-            let _guard = LocaleGuard::new(None);
-            // 测试月份比较在不同locale下的一致性
-            assert_eq!(sort_month_compare("JAN", "FEB"), Ordering::Less);
-            assert_eq!(sort_month_compare("DEC", "JAN"), Ordering::Greater);
-            assert_eq!(sort_month_compare("MAY", "MAY"), Ordering::Equal);
-
-            // 模拟中文locale
-            let _guard = LocaleGuard::new(Some("zh_CN.UTF-8"));
-
-            // 检查实际的中文月份解析是否工作（不依赖hard_locale_time判断）
-            let jan_parsed = sort_month_parse("一月");
-            let feb_parsed = sort_month_parse("二月");
-
-            if jan_parsed != SortMonth::Unknown && feb_parsed != SortMonth::Unknown {
-                // 中文月份解析成功时才进行中文月份测试
-                assert_eq!(sort_month_compare("一月", "二月"), Ordering::Less);
-                assert_eq!(sort_month_compare("十二月", "一月"), Ordering::Greater);
-
-                // 混合比较（英文vs中文）
-                assert_eq!(sort_month_compare("JAN", "二月"), Ordering::Less);
-            } else {
-                // 在不支持中文locale的环境中，中文月份应该返回Unknown，比较结果为Equal
-                assert_eq!(sort_month_compare("一月", "二月"), Ordering::Equal);
-                assert_eq!(sort_month_compare("十二月", "一月"), Ordering::Equal);
-
-                // 英文vs中文，英文应该被识别，中文为Unknown，所以JAN(1) vs Unknown(0) -> Greater
-                assert_eq!(sort_month_compare("JAN", "二月"), Ordering::Greater);
-            }
-        }
-
-        #[test]
-        fn test_hard_locale_time_integration() {
-            let _lock = LOCALE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-            // 测试hard_locale_time函数的使用
-            let _guard = LocaleGuard::new(Some("C"));
-            assert!(!hard_locale_time());
-
-            let _guard = LocaleGuard::new(Some("zh_CN.UTF-8"));
-            assert!(hard_locale_time());
         }
     }
 }

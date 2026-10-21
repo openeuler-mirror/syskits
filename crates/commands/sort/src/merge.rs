@@ -43,31 +43,30 @@ fn merge_replace_output_file_in_input_files(
     tmp_dir: &mut TmpDirWrapper,
 ) -> CTResult<()> {
     let mut copy: Option<PathBuf> = None;
-    if let Some(Ok(output_path)) = output.map(|path| Path::new(path).canonicalize()) {
+    if let Some(output_path) = output.map(Path::new) {
         for file in files {
-            if let Ok(file_path) = Path::new(file).canonicalize() {
-                if file_path == output_path {
-                    match &copy {
-                        Some(copy_path) => {
-                            *file = copy_path.clone().into_os_string();
-                        }
-                        _ => {
-                            // 复用 tmp_dir.next_file 返回的已打开文件句柄
-                            // 避免 std::fs::copy 导致的一瞬间 3 个 FD 的并发占用峰值
-                            let (mut tmp_file, copy_path) = tmp_dir.next_file()?;
-                            let mut src_file = File::open(&file_path)
-                                .map_err(|error| SortError::SortOpenTmpFileFailed { error })?;
+            let file_path = Path::new(file.as_os_str());
+            if ctcore::ct_fs::paths_refer_to_same_file(file_path, output_path, true) {
+                match &copy {
+                    Some(copy_path) => {
+                        *file = copy_path.clone().into_os_string();
+                    }
+                    _ => {
+                        // 复用 tmp_dir.next_file 返回的已打开文件句柄
+                        // 避免 std::fs::copy 导致的一瞬间 3 个 FD 的并发占用峰值
+                        let (mut tmp_file, copy_path) = tmp_dir.next_file()?;
+                        let mut src_file = File::open(file_path)
+                            .map_err(|error| SortError::SortOpenTmpFileFailed { error })?;
 
-                            std::io::copy(&mut src_file, &mut tmp_file)
-                                .map_err(|error| SortError::SortOpenTmpFileFailed { error })?;
+                        std::io::copy(&mut src_file, &mut tmp_file)
+                            .map_err(|error| SortError::SortOpenTmpFileFailed { error })?;
 
-                            // 及时主动释放 FD，给后续合并留出生命空间
-                            drop(src_file);
-                            drop(tmp_file);
+                        // 及时主动释放 FD，给后续合并留出生命空间
+                        drop(src_file);
+                        drop(tmp_file);
 
-                            *file = copy_path.clone().into_os_string();
-                            copy = Some(copy_path);
-                        }
+                        *file = copy_path.clone().into_os_string();
+                        copy = Some(copy_path);
                     }
                 }
             }
@@ -2473,6 +2472,27 @@ mod tests {
                     OsString::from("/path/to/file2.txt"),
                 ]
             );
+        }
+
+        #[test]
+        fn test_output_hard_link_in_list() {
+            let dir = tempdir().unwrap();
+            let input_path = dir.path().join("input");
+            let output_path = dir.path().join("output");
+            fs::write(&input_path, b"a\nb\n").unwrap();
+            fs::hard_link(&input_path, &output_path).unwrap();
+
+            let mut files = vec![input_path.clone().into_os_string()];
+            let mut tmp_dir = TmpDirWrapper::new(dir.path().to_path_buf());
+            merge_replace_output_file_in_input_files(
+                &mut files,
+                Some(output_path.as_os_str()),
+                &mut tmp_dir,
+            )
+            .unwrap();
+
+            assert_ne!(files[0], input_path.into_os_string());
+            assert_eq!(fs::read(&files[0]).unwrap(), b"a\nb\n");
         }
 
         #[test]

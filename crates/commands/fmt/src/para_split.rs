@@ -246,6 +246,7 @@ pub struct FmtParagraph {
 pub struct FmtParagraphStream<'a> {
     lines: Peekable<FmtFileLines<'a>>,
     next_mail: bool,
+    tagged_indent: usize,
     opts: &'a FmtConfigs,
 }
 
@@ -260,6 +261,7 @@ impl FmtParagraphStream<'_> {
         FmtParagraphStream {
             lines,
             next_mail: true,
+            tagged_indent: 0,
             opts,
         }
     }
@@ -362,12 +364,11 @@ impl Iterator for FmtParagraphStream<'_> {
                     if self.opts.is_tagged {
                         indent_str.clear();
                         indent_end = 0;
-                        if init_len == 0 {
-                            indent_str.push_str("   ");
-                            indent_len = 3;
-                        } else {
-                            indent_len = 0;
+                        if self.tagged_indent == init_len {
+                            self.tagged_indent = if init_len == 0 { 3 } else { 0 };
                         }
+                        indent_len = self.tagged_indent;
+                        indent_str.push_str(&" ".repeat(indent_len));
                     }
                 }
             } else if is_in_mail {
@@ -417,6 +418,9 @@ impl Iterator for FmtParagraphStream<'_> {
         // 如果这是一个邮件头，那么下一行可以被检测为邮件头。否则就不能检测。
         // 注意 next_mail 在 ParagraphStream 实例化时为 true，并在空白 NoFormatLine 后设置为 true。
         self.next_mail = is_in_mail;
+        if self.opts.is_tagged {
+            self.tagged_indent = indent_len;
+        }
 
         Some(Ok(FmtParagraph {
             lines: p_lines,

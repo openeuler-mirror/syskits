@@ -359,11 +359,15 @@ impl Iterator for FmtParagraphStream<'_> {
                     // 保存这些内容，以检查是否有匹配的行
                     prefix_len = fl.prefix_len;
 
-                    // 在标记模式下，默认情况下增加 4 个额外的缩进空格（gnu fmt 的行为与此不同：它似乎会找到最靠近
-                    // indent_end 的一列，且该列能被 3 整除。也许更好的默认值是 1 TABWIDTH？不过这也太大了。
                     if self.opts.is_tagged {
-                        indent_str.push_str("    ");
-                        indent_len += 4;
+                        indent_str.clear();
+                        indent_end = 0;
+                        if init_len == 0 {
+                            indent_str.push_str("   ");
+                            indent_len = 3;
+                        } else {
+                            indent_len = 0;
+                        }
                     }
                 }
             } else if is_in_mail {
@@ -382,7 +386,7 @@ impl Iterator for FmtParagraphStream<'_> {
                 }
 
                 // 在标记模式下，后面几行的缩进必须*different*。
-                if self.opts.is_tagged && indent_len - 4 == fl.indent_len {
+                if self.opts.is_tagged && init_len == fl.indent_len {
                     break;
                 }
 

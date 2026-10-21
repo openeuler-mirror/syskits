@@ -50,7 +50,9 @@ use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, Read, Seek, Write};
 #[cfg(unix)]
-use std::os::fd::AsRawFd;
+use std::mem::ManuallyDrop;
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, FromRawFd};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
@@ -835,11 +837,8 @@ fn shred_exec_stdout(settings: &ShredSettings, random_source: &mut RandomSource)
         size = round_up_to_block_size(size, u64::try_from(stat.st_blksize).unwrap_or(1).max(1));
     }
 
-    let mut file = OpenOptions::new()
-        .write(true)
-        .truncate(false)
-        .open("/proc/self/fd/1")
-        .map_err_context(|| "-: failed to open for writing".to_string())?;
+    // Borrow stdout without reopening it or closing the inherited descriptor.
+    let mut file = ManuallyDrop::new(unsafe { File::from_raw_fd(libc::STDOUT_FILENO) });
 
     shred_run_passes(
         &mut file,

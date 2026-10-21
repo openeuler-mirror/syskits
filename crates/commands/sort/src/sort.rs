@@ -2139,6 +2139,7 @@ pub fn ct_app() -> Command {
         Arg::new(sort_flags::SORT_FILES)
             .action(ArgAction::Append)
             .value_parser(ValueParser::os_string())
+            .trailing_var_arg(env::var_os("POSIXLY_CORRECT").is_some())
             .value_hint(clap::ValueHint::FilePath),
     ];
 

@@ -1559,13 +1559,15 @@ fn sort_handle_settings(
         .unwrap_or_default()
         .collect();
 
-    // 如果指定了多个输出文件，严格复刻 GNU 的报错退出行为
-    if outputs.len() > 1 {
+    // GNU accepts repeated -o options when they name the same file.
+    if outputs
+        .first()
+        .is_some_and(|output| outputs.iter().any(|candidate| candidate != output))
+    {
         return Err(CTsageError::new(2, "multiple output files specified"));
     }
 
-    // 取出唯一的一个（如果有的话）
-    let output = SortOutput::new(outputs.into_iter().next().map(|s| s.as_str()))?;
+    let output = SortOutput::new(outputs.first().map(|s| s.as_str()))?;
 
     settings.init_precomputed();
     Ok((settings, files, tmp_dir, output))

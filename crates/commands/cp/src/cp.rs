@@ -516,7 +516,6 @@ fn cp_args_init() -> Vec<Arg> {
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::REMOVE_DESTINATION)
             .long(opt_flags::REMOVE_DESTINATION)
-            .overrides_with(opt_flags::FORCE)
             .help(
                 "remove each existing destination file before attempting to open it \
                      (contrast with --force). On Windows, currently only works for \
@@ -785,10 +784,10 @@ fn cp_prepare_posix_args(args: &[OsString]) -> Vec<OsString> {
 
 impl CpClobberMode {
     fn cp_from_matches(args_match: &ArgMatches) -> Self {
-        if args_match.get_flag(opt_flags::FORCE) {
-            Self::Force
-        } else if args_match.get_flag(opt_flags::REMOVE_DESTINATION) {
+        if args_match.get_flag(opt_flags::REMOVE_DESTINATION) {
             Self::RemoveDestination
+        } else if args_match.get_flag(opt_flags::FORCE) {
+            Self::Force
         } else {
             Self::Standard
         }

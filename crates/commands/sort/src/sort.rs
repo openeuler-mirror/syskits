@@ -1439,12 +1439,25 @@ fn preprocess_sort_args(args: Vec<OsString>) -> Vec<OsString> {
     }
 
     let mut idx = 1;
+    let mut end_of_options = false;
     while idx < args.len() {
         let Some(arg) = args[idx].to_str() else {
             processed.push(args[idx].clone());
             idx += 1;
             continue;
         };
+
+        if end_of_options {
+            processed.push(args[idx].clone());
+            idx += 1;
+            continue;
+        }
+        if arg == "--" {
+            processed.push(args[idx].clone());
+            end_of_options = true;
+            idx += 1;
+            continue;
+        }
 
         if arg == "--che" {
             processed.push(OsString::from("--check"));

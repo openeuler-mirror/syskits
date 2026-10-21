@@ -868,7 +868,6 @@ impl CpAttributes {
         ownership: CpPreserve::Yes { required: true },
         mode: CpPreserve::Yes { required: true },
         timestamps: CpPreserve::Yes { required: true },
-        xattr: CpPreserve::Yes { required: true },
         selinux_context: None,
         ..Self::NONE
     };
@@ -1254,7 +1253,6 @@ impl CpOptions {
                         attributes.ownership = CpPreserve::Yes { required: true };
                         attributes.mode = CpPreserve::Yes { required: true };
                         attributes.timestamps = CpPreserve::Yes { required: true };
-                        attributes.xattr = CpPreserve::Yes { required: true };
                     }
                     "preserve" => {
                         found = true;
@@ -1332,7 +1330,6 @@ impl CpOptions {
         }
         attributes.mode = value;
         attributes.timestamps = value;
-        attributes.xattr = value;
     }
 
     fn cp_apply_ordered_attribute_list(
@@ -1426,7 +1423,6 @@ impl CpOptions {
                 }
                 mode = mode.max(CpPreserve::Yes { required: true });
                 timestamps = timestamps.max(CpPreserve::Yes { required: true });
-                xattr = xattr.max(CpPreserve::Yes { required: true });
             } else {
                 // 标记是否显式声明了 context 或 all
                 for val in &att_strs_clone {
@@ -1452,7 +1448,6 @@ impl CpOptions {
             }
             mode = mode.max(CpPreserve::Yes { required: true });
             timestamps = timestamps.max(CpPreserve::Yes { required: true });
-            xattr = xattr.max(CpPreserve::Yes { required: true });
         }
 
         if args_match.get_flag(opt_flags::Z) {

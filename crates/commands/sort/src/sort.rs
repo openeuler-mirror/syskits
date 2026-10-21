@@ -205,6 +205,9 @@ enum SortError {
         path: PathBuf,
         error: std::io::Error,
     },
+    SortWriteFailed {
+        error: std::io::Error,
+    },
     SortParseKeyError {
         key: String,
         msg: String,
@@ -275,6 +278,9 @@ impl Display for SortError {
                     path.maybe_quote(),
                     strip_errno(error)
                 )
+            }
+            Self::SortWriteFailed { error } => {
+                write!(fmt, "write error: {}", strip_errno(error))
             }
             Self::SortOpenTmpFileFailed { error } => {
                 write!(fmt, "failed to open temporary file: {}", strip_errno(error))
@@ -822,15 +828,13 @@ impl<'a> SortLine<'a> {
         }
     }
 
-    fn print(&self, w: &mut impl Write, sort_settings: &SortGlobalConfigs) {
+    fn print(&self, w: &mut impl Write, sort_settings: &SortGlobalConfigs) -> std::io::Result<()> {
         match sort_settings.is_debug {
-            true => {
-                self.print_debug(sort_settings, w).unwrap();
-            }
+            true => self.print_debug(sort_settings, w),
             false => {
                 // 输出时，必须原封不动地打印被保留下来的原始乱码/非 UTF-8 字节！
-                w.write_all(self.raw_bytes).unwrap();
-                w.write_all(&[sort_settings.line_ending.into()]).unwrap();
+                w.write_all(self.raw_bytes)?;
+                w.write_all(&[sort_settings.line_ending.into()])
             }
         }
     }
@@ -2964,11 +2968,16 @@ fn sort_print_sorted<'a, T: Iterator<Item = &'a SortLine<'a>>>(
     iter: T,
     sort_settings: &SortGlobalConfigs,
     sort_output: SortOutput,
-) {
+) -> CTResult<()> {
     let mut writer = sort_output.into_write();
     for line in iter {
-        line.print(&mut writer, sort_settings);
+        line.print(&mut writer, sort_settings)
+            .map_err(|error| SortError::SortWriteFailed { error })?;
     }
+    writer
+        .flush()
+        .map_err(|error| SortError::SortWriteFailed { error })?;
+    Ok(())
 }
 
 fn sort_open(path: impl AsRef<OsStr>) -> CTResult<Box<dyn Read + Send>> {
@@ -4804,7 +4813,7 @@ mod tests {
                 ..Default::default()
             };
             let mut output = Vec::new();
-            line.print(&mut output, &settings);
+            line.print(&mut output, &settings).unwrap();
 
             assert_eq!(String::from_utf8(output).unwrap(), "Hello, world\n");
         }

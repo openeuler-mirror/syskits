@@ -623,6 +623,8 @@ fn cp_args_init() -> Vec<Arg> {
         Arg::new(opt_flags::NO_PRESERVE)
             .long(opt_flags::NO_PRESERVE)
             .value_name("ATTR_LIST")
+            .value_delimiter(',')
+            .value_parser(CtShortcutValueParser::new(CP_PRESERVABLE_ATTRIBUTES))
             .overrides_with_all([
                 opt_flags::PRESERVE_DEFAULT_ATTRIBUTES,
                 opt_flags::PRESERVE,
@@ -5132,7 +5134,7 @@ mod tests {
 
             let args = [
                 ctcore::ct_util_name(),
-                "--no-preserve",
+                "--no-preserve=mode",
                 filename1,
                 filename2,
             ];
@@ -5168,7 +5170,7 @@ mod tests {
             let args = [
                 ctcore::ct_util_name(),
                 "-p",
-                "--no-preserve",
+                "--no-preserve=mode",
                 filename1,
                 filename2,
             ];
@@ -11217,7 +11219,7 @@ mod tests {
 
             let args = vec![
                 ctcore::ct_util_name(),
-                "--no-preserve",
+                "--no-preserve=mode",
                 filename1,
                 filename2,
             ];
@@ -11248,7 +11250,7 @@ mod tests {
             let args = vec![
                 ctcore::ct_util_name(),
                 "-p",
-                "--no-preserve",
+                "--no-preserve=mode",
                 filename1,
                 filename2,
             ];
@@ -11256,6 +11258,35 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_parses_no_preserve_attribute_lists() {
+            let matches = ct_app()
+                .try_get_matches_from([
+                    ctcore::ct_util_name(),
+                    "--no-preserve=mode,ownership",
+                    "source",
+                    "target",
+                ])
+                .unwrap();
+            let values: Vec<_> = matches
+                .get_many::<String>(opt_flags::NO_PRESERVE)
+                .unwrap()
+                .map(String::as_str)
+                .collect();
+
+            assert_eq!(values, ["mode", "ownership"]);
+
+            let error = ct_app()
+                .try_get_matches_from([
+                    ctcore::ct_util_name(),
+                    "--no-preserve=MODE",
+                    "source",
+                    "target",
+                ])
+                .unwrap_err();
+            assert_eq!(error.kind(), ErrorKind::InvalidValue);
         }
 
         #[test]

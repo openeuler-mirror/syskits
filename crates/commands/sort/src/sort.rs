@@ -2632,7 +2632,11 @@ fn sort_default_cmp(a: &str, b: &str, settings: &SortKeySettings) -> Ordering {
         }
     }
 
-    sort_locale_cmp_bytes(s_a.as_bytes(), s_b.as_bytes())
+    if settings.is_ignore_case {
+        s_a.as_bytes().cmp(s_b.as_bytes())
+    } else {
+        sort_locale_cmp_bytes(s_a.as_bytes(), s_b.as_bytes())
+    }
 }
 
 fn sort_compare_by<'a>(

@@ -448,6 +448,27 @@ fn sort_ignore_case_uses_single_character_locale_mapping() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn sort_ignore_case_compares_locale_mappings_as_bytes() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("input");
+    fs::write(&input, b"SSb\n\xc3\x9fa\n").expect("write case mapping input");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "de_DE.utf8")
+        .args(["sort", "-fs", input.to_str().expect("utf8 path")])
+        .output()
+        .expect("run locale ignore-case stable sort");
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"SSb\n\xc3\x9fa\n");
+}
+
+#[test]
 fn sort_c_locale_key_character_offsets_count_bytes() {
     let temp_dir = TempDir::new().expect("tempdir");
     let input = temp_dir.path().join("input");

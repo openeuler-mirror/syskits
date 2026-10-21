@@ -347,31 +347,32 @@ fn core_write_indent<W: ?Sized + Write>(
     }
 }
 
-fn fmt_break_coreutils_paragraph<W: ?Sized + Write>(
-    para_graph: &FmtParagraph,
+const CORE_MAX_WORDS: usize = 1000;
+const CORE_MAX_CHARS: usize = 5000;
+const CORE_LINE_CREDIT: i64 = 3 * 3;
+
+struct CoreLayout {
+    best_cost: Vec<i64>,
+    next_break: Vec<usize>,
+}
+
+struct CoreFormat<'a> {
+    fmt_opts: &'a FmtConfigs,
+    init_indent_str: &'a str,
+    init_indent_len: usize,
+    other_indent_str: &'a str,
+    other_indent_len: usize,
+    tabs_seen: bool,
+}
+
+fn core_optimize(
+    words: &[CoreWord],
+    init_indent_len: usize,
+    other_indent_len: usize,
     fmt_opts: &FmtConfigs,
-    out_stream: &mut W,
-) -> std::io::Result<()> {
-    let (words, paragraph_tabs_seen) = core_collect_words(para_graph, fmt_opts);
-    let tabs_seen = para_graph.tabs_seen || paragraph_tabs_seen;
+    last_line_length: usize,
+) -> CoreLayout {
     let n = words.len();
-    if n == 0 {
-        return out_stream.write_all(b"\n");
-    }
-
-    let init_indent_str = if fmt_opts.is_crown || fmt_opts.is_tagged {
-        para_graph.init_str.as_str()
-    } else {
-        para_graph.indent_str.as_str()
-    };
-    let init_indent_len = if fmt_opts.is_crown || fmt_opts.is_tagged {
-        para_graph.init_len
-    } else {
-        para_graph.indent_len
-    };
-    let other_indent_str = para_graph.indent_str.as_str();
-    let other_indent_len = para_graph.indent_len;
-
     let mut best_cost = vec![0_i64; n + 1];
     let mut best_line_len = vec![0_usize; n + 1];
     let mut next_break = vec![n; n];
@@ -389,8 +390,12 @@ fn fmt_break_coreutils_paragraph<W: ?Sized + Write>(
         let mut j = i + 1;
 
         loop {
-            let wcost = core_line_cost(j, len, fmt_opts.goal, &best_line_len, &next_break, n)
+            let mut wcost = core_line_cost(j, len, fmt_opts.goal, &best_line_len, &next_break, n)
                 + best_cost[j];
+            if i == 0 && last_line_length > 0 {
+                let difference = len as i64 - last_line_length as i64;
+                wcost += (difference * 10).pow(2) / 2;
+            }
             if wcost < best {
                 best = wcost;
                 best_j = j;
@@ -403,60 +408,196 @@ fn fmt_break_coreutils_paragraph<W: ?Sized + Write>(
 
             len += words[j - 1].space + words[j].length;
             j += 1;
-
-            // 与 coreutils do/while(len < max_width) 对齐。
             if len >= fmt_opts.width {
                 break;
             }
         }
 
-        best_cost[i] = best + core_base_cost(i, &words);
+        best_cost[i] = best + core_base_cost(i, words);
         best_line_len[i] = best_len_i;
         next_break[i] = best_j;
     }
 
-    let mut start = 0usize;
-    let mut is_first_line = true;
-    while start < n {
-        let end = next_break[start];
-        if is_first_line {
-            core_write_indent(
-                init_indent_str,
-                init_indent_len,
-                fmt_opts,
-                tabs_seen,
-                out_stream,
-            )?;
-        } else {
-            out_stream.write_all(b"\n")?;
-            core_write_indent(
-                other_indent_str,
-                other_indent_len,
-                fmt_opts,
-                tabs_seen,
-                out_stream,
-            )?;
-        }
+    CoreLayout {
+        best_cost,
+        next_break,
+    }
+}
 
-        let mut out_col = if is_first_line {
-            init_indent_len
+fn core_write_layout<W: ?Sized + Write>(
+    words: &[CoreWord],
+    layout: &CoreLayout,
+    finish: usize,
+    format: &CoreFormat<'_>,
+    out_stream: &mut W,
+) -> std::io::Result<usize> {
+    let mut start = 0usize;
+    let mut first_line = true;
+    let mut last_line_length = 0usize;
+
+    while start < finish {
+        let end = layout.next_break[start];
+        let (indent_str, indent_len) = if first_line {
+            (format.init_indent_str, format.init_indent_len)
         } else {
-            other_indent_len
+            (format.other_indent_str, format.other_indent_len)
         };
-        for (offset, w) in words[start..end].iter().enumerate() {
-            let k = start + offset;
-            out_stream.write_all(w.text.as_bytes())?;
-            out_col += w.length;
-            if k + 1 < end {
-                core_write_space(w.space, out_col, fmt_opts.tab_width, tabs_seen, out_stream)?;
-                out_col += w.space;
+        core_write_indent(
+            indent_str,
+            indent_len,
+            format.fmt_opts,
+            format.tabs_seen,
+            out_stream,
+        )?;
+
+        let mut out_col = indent_len;
+        for (offset, word) in words[start..end].iter().enumerate() {
+            let index = start + offset;
+            out_stream.write_all(word.text.as_bytes())?;
+            out_col += word.length;
+            if index + 1 < end {
+                core_write_space(
+                    word.space,
+                    out_col,
+                    format.fmt_opts.tab_width,
+                    format.tabs_seen,
+                    out_stream,
+                )?;
+                out_col += word.space;
             }
         }
-
+        out_stream.write_all(b"\n")?;
+        last_line_length = out_col;
         start = end;
-        is_first_line = false;
+        first_line = false;
     }
-    out_stream.write_all(b"\n")
+
+    Ok(last_line_length)
+}
+
+fn core_flush_words<W: ?Sized + Write>(
+    buffer: &mut Vec<CoreWord>,
+    optimize_count: usize,
+    format: &CoreFormat<'_>,
+    last_line_length: &mut usize,
+    out_stream: &mut W,
+) -> std::io::Result<()> {
+    let layout = core_optimize(
+        &buffer[..optimize_count],
+        format.init_indent_len,
+        format.other_indent_len,
+        format.fmt_opts,
+        *last_line_length,
+    );
+
+    let mut split_point = optimize_count;
+    let mut best_break = i64::MAX;
+    let mut word = layout.next_break[0];
+    while word != optimize_count {
+        let next = layout.next_break[word];
+        let break_cost = layout.best_cost[word] - layout.best_cost[next];
+        if break_cost < best_break {
+            split_point = word;
+            best_break = break_cost;
+        }
+        if best_break <= i64::MAX - CORE_LINE_CREDIT {
+            best_break += CORE_LINE_CREDIT;
+        }
+        word = next;
+    }
+
+    *last_line_length = core_write_layout(
+        &buffer[..optimize_count],
+        &layout,
+        split_point,
+        format,
+        out_stream,
+    )?;
+    buffer.drain(..split_point);
+    Ok(())
+}
+
+fn fmt_break_coreutils_paragraph<W: ?Sized + Write>(
+    para_graph: &FmtParagraph,
+    fmt_opts: &FmtConfigs,
+    out_stream: &mut W,
+) -> std::io::Result<()> {
+    let (words, paragraph_tabs_seen) = core_collect_words(para_graph, fmt_opts);
+    let tabs_seen = para_graph.tabs_seen || paragraph_tabs_seen;
+    if words.is_empty() {
+        return out_stream.write_all(b"\n");
+    }
+
+    let init_indent_str = if fmt_opts.is_crown || fmt_opts.is_tagged {
+        para_graph.init_str.as_str()
+    } else {
+        para_graph.indent_str.as_str()
+    };
+    let init_indent_len = if fmt_opts.is_crown || fmt_opts.is_tagged {
+        para_graph.init_len
+    } else {
+        para_graph.indent_len
+    };
+    let other_indent_str = para_graph.indent_str.as_str();
+    let other_indent_len = para_graph.indent_len;
+
+    let format = CoreFormat {
+        fmt_opts,
+        init_indent_str,
+        init_indent_len,
+        other_indent_str,
+        other_indent_len,
+        tabs_seen,
+    };
+    let mut buffer = Vec::with_capacity(CORE_MAX_WORDS);
+    let mut buffered_chars = 0usize;
+    let mut last_line_length = 0usize;
+
+    for mut word in words {
+        while buffered_chars + word.length > CORE_MAX_CHARS && !buffer.is_empty() {
+            let optimize_count = buffer.len();
+            core_flush_words(
+                &mut buffer,
+                optimize_count,
+                &format,
+                &mut last_line_length,
+                out_stream,
+            )?;
+            buffered_chars = buffer.iter().map(|word| word.length).sum();
+        }
+
+        while word.length > CORE_MAX_CHARS && buffer.is_empty() {
+            let split_byte = word.text.char_indices().nth(CORE_MAX_CHARS).unwrap().0;
+            out_stream.write_all(&word.text.as_bytes()[..split_byte])?;
+            word.text = word.text[split_byte..].to_string();
+            word.length -= CORE_MAX_CHARS;
+            word.paren = word.text.chars().next().is_some_and(core_is_open);
+        }
+
+        buffered_chars += word.length;
+        buffer.push(word);
+
+        if buffer.len() == CORE_MAX_WORDS - 1 {
+            let optimize_count = buffer.len() - 1;
+            core_flush_words(
+                &mut buffer,
+                optimize_count,
+                &format,
+                &mut last_line_length,
+                out_stream,
+            )?;
+            buffered_chars = buffer.iter().map(|word| word.length).sum();
+        }
+    }
+
+    let layout = core_optimize(
+        &buffer,
+        init_indent_len,
+        other_indent_len,
+        fmt_opts,
+        last_line_length,
+    );
+    core_write_layout(&buffer, &layout, buffer.len(), &format, out_stream).map(|_| ())
 }
 
 // break_simple 实现了一种 "贪婪 "的分行算法：打印单词，直到超过最大长度。

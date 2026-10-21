@@ -1444,7 +1444,7 @@ fn sort_validate_inputs(files: &[OsString], output: &SortOutput) -> CTResult<()>
     // 扫描所有输入文件是否可读，如果有不可读的直接报错，决不提前触碰 stdin
     for file in files {
         if file != "-" {
-            if let Err(error) = File::open(file) {
+            if let Err(error) = sort_check_input_access(file) {
                 return Err(SortError::SortReadFailed {
                     path: PathBuf::from(file),
                     error,
@@ -1455,6 +1455,37 @@ fn sort_validate_inputs(files: &[OsString], output: &SortOutput) -> CTResult<()>
     }
 
     Ok(())
+}
+
+#[cfg(target_family = "unix")]
+fn sort_check_input_access(path: &OsStr) -> std::io::Result<()> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    let path = CString::new(path.as_bytes()).map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "file name contained an unexpected NUL byte",
+        )
+    })?;
+    let result = unsafe {
+        ctcore::libc::faccessat(
+            ctcore::libc::AT_FDCWD,
+            path.as_ptr(),
+            ctcore::libc::R_OK,
+            ctcore::libc::AT_EACCESS,
+        )
+    };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(not(target_family = "unix"))]
+fn sort_check_input_access(path: &OsStr) -> std::io::Result<()> {
+    File::open(path).map(drop)
 }
 
 fn parse_posix2_version() -> i32 {

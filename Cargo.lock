@@ -2490,6 +2490,7 @@ dependencies = [
  "rust-i18n",
  "self_cell",
  "serial_test",
+ "signal-hook",
  "sys-locale 0.2.4",
  "tempfile",
  "unicode-width 0.1.14",

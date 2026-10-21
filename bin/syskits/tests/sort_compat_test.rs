@@ -470,6 +470,33 @@ fn sort_numeric_modes_use_locale_separators() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn sort_general_numeric_uses_only_locale_decimal_point() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let cases: [(&str, &[u8], &[u8]); 2] = [
+        ("C", b"1,5\n1.4\n", b"1,5\n1.4\n"),
+        ("de_DE.utf8", b"1,5\n1.6\n", b"1.6\n1,5\n"),
+    ];
+
+    for (index, (locale, records, expected)) in cases.into_iter().enumerate() {
+        let input = temp_dir.path().join(format!("general-numeric-{index}"));
+        fs::write(&input, records).expect("write general numeric input");
+        let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+            .env("LC_ALL", locale)
+            .args(["sort", "-gs", input.to_str().expect("utf8 path")])
+            .output()
+            .expect("run general numeric sort");
+
+        assert!(
+            output.status.success(),
+            "{locale}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.stdout, expected, "{locale}");
+    }
+}
+
+#[test]
 #[cfg(target_family = "unix")]
 fn sort_field_separator_uses_c_locale_bytes() {
     let temp_dir = TempDir::new().expect("tempdir");

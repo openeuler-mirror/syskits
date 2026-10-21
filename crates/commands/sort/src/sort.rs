@@ -2638,6 +2638,7 @@ fn sort_compare_by<'a>(
 fn sort_get_leading_gen(input: &str) -> Range<usize> {
     let trimmed = input.trim_start();
     let leading_whitespace_len = input.len() - trimmed.len();
+    let decimal_point = sort_locale_decimal_point();
 
     // 检查 inf、-inf 和 nan
     for allowed_prefix in ["inf", "-inf", "nan"] {
@@ -2662,7 +2663,7 @@ fn sort_get_leading_gen(input: &str) -> Range<usize> {
         if c.is_ascii_digit() {
             continue;
         }
-        if (c == SORT_DECIMAL_PT || c == ',') && !is_had_decimal_pt && !is_had_e_notation {
+        if c == decimal_point && !is_had_decimal_pt && !is_had_e_notation {
             is_had_decimal_pt = true;
             continue;
         }
@@ -2704,8 +2705,12 @@ pub enum SortGeneralF64ParseResult {
 /// 必须使用 GeneralF64ParseResult 而不是 f64 才能正确排序浮点数。
 #[inline(always)]
 fn sort_general_f64_parse(a: &str) -> SortGeneralF64ParseResult {
-    // 抹平 locale 差异：将法文的逗号强转为标准小数点
-    let normalized = a.replace(',', ".");
+    let decimal_point = sort_locale_decimal_point();
+    let normalized = if decimal_point == SORT_DECIMAL_PT {
+        a.to_owned()
+    } else {
+        a.replace(decimal_point, ".")
+    };
     let normalized = normalized.trim();
 
     // 手动处理特殊值

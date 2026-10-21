@@ -1695,7 +1695,9 @@ fn sort_get_setting_check(matches: &ArgMatches) -> CTResult<(bool, bool)> {
 
 fn sort_get_settings_merge_batch_size(matches: &ArgMatches) -> CTResult<usize> {
     if let Some(n_merge) = matches.get_one::<String>(sort_flags::SORT_BATCH_SIZE) {
-        let merge_batch_size = n_merge.parse().map_err(|_| {
+        let numeric = n_merge.trim_start_matches(|c: char| c.is_ascii_whitespace());
+        let numeric = numeric.strip_prefix('+').unwrap_or(numeric);
+        let merge_batch_size = numeric.parse().map_err(|_| {
             CTsageError::new(
                 2,
                 format!("invalid --batch-size argument {}", n_merge.quote()),
@@ -10752,6 +10754,19 @@ mod tests {
 
             assert!(result.is_ok());
             assert!(result.unwrap().contains_id(sort_flags::SORT_BATCH_SIZE));
+        }
+
+        #[test]
+        fn test_sort_get_settings_merge_batch_size_whitespace() {
+            let matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "--batch-size= 2"])
+                .unwrap();
+            assert_eq!(sort_get_settings_merge_batch_size(&matches).unwrap(), 2);
+
+            let matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "--batch-size=2 "])
+                .unwrap();
+            assert!(sort_get_settings_merge_batch_size(&matches).is_err());
         }
 
         #[test]

@@ -44,6 +44,7 @@ use ctcore::ct_error::{
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_locale::{LcCategory, hard_locale, hard_locale_time, strcoll_compare};
 use ctcore::ct_parse_size::{CtParser, ParseSizeError};
+use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 use ctcore::ct_version_cmp::ct_version_cmp;
 use sys_locale::get_locale;
 
@@ -1310,15 +1311,16 @@ pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 fn sort_clap_error_exit_code(error: &clap::Error) -> i32 {
-    let invalid_sort_value = error.kind() == ClapErrorKind::InvalidValue
-        && error
-            .get(ContextKind::InvalidArg)
-            .is_some_and(|arg| arg.to_string().starts_with("--sort"))
+    let invalid_enum_value = error.kind() == ClapErrorKind::InvalidValue
+        && error.get(ContextKind::InvalidArg).is_some_and(|arg| {
+            let arg = arg.to_string();
+            arg.starts_with("--sort") || arg.starts_with("--check")
+        })
         && error
             .get(ContextKind::InvalidValue)
             .is_some_and(|value| !value.to_string().is_empty());
 
-    if invalid_sort_value { 1 } else { 2 }
+    if invalid_enum_value { 1 } else { 2 }
 }
 
 fn sort_validate_inputs(files: &[OsString], output: &SortOutput) -> CTResult<()> {
@@ -1431,10 +1433,6 @@ fn parse_obsolete_key_spec(spec: &str, is_start: bool) -> Option<String> {
 }
 
 fn preprocess_sort_args(args: Vec<OsString>) -> Vec<OsString> {
-    if !traditional_sort_usage() {
-        return args;
-    }
-
     let mut processed = Vec::with_capacity(args.len() + 4);
     if let Some(program) = args.first() {
         processed.push(program.clone());
@@ -1448,22 +1446,41 @@ fn preprocess_sort_args(args: Vec<OsString>) -> Vec<OsString> {
             continue;
         };
 
-        if let Some(start) = parse_obsolete_key_spec(arg, true) {
-            let mut key = start;
-            if idx + 1 < args.len() {
-                if let Some(next) = args[idx + 1].to_str() {
-                    if let Some(end) = parse_obsolete_key_spec(next, false) {
-                        key.push(',');
-                        key.push_str(&end);
-                        idx += 1;
+        if arg == "--che" {
+            processed.push(OsString::from("--check"));
+            idx += 1;
+            continue;
+        }
+        if arg == "--sort=" {
+            processed.push(OsString::from("--sort=\u{1}"));
+            idx += 1;
+            continue;
+        }
+        if arg == "--check=" {
+            processed.push(OsString::from("--check=\u{1}"));
+            idx += 1;
+            continue;
+        }
+
+        if traditional_sort_usage() {
+            if let Some(start) = parse_obsolete_key_spec(arg, true) {
+                let mut key = start;
+                if idx + 1 < args.len() {
+                    if let Some(next) = args[idx + 1].to_str() {
+                        if let Some(end) = parse_obsolete_key_spec(next, false) {
+                            key.push(',');
+                            key.push_str(&end);
+                            idx += 1;
+                        }
                     }
                 }
+                processed.push(OsString::from("-k"));
+                processed.push(OsString::from(key));
+                idx += 1;
+                continue;
             }
-            processed.push(OsString::from("-k"));
-            processed.push(OsString::from(key));
-        } else {
-            processed.push(args[idx].clone());
         }
+        processed.push(args[idx].clone());
         idx += 1;
     }
 
@@ -1923,14 +1940,14 @@ pub fn ct_app() -> Command {
             .action(ArgAction::Version),
         Arg::new(sort_flags::modes::SORT)
             .long(sort_flags::modes::SORT)
-            .value_parser([
+            .value_parser(CtShortcutValueParser::new([
                 "general-numeric",
                 "human-numeric",
                 "month",
                 "numeric",
                 "version",
                 "random",
-            ])
+            ]))
             .conflicts_with_all(sort_flags::modes::SORT_ALL_MODES),
         make_sort_mode_arg(
             sort_flags::modes::SORT_HUMAN_NUMERIC,
@@ -1988,11 +2005,11 @@ pub fn ct_app() -> Command {
             .long(sort_flags::check::SORT_CHECK)
             .require_equals(true)
             .num_args(0..)
-            .value_parser([
+            .value_parser(CtShortcutValueParser::new([
                 sort_flags::check::SORT_SILENT,
                 sort_flags::check::SORT_QUIET,
                 sort_flags::check::SORT_DIAGNOSE_FIRST,
-            ])
+            ]))
             .conflicts_with(sort_flags::SORT_OUTPUT)
             .help(t!("sort.clap.sort_check")),
         Arg::new(sort_flags::check::SORT_CHECK_SILENT)

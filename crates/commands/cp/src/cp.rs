@@ -1341,6 +1341,16 @@ impl CpOptions {
         preserve: bool,
     ) -> CopyResult<()> {
         for value in values.split(',') {
+            let value = match value {
+                "m" => "mode",
+                "o" => "ownership",
+                "t" => "timestamps",
+                "c" => "context",
+                "l" | "link" => "links",
+                "x" => "xattr",
+                "a" => "all",
+                value => value,
+            };
             let parsed = CpAttributes::cp_parse_single_string(value)?;
             let yes = CpPreserve::Yes { required: true };
             let no = CpPreserve::No {

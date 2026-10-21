@@ -9,8 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
+use std::cell::Cell;
 use std::io::BufRead;
 use std::iter::Peekable;
+use std::rc::Rc;
 use std::slice::Iter;
 
 use unicode_width::UnicodeWidthChar;
@@ -85,11 +87,25 @@ pub struct FmtFileLine {
 pub struct FmtFileLines<'a> {
     opts: &'a FmtConfigs,
     reader: &'a mut FmtFileOrStdReader,
+    tabs_seen: Rc<Cell<bool>>,
 }
 
 impl FmtFileLines<'_> {
+    #[cfg(test)]
     fn new<'b>(opts: &'b FmtConfigs, reader: &'b mut FmtFileOrStdReader) -> FmtFileLines<'b> {
-        FmtFileLines { opts, reader }
+        Self::with_tabs_state(opts, reader, Rc::new(Cell::new(false)))
+    }
+
+    fn with_tabs_state<'b>(
+        opts: &'b FmtConfigs,
+        reader: &'b mut FmtFileOrStdReader,
+        tabs_seen: Rc<Cell<bool>>,
+    ) -> FmtFileLines<'b> {
+        FmtFileLines {
+            opts,
+            reader,
+            tabs_seen,
+        }
     }
 
     /// 如果该行应被格式化，则返回 true
@@ -172,6 +188,7 @@ impl Iterator for FmtFileLines<'_> {
         if n.ends_with('\n') {
             n.pop();
         }
+        self.tabs_seen.set(self.tabs_seen.get() || n.contains('\t'));
 
         // 如果这一行完全是空白、
         // 发送一个空行
@@ -226,6 +243,8 @@ pub struct FmtParagraph {
     pub lines: Vec<String>,
     /// 每一行正文开始的字节位置
     pub indent_ends: Vec<usize>,
+    /// 当前文件在读取本段落时是否已经遇到制表符
+    pub tabs_seen: bool,
     /// 表示初始值的字符串，即第一行的缩进值
     pub init_str: String,
     /// 考虑到 TABWIDTH，初始字符串的可打印长度
@@ -247,6 +266,7 @@ pub struct FmtParagraphStream<'a> {
     lines: Peekable<FmtFileLines<'a>>,
     next_mail: bool,
     tagged_indent: usize,
+    tabs_seen: Rc<Cell<bool>>,
     opts: &'a FmtConfigs,
 }
 
@@ -256,12 +276,14 @@ impl FmtParagraphStream<'_> {
         reader: &'b mut FmtFileOrStdReader,
     ) -> FmtParagraphStream<'b> {
         // 不再调用脆弱的 .lines()，将 reader 本身传给强韧的 FmtFileLines
-        let lines = FmtFileLines::new(opts, reader).peekable();
+        let tabs_seen = Rc::new(Cell::new(false));
+        let lines = FmtFileLines::with_tabs_state(opts, reader, Rc::clone(&tabs_seen)).peekable();
         // 在文件开头，我们可能会发现邮件头
         FmtParagraphStream {
             lines,
             next_mail: true,
             tagged_indent: 0,
+            tabs_seen,
             opts,
         }
     }
@@ -425,6 +447,7 @@ impl Iterator for FmtParagraphStream<'_> {
         Some(Ok(FmtParagraph {
             lines: p_lines,
             indent_ends: p_indent_ends,
+            tabs_seen: self.tabs_seen.get(),
             init_str,
             init_len,
             init_end,
@@ -1177,6 +1200,7 @@ mod tests {
             FmtParagraph {
                 lines: lines.iter().map(|&line| line.to_string()).collect(),
                 indent_ends,
+                tabs_seen: false,
                 init_str: String::new(),
                 init_len,
                 init_end: init_len,

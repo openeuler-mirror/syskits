@@ -420,6 +420,26 @@ fn sort_ignore_case_uses_single_character_locale_mapping() {
 }
 
 #[test]
+fn sort_c_locale_key_character_offsets_count_bytes() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("input");
+    fs::write(&input, b"\xc3\xa9Z\n\xc3\xaaA\n").expect("write multibyte input");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args(["sort", "-k1.2,1.2", input.to_str().expect("utf8 path")])
+        .output()
+        .expect("run C-locale byte-offset sort");
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"\xc3\xa9Z\n\xc3\xaaA\n");
+}
+
+#[test]
 #[cfg(target_family = "unix")]
 fn sort_field_separator_uses_c_locale_bytes() {
     let temp_dir = TempDir::new().expect("tempdir");

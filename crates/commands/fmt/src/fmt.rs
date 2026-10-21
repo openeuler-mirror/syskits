@@ -65,6 +65,33 @@ fn decode_output_bytes(encoded: &str) -> Vec<u8> {
     bytes
 }
 
+struct DecodedWriter<W> {
+    inner: W,
+}
+
+impl<W> DecodedWriter<W> {
+    fn new(inner: W) -> Self {
+        Self { inner }
+    }
+}
+
+impl<W: Write> Write for DecodedWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let encoded = std::str::from_utf8(buf).map_err(|err| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("invalid internal fmt output: {err}"),
+            )
+        })?;
+        self.inner.write_all(&decode_output_bytes(encoded))?;
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
 mod fmt_flags {
     pub const FMT_CROWN_MARGIN: &str = "crown-margin";
     pub const FMT_TAGGED_PARAGRAPH: &str = "tagged-paragraph";
@@ -272,25 +299,25 @@ fn fmt_process_file_core<W: ?Sized + Write>(
     };
 
     let mut paragraph_stream = FmtParagraphStream::new(fmt_configs, &mut fp);
-    while let Some(para_result) = paragraph_stream.next() {
+    for para_result in paragraph_stream.by_ref() {
         match para_result {
             Err(s) => {
                 output_stream
                     .write_all(s.as_bytes())
-                    .map_err_context(|| "failed to write output".to_string())?;
+                    .map_err_context(|| "write error".to_string())?;
                 output_stream
                     .write_all(b"\n")
-                    .map_err_context(|| "failed to write output".to_string())?;
+                    .map_err_context(|| "write error".to_string())?;
             }
             Ok(para) => fmt_break_lines(&para, fmt_configs, output_stream)
-                .map_err_context(|| "failed to write output".to_string())?,
+                .map_err_context(|| "write error".to_string())?,
         }
     }
 
     // 清除每个文件后的输出
     output_stream
         .flush()
-        .map_err_context(|| "failed to write output".to_string())?;
+        .map_err_context(|| "write error".to_string())?;
 
     if paragraph_stream.take_read_error().is_some() {
         stderr_text.push_str("fmt: read error\n");
@@ -342,20 +369,27 @@ impl Tool for Fmt {
 }
 
 pub fn fmt_main(args: impl ctcore::Args) -> CTResult<()> {
-    let semantic = fmt_native_semantic(args)?;
-    std::io::stdout()
-        .write_all(&semantic.output_bytes)
+    let stdout = std::io::stdout();
+    let mut output = DecodedWriter::new(stdout.lock());
+    let outcome = fmt_run(args, &mut output)?;
+    output
+        .flush()
         .map_err_context(|| "write error".to_string())?;
-    if !semantic.stderr_text.is_empty() {
-        eprint!("{}", semantic.stderr_text);
+    if !outcome.stderr_text.is_empty() {
+        eprint!("{}", outcome.stderr_text);
     }
-    if semantic.exit_code != 0 {
-        set_ct_exit_code(semantic.exit_code);
+    if outcome.exit_code != 0 {
+        set_ct_exit_code(outcome.exit_code);
     }
     Ok(())
 }
 
-pub fn fmt_native_semantic(args: impl ctcore::Args) -> CTResult<FmtSemantic> {
+struct FmtRunOutcome {
+    stderr_text: String,
+    exit_code: i32,
+}
+
+fn fmt_run<W: ?Sized + Write>(args: impl ctcore::Args, output: &mut W) -> CTResult<FmtRunOutcome> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
@@ -369,18 +403,23 @@ pub fn fmt_native_semantic(args: impl ctcore::Args) -> CTResult<FmtSemantic> {
         .unwrap_or_else(|| vec![OsString::from("-")]);
 
     let fmt_opts = FmtConfigs::from_matches(&matches)?;
-    let mut output = BufWriter::new(Vec::new());
     let mut stderr_text = String::new();
     let mut all_ok = true;
 
     for file_name in &files {
-        all_ok &= fmt_process_file_core(
-            file_name.as_os_str(),
-            &fmt_opts,
-            &mut output,
-            &mut stderr_text,
-        )?;
+        all_ok &=
+            fmt_process_file_core(file_name.as_os_str(), &fmt_opts, output, &mut stderr_text)?;
     }
+
+    Ok(FmtRunOutcome {
+        stderr_text,
+        exit_code: if all_ok { 0 } else { 1 },
+    })
+}
+
+pub fn fmt_native_semantic(args: impl ctcore::Args) -> CTResult<FmtSemantic> {
+    let mut output = BufWriter::new(Vec::new());
+    let outcome = fmt_run(args, &mut output)?;
 
     let encoded_output =
         String::from_utf8(output.into_inner().map_err(|err| {
@@ -393,8 +432,8 @@ pub fn fmt_native_semantic(args: impl ctcore::Args) -> CTResult<FmtSemantic> {
     Ok(FmtSemantic {
         output,
         output_bytes,
-        stderr_text,
-        exit_code: if all_ok { 0 } else { 1 },
+        stderr_text: outcome.stderr_text,
+        exit_code: outcome.exit_code,
     })
 }
 
@@ -630,6 +669,16 @@ pub fn ct_app() -> Command {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn decoded_writer_streams_original_bytes() {
+        let encoded = encode_input_bytes(b"alpha\xffbeta\n");
+        let mut writer = DecodedWriter::new(Vec::new());
+
+        writer.write_all(encoded.as_bytes()).unwrap();
+
+        assert_eq!(writer.inner, b"alpha\xffbeta\n");
+    }
 
     #[test]
     fn test_tool_implementation() {

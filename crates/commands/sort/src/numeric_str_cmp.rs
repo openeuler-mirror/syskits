@@ -21,6 +21,8 @@
 use ctcore::ct_locale::hard_locale_numeric;
 use std::{cmp::Ordering, ops::Range};
 
+use crate::sort_is_blank;
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 enum NumSign {
     Negative,
@@ -83,7 +85,7 @@ impl NumInfo {
         let mut is_first_char = true;
 
         for (idx, char) in num.char_indices() {
-            if is_first_char && char.is_whitespace() {
+            if is_first_char && sort_is_blank(char) {
                 continue;
             }
 

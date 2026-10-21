@@ -9,8 +9,8 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::cell::Cell;
-use std::io::BufRead;
+use std::cell::{Cell, RefCell};
+use std::io::{self, BufRead};
 use std::iter::Peekable;
 use std::rc::Rc;
 use std::slice::Iter;
@@ -88,23 +88,31 @@ pub struct FmtFileLines<'a> {
     opts: &'a FmtConfigs,
     reader: &'a mut FmtFileOrStdReader,
     tabs_seen: Rc<Cell<bool>>,
+    read_error: Rc<RefCell<Option<io::Error>>>,
 }
 
 impl FmtFileLines<'_> {
     #[cfg(test)]
     fn new<'b>(opts: &'b FmtConfigs, reader: &'b mut FmtFileOrStdReader) -> FmtFileLines<'b> {
-        Self::with_tabs_state(opts, reader, Rc::new(Cell::new(false)))
+        Self::with_shared_state(
+            opts,
+            reader,
+            Rc::new(Cell::new(false)),
+            Rc::new(RefCell::new(None)),
+        )
     }
 
-    fn with_tabs_state<'b>(
+    fn with_shared_state<'b>(
         opts: &'b FmtConfigs,
         reader: &'b mut FmtFileOrStdReader,
         tabs_seen: Rc<Cell<bool>>,
+        read_error: Rc<RefCell<Option<io::Error>>>,
     ) -> FmtFileLines<'b> {
         FmtFileLines {
             opts,
             reader,
             tabs_seen,
+            read_error,
         }
     }
 
@@ -180,7 +188,11 @@ impl Iterator for FmtFileLines<'_> {
         // Internally escape non-ASCII bytes so arbitrary input remains lossless.
         let mut buf = Vec::new();
         match self.reader.read_until(b'\n', &mut buf) {
-            Ok(0) | Err(_) => return None, // 遇到 EOF 或不可恢复的 IO 错误时退出
+            Ok(0) => return None,
+            Err(err) => {
+                *self.read_error.borrow_mut() = Some(err);
+                return None;
+            }
             Ok(_) => {}
         }
 
@@ -267,6 +279,7 @@ pub struct FmtParagraphStream<'a> {
     next_mail: bool,
     tagged_indent: usize,
     tabs_seen: Rc<Cell<bool>>,
+    read_error: Rc<RefCell<Option<io::Error>>>,
     opts: &'a FmtConfigs,
 }
 
@@ -275,17 +288,28 @@ impl FmtParagraphStream<'_> {
         opts: &'b FmtConfigs,
         reader: &'b mut FmtFileOrStdReader,
     ) -> FmtParagraphStream<'b> {
-        // 不再调用脆弱的 .lines()，将 reader 本身传给强韧的 FmtFileLines
         let tabs_seen = Rc::new(Cell::new(false));
-        let lines = FmtFileLines::with_tabs_state(opts, reader, Rc::clone(&tabs_seen)).peekable();
+        let read_error = Rc::new(RefCell::new(None));
+        let lines = FmtFileLines::with_shared_state(
+            opts,
+            reader,
+            Rc::clone(&tabs_seen),
+            Rc::clone(&read_error),
+        )
+        .peekable();
         // 在文件开头，我们可能会发现邮件头
         FmtParagraphStream {
             lines,
             next_mail: true,
             tagged_indent: 0,
             tabs_seen,
+            read_error,
             opts,
         }
+    }
+
+    pub fn take_read_error(&self) -> Option<io::Error> {
+        self.read_error.borrow_mut().take()
     }
 
     /// 检测 RFC822 邮件头
@@ -1035,7 +1059,7 @@ mod tests {
 
     #[cfg(test)]
     mod paragraph_stream_tests {
-        use std::io::{BufReader, Cursor};
+        use std::io::{self, BufReader, Cursor, Read};
 
         use super::*;
 
@@ -1043,6 +1067,30 @@ mod tests {
         fn create_reader(data: &str) -> FmtFileOrStdReader {
             let cursor = Cursor::new(data.to_string());
             BufReader::new(Box::new(cursor))
+        }
+
+        struct ErrorReader;
+
+        impl Read for ErrorReader {
+            fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+                Err(io::Error::other("simulated read error"))
+            }
+        }
+
+        #[test]
+        fn test_read_error_is_preserved() {
+            let opts = FmtConfigs::default();
+            let mut reader = BufReader::new(Box::new(ErrorReader) as Box<dyn Read>);
+            let mut stream = FmtParagraphStream::new(&opts, &mut reader);
+
+            assert!(stream.next().is_none());
+            assert_eq!(
+                stream
+                    .take_read_error()
+                    .expect("read error should be preserved")
+                    .to_string(),
+                "simulated read error"
+            );
         }
 
         #[test]

@@ -131,7 +131,6 @@ unsafe extern "C" {
     fn iswalnum(character: ctcore::libc::c_uint) -> ctcore::libc::c_int;
     fn iswprint(character: ctcore::libc::c_uint) -> ctcore::libc::c_int;
     fn towupper(character: ctcore::libc::c_uint) -> ctcore::libc::c_uint;
-    fn ct_sort_general_numeric_classify(text: *const ctcore::libc::c_char) -> ctcore::libc::c_int;
 }
 
 pub(crate) fn sort_is_blank(character: char) -> bool {
@@ -2687,7 +2686,7 @@ fn sort_get_leading_gen(input: &str) -> Range<usize> {
     let decimal_point = sort_locale_decimal_point();
 
     // 检查 inf、-inf 和 nan
-    for allowed_prefix in ["inf", "+inf", "-inf", "nan", "+nan", "-nan"] {
+    for allowed_prefix in ["inf", "-inf", "nan"] {
         if trimmed.is_char_boundary(allowed_prefix.len())
             && trimmed[..allowed_prefix.len()].eq_ignore_ascii_case(allowed_prefix)
         {
@@ -2741,7 +2740,6 @@ fn sort_get_leading_gen(input: &str) -> Range<usize> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum SortGeneralF64ParseResult {
     SortInvalid,
-    SortNegNaN,
     SortNaN,
     SortNegInfinity,
     SortNumber(BigDecimal),
@@ -2760,37 +2758,18 @@ fn sort_general_f64_parse(a: &str) -> SortGeneralF64ParseResult {
     };
     let normalized = normalized.trim();
 
-    #[cfg(target_family = "unix")]
+    // 手动处理特殊值
+    if normalized.eq_ignore_ascii_case("nan") {
+        return SortGeneralF64ParseResult::SortNaN;
+    } else if normalized.eq_ignore_ascii_case("inf")
+        || normalized.eq_ignore_ascii_case("+inf")
+        || normalized.eq_ignore_ascii_case("infinity")
     {
-        let mut nul_terminated = a.as_bytes().to_vec();
-        nul_terminated.push(0);
-        let class = unsafe { ct_sort_general_numeric_classify(nul_terminated.as_ptr().cast()) };
-        match class {
-            0 => return SortGeneralF64ParseResult::SortInvalid,
-            1 => return SortGeneralF64ParseResult::SortNegNaN,
-            2 => return SortGeneralF64ParseResult::SortNaN,
-            3 => return SortGeneralF64ParseResult::SortNegInfinity,
-            5 => return SortGeneralF64ParseResult::SortInfinity,
-            _ => {}
-        }
-    }
-
-    #[cfg(not(target_family = "unix"))]
+        return SortGeneralF64ParseResult::SortInfinity;
+    } else if normalized.eq_ignore_ascii_case("-inf")
+        || normalized.eq_ignore_ascii_case("-infinity")
     {
-        if normalized.eq_ignore_ascii_case("nan") || normalized.eq_ignore_ascii_case("+nan") {
-            return SortGeneralF64ParseResult::SortNaN;
-        } else if normalized.eq_ignore_ascii_case("-nan") {
-            return SortGeneralF64ParseResult::SortNegNaN;
-        } else if normalized.eq_ignore_ascii_case("inf")
-            || normalized.eq_ignore_ascii_case("+inf")
-            || normalized.eq_ignore_ascii_case("infinity")
-        {
-            return SortGeneralF64ParseResult::SortInfinity;
-        } else if normalized.eq_ignore_ascii_case("-inf")
-            || normalized.eq_ignore_ascii_case("-infinity")
-        {
-            return SortGeneralF64ParseResult::SortNegInfinity;
-        }
+        return SortGeneralF64ParseResult::SortNegInfinity;
     }
 
     match BigDecimal::from_str(normalized) {
@@ -2813,12 +2792,6 @@ fn sort_general_numeric_compare(
         }
         (SortGeneralF64ParseResult::SortInvalid, _) => Ordering::Less,
         (_, SortGeneralF64ParseResult::SortInvalid) => Ordering::Greater,
-
-        (SortGeneralF64ParseResult::SortNegNaN, SortGeneralF64ParseResult::SortNegNaN) => {
-            Ordering::Equal
-        }
-        (SortGeneralF64ParseResult::SortNegNaN, _) => Ordering::Less,
-        (_, SortGeneralF64ParseResult::SortNegNaN) => Ordering::Greater,
 
         (SortGeneralF64ParseResult::SortNaN, SortGeneralF64ParseResult::SortNaN) => Ordering::Equal,
         (SortGeneralF64ParseResult::SortNaN, _) => Ordering::Less,

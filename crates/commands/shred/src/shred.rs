@@ -1208,7 +1208,7 @@ fn shred_do_remove(
 
     // 根据删除方法选择最终路径
     let remove_path = if remove_method == RemoveMethod::Unlink {
-        Some(path.with_file_name(orig_filename))
+        Some(path.to_path_buf())
     } else {
         shred_wipe_name(path, verbose, remove_method)
     };
@@ -1780,6 +1780,20 @@ mod tests {
 
             assert!(result.is_ok(), "删除应该成功");
             assert!(!file_path.exists(), "文件应该被删除");
+        }
+
+        #[test]
+        fn test_do_remove_unlink_nested_relative_path() {
+            let dir = tempdir().unwrap();
+            let subdir = dir.path().join("sub");
+            fs::create_dir(&subdir).unwrap();
+            let file_path = subdir.join("test.txt");
+            fs::write(&file_path, "test").unwrap();
+
+            let result = shred_do_remove(&file_path, &file_path, false, RemoveMethod::Unlink);
+
+            assert!(result.is_ok());
+            assert!(!file_path.exists());
         }
 
         #[test]

@@ -99,8 +99,8 @@ impl FmtConfigs {
         let is_xanti_prefix = arg_matches.contains_id(fmt_flags::FMT_SKIP_PREFIX);
 
         let prefix_option = arg_matches
-            .get_one::<String>(fmt_flags::FMT_PREFIX)
-            .map(String::from);
+            .get_many::<String>(fmt_flags::FMT_PREFIX)
+            .and_then(|mut values| values.next_back().cloned());
         let anti_prefix_option = arg_matches
             .get_one::<String>(fmt_flags::FMT_SKIP_PREFIX)
             .map(String::from);
@@ -148,21 +148,25 @@ impl FmtConfigs {
     }
 
     fn parse_width_and_goal(arg_matches: &ArgMatches) -> CTResult<(usize, usize)> {
-        let width_opt = arg_matches.get_one::<usize>(fmt_flags::FMT_WIDTH);
-        let goal_opt = arg_matches.get_one::<usize>(fmt_flags::FMT_GOAL);
+        let width_opt = arg_matches
+            .get_many::<usize>(fmt_flags::FMT_WIDTH)
+            .and_then(|mut values| values.next_back().copied());
+        let goal_opt = arg_matches
+            .get_many::<usize>(fmt_flags::FMT_GOAL)
+            .and_then(|mut values| values.next_back().copied());
         let (width, goal) = match (width_opt, goal_opt) {
-            (Some(&w), Some(&g)) => {
+            (Some(w), Some(g)) => {
                 if g > w {
                     return Err(CtSimpleError::new(1, "GOAL cannot be greater than WIDTH."));
                 }
                 (w, g)
             }
-            (Some(&w), None) => {
+            (Some(w), None) => {
                 // 只有当宽度设置为零时，才允许目标值为零
                 let g = (w * FMT_DEFAULT_GOAL_TO_WIDTH_RATIO / 100).max(if w == 0 { 0 } else { 1 });
                 (w, g)
             }
-            (None, Some(&g)) => {
+            (None, Some(g)) => {
                 if g > FMT_DEFAULT_WIDTH {
                     return Err(CtSimpleError::new(1, "GOAL cannot be greater than WIDTH."));
                 }
@@ -449,7 +453,8 @@ pub fn ct_app() -> Command {
                     Unless -x is specified, leading whitespace will be ignored \
                     when matching PREFIX.",
             )
-            .value_name("PREFIX"),
+            .value_name("PREFIX")
+            .action(ArgAction::Append),
         Arg::new(fmt_flags::FMT_SKIP_PREFIX)
             .short('P')
             .long("skip-prefix")
@@ -480,12 +485,14 @@ pub fn ct_app() -> Command {
             .long("width")
             .help(t!("fmt.clap.fmt_width"))
             .value_name("WIDTH")
+            .action(ArgAction::Append)
             .value_parser(clap::value_parser!(usize)),
         Arg::new(fmt_flags::FMT_GOAL)
             .short('g')
             .long("goal")
             .help(t!("fmt.clap.fmt_goal"))
             .value_name("GOAL")
+            .action(ArgAction::Append)
             .value_parser(clap::value_parser!(usize)),
         Arg::new(fmt_flags::FMT_QUICK)
             .short('q')

@@ -574,6 +574,39 @@ fn sort_month_names_come_only_from_current_locale() {
 }
 
 #[test]
+fn sort_random_mode_keeps_last_resort_comparison_and_warning() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("random-last-resort");
+    fs::write(&input, b"b 1\na 1\n").expect("write random last resort input");
+    let path = input.to_str().expect("utf8 path");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args(["sort", "-R", "-k2,2n", path])
+        .output()
+        .expect("run random last resort sort");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"a 1\nb 1\n");
+
+    let debug = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args(["sort", "-R", "--debug", "-k2,2n", path])
+        .output()
+        .expect("run random last resort debug sort");
+    assert!(debug.status.success());
+    assert_eq!(debug.stdout, b"a 1\n  _\n___\nb 1\n  _\n___\n");
+    assert!(
+        debug.stderr.ends_with(b"sort: option '-R' is ignored\n"),
+        "stderr: {}",
+        String::from_utf8_lossy(&debug.stderr)
+    );
+}
+
+#[test]
 #[cfg(target_family = "unix")]
 fn sort_field_separator_uses_c_locale_bytes() {
     let temp_dir = TempDir::new().expect("tempdir");

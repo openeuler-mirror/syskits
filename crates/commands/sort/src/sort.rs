@@ -628,6 +628,14 @@ fn sort_debug_needs_numeric_locale_note(settings: &SortGlobalConfigs) -> bool {
     })
 }
 
+fn sort_debug_random_option_is_ignored(settings: &SortGlobalConfigs) -> bool {
+    settings.mode == SortMode::SortRandom
+        && settings
+            .selectors
+            .iter()
+            .all(|selector| selector.settings.mode != SortMode::SortRandom)
+}
+
 fn sort_debug_diagnostic_text(settings: &SortGlobalConfigs) -> String {
     if !settings.is_debug {
         return String::new();
@@ -652,6 +660,13 @@ fn sort_debug_diagnostic_text(settings: &SortGlobalConfigs) -> String {
             "{}: note numbers use '{}' as a decimal point in this locale\n",
             ctcore::ct_util_name(),
             sort_locale_decimal_point()
+        ));
+    }
+
+    if sort_debug_random_option_is_ignored(settings) {
+        text.push_str(&format!(
+            "{}: option '-R' is ignored\n",
+            ctcore::ct_util_name()
         ));
     }
 
@@ -931,8 +946,7 @@ impl<'a> SortLine<'a> {
                 )?;
             }
         }
-        if sort_settings.mode != SortMode::SortRandom
-            && !sort_settings.is_stable
+        if !sort_settings.is_stable
             && !sort_settings.is_unique
             && (sort_settings.is_dictionary_order
                 || sort_settings.is_ignore_leading_blanks
@@ -2627,10 +2641,7 @@ fn sort_compare_by<'a>(
     }
 
     // Call "last resort compare" if all selectors returned Equal
-    let cmp = if global_settings.mode == SortMode::SortRandom
-        || global_settings.is_stable
-        || global_settings.is_unique
-    {
+    let cmp = if global_settings.is_stable || global_settings.is_unique {
         Ordering::Equal
     } else {
         // 底层 strcoll 是 C 语言函数，直接支持特定语种（如 fr_FR 的 ISO-8859-1）

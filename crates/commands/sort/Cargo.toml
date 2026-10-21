@@ -33,6 +33,9 @@ ctcore = { workspace = true, features = ["fs", "version-cmp"] }
 serial_test = { workspace = true }
 bigdecimal.workspace = true
 
+[build-dependencies]
+cc = "1"
+
 [[bin]]
 name = "sort"
 path = "src/main.rs"

@@ -31,8 +31,6 @@ mod para_split;
 const FMT_MAX_WIDTH: usize = 2500;
 const FMT_DEFAULT_GOAL: usize = 70;
 const FMT_DEFAULT_WIDTH: usize = 75;
-// 默认情况下，目标为宽度的 93
-const FMT_DEFAULT_GOAL_TO_WIDTH_RATIO: usize = 93;
 
 mod fmt_flags {
     pub const FMT_CROWN_MARGIN: &str = "crown-margin";
@@ -163,7 +161,7 @@ impl FmtConfigs {
             }
             (Some(w), None) => {
                 // 只有当宽度设置为零时，才允许目标值为零
-                let g = (w * FMT_DEFAULT_GOAL_TO_WIDTH_RATIO / 100).max(if w == 0 { 0 } else { 1 });
+                let g = (w * 187 / 200).max(if w == 0 { 0 } else { 1 });
                 (w, g)
             }
             (None, Some(g)) => {
@@ -6854,7 +6852,7 @@ mod tests {
                 is_uniform: false,
                 is_quick: false,
                 width: 1000,
-                goal: 930,
+                goal: 935,
                 tab_width: 8,
             };
             assert_eq!(configs, expected_configs);
@@ -7004,7 +7002,7 @@ mod tests {
                 is_uniform: false,
                 is_quick: false,
                 width: 1000,
-                goal: 930,
+                goal: 935,
                 tab_width: 8,
             };
             assert_eq!(configs, expected_configs);

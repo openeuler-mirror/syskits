@@ -33,6 +33,7 @@ pub struct TmpDirWrapper {
     size: usize,
     lock: Arc<Mutex<()>>,
     cleanup_paths: Arc<Mutex<Vec<PathBuf>>>,
+    signal_handler_installed: bool,
 }
 
 impl TmpDirWrapper {
@@ -49,6 +50,7 @@ impl TmpDirWrapper {
             size: 0,
             lock: Arc::default(),
             cleanup_paths: Arc::default(),
+            signal_handler_installed: false,
         }
     }
 
@@ -64,25 +66,52 @@ impl TmpDirWrapper {
         let tmp_dir = self.temp_dirs[index].as_ref().unwrap();
         let path_buf = tmp_dir.path().to_owned();
         self.cleanup_paths.lock().unwrap().push(path_buf);
-        let lock = self.lock.clone();
-        let cleanup_paths = self.cleanup_paths.clone();
-        if let Err(e) = ctrlc::set_handler(move || {
-            // 加锁，这样 `next_file_path` 就不会返回新的文件路径、
-            // 并且程序不会在处理程序结束前终止
-            let _lock = lock.lock().unwrap();
-            for path in cleanup_paths.lock().unwrap().iter() {
-                if let Err(e) = tmp_dir_remove_tmp_dir(path) {
-                    ct_show_error!("failed to delete temporary directory: {}", e);
+        if !self.signal_handler_installed {
+            let lock = self.lock.clone();
+            let cleanup_paths = self.cleanup_paths.clone();
+
+            #[cfg(unix)]
+            {
+                use signal_hook::consts::signal::{SIGHUP, SIGINT, SIGTERM};
+                use signal_hook::iterator::Signals;
+
+                let mut signals = Signals::new([SIGHUP, SIGINT, SIGTERM]).map_err(|e| {
+                    CtSimpleError::new(2, format!("failed to set up signal handler: {e}"))
+                })?;
+                std::thread::Builder::new()
+                    .name("sort-signal".into())
+                    .spawn(move || {
+                        if let Some(signal) = signals.forever().next() {
+                            // 加锁，这样 `next_file_path` 就不会返回新的文件路径、
+                            // 并且程序不会在处理程序结束前终止
+                            let _lock = lock.lock().unwrap();
+                            for path in cleanup_paths.lock().unwrap().iter() {
+                                if let Err(e) = tmp_dir_remove_tmp_dir(path) {
+                                    ct_show_error!("failed to delete temporary directory: {}", e);
+                                }
+                            }
+                            let _ = signal_hook::low_level::emulate_default_handler(signal);
+                            signal_hook::low_level::exit(128 + signal);
+                        }
+                    })
+                    .map_err(|e| {
+                        CtSimpleError::new(2, format!("failed to set up signal handler: {e}"))
+                    })?;
+            }
+
+            #[cfg(not(unix))]
+            ctrlc::set_handler(move || {
+                let _lock = lock.lock().unwrap();
+                for path in cleanup_paths.lock().unwrap().iter() {
+                    if let Err(e) = tmp_dir_remove_tmp_dir(path) {
+                        ct_show_error!("failed to delete temporary directory: {}", e);
+                    }
                 }
-            }
-            std::process::exit(2)
-        }) {
-            if !matches!(e, ctrlc::Error::MultipleHandlers) {
-                return Err(CtSimpleError::new(
-                    2,
-                    format!("failed to set up signal handler: {e}"),
-                ));
-            }
+                std::process::exit(2)
+            })
+            .map_err(|e| CtSimpleError::new(2, format!("failed to set up signal handler: {e}")))?;
+
+            self.signal_handler_installed = true;
         }
         Ok(())
     }

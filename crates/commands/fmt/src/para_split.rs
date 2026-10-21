@@ -20,7 +20,7 @@ use crate::{FmtConfigs, encode_input_bytes};
 
 #[inline]
 fn is_fmt_whitespace(c: char) -> bool {
-    c.is_ascii_whitespace()
+    matches!(c, ' ' | '\t')
 }
 
 fn trim_fmt_whitespace_start(s: &str) -> &str {
@@ -170,9 +170,6 @@ impl Iterator for FmtFileLines<'_> {
 
         let mut n = encode_input_bytes(&buf);
         if n.ends_with('\n') {
-            n.pop();
-        }
-        if n.ends_with('\r') {
             n.pop();
         }
 

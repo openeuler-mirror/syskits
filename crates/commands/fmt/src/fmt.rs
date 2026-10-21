@@ -7853,10 +7853,10 @@ mod tests {
 
             let result = fmt_process_file(file_name, &fmt_configs, &mut output_stream);
             assert!(result.is_ok());
-            // Checking that newlines are handled consistently
+            // GNU fmt retains the carriage return byte from CRLF input.
             assert_eq!(
                 String::from_utf8(output_stream.into_inner()).unwrap(),
-                "This is a line This is another line This is yet another line\n"
+                "This is a line This is another line\r This is yet another line\r\n"
             );
         }
 
@@ -7902,7 +7902,7 @@ mod tests {
             // Check if output formatting corresponds to crown mode specifics
             assert_eq!(
                 String::from_utf8(output_stream.into_inner()).unwrap(),
-                "This is a test input for the crown configuration.\n"
+                "This is a \r test input for \r the crown\nconfiguration.\n"
             );
         }
 
@@ -7924,7 +7924,7 @@ mod tests {
             // Check for tagged formatting specifics
             assert_eq!(
                 String::from_utf8(output_stream.into_inner()).unwrap(),
-                "This is a\ntest input for\nthe crown configuration.\n"
+                "This is a \r\ntest input for \r\nthe crown configuration.\n"
             );
         }
 
@@ -7946,7 +7946,7 @@ mod tests {
             // Check if mail formatting is correctly applied
             assert_eq!(
                 String::from_utf8(output_stream.into_inner()).unwrap(),
-                "This is a test input for the crown configuration.\n"
+                "This is a \r test input for \r the crown\nconfiguration.\n"
             );
         }
 

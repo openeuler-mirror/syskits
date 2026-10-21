@@ -117,6 +117,10 @@ fn core_is_ws(c: char) -> bool {
     c.is_ascii_whitespace()
 }
 
+fn core_is_horizontal_space(c: char) -> bool {
+    matches!(c, ' ' | '\t')
+}
+
 fn core_char_width(c: char) -> usize {
     if crate::escaped_byte(c).is_some() {
         1
@@ -159,7 +163,7 @@ fn core_collect_words(para_graph: &FmtParagraph, fmt_opts: &FmtConfigs) -> (Vec<
             // 与 coreutils 一致：跳过词前空白
             while idx < line.len() {
                 let c = line[idx..].chars().next().unwrap_or('\0');
-                if !core_is_ws(c) {
+                if !core_is_horizontal_space(c) {
                     break;
                 }
                 let before = col;
@@ -178,15 +182,17 @@ fn core_collect_words(para_graph: &FmtParagraph, fmt_opts: &FmtConfigs) -> (Vec<
 
             let word_start = idx;
             let mut length = 0usize;
+            let mut consumed = false;
             while idx < line.len() {
                 let c = line[idx..].chars().next().unwrap_or('\0');
-                if core_is_ws(c) {
+                if consumed && core_is_ws(c) {
                     break;
                 }
                 let w = core_char_width(c);
                 length += w;
                 col += w;
                 idx += c.len_utf8();
+                consumed = true;
             }
             let text = &line[word_start..idx];
 
@@ -194,7 +200,7 @@ fn core_collect_words(para_graph: &FmtParagraph, fmt_opts: &FmtConfigs) -> (Vec<
             let mut end_of_line = true;
             while idx < line.len() {
                 let c = line[idx..].chars().next().unwrap_or('\0');
-                if !core_is_ws(c) {
+                if !core_is_horizontal_space(c) {
                     end_of_line = false;
                     break;
                 }

@@ -713,6 +713,13 @@ fn shred_exec_with_random_source(
 
     // 如果需要，删除文件
     if settings.remove_method != RemoveMethod::None {
+        if let Err(err) = file.set_len(0) {
+            if metadata.is_file() {
+                return Err(err).map_err_context(|| {
+                    format!("{}: error truncating", settings.path.maybe_quote())
+                });
+            }
+        }
         shred_do_remove(
             path,
             settings.path,
@@ -1849,6 +1856,25 @@ mod tests {
 
             assert!(result.is_ok(), "擦除应该成功");
             assert!(!file_path.exists(), "文件应该被删除");
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_removal_truncates_other_hard_links() {
+            let dir = tempdir().unwrap();
+            let file_path = dir.path().join("test.txt");
+            let link_path = dir.path().join("link.txt");
+            fs::write(&file_path, "secret").unwrap();
+            fs::hard_link(&file_path, &link_path).unwrap();
+
+            let mut settings = create_test_settings(&file_path);
+            settings.n_passes = 0;
+            settings.remove_method = RemoveMethod::Unlink;
+
+            shred_exec(&settings).unwrap();
+
+            assert!(!file_path.exists());
+            assert_eq!(fs::metadata(link_path).unwrap().len(), 0);
         }
 
         #[test]

@@ -435,14 +435,6 @@ pub fn ct_app() -> Command {
 }
 
 fn cp_args_init() -> Vec<Arg> {
-    const MODE_ARGS: &[&str] = &[
-        opt_flags::LINK,
-        opt_flags::REFLINK,
-        opt_flags::SYMBOLIC_LINK,
-        opt_flags::ATTRIBUTES_ONLY,
-        opt_flags::COPY_CONTENTS,
-    ];
-
     let args = vec![
         Arg::new("help")
             .short('h')
@@ -540,7 +532,6 @@ fn cp_args_init() -> Vec<Arg> {
         Arg::new(opt_flags::REFLINK)
             .long(opt_flags::REFLINK)
             .value_name("WHEN")
-            .overrides_with_all(MODE_ARGS)
             .require_equals(true)
             .default_missing_value("always")
             .value_parser(CtShortcutValueParser::new(["auto", "always", "never"]))
@@ -548,7 +539,6 @@ fn cp_args_init() -> Vec<Arg> {
             .help(t!("cp.clap.reflink")),
         Arg::new(opt_flags::ATTRIBUTES_ONLY)
             .long(opt_flags::ATTRIBUTES_ONLY)
-            .overrides_with_all(MODE_ARGS)
             .help(t!("cp.clap.attributes_only"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::PARENTS)
@@ -633,7 +623,6 @@ fn cp_args_init() -> Vec<Arg> {
         // TODO: implement the following args
         Arg::new(opt_flags::COPY_CONTENTS)
             .long(opt_flags::COPY_CONTENTS)
-            .overrides_with(opt_flags::ATTRIBUTES_ONLY)
             .help(t!("cp.clap.copy_contents"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::Z)

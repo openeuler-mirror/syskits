@@ -671,7 +671,7 @@ fn pass_name(pass_type: &PassType) -> String {
             }
             format!("{:02x}{:02x}{:02x}", bytes[0], bytes[1], bytes[2])
         }
-        PassType::Zero => String::from("000"),
+        PassType::Zero => String::from("000000"),
     }
 }
 
@@ -1554,6 +1554,11 @@ mod tests {
             assert_eq!(flipped_count, expected_flipped);
         }
         Ok(())
+    }
+
+    #[test]
+    fn test_zero_pass_name_uses_six_hex_digits() {
+        assert_eq!(pass_name(&PassType::Zero), "000000");
     }
 
     mod pattern_tests {

@@ -299,7 +299,7 @@ fn ext_sort_write<I: MergeWriteableTmpFile>(
 
 fn ext_sort_write_lines<T: Write>(lines: &[SortLine], w: &mut T, separator: u8) {
     for s in lines {
-        w.write_all(s.line.as_bytes()).unwrap();
+        w.write_all(s.raw_bytes).unwrap();
         w.write_all(&[separator]).unwrap();
     }
 }

@@ -25,7 +25,7 @@ use ctcore::ct_error::{CTResult, CtSimpleError};
 
 use crate::{
     SortGeneralF64ParseResult, SortGlobalConfigs, SortLine, numeric_str_cmp::NumInfo,
-    sort_field_separator_raw_byte, sort_raw_field_separator,
+    sort_ctype_is_single_byte, sort_raw_field_separator,
 };
 
 self_cell!(
@@ -53,18 +53,18 @@ pub struct ChunkLineData<'a> {
     pub parsed_floats: Vec<SortGeneralF64ParseResult>,
 }
 
-fn sort_lossy_text(raw: &[u8], field_separator: Option<char>) -> Cow<'_, str> {
-    let Some(raw_separator) = field_separator.and_then(sort_field_separator_raw_byte) else {
+fn sort_lossy_text(raw: &[u8], _field_separator: Option<char>) -> Cow<'_, str> {
+    if !sort_ctype_is_single_byte() {
         return String::from_utf8_lossy(raw);
-    };
+    }
 
-    let marker = sort_raw_field_separator(raw_separator);
     let mut text = String::with_capacity(raw.len());
-    for (index, part) in raw.split(|byte| *byte == raw_separator).enumerate() {
-        if index != 0 {
-            text.push(marker);
+    for &byte in raw {
+        if byte.is_ascii() {
+            text.push(char::from(byte));
+        } else {
+            text.push(sort_raw_field_separator(byte));
         }
-        text.push_str(&String::from_utf8_lossy(part));
     }
     Cow::Owned(text)
 }

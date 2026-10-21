@@ -587,17 +587,6 @@ pub(crate) fn sort_raw_field_separator(byte: u8) -> char {
     char::from_u32(SORT_RAW_FIELD_SEPARATOR_BASE + u32::from(byte)).unwrap()
 }
 
-pub(crate) fn sort_field_separator_raw_byte(separator: char) -> Option<u8> {
-    if !sort_ctype_is_single_byte() {
-        return None;
-    }
-    let value = u32::from(separator);
-    let byte = value.checked_sub(SORT_RAW_FIELD_SEPARATOR_BASE)?;
-    (u32::from(u8::MAX - 127)..=u32::from(u8::MAX))
-        .contains(&byte)
-        .then(|| byte as u8)
-}
-
 fn sort_locale_decimal_point() -> char {
     unsafe {
         let locale = ctcore::libc::localeconv();

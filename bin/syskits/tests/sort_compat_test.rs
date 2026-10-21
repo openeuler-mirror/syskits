@@ -579,6 +579,27 @@ fn sort_random_mode_keeps_last_resort_comparison_and_warning() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn sort_locale_collation_handles_embedded_nul_records() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("embedded-nul");
+    fs::write(&input, b"z\0a\n\xc3\xa4\0b\n").expect("write embedded NUL input");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "de_DE.utf8")
+        .args(["sort", "-s", input.to_str().expect("utf8 path")])
+        .output()
+        .expect("run locale sort with embedded NUL records");
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"\xc3\xa4\0b\nz\0a\n");
+}
+
+#[test]
 #[cfg(target_family = "unix")]
 fn sort_check_propagates_reader_errors() {
     let temp_dir = TempDir::new().expect("tempdir");

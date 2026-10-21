@@ -1440,6 +1440,7 @@ fn preprocess_sort_args(args: Vec<OsString>) -> Vec<OsString> {
 
     let mut idx = 1;
     let mut end_of_options = false;
+    let mut option_value_pending = false;
     while idx < args.len() {
         let Some(arg) = args[idx].to_str() else {
             processed.push(args[idx].clone());
@@ -1452,9 +1453,21 @@ fn preprocess_sort_args(args: Vec<OsString>) -> Vec<OsString> {
             idx += 1;
             continue;
         }
+        if option_value_pending {
+            processed.push(args[idx].clone());
+            option_value_pending = false;
+            idx += 1;
+            continue;
+        }
         if arg == "--" {
             processed.push(args[idx].clone());
             end_of_options = true;
+            idx += 1;
+            continue;
+        }
+        if matches!(arg, "-o" | "--output") {
+            processed.push(args[idx].clone());
+            option_value_pending = true;
             idx += 1;
             continue;
         }

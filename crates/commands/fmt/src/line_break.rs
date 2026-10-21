@@ -118,7 +118,11 @@ fn core_is_ws(c: char) -> bool {
 }
 
 fn core_char_width(c: char) -> usize {
-    c.len_utf8()
+    if crate::escaped_byte(c).is_some() {
+        1
+    } else {
+        c.len_utf8()
+    }
 }
 
 fn core_is_open(c: char) -> bool {

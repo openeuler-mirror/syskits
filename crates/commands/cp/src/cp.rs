@@ -2158,6 +2158,49 @@ fn is_permission_xattr(attr_name: &std::ffi::OsStr) -> bool {
     )
 }
 
+#[cfg(target_os = "linux")]
+fn copy_acl_xattrs(source_path: &Path, dest_path: &Path, dereference: bool) -> CopyResult<()> {
+    const ACL_XATTRS: [&str; 2] = ["system.posix_acl_access", "system.posix_acl_default"];
+
+    for attr_name in ACL_XATTRS {
+        let source_acl = if dereference {
+            xattr::get_deref(source_path, attr_name)
+        } else {
+            xattr::get(source_path, attr_name)
+        };
+
+        match source_acl {
+            Ok(Some(acl)) => {
+                xattr::set(dest_path, attr_name, &acl)
+                    .context(format!("preserving ACL for {}", dest_path.quote()))?;
+            }
+            Ok(None) => match xattr::remove(dest_path, attr_name) {
+                Ok(()) => {}
+                Err(err)
+                    if matches!(
+                        err.raw_os_error(),
+                        Some(libc::ENODATA) | Some(libc::ENOTSUP)
+                    ) => {}
+                Err(err) => {
+                    return Err(CpError::IoErrContext(
+                        err,
+                        format!("preserving ACL for {}", dest_path.quote()),
+                    ));
+                }
+            },
+            Err(err) if err.raw_os_error() == Some(libc::ENOTSUP) => {}
+            Err(err) => {
+                return Err(CpError::IoErrContext(
+                    err,
+                    format!("reading ACL from {}", source_path.quote()),
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub(crate) fn copy_attributes_with_deref(
     source_path: &Path,
     dest_path: &Path,
@@ -2370,7 +2413,9 @@ pub(crate) fn copy_attributes_with_deref(
                 );
             }
             fs::set_permissions(dest_path, permissions).context(str)?;
-            #[cfg(feature = "feat_acl")]
+            #[cfg(target_os = "linux")]
+            copy_acl_xattrs(source_path, dest_path, dereference)?;
+            #[cfg(all(feature = "feat_acl", not(target_os = "linux")))]
             exacl::getfacl(source_path, None)
                 .and_then(|acl| exacl::setfacl(&[dest_path], &acl, None))
                 .map_err(|err| CpError::Error(err.to_string()))?;

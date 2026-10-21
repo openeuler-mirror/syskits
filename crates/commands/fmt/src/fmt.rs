@@ -342,13 +342,22 @@ fn preprocess_legacy_width_syntax(args: Vec<OsString>) -> CTResult<Vec<OsString>
     }
 
     let mut saw_double_dash = false;
+    let mut skip_option_value = false;
     for (idx, arg) in args.iter().enumerate().skip(1) {
         let s = arg.to_string_lossy();
+        if skip_option_value {
+            skip_option_value = false;
+            continue;
+        }
         if saw_double_dash {
             continue;
         }
         if s == "--" {
             saw_double_dash = true;
+            continue;
+        }
+        if option_takes_separate_value(&s) {
+            skip_option_value = true;
             continue;
         }
         if idx > 1 && is_legacy_width_flag(&s) {
@@ -384,8 +393,38 @@ fn preprocess_legacy_width_syntax(args: Vec<OsString>) -> CTResult<Vec<OsString>
     Ok(args)
 }
 
+fn option_takes_separate_value(arg: &str) -> bool {
+    matches!(
+        arg,
+        "-w" | "--width"
+            | "-g"
+            | "--goal"
+            | "-p"
+            | "--prefix"
+            | "-P"
+            | "--skip-prefix"
+            | "-T"
+            | "--tab-width"
+    )
+}
+
 fn is_legacy_width_flag(arg: &str) -> bool {
     arg.len() >= 2 && arg.starts_with('-') && arg.as_bytes()[1].is_ascii_digit()
+}
+
+fn parse_width_value(value: &str) -> Result<usize, String> {
+    let value_without_space = value.trim_start_matches(|c: char| c.is_ascii_whitespace());
+    let digits = value_without_space
+        .strip_prefix('+')
+        .unwrap_or(value_without_space);
+
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(format!("invalid width: {}", value.quote()));
+    }
+
+    digits
+        .parse::<usize>()
+        .map_err(|_| format!("invalid width: {}", value.quote()))
 }
 
 fn io_error_message(err: &std::io::Error) -> String {
@@ -486,14 +525,16 @@ pub fn ct_app() -> Command {
             .help(t!("fmt.clap.fmt_width"))
             .value_name("WIDTH")
             .action(ArgAction::Append)
-            .value_parser(clap::value_parser!(usize)),
+            .allow_hyphen_values(true)
+            .value_parser(parse_width_value),
         Arg::new(fmt_flags::FMT_GOAL)
             .short('g')
             .long("goal")
             .help(t!("fmt.clap.fmt_goal"))
             .value_name("GOAL")
             .action(ArgAction::Append)
-            .value_parser(clap::value_parser!(usize)),
+            .allow_hyphen_values(true)
+            .value_parser(parse_width_value),
         Arg::new(fmt_flags::FMT_QUICK)
             .short('q')
             .long("quick")

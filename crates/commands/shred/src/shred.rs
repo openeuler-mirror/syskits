@@ -35,6 +35,7 @@
 // spell-checker:ignore (words) wipesync prefill
 
 extern crate rust_i18n;
+use clap::builder::OsStringValueParser;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
@@ -228,7 +229,7 @@ enum BytesWriter {
 impl BytesWriter {
     fn from_pass_type_with_random_source(
         pass: &PassType,
-        random_source: Option<&str>,
+        random_source: Option<&Path>,
     ) -> Result<Self, io::Error> {
         match pass {
             // 创建随机数据生成器
@@ -415,7 +416,7 @@ fn parse_shred_iterations(value: &str) -> Result<usize, ()> {
 /// 文件擦除的配置选项
 ///
 /// # 字段说明
-/// * `path_str` - 要擦除的文件路径
+/// * `path` - 要擦除的文件路径
 /// * `n_passes` - 覆写次数
 /// * `remove_method` - 删除方式（无、直接删除、擦除删除、同步擦除删除）
 /// * `size` - 指定的文件大小，None 表示使用原始大小
@@ -425,7 +426,7 @@ fn parse_shred_iterations(value: &str) -> Result<usize, ()> {
 /// * `force` - 是否强制写入（修改文件权限）
 /// * `random_source` - 随机数据源文件路径
 struct ShredSettings<'a> {
-    path_str: &'a str,
+    path: &'a Path,
     n_passes: usize,
     remove_method: RemoveMethod,
     size: Option<u64>,
@@ -433,7 +434,7 @@ struct ShredSettings<'a> {
     zero: bool,
     verbose: bool,
     force: bool,
-    random_source: Option<&'a str>,
+    random_source: Option<&'a Path>,
 }
 
 impl<'a> ShredSettings<'a> {
@@ -492,15 +493,15 @@ impl<'a> ShredSettings<'a> {
         let verbose = matches.get_flag(shred_options::SHRED_VERBOSE);
         let force = matches.get_flag(shred_options::SHRED_FORCE);
         let random_source = matches
-            .get_one::<String>(shred_options::SHRED_RANDOM_SOURCE)
-            .map(|s| s.as_str());
+            .get_one::<OsString>(shred_options::SHRED_RANDOM_SOURCE)
+            .map(Path::new);
 
         // 获取所有文件路径并创建配置
         let settings = matches
-            .get_many::<String>(shred_options::SHRED_FILE)
+            .get_many::<OsString>(shred_options::SHRED_FILE)
             .unwrap()
             .map(|path| Self {
-                path_str: path,
+                path: Path::new(path),
                 n_passes,
                 remove_method,
                 size,
@@ -611,10 +612,12 @@ pub fn ct_app() -> Command {
             .long(shred_options::SHRED_RANDOM_SOURCE)
             .value_name("FILE")
             .help("get random bytes from FILE")
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
         // Positional arguments
         Arg::new(shred_options::SHRED_FILE)
             .action(ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
     ];
 
@@ -638,12 +641,12 @@ fn pass_name(pass_type: &PassType) -> String {
 
 /// 执行文件擦除操作
 fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
-    if settings.path_str == "-" {
+    if settings.path == Path::new("-") {
         return shred_exec_stdout(settings);
     }
 
     // 验证文件是否存在且是普通文件
-    let path = Path::new(settings.path_str);
+    let path = settings.path;
     if !path.exists() {
         return Err(CtSimpleError::new(
             1,
@@ -662,13 +665,13 @@ fn shred_exec(settings: &ShredSettings) -> CTResult<()> {
     let size = shred_target_size(settings, &metadata);
     let mut file = shred_open_for_writing(path, &metadata, settings.force)?;
 
-    shred_run_passes(&mut file, settings.path_str, settings, size, true)?;
+    shred_run_passes(&mut file, settings.path, settings, size, true)?;
 
     // 如果需要，删除文件
     if settings.remove_method != RemoveMethod::None {
         shred_do_remove(
             path,
-            settings.path_str,
+            settings.path,
             settings.verbose,
             settings.remove_method,
         )?;
@@ -750,7 +753,7 @@ fn shred_exec_stdout(settings: &ShredSettings) -> CTResult<()> {
         .open("/proc/self/fd/1")
         .map_err_context(|| "-: failed to open for writing".to_string())?;
 
-    shred_run_passes(&mut file, "-", settings, size, stdout_is_regular)?;
+    shred_run_passes(&mut file, Path::new("-"), settings, size, stdout_is_regular)?;
 
     if settings.remove_method != RemoveMethod::None {
         file.set_len(0)
@@ -813,7 +816,7 @@ fn shred_pass_sequence(settings: &ShredSettings, target_size: u64) -> Vec<PassTy
 
 fn shred_run_passes(
     file: &mut File,
-    display_name: &str,
+    display_name: &Path,
     settings: &ShredSettings,
     size: u64,
     sync_data: bool,
@@ -925,7 +928,7 @@ fn shred_do_pass(
     pass_type: &PassType,
     _exact: bool,
     file_size: u64,
-    random_source: Option<&str>,
+    random_source: Option<&Path>,
 ) -> Result<(), io::Error> {
     shred_do_pass_impl(file, pass_type, _exact, file_size, random_source, true)
 }
@@ -935,7 +938,7 @@ fn shred_do_pass_impl(
     pass_type: &PassType,
     _exact: bool,
     file_size: u64,
-    random_source: Option<&str>,
+    random_source: Option<&Path>,
     sync_data: bool,
 ) -> Result<(), io::Error> {
     // 重置文件指针到开始位置
@@ -978,7 +981,7 @@ fn shred_wipe_name(
     verbose: bool,
     remove_method: RemoveMethod,
 ) -> Option<PathBuf> {
-    let file_name_len = orig_path.file_name()?.to_str()?.len();
+    let file_name_len = orig_path.file_name()?.len();
     let mut last_path = PathBuf::from(orig_path);
 
     // 从长到短尝试不同长度的文件名
@@ -1041,7 +1044,7 @@ fn shred_wipe_name(
 /// 成功返回 Ok(())，失败返回 IO 错误
 fn shred_do_remove(
     path: &Path,
-    orig_filename: &str,
+    orig_filename: &Path,
     verbose: bool,
     remove_method: RemoveMethod,
 ) -> CTResult<()> {
@@ -1140,9 +1143,9 @@ mod tests {
         );
         assert_eq!(
             matches
-                .get_one::<String>(shred_options::SHRED_RANDOM_SOURCE)
+                .get_one::<OsString>(shred_options::SHRED_RANDOM_SOURCE)
                 .unwrap(),
-            "/dev/urandom",
+            &OsString::from("/dev/urandom"),
             "随机源路径应该正确解析"
         );
     }
@@ -1166,11 +1169,15 @@ mod tests {
         let setting = &settings[0];
         assert_eq!(
             setting.random_source,
-            Some("/dev/urandom"),
+            Some(Path::new("/dev/urandom")),
             "随机源应该正确设置"
         );
         assert_eq!(setting.n_passes, 2, "迭代次数应该正确设置");
-        assert_eq!(setting.path_str, "testfile.txt", "文件路径应该正确设置");
+        assert_eq!(
+            setting.path,
+            Path::new("testfile.txt"),
+            "文件路径应该正确设置"
+        );
 
         Ok(())
     }
@@ -1206,9 +1213,49 @@ mod tests {
         );
         assert!(matches.get_flag(shred_options::SHRED_VERBOSE));
         assert_eq!(
-            matches.get_one::<String>(shred_options::SHRED_RANDOM_SOURCE),
-            Some(&"/dev/zero".to_string())
+            matches.get_one::<OsString>(shred_options::SHRED_RANDOM_SOURCE),
+            Some(&OsString::from("/dev/zero"))
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_non_utf8_file_and_random_source_paths() -> CTResult<()> {
+        use std::os::unix::ffi::OsStringExt;
+
+        let dir = tempdir().unwrap();
+        let target = dir.path().join(OsString::from_vec(b"target-\xff".to_vec()));
+        let random_source = dir.path().join(OsString::from_vec(b"source-\xfe".to_vec()));
+        fs::write(&target, b"data").unwrap();
+        fs::write(&random_source, b"ZZZZ").unwrap();
+
+        shred_main(
+            vec![
+                OsString::from("shred"),
+                OsString::from("-x"),
+                OsString::from("-n1"),
+                OsString::from("--random-source"),
+                random_source.into_os_string(),
+                target.clone().into_os_string(),
+            ]
+            .into_iter(),
+        )?;
+        assert_eq!(fs::read(&target).unwrap(), b"ZZZZ");
+
+        let removable = dir.path().join(OsString::from_vec(b"remove-\xfd".to_vec()));
+        fs::write(&removable, b"data").unwrap();
+        shred_main(
+            vec![
+                OsString::from("shred"),
+                OsString::from("-n0"),
+                OsString::from("--remove=wipe"),
+                removable.clone().into_os_string(),
+            ]
+            .into_iter(),
+        )?;
+        assert!(!removable.exists());
+
+        Ok(())
     }
 
     #[test]
@@ -1337,11 +1384,11 @@ mod tests {
             temp_file.write_all(test_data).unwrap();
             temp_file.flush().unwrap();
 
-            let path = temp_file.path().to_str().unwrap();
-
             // 使用文件作为随机源
-            let mut writer =
-                BytesWriter::from_pass_type_with_random_source(&PassType::Random, Some(path))?;
+            let mut writer = BytesWriter::from_pass_type_with_random_source(
+                &PassType::Random,
+                Some(temp_file.path()),
+            )?;
 
             let block = writer.bytes_for_pass(10)?;
             assert_eq!(block.len(), 10, "应该生成请求的长度");
@@ -1405,12 +1452,7 @@ mod tests {
             let file_path = dir.path().join("test.txt");
             fs::write(&file_path, "test").unwrap();
 
-            let result = shred_do_remove(
-                &file_path,
-                file_path.to_str().unwrap(),
-                false,
-                RemoveMethod::Unlink,
-            );
+            let result = shred_do_remove(&file_path, &file_path, false, RemoveMethod::Unlink);
 
             assert!(result.is_ok(), "删除应该成功");
             assert!(!file_path.exists(), "文件应该被删除");
@@ -1422,12 +1464,7 @@ mod tests {
             let file_path = dir.path().join("test.txt");
             fs::write(&file_path, "test").unwrap();
 
-            let result = shred_do_remove(
-                &file_path,
-                file_path.to_str().unwrap(),
-                false,
-                RemoveMethod::Wipe,
-            );
+            let result = shred_do_remove(&file_path, &file_path, false, RemoveMethod::Wipe);
 
             assert!(result.is_ok(), "删除应该成功");
             assert!(!file_path.exists(), "文件应该被删除");
@@ -1438,9 +1475,9 @@ mod tests {
         use super::*;
 
         /// 创建测试用的配置
-        fn create_test_settings(path: &str) -> ShredSettings {
+        fn create_test_settings(path: &Path) -> ShredSettings {
             ShredSettings {
-                path_str: path,
+                path,
                 n_passes: 3,
                 remove_method: RemoveMethod::None,
                 size: None,
@@ -1460,7 +1497,7 @@ mod tests {
             fs::write(&file_path, test_data).unwrap();
             let original_size = test_data.len();
 
-            let mut settings = create_test_settings(file_path.to_str().unwrap());
+            let mut settings = create_test_settings(&file_path);
             settings.size = Some(original_size as u64);
             settings.exact = true;
 
@@ -1476,7 +1513,7 @@ mod tests {
 
         #[test]
         fn test_wipe_file_nonexistent() {
-            let settings = create_test_settings("nonexistent.txt");
+            let settings = create_test_settings(Path::new("nonexistent.txt"));
             let result = shred_exec(&settings);
             assert!(result.is_err(), "不存在的文件应该返回错误");
         }
@@ -1487,7 +1524,7 @@ mod tests {
             let file_path = dir.path().join("test.txt");
             fs::write(&file_path, "test data").unwrap();
 
-            let mut settings = create_test_settings(file_path.to_str().unwrap());
+            let mut settings = create_test_settings(&file_path);
             settings.n_passes = 1;
             settings.remove_method = RemoveMethod::Unlink;
 
@@ -1503,7 +1540,7 @@ mod tests {
             let file_path = dir.path().join("test.txt");
             fs::write(&file_path, "test data").unwrap();
 
-            let mut settings = create_test_settings(file_path.to_str().unwrap());
+            let mut settings = create_test_settings(&file_path);
             settings.zero = true;
 
             let result = shred_exec(&settings);
@@ -1518,7 +1555,7 @@ mod tests {
             let file_path = dir.path().join("test.txt");
             fs::write(&file_path, "").unwrap();
 
-            let mut settings = create_test_settings(file_path.to_str().unwrap());
+            let mut settings = create_test_settings(&file_path);
             settings.n_passes = 0;
             settings.size = Some(4);
             settings.exact = true;
@@ -1548,7 +1585,7 @@ mod tests {
             }
 
             let settings = ShredSettings {
-                path_str: file_path.to_str().unwrap(),
+                path: &file_path,
                 n_passes: 1,
                 remove_method: RemoveMethod::None,
                 size: None,
@@ -1584,10 +1621,8 @@ mod tests {
             let random_data = b"this is my custom random data source for testing with lots of random bytes and more content to ensure we have enough data for the test case";
             random_source.write_all(random_data).unwrap();
             random_source.flush().unwrap();
-            let random_source_path = random_source.path().to_str().unwrap();
-
             let settings = ShredSettings {
-                path_str: file_path.to_str().unwrap(),
+                path: &file_path,
                 n_passes: 1,
                 remove_method: RemoveMethod::None,
                 size: Some(test_content.len() as u64), // 明确指定文件大小
@@ -1595,7 +1630,7 @@ mod tests {
                 zero: false,
                 verbose: false,
                 force: false,
-                random_source: Some(random_source_path),
+                random_source: Some(random_source.path()),
             };
 
             let result = shred_exec(&settings);

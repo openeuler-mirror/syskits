@@ -478,7 +478,7 @@ fn cp_args_init() -> Vec<Arg> {
         Arg::new(opt_flags::LINK)
             .short('l')
             .long(opt_flags::LINK)
-            .overrides_with_all(MODE_ARGS)
+            .conflicts_with(opt_flags::SYMBOLIC_LINK)
             .help(t!("cp.clap.link"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::NO_CLOBBER)
@@ -510,7 +510,7 @@ fn cp_args_init() -> Vec<Arg> {
         Arg::new(opt_flags::SYMBOLIC_LINK)
             .short('s')
             .long(opt_flags::SYMBOLIC_LINK)
-            .overrides_with_all(MODE_ARGS)
+            .conflicts_with(opt_flags::LINK)
             .help(t!("cp.clap.symbolic_link"))
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::FORCE)

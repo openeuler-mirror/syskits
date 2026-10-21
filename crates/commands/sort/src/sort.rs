@@ -631,6 +631,31 @@ fn sort_debug_random_option_is_ignored(settings: &SortGlobalConfigs) -> bool {
             .all(|selector| selector.settings.mode != SortMode::SortRandom)
 }
 
+fn sort_debug_key_uses_significant_leading_blanks(
+    selector: &SortFieldSelector,
+    separator: Option<char>,
+) -> bool {
+    if !selector.is_needs_tokens
+        || separator.is_some()
+        || selector.from.is_ignore_blanks
+        || matches!(
+            selector.settings.mode,
+            SortMode::SortNumeric
+                | SortMode::SortHumanNumeric
+                | SortMode::SortGeneralNumeric
+                | SortMode::SortMonth
+        )
+    {
+        return false;
+    }
+
+    selector.from.field > 1
+        || selector
+            .to
+            .as_ref()
+            .is_none_or(|to| to.field > selector.from.field || to.char == 0)
+}
+
 fn sort_debug_diagnostic_text(settings: &SortGlobalConfigs) -> String {
     if !settings.is_debug {
         return String::new();
@@ -663,6 +688,16 @@ fn sort_debug_diagnostic_text(settings: &SortGlobalConfigs) -> String {
             "{}: option '-R' is ignored\n",
             ctcore::ct_util_name()
         ));
+    }
+
+    for (index, selector) in settings.selectors.iter().enumerate() {
+        if sort_debug_key_uses_significant_leading_blanks(selector, settings.separator) {
+            text.push_str(&format!(
+                "{}: leading blanks are significant in key {}; consider also specifying 'b'\n",
+                ctcore::ct_util_name(),
+                index + 1
+            ));
+        }
     }
 
     text

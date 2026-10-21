@@ -97,6 +97,34 @@ fn sort_debug_reports_numeric_decimal_point_note() {
 }
 
 #[test]
+fn sort_debug_warns_about_significant_key_blanks() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("fields");
+    fs::write(&input, b"b 2\na 1\n").expect("write fixture");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args([
+            "sort",
+            "--debug",
+            "-k2,2",
+            input.to_str().expect("utf8 path"),
+        ])
+        .output()
+        .expect("run syskits sort --debug -k2,2");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.stderr,
+        b"sort: text ordering performed using simple byte comparison\nsort: leading blanks are significant in key 1; consider also specifying 'b'\n"
+    );
+}
+
+#[test]
 #[cfg(target_family = "unix")]
 fn sort_buffer_size_accepts_percent_suffix() {
     let temp_dir = TempDir::new().expect("tempdir");

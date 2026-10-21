@@ -2890,7 +2890,7 @@ fn is_skipped_by_update(
     cp_opts: &CpOptions,
     source_in_command_line: bool,
 ) -> bool {
-    if cp_opts.copy_mode == CpCopyMode::Update && dest_path.exists() {
+    if cp_opts.update != CtUpdateMode::ReplaceAll && dest_path.exists() {
         match cp_opts.update {
             CtUpdateMode::ReplaceNone => return true,
             CtUpdateMode::ReplaceIfOlder => {
@@ -2979,6 +2979,12 @@ fn copy_file(
         }
     }
 
+    if cp_file_or_link_exists(dest_path) && cp_opts.overwrite == CpOverwriteMode::NoClobber {
+        cp_source_metadata(sour_path, cp_opts, source_in_command_line)?;
+        ct_show_error!("not replacing {}", dest_path.quote());
+        return Err(CpError::NotAllFilesCopied);
+    }
+
     if is_skipped_by_update(sour_path, dest_path, cp_opts, source_in_command_line) {
         if cp_opts.cp_preserve_hard_links() && dest_path.exists() {
             if let Ok(src_info) = CtFileInformation::from_path(
@@ -3002,12 +3008,6 @@ fn copy_file(
         }
 
         return Ok(());
-    }
-
-    if cp_file_or_link_exists(dest_path) && cp_opts.overwrite == CpOverwriteMode::NoClobber {
-        cp_source_metadata(sour_path, cp_opts, source_in_command_line)?;
-        ct_show_error!("not replacing {}", dest_path.quote());
-        return Err(CpError::NotAllFilesCopied);
     }
 
     if cp_file_or_link_exists(dest_path) {

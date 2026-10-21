@@ -271,8 +271,8 @@ fn fmt_process_file_core<W: ?Sized + Write>(
         }
     };
 
-    let paragraph_stream = FmtParagraphStream::new(fmt_configs, &mut fp);
-    for para_result in paragraph_stream {
+    let mut paragraph_stream = FmtParagraphStream::new(fmt_configs, &mut fp);
+    while let Some(para_result) = paragraph_stream.next() {
         match para_result {
             Err(s) => {
                 output_stream
@@ -292,7 +292,12 @@ fn fmt_process_file_core<W: ?Sized + Write>(
         .flush()
         .map_err_context(|| "failed to write output".to_string())?;
 
-    Ok(true)
+    if paragraph_stream.take_read_error().is_some() {
+        stderr_text.push_str("fmt: read error\n");
+        Ok(false)
+    } else {
+        Ok(true)
+    }
 }
 
 #[cfg(test)]

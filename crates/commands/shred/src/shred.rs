@@ -46,13 +46,15 @@ use ctcore::{ct_show_error, ct_show_if_err};
 #[cfg(unix)]
 use libc::S_IWUSR;
 use rand::{Rng, SeedableRng, rngs::StdRng};
-use std::ffi::OsString;
+use std::ffi::{CString, OsString};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, Read, Seek, Write};
 #[cfg(unix)]
 use std::mem::ManuallyDrop;
 #[cfg(unix)]
 use std::os::fd::{AsRawFd, FromRawFd};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
@@ -1137,6 +1139,13 @@ fn shred_wipe_name(
 ) -> Option<PathBuf> {
     let file_name_len = orig_path.file_name()?.len();
     let mut last_path = PathBuf::from(orig_path);
+    let parent = orig_path
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let parent_dir = (remove_method == RemoveMethod::WipeSync)
+        .then(|| File::open(parent).ok())
+        .flatten();
 
     // 从长到短尝试不同长度的文件名
     'outer: for length in (1..=file_name_len).rev() {
@@ -1144,13 +1153,8 @@ fn shred_wipe_name(
         for name in ShredFilenameIter::new(length) {
             let new_path = orig_path.with_file_name(name);
 
-            // 跳过已存在的文件名
-            if new_path.exists() {
-                continue;
-            }
-
             // 尝试重命名
-            match fs::rename(&last_path, &new_path) {
+            match shred_rename_noreplace(&last_path, &new_path) {
                 Ok(()) => {
                     if verbose {
                         ct_show_error!(
@@ -1160,16 +1164,21 @@ fn shred_wipe_name(
                         );
                     }
 
-                    // 同步文件系统（如果需要）
-                    if remove_method == RemoveMethod::WipeSync {
-                        if let Ok(new_file) = OpenOptions::new().write(true).open(&new_path) {
-                            let _ = new_file.sync_all();
+                    if let Some(parent_dir) = parent_dir.as_ref() {
+                        if let Err(err) = shred_sync_directory(parent_dir) {
+                            ct_show_error!(
+                                "{}: fdatasync failed: {}",
+                                parent.display(),
+                                strip_errno(&err)
+                            );
+                            return None;
                         }
                     }
 
                     last_path = new_path;
                     continue 'outer;
                 }
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
                 Err(e) => {
                     ct_show_error!(
                         "{}: Couldn't rename to {}: {}",
@@ -1184,6 +1193,48 @@ fn shred_wipe_name(
     }
 
     Some(last_path)
+}
+
+#[cfg(target_os = "linux")]
+fn shred_rename_noreplace(old_path: &Path, new_path: &Path) -> io::Result<()> {
+    let old_path = CString::new(old_path.as_os_str().as_bytes())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "path contains NUL"))?;
+    let new_path = CString::new(new_path.as_os_str().as_bytes())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "path contains NUL"))?;
+    let result = unsafe {
+        libc::renameat2(
+            libc::AT_FDCWD,
+            old_path.as_ptr(),
+            libc::AT_FDCWD,
+            new_path.as_ptr(),
+            libc::RENAME_NOREPLACE,
+        )
+    };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn shred_rename_noreplace(old_path: &Path, new_path: &Path) -> io::Result<()> {
+    fs::rename(old_path, new_path)
+}
+
+fn shred_sync_directory(directory: &File) -> io::Result<()> {
+    match directory.sync_data() {
+        Ok(()) => Ok(()),
+        Err(err)
+            if matches!(
+                err.raw_os_error(),
+                Some(libc::EINVAL | libc::EBADF | libc::EISDIR)
+            ) =>
+        {
+            directory.sync_all()
+        }
+        Err(err) => Err(err),
+    }
 }
 
 /// 删除文件
@@ -1225,6 +1276,16 @@ fn shred_do_remove(
                 ),
             )
             .into());
+        }
+        if remove_method == RemoveMethod::WipeSync {
+            let parent = path
+                .parent()
+                .filter(|path| !path.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."));
+            if let Ok(parent_dir) = File::open(parent) {
+                shred_sync_directory(&parent_dir)
+                    .map_err_context(|| format!("{}: fdatasync failed", parent.display()))?;
+            }
         }
     } else {
         return Err(CtSimpleError::new(1, String::new()));

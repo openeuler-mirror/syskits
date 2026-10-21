@@ -17,7 +17,7 @@ use std::iter;
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::thread;
 
-use ctcore::ct_error::CTResult;
+use ctcore::ct_error::{CTResult, CtSimpleError};
 
 use crate::chunks::{self, Chunk, ChunkRecycled};
 use crate::{SortError, SortGlobalConfigs, sort_compare_by, sort_open};
@@ -37,7 +37,7 @@ pub fn check(path: &OsStr, settings: &SortGlobalConfigs) -> CTResult<()> {
     let file = sort_open(path)?;
     let (recycled_sender, recycled_receiver) = sync_channel(2);
     let (loaded_sender, loaded_receiver) = sync_channel(2);
-    thread::spawn({
+    let reader_join_handle = thread::spawn({
         let settings = settings.clone();
         move || check_reader(file, &recycled_receiver, &loaded_sender, &settings)
     });
@@ -52,7 +52,15 @@ pub fn check(path: &OsStr, settings: &SortGlobalConfigs) -> CTResult<()> {
 
     let mut prev_chunk: Option<Chunk> = None;
     let mut line_idx = 0;
-    for chunk in loaded_receiver {
+    let mut disorder_error = None;
+    for chunk in loaded_receiver.iter() {
+        if disorder_error.is_some() {
+            if let Some(prev_chunk) = prev_chunk.replace(chunk) {
+                let _ = recycled_sender.send(prev_chunk.recycle());
+            }
+            continue;
+        }
+
         line_idx += 1;
         if let Some(prev_chunk) = prev_chunk.take() {
             // 检查新块的第一个元素是否大于上一个块的最后一个元素
@@ -74,30 +82,42 @@ pub fn check(path: &OsStr, settings: &SortGlobalConfigs) -> CTResult<()> {
                     line: new_first.line.to_owned(),
                     is_silent: settings.is_check_silent,
                 };
-                return Err(disorder_err.into());
+                disorder_error = Some(disorder_err);
             }
 
             let _ = recycled_sender.send(prev_chunk.recycle());
         }
 
-        for (a, b) in chunk.lines().iter().tuple_windows() {
-            line_idx += 1;
-            let compare_order =
-                sort_compare_by(a, b, settings, chunk.line_data(), chunk.line_data());
-            if compare_order > max_allowed_cmp {
-                let disorder_err = SortError::SortDisorder {
-                    file: path.to_owned(),
-                    line_number: line_idx,
-                    line: b.line.to_owned(),
-                    is_silent: settings.is_check_silent,
-                };
-                return Err(disorder_err.into());
+        if disorder_error.is_none() {
+            for (a, b) in chunk.lines().iter().tuple_windows() {
+                line_idx += 1;
+                let compare_order =
+                    sort_compare_by(a, b, settings, chunk.line_data(), chunk.line_data());
+                if compare_order > max_allowed_cmp {
+                    let disorder_err = SortError::SortDisorder {
+                        file: path.to_owned(),
+                        line_number: line_idx,
+                        line: b.line.to_owned(),
+                        is_silent: settings.is_check_silent,
+                    };
+                    disorder_error = Some(disorder_err);
+                    break;
+                }
             }
         }
 
         prev_chunk = Some(chunk);
     }
-    Ok(())
+    drop(recycled_sender);
+    let reader_result = reader_join_handle
+        .join()
+        .map_err(|_| CtSimpleError::new(2, "check reader thread terminated unexpectedly"))?;
+    reader_result?;
+
+    match disorder_error {
+        Some(error) => Err(error.into()),
+        None => Ok(()),
+    }
 }
 
 /// 在阅读器线程上运行的函数。

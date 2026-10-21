@@ -608,6 +608,27 @@ fn sort_random_mode_keeps_last_resort_comparison_and_warning() {
 
 #[test]
 #[cfg(target_family = "unix")]
+fn sort_check_propagates_reader_errors() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let gnu = Command::new("/usr/bin/sort")
+        .env("LC_ALL", "C")
+        .args(["-c", temp_dir.path().to_str().expect("utf8 path")])
+        .output()
+        .expect("run GNU sort check on directory");
+    let syskits = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .env("LC_ALL", "C")
+        .args(["sort", "-c", temp_dir.path().to_str().expect("utf8 path")])
+        .output()
+        .expect("run syskits sort check on directory");
+
+    assert_eq!(gnu.status.code(), Some(2));
+    assert_eq!(syskits.status.code(), gnu.status.code());
+    assert_eq!(syskits.stdout, gnu.stdout);
+    assert!(!syskits.stderr.is_empty());
+}
+
+#[test]
+#[cfg(target_family = "unix")]
 fn sort_field_separator_uses_c_locale_bytes() {
     let temp_dir = TempDir::new().expect("tempdir");
     let utf8_input = temp_dir.path().join("utf8-input");

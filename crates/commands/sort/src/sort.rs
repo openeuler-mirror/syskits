@@ -1618,32 +1618,38 @@ fn sort_get_settings_merge_batch_size(matches: &ArgMatches) -> CTResult<usize> {
 }
 
 fn sort_get_settings_sparator(matches: &ArgMatches) -> CTResult<Option<char>> {
-    if let Some(arg) = matches.get_one::<OsString>(sort_flags::SORT_SEPARATOR) {
-        let mut separator = arg.to_str().ok_or_else(|| {
-            CTsageError::new(
-                2,
-                format!("separator is not valid unicode: {}", arg.quote()),
-            )
-        })?;
-        if separator == "\\0" {
-            separator = "\0";
+    let mut parsed_separator = None;
+    if let Some(values) = matches.get_many::<OsString>(sort_flags::SORT_SEPARATOR) {
+        for arg in values {
+            let mut separator = arg.to_str().ok_or_else(|| {
+                CTsageError::new(
+                    2,
+                    format!("separator is not valid unicode: {}", arg.quote()),
+                )
+            })?;
+            if separator == "\\0" {
+                separator = "\0";
+            }
+            // 这将拒绝非 ASCII 编码点，但也许我们不必这样做。
+            // 另一方面，GNU 接受任何单字节，无论是否为有效的 unicode。
+            // 支持多字节字符需要修改 tokenize_with_separator()）。
+            if separator.chars().count() != 1 {
+                return Err(CTsageError::new(
+                    2,
+                    format!(
+                        "separator must be exactly one character long: {}",
+                        separator.quote()
+                    ),
+                ));
+            }
+            let separator = separator.chars().next().unwrap();
+            if parsed_separator.is_some_and(|previous| previous != separator) {
+                return Err(CTsageError::new(2, "incompatible tabs"));
+            }
+            parsed_separator = Some(separator);
         }
-        // 这将拒绝非 ASCII 编码点，但也许我们不必这样做。
-        // 另一方面，GNU 接受任何单字节，无论是否为有效的 unicode。
-        // 支持多字节字符需要修改 tokenize_with_separator()）。
-        if separator.chars().count() != 1 {
-            return Err(CTsageError::new(
-                2,
-                format!(
-                    "separator must be exactly one character long: {}",
-                    separator.quote()
-                ),
-            ));
-        }
-        Ok(Some(separator.chars().next().unwrap()))
-    } else {
-        Ok(None)
     }
+    Ok(parsed_separator)
 }
 
 fn sort_get_settings_compress_prog(matches: &ArgMatches) -> Option<String> {
@@ -2015,6 +2021,7 @@ pub fn ct_app() -> Command {
             .short('t')
             .long(sort_flags::SORT_SEPARATOR)
             .help(t!("sort.clap.sort_separator"))
+            .action(ArgAction::Append)
             .value_parser(ValueParser::os_string()),
         Arg::new(sort_flags::SORT_ZERO_TERMINATED)
             .short('z')

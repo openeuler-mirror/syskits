@@ -290,8 +290,10 @@ impl BytesWriter {
                 while total_read < size {
                     match reader.read(&mut bytes[total_read..]) {
                         Ok(0) => {
-                            // 文件读取到末尾，重新定位到开头
-                            reader.seek(std::io::SeekFrom::Start(0))?;
+                            return Err(io::Error::new(
+                                io::ErrorKind::UnexpectedEof,
+                                "random source EOF",
+                            ));
                         }
                         Ok(n) => {
                             total_read += n;
@@ -1467,6 +1469,21 @@ mod tests {
             assert_eq!(block, &test_data[..10], "应该从文件读取数据");
 
             Ok(())
+        }
+
+        #[test]
+        fn test_bytes_writer_file_random_reports_eof() {
+            use tempfile::NamedTempFile;
+
+            let temp_file = NamedTempFile::new().unwrap();
+            let mut writer = BytesWriter::from_pass_type_with_random_source(
+                &PassType::Random,
+                Some(temp_file.path()),
+            )
+            .unwrap();
+
+            let error = writer.bytes_for_pass(1).unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::UnexpectedEof);
         }
 
         #[test]

@@ -301,13 +301,15 @@ fn fmt_process_file_core<W: ?Sized + Write>(
     let mut paragraph_stream = FmtParagraphStream::new(fmt_configs, &mut fp);
     for para_result in paragraph_stream.by_ref() {
         match para_result {
-            Err(s) => {
+            Err((s, has_newline)) => {
                 output_stream
                     .write_all(s.as_bytes())
                     .map_err_context(|| "write error".to_string())?;
-                output_stream
-                    .write_all(b"\n")
-                    .map_err_context(|| "write error".to_string())?;
+                if has_newline {
+                    output_stream
+                        .write_all(b"\n")
+                        .map_err_context(|| "write error".to_string())?;
+                }
             }
             Ok(para) => fmt_break_lines(&para, fmt_configs, output_stream)
                 .map_err_context(|| "write error".to_string())?,

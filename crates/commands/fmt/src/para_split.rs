@@ -48,7 +48,7 @@ fn fmt_char_width(c: char) -> usize {
 #[derive(Debug, Clone)]
 pub enum FmtLine {
     FormatLine(FmtFileLine),
-    NoFormatLine(String, bool),
+    NoFormatLine(String, bool, bool),
 }
 
 impl FmtLine {
@@ -61,9 +61,9 @@ impl FmtLine {
     }
 
     // 当我们知道它是 NoFormatLine 时，就像在 ParagraphStream 迭代器中一样
-    fn get_no_format_line(self) -> (String, bool) {
+    fn get_no_format_line(self) -> (String, bool, bool) {
         match self {
-            FmtLine::NoFormatLine(s, b) => (s, b),
+            FmtLine::NoFormatLine(s, is_new_mail, has_newline) => (s, is_new_mail, has_newline),
             FmtLine::FormatLine(..) => panic!("Found FormatLine when expecting NoFormatLine"),
         }
     }
@@ -196,8 +196,9 @@ impl Iterator for FmtFileLines<'_> {
             Ok(_) => {}
         }
 
+        let has_newline = buf.ends_with(b"\n");
         let mut n = encode_input_bytes(&buf);
-        if n.ends_with('\n') {
+        if has_newline {
             n.pop();
         }
         self.tabs_seen.set(self.tabs_seen.get() || n.contains('\t'));
@@ -207,7 +208,17 @@ impl Iterator for FmtFileLines<'_> {
         // Err(true) 表示这是一个换行符、
         // 在检测邮件头时必须知道这一点
         if n.chars().all(is_fmt_whitespace) {
-            return Some(FmtLine::NoFormatLine(String::new(), true));
+            let has_output_newline = has_newline
+                || self
+                    .opts
+                    .prefix_option
+                    .as_ref()
+                    .is_none_or(String::is_empty);
+            return Some(FmtLine::NoFormatLine(
+                String::new(),
+                true,
+                has_output_newline,
+            ));
         }
 
         let (is_p_match, p_offset) = self.match_prefix(&n[..]);
@@ -215,7 +226,7 @@ impl Iterator for FmtFileLines<'_> {
         // 如果该行与前缀不匹配、
         // 未处理该行，并再次迭代
         if !is_p_match {
-            return Some(FmtLine::NoFormatLine(n, false));
+            return Some(FmtLine::NoFormatLine(n, false, has_newline));
         }
 
         // 如果行符合前缀，但后面是空白、 不允许通过它合并行...
@@ -226,11 +237,11 @@ impl Iterator for FmtFileLines<'_> {
         {
             let prefix_end = p_offset + self.opts.prefix_option.as_ref().map_or(0, |s| s.len());
             n.truncate(prefix_end);
-            return Some(FmtLine::NoFormatLine(n, false));
+            return Some(FmtLine::NoFormatLine(n, false, true));
         }
 
         if !self.match_anti_prefix(&n[..]) {
-            return Some(FmtLine::NoFormatLine(n, false));
+            return Some(FmtLine::NoFormatLine(n, false, has_newline));
         }
 
         let prefix_end = p_offset + self.opts.prefix_option.as_ref().map_or(0, |s| s.len());
@@ -343,21 +354,21 @@ impl FmtParagraphStream<'_> {
 }
 
 impl Iterator for FmtParagraphStream<'_> {
-    type Item = Result<FmtParagraph, String>;
+    type Item = Result<FmtParagraph, (String, bool)>;
 
     #[allow(clippy::cognitive_complexity)]
-    fn next(&mut self) -> Option<Result<FmtParagraph, String>> {
+    fn next(&mut self) -> Option<Result<FmtParagraph, (String, bool)>> {
         // 在 Err 中返回 NoFormatLine；应立即输出
         let is_no_format = match self.lines.peek()? {
             FmtLine::FormatLine(_) => false,
-            FmtLine::NoFormatLine(_, _) => true,
+            FmtLine::NoFormatLine(_, _, _) => true,
         };
 
         // 发现 NoFormatLine，立即将其转出
         if is_no_format {
-            let (s, is_nm) = self.lines.next().unwrap().get_no_format_line();
+            let (s, is_nm, has_newline) = self.lines.next().unwrap().get_no_format_line();
             self.next_mail = is_nm;
-            return Some(Err(s));
+            return Some(Err((s, has_newline)));
         }
 
         // 发现一个格式行，现在建立一个段落
@@ -808,7 +819,8 @@ mod tests {
         #[test]
         #[should_panic(expected = "Found NoFormatLine when expecting FormatLine")]
         fn test_get_formatline_panic() {
-            let fmt_line = FmtLine::NoFormatLine("This is not a format line.".to_string(), false);
+            let fmt_line =
+                FmtLine::NoFormatLine("This is not a format line.".to_string(), false, true);
             let _ = fmt_line.get_format_line(); // This should panic
         }
 
@@ -816,14 +828,15 @@ mod tests {
         #[test]
         fn test_get_noformatline() {
             let no_fmt_line = "This is not a format line.".to_string();
-            let fmt_line = FmtLine::NoFormatLine(no_fmt_line.clone(), true);
+            let fmt_line = FmtLine::NoFormatLine(no_fmt_line.clone(), true, false);
 
-            let (extracted_line, flag) = fmt_line.get_no_format_line();
+            let (extracted_line, flag, has_newline) = fmt_line.get_no_format_line();
             assert_eq!(
                 extracted_line, no_fmt_line,
                 "The line should match the original."
             );
             assert!(flag, "The flag should be true.");
+            assert!(!has_newline, "The line ending should be preserved.");
         }
 
         // 测试在提取 NoFormatLine 时遇到 FormatLine 的情况，预期应触发 panic
@@ -970,11 +983,17 @@ mod tests {
             });
 
             assert!(
-                matches!(lines.next(), Some(FmtLine::NoFormatLine(_expected1, false))),
+                matches!(
+                    lines.next(),
+                    Some(FmtLine::NoFormatLine(_expected1, false, true))
+                ),
                 "Should recognize a normal line as format line."
             );
             assert!(
-                matches!(lines.next(), Some(FmtLine::NoFormatLine(_expected2, false))),
+                matches!(
+                    lines.next(),
+                    Some(FmtLine::NoFormatLine(_expected2, false, true))
+                ),
                 "Should recognize an indented line as format line."
             );
             assert!(
@@ -1004,6 +1023,28 @@ mod tests {
                 !lines.match_anti_prefix("prefix2: Line with second prefix."),
                 "Second prefix should prevent formatting."
             );
+        }
+
+        #[test]
+        fn test_unmatched_prefix_preserves_missing_newline() {
+            let opts = FmtConfigs {
+                prefix_option: Some(">".to_string()),
+                ..Default::default()
+            };
+            let mut reader = setup_lines_reader("plain text");
+            let mut lines = FmtFileLines::new(&opts, &mut reader);
+
+            assert!(matches!(
+                lines.next(),
+                Some(FmtLine::NoFormatLine(line, false, false)) if line == "plain text"
+            ));
+
+            let mut reader = setup_lines_reader("   ");
+            let mut lines = FmtFileLines::new(&opts, &mut reader);
+            assert!(matches!(
+                lines.next(),
+                Some(FmtLine::NoFormatLine(line, true, false)) if line.is_empty()
+            ));
         }
 
         #[test]
@@ -1045,13 +1086,13 @@ mod tests {
 
             let empty_line = lines.next().unwrap();
             assert!(
-                matches!(empty_line, FmtLine::NoFormatLine(_, _)),
+                matches!(empty_line, FmtLine::NoFormatLine(_, _, _)),
                 "Empty line should be recognized as no format line."
             );
 
             let malformed_line = lines.next().unwrap();
             assert!(
-                matches!(malformed_line, FmtLine::NoFormatLine(_, _)),
+                matches!(malformed_line, FmtLine::NoFormatLine(_, _, _)),
                 "Malformed line should not be formatted due to missing prefix."
             );
         }

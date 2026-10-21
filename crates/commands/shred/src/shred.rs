@@ -45,7 +45,7 @@ use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo, strip_errno
 use ctcore::{ct_show_error, ct_show_if_err};
 #[cfg(unix)]
 use libc::S_IWUSR;
-use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, Read, Seek, Write};
@@ -96,46 +96,39 @@ const SHRED_NAME_CHARSET: &[u8] =
     b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
 
 const SHRED_PATTERN_LENGTH: usize = 3;
-const SHRED_PATTERN_BUFFER_SIZE: usize = SHRED_BLOCK_SIZE + SHRED_PATTERN_LENGTH - 1;
 
-/// Patterns that appear in order for the passes
-///
-/// They are all extended to 3 bytes for consistency, even though some could be
-/// expressed as single bytes.
-const SHRED_PATTERNS: [Pattern; 22] = [
-    Pattern::Single(b'\x00'),
-    Pattern::Single(b'\xFF'),
-    Pattern::Single(b'\x55'),
-    Pattern::Single(b'\xAA'),
-    Pattern::Multi([b'\x24', b'\x92', b'\x49']),
-    Pattern::Multi([b'\x49', b'\x24', b'\x92']),
-    Pattern::Multi([b'\x6D', b'\xB6', b'\xDB']),
-    Pattern::Multi([b'\x92', b'\x49', b'\x24']),
-    Pattern::Multi([b'\xB6', b'\xDB', b'\x6D']),
-    Pattern::Multi([b'\xDB', b'\x6D', b'\xB6']),
-    Pattern::Single(b'\x11'),
-    Pattern::Single(b'\x22'),
-    Pattern::Single(b'\x33'),
-    Pattern::Single(b'\x44'),
-    Pattern::Single(b'\x66'),
-    Pattern::Single(b'\x77'),
-    Pattern::Single(b'\x88'),
-    Pattern::Single(b'\x99'),
-    Pattern::Single(b'\xBB'),
-    Pattern::Single(b'\xCC'),
-    Pattern::Single(b'\xDD'),
-    Pattern::Single(b'\xEE'),
+const SHRED_PATTERN_SPEC: &[i32] = &[
+    -2, 2, 0x000, 0xFFF, 2, 0x555, 0xAAA, -1, 6, 0x249, 0x492, 0x6DB, 0x924, 0xB6D, 0xDB6, 12,
+    0x111, 0x222, 0x333, 0x444, 0x666, 0x777, 0x888, 0x999, 0xBBB, 0xCCC, 0xDDD, 0xEEE, -1, 8,
+    0x1000, 0x1249, 0x1492, 0x16DB, 0x1924, 0x1B6D, 0x1DB6, 0x1FFF, 14, 0x1111, 0x1222, 0x1333,
+    0x1444, 0x1555, 0x1666, 0x1777, 0x1888, 0x1999, 0x1AAA, 0x1BBB, 0x1CCC, 0x1DDD, 0x1EEE, -1, 0,
 ];
 
 #[derive(Clone, Copy)]
-enum Pattern {
-    Single(u8),
-    Multi([u8; 3]),
+struct Pattern {
+    bytes: [u8; SHRED_PATTERN_LENGTH],
+    flip_sector_bit: bool,
+}
+
+impl Pattern {
+    const fn from_gnu_type(pattern_type: i32) -> Self {
+        let bits = (pattern_type as u32) & 0xFFF;
+        let repeated = bits | (bits << 12);
+        Self {
+            bytes: [
+                ((repeated >> 4) & 0xFF) as u8,
+                ((repeated >> 8) & 0xFF) as u8,
+                (repeated & 0xFF) as u8,
+            ],
+            flip_sector_bit: pattern_type & 0x1000 != 0,
+        }
+    }
 }
 
 enum PassType {
     Pattern(Pattern),
     Random,
+    Zero,
 }
 
 #[derive(PartialEq, Clone, Copy)]
@@ -197,26 +190,82 @@ impl Iterator for ShredFilenameIter {
     }
 }
 
-enum RandomSource {
+enum RandomReader {
     Entropy(Box<StdRng>),
     File(BufReader<File>),
 }
 
+struct RandomSource {
+    reader: RandomReader,
+    randnum: u64,
+    randmax: u64,
+}
+
 impl RandomSource {
     fn new(path: Option<&Path>) -> io::Result<Self> {
-        match path {
-            Some(path) => Ok(Self::File(BufReader::new(File::open(path)?))),
-            None => Ok(Self::Entropy(Box::new(StdRng::from_entropy()))),
-        }
+        let reader = match path {
+            Some(path) => RandomReader::File(BufReader::new(File::open(path)?)),
+            None => RandomReader::Entropy(Box::new(StdRng::from_entropy())),
+        };
+        Ok(Self {
+            reader,
+            randnum: 0,
+            randmax: 0,
+        })
     }
 
     fn fill(&mut self, bytes: &mut [u8]) -> io::Result<()> {
-        match self {
-            Self::Entropy(rng) => {
+        match &mut self.reader {
+            RandomReader::Entropy(rng) => {
                 rng.fill(bytes);
                 Ok(())
             }
-            Self::File(reader) => reader.read_exact(bytes),
+            RandomReader::File(reader) => reader.read_exact(bytes),
+        }
+    }
+
+    fn choose(&mut self, choices: usize) -> io::Result<usize> {
+        debug_assert!(choices > 0);
+        let genmax = (choices - 1) as u64;
+        let mut randnum = self.randnum;
+        let mut randmax = self.randmax;
+
+        loop {
+            if randmax < genmax {
+                let mut count = 0;
+                let mut expanded_max = randmax;
+                while expanded_max < genmax {
+                    expanded_max = expanded_max.wrapping_shl(8).wrapping_add(u8::MAX as u64);
+                    count += 1;
+                }
+
+                let mut bytes = [0; std::mem::size_of::<u64>()];
+                self.fill(&mut bytes[..count])?;
+                for byte in bytes.into_iter().take(count) {
+                    randnum = randnum.wrapping_shl(8).wrapping_add(byte as u64);
+                    randmax = randmax.wrapping_shl(8).wrapping_add(u8::MAX as u64);
+                }
+            }
+
+            if randmax == genmax {
+                self.randnum = 0;
+                self.randmax = 0;
+                return Ok(randnum as usize);
+            }
+
+            let choice_count = genmax + 1;
+            let excess_choices = randmax - genmax;
+            let unusable_choices = excess_choices % choice_count;
+            let last_usable_choice = randmax - unusable_choices;
+            let reduced_randnum = randnum % choice_count;
+            if randnum <= last_usable_choice {
+                self.randnum = randnum / choice_count;
+                self.randmax = excess_choices / choice_count;
+                return Ok(reduced_randnum as usize);
+            }
+
+            randnum = reduced_randnum;
+            randmax = unusable_choices - 1;
         }
     }
 }
@@ -227,8 +276,9 @@ enum BytesWriter<'a> {
         buffer: Box<[u8; SHRED_BLOCK_SIZE]>,
     },
     Pattern {
-        offset: usize,
-        buffer: Box<[u8; SHRED_PATTERN_BUFFER_SIZE]>,
+        pattern: Pattern,
+        position: usize,
+        buffer: Box<[u8; SHRED_BLOCK_SIZE]>,
     },
 }
 
@@ -239,22 +289,16 @@ impl<'a> BytesWriter<'a> {
                 source: random_source,
                 buffer: Box::new([0; SHRED_BLOCK_SIZE]),
             },
-            PassType::Pattern(pattern) => {
-                let buffer = match pattern {
-                    Pattern::Single(byte) => [*byte; SHRED_PATTERN_BUFFER_SIZE],
-                    Pattern::Multi(bytes) => {
-                        let mut buf = [0; SHRED_PATTERN_BUFFER_SIZE];
-                        for chunk in buf.chunks_exact_mut(SHRED_PATTERN_LENGTH) {
-                            chunk.copy_from_slice(bytes);
-                        }
-                        buf
-                    }
-                };
-                Self::Pattern {
-                    offset: 0,
-                    buffer: Box::new(buffer),
-                }
-            }
+            PassType::Pattern(pattern) => Self::Pattern {
+                pattern: *pattern,
+                position: 0,
+                buffer: Box::new([0; SHRED_BLOCK_SIZE]),
+            },
+            PassType::Zero => Self::Pattern {
+                pattern: Pattern::from_gnu_type(0),
+                position: 0,
+                buffer: Box::new([0; SHRED_BLOCK_SIZE]),
+            },
         }
     }
 
@@ -265,9 +309,20 @@ impl<'a> BytesWriter<'a> {
                 source.fill(bytes)?;
                 Ok(bytes)
             }
-            Self::Pattern { offset, buffer } => {
-                let bytes = &buffer[*offset..size + *offset];
-                *offset = (*offset + size) % SHRED_PATTERN_LENGTH;
+            Self::Pattern {
+                pattern,
+                position,
+                buffer,
+            } => {
+                let bytes = &mut buffer[..size];
+                for (index, byte) in bytes.iter_mut().enumerate() {
+                    let absolute = *position + index;
+                    *byte = pattern.bytes[absolute % SHRED_PATTERN_LENGTH];
+                    if pattern.flip_sector_bit && absolute % 512 == 0 {
+                        *byte ^= 0x80;
+                    }
+                }
+                *position += size;
                 Ok(bytes)
             }
         }
@@ -609,8 +664,14 @@ pub fn ct_app() -> Command {
 fn pass_name(pass_type: &PassType) -> String {
     match pass_type {
         PassType::Random => String::from("random"),
-        PassType::Pattern(Pattern::Single(byte)) => format!("{byte:x}{byte:x}{byte:x}"),
-        PassType::Pattern(Pattern::Multi([a, b, c])) => format!("{a:x}{b:x}{c:x}"),
+        PassType::Pattern(pattern) => {
+            let mut bytes = pattern.bytes;
+            if pattern.flip_sector_bit {
+                bytes[0] ^= 0x80;
+            }
+            format!("{:02x}{:02x}{:02x}", bytes[0], bytes[1], bytes[2])
+        }
+        PassType::Zero => String::from("000"),
     }
 }
 
@@ -773,50 +834,95 @@ fn shred_exec_stdout(_settings: &ShredSettings, _random_source: &mut RandomSourc
     Err(CtSimpleError::new(1, "-: invalid file type"))
 }
 
-fn shred_pass_sequence(settings: &ShredSettings, target_size: u64) -> Vec<PassType> {
-    let mut pass_sequence = Vec::new();
-    if target_size == 0 {
-        return pass_sequence;
-    }
-
-    // 根据迭代次数生成擦除序列
-    if settings.n_passes <= 3 {
-        // 少量迭代时使用随机模式
-        for _ in 0..settings.n_passes {
-            pass_sequence.push(PassType::Random);
-        }
-    } else {
-        // 多次迭代时混合使用固定模式和随机模式
-        let n_full_arrays = settings.n_passes / SHRED_PATTERNS.len();
-        let remainder = settings.n_passes % SHRED_PATTERNS.len();
-
-        // 填充完整的模式序列
-        for _ in 0..n_full_arrays {
-            for p in SHRED_PATTERNS {
-                pass_sequence.push(PassType::Pattern(p));
+fn shred_pass_sequence(
+    settings: &ShredSettings,
+    random_source: &mut RandomSource,
+) -> io::Result<Vec<PassType>> {
+    let mut pass_sequence = generate_pass_types(settings.n_passes, random_source)?
+        .into_iter()
+        .map(|pattern_type| {
+            if pattern_type < 0 {
+                PassType::Random
+            } else {
+                PassType::Pattern(Pattern::from_gnu_type(pattern_type))
             }
-        }
-        // 添加剩余的模式
-        for pattern in SHRED_PATTERNS.into_iter().take(remainder) {
-            pass_sequence.push(PassType::Pattern(pattern));
-        }
-        // 随机打乱序列
-        let mut rng = rand::thread_rng();
-        pass_sequence.shuffle(&mut rng);
+        })
+        .collect::<Vec<_>>();
 
-        // 插入随机模式
-        let n_random = 3 + settings.n_passes / 10;
-        for i in 0..n_random {
-            pass_sequence[i * (settings.n_passes - 1) / (n_random - 1)] = PassType::Random;
-        }
-    }
-
-    // 如果需要，添加零填充
     if settings.zero {
-        pass_sequence.push(PassType::Pattern(SHRED_PATTERNS[0]));
+        pass_sequence.push(PassType::Zero);
     }
 
-    pass_sequence
+    Ok(pass_sequence)
+}
+
+fn generate_pass_types(num: usize, random_source: &mut RandomSource) -> io::Result<Vec<i32>> {
+    let mut passes = vec![0; num];
+    if num == 0 {
+        return Ok(passes);
+    }
+
+    let mut spec_index = 0;
+    let mut random_passes = 0;
+    let mut destination = 0;
+    let mut remaining = num;
+
+    loop {
+        let mut group_size = SHRED_PATTERN_SPEC[spec_index];
+        spec_index += 1;
+        if group_size == 0 {
+            spec_index = 0;
+        } else if group_size < 0 {
+            group_size = -group_size;
+            if group_size as usize >= remaining {
+                random_passes += remaining;
+                break;
+            }
+            random_passes += group_size as usize;
+            remaining -= group_size as usize;
+        } else if group_size as usize <= remaining {
+            let group_size = group_size as usize;
+            passes[destination..destination + group_size]
+                .copy_from_slice(&SHRED_PATTERN_SPEC[spec_index..spec_index + group_size]);
+            spec_index += group_size;
+            destination += group_size;
+            remaining -= group_size;
+        } else if remaining < 2 || 3 * remaining < group_size as usize {
+            random_passes += remaining;
+            break;
+        } else {
+            while remaining > 0 {
+                if remaining == group_size as usize
+                    || random_source.choose(group_size as usize)? < remaining
+                {
+                    passes[destination] = SHRED_PATTERN_SPEC[spec_index];
+                    destination += 1;
+                    remaining -= 1;
+                }
+                spec_index += 1;
+                group_size -= 1;
+            }
+            break;
+        }
+    }
+
+    let mut top = num - random_passes;
+    let random_step = random_passes - 1;
+    let mut accumulator = random_step;
+    for index in 0..num {
+        if accumulator <= random_step {
+            accumulator += num - 1;
+            passes[top] = passes[index];
+            top += 1;
+            passes[index] = -1;
+        } else {
+            let swap = index + random_source.choose(top - index)?;
+            passes.swap(index, swap);
+        }
+        accumulator -= random_step;
+    }
+
+    Ok(passes)
 }
 
 fn shred_run_passes(
@@ -827,7 +933,15 @@ fn shred_run_passes(
     sync_data: bool,
     random_source: &mut RandomSource,
 ) -> CTResult<()> {
-    let pass_sequence = shred_pass_sequence(settings, size);
+    let pass_sequence = shred_pass_sequence(settings, random_source).map_err_context(|| {
+        settings.random_source.map_or_else(
+            || "getrandom".to_string(),
+            |path| path.maybe_quote().to_string(),
+        )
+    })?;
+    if size == 0 {
+        return Ok(());
+    }
     let total_passes = pass_sequence.len();
 
     for (i, pass_type) in pass_sequence.into_iter().enumerate() {
@@ -1403,6 +1517,45 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_gnu_pass_schedule_counts() -> Result<(), io::Error> {
+        use tempfile::NamedTempFile;
+
+        let mut source_file = NamedTempFile::new().unwrap();
+        source_file.write_all(&[0; 4096]).unwrap();
+        source_file.flush().unwrap();
+
+        for (n_passes, expected_random, expected_flipped) in [(25, 3, 0), (48, 4, 22)] {
+            let settings = ShredSettings {
+                path: Path::new("file"),
+                n_passes,
+                remove_method: RemoveMethod::None,
+                size: None,
+                exact: true,
+                zero: false,
+                verbose: false,
+                force: false,
+                random_source: Some(source_file.path()),
+            };
+            let mut random_source = RandomSource::new(Some(source_file.path()))?;
+            let sequence = shred_pass_sequence(&settings, &mut random_source)?;
+            let random_count = sequence
+                .iter()
+                .filter(|pass| matches!(pass, PassType::Random))
+                .count();
+            let flipped_count = sequence
+                .iter()
+                .filter(
+                    |pass| matches!(pass, PassType::Pattern(pattern) if pattern.flip_sector_bit),
+                )
+                .count();
+
+            assert_eq!(random_count, expected_random);
+            assert_eq!(flipped_count, expected_flipped);
+        }
+        Ok(())
+    }
+
     mod pattern_tests {
         use super::*;
 
@@ -1473,6 +1626,19 @@ mod tests {
 
             assert_eq!(first, b"AAAA");
             assert_eq!(second, b"BBBB");
+            Ok(())
+        }
+
+        #[test]
+        fn test_flipped_pattern_changes_each_sector() -> Result<(), io::Error> {
+            let mut source = RandomSource::new(None)?;
+            let pass = PassType::Pattern(Pattern::from_gnu_type(0x1000));
+            let mut writer = BytesWriter::from_pass_type(&pass, &mut source);
+            let bytes = writer.bytes_for_pass(513)?;
+
+            assert_eq!(bytes[0], 0x80);
+            assert!(bytes[1..512].iter().all(|byte| *byte == 0));
+            assert_eq!(bytes[512], 0x80);
             Ok(())
         }
 
@@ -1756,7 +1922,7 @@ mod tests {
             let mut random_source = RandomSource::new(None).unwrap();
             let result = shred_do_pass(
                 &mut file,
-                &PassType::Pattern(Pattern::Single(0xFF)),
+                &PassType::Pattern(Pattern::from_gnu_type(0xFFF)),
                 true,
                 5,
                 &mut random_source,

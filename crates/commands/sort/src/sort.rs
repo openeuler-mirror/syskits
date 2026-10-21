@@ -1499,7 +1499,7 @@ fn sort_handle_settings(
             .unwrap_or_else(env::temp_dir),
     );
 
-    settings.compress_prog = sort_get_settings_compress_prog(&matches);
+    settings.compress_prog = sort_get_settings_compress_prog(&matches)?;
     settings.merge_batch_size = sort_get_settings_merge_batch_size(&matches)?;
     settings.line_ending =
         CtLineEnding::from_zero_flag(matches.get_flag(sort_flags::SORT_ZERO_TERMINATED));
@@ -1652,10 +1652,20 @@ fn sort_get_settings_sparator(matches: &ArgMatches) -> CTResult<Option<char>> {
     Ok(parsed_separator)
 }
 
-fn sort_get_settings_compress_prog(matches: &ArgMatches) -> Option<String> {
-    matches
-        .get_one::<String>(sort_flags::SORT_COMPRESS_PROG)
-        .map(String::from)
+fn sort_get_settings_compress_prog(matches: &ArgMatches) -> CTResult<Option<String>> {
+    let mut compress_prog = None;
+    if let Some(values) = matches.get_many::<String>(sort_flags::SORT_COMPRESS_PROG) {
+        for value in values {
+            if compress_prog
+                .as_ref()
+                .is_some_and(|previous| previous != value)
+            {
+                return Err(CTsageError::new(2, "multiple compress programs specified"));
+            }
+            compress_prog = Some(value.clone());
+        }
+    }
+    Ok(compress_prog)
 }
 
 fn sort_get_settings_threads(matches: &ArgMatches) -> CTResult<String> {
@@ -2046,6 +2056,7 @@ pub fn ct_app() -> Command {
         Arg::new(sort_flags::SORT_COMPRESS_PROG)
             .long(sort_flags::SORT_COMPRESS_PROG)
             .help(t!("sort.clap.sort_compress_prog"))
+            .action(ArgAction::Append)
             .value_name("PROG")
             .value_hint(clap::ValueHint::CommandName),
         Arg::new(sort_flags::SORT_BATCH_SIZE)

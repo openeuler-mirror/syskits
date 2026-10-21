@@ -553,11 +553,19 @@ pub fn shred_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     let settings = ShredSettings::new(&matches)?;
+    validate_random_source(settings.first().and_then(|setting| setting.random_source))?;
 
     for setting in settings {
         ct_show_if_err!(shred_exec(&setting));
     }
 
+    Ok(())
+}
+
+fn validate_random_source(random_source: Option<&Path>) -> CTResult<()> {
+    if let Some(path) = random_source {
+        File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
+    }
     Ok(())
 }
 
@@ -1223,6 +1231,27 @@ mod tests {
 
         assert!(!second.exists());
         Ok(())
+    }
+
+    #[test]
+    fn test_validates_random_source_before_files() {
+        let dir = tempdir().unwrap();
+        let target = dir.path().join("target");
+        fs::write(&target, b"data").unwrap();
+
+        let result = shred_main(
+            [
+                OsString::from("shred"),
+                OsString::from("-n0"),
+                OsString::from("--random-source"),
+                dir.path().join("missing-source").into_os_string(),
+                target.clone().into_os_string(),
+            ]
+            .into_iter(),
+        );
+
+        assert!(result.is_err());
+        assert_eq!(fs::read(target).unwrap(), b"data");
     }
 
     #[test]

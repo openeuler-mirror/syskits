@@ -445,8 +445,8 @@ impl Compare<MergeableFile> for MergeFileComparator<'_> {
 
 // 等待子代退出并检查其退出代码。
 fn merge_check_child_success(mut child: Child, program: &str) -> CTResult<()> {
-    match child.wait().map(|e| e.code()) {
-        Ok(Some(0)) | Ok(None) | Err(_) => Ok(()),
+    match child.wait() {
+        Ok(status) if status.success() => Ok(()),
         _ => Err(SortError::SortCompressProgTerminatedAbnormally {
             prog: program.to_owned(),
         }
@@ -662,6 +662,18 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_merge_check_child_success_rejects_signal() {
+        let child = Command::new("sh")
+            .arg("-c")
+            .arg("kill -TERM $$")
+            .spawn()
+            .unwrap();
+
+        assert!(merge_check_child_success(child, "sh").is_err());
+    }
 
     struct MockMergeInput {
         data: Cursor<Vec<u8>>,

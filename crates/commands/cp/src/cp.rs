@@ -1223,8 +1223,11 @@ fn cp_parse_path_args(
         None => path_buf.pop().unwrap(),
     };
 
-    // 如果启用了剥离尾部斜杠选项，则对所有源路径进行处理
-    if cp_opts.strip_trailing_slashes {
+    // GNU only strips source slashes after deciding to copy into a directory.
+    // With two operands and a new destination, a trailing slash still controls
+    // whether a command-line symlink is dereferenced.
+    let target_is_directory = path_buf.len() > 1 || target.is_dir();
+    if cp_opts.strip_trailing_slashes && target_is_directory {
         for source in &mut path_buf {
             let temp = source.components().as_path().to_owned();
             *source = temp;
@@ -8362,6 +8365,35 @@ mod tests {
                     assert_eq!(output, 0);
                 }
             }
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_ctmain_strip_trailing_slashes_preserves_two_operand_symlink_semantics() {
+            use std::os::unix::fs::symlink;
+
+            let temp_dir = Builder::new()
+                .prefix("cp_strip_two_operand")
+                .tempdir()
+                .unwrap();
+            let real = temp_dir.path().join("real");
+            fs::create_dir(&real).unwrap();
+            File::create(real.join("file")).unwrap();
+            let link = temp_dir.path().join("link");
+            symlink(&real, &link).unwrap();
+            let dest = temp_dir.path().join("dest");
+
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-RP"),
+                OsString::from("--strip-trailing-slashes"),
+                OsString::from(format!("{}/", link.display())),
+                dest.clone().into_os_string(),
+            ];
+
+            cp_main(args.into_iter()).unwrap();
+            assert!(dest.is_dir());
+            assert!(dest.join("file").is_file());
         }
 
         #[test]

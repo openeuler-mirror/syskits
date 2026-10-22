@@ -1259,7 +1259,7 @@ impl DuStatPrinter {
             UNIX_EPOCH + Duration::new(timestamp.seconds, timestamp.nanoseconds),
         );
         if let Some(fmt) = self.time_format.strip_prefix('+') {
-            du_format_local_time_strftime(timestamp.seconds, fmt)
+            du_format_local_time_strftime(timestamp.seconds, timestamp.nanoseconds, fmt)
                 .unwrap_or_else(|| du_time.format(fmt).to_string())
         } else {
             du_time.format(&self.time_format).to_string()
@@ -1447,10 +1447,30 @@ fn du_inodes_apparent_size_warning(
 }
 
 #[cfg(unix)]
-fn du_format_local_time_strftime(seconds: u64, fmt: &str) -> Option<String> {
+fn du_format_local_time_strftime(seconds: u64, nanoseconds: u32, fmt: &str) -> Option<String> {
     let time = ctcore::libc::time_t::try_from(seconds).ok()?;
     let mut tm: ctcore::libc::tm = unsafe { std::mem::zeroed() };
-    let c_format = CString::new(fmt).ok()?;
+    let mut expanded_fmt = String::with_capacity(fmt.len());
+    let mut format_chars = fmt.chars().peekable();
+    while let Some(character) = format_chars.next() {
+        if character == '%' {
+            match format_chars.peek() {
+                Some('N') => {
+                    expanded_fmt.push_str(&format!("{nanoseconds:09}"));
+                    format_chars.next();
+                    continue;
+                }
+                Some('%') => {
+                    expanded_fmt.push_str("%%");
+                    format_chars.next();
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        expanded_fmt.push(character);
+    }
+    let c_format = CString::new(expanded_fmt).ok()?;
     let tm_ptr = unsafe { ctcore::libc::localtime_r(&time as *const _, &mut tm as *mut _) };
     if tm_ptr.is_null() {
         return None;
@@ -1477,7 +1497,7 @@ fn du_format_local_time_strftime(seconds: u64, fmt: &str) -> Option<String> {
 }
 
 #[cfg(not(unix))]
-fn du_format_local_time_strftime(_seconds: u64, _fmt: &str) -> Option<String> {
+fn du_format_local_time_strftime(_seconds: u64, _nanoseconds: u32, _fmt: &str) -> Option<String> {
     None
 }
 /**
@@ -10860,9 +10880,18 @@ mod tests_fn {
     #[cfg(unix)]
     #[test]
     fn test_du_format_local_time_strftime_percent_z() {
-        let out = du_format_local_time_strftime(0, "%Z").unwrap();
+        let out = du_format_local_time_strftime(0, 0, "%Z").unwrap();
         assert!(!out.is_empty());
         assert!(!out.contains(':'));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_du_format_local_time_strftime_percent_n() {
+        assert_eq!(
+            du_format_local_time_strftime(0, 123_456_789, "%s.%N %%N").as_deref(),
+            Some("0.123456789 %N")
+        );
     }
 
     // 用于同步访问 TIME_STYLE 环境变量的全局锁

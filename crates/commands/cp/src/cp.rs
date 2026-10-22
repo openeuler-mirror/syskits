@@ -1603,7 +1603,9 @@ fn show_error_if_needed(err: &CpError) {
         }
         // 对于所有其他类型的错误，显示标准错误信息
         _ => {
-            ct_show_error!("{}", err);
+            let stderr = io::stderr();
+            let mut stderr = stderr.lock();
+            let _ = writeln!(stderr, "{}: {}", ctcore::ct_util_name(), err);
             set_ct_exit_code(EXIT_ERR);
         }
     }

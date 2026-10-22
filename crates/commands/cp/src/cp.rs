@@ -2856,6 +2856,23 @@ fn cp_handle_copy_mode(
             )?
         }
         CpCopyMode::SymLink => {
+            if !sour_path.is_absolute() {
+                let current_dir = env::current_dir()?;
+                let dest_parent = dest_path
+                    .parent()
+                    .filter(|parent| !parent.as_os_str().is_empty())
+                    .unwrap_or_else(|| Path::new("."));
+                let parent_is_current = fs::canonicalize(dest_parent)
+                    .map(|parent| parent == current_dir)
+                    .unwrap_or(false);
+                if !parent_is_current {
+                    return Err(format!(
+                        "{}: can make relative symbolic links only in current directory",
+                        dest_path.quote()
+                    )
+                    .into());
+                }
+            }
             // 改用 cp_file_or_link_exists，确保哪怕是断链也能被识别并在 -f 时被正确删除
             if cp_file_or_link_exists(dest_path)
                 && cp_opts.overwrite == CpOverwriteMode::Clobber(CpClobberMode::Force)

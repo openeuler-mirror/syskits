@@ -119,6 +119,7 @@ struct DuTraversalOptions {
 
 struct DuStatPrinter {
     total: bool,
+    separate_dirs: bool,
     inodes: bool,
     max_depth: Option<usize>,
     threshold: Option<DuThreshold>,
@@ -1013,6 +1014,10 @@ impl DuStatPrinter {
             && (!self.summarize || stat_info.depth == 0)
     }
 
+    fn du_contributes_to_total(&self, stat_info: &StatPrintInfo) -> bool {
+        stat_info.depth == 0 || (self.separate_dirs && stat_info.stat.is_dir)
+    }
+
     fn du_time_info(&self, du_stat: &DuStat) -> CTResult<Option<(u64, String)>> {
         if let Some(time) = self.time {
             let seconds = du_get_time_secs(time, du_stat)?;
@@ -1099,8 +1104,8 @@ impl DuStatPrinter {
                     Ok(stat_info) => {
                         let size = self.du_choose_size(&stat_info.stat); // 根据状态选择合适的大小表示。
 
-                        if stat_info.depth == 0 {
-                            grand_total += size; // 如果统计深度为0，则累加到总统计数。
+                        if self.du_contributes_to_total(&stat_info) {
+                            grand_total += size;
                         }
 
                         if self.du_should_print(&stat_info, size) {
@@ -1538,7 +1543,7 @@ fn du_collect_semantic(
             Ok(message) => match message {
                 Ok(stat_info) => {
                     let size = du_stat_printer.du_choose_size(&stat_info.stat);
-                    if stat_info.depth == 0 {
+                    if du_stat_printer.du_contributes_to_total(&stat_info) {
                         grand_total += size;
                     }
                     if du_stat_printer.du_should_print(&stat_info, size) {
@@ -1714,6 +1719,7 @@ fn du_get_stat_printer(
         size_format,
         summarize: is_summarize,
         total: args_match.get_flag(opt_flags::TOTAL),
+        separate_dirs: args_match.get_flag(opt_flags::SEPARATE_DIRS),
         inodes: args_match.get_flag(opt_flags::INODES),
         threshold: args_match
             .get_one::<String>(opt_flags::THRESHOLD)
@@ -2279,6 +2285,40 @@ mod tests {
         assert_eq!(roots.len(), 2);
         assert_eq!(roots[0].measured_size, roots[1].measured_size);
         assert_eq!(total.measured_size, roots[0].measured_size * 2);
+    }
+
+    #[test]
+    fn test_separate_dirs_total_includes_subdirectories() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let tree = temp_dir.path().join("tree");
+        let child = tree.join("child");
+        fs::create_dir_all(&child).unwrap();
+        fs::write(tree.join("root-file"), b"root").unwrap();
+        fs::write(child.join("child-file"), b"child").unwrap();
+
+        let args = vec![
+            OsString::from("du"),
+            OsString::from("-S"),
+            OsString::from("-c"),
+            OsString::from("--apparent-size"),
+            OsString::from("-B1"),
+            tree.as_os_str().to_os_string(),
+        ];
+        let semantic = du_native_semantic(args.into_iter()).unwrap();
+        let entry_total: u64 = semantic
+            .rows
+            .iter()
+            .filter(|row| row.kind == "entry")
+            .map(|row| row.measured_size)
+            .sum();
+        let total = semantic
+            .rows
+            .iter()
+            .find(|row| row.kind == "total")
+            .unwrap();
+
+        assert_eq!(entry_total, 9);
+        assert_eq!(total.measured_size, entry_total);
     }
 
     #[test]

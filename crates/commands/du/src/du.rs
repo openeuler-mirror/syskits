@@ -404,6 +404,9 @@ fn du_read_block_size(option: Option<&str>) -> CTResult<u64> {
 fn du_parse_block_size_value(s: &str) -> Result<u64, ParseSizeError> {
     let value = s.trim_start_matches(|c: char| c.is_ascii_whitespace());
     let value = value.strip_prefix('+').unwrap_or(value);
+    if value.ends_with('b') {
+        return Err(ParseSizeError::InvalidSuffix(s.to_string()));
+    }
     let block_size = parse_size_u64(value)?;
     if block_size == 0 {
         Err(ParseSizeError::ParseFailure(format!("{}", s.quote())))
@@ -2274,6 +2277,14 @@ mod tests {
     fn test_du_block_size_accepts_leading_plus_and_ascii_whitespace() {
         assert_eq!(du_parse_block_size_value("+1"), Ok(1));
         assert_eq!(du_parse_block_size_value(" \t1K"), Ok(1024));
+    }
+
+    #[test]
+    fn test_du_block_size_rejects_lowercase_b_suffix() {
+        assert!(matches!(
+            du_parse_block_size_value("1b"),
+            Err(ParseSizeError::InvalidSuffix(_))
+        ));
     }
 
     #[test]

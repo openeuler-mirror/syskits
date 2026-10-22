@@ -479,6 +479,19 @@ fn write_invalid_option_diagnostic(
     writeln!(writer, "Try '{utility_name} --help' for more information.")
 }
 
+fn write_factor_error_diagnostic(
+    writer: &mut impl Write,
+    utility_name: &str,
+    message: &str,
+) -> io::Result<()> {
+    writeln!(writer, "{utility_name}: {message}")
+}
+
+fn show_factor_error(message: &str) {
+    let stderr = io::stderr();
+    let _ = write_factor_error_diagnostic(&mut stderr.lock(), ctcore::ct_util_name(), message);
+}
+
 fn factor_row_from_powers(
     number: String,
     factor_powers: Vec<FactorPower>,
@@ -794,7 +807,7 @@ fn factors_print_bytes(
     let parsed = match parse_number_token(token) {
         Some(parsed) => parsed,
         None => {
-            ct_show_error!("{}", invalid_number_message(token));
+            show_factor_error(&invalid_number_message(token));
             set_ct_exit_code(1);
             return Ok(());
         }
@@ -1439,6 +1452,23 @@ mod tests {
         let buffer = writer.into_inner().unwrap();
         let output = String::from_utf8(buffer).unwrap();
         assert_eq!(output, ""); // 无效输入不会产生输出
+    }
+
+    #[test]
+    fn test_factor_error_diagnostic_propagates_write_failure() {
+        struct FailingWriter;
+
+        impl Write for FailingWriter {
+            fn write(&mut self, _buffer: &[u8]) -> io::Result<usize> {
+                Err(io::Error::from_raw_os_error(28))
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+
+        assert!(write_factor_error_diagnostic(&mut FailingWriter, "factor", "invalid").is_err());
     }
 
     /// 测试边界情况

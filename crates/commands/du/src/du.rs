@@ -176,6 +176,7 @@ enum DuDeref {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum DuTime {
     Accessed,
+    Changed,
     Modified,
     Created,
 }
@@ -211,6 +212,7 @@ struct DuStat {
     inode: Option<DuFileInfo>,
     created: Option<u64>,
     accessed: u64,
+    changed: u64,
     modified: u64,
     #[cfg(unix)]
     directory: Option<DuDirectory>,
@@ -219,6 +221,7 @@ struct DuStat {
 impl DuStat {
     fn merge_time_from(&mut self, other: &Self) {
         self.accessed = self.accessed.max(other.accessed);
+        self.changed = self.changed.max(other.changed);
         self.modified = self.modified.max(other.modified);
         self.created = match (self.created, other.created) {
             (Some(current), Some(other)) => Some(current.max(other)),
@@ -274,6 +277,7 @@ impl DuStat {
                 inode: Some(file_info),
                 created: du_birth_u64(&metadata),
                 accessed: metadata.atime() as u64,
+                changed: metadata.ctime() as u64,
                 modified: metadata.mtime() as u64,
                 #[cfg(unix)]
                 directory: metadata
@@ -298,6 +302,7 @@ impl DuStat {
                 inode: file_info,
                 created: windows_creation_time_to_unix_time(metadata.creation_time()),
                 accessed: windows_time_to_unix_time(metadata.last_access_time()),
+                changed: windows_time_to_unix_time(metadata.last_write_time()),
                 modified: windows_time_to_unix_time(metadata.last_write_time()),
             })
         }
@@ -335,6 +340,7 @@ impl DuStat {
             }),
             created: du_birth_at(dir_fd, name, should_dereference),
             accessed: metadata.st_atime as u64,
+            changed: metadata.st_ctime as u64,
             modified: metadata.st_mtime as u64,
             directory: is_dir.then(|| du_open_directory_at(dir_fd, name, should_dereference)),
         })
@@ -2004,7 +2010,8 @@ fn du_get_time(args_match: &ArgMatches) -> Option<DuTime> {
             .get_one::<String>(opt_flags::TIME)
             .map(AsRef::as_ref)
         {
-            None | Some("ctime" | "status") => DuTime::Modified,
+            None => DuTime::Modified,
+            Some("ctime" | "status") => DuTime::Changed,
             Some("access" | "atime" | "use") => DuTime::Accessed,
             Some("birth" | "creation") => DuTime::Created,
             _ => unreachable!("should be caught by clap"),
@@ -2067,6 +2074,7 @@ fn du_get_time_secs(du_time: DuTime, du_stat: &DuStat) -> Result<u64, DuError> {
     match du_time {
         DuTime::Modified => Ok(du_stat.modified),
         DuTime::Accessed => Ok(du_stat.accessed),
+        DuTime::Changed => Ok(du_stat.changed),
         DuTime::Created => du_stat.created.ok_or(DuError::InvalidTimeArg),
     }
 }
@@ -2599,6 +2607,41 @@ mod tests {
         assert_eq!(total.time_display, entry.time_display);
         assert_eq!(total_fields.len(), 3);
         assert_eq!(total_fields[1], entry.time_display.as_deref().unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_ctime_selection_uses_status_change_time() {
+        use std::os::unix::fs::MetadataExt;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file = temp_dir.path().join("file");
+        fs::write(&file, b"x").unwrap();
+        File::options()
+            .write(true)
+            .open(&file)
+            .unwrap()
+            .set_times(
+                fs::FileTimes::new().set_modified(UNIX_EPOCH + Duration::from_secs(981_158_400)),
+            )
+            .unwrap();
+        let metadata = fs::metadata(&file).unwrap();
+        assert_ne!(metadata.ctime(), metadata.mtime());
+
+        let args = vec![
+            OsString::from("du"),
+            OsString::from("--time=ctime"),
+            OsString::from("--time-style=+%s"),
+            file.as_os_str().to_os_string(),
+        ];
+        let semantic = du_native_semantic(args.into_iter()).unwrap();
+        let entry = semantic
+            .rows
+            .iter()
+            .find(|row| row.kind == "entry")
+            .unwrap();
+
+        assert_eq!(entry.time_seconds, Some(metadata.ctime() as u64));
     }
 
     #[test]
@@ -10500,7 +10543,7 @@ mod tests_fn {
 
         let time = du_get_time(&matches);
 
-        assert_eq!(time.unwrap(), DuTime::Modified);
+        assert_eq!(time.unwrap(), DuTime::Changed);
     }
 
     #[test]
@@ -10527,7 +10570,7 @@ mod tests_fn {
 
         let time = du_get_time(&matches);
 
-        assert_eq!(time.unwrap(), DuTime::Modified);
+        assert_eq!(time.unwrap(), DuTime::Changed);
     }
 
     #[test]

@@ -824,11 +824,7 @@ impl CpCopyMode {
         {
             Self::Update
         } else if args_match.get_flag(opt_flags::ATTRIBUTES_ONLY) {
-            if args_match.get_flag(opt_flags::REMOVE_DESTINATION) {
-                Self::Copy
-            } else {
-                Self::AttrOnly
-            }
+            Self::AttrOnly
         } else {
             Self::Copy
         }

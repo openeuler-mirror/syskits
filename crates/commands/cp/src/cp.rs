@@ -3200,6 +3200,18 @@ fn copy_file(
     let dest_permissions =
         cp_calculate_dest_permissions(dest_path, &source_metadata, cp_opts, &context)?;
 
+    let verbose_error = if cp_opts.verbose {
+        match cp_print_verbose_output(cp_opts.parents, progress_bar, verbose_sour_path, dest_path) {
+            Err(error) => Some(error),
+            Ok(()) if ctcore::ct_stdout_was_closed() => {
+                Some(CpError::Error("write error".to_string()))
+            }
+            Ok(()) => None,
+        }
+    } else {
+        None
+    };
+
     // 根据复制模式和其他选项处理实际复制过程。
     let copy_debug = cp_handle_copy_mode(
         sour_path,
@@ -3278,14 +3290,8 @@ fn copy_file(
         progress_bar.inc(fs::metadata(sour_path)?.len());
     }
 
-    // GNU cp 行为：即便 verbose 输出失败，复制副作用也应已发生。
-    if cp_opts.verbose {
-        cp_print_verbose_output(cp_opts.parents, progress_bar, verbose_sour_path, dest_path)?;
-        // 对于“stdout 初始关闭并被运行时兜底重定向”的场景（close-stdout 语义），
-        // 复制已经完成，但命令仍需以写错误退出。
-        if ctcore::ct_stdout_was_closed() {
-            return Err(CpError::Error("write error".to_string()));
-        }
+    if let Some(error) = verbose_error {
+        return Err(error);
     }
 
     if cp_opts.debug {

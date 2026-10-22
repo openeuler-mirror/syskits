@@ -158,6 +158,13 @@ fn parse_number_token(token: &[u8]) -> Option<ParsedNumber> {
     Some(ParsedNumber::Big(value))
 }
 
+fn uses_arbitrary_precision(token: &[u8]) -> bool {
+    matches!(
+        parse_number_token(c_string_token(token)),
+        Some(ParsedNumber::Big(value)) if value.bits() >= 128
+    )
+}
+
 fn push_octal_escape(quoted: &mut String, byte: u8) {
     quoted.push_str(&format!("\\{byte:03o}"));
 }
@@ -785,14 +792,25 @@ fn process_numbers(
     print_exponents: bool,
     dev_debug: bool,
 ) -> CTResult<()> {
+    let defer_native_output = numbers
+        .iter()
+        .any(|number| uses_arbitrary_precision(os_str_bytes(number.as_os_str())));
+    let mut native_output = io::BufWriter::new(Vec::new());
+
     for number in numbers {
-        factors_print_bytes(
-            os_str_bytes(number.as_os_str()),
-            w,
-            print_exponents,
-            dev_debug,
-        )
-        .map_err_context(|| "write error".into())?;
+        let token = os_str_bytes(number.as_os_str());
+        if defer_native_output && !uses_arbitrary_precision(token) {
+            factors_print_bytes(token, &mut native_output, print_exponents, dev_debug)
+                .map_err_context(|| "write error".into())?;
+        } else {
+            factors_print_bytes(token, w, print_exponents, dev_debug)
+                .map_err_context(|| "write error".into())?;
+        }
+    }
+
+    if defer_native_output {
+        w.write_all(native_output.get_ref())
+            .map_err_context(|| "write error".into())?;
     }
     Ok(())
 }
@@ -1245,6 +1263,24 @@ mod tests {
         let buffer = writer.into_inner().unwrap();
         let output = String::from_utf8(buffer).unwrap();
         assert_eq!(output, "12: 2 2 3\n24: 2 2 2 3\n");
+    }
+
+    #[test]
+    fn test_process_numbers_writes_arbitrary_precision_before_native() {
+        let buffer = Vec::new();
+        let mut writer = BufWriter::new(buffer);
+        let huge = "170141183460469231731687303715884105728";
+        let numbers = vec![
+            OsString::from("12"),
+            OsString::from(huge),
+            OsString::from("15"),
+        ];
+
+        process_numbers(&numbers, &mut writer, false, false).unwrap();
+
+        let output = String::from_utf8(writer.into_inner().unwrap()).unwrap();
+        assert!(output.starts_with(&format!("{huge}:")));
+        assert!(output.ends_with("12: 2 2 3\n15: 3 5\n"));
     }
 
     /// 测试无效输入的处理

@@ -19,7 +19,7 @@ use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
 use std::fs::{self, File, Metadata, OpenOptions, Permissions};
-use std::io::{self, Write};
+use std::io::{self, BufRead, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
@@ -51,6 +51,11 @@ use platform::copy_on_write;
 use quick_error::ResultExt;
 use std::ffi::OsString;
 use sys_locale::get_locale;
+
+#[cfg(unix)]
+unsafe extern "C" {
+    fn rpmatch(response: *const libc::c_char) -> libc::c_int;
+}
 
 mod copydir;
 mod platform;
@@ -2071,7 +2076,36 @@ fn cp_prompt_yes(prompt: &str) -> CopyResult<bool> {
         ));
     }
 
-    Ok(ctcore::ct_read_true())
+    let stdin = io::stdin();
+    let mut stdin = stdin.lock();
+    let mut response = Vec::new();
+    match stdin.read_until(b'\n', &mut response) {
+        Ok(0) => Ok(false),
+        Err(error) => Err(error.into()),
+        Ok(_) => {
+            if response.last() == Some(&b'\n') {
+                response.pop();
+            }
+            Ok(cp_response_is_yes(&response))
+        }
+    }
+}
+
+#[cfg(unix)]
+fn cp_response_is_yes(response: &[u8]) -> bool {
+    let mut nul_terminated = Vec::with_capacity(response.len() + 1);
+    nul_terminated.extend_from_slice(response);
+    nul_terminated.push(0);
+
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+        rpmatch(nul_terminated.as_ptr().cast()) > 0
+    }
+}
+
+#[cfg(not(unix))]
+fn cp_response_is_yes(response: &[u8]) -> bool {
+    matches!(response.first(), Some(b'y' | b'Y'))
 }
 
 /// Handles errors for attributes preservation. If the attribute is not required, and

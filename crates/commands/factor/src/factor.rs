@@ -16,6 +16,8 @@ use ctcore::Tool;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::collections::BTreeMap;
+#[cfg(target_os = "linux")]
+use std::ffi::{CStr, CString, c_char};
 use std::ffi::{OsStr, OsString};
 use std::io::BufRead;
 use std::io::{self, BufReader, Write, stdout};
@@ -202,6 +204,43 @@ fn factor_quote(token: &[u8]) -> String {
     quoted
 }
 
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn setlocale(category: ctcore::libc::c_int, locale: *const c_char) -> *mut c_char;
+    fn bindtextdomain(domainname: *const c_char, dirname: *const c_char) -> *mut c_char;
+    fn dgettext(domainname: *const c_char, msgid: *const c_char) -> *mut c_char;
+}
+
+fn factor_init_locale() {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    #[cfg(target_os = "linux")]
+    unsafe {
+        setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+        bindtextdomain(c"coreutils".as_ptr(), c"/usr/share/locale".as_ptr());
+    }
+}
+
+fn factor_gettext(message: &str) -> String {
+    #[cfg(target_os = "linux")]
+    {
+        let message_id = CString::new(message).expect("gettext message has no NUL");
+        let translated = unsafe { dgettext(c"coreutils".as_ptr(), message_id.as_ptr()) };
+        if !translated.is_null() {
+            return unsafe { CStr::from_ptr(translated) }
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+
+    message.to_owned()
+}
+
+fn invalid_number_message(token: &[u8]) -> String {
+    factor_gettext("%s is not a valid positive integer").replacen("%s", &factor_quote(token), 1)
+}
+
 fn recognized_long_option(candidate: &str) -> Option<&'static str> {
     if candidate.is_empty() {
         return None;
@@ -378,12 +417,8 @@ fn factor_row_from_powers(
 
 fn factor_row_from_token(token: &[u8], print_exponents: bool) -> Result<FactorRow, String> {
     let token = c_string_token(token);
-    let parsed = parse_number_token(token).ok_or_else(|| {
-        format!(
-            "factor: {} is not a valid positive integer\n",
-            factor_quote(token)
-        )
-    })?;
+    let parsed = parse_number_token(token)
+        .ok_or_else(|| format!("factor: {}\n", invalid_number_message(token)))?;
 
     Ok(match parsed {
         ParsedNumber::Small(value) => {
@@ -483,8 +518,7 @@ fn closed_stdin_error() -> Option<io::Error> {
 }
 
 pub fn factor_native_semantic(args: impl ctcore::Args) -> CTResult<FactorSemantic> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    factor_init_locale();
 
     let args_vec: Vec<OsString> = args.into_iter().collect();
     if let Some(stderr_text) = factor_option_error(&args_vec) {
@@ -673,7 +707,7 @@ fn factors_print_bytes(
     let parsed = match parse_number_token(token) {
         Some(parsed) => parsed,
         None => {
-            ct_show_error!("{} is not a valid positive integer", factor_quote(token));
+            ct_show_error!("{}", invalid_number_message(token));
             set_ct_exit_code(1);
             return Ok(());
         }
@@ -789,8 +823,7 @@ impl Tool for Factor {
 /// - 写入输出时发生 I/O 错误
 /// - 处理输入数字时发生错误
 pub fn factor_main(args: impl ctcore::Args, w: &mut io::BufWriter<impl io::Write>) -> CTResult<()> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    factor_init_locale();
     // 1. 解析命令行参数
     let args_vec: Vec<OsString> = args.into_iter().collect();
     validate_options(&args_vec)?;

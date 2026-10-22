@@ -688,6 +688,11 @@ pub fn cp_main(args: impl ctcore::Args) -> CTResult<i32> {
     } else if let Ok(mut args_matches) = args_match {
         let cp_options = CpOptions::cp_from_matches_with_args(&args_matches, &parse_args)?;
 
+        #[cfg(not(feature = "feat_selinux"))]
+        if cp_options.attributes.selinux_context.is_some() {
+            ct_show_warning!("ignoring --context; it requires an SELinux-enabled kernel");
+        }
+
         if cp_options.overwrite == CpOverwriteMode::NoClobber
             && cp_options.backup != CtBackupMode::NoBackup
         {

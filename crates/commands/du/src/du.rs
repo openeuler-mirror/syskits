@@ -29,12 +29,12 @@ use std::env;
 use std::error::Error;
 #[cfg(unix)]
 use std::ffi::CString;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 #[cfg(not(windows))]
 use std::fs::Metadata;
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Write};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -770,23 +770,44 @@ fn du_short_option_consumes_next(arg: &str) -> bool {
     false
 }
 
-fn du_invalid_short_option_character(arg: &str) -> Option<char> {
-    let options = arg.strip_prefix('-')?;
-    for option in options.chars() {
+fn du_invalid_short_option_byte(arg: &OsStr) -> Option<u8> {
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStrExt;
+
+    #[cfg(unix)]
+    let bytes = arg.as_bytes();
+    #[cfg(not(unix))]
+    let bytes = arg.to_string_lossy();
+    #[cfg(not(unix))]
+    let bytes = bytes.as_bytes();
+
+    for option in bytes.iter().copied().skip(1) {
         match option {
-            '0' | 'D' | 'H' | 'L' | 'P' | 'S' | 'a' | 'b' | 'c' | 'h' | 'k' | 'l' | 'm' | 's'
-            | 'v' | 'x' => {}
-            'B' | 'X' | 'd' | 't' => return None,
+            b'0' | b'D' | b'H' | b'L' | b'P' | b'S' | b'a' | b'b' | b'c' | b'h' | b'k' | b'l'
+            | b'm' | b's' | b'v' | b'x' => {}
+            b'B' | b'X' | b'd' | b't' => return None,
             invalid => return Some(invalid),
         }
     }
     None
 }
 
+fn write_du_invalid_option_diagnostic(
+    writer: &mut impl Write,
+    utility_name: &str,
+    invalid: u8,
+) -> io::Result<()> {
+    write!(writer, "{utility_name}: invalid option -- '")?;
+    writer.write_all(&[invalid])?;
+    writeln!(writer, "'")?;
+    writeln!(writer, "Try '{utility_name} --help' for more information.")
+}
+
 fn du_validate_options(args: &[OsString]) -> CTResult<()> {
     let mut index = 1;
     while index < args.len() {
-        let arg = args[index].to_string_lossy();
+        let arg_os = &args[index];
+        let arg = arg_os.to_string_lossy();
         if arg == "--" {
             break;
         }
@@ -808,12 +829,14 @@ fn du_validate_options(args: &[OsString]) -> CTResult<()> {
                 index += 1;
             }
         } else if arg.starts_with('-') && arg != "-" {
-            if let Some(invalid) = du_invalid_short_option_character(&arg) {
-                ct_show_error!("invalid option -- '{}'", invalid);
-                eprintln!(
-                    "Try '{} --help' for more information.",
-                    ctcore::ct_help_utility_name()
-                );
+            if let Some(invalid) = du_invalid_short_option_byte(arg_os.as_os_str()) {
+                let stderr = io::stderr();
+                write_du_invalid_option_diagnostic(
+                    &mut stderr.lock(),
+                    &ctcore::ct_util_name(),
+                    invalid,
+                )
+                .expect("failed to write invalid option diagnostic");
                 return Err(CtSimpleError::new(1, ""));
             }
             if du_short_option_consumes_next(&arg) {
@@ -2059,10 +2082,28 @@ mod tests {
 
     #[test]
     fn test_du_short_option_cluster_reports_invalid_character() {
-        assert_eq!(du_invalid_short_option_character("-hhq"), Some('q'));
-        assert_eq!(du_invalid_short_option_character("-qh"), Some('q'));
-        assert_eq!(du_invalid_short_option_character("-hBq"), None);
-        assert_eq!(du_invalid_short_option_character("-hh"), None);
+        assert_eq!(du_invalid_short_option_byte(OsStr::new("-hhq")), Some(b'q'));
+        assert_eq!(du_invalid_short_option_byte(OsStr::new("-qh")), Some(b'q'));
+        assert_eq!(du_invalid_short_option_byte(OsStr::new("-hBq")), None);
+        assert_eq!(du_invalid_short_option_byte(OsStr::new("-hh")), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_du_multibyte_short_option_uses_first_byte() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let option = OsString::from_vec(vec![b'-', 0xc3, 0xa9]);
+        let invalid = du_invalid_short_option_byte(option.as_os_str());
+        let mut diagnostic = Vec::new();
+
+        write_du_invalid_option_diagnostic(&mut diagnostic, "du", invalid.unwrap()).unwrap();
+
+        assert_eq!(invalid, Some(0xc3));
+        assert_eq!(
+            diagnostic,
+            b"du: invalid option -- '\xc3'\nTry 'du --help' for more information.\n"
+        );
     }
 
     #[test]

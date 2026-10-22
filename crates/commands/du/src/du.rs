@@ -1837,6 +1837,7 @@ pub fn ct_app() -> Command {
             .short('B')
             .long(opt_flags::BLOCK_SIZE)
             .value_name("SIZE")
+            .overrides_with(opt_flags::BLOCK_SIZE)
             .help(
                 "scale sizes by SIZE before printing them. \
                 E.g., '-BM' prints sizes in units of 1,048,576 bytes. See SIZE format below."
@@ -2129,6 +2130,20 @@ mod tests {
         let matches = ct_app().try_get_matches_from(["du", "-hh"]).unwrap();
 
         assert!(matches.get_flag(opt_flags::HUMAN_READABLE));
+    }
+
+    #[test]
+    fn test_du_repeated_block_size_uses_last_value() {
+        let matches = ct_app()
+            .try_get_matches_from(["du", "-B1", "-B1K"])
+            .unwrap();
+
+        assert_eq!(
+            matches
+                .get_one::<String>(opt_flags::BLOCK_SIZE)
+                .map(String::as_str),
+            Some("1K")
+        );
     }
 
     #[test]

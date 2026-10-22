@@ -142,7 +142,7 @@ fn recognized_long_option(candidate: &str) -> Option<&'static str> {
         return None;
     }
 
-    let mut matches = ["exponents", "help", "version"]
+    let mut matches = ["exponents", "-debug", "help", "version"]
         .iter()
         .copied()
         .filter(|option| option.starts_with(candidate));
@@ -159,6 +159,44 @@ fn is_recognized_long_option(arg: &str) -> bool {
 fn long_option_with_unexpected_argument(arg: &str) -> Option<&'static str> {
     let (candidate, _) = arg.strip_prefix("--")?.split_once('=')?;
     recognized_long_option(candidate)
+}
+
+fn is_developer_debug_option(arg: &str) -> bool {
+    arg.strip_prefix("--")
+        .and_then(recognized_long_option)
+        .is_some_and(|option| option == "-debug")
+}
+
+fn filter_developer_debug_options_with_mode(
+    args: &[OsString],
+    posixly_correct: bool,
+) -> (Vec<OsString>, bool) {
+    let mut filtered = Vec::with_capacity(args.len());
+    let mut parse_options = true;
+    let mut dev_debug = false;
+
+    for (index, arg) in args.iter().enumerate() {
+        if index == 0 {
+            filtered.push(arg.clone());
+            continue;
+        }
+
+        let arg_str = arg.to_string_lossy();
+        if parse_options {
+            if arg_str == "--" {
+                parse_options = false;
+            } else if is_developer_debug_option(&arg_str) {
+                dev_debug = true;
+                continue;
+            } else if posixly_correct && (!arg_str.starts_with('-') || arg_str == "-") {
+                parse_options = false;
+            }
+        }
+
+        filtered.push(arg.clone());
+    }
+
+    (filtered, dev_debug)
 }
 
 fn factor_option_error(args: &[OsString]) -> Option<String> {
@@ -379,6 +417,10 @@ pub fn factor_native_semantic(args: impl ctcore::Args) -> CTResult<FactorSemanti
         });
     }
 
+    let (args_vec, _) = filter_developer_debug_options_with_mode(
+        &args_vec,
+        std::env::var_os("POSIXLY_CORRECT").is_some(),
+    );
     let matches = ct_app().try_get_matches_from(&args_vec)?;
     let settings = FactorFlags::new(&matches);
 
@@ -533,6 +575,7 @@ fn factors_print_str(
     num_str: &str,
     w: &mut io::BufWriter<impl io::Write>,
     is_print_exponents: bool,
+    dev_debug: bool,
 ) -> io::Result<()> {
     let display_token = num_str.trim();
     let parsed = match parse_number_token(display_token) {
@@ -546,6 +589,15 @@ fn factors_print_str(
             return Ok(());
         }
     };
+
+    if dev_debug {
+        let precision = match &parsed {
+            ParsedNumber::Small(_) => "single",
+            ParsedNumber::Big(value) if value.bits() < 128 => "single",
+            ParsedNumber::Big(_) => "arbitrary",
+        };
+        eprint!("[using {precision}-precision arithmetic] ");
+    }
 
     match parsed {
         ParsedNumber::Small(x) => {
@@ -570,13 +622,17 @@ fn factors_print_str(
 }
 
 /// 处理从标准输入读取的数字
-fn process_stdin(w: &mut io::BufWriter<impl io::Write>, print_exponents: bool) -> CTResult<()> {
+fn process_stdin(
+    w: &mut io::BufWriter<impl io::Write>,
+    print_exponents: bool,
+    dev_debug: bool,
+) -> CTResult<()> {
     let lines = BufReader::new(ctcore::ct_io::stdin_reader_box()).lines();
     for line in lines {
         match line {
             Ok(line) => {
                 for number in line.split_whitespace() {
-                    factors_print_str(number, w, print_exponents)
+                    factors_print_str(number, w, print_exponents, dev_debug)
                         .map_err_context(|| "write error".into())?;
                 }
             }
@@ -595,9 +651,11 @@ fn process_numbers(
     numbers: &[String],
     w: &mut io::BufWriter<impl io::Write>,
     print_exponents: bool,
+    dev_debug: bool,
 ) -> CTResult<()> {
     for number in numbers {
-        factors_print_str(number, w, print_exponents).map_err_context(|| "write error".into())?;
+        factors_print_str(number, w, print_exponents, dev_debug)
+            .map_err_context(|| "write error".into())?;
     }
     Ok(())
 }
@@ -633,6 +691,10 @@ pub fn factor_main(args: impl ctcore::Args, w: &mut io::BufWriter<impl io::Write
     // 1. 解析命令行参数
     let args_vec: Vec<OsString> = args.into_iter().collect();
     validate_options(&args_vec)?;
+    let (args_vec, dev_debug) = filter_developer_debug_options_with_mode(
+        &args_vec,
+        std::env::var_os("POSIXLY_CORRECT").is_some(),
+    );
     let matches = ct_app().try_get_matches_from(&args_vec)?;
 
     // 2. 创建配置对象
@@ -641,10 +703,10 @@ pub fn factor_main(args: impl ctcore::Args, w: &mut io::BufWriter<impl io::Write
     // 3. 使用配置执行主要逻辑
     if settings.numbers.is_empty() {
         // 处理从标准输入读取的数字
-        process_stdin(w, settings.print_exponents)?;
+        process_stdin(w, settings.print_exponents, dev_debug)?;
     } else {
         // 处理命令行参数中提供的数字
-        process_numbers(&settings.numbers, w, settings.print_exponents)?;
+        process_numbers(&settings.numbers, w, settings.print_exponents, dev_debug)?;
     }
 
     // 确保所有输出都被刷新
@@ -795,6 +857,37 @@ mod tests {
         assert_eq!(flags.numbers, vec!["12", "-h", "18"]);
     }
 
+    #[test]
+    fn test_developer_debug_option_filtering() {
+        let args = vec![
+            OsString::from("factor"),
+            OsString::from("12"),
+            OsString::from("---d"),
+        ];
+
+        assert!(factor_option_error_with_mode(&args, false).is_none());
+        let (filtered, dev_debug) = filter_developer_debug_options_with_mode(&args, false);
+        assert!(dev_debug);
+        assert_eq!(
+            filtered,
+            vec![OsString::from("factor"), OsString::from("12")]
+        );
+
+        let (filtered, dev_debug) = filter_developer_debug_options_with_mode(&args, true);
+        assert!(!dev_debug);
+        assert_eq!(filtered, args);
+
+        let after_delimiter = vec![
+            OsString::from("factor"),
+            OsString::from("--"),
+            OsString::from("---debug"),
+        ];
+        let (filtered, dev_debug) =
+            filter_developer_debug_options_with_mode(&after_delimiter, false);
+        assert!(!dev_debug);
+        assert_eq!(filtered, after_delimiter);
+    }
+
     use std::io::BufWriter;
 
     /// 测试 factors_print_str 函数 - 普通格式
@@ -804,7 +897,7 @@ mod tests {
         let mut writer = BufWriter::new(buffer);
 
         // 测试数字 12 的因式分解（普通格式）
-        factors_print_str("12", &mut writer, false).unwrap();
+        factors_print_str("12", &mut writer, false, false).unwrap();
 
         // 获取 writer 中的 buffer
         let buffer = writer.into_inner().unwrap();
@@ -819,7 +912,7 @@ mod tests {
         let mut writer = BufWriter::new(buffer);
 
         // 测试数字 12 的因式分解（指数格式）
-        factors_print_str("12", &mut writer, true).unwrap();
+        factors_print_str("12", &mut writer, true, false).unwrap();
 
         // 获取 writer 中的 buffer
         let buffer = writer.into_inner().unwrap();
@@ -929,7 +1022,7 @@ mod tests {
 
         // 测试处理多个数字
         let numbers = vec!["12".to_string(), "24".to_string()];
-        process_numbers(&numbers, &mut writer, false).unwrap();
+        process_numbers(&numbers, &mut writer, false, false).unwrap();
 
         // 获取 writer 中的 buffer
         let buffer = writer.into_inner().unwrap();
@@ -945,7 +1038,7 @@ mod tests {
 
         // 测试无效输入（非数字）
         // 注意：这个测试会产生警告消息，但不会失败
-        factors_print_str("abc", &mut writer, false).unwrap();
+        factors_print_str("abc", &mut writer, false, false).unwrap();
 
         // 获取 writer 中的 buffer
         let buffer = writer.into_inner().unwrap();
@@ -960,10 +1053,10 @@ mod tests {
         let mut writer = BufWriter::new(buffer);
 
         // 测试 0
-        factors_print_str("0", &mut writer, false).unwrap();
+        factors_print_str("0", &mut writer, false, false).unwrap();
 
         // 测试 1
-        factors_print_str("1", &mut writer, false).unwrap();
+        factors_print_str("1", &mut writer, false, false).unwrap();
 
         // 获取 writer 中的 buffer
         let buffer = writer.into_inner().unwrap();
@@ -978,7 +1071,7 @@ mod tests {
         let mut writer = BufWriter::new(buffer);
 
         // 测试较大的数字
-        factors_print_str("1234567", &mut writer, true).unwrap();
+        factors_print_str("1234567", &mut writer, true, false).unwrap();
 
         // 获取 writer 中的 buffer
         let buffer = writer.into_inner().unwrap();

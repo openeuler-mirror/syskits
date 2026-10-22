@@ -3209,7 +3209,7 @@ fn cp_source_metadata(
 
 #[cfg(unix)]
 fn handle_no_preserve_mode(cp_opts: &CpOptions, org_mode: u32) -> u32 {
-    let (_, explicit_no_preserve_mode) = cp_opts.cp_preserve_mode();
+    let (preserve_mode, explicit_no_preserve_mode) = cp_opts.cp_preserve_mode();
     if explicit_no_preserve_mode {
         use libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
         // GNU cp only falls back to the default file creation permissions
@@ -3217,6 +3217,14 @@ fn handle_no_preserve_mode(cp_opts: &CpOptions, org_mode: u32) -> u32 {
         const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
         return MODE_RW_UGO;
     }
+
+    if !preserve_mode
+        && !cp_opts.attributes_only
+        && matches!(cp_opts.copy_mode, CpCopyMode::Copy | CpCopyMode::Update)
+    {
+        return org_mode & !(libc::S_ISUID | libc::S_ISGID);
+    }
+
     org_mode
 }
 

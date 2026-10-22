@@ -197,6 +197,12 @@ struct DuFileInfo {
     dev_id: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct DuTimestamp {
+    seconds: u64,
+    nanoseconds: u32,
+}
+
 #[cfg(unix)]
 enum DuDirectory {
     Open(Dir),
@@ -210,10 +216,10 @@ struct DuStat {
     blocks: u64,
     inodes: u64,
     inode: Option<DuFileInfo>,
-    created: Option<u64>,
-    accessed: u64,
-    changed: u64,
-    modified: u64,
+    created: Option<DuTimestamp>,
+    accessed: DuTimestamp,
+    changed: DuTimestamp,
+    modified: DuTimestamp,
     #[cfg(unix)]
     directory: Option<DuDirectory>,
 }
@@ -276,9 +282,18 @@ impl DuStat {
                 inodes: 1,
                 inode: Some(file_info),
                 created: du_birth_u64(&metadata),
-                accessed: metadata.atime() as u64,
-                changed: metadata.ctime() as u64,
-                modified: metadata.mtime() as u64,
+                accessed: DuTimestamp {
+                    seconds: metadata.atime() as u64,
+                    nanoseconds: metadata.atime_nsec() as u32,
+                },
+                changed: DuTimestamp {
+                    seconds: metadata.ctime() as u64,
+                    nanoseconds: metadata.ctime_nsec() as u32,
+                },
+                modified: DuTimestamp {
+                    seconds: metadata.mtime() as u64,
+                    nanoseconds: metadata.mtime_nsec() as u32,
+                },
                 #[cfg(unix)]
                 directory: metadata
                     .is_dir()
@@ -300,10 +315,24 @@ impl DuStat {
                 blocks: size_on_disk / 1024 * 2,
                 inodes: 1,
                 inode: file_info,
-                created: windows_creation_time_to_unix_time(metadata.creation_time()),
-                accessed: windows_time_to_unix_time(metadata.last_access_time()),
-                changed: windows_time_to_unix_time(metadata.last_write_time()),
-                modified: windows_time_to_unix_time(metadata.last_write_time()),
+                created: windows_creation_time_to_unix_time(metadata.creation_time()).map(
+                    |seconds| DuTimestamp {
+                        seconds,
+                        nanoseconds: windows_time_nanoseconds(metadata.creation_time()),
+                    },
+                ),
+                accessed: DuTimestamp {
+                    seconds: windows_time_to_unix_time(metadata.last_access_time()),
+                    nanoseconds: windows_time_nanoseconds(metadata.last_access_time()),
+                },
+                changed: DuTimestamp {
+                    seconds: windows_time_to_unix_time(metadata.last_write_time()),
+                    nanoseconds: windows_time_nanoseconds(metadata.last_write_time()),
+                },
+                modified: DuTimestamp {
+                    seconds: windows_time_to_unix_time(metadata.last_write_time()),
+                    nanoseconds: windows_time_nanoseconds(metadata.last_write_time()),
+                },
             })
         }
     }
@@ -339,9 +368,18 @@ impl DuStat {
                 dev_id: metadata.st_dev as u64,
             }),
             created: du_birth_at(dir_fd, name, should_dereference),
-            accessed: metadata.st_atime as u64,
-            changed: metadata.st_ctime as u64,
-            modified: metadata.st_mtime as u64,
+            accessed: DuTimestamp {
+                seconds: metadata.st_atime as u64,
+                nanoseconds: metadata.st_atime_nsec as u32,
+            },
+            changed: DuTimestamp {
+                seconds: metadata.st_ctime as u64,
+                nanoseconds: metadata.st_ctime_nsec as u32,
+            },
+            modified: DuTimestamp {
+                seconds: metadata.st_mtime as u64,
+                nanoseconds: metadata.st_mtime_nsec as u32,
+            },
             directory: is_dir.then(|| du_open_directory_at(dir_fd, name, should_dereference)),
         })
     }
@@ -383,7 +421,7 @@ fn du_nix_error_to_io(error: nix::errno::Errno) -> io::Error {
 }
 
 #[cfg(target_os = "linux")]
-fn du_birth_at(dir_fd: i32, name: &OsStr, follow_symlink: bool) -> Option<u64> {
+fn du_birth_at(dir_fd: i32, name: &OsStr, follow_symlink: bool) -> Option<DuTimestamp> {
     let name = CString::new(name.as_bytes()).ok()?;
     let mut statx = std::mem::MaybeUninit::<nix::libc::statx>::zeroed();
     let flags = if follow_symlink {
@@ -405,12 +443,16 @@ fn du_birth_at(dir_fd: i32, name: &OsStr, follow_symlink: bool) -> Option<u64> {
     }
 
     let statx = unsafe { statx.assume_init() };
-    ((statx.stx_mask & nix::libc::STATX_BTIME) != 0 && statx.stx_btime.tv_sec >= 0)
-        .then_some(statx.stx_btime.tv_sec as u64)
+    ((statx.stx_mask & nix::libc::STATX_BTIME) != 0 && statx.stx_btime.tv_sec >= 0).then_some(
+        DuTimestamp {
+            seconds: statx.stx_btime.tv_sec as u64,
+            nanoseconds: statx.stx_btime.tv_nsec,
+        },
+    )
 }
 
 #[cfg(all(unix, not(target_os = "linux")))]
-fn du_birth_at(_dir_fd: i32, _name: &OsStr, _follow_symlink: bool) -> Option<u64> {
+fn du_birth_at(_dir_fd: i32, _name: &OsStr, _follow_symlink: bool) -> Option<DuTimestamp> {
     None
 }
 #[cfg(windows)]
@@ -426,6 +468,11 @@ fn windows_time_to_unix_time(win_time: u64) -> u64 {
 }
 
 #[cfg(windows)]
+fn windows_time_nanoseconds(win_time: u64) -> u32 {
+    ((win_time % 10_000_000) * 100) as u32
+}
+
+#[cfg(windows)]
 /**
  * 将类似于Linux的文件创建时间戳转换为UNIX时间戳。
  *
@@ -438,12 +485,15 @@ fn windows_creation_time_to_unix_time(win_time: u64) -> Option<u64> {
 }
 
 #[cfg(not(windows))]
-fn du_birth_u64(met_data: &Metadata) -> Option<u64> {
+fn du_birth_u64(met_data: &Metadata) -> Option<DuTimestamp> {
     met_data
         .created()
         .ok()
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|e| e.as_secs())
+        .map(|duration| DuTimestamp {
+            seconds: duration.as_secs(),
+            nanoseconds: duration.subsec_nanos(),
+        })
 }
 
 // 此函数用于获取指定路径的文件或目录在磁盘上占用的空间大小（以字节为单位）。
@@ -1204,20 +1254,22 @@ impl DuStatPrinter {
         stat_info.depth == 0 || (self.separate_dirs && stat_info.stat.is_dir)
     }
 
-    fn du_format_time(&self, seconds: u64) -> String {
-        let du_time = DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(seconds));
+    fn du_format_time(&self, timestamp: DuTimestamp) -> String {
+        let du_time = DateTime::<Local>::from(
+            UNIX_EPOCH + Duration::new(timestamp.seconds, timestamp.nanoseconds),
+        );
         if let Some(fmt) = self.time_format.strip_prefix('+') {
-            du_format_local_time_strftime(seconds, fmt)
+            du_format_local_time_strftime(timestamp.seconds, fmt)
                 .unwrap_or_else(|| du_time.format(fmt).to_string())
         } else {
             du_time.format(&self.time_format).to_string()
         }
     }
 
-    fn du_time_info(&self, du_stat: &DuStat) -> CTResult<Option<(u64, String)>> {
+    fn du_time_info(&self, du_stat: &DuStat) -> CTResult<Option<(DuTimestamp, String)>> {
         if let Some(time) = self.time {
-            let seconds = du_get_time_secs(time, du_stat)?;
-            Ok(Some((seconds, self.du_format_time(seconds))))
+            let timestamp = du_get_timestamp(time, du_stat)?;
+            Ok(Some((timestamp, self.du_format_time(timestamp))))
         } else {
             Ok(None)
         }
@@ -1228,13 +1280,13 @@ impl DuStatPrinter {
         stat_info: &StatPrintInfo,
         size: u64,
         grand_total: &mut u64,
-        latest_time: &mut Option<u64>,
+        latest_time: &mut Option<DuTimestamp>,
     ) -> CTResult<()> {
         if self.du_contributes_to_total(stat_info) {
             *grand_total += size;
             if let Some(time) = self.time {
-                let seconds = du_get_time_secs(time, &stat_info.stat)?;
-                *latest_time = Some(latest_time.map_or(seconds, |latest| latest.max(seconds)));
+                let timestamp = du_get_timestamp(time, &stat_info.stat)?;
+                *latest_time = Some(latest_time.map_or(timestamp, |latest| latest.max(timestamp)));
             }
         }
         Ok(())
@@ -1269,12 +1321,12 @@ impl DuStatPrinter {
             apparent_size_bytes: du_stat.size,
             allocated_bytes: du_stat.blocks * 512,
             inodes: du_stat.inodes,
-            time_seconds: time_info.as_ref().map(|(seconds, _)| *seconds),
+            time_seconds: time_info.as_ref().map(|(timestamp, _)| timestamp.seconds),
             time_display: time_info.map(|(_, display)| display),
         })
     }
 
-    fn du_total_row(&self, grand_total: u64, latest_time: Option<u64>) -> DuRow {
+    fn du_total_row(&self, grand_total: u64, latest_time: Option<DuTimestamp>) -> DuRow {
         DuRow {
             kind: "total".into(),
             path: None,
@@ -1286,8 +1338,8 @@ impl DuStatPrinter {
             apparent_size_bytes: 0,
             allocated_bytes: 0,
             inodes: 0,
-            time_seconds: latest_time,
-            time_display: latest_time.map(|seconds| self.du_format_time(seconds)),
+            time_seconds: latest_time.map(|timestamp| timestamp.seconds),
+            time_display: latest_time.map(|timestamp| self.du_format_time(timestamp)),
         }
     }
 
@@ -2070,7 +2122,7 @@ fn du_check_option_conflicts(args_match: &ArgMatches) -> CTResult<()> {
     }
 }
 
-fn du_get_time_secs(du_time: DuTime, du_stat: &DuStat) -> Result<u64, DuError> {
+fn du_get_timestamp(du_time: DuTime, du_stat: &DuStat) -> Result<DuTimestamp, DuError> {
     match du_time {
         DuTime::Modified => Ok(du_stat.modified),
         DuTime::Accessed => Ok(du_stat.accessed),
@@ -2607,6 +2659,41 @@ mod tests {
         assert_eq!(total.time_display, entry.time_display);
         assert_eq!(total_fields.len(), 3);
         assert_eq!(total_fields[1], entry.time_display.as_deref().unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_full_iso_preserves_timestamp_nanoseconds() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file = temp_dir.path().join("file");
+        fs::write(&file, b"x").unwrap();
+        File::options()
+            .write(true)
+            .open(&file)
+            .unwrap()
+            .set_times(
+                fs::FileTimes::new()
+                    .set_modified(UNIX_EPOCH + Duration::new(981_173_106, 123_456_789)),
+            )
+            .unwrap();
+
+        let args = vec![
+            OsString::from("du"),
+            OsString::from("--time"),
+            OsString::from("--time-style=full-iso"),
+            file.as_os_str().to_os_string(),
+        ];
+        let semantic = du_native_semantic(args.into_iter()).unwrap();
+        let time_display = semantic
+            .rows
+            .iter()
+            .find(|row| row.kind == "entry")
+            .unwrap()
+            .time_display
+            .as_deref()
+            .unwrap();
+
+        assert!(time_display.contains(".123456789 "));
     }
 
     #[cfg(unix)]

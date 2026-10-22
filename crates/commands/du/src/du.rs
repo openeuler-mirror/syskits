@@ -220,11 +220,15 @@ impl DuStat {
      * @param options 包含遍历选项，如是否跟随符号链接。
      * @return std::io::Result<Self> 返回一个包含文件或目录统计信息的DuStat实例，如果发生错误则返回错误信息。
      */
-    fn new(du_path: &Path, du_opts: &DuTraversalOptions) -> std::io::Result<Self> {
+    fn new(
+        du_path: &Path,
+        du_opts: &DuTraversalOptions,
+        is_command_line_arg: bool,
+    ) -> std::io::Result<Self> {
         // 根据遍历选项决定是否取消符号链接
         let should_dereference = match &du_opts.dereference {
             DuDeref::All => true,
-            DuDeref::Args(paths) => paths.contains(&du_path.to_path_buf()),
+            DuDeref::Args(paths) => is_command_line_arg && paths.contains(&du_path.to_path_buf()),
             DuDeref::None => false,
         };
 
@@ -525,7 +529,7 @@ fn du(
             match f {
                 // 统计当前文件或目录的信息
                 Ok(entry) => {
-                    match DuStat::new(&entry.path(), du_opts) {
+                    match DuStat::new(&entry.path(), du_opts, false) {
                         Ok(this_stat) => {
                             // 检查是否应忽略当前项，根据排除列表和其他选项
                             for pattern in &du_opts.excludes {
@@ -1470,7 +1474,7 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
             }
         }
         // 检查参数提供的路径是否存在
-        if let Ok(stat) = DuStat::new(&path, &du_traversal_options) {
+        if let Ok(stat) = DuStat::new(&path, &du_traversal_options, true) {
             if let Some(inode) = stat.inode {
                 // 【核心修复】：顶层入口也一样，目录必须始终过滤防重
                 if !du_traversal_options.count_links || stat.is_dir {
@@ -1639,7 +1643,7 @@ pub fn du_native_semantic(args: impl ctcore::Args) -> CTResult<DuSemantic> {
             }
         }
 
-        if let Ok(stat) = DuStat::new(&path, &du_traversal_options) {
+        if let Ok(stat) = DuStat::new(&path, &du_traversal_options, true) {
             if let Some(inode) = stat.inode {
                 if !du_traversal_options.count_links || stat.is_dir {
                     if seen_inodes.contains(&inode) {
@@ -9699,7 +9703,7 @@ mod tests_fn {
             excludes: exclude_pattern,
         };
 
-        let stat_result = DuStat::new(&test_file_path, &options);
+        let stat_result = DuStat::new(&test_file_path, &options, true);
 
         assert!(stat_result.is_ok());
 
@@ -9724,7 +9728,7 @@ mod tests_fn {
             excludes: exclude_pattern,
         };
 
-        let stat_result = DuStat::new(temp_dir.path(), &options);
+        let stat_result = DuStat::new(temp_dir.path(), &options, true);
 
         assert!(stat_result.is_ok());
 
@@ -9755,7 +9759,7 @@ mod tests_fn {
             excludes: exclude_pattern,
         };
 
-        let stat_result = DuStat::new(&symlink_path, &options);
+        let stat_result = DuStat::new(&symlink_path, &options, true);
 
         assert!(stat_result.is_ok());
 
@@ -9781,13 +9785,36 @@ mod tests_fn {
             excludes: Vec::new(),
         };
 
-        let stat = DuStat::new(&symlink_path, &options).unwrap();
+        let stat = DuStat::new(&symlink_path, &options, true).unwrap();
 
         assert!(!stat.is_dir);
         assert_eq!(
             stat.size,
             fs::symlink_metadata(&symlink_path).unwrap().len()
         );
+    }
+
+    #[test]
+    fn test_stat_new_dereferences_args_only_at_command_line_root() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir(temp_dir.path().join("target")).unwrap();
+        let symlink_path = temp_dir.path().join("link");
+        create_temp_symlink(Path::new("target"), &symlink_path);
+        let options = DuTraversalOptions {
+            all: true,
+            separate_dirs: false,
+            one_file_system: false,
+            dereference: DuDeref::Args(vec![symlink_path.clone()]),
+            count_links: false,
+            verbose: false,
+            excludes: Vec::new(),
+        };
+
+        let root_stat = DuStat::new(&symlink_path, &options, true).unwrap();
+        let child_stat = DuStat::new(&symlink_path, &options, false).unwrap();
+
+        assert!(root_stat.is_dir);
+        assert!(!child_stat.is_dir);
     }
 
     #[test]

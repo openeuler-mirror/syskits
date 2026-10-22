@@ -94,6 +94,7 @@ use clap::ArgMatches;
 use std::{
     env,
     error::Error,
+    ffi::{OsStr, OsString},
     fmt::{Debug, Display},
     path::{Path, PathBuf},
 };
@@ -234,6 +235,11 @@ pub mod arguments {
             .value_name("SUFFIX")
             .allow_hyphen_values(true)
     }
+
+    /// `-S, --suffix` variant that preserves arbitrary platform path bytes.
+    pub fn suffix_os() -> clap::Arg {
+        suffix().value_parser(clap::builder::ValueParser::os_string())
+    }
 }
 
 /// Obtain the suffix to use for a backup.
@@ -255,6 +261,21 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 
     if suffix.is_empty() {
         "~".to_owned()
+    } else {
+        suffix
+    }
+}
+
+/// Obtain a backup suffix without converting platform path bytes to UTF-8.
+pub fn determine_backup_suffix_os(matches: &ArgMatches) -> OsString {
+    let suffix = matches
+        .get_one::<OsString>(arguments::OPT_SUFFIX)
+        .cloned()
+        .or_else(|| env::var_os("SIMPLE_BACKUP_SUFFIX"))
+        .unwrap_or_default();
+
+    if suffix.is_empty() {
+        OsString::from("~")
     } else {
         suffix
     }
@@ -412,10 +433,10 @@ fn match_method(method: &str, origin: &str) -> CTResult<CtBackupMode> {
     }
 }
 
-pub fn get_backup_path(
+pub fn get_backup_path<S: AsRef<OsStr> + ?Sized>(
     backup_mode: CtBackupMode,
     backup_path: &Path,
-    suffix: &str,
+    suffix: &S,
 ) -> Option<PathBuf> {
     match backup_mode {
         CtBackupMode::NoBackup => None,
@@ -425,26 +446,24 @@ pub fn get_backup_path(
     }
 }
 
-fn simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
-    let mut p = path.to_string_lossy().into_owned();
-    p.push_str(suffix);
+fn simple_backup_path<S: AsRef<OsStr> + ?Sized>(path: &Path, suffix: &S) -> PathBuf {
+    let mut p = path.as_os_str().to_os_string();
+    p.push(suffix.as_ref());
     PathBuf::from(p)
 }
 
 fn numbered_backup_path(path: &Path) -> PathBuf {
     for i in 1_u64.. {
-        let path_str = &format!("{}.~{}~", path.to_string_lossy(), i);
-        let path = Path::new(path_str);
-        if path.symlink_metadata().is_err() {
-            return path.to_path_buf();
+        let candidate = simple_backup_path(path, &format!(".~{i}~"));
+        if candidate.symlink_metadata().is_err() {
+            return candidate;
         }
     }
     panic!("cannot create backup")
 }
 
-fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
-    let test_path_str = &format!("{}.~1~", path.to_string_lossy());
-    let test_path = Path::new(test_path_str);
+fn existing_backup_path<S: AsRef<OsStr> + ?Sized>(path: &Path, suffix: &S) -> PathBuf {
+    let test_path = simple_backup_path(path, ".~1~");
     if test_path.exists() {
         numbered_backup_path(path)
     } else {
@@ -833,6 +852,18 @@ mod tests {
         let result = simple_backup_path(path, suffix);
 
         assert_eq!(result, expected);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_simple_backup_path_preserves_non_utf8_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let path = PathBuf::from(OsString::from_vec(b"dest-\xff".to_vec()));
+        let suffix = OsString::from_vec(vec![0xfe]);
+        let expected = PathBuf::from(OsString::from_vec(b"dest-\xff\xfe".to_vec()));
+
+        assert_eq!(simple_backup_path(&path, &suffix), expected);
     }
 
     #[test]

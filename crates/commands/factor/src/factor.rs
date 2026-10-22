@@ -137,6 +137,21 @@ fn parse_number_token(token: &str) -> Option<ParsedNumber> {
     Some(ParsedNumber::Big(value))
 }
 
+fn is_recognized_long_option(arg: &str) -> bool {
+    let Some(candidate) = arg.strip_prefix("--") else {
+        return false;
+    };
+    if candidate.is_empty() {
+        return false;
+    }
+
+    ["exponents", "help", "version"]
+        .iter()
+        .filter(|option| option.starts_with(candidate))
+        .count()
+        == 1
+}
+
 fn factor_option_error(args: &[OsString]) -> Option<String> {
     let mut options_done = false;
     for arg in args.iter().skip(1) {
@@ -151,7 +166,7 @@ fn factor_option_error(args: &[OsString]) -> Option<String> {
         }
 
         if arg_str.starts_with("--") {
-            if arg_str == "--exponents" || arg_str == "--help" || arg_str == "--version" {
+            if is_recognized_long_option(&arg_str) {
                 continue;
             }
             return Some(format!(
@@ -413,7 +428,7 @@ fn validate_options(args: &[OsString]) -> CTResult<()> {
         }
 
         if arg_str.starts_with("--") {
-            if arg_str == "--exponents" || arg_str == "--help" || arg_str == "--version" {
+            if is_recognized_long_option(&arg_str) {
                 continue;
             }
             ct_show_error!("unrecognized option '{}'", arg_str);
@@ -724,6 +739,23 @@ mod tests {
             OsString::from("factor"),
             OsString::from("-h"),
             OsString::from("-h"),
+            OsString::from("360"),
+        ];
+
+        factor_main(args.into_iter(), &mut writer).unwrap();
+
+        let buffer = writer.into_inner().unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        assert_eq!(output, "360: 2^3 3^2 5\n");
+    }
+
+    #[test]
+    fn test_factor_main_accepts_abbreviated_exponents_option() {
+        let buffer = Vec::new();
+        let mut writer = BufWriter::new(buffer);
+        let args = vec![
+            OsString::from("factor"),
+            OsString::from("--exp"),
             OsString::from("360"),
         ];
 

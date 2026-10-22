@@ -705,6 +705,104 @@ impl CTError for DuClapError {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DuLongOptionArgument {
+    None,
+    Required,
+    Optional,
+}
+
+fn du_recognized_long_option(candidate: &str) -> Option<(&'static str, DuLongOptionArgument)> {
+    if candidate.is_empty() {
+        return None;
+    }
+
+    let mut matches = [
+        ("all", DuLongOptionArgument::None),
+        ("apparent-size", DuLongOptionArgument::None),
+        ("block-size", DuLongOptionArgument::Required),
+        ("bytes", DuLongOptionArgument::None),
+        ("count-links", DuLongOptionArgument::None),
+        ("dereference", DuLongOptionArgument::None),
+        ("dereference-args", DuLongOptionArgument::None),
+        ("exclude", DuLongOptionArgument::Required),
+        ("exclude-from", DuLongOptionArgument::Required),
+        ("files0-from", DuLongOptionArgument::Required),
+        ("help", DuLongOptionArgument::None),
+        ("human-readable", DuLongOptionArgument::None),
+        ("inodes", DuLongOptionArgument::None),
+        ("max-depth", DuLongOptionArgument::Required),
+        ("no-dereference", DuLongOptionArgument::None),
+        ("null", DuLongOptionArgument::None),
+        ("one-file-system", DuLongOptionArgument::None),
+        ("separate-dirs", DuLongOptionArgument::None),
+        ("si", DuLongOptionArgument::None),
+        ("summarize", DuLongOptionArgument::None),
+        ("threshold", DuLongOptionArgument::Required),
+        ("time", DuLongOptionArgument::Optional),
+        ("time-style", DuLongOptionArgument::Required),
+        ("total", DuLongOptionArgument::None),
+        ("verbose", DuLongOptionArgument::None),
+        ("version", DuLongOptionArgument::None),
+    ]
+    .into_iter()
+    .filter(|(option, _)| option.starts_with(candidate));
+    let option = matches.next()?;
+    matches.next().is_none().then_some(option)
+}
+
+fn du_long_option_with_unexpected_argument(arg: &str) -> Option<&'static str> {
+    let (candidate, _) = arg.strip_prefix("--")?.split_once('=')?;
+    let (option, argument) = du_recognized_long_option(candidate)?;
+    (argument == DuLongOptionArgument::None).then_some(option)
+}
+
+fn du_short_option_consumes_next(arg: &str) -> bool {
+    let Some(options) = arg.strip_prefix('-') else {
+        return false;
+    };
+
+    for (index, option) in options.char_indices() {
+        if matches!(option, 'B' | 'X' | 'd' | 't') {
+            return index + option.len_utf8() == options.len();
+        }
+    }
+    false
+}
+
+fn du_validate_options(args: &[OsString]) -> CTResult<()> {
+    let mut index = 1;
+    while index < args.len() {
+        let arg = args[index].to_string_lossy();
+        if arg == "--" {
+            break;
+        }
+
+        if arg.starts_with("--") {
+            if let Some(option) = du_long_option_with_unexpected_argument(&arg) {
+                ct_show_error!("option '--{}' doesn't allow an argument", option);
+                eprintln!(
+                    "Try '{} --help' for more information.",
+                    ctcore::ct_help_utility_name()
+                );
+                return Err(CtSimpleError::new(1, ""));
+            }
+
+            if !arg.contains('=')
+                && du_recognized_long_option(&arg[2..])
+                    .is_some_and(|(_, argument)| argument == DuLongOptionArgument::Required)
+            {
+                index += 1;
+            }
+        } else if arg.starts_with('-') && arg != "-" && du_short_option_consumes_next(&arg) {
+            index += 1;
+        }
+
+        index += 1;
+    }
+    Ok(())
+}
+
 /**
  * 将文件内容读取到一个String类型的vector中。
  *
@@ -1146,6 +1244,8 @@ impl Tool for Du {
 pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = args.collect::<Vec<_>>();
+    du_validate_options(&args)?;
     // 从命令行参数中解析匹配项
     let args_match = ct_app()
         .try_get_matches_from(args)
@@ -1915,6 +2015,24 @@ fn format_error_message(pase_error: &ParseSizeError, s: &str, opt: &str) -> Stri
 mod tests {
     use super::*;
     use std::ffi::OsString;
+
+    #[test]
+    fn test_du_long_option_with_unexpected_argument() {
+        assert_eq!(
+            du_long_option_with_unexpected_argument("--ino=value"),
+            Some("inodes")
+        );
+        assert_eq!(du_long_option_with_unexpected_argument("--block=1K"), None);
+        assert_eq!(du_long_option_with_unexpected_argument("--a=value"), None);
+    }
+
+    #[test]
+    fn test_du_short_option_value_detection() {
+        assert!(du_short_option_consumes_next("-hB"));
+        assert!(du_short_option_consumes_next("-d"));
+        assert!(!du_short_option_consumes_next("-B1K"));
+        assert!(!du_short_option_consumes_next("-hh"));
+    }
 
     #[test]
     fn test_tool_implementation() {

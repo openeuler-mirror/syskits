@@ -2136,14 +2136,15 @@ impl FromStr for DuThreshold {
      * 如果字符串以'-'开头且后续的大小为0，则视为无效输入。
      */
     fn from_str(str: &str) -> Result<Self, Self::Err> {
+        let value = str.trim_start_matches(|c: char| c.is_ascii_whitespace());
         // 根据字符串是否以'-'或'+'开头，计算出实际大小字符串的起始位置。
-        let str_offset = usize::from(str.starts_with(&['-', '+'][..]));
+        let str_offset = usize::from(value.starts_with(&['-', '+'][..]));
 
         // 解析大小。
-        let str_size = parse_size_u64(&str[str_offset..])?;
+        let str_size = parse_size_u64(&value[str_offset..])?;
 
         // 如果字符串以'-'开头，判断解析出的大小是否为0，为0则报错。
-        if str.starts_with('-') {
+        if value.starts_with('-') {
             // 阈值为'-0'时，除了大小为0的条目外排除所有条目。
             if str_size == 0 {
                 return Err(ParseSizeError::ParseFailure(str.to_string()));
@@ -2307,6 +2308,18 @@ mod tests {
                 .map(String::as_str),
             Some("2")
         );
+    }
+
+    #[test]
+    fn test_du_threshold_accepts_leading_ascii_whitespace() {
+        assert!(matches!(
+            DuThreshold::from_str(" \t1").unwrap(),
+            DuThreshold::Lower(1)
+        ));
+        assert!(matches!(
+            DuThreshold::from_str(" \t-1").unwrap(),
+            DuThreshold::Upper(1)
+        ));
     }
 
     #[test]

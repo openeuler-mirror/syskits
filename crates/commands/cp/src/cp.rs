@@ -2540,6 +2540,30 @@ fn cp_backup_dest(dest_path: &Path, backup_path: &Path, move_dest: bool) -> Copy
     Ok(backup_path.into())
 }
 
+struct BackupRollback<'a> {
+    backup_path: Option<PathBuf>,
+    dest_path: &'a Path,
+}
+
+impl BackupRollback<'_> {
+    fn commit(&mut self) {
+        self.backup_path = None;
+    }
+}
+
+impl Drop for BackupRollback<'_> {
+    fn drop(&mut self) {
+        let Some(backup_path) = self.backup_path.take() else {
+            return;
+        };
+
+        if cp_file_or_link_exists(self.dest_path) {
+            let _ = fs::remove_file(self.dest_path);
+        }
+        let _ = fs::rename(backup_path, self.dest_path);
+    }
+}
+
 /// Decide whether source and destination files are the same and
 /// copying is forbidden.
 ///
@@ -2626,7 +2650,7 @@ fn cp_handle_existing_dest(
     dest_path: &Path,
     cp_opts: &CpOptions,
     source_in_command_line: bool,
-) -> CopyResult<()> {
+) -> CopyResult<Option<PathBuf>> {
     if is_forbidden_to_copy_to_same_file(sour_path, dest_path, cp_opts, source_in_command_line) {
         return Err(format!(
             "{} and {} are the same file",
@@ -2649,7 +2673,11 @@ fn cp_handle_existing_dest(
             )
             .into());
         } else {
+            let move_dest = sour_path != dest_path || dest_path.is_symlink();
             cp_backup_dest(dest_path, &backup_path, sour_path != dest_path)?;
+            if move_dest {
+                return Ok(Some(backup_path));
+            }
         }
     }
 
@@ -2672,7 +2700,7 @@ fn cp_handle_existing_dest(
         }
     }
 
-    Ok(())
+    Ok(None)
 }
 
 /// Decide whether the given path exists.
@@ -3034,6 +3062,10 @@ fn copy_file(
 ) -> CopyResult<()> {
     let dest_existed = dest_path.exists();
     let mut source_metadata = None;
+    let mut backup_rollback = BackupRollback {
+        backup_path: None,
+        dest_path,
+    };
     if dest_path.is_symlink() {
         if CtFileInformation::from_path(dest_path, false)
             .map(|info| symlinked_files.contains(&info))
@@ -3118,7 +3150,8 @@ fn copy_file(
         {
             return Ok(());
         }
-        cp_handle_existing_dest(sour_path, dest_path, cp_opts, source_in_command_line)?;
+        backup_rollback.backup_path =
+            cp_handle_existing_dest(sour_path, dest_path, cp_opts, source_in_command_line)?;
 
         if sour_path == dest_path && cp_opts.cp_force() && cp_opts.backup != CtBackupMode::NoBackup
         {
@@ -3130,6 +3163,7 @@ fn copy_file(
                     dest_path,
                 )?;
             }
+            backup_rollback.commit();
             return Ok(());
         }
     }
@@ -3149,6 +3183,7 @@ fn copy_file(
             }
             std::fs::hard_link(existing_dest, dest_path)?;
             // 记录此路径以便后续链接（同一 inode 多个硬链接时）
+            backup_rollback.commit();
             return Ok(());
         };
     }
@@ -3237,6 +3272,7 @@ fn copy_file(
         CtFileInformation::from_path(sour_path, cp_opts.cp_dereference(source_in_command_line))?,
         dest_path.to_path_buf(),
     );
+    backup_rollback.commit();
 
     if let Some(progress_bar) = progress_bar {
         progress_bar.inc(fs::metadata(sour_path)?.len());

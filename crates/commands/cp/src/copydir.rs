@@ -103,7 +103,8 @@ impl<'a> Context<'a> {
     fn new(root: &'a Path, target: &'a Path) -> std::io::Result<Self> {
         let current_dir = env::current_dir()?;
         let root_path = current_dir.join(root);
-        let root_parent = if target.exists() && !ends_with_slash_dot(root) {
+        let root_is_dot = root == Path::new(".") || root == Path::new("./");
+        let root_parent = if target.exists() && !ends_with_slash_dot(root) && !root_is_dot {
             root_path.parent().map(|p| p.to_path_buf())
         } else {
             Some(root_path)

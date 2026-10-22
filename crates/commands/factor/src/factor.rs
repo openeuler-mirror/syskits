@@ -792,19 +792,25 @@ fn factors_print_bytes(
     w.flush()
 }
 
+fn factor_output_error(error: io::Error, arbitrary_precision: bool) -> Box<dyn CTError> {
+    if ctcore::ct_stdout_was_closed() {
+        io::Error::from_raw_os_error(ctcore::libc::EBADF).map_err_context(|| "write error".into())
+            as Box<dyn CTError>
+    } else if arbitrary_precision {
+        CtSimpleError::new(1, factor_gettext("write error"))
+    } else {
+        error.map_err_context(|| "write error".into()) as Box<dyn CTError>
+    }
+}
+
 fn factor_write_result(
     token: &[u8],
     w: &mut io::BufWriter<impl io::Write>,
     print_exponents: bool,
     dev_debug: bool,
 ) -> CTResult<()> {
-    factors_print_bytes(token, w, print_exponents, dev_debug).map_err(|error| {
-        if uses_arbitrary_precision(token) {
-            CtSimpleError::new(1, factor_gettext("write error"))
-        } else {
-            error.map_err_context(|| "write error".into()) as Box<dyn CTError>
-        }
-    })
+    factors_print_bytes(token, w, print_exponents, dev_debug)
+        .map_err(|error| factor_output_error(error, uses_arbitrary_precision(token)))
 }
 
 /// 处理从标准输入读取的数字
@@ -844,7 +850,7 @@ fn process_stdin(
                         if let Some(boundary) = native_flush_boundary(&native_output, line_buffered)
                         {
                             flush_native_output(&mut native_output, boundary, w)
-                                .map_err_context(|| "write error".into())?;
+                                .map_err(|error| factor_output_error(error, false))?;
                         }
                     }
                 }
@@ -859,7 +865,8 @@ fn process_stdin(
 
     if !native_output.is_empty() {
         w.write_all(&native_output)
-            .map_err_context(|| "write error".into())?;
+            .and_then(|()| w.flush())
+            .map_err(|error| factor_output_error(error, false))?;
     }
     Ok(())
 }
@@ -888,7 +895,8 @@ fn process_numbers(
 
     if defer_native_output {
         w.write_all(native_output.get_ref())
-            .map_err_context(|| "write error".into())?;
+            .and_then(|()| w.flush())
+            .map_err(|error| factor_output_error(error, false))?;
     }
     Ok(())
 }

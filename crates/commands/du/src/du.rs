@@ -1759,6 +1759,20 @@ fn du_get_time(args_match: &ArgMatches) -> Option<DuTime> {
     })
 }
 
+fn du_parse_time_value(value: &str) -> Result<String, String> {
+    if value.is_empty() {
+        return Err("time value must not be empty".to_string());
+    }
+
+    [
+        "atime", "access", "use", "ctime", "status", "birth", "creation",
+    ]
+    .into_iter()
+    .find(|candidate| candidate.starts_with(value))
+    .map(str::to_string)
+    .ok_or_else(|| format!("invalid time value {value:?}"))
+}
+
 fn du_get_max_depth(
     args_match: &ArgMatches,
     summarize: bool,
@@ -2058,7 +2072,7 @@ pub fn ct_app() -> Command {
             .require_equals(true)
             .num_args(0..)
             .overrides_with(opt_flags::TIME)
-            .value_parser(["atime", "access", "use", "ctime", "status", "birth", "creation"])
+            .value_parser(du_parse_time_value)
             .help(
                 "show time of the last modification of any file in the \
                 directory, or any of its subdirectories. If WORD is given, show time as WORD instead \
@@ -2282,6 +2296,18 @@ mod tests {
                 .get_one::<String>(opt_flags::TIME)
                 .map(String::as_str),
             Some("ctime")
+        );
+    }
+
+    #[test]
+    fn test_du_time_value_accepts_abbreviation() {
+        let matches = ct_app().try_get_matches_from(["du", "--time=at"]).unwrap();
+
+        assert_eq!(
+            matches
+                .get_one::<String>(opt_flags::TIME)
+                .map(String::as_str),
+            Some("atime")
         );
     }
 

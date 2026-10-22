@@ -1948,6 +1948,7 @@ pub fn ct_app() -> Command {
             .value_name("SIZE")
             .num_args(1)
             .allow_hyphen_values(true)
+            .overrides_with(opt_flags::THRESHOLD)
             .help(t!("du.clap.threshold")),
         Arg::new(opt_flags::VERBOSE)
             .short('v')
@@ -2156,6 +2157,18 @@ mod tests {
                 .get_one::<String>(opt_flags::MAX_DEPTH)
                 .map(String::as_str),
             Some("1")
+        );
+    }
+
+    #[test]
+    fn test_du_repeated_threshold_uses_last_value() {
+        let matches = ct_app().try_get_matches_from(["du", "-t1", "-t2"]).unwrap();
+
+        assert_eq!(
+            matches
+                .get_one::<String>(opt_flags::THRESHOLD)
+                .map(String::as_str),
+            Some("2")
         );
     }
 

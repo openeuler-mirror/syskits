@@ -1773,6 +1773,21 @@ fn du_parse_time_value(value: &str) -> Result<String, String> {
     .ok_or_else(|| format!("invalid time value {value:?}"))
 }
 
+fn du_parse_time_style_value(value: &str) -> Result<String, String> {
+    if value.starts_with('+') {
+        return Ok(value.to_string());
+    }
+    if value.is_empty() {
+        return Err("time style must not be empty".to_string());
+    }
+
+    ["full-iso", "long-iso", "iso"]
+        .into_iter()
+        .find(|candidate| candidate.starts_with(value))
+        .map(str::to_string)
+        .ok_or_else(|| format!("invalid time style {value:?}"))
+}
+
 fn du_get_max_depth(
     args_match: &ArgMatches,
     summarize: bool,
@@ -2082,6 +2097,7 @@ pub fn ct_app() -> Command {
             .long(opt_flags::TIME_STYLE)
             .value_name("STYLE")
             .overrides_with(opt_flags::TIME_STYLE)
+            .value_parser(du_parse_time_style_value)
             .help(
                 "show times using style STYLE: \
                 full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'"
@@ -2308,6 +2324,20 @@ mod tests {
                 .get_one::<String>(opt_flags::TIME)
                 .map(String::as_str),
             Some("atime")
+        );
+    }
+
+    #[test]
+    fn test_du_time_style_accepts_abbreviation() {
+        let matches = ct_app()
+            .try_get_matches_from(["du", "--time-style=full"])
+            .unwrap();
+
+        assert_eq!(
+            matches
+                .get_one::<String>(opt_flags::TIME_STYLE)
+                .map(String::as_str),
+            Some("full-iso")
         );
     }
 

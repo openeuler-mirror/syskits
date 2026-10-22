@@ -1979,6 +1979,7 @@ pub fn ct_app() -> Command {
             .value_name("WORD")
             .require_equals(true)
             .num_args(0..)
+            .overrides_with(opt_flags::TIME)
             .value_parser(["atime", "access", "use", "ctime", "status", "birth", "creation"])
             .help(
                 "show time of the last modification of any file in the \
@@ -2169,6 +2170,20 @@ mod tests {
                 .get_one::<String>(opt_flags::THRESHOLD)
                 .map(String::as_str),
             Some("2")
+        );
+    }
+
+    #[test]
+    fn test_du_repeated_time_uses_last_value() {
+        let matches = ct_app()
+            .try_get_matches_from(["du", "--time=atime", "--time=ctime"])
+            .unwrap();
+
+        assert_eq!(
+            matches
+                .get_one::<String>(opt_flags::TIME)
+                .map(String::as_str),
+            Some("ctime")
         );
     }
 

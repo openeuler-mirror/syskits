@@ -855,6 +855,33 @@ fn du_last_files0_from(args_match: &ArgMatches) -> Option<&String> {
         .and_then(|values| values.last())
 }
 
+fn du_apply_posix_option_order(args: &mut Vec<OsString>, enabled: bool) {
+    if !enabled {
+        return;
+    }
+
+    let mut index = 1;
+    while index < args.len() {
+        let arg = args[index].to_string_lossy();
+        if arg == "--" {
+            return;
+        }
+        if arg == "-" || !arg.starts_with('-') {
+            args.insert(index, OsString::from("--"));
+            return;
+        }
+
+        let consumes_next = if let Some(option) = arg.strip_prefix("--") {
+            !option.contains('=')
+                && du_recognized_long_option(option)
+                    .is_some_and(|(_, argument)| argument == DuLongOptionArgument::Required)
+        } else {
+            du_short_option_consumes_next(&arg)
+        };
+        index += if consumes_next { 2 } else { 1 };
+    }
+}
+
 /**
  * 将文件内容读取到一个String类型的vector中。
  *
@@ -1296,7 +1323,8 @@ impl Tool for Du {
 pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = args.collect::<Vec<_>>();
+    let mut args = args.collect::<Vec<_>>();
+    du_apply_posix_option_order(&mut args, env::var_os("POSIXLY_CORRECT").is_some());
     du_validate_options(&args)?;
     // 从命令行参数中解析匹配项
     let args_match = ct_app()
@@ -1498,6 +1526,8 @@ fn du_collect_semantic(
 pub fn du_native_semantic(args: impl ctcore::Args) -> CTResult<DuSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let mut args = args.collect::<Vec<_>>();
+    du_apply_posix_option_order(&mut args, env::var_os("POSIXLY_CORRECT").is_some());
     let args_match = ct_app().try_get_matches_from(args)?;
 
     let is_summarize = args_match.get_flag(opt_flags::SUMMARIZE);
@@ -2217,6 +2247,24 @@ mod tests {
         assert_eq!(
             du_last_files0_from(&matches).map(String::as_str),
             Some("list-b")
+        );
+    }
+
+    #[test]
+    fn test_du_posix_option_order_stops_at_first_operand() {
+        let mut args = ["du", "-B", "1K", "tree", "-a"]
+            .into_iter()
+            .map(OsString::from)
+            .collect();
+
+        du_apply_posix_option_order(&mut args, true);
+
+        assert_eq!(
+            args,
+            ["du", "-B", "1K", "--", "tree", "-a"]
+                .into_iter()
+                .map(OsString::from)
+                .collect::<Vec<_>>()
         );
     }
 

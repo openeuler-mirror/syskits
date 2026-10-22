@@ -10,8 +10,7 @@
  */
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use std::os::unix::fs::MetadataExt;
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::{FileTypeExt, MetadataExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 
@@ -486,6 +485,17 @@ pub(crate) fn copy_on_write(
         reflink: CpOffloadReflinkDebug::Unsupported,
         sparse_detection: CpSparseDebug::No,
     };
+
+    if std::fs::metadata(dest)
+        .map(|metadata| metadata.file_type().is_fifo())
+        .unwrap_or(false)
+    {
+        copy_debug.offload = CpOffloadReflinkDebug::Unsupported;
+        copy_debug.reflink = CpOffloadReflinkDebug::Unsupported;
+        copy_debug.sparse_detection = CpSparseDebug::No;
+        no_offload_copy(source, dest).context(context)?;
+        return Ok(copy_debug);
+    }
 
     if source_is_fifo && sparse_mode == CpSparseMode::Always {
         copy_debug.offload = CpOffloadReflinkDebug::Avoided;

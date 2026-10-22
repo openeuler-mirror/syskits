@@ -2142,9 +2142,18 @@ impl FromStr for DuThreshold {
 
         // 解析大小。
         let str_size = parse_size_u64(&value[str_offset..])?;
+        let negative = value.starts_with('-');
+        let max_magnitude = if negative {
+            i64::MAX as u64 + 1
+        } else {
+            i64::MAX as u64
+        };
+        if str_size > max_magnitude {
+            return Err(ParseSizeError::SizeTooBig(str.to_string()));
+        }
 
         // 如果字符串以'-'开头，判断解析出的大小是否为0，为0则报错。
-        if value.starts_with('-') {
+        if negative {
             // 阈值为'-0'时，除了大小为0的条目外排除所有条目。
             if str_size == 0 {
                 return Err(ParseSizeError::ParseFailure(str.to_string()));
@@ -2319,6 +2328,26 @@ mod tests {
         assert!(matches!(
             DuThreshold::from_str(" \t-1").unwrap(),
             DuThreshold::Upper(1)
+        ));
+    }
+
+    #[test]
+    fn test_du_threshold_enforces_signed_range() {
+        assert!(matches!(
+            DuThreshold::from_str("9223372036854775807").unwrap(),
+            DuThreshold::Lower(9223372036854775807)
+        ));
+        assert!(matches!(
+            DuThreshold::from_str("-9223372036854775808").unwrap(),
+            DuThreshold::Upper(9223372036854775808)
+        ));
+        assert!(matches!(
+            DuThreshold::from_str("9223372036854775808"),
+            Err(ParseSizeError::SizeTooBig(_))
+        ));
+        assert!(matches!(
+            DuThreshold::from_str("-9223372036854775809"),
+            Err(ParseSizeError::SizeTooBig(_))
         ));
     }
 

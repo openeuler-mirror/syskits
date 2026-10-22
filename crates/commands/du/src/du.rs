@@ -1231,35 +1231,29 @@ fn du_human_readable(size: u64, multiplier: u64) -> String {
 
 fn du_to_magnitude_and_suffix(n: u128, bases: &[u128], suffixes: &[&'static str]) -> String {
     let mut magnitude = 0usize;
-    while magnitude + 1 < bases.len() && bases[magnitude + 1] - bases[magnitude] < n {
+    while magnitude + 1 < bases.len() && bases[magnitude + 1] <= n {
         magnitude += 1;
     }
 
-    let quotient = n / bases[magnitude];
-    let remainder = n % bases[magnitude];
-    let suffix = suffixes[magnitude];
+    if magnitude == 0 {
+        return n.to_string();
+    }
 
-    if remainder == 0 {
-        if magnitude > 0 && quotient < 10 {
-            format!("{quotient}.0{suffix}")
-        } else {
-            format!("{quotient}{suffix}")
+    let divisor = bases[magnitude];
+    let suffix = suffixes[magnitude];
+    if n < 10 * divisor {
+        let tenths = (n * 10).div_ceil(divisor);
+        if tenths < 100 {
+            return format!("{}.{}{}", tenths / 10, tenths % 10, suffix);
         }
+    }
+
+    let rounded = n.div_ceil(divisor);
+    let unit_base = bases[1];
+    if rounded == unit_base && magnitude + 1 < bases.len() {
+        format!("1.0{}", suffixes[magnitude + 1])
     } else {
-        let tenth = bases[magnitude] / 10;
-        let tenths_place = remainder / tenth;
-        if remainder % tenth == 0 {
-            format!("{quotient}.{tenths_place}{suffix}")
-        } else if tenths_place + 1 == 10 || quotient >= 10 {
-            let rounded = quotient + 1;
-            if magnitude > 0 && rounded < 10 {
-                format!("{rounded}.0{suffix}")
-            } else {
-                format!("{rounded}{suffix}")
-            }
-        } else {
-            format!("{}.{}{}", quotient, tenths_place + 1, suffix)
-        }
+        format!("{rounded}{suffix}")
     }
 }
 
@@ -2289,6 +2283,14 @@ mod tests {
             du_parse_block_size_value("1b"),
             Err(ParseSizeError::InvalidSuffix(_))
         ));
+    }
+
+    #[test]
+    fn test_du_human_readable_uses_gnu_ceiling_rounding() {
+        assert_eq!(du_human_readable(1025, 1024), "1.1K");
+        assert_eq!(du_human_readable(10239, 1024), "10K");
+        assert_eq!(du_human_readable(1048575, 1024), "1.0M");
+        assert_eq!(du_human_readable(9999, 1000), "10k");
     }
 
     #[test]

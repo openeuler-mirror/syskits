@@ -3398,7 +3398,8 @@ pub(crate) fn copy_recursive_link(
     if cp_file_or_link_exists(dest_path) {
         cp_handle_existing_dest(sour_path, dest_path, options, false)?;
     }
-    copy_link(sour_path, dest_path, symlinked_files)
+    copy_link(sour_path, dest_path, symlinked_files)?;
+    copy_attributes_with_deref(sour_path, dest_path, &options.attributes, false)
 }
 
 /// Generate an error message if `target` is not the correct `target_type`

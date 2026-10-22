@@ -31,8 +31,8 @@ use indicatif::ProgressBar;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
-    CopyResult, CpError, CpOptions, copy_attributes, copy_file, copy_recursive_link,
-    cp_aligned_ancestors, cp_context_for,
+    CopyResult, CpError, CpOptions, copy_attributes, copy_attributes_with_deref, copy_file,
+    copy_recursive_link, cp_aligned_ancestors, cp_context_for,
 };
 
 /// Ensure a Windows path starts with a `\\?`.
@@ -461,7 +461,12 @@ pub(crate) fn copy_directory(
     // Capture the root metadata before WalkDir reads the directory.  Reading a
     // directory updates its atime on filesystems mounted with atime semantics,
     // while GNU cp's archive mode preserves the timestamp from before traversal.
-    let root_metadata = fs::symlink_metadata(root).ok();
+    let root_dereference = options.cp_dereference(source_in_command_line);
+    let root_metadata = if root_dereference {
+        fs::metadata(root).ok()
+    } else {
+        fs::symlink_metadata(root).ok()
+    };
     let mut dirs_to_preserve = Vec::new();
 
     // Traverse the contents of the directory, copying each one.
@@ -473,17 +478,30 @@ pub(crate) fn copy_directory(
         match direntry_result {
             Ok(direntry) => {
                 let entry = Entry::new(&context, &direntry, options.no_target_dir)?;
-                if entry.source_absolute.is_dir() && !ends_with_slash_dot(&entry.source_absolute) {
-                    let source_metadata = if entry.depth == 0 {
-                        root_metadata.clone()
-                    } else {
-                        fs::symlink_metadata(&entry.source_absolute).ok()
-                    };
+                let dereference = if entry.depth == 0 {
+                    root_dereference
+                } else {
+                    options.dereference
+                };
+                let source_metadata = if entry.depth == 0 {
+                    root_metadata.clone()
+                } else if dereference {
+                    fs::metadata(&entry.source_absolute).ok()
+                } else {
+                    fs::symlink_metadata(&entry.source_absolute).ok()
+                };
+                if source_metadata
+                    .as_ref()
+                    .map(|metadata| metadata.is_dir())
+                    .unwrap_or(false)
+                    && !ends_with_slash_dot(&entry.source_absolute)
+                {
                     dirs_to_preserve.push((
                         entry.source_absolute.clone(),
                         entry.local_to_target.clone(),
                         !entry.local_to_target.exists(),
                         source_metadata,
+                        dereference,
                     ));
                 }
                 copy_direntry(
@@ -503,9 +521,9 @@ pub(crate) fn copy_directory(
 
     // Apply attributes to all directories we traversed in post-order (deepest first).
     // This perfectly emulates GNU cp behavior and avoids read-only parent issues.
-    for (src, dest, created, source_metadata) in dirs_to_preserve.into_iter().rev() {
+    for (src, dest, created, source_metadata, dereference) in dirs_to_preserve.into_iter().rev() {
         if dest.exists() && dest.is_dir() {
-            copy_attributes(&src, &dest, &options.attributes)?;
+            copy_attributes_with_deref(&src, &dest, &options.attributes, dereference)?;
             if matches!(options.attributes.timestamps, crate::CpPreserve::Yes { .. }) {
                 if let Some(source_metadata) = source_metadata {
                     let destination_metadata = fs::metadata(&dest)?;

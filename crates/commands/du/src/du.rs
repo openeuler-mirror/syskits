@@ -28,7 +28,7 @@ use std::collections::HashSet;
 use std::env;
 use std::error::Error;
 #[cfg(unix)]
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 #[cfg(not(windows))]
@@ -1226,7 +1226,36 @@ fn du_human_readable(size: u64, multiplier: u64) -> String {
     } else {
         (&DU_IEC_BASES, &DU_IEC_SUFFIXES)
     };
-    du_to_magnitude_and_suffix(size as u128, bases, suffixes)
+    du_localize_decimal_point(du_to_magnitude_and_suffix(size as u128, bases, suffixes))
+}
+
+fn du_init_locale() {
+    #[cfg(unix)]
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
+}
+
+fn du_localize_decimal_point(number: String) -> String {
+    #[cfg(unix)]
+    unsafe {
+        let locale = ctcore::libc::localeconv();
+        if !locale.is_null() && !(*locale).decimal_point.is_null() {
+            let decimal_point = CStr::from_ptr((*locale).decimal_point).to_string_lossy();
+            return du_localize_decimal_point_with(number, &decimal_point);
+        }
+    }
+
+    number
+}
+
+fn du_localize_decimal_point_with(mut number: String, decimal_point: &str) -> String {
+    if decimal_point != "." && !decimal_point.is_empty() {
+        if let Some(index) = number.find('.') {
+            number.replace_range(index..=index, decimal_point);
+        }
+    }
+    number
 }
 
 fn du_to_magnitude_and_suffix(n: u128, bases: &[u128], suffixes: &[&'static str]) -> String {
@@ -1342,6 +1371,7 @@ impl Tool for Du {
 }
 
 pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
+    du_init_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let mut args = args.collect::<Vec<_>>();
@@ -1541,6 +1571,7 @@ fn du_collect_semantic(
 }
 
 pub fn du_native_semantic(args: impl ctcore::Args) -> CTResult<DuSemantic> {
+    du_init_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let mut args = args.collect::<Vec<_>>();
@@ -2291,6 +2322,18 @@ mod tests {
         assert_eq!(du_human_readable(10239, 1024), "10K");
         assert_eq!(du_human_readable(1048575, 1024), "1.0M");
         assert_eq!(du_human_readable(9999, 1000), "10k");
+    }
+
+    #[test]
+    fn test_du_human_readable_localizes_decimal_point() {
+        assert_eq!(
+            du_localize_decimal_point_with("1.0K".to_string(), ","),
+            "1,0K"
+        );
+        assert_eq!(
+            du_localize_decimal_point_with("1.1K".to_string(), "٫"),
+            "1٫1K"
+        );
     }
 
     #[test]

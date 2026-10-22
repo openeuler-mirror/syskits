@@ -477,6 +477,11 @@ fn read_error_message(error: &io::Error) -> String {
     format!("error reading input: {}", strip_errno(error))
 }
 
+fn closed_stdin_error() -> Option<io::Error> {
+    (ctcore::ct_stdin_was_closed() && !ctcore::ct_io::has_injected_stdin())
+        .then(|| io::Error::from_raw_os_error(ctcore::libc::EBADF))
+}
+
 pub fn factor_native_semantic(args: impl ctcore::Args) -> CTResult<FactorSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -499,6 +504,15 @@ pub fn factor_native_semantic(args: impl ctcore::Args) -> CTResult<FactorSemanti
     let settings = FactorFlags::new(&matches);
 
     if settings.numbers.is_empty() {
+        if let Some(err) = closed_stdin_error() {
+            return Ok(FactorSemantic {
+                rows: Vec::new(),
+                classic_text: String::new(),
+                stderr_text: format!("factor: {}\n", read_error_message(&err)),
+                exit_code: 1,
+            });
+        }
+
         let mut stdin = BufReader::new(ctcore::ct_io::stdin_reader_box());
         let mut semantic = FactorSemantic {
             rows: Vec::new(),
@@ -702,6 +716,12 @@ fn process_stdin(
     print_exponents: bool,
     dev_debug: bool,
 ) -> CTResult<()> {
+    if let Some(error) = closed_stdin_error() {
+        set_ct_exit_code(1);
+        ct_show_error!("{}", read_error_message(&error));
+        return Ok(());
+    }
+
     let mut stdin = BufReader::new(ctcore::ct_io::stdin_reader_box());
     let mut line = Vec::new();
     loop {

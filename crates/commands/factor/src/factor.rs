@@ -115,7 +115,7 @@ pub struct FactorSemantic {
 }
 
 fn parse_number_token(token: &str) -> Option<ParsedNumber> {
-    let trimmed = token.trim();
+    let trimmed = token.trim_start_matches(' ');
     if trimmed.is_empty() {
         return None;
     }
@@ -313,7 +313,7 @@ fn factor_row_from_powers(
 
 fn factor_row_from_token(token: &str, print_exponents: bool) -> Result<FactorRow, String> {
     let display_token = token.trim();
-    let parsed = parse_number_token(display_token).ok_or_else(|| {
+    let parsed = parse_number_token(token).ok_or_else(|| {
         format!(
             "factor: {} is not a valid positive integer\n",
             locale_quote(display_token)
@@ -578,7 +578,7 @@ fn factors_print_str(
     dev_debug: bool,
 ) -> io::Result<()> {
     let display_token = num_str.trim();
-    let parsed = match parse_number_token(display_token) {
+    let parsed = match parse_number_token(num_str) {
         Some(parsed) => parsed,
         None => {
             ct_show_error!(
@@ -918,6 +918,14 @@ mod tests {
         let buffer = writer.into_inner().unwrap();
         let output = String::from_utf8(buffer).unwrap();
         assert_eq!(output, "12: 2^2 3\n");
+    }
+
+    #[test]
+    fn test_operand_skips_only_leading_ascii_spaces() {
+        assert!(parse_number_token("  12").is_some());
+        assert!(parse_number_token("12 ").is_none());
+        assert!(parse_number_token("\t12").is_none());
+        assert!(parse_number_token("\u{a0}12").is_none());
     }
 
     #[test]

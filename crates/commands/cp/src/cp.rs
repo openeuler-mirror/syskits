@@ -3069,6 +3069,10 @@ fn copy_file(
         return Err(CpError::NotAllFilesCopied);
     }
 
+    if cp_opts.update == CtUpdateMode::ReplaceNone && dest_path.exists() {
+        cp_source_metadata(sour_path, cp_opts, source_in_command_line)?;
+    }
+
     if is_skipped_by_update(sour_path, dest_path, cp_opts, source_in_command_line) {
         if cp_opts.cp_preserve_hard_links() && dest_path.exists() {
             if let Ok(src_info) = CtFileInformation::from_path(

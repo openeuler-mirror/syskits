@@ -1473,6 +1473,11 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
                 }
             }
         }
+        // --count-links counts each command-line root independently.  Keep
+        // directory inode tracking only within one root to prevent cycles.
+        if du_traversal_options.count_links {
+            seen_inodes.clear();
+        }
         // 检查参数提供的路径是否存在
         if let Ok(stat) = DuStat::new(&path, &du_traversal_options, true) {
             if let Some(inode) = stat.inode {
@@ -1641,6 +1646,10 @@ pub fn du_native_semantic(args: impl ctcore::Args) -> CTResult<DuSemantic> {
                     continue 'loop_file;
                 }
             }
+        }
+
+        if du_traversal_options.count_links {
+            seen_inodes.clear();
         }
 
         if let Ok(stat) = DuStat::new(&path, &du_traversal_options, true) {
@@ -2240,6 +2249,37 @@ fn format_error_message(pase_error: &ParseSizeError, s: &str, opt: &str) -> Stri
 mod tests {
     use super::*;
     use std::ffi::OsString;
+
+    #[test]
+    fn test_count_links_counts_repeated_directory_arguments() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let tree = temp_dir.path().join("tree");
+        fs::create_dir(&tree).unwrap();
+        fs::write(tree.join("file"), b"x").unwrap();
+
+        let args = vec![
+            OsString::from("du"),
+            OsString::from("-l"),
+            OsString::from("-c"),
+            tree.as_os_str().to_os_string(),
+            tree.as_os_str().to_os_string(),
+        ];
+        let semantic = du_native_semantic(args.into_iter()).unwrap();
+        let roots: Vec<_> = semantic
+            .rows
+            .iter()
+            .filter(|row| row.kind == "entry" && row.depth == 0)
+            .collect();
+        let total = semantic
+            .rows
+            .iter()
+            .find(|row| row.kind == "total")
+            .unwrap();
+
+        assert_eq!(roots.len(), 2);
+        assert_eq!(roots[0].measured_size, roots[1].measured_size);
+        assert_eq!(total.measured_size, roots[0].measured_size * 2);
+    }
 
     #[test]
     fn test_du_long_option_with_unexpected_argument() {

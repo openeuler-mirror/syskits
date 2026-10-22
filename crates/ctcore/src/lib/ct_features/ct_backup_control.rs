@@ -435,7 +435,7 @@ fn numbered_backup_path(path: &Path) -> PathBuf {
     for i in 1_u64.. {
         let path_str = &format!("{}.~{}~", path.to_string_lossy(), i);
         let path = Path::new(path_str);
-        if !path.exists() {
+        if path.symlink_metadata().is_err() {
             return path.to_path_buf();
         }
     }
@@ -804,6 +804,26 @@ mod tests {
         // Clean up the temporary directory
         temp_dir.close().unwrap();
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_numbered_backup_path_skips_dangling_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = tempfile::Builder::new()
+            .prefix("backup_dangling")
+            .tempdir()
+            .unwrap();
+        let path = temp_dir.path().join("dest");
+        let first = temp_dir.path().join("dest.~1~");
+        symlink("missing", &first).unwrap();
+
+        assert_eq!(
+            numbered_backup_path(&path),
+            temp_dir.path().join("dest.~2~")
+        );
+    }
+
     #[test]
     fn test_simple_backup_path() {
         let path = Path::new("/var/tmp/file.txt");

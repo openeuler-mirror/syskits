@@ -2875,10 +2875,12 @@ fn cp_handle_copy_mode(
             symlinked_files,
         )?,
         CpCopyMode::AttrOnly => {
-            // 确保文件打开时不截断，且正确处理错误
-            // 如果目标文件不存在（前面逻辑意外删除），创建空文件以兼容 GNU 行为
-            // 如果存在，则以非截断模式打开，准备修改属性
-            if !dest_path.exists() {
+            if sour_is_symlink {
+                copy_link(sour_path, dest_path, symlinked_files)?;
+            } else if sour_is_fifo && cp_opts.recursive && !cp_opts.copy_contents {
+                copy_fifo(dest_path, cp_opts.overwrite)?;
+            } else if !dest_path.exists() {
+                // A regular-file attributes-only copy creates an empty target.
                 File::create(dest_path).context(format!(
                     "cannot create destination file {}",
                     dest_path.quote()
@@ -3075,17 +3077,6 @@ fn copy_file(
             return Ok(());
         }
         cp_handle_existing_dest(sour_path, dest_path, cp_opts, source_in_command_line)?;
-    }
-
-    // 尝试仅更改符号链接属性但不允许覆盖时，返回错误。
-    if cp_opts.attributes_only
-        && sour_path.is_symlink()
-        && !matches!(
-            cp_opts.overwrite,
-            CpOverwriteMode::Clobber(CpClobberMode::RemoveDestination)
-        )
-    {
-        return Err(format!("无法更改属性 {}: 源文件非常规文件", dest_path.quote()).into());
     }
 
     // 如请求，保留硬链接。

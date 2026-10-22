@@ -1858,6 +1858,7 @@ pub fn ct_app() -> Command {
             .short('d')
             .long("max-depth")
             .value_name("N")
+            .overrides_with(opt_flags::MAX_DEPTH)
             .help(
                 "print the total for a directory (or file, with --all) \
                 only if it is N or fewer levels below the command \
@@ -2143,6 +2144,18 @@ mod tests {
                 .get_one::<String>(opt_flags::BLOCK_SIZE)
                 .map(String::as_str),
             Some("1K")
+        );
+    }
+
+    #[test]
+    fn test_du_repeated_max_depth_uses_last_value() {
+        let matches = ct_app().try_get_matches_from(["du", "-d0", "-d1"]).unwrap();
+
+        assert_eq!(
+            matches
+                .get_one::<String>(opt_flags::MAX_DEPTH)
+                .map(String::as_str),
+            Some("1")
         );
     }
 

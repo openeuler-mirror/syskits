@@ -21,7 +21,7 @@ use std::io::BufRead;
 use std::io::{self, BufReader, Write, stdout};
 mod factor_algorithm;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
-use ctcore::ct_display::locale_quote;
+use ctcore::ct_display::locale_quote_marks;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
 use ctcore::ct_show_error;
 pub use factor_algorithm::*;
@@ -135,6 +135,38 @@ fn parse_number_token(token: &str) -> Option<ParsedNumber> {
     }
 
     Some(ParsedNumber::Big(value))
+}
+
+fn factor_quote(token: &str) -> String {
+    let (left_quote, right_quote) = locale_quote_marks();
+    let unicode_locale = right_quote != "'";
+    let mut quoted = left_quote;
+
+    for character in token.chars() {
+        match character {
+            '\x07' => quoted.push_str("\\a"),
+            '\x08' => quoted.push_str("\\b"),
+            '\t' => quoted.push_str("\\t"),
+            '\n' => quoted.push_str("\\n"),
+            '\x0b' => quoted.push_str("\\v"),
+            '\x0c' => quoted.push_str("\\f"),
+            '\r' => quoted.push_str("\\r"),
+            '\\' => quoted.push_str("\\\\"),
+            '\'' if !unicode_locale => quoted.push_str("\\'"),
+            character if character.is_ascii_control() => {
+                quoted.push_str(&format!("\\{:03o}", u32::from(character)));
+            }
+            character if character.is_ascii() || unicode_locale => quoted.push(character),
+            character => {
+                let mut bytes = [0; 4];
+                for byte in character.encode_utf8(&mut bytes).bytes() {
+                    quoted.push_str(&format!("\\{byte:03o}"));
+                }
+            }
+        }
+    }
+    quoted.push_str(&right_quote);
+    quoted
 }
 
 fn recognized_long_option(candidate: &str) -> Option<&'static str> {
@@ -315,7 +347,7 @@ fn factor_row_from_token(token: &str, print_exponents: bool) -> Result<FactorRow
     let parsed = parse_number_token(token).ok_or_else(|| {
         format!(
             "factor: {} is not a valid positive integer\n",
-            locale_quote(token)
+            factor_quote(token)
         )
     })?;
 
@@ -579,10 +611,7 @@ fn factors_print_str(
     let parsed = match parse_number_token(num_str) {
         Some(parsed) => parsed,
         None => {
-            ct_show_error!(
-                "{} is not a valid positive integer",
-                locale_quote(num_str)
-            );
+            ct_show_error!("{} is not a valid positive integer", factor_quote(num_str));
             set_ct_exit_code(1);
             return Ok(());
         }
@@ -932,6 +961,15 @@ mod tests {
 
         assert!(message.contains("abc "));
         assert!(!message.contains("'abc'"));
+    }
+
+    #[test]
+    fn test_invalid_operand_quoting_escapes_control_characters() {
+        let quoted = factor_quote("a\n\x01b");
+
+        assert!(quoted.contains("a\\n\\001b"));
+        assert!(!quoted.contains('\n'));
+        assert!(!quoted.contains('\x01'));
     }
 
     #[test]

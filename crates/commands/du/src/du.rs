@@ -1693,23 +1693,35 @@ fn du_effective_time_style(args_match: &ArgMatches) -> Option<String> {
 }
 
 fn du_get_size_format(args_match: &ArgMatches) -> Result<DuSizeFormat, Box<dyn CTError>> {
-    // 解析大小格式化选项
-    let size_format = if args_match.get_flag(opt_flags::HUMAN_READABLE) {
-        DuSizeFormat::Human(1024)
-    } else if args_match.get_flag(opt_flags::SI) {
-        DuSizeFormat::Human(1000)
-    } else if args_match.get_flag(opt_flags::BYTES) {
-        DuSizeFormat::BlockSize(1)
-    } else if args_match.get_flag(opt_flags::BLOCK_SIZE_1K) {
-        DuSizeFormat::BlockSize(1024)
-    } else if args_match.get_flag(opt_flags::BLOCK_SIZE_1M) {
-        DuSizeFormat::BlockSize(1024 * 1024)
-    } else {
-        du_read_block_size_format(
+    let last_option = [
+        opt_flags::HUMAN_READABLE,
+        opt_flags::SI,
+        opt_flags::BYTES,
+        opt_flags::BLOCK_SIZE_1K,
+        opt_flags::BLOCK_SIZE_1M,
+        opt_flags::BLOCK_SIZE,
+    ]
+    .into_iter()
+    .filter(|option| {
+        args_match.value_source(option) == Some(clap::parser::ValueSource::CommandLine)
+    })
+    .filter_map(|option| args_match.index_of(option).map(|index| (index, option)))
+    .max_by_key(|(index, _)| *index)
+    .map(|(_, option)| option);
+
+    let size_format = match last_option {
+        Some(opt_flags::HUMAN_READABLE) => DuSizeFormat::Human(1024),
+        Some(opt_flags::SI) => DuSizeFormat::Human(1000),
+        Some(opt_flags::BYTES) => DuSizeFormat::BlockSize(1),
+        Some(opt_flags::BLOCK_SIZE_1K) => DuSizeFormat::BlockSize(1024),
+        Some(opt_flags::BLOCK_SIZE_1M) => DuSizeFormat::BlockSize(1024 * 1024),
+        Some(opt_flags::BLOCK_SIZE) => du_read_block_size_format(
             args_match
                 .get_one::<String>(opt_flags::BLOCK_SIZE)
                 .map(AsRef::as_ref),
-        )?
+        )?,
+        Some(_) => unreachable!("all size options are handled"),
+        None => du_read_block_size_format(None)?,
     };
     Ok(size_format)
 }
@@ -2265,6 +2277,31 @@ mod tests {
                 .into_iter()
                 .map(OsString::from)
                 .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_du_output_size_uses_last_format_option() {
+        let cases: &[(&[&str], DuSizeFormat)] = &[
+            (&["du", "-h", "-k"], DuSizeFormat::BlockSize(1024)),
+            (&["du", "-k", "-m"], DuSizeFormat::BlockSize(1024 * 1024)),
+            (&["du", "-m", "-B2K"], DuSizeFormat::BlockSize(2048)),
+            (&["du", "-B2K", "-b"], DuSizeFormat::BlockSize(1)),
+            (&["du", "-b", "--si"], DuSizeFormat::Human(1000)),
+            (&["du", "--si", "-h"], DuSizeFormat::Human(1024)),
+        ];
+
+        for (args, expected) in cases {
+            let matches = ct_app().try_get_matches_from(args.iter().copied()).unwrap();
+
+            assert_eq!(&du_get_size_format(&matches).unwrap(), expected);
+        }
+
+        let matches = ct_app().try_get_matches_from(["du", "-b", "-k"]).unwrap();
+        assert!(matches.get_flag(opt_flags::BYTES));
+        assert_eq!(
+            du_get_size_format(&matches).unwrap(),
+            DuSizeFormat::BlockSize(1024)
         );
     }
 

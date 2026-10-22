@@ -192,7 +192,7 @@ fn factor_option_error(args: &[OsString]) -> Option<String> {
             if is_exponents_short_option_cluster(&arg_str) || arg_str == "-V" {
                 continue;
             }
-            let invalid = arg_str.chars().nth(1).unwrap_or('-');
+            let invalid = invalid_short_option_character(&arg_str);
             return Some(format!(
                 "factor: invalid option -- '{invalid}'\nTry 'factor --help' for more information.\n"
             ));
@@ -204,6 +204,12 @@ fn factor_option_error(args: &[OsString]) -> Option<String> {
 
 fn is_exponents_short_option_cluster(arg: &str) -> bool {
     arg.starts_with('-') && arg.len() > 1 && arg[1..].chars().all(|c| c == 'h')
+}
+
+fn invalid_short_option_character(arg: &str) -> char {
+    arg.strip_prefix('-')
+        .and_then(|options| options.chars().find(|option| *option != 'h'))
+        .unwrap_or('-')
 }
 
 fn factor_row_from_powers(
@@ -465,7 +471,7 @@ fn validate_options(args: &[OsString]) -> CTResult<()> {
             if is_exponents_short_option_cluster(&arg_str) || arg_str == "-V" {
                 continue;
             }
-            let invalid = arg_str.chars().nth(1).unwrap_or('-');
+            let invalid = invalid_short_option_character(&arg_str);
             ct_show_error!("invalid option -- '{}'", invalid);
             eprintln!(
                 "Try '{} --help' for more information.",
@@ -796,6 +802,19 @@ mod tests {
             factor_option_error(&args),
             Some(String::from(
                 "factor: option '--exponents' doesn't allow an argument\n\
+                 Try 'factor --help' for more information.\n"
+            ))
+        );
+    }
+
+    #[test]
+    fn test_short_option_cluster_reports_invalid_character() {
+        let args = vec![OsString::from("factor"), OsString::from("-hhx")];
+
+        assert_eq!(
+            factor_option_error(&args),
+            Some(String::from(
+                "factor: invalid option -- 'x'\n\
                  Try 'factor --help' for more information.\n"
             ))
         );

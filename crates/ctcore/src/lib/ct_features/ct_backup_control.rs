@@ -247,11 +247,16 @@ pub mod arguments {
 /// This function directly takes [`clap::ArgMatches`] as argument and looks for
 /// the '-S' and '--suffix' arguments itself.
 pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
-    let supplied_suffix = matches.get_one::<String>(arguments::OPT_SUFFIX);
-    if let Some(suffix) = supplied_suffix {
-        String::from(suffix)
+    let suffix = matches
+        .get_one::<String>(arguments::OPT_SUFFIX)
+        .cloned()
+        .or_else(|| env::var("SIMPLE_BACKUP_SUFFIX").ok())
+        .unwrap_or_default();
+
+    if suffix.is_empty() {
+        "~".to_owned()
     } else {
-        env::var("SIMPLE_BACKUP_SUFFIX").unwrap_or_else(|_| "~".to_owned())
+        suffix
     }
 }
 
@@ -690,6 +695,15 @@ mod tests {
         let result = determine_backup_suffix(&matches);
         assert_eq!(result, "-v");
     }
+
+    #[test]
+    fn test_empty_suffix_uses_default() {
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        let matches = make_app().get_matches_from(vec!["command", "-b", "--suffix", ""]);
+
+        assert_eq!(determine_backup_suffix(&matches), "~");
+    }
+
     #[test]
     fn test_source_is_target_backup() {
         let source = Path::new("data.txt.bak");

@@ -1822,6 +1822,7 @@ pub fn ct_app() -> Command {
             .short('a')
             .long(opt_flags::ALL)
             .help(t!("du.clap.all"))
+            .overrides_with(opt_flags::ALL)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::APPARENT_SIZE)
             .long(opt_flags::APPARENT_SIZE)
@@ -1830,6 +1831,7 @@ pub fn ct_app() -> Command {
                 although the apparent size is usually smaller, it may be larger due to holes \
                 in ('sparse') files, internal fragmentation, indirect blocks, and the like"
             )
+            .overrides_with(opt_flags::APPARENT_SIZE)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::BLOCK_SIZE)
             .short('B')
@@ -1843,11 +1845,13 @@ pub fn ct_app() -> Command {
             .short('b')
             .long("bytes")
             .help(t!("du.clap.bytes"))
+            .overrides_with(opt_flags::BYTES)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::TOTAL)
             .long("total")
             .short('c')
             .help(t!("du.clap.total"))
+            .overrides_with(opt_flags::TOTAL)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::MAX_DEPTH)
             .short('d')
@@ -1862,66 +1866,79 @@ pub fn ct_app() -> Command {
             .long("human-readable")
             .short('h')
             .help(t!("du.clap.human_readable"))
+            .overrides_with(opt_flags::HUMAN_READABLE)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::INODES)
             .long(opt_flags::INODES)
             .help(
                 "list inode usage information instead of block usage like --block-size=1K"
             )
+            .overrides_with(opt_flags::INODES)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::BLOCK_SIZE_1K)
             .short('k')
             .help(t!("du.clap.block_size_1k"))
+            .overrides_with(opt_flags::BLOCK_SIZE_1K)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::COUNT_LINKS)
             .short('l')
             .long("count-links")
             .help(t!("du.clap.count_links"))
+            .overrides_with(opt_flags::COUNT_LINKS)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::DEREFERENCE)
             .short('L')
             .long(opt_flags::DEREFERENCE)
             .help(t!("du.clap.dereference"))
+            .overrides_with(opt_flags::DEREFERENCE)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::DEREFERENCE_ARGS)
             .short('D')
             .visible_short_alias('H')
             .long(opt_flags::DEREFERENCE_ARGS)
             .help(t!("du.clap.dereference_args"))
+            .overrides_with(opt_flags::DEREFERENCE_ARGS)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::NO_DEREFERENCE)
             .short('P')
             .long(opt_flags::NO_DEREFERENCE)
             .help(t!("du.clap.no_dereference"))
             .overrides_with(opt_flags::DEREFERENCE)
+            .overrides_with(opt_flags::NO_DEREFERENCE)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::BLOCK_SIZE_1M)
             .short('m')
             .help(t!("du.clap.block_size_1m"))
+            .overrides_with(opt_flags::BLOCK_SIZE_1M)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::NULL)
             .short('0')
             .long("null")
             .help(t!("du.clap.null"))
+            .overrides_with(opt_flags::NULL)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::SEPARATE_DIRS)
             .short('S')
             .long("separate-dirs")
             .help(t!("du.clap.separate_dirs"))
+            .overrides_with(opt_flags::SEPARATE_DIRS)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::SUMMARIZE)
             .short('s')
             .long("summarize")
             .help(t!("du.clap.summarize"))
+            .overrides_with(opt_flags::SUMMARIZE)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::SI)
             .long(opt_flags::SI)
             .help(t!("du.clap.si"))
+            .overrides_with(opt_flags::SI)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::ONE_FILE_SYSTEM)
             .short('x')
             .long(opt_flags::ONE_FILE_SYSTEM)
             .help(t!("du.clap.one_file_system"))
+            .overrides_with(opt_flags::ONE_FILE_SYSTEM)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::THRESHOLD)
             .short('t')
@@ -1934,6 +1951,7 @@ pub fn ct_app() -> Command {
             .short('v')
             .long("verbose")
             .help(t!("du.clap.verbose"))
+            .overrides_with(opt_flags::VERBOSE)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::EXCLUDE)
             .long(opt_flags::EXCLUDE)
@@ -2104,6 +2122,13 @@ mod tests {
             diagnostic,
             b"du: invalid option -- '\xc3'\nTry 'du --help' for more information.\n"
         );
+    }
+
+    #[test]
+    fn test_du_repeated_boolean_flag_is_accepted() {
+        let matches = ct_app().try_get_matches_from(["du", "-hh"]).unwrap();
+
+        assert!(matches.get_flag(opt_flags::HUMAN_READABLE));
     }
 
     #[test]
@@ -3779,9 +3804,10 @@ mod tests {
             ];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_flag(HUMAN_READABLE));
+            assert!(matches.get_flag(INODES));
         }
 
         #[test]
@@ -3876,9 +3902,8 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), dir, "-l", "--count-links"];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+            assert!(result.is_ok());
+            assert!(result.unwrap().get_flag(COUNT_LINKS));
         }
 
         #[test]
@@ -4286,9 +4311,10 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), dir, "-s", "--summarize", "--si"];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+            assert!(result.is_ok());
+            let matches = result.unwrap();
+            assert!(matches.get_flag(SUMMARIZE));
+            assert!(matches.get_flag(SI));
         }
 
         #[test]
@@ -7324,7 +7350,7 @@ mod tests {
             ];
             let result = du_main(args.iter().map(OsString::from));
 
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -7420,7 +7446,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), dir, "-l", "--count-links"];
             let result = du_main(args.iter().map(OsString::from));
 
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]
@@ -7842,7 +7868,7 @@ mod tests {
             let args = [ctcore::ct_util_name(), dir, "-s", "--summarize", "--si"];
             let result = du_main(args.iter().map(OsString::from));
 
-            assert!(result.is_err());
+            assert!(result.is_ok());
         }
 
         #[test]

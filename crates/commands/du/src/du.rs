@@ -247,7 +247,7 @@ impl DuStat {
             Ok(Self {
                 path: du_path.to_path_buf(),
                 is_dir: metadata.is_dir(),
-                size: if du_path.is_dir() { 0 } else { metadata.len() },
+                size: if metadata.is_dir() { 0 } else { metadata.len() },
                 blocks: metadata.blocks(),
                 inodes: 1,
                 inode: Some(file_info),
@@ -267,7 +267,7 @@ impl DuStat {
             Ok(Self {
                 path: du_path.to_path_buf(),
                 is_dir: metadata.is_dir(),
-                size: if du_path.is_dir() { 0 } else { metadata.len() },
+                size: if metadata.is_dir() { 0 } else { metadata.len() },
                 blocks: size_on_disk / 1024 * 2,
                 inodes: 1,
                 inode: file_info,
@@ -9763,6 +9763,31 @@ mod tests_fn {
         assert_eq!(stat.path, symlink_path);
         assert!(!stat.is_dir);
         assert_eq!(stat.size, "Symlink target content".len() as u64);
+    }
+
+    #[test]
+    fn test_stat_new_keeps_directory_symlink_apparent_size() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir(temp_dir.path().join("sub")).unwrap();
+        let symlink_path = temp_dir.path().join("link");
+        create_temp_symlink(Path::new("sub"), &symlink_path);
+        let options = DuTraversalOptions {
+            all: true,
+            separate_dirs: false,
+            one_file_system: false,
+            dereference: DuDeref::None,
+            count_links: false,
+            verbose: false,
+            excludes: Vec::new(),
+        };
+
+        let stat = DuStat::new(&symlink_path, &options).unwrap();
+
+        assert!(!stat.is_dir);
+        assert_eq!(
+            stat.size,
+            fs::symlink_metadata(&symlink_path).unwrap().len()
+        );
     }
 
     #[test]

@@ -3280,32 +3280,54 @@ fn copy_helper(
         return Err(CpError::NotADirectory(dest_path.to_path_buf()));
     }
 
-    // 特殊处理源路径为"/dev/null"的情况，直接创建一个空的目标文件
-    let copy_debug = if sour_path.as_os_str() == "/dev/null" {
-        File::create(dest_path).context(dest_path.display().to_string())?;
-        None
-    } else if is_sour_fifo && cp_opts.recursive && !cp_opts.copy_contents {
-        // 如果源路径是FIFO且设置了递归复制但不复制内容，则特殊处理FIFO文件
-        #[cfg(unix)]
-        copy_fifo(dest_path, cp_opts.overwrite)?;
-        None
-    } else if is_sour_symlink {
-        // 如果源路径是符号链接，则复制符号链接
-        copy_link(sour_path, dest_path, symlinked_files)?;
-        None
-    } else {
-        // 默认情况下，进行文件或目录的实际复制操作
-        let copy_debug = copy_on_write(
-            sour_path,
-            dest_path,
-            cp_opts.reflink_mode,
-            cp_opts.sparse_mode,
-            cp_str,
-            #[cfg(target_os = "linux")]
-            is_sour_fifo,
-        )?;
-        Some(copy_debug)
-    };
+    let destination_existed = cp_file_or_link_exists(dest_path);
+
+    // /dev/null normally produces an empty regular file, but mandatory
+    // reflinks must still go through clone validation like every other source.
+    let copy_debug =
+        if sour_path.as_os_str() == "/dev/null" && cp_opts.reflink_mode == CpReflinkMode::Always {
+            match copy_on_write(
+                sour_path,
+                dest_path,
+                cp_opts.reflink_mode,
+                cp_opts.sparse_mode,
+                cp_str,
+                #[cfg(target_os = "linux")]
+                is_sour_fifo,
+            ) {
+                Ok(copy_debug) => Some(copy_debug),
+                Err(error) => {
+                    if !destination_existed {
+                        let _ = fs::remove_file(dest_path);
+                    }
+                    return Err(error);
+                }
+            }
+        } else if sour_path.as_os_str() == "/dev/null" {
+            File::create(dest_path).context(dest_path.display().to_string())?;
+            None
+        } else if is_sour_fifo && cp_opts.recursive && !cp_opts.copy_contents {
+            // 如果源路径是FIFO且设置了递归复制但不复制内容，则特殊处理FIFO文件
+            #[cfg(unix)]
+            copy_fifo(dest_path, cp_opts.overwrite)?;
+            None
+        } else if is_sour_symlink {
+            // 如果源路径是符号链接，则复制符号链接
+            copy_link(sour_path, dest_path, symlinked_files)?;
+            None
+        } else {
+            // 默认情况下，进行文件或目录的实际复制操作
+            let copy_debug = copy_on_write(
+                sour_path,
+                dest_path,
+                cp_opts.reflink_mode,
+                cp_opts.sparse_mode,
+                cp_str,
+                #[cfg(target_os = "linux")]
+                is_sour_fifo,
+            )?;
+            Some(copy_debug)
+        };
 
     Ok(copy_debug)
 }

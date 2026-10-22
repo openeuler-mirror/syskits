@@ -434,6 +434,11 @@ fn factor_semantic_from_tokens<'a>(
     }
 }
 
+fn stdin_tokens(line: &str) -> impl Iterator<Item = &str> {
+    line.split([' ', '\t', '\n'])
+        .filter(|token| !token.is_empty())
+}
+
 pub fn factor_native_semantic(args: impl ctcore::Args) -> CTResult<FactorSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -456,21 +461,22 @@ pub fn factor_native_semantic(args: impl ctcore::Args) -> CTResult<FactorSemanti
     let settings = FactorFlags::new(&matches);
 
     if settings.numbers.is_empty() {
-        let stdin = BufReader::new(ctcore::ct_io::stdin_reader_box());
+        let mut stdin = BufReader::new(ctcore::ct_io::stdin_reader_box());
         let mut semantic = FactorSemantic {
             rows: Vec::new(),
             classic_text: String::new(),
             stderr_text: String::new(),
             exit_code: 0,
         };
+        let mut line = String::new();
 
-        for line in stdin.lines() {
-            match line {
-                Ok(line) => {
-                    let line_semantic = factor_semantic_from_tokens(
-                        line.split_whitespace(),
-                        settings.print_exponents,
-                    );
+        loop {
+            line.clear();
+            match stdin.read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) => {
+                    let line_semantic =
+                        factor_semantic_from_tokens(stdin_tokens(&line), settings.print_exponents);
                     semantic.rows.extend(line_semantic.rows);
                     semantic.classic_text.push_str(&line_semantic.classic_text);
                     semantic.stderr_text.push_str(&line_semantic.stderr_text);
@@ -654,11 +660,14 @@ fn process_stdin(
     print_exponents: bool,
     dev_debug: bool,
 ) -> CTResult<()> {
-    let lines = BufReader::new(ctcore::ct_io::stdin_reader_box()).lines();
-    for line in lines {
-        match line {
-            Ok(line) => {
-                for number in line.split_whitespace() {
+    let mut stdin = BufReader::new(ctcore::ct_io::stdin_reader_box());
+    let mut line = String::new();
+    loop {
+        line.clear();
+        match stdin.read_line(&mut line) {
+            Ok(0) => break,
+            Ok(_) => {
+                for number in stdin_tokens(&line) {
                     factors_print_str(number, w, print_exponents, dev_debug)
                         .map_err_context(|| "write error".into())?;
                 }
@@ -970,6 +979,16 @@ mod tests {
         assert!(quoted.contains("a\\n\\001b"));
         assert!(!quoted.contains('\n'));
         assert!(!quoted.contains('\x01'));
+    }
+
+    #[test]
+    fn test_stdin_uses_only_gnu_delimiters() {
+        let input = "12\r\n15\x0b21\x0c25\u{a0}27\n";
+
+        assert_eq!(
+            stdin_tokens(input).collect::<Vec<_>>(),
+            vec!["12\r", "15\x0b21\x0c25\u{a0}27"]
+        );
     }
 
     #[test]

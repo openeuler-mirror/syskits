@@ -770,6 +770,19 @@ fn du_short_option_consumes_next(arg: &str) -> bool {
     false
 }
 
+fn du_invalid_short_option_character(arg: &str) -> Option<char> {
+    let options = arg.strip_prefix('-')?;
+    for option in options.chars() {
+        match option {
+            '0' | 'D' | 'H' | 'L' | 'P' | 'S' | 'a' | 'b' | 'c' | 'h' | 'k' | 'l' | 'm' | 's'
+            | 'v' | 'x' => {}
+            'B' | 'X' | 'd' | 't' => return None,
+            invalid => return Some(invalid),
+        }
+    }
+    None
+}
+
 fn du_validate_options(args: &[OsString]) -> CTResult<()> {
     let mut index = 1;
     while index < args.len() {
@@ -794,8 +807,18 @@ fn du_validate_options(args: &[OsString]) -> CTResult<()> {
             {
                 index += 1;
             }
-        } else if arg.starts_with('-') && arg != "-" && du_short_option_consumes_next(&arg) {
-            index += 1;
+        } else if arg.starts_with('-') && arg != "-" {
+            if let Some(invalid) = du_invalid_short_option_character(&arg) {
+                ct_show_error!("invalid option -- '{}'", invalid);
+                eprintln!(
+                    "Try '{} --help' for more information.",
+                    ctcore::ct_help_utility_name()
+                );
+                return Err(CtSimpleError::new(1, ""));
+            }
+            if du_short_option_consumes_next(&arg) {
+                index += 1;
+            }
         }
 
         index += 1;
@@ -2032,6 +2055,14 @@ mod tests {
         assert!(du_short_option_consumes_next("-d"));
         assert!(!du_short_option_consumes_next("-B1K"));
         assert!(!du_short_option_consumes_next("-hh"));
+    }
+
+    #[test]
+    fn test_du_short_option_cluster_reports_invalid_character() {
+        assert_eq!(du_invalid_short_option_character("-hhq"), Some('q'));
+        assert_eq!(du_invalid_short_option_character("-qh"), Some('q'));
+        assert_eq!(du_invalid_short_option_character("-hBq"), None);
+        assert_eq!(du_invalid_short_option_character("-hh"), None);
     }
 
     #[test]

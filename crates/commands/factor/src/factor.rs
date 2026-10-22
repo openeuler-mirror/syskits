@@ -104,6 +104,13 @@ fn os_str_bytes(value: &OsStr) -> &[u8] {
     value.to_str().map_or(&[], str::as_bytes)
 }
 
+fn c_string_token(token: &[u8]) -> &[u8] {
+    token
+        .iter()
+        .position(|&byte| byte == 0)
+        .map_or(token, |end| &token[..end])
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FactorPower {
     pub prime: String,
@@ -370,6 +377,7 @@ fn factor_row_from_powers(
 }
 
 fn factor_row_from_token(token: &[u8], print_exponents: bool) -> Result<FactorRow, String> {
+    let token = c_string_token(token);
     let parsed = parse_number_token(token).ok_or_else(|| {
         format!(
             "factor: {} is not a valid positive integer\n",
@@ -643,6 +651,7 @@ fn factors_print_bytes(
     is_print_exponents: bool,
     dev_debug: bool,
 ) -> io::Result<()> {
+    let token = c_string_token(token);
     let parsed = match parse_number_token(token) {
         Some(parsed) => parsed,
         None => {
@@ -1050,6 +1059,14 @@ mod tests {
         let flags = FactorFlags::new(&matches);
 
         assert_eq!(flags.numbers, vec![invalid, OsString::from("15")]);
+    }
+
+    #[test]
+    fn test_nul_terminates_stdin_token_like_c_string() {
+        let row = factor_row_from_token(b"12\0bad", false).unwrap();
+
+        assert_eq!(row.number, "12");
+        assert_eq!(row.factors, vec!["2", "2", "3"]);
     }
 
     #[test]

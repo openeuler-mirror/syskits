@@ -162,6 +162,10 @@ fn long_option_with_unexpected_argument(arg: &str) -> Option<&'static str> {
 }
 
 fn factor_option_error(args: &[OsString]) -> Option<String> {
+    factor_option_error_with_mode(args, std::env::var_os("POSIXLY_CORRECT").is_some())
+}
+
+fn factor_option_error_with_mode(args: &[OsString], posixly_correct: bool) -> Option<String> {
     let mut options_done = false;
     for arg in args.iter().skip(1) {
         let arg_str = arg.to_string_lossy();
@@ -196,6 +200,10 @@ fn factor_option_error(args: &[OsString]) -> Option<String> {
             return Some(format!(
                 "factor: invalid option -- '{invalid}'\nTry 'factor --help' for more information.\n"
             ));
+        }
+
+        if posixly_correct {
+            break;
         }
     }
 
@@ -465,6 +473,10 @@ fn factorize_biguint(value: &BigUint) -> BTreeMap<BigUint, usize> {
 }
 
 fn validate_options(args: &[OsString]) -> CTResult<()> {
+    validate_options_with_mode(args, std::env::var_os("POSIXLY_CORRECT").is_some())
+}
+
+fn validate_options_with_mode(args: &[OsString], posixly_correct: bool) -> CTResult<()> {
     let mut options_done = false;
     for arg in args.iter().skip(1) {
         let arg_str = arg.to_string_lossy();
@@ -506,6 +518,10 @@ fn validate_options(args: &[OsString]) -> CTResult<()> {
             write_invalid_option_diagnostic(&mut stderr.lock(), ctcore::ct_util_name(), invalid)
                 .expect("failed to write invalid option diagnostic");
             return Err(CtSimpleError::new(1, ""));
+        }
+
+        if posixly_correct {
+            break;
         }
     }
 
@@ -642,12 +658,18 @@ pub fn factor_main(args: impl ctcore::Args, w: &mut io::BufWriter<impl io::Write
 /// 创建命令行应用程序
 #[must_use]
 pub fn ct_app() -> Command {
+    ct_app_with_mode(std::env::var_os("POSIXLY_CORRECT").is_some())
+}
+
+fn ct_app_with_mode(posixly_correct: bool) -> Command {
     let utility_name = ctcore::ct_util_name();
     let command_version = crate_version!();
     let application_info = t!("factor.about");
     let usage_description = t!("factor.usage");
     let args = vec![
-        Arg::new(factor_flags::NUMBER).action(ArgAction::Append),
+        Arg::new(factor_flags::NUMBER)
+            .action(ArgAction::Append)
+            .trailing_var_arg(posixly_correct),
         Arg::new(factor_flags::EXPONENTS)
             .short('h')
             .long(factor_flags::EXPONENTS)
@@ -753,6 +775,24 @@ mod tests {
         let flags = FactorFlags::new(&matches);
         assert!(flags.print_exponents);
         assert_eq!(flags.numbers, vec!["360"]);
+    }
+
+    #[test]
+    fn test_posix_mode_stops_options_at_first_operand() {
+        let args = vec![
+            OsString::from("factor"),
+            OsString::from("12"),
+            OsString::from("-h"),
+            OsString::from("18"),
+        ];
+
+        assert!(factor_option_error_with_mode(&args, true).is_none());
+        assert!(validate_options_with_mode(&args, true).is_ok());
+
+        let matches = ct_app_with_mode(true).try_get_matches_from(&args).unwrap();
+        let flags = FactorFlags::new(&matches);
+        assert!(!flags.print_exponents);
+        assert_eq!(flags.numbers, vec!["12", "-h", "18"]);
     }
 
     use std::io::BufWriter;

@@ -3394,12 +3394,29 @@ pub(crate) fn copy_recursive_link(
     dest_path: &Path,
     options: &CpOptions,
     symlinked_files: &mut HashSet<CtFileInformation>,
+    copied_files: &mut HashMap<CtFileInformation, PathBuf>,
 ) -> CopyResult<()> {
     if cp_file_or_link_exists(dest_path) {
         cp_handle_existing_dest(sour_path, dest_path, options, false)?;
     }
+
+    let source_info = CtFileInformation::from_path(sour_path, false)?;
+    if options.cp_preserve_hard_links() {
+        if let Some(existing_dest) = copied_files.get(&source_info) {
+            if cp_file_or_link_exists(dest_path) {
+                fs::remove_file(dest_path)?;
+            }
+            fs::hard_link(existing_dest, dest_path)?;
+            return Ok(());
+        }
+    }
+
     copy_link(sour_path, dest_path, symlinked_files)?;
-    copy_attributes_with_deref(sour_path, dest_path, &options.attributes, false)
+    copy_attributes_with_deref(sour_path, dest_path, &options.attributes, false)?;
+    if options.cp_preserve_hard_links() {
+        copied_files.insert(source_info, dest_path.to_path_buf());
+    }
+    Ok(())
 }
 
 /// Generate an error message if `target` is not the correct `target_type`

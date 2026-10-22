@@ -2598,12 +2598,16 @@ fn is_forbidden_to_copy_to_same_file(
     // 例如：cp real.txt link.txt （link.txt -> real.txt）
     // 删除/覆盖目标只是删除链接，不影响源文件
     if !sour_is_symlink && dest_is_symlink {
-        // 当有 --backup、--remove-destination 或 --force 时允许覆盖
-        // 注意：-f（force）模式也应该允许覆盖符号链接
-        if has_backup || is_remove_dest || cp_opts.cp_force() {
+        // 备份或预先删除目标链接时不会写穿链接并截断源文件。
+        // 单独的 --force 只有在打开目标失败后才能删除链接，因此仍应拒绝。
+        if has_backup || is_remove_dest {
             return false;
         }
         return true;
+    }
+
+    if is_remove_dest {
+        return false;
     }
 
     // 情况3：其他情况（都是普通文件、都是符号链接、硬链接等）
@@ -3106,6 +3110,19 @@ fn copy_file(
             return Ok(());
         }
         cp_handle_existing_dest(sour_path, dest_path, cp_opts, source_in_command_line)?;
+
+        if sour_path == dest_path && cp_opts.cp_force() && cp_opts.backup != CtBackupMode::NoBackup
+        {
+            if cp_opts.verbose {
+                cp_print_verbose_output(
+                    cp_opts.parents,
+                    progress_bar,
+                    verbose_sour_path,
+                    dest_path,
+                )?;
+            }
+            return Ok(());
+        }
     }
 
     // 如请求，保留硬链接。

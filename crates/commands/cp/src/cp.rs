@@ -278,7 +278,7 @@ pub struct CpOptions {
     /// `-R`, `-r`, `--recursive`
     pub recursive: bool,
     /// `-S`, `--suffix`
-    pub backup_suffix: String,
+    pub backup_suffix: OsString,
     /// `-t`, `--target-directory`
     pub target_dir: Option<PathBuf>,
     /// `--update[=UPDATE]`
@@ -524,7 +524,7 @@ fn cp_args_init() -> Vec<Arg> {
             .action(ArgAction::SetTrue),
         ct_backup_control::arguments::backup(),
         ct_backup_control::arguments::backup_no_args(),
-        ct_backup_control::arguments::suffix(),
+        ct_backup_control::arguments::suffix_os(),
         ct_update_control::arguments::update()
             .value_parser(CtShortcutValueParser::new(["none", "all", "older"])),
         ct_update_control::arguments::update_no_args(),
@@ -977,7 +977,7 @@ impl CpOptions {
         };
         let update_mode = ct_update_control::ct_determine_update_mode(args_match);
 
-        let backup_suffix = ct_backup_control::determine_backup_suffix(args_match);
+        let backup_suffix = ct_backup_control::determine_backup_suffix_os(args_match);
 
         let overwrite = CpOverwriteMode::cp_from_matches(args_match);
 

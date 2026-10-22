@@ -26,6 +26,7 @@ use ctcore::ct_fs::{
 use ctcore::ct_show;
 use ctcore::ct_show_error;
 use ctcore::uio_error;
+use filetime::FileTime;
 use indicatif::ProgressBar;
 use walkdir::{DirEntry, WalkDir};
 
@@ -447,6 +448,10 @@ pub(crate) fn copy_directory(
         Err(e) => return Err(format!("failed to get current directory {e}").into()),
     };
 
+    // Capture the root metadata before WalkDir reads the directory.  Reading a
+    // directory updates its atime on filesystems mounted with atime semantics,
+    // while GNU cp's archive mode preserves the timestamp from before traversal.
+    let root_metadata = fs::symlink_metadata(root).ok();
     let mut dirs_to_preserve = Vec::new();
 
     // Traverse the contents of the directory, copying each one.
@@ -459,10 +464,16 @@ pub(crate) fn copy_directory(
             Ok(direntry) => {
                 let entry = Entry::new(&context, &direntry, options.no_target_dir)?;
                 if entry.source_absolute.is_dir() && !ends_with_slash_dot(&entry.source_absolute) {
+                    let source_metadata = if entry.depth == 0 {
+                        root_metadata.clone()
+                    } else {
+                        fs::symlink_metadata(&entry.source_absolute).ok()
+                    };
                     dirs_to_preserve.push((
                         entry.source_absolute.clone(),
                         entry.local_to_target.clone(),
                         !entry.local_to_target.exists(),
+                        source_metadata,
                     ));
                 }
                 copy_direntry(
@@ -482,9 +493,19 @@ pub(crate) fn copy_directory(
 
     // Apply attributes to all directories we traversed in post-order (deepest first).
     // This perfectly emulates GNU cp behavior and avoids read-only parent issues.
-    for (src, dest, created) in dirs_to_preserve.into_iter().rev() {
+    for (src, dest, created, source_metadata) in dirs_to_preserve.into_iter().rev() {
         if dest.exists() && dest.is_dir() {
             copy_attributes(&src, &dest, &options.attributes)?;
+            if matches!(options.attributes.timestamps, crate::CpPreserve::Yes { .. }) {
+                if let Some(source_metadata) = source_metadata {
+                    let destination_metadata = fs::metadata(&dest)?;
+                    filetime::set_file_times(
+                        &dest,
+                        FileTime::from_last_access_time(&source_metadata),
+                        FileTime::from_last_modification_time(&destination_metadata),
+                    )?;
+                }
+            }
             #[cfg(unix)]
             if created
                 && !dest.is_symlink()

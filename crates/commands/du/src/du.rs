@@ -1359,6 +1359,9 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     du_check_option_conflicts(&args_match)?;
 
     let du_max_depth = du_get_max_depth(&args_match, is_summarize)?;
+    if let Some(warning) = du_summarize_depth_warning(is_summarize, du_max_depth) {
+        ct_show_warning!("{warning}");
+    }
 
     // 处理输入文件列表
     let files_path = if let Some(file_from) = du_last_files0_from(&args_match) {
@@ -1548,6 +1551,7 @@ pub fn du_native_semantic(args: impl ctcore::Args) -> CTResult<DuSemantic> {
     let is_summarize = args_match.get_flag(opt_flags::SUMMARIZE);
     du_check_option_conflicts(&args_match)?;
     let du_max_depth = du_get_max_depth(&args_match, is_summarize)?;
+    let summarize_depth_warning = du_summarize_depth_warning(is_summarize, du_max_depth);
 
     let files_path = if let Some(file_from) = du_last_files0_from(&args_match) {
         if args_match.get_one::<String>(opt_flags::FILE).is_some() {
@@ -1636,6 +1640,11 @@ pub fn du_native_semantic(args: impl ctcore::Args) -> CTResult<DuSemantic> {
     drop(print_tx);
     let mut semantic = du_collect_semantic(&du_stat_printer, &rx)?;
     if let Some(warning) = du_inodes_apparent_size_warning(&args_match, &du_stat_printer) {
+        semantic
+            .stderr_text
+            .insert_str(0, &format!("du: warning: {warning}\n"));
+    }
+    if let Some(warning) = summarize_depth_warning {
         semantic
             .stderr_text
             .insert_str(0, &format!("du: warning: {warning}\n"));
@@ -1795,11 +1804,22 @@ fn du_parse_time_style(option: Option<&str>) -> CTResult<&str> {
 
 fn du_parse_depth(du_max_depth_str: Option<&str>, summarize: bool) -> CTResult<Option<usize>> {
     match du_max_depth_str {
-        Some(s) if summarize => Err(DuError::SummarizeDepthConflict(s.into()).into()),
-        Some(s) => du_parse_depth_limit(s)
-            .ok_or_else(|| Box::new(DuError::InvalidMaxDepthArg(s.into())) as Box<dyn CTError>),
+        Some(s) => {
+            let depth = du_parse_depth_limit(s).ok_or_else(|| {
+                Box::new(DuError::InvalidMaxDepthArg(s.into())) as Box<dyn CTError>
+            })?;
+            if summarize && depth != Some(0) {
+                Err(DuError::SummarizeDepthConflict(s.into()).into())
+            } else {
+                Ok(depth)
+            }
+        }
         None => Ok(None),
     }
+}
+
+fn du_summarize_depth_warning(summarize: bool, max_depth: Option<usize>) -> Option<&'static str> {
+    (summarize && max_depth == Some(0)).then_some("summarizing is the same as using --max-depth=0")
 }
 
 fn du_parse_depth_limit(depth: &str) -> Option<Option<usize>> {
@@ -2225,6 +2245,18 @@ mod tests {
         let matches = ct_app().try_get_matches_from(["du", "-d", "-1"]).unwrap();
 
         assert_eq!(du_get_max_depth(&matches, false).unwrap(), None);
+    }
+
+    #[test]
+    fn test_du_summarize_accepts_zero_depth_with_warning() {
+        let matches = ct_app().try_get_matches_from(["du", "-s", "-d0"]).unwrap();
+        let max_depth = du_get_max_depth(&matches, true).unwrap();
+
+        assert_eq!(max_depth, Some(0));
+        assert_eq!(
+            du_summarize_depth_warning(true, max_depth),
+            Some("summarizing is the same as using --max-depth=0")
+        );
     }
 
     #[test]

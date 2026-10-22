@@ -137,19 +137,28 @@ fn parse_number_token(token: &str) -> Option<ParsedNumber> {
     Some(ParsedNumber::Big(value))
 }
 
-fn is_recognized_long_option(arg: &str) -> bool {
-    let Some(candidate) = arg.strip_prefix("--") else {
-        return false;
-    };
+fn recognized_long_option(candidate: &str) -> Option<&'static str> {
     if candidate.is_empty() {
-        return false;
+        return None;
     }
 
-    ["exponents", "help", "version"]
+    let mut matches = ["exponents", "help", "version"]
         .iter()
-        .filter(|option| option.starts_with(candidate))
-        .count()
-        == 1
+        .copied()
+        .filter(|option| option.starts_with(candidate));
+    let option = matches.next()?;
+    matches.next().is_none().then_some(option)
+}
+
+fn is_recognized_long_option(arg: &str) -> bool {
+    arg.strip_prefix("--")
+        .and_then(recognized_long_option)
+        .is_some()
+}
+
+fn long_option_with_unexpected_argument(arg: &str) -> Option<&'static str> {
+    let (candidate, _) = arg.strip_prefix("--")?.split_once('=')?;
+    recognized_long_option(candidate)
 }
 
 fn factor_option_error(args: &[OsString]) -> Option<String> {
@@ -166,6 +175,11 @@ fn factor_option_error(args: &[OsString]) -> Option<String> {
         }
 
         if arg_str.starts_with("--") {
+            if let Some(option) = long_option_with_unexpected_argument(&arg_str) {
+                return Some(format!(
+                    "factor: option '--{option}' doesn't allow an argument\nTry 'factor --help' for more information.\n"
+                ));
+            }
             if is_recognized_long_option(&arg_str) {
                 continue;
             }
@@ -428,6 +442,14 @@ fn validate_options(args: &[OsString]) -> CTResult<()> {
         }
 
         if arg_str.starts_with("--") {
+            if let Some(option) = long_option_with_unexpected_argument(&arg_str) {
+                ct_show_error!("option '--{}' doesn't allow an argument", option);
+                eprintln!(
+                    "Try '{} --help' for more information.",
+                    ctcore::ct_util_name()
+                );
+                return Err(CtSimpleError::new(1, ""));
+            }
             if is_recognized_long_option(&arg_str) {
                 continue;
             }
@@ -764,6 +786,19 @@ mod tests {
         let buffer = writer.into_inner().unwrap();
         let output = String::from_utf8(buffer).unwrap();
         assert_eq!(output, "360: 2^3 3^2 5\n");
+    }
+
+    #[test]
+    fn test_exponents_option_rejects_attached_argument() {
+        let args = vec![OsString::from("factor"), OsString::from("--exp=value")];
+
+        assert_eq!(
+            factor_option_error(&args),
+            Some(String::from(
+                "factor: option '--exponents' doesn't allow an argument\n\
+                 Try 'factor --help' for more information.\n"
+            ))
+        );
     }
 
     #[test]

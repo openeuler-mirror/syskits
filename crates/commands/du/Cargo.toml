@@ -23,6 +23,9 @@ glob = { workspace = true }
 clap = { workspace = true }
 ctcore = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["dir", "fs"] }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 

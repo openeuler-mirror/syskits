@@ -1827,6 +1827,7 @@ dependencies = [
  "clap",
  "ctcore",
  "glob",
+ "nix 0.28.0",
  "rust-i18n",
  "sys-locale 0.2.4",
  "tempfile",

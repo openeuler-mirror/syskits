@@ -24,6 +24,12 @@ use ctcore::ct_parse_glob;
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 use ctcore::{ct_show, ct_show_error, ct_show_warning};
 use glob::Pattern;
+#[cfg(unix)]
+use nix::dir::Dir;
+#[cfg(unix)]
+use nix::fcntl::{AtFlags, OFlag};
+#[cfg(unix)]
+use nix::sys::stat::{Mode, SFlag, fstatat};
 use std::collections::HashSet;
 use std::env;
 use std::error::Error;
@@ -41,6 +47,8 @@ use std::os::unix::fs::MetadataExt;
 use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
+#[cfg(unix)]
+use std::os::{fd::AsRawFd, unix::ffi::OsStrExt};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::mpsc;
@@ -188,6 +196,12 @@ struct DuFileInfo {
     dev_id: u64,
 }
 
+#[cfg(unix)]
+enum DuDirectory {
+    Open(Dir),
+    Unreadable(io::Error),
+}
+
 struct DuStat {
     path: PathBuf,
     is_dir: bool,
@@ -198,6 +212,8 @@ struct DuStat {
     created: Option<u64>,
     accessed: u64,
     modified: u64,
+    #[cfg(unix)]
+    directory: Option<DuDirectory>,
 }
 
 impl DuStat {
@@ -259,6 +275,10 @@ impl DuStat {
                 created: du_birth_u64(&metadata),
                 accessed: metadata.atime() as u64,
                 modified: metadata.mtime() as u64,
+                #[cfg(unix)]
+                directory: metadata
+                    .is_dir()
+                    .then(|| du_open_path_directory(du_path, should_dereference)),
             })
         }
 
@@ -282,6 +302,110 @@ impl DuStat {
             })
         }
     }
+
+    #[cfg(unix)]
+    fn new_at(
+        dir_fd: i32,
+        name: &OsStr,
+        display_path: PathBuf,
+        du_opts: &DuTraversalOptions,
+    ) -> io::Result<Self> {
+        let should_dereference = matches!(&du_opts.dereference, DuDeref::All);
+        let metadata = fstatat(
+            Some(dir_fd),
+            name,
+            if should_dereference {
+                AtFlags::empty()
+            } else {
+                AtFlags::AT_SYMLINK_NOFOLLOW
+            },
+        )
+        .map_err(du_nix_error_to_io)?;
+        let is_dir = SFlag::from_bits_truncate(metadata.st_mode).contains(SFlag::S_IFDIR);
+
+        Ok(Self {
+            path: display_path,
+            is_dir,
+            size: if is_dir { 0 } else { metadata.st_size as u64 },
+            blocks: metadata.st_blocks as u64,
+            inodes: 1,
+            inode: Some(DuFileInfo {
+                file_id: metadata.st_ino as u128,
+                dev_id: metadata.st_dev as u64,
+            }),
+            created: du_birth_at(dir_fd, name, should_dereference),
+            accessed: metadata.st_atime as u64,
+            modified: metadata.st_mtime as u64,
+            directory: is_dir.then(|| du_open_directory_at(dir_fd, name, should_dereference)),
+        })
+    }
+}
+
+#[cfg(unix)]
+fn du_directory_flags(follow_symlink: bool) -> OFlag {
+    let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+    if !follow_symlink {
+        flags |= OFlag::O_NOFOLLOW;
+    }
+    flags
+}
+
+#[cfg(unix)]
+fn du_open_path_directory(path: &Path, follow_symlink: bool) -> DuDirectory {
+    match Dir::open(path, du_directory_flags(follow_symlink), Mode::empty()) {
+        Ok(directory) => DuDirectory::Open(directory),
+        Err(error) => DuDirectory::Unreadable(du_nix_error_to_io(error)),
+    }
+}
+
+#[cfg(unix)]
+fn du_open_directory_at(dir_fd: i32, name: &OsStr, follow_symlink: bool) -> DuDirectory {
+    match Dir::openat(
+        Some(dir_fd),
+        name,
+        du_directory_flags(follow_symlink),
+        Mode::empty(),
+    ) {
+        Ok(directory) => DuDirectory::Open(directory),
+        Err(error) => DuDirectory::Unreadable(du_nix_error_to_io(error)),
+    }
+}
+
+#[cfg(unix)]
+fn du_nix_error_to_io(error: nix::errno::Errno) -> io::Error {
+    io::Error::from_raw_os_error(error as i32)
+}
+
+#[cfg(target_os = "linux")]
+fn du_birth_at(dir_fd: i32, name: &OsStr, follow_symlink: bool) -> Option<u64> {
+    let name = CString::new(name.as_bytes()).ok()?;
+    let mut statx = std::mem::MaybeUninit::<nix::libc::statx>::zeroed();
+    let flags = if follow_symlink {
+        0
+    } else {
+        nix::libc::AT_SYMLINK_NOFOLLOW
+    };
+    let result = unsafe {
+        nix::libc::statx(
+            dir_fd,
+            name.as_ptr(),
+            flags,
+            nix::libc::STATX_BTIME,
+            statx.as_mut_ptr(),
+        )
+    };
+    if result != 0 {
+        return None;
+    }
+
+    let statx = unsafe { statx.assume_init() };
+    ((statx.stx_mask & nix::libc::STATX_BTIME) != 0 && statx.stx_btime.tv_sec >= 0)
+        .then_some(statx.stx_btime.tv_sec as u64)
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn du_birth_at(_dir_fd: i32, _name: &OsStr, _follow_symlink: bool) -> Option<u64> {
+    None
 }
 #[cfg(windows)]
 /**
@@ -514,111 +638,167 @@ fn du(
 ) -> Result<DuStat, Box<mpsc::SendError<CTResult<StatPrintInfo>>>> {
     // 如果当前项是目录，开始遍历其内容
     if state.is_dir {
-        // 尝试读取目录内容
-        let read = match fs::read_dir(&state.path) {
-            Ok(read) => read,
-            Err(e) => {
-                // 发送读取目录失败的错误信息
-                du_print_tx.send(Err(e.map_err_context(|| {
-                    format!("cannot read directory {}", state.path.quote())
-                })))?;
-                return Ok(state);
-            }
-        };
-
-        'file_loop: for f in read {
-            match f {
-                // 统计当前文件或目录的信息
-                Ok(entry) => {
-                    match DuStat::new(&entry.path(), du_opts, false) {
-                        Ok(this_stat) => {
-                            // 检查是否应忽略当前项，根据排除列表和其他选项
-                            for pattern in &du_opts.excludes {
-                                // 查看同时具有短路径和长路径的所有模式
-                                // 如果我们有命令 'du foo' 并且要排除搜索 'foo/bar'
-                                // 我们需要完整的路径
-                                if pattern.matches(&this_stat.path.to_string_lossy())
-                                    || pattern.matches(&entry.file_name().into_string().unwrap())
-                                {
-                                    // 如果目录被忽略，则提前退出
-                                    if du_opts.verbose {
-                                        println!("{} ignored", &this_stat.path.quote());
-                                    }
-                                    // 转至下一个文件
-                                    continue 'file_loop;
-                                }
-                            }
-
-                            // 默认模式下避免重复统计同一 inode；--count-links 时不过滤。
-                            if !du_opts.count_links || this_stat.is_dir {
-                                if let Some(inode) = this_stat.inode {
-                                    if du_seen_inodes.contains(&inode) {
-                                        continue;
-                                    }
-                                    du_seen_inodes.insert(inode);
-                                }
-                            }
-                            // 递归统计子目录，或更新当前目录的统计信息
-                            if this_stat.is_dir {
-                                // 检查是否跨越了不同的文件系统
-                                if du_opts.one_file_system {
-                                    if let (Some(this_inode), Some(my_inode)) =
-                                        (this_stat.inode, state.inode)
-                                    {
-                                        if this_inode.dev_id != my_inode.dev_id {
-                                            continue;
-                                        }
-                                    }
-                                }
-
-                                // 合并子目录的统计信息到当前目录
-                                let this_stat = du(
-                                    this_stat,
-                                    du_opts,
-                                    du_depth + 1,
-                                    du_seen_inodes,
-                                    du_print_tx,
-                                )?;
-
-                                if !du_opts.separate_dirs {
-                                    state.size += this_stat.size;
-                                    state.blocks += this_stat.blocks;
-                                    state.inodes += this_stat.inodes;
-                                    state.merge_time_from(&this_stat);
-                                }
-                                // 发送统计结果
-                                du_print_tx.send(Ok(StatPrintInfo {
-                                    stat: this_stat,
-                                    depth: du_depth + 1,
-                                }))?;
-                            } else {
-                                // 更新文件的统计信息
-                                state.size += this_stat.size;
-                                state.blocks += this_stat.blocks;
-                                state.inodes += 1;
-                                state.merge_time_from(&this_stat);
-                                // 如果选项为统计所有文件，发送该文件的统计信息
-                                if du_opts.all {
-                                    du_print_tx.send(Ok(StatPrintInfo {
-                                        stat: this_stat,
-                                        depth: du_depth + 1,
-                                    }))?;
-                                }
-                            }
-                        }
-                        // 发送统计失败的错误信息
-                        Err(e) => du_print_tx.send(Err(e.map_err_context(|| {
-                            format!("cannot access {}", entry.path().quote())
-                        })))?,
-                    }
+        #[cfg(unix)]
+        {
+            let mut directory = match state.directory.take() {
+                Some(DuDirectory::Open(directory)) => directory,
+                Some(DuDirectory::Unreadable(error)) => {
+                    du_print_tx.send(Err(error.map_err_context(|| {
+                        format!("cannot read directory {}", state.path.quote())
+                    })))?;
+                    return Ok(state);
                 }
-                // 发送读取文件错误的信息
-                Err(error) => du_print_tx.send(Err(error.into()))?,
+                None => unreachable!("directories are opened when their metadata is read"),
+            };
+            let dir_fd = directory.as_raw_fd();
+
+            for entry in directory.iter() {
+                match entry {
+                    Ok(entry) => {
+                        let name = OsStr::from_bytes(entry.file_name().to_bytes());
+                        if name == OsStr::new(".") || name == OsStr::new("..") {
+                            continue;
+                        }
+                        let name = name.to_os_string();
+                        let entry_path = state.path.join(&name);
+                        let this_stat = DuStat::new_at(dir_fd, &name, entry_path.clone(), du_opts);
+                        du_process_entry(
+                            &mut state,
+                            this_stat,
+                            &entry_path,
+                            &name,
+                            du_opts,
+                            du_depth,
+                            du_seen_inodes,
+                            du_print_tx,
+                        )?;
+                    }
+                    Err(error) => du_print_tx.send(Err(du_nix_error_to_io(error).into()))?,
+                }
+            }
+        }
+
+        #[cfg(not(unix))]
+        {
+            // 尝试读取目录内容
+            let read = match fs::read_dir(&state.path) {
+                Ok(read) => read,
+                Err(e) => {
+                    // 发送读取目录失败的错误信息
+                    du_print_tx.send(Err(e.map_err_context(|| {
+                        format!("cannot read directory {}", state.path.quote())
+                    })))?;
+                    return Ok(state);
+                }
+            };
+
+            for entry in read {
+                match entry {
+                    Ok(entry) => {
+                        let entry_path = entry.path();
+                        du_process_entry(
+                            &mut state,
+                            DuStat::new(&entry_path, du_opts, false),
+                            &entry_path,
+                            &entry.file_name(),
+                            du_opts,
+                            du_depth,
+                            du_seen_inodes,
+                            du_print_tx,
+                        )?;
+                    }
+                    Err(error) => du_print_tx.send(Err(error.into()))?,
+                }
             }
         }
     }
 
     Ok(state)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn du_process_entry(
+    state: &mut DuStat,
+    this_stat: io::Result<DuStat>,
+    entry_path: &Path,
+    entry_name: &OsStr,
+    du_opts: &DuTraversalOptions,
+    du_depth: usize,
+    du_seen_inodes: &mut HashSet<DuFileInfo>,
+    du_print_tx: &mpsc::Sender<CTResult<StatPrintInfo>>,
+) -> Result<(), Box<mpsc::SendError<CTResult<StatPrintInfo>>>> {
+    let this_stat = match this_stat {
+        Ok(stat) => stat,
+        Err(error) => {
+            du_print_tx.send(Err(
+                error.map_err_context(|| format!("cannot access {}", entry_path.quote()))
+            ))?;
+            return Ok(());
+        }
+    };
+
+    for pattern in &du_opts.excludes {
+        if pattern.matches(&this_stat.path.to_string_lossy())
+            || pattern.matches(entry_name.to_str().unwrap())
+        {
+            if du_opts.verbose {
+                println!("{} ignored", &this_stat.path.quote());
+            }
+            return Ok(());
+        }
+    }
+
+    // 默认模式下避免重复统计同一 inode；--count-links 时不过滤。
+    if !du_opts.count_links || this_stat.is_dir {
+        if let Some(inode) = this_stat.inode {
+            if du_seen_inodes.contains(&inode) {
+                return Ok(());
+            }
+            du_seen_inodes.insert(inode);
+        }
+    }
+
+    if this_stat.is_dir {
+        if du_opts.one_file_system {
+            if let (Some(this_inode), Some(my_inode)) = (this_stat.inode, state.inode) {
+                if this_inode.dev_id != my_inode.dev_id {
+                    return Ok(());
+                }
+            }
+        }
+
+        let this_stat = du(
+            this_stat,
+            du_opts,
+            du_depth + 1,
+            du_seen_inodes,
+            du_print_tx,
+        )?;
+
+        if !du_opts.separate_dirs {
+            state.size += this_stat.size;
+            state.blocks += this_stat.blocks;
+            state.inodes += this_stat.inodes;
+            state.merge_time_from(&this_stat);
+        }
+        du_print_tx.send(Ok(StatPrintInfo {
+            stat: this_stat,
+            depth: du_depth + 1,
+        }))?;
+    } else {
+        state.size += this_stat.size;
+        state.blocks += this_stat.blocks;
+        state.inodes += 1;
+        state.merge_time_from(&this_stat);
+        if du_opts.all {
+            du_print_tx.send(Ok(StatPrintInfo {
+                stat: this_stat,
+                depth: du_depth + 1,
+            }))?;
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -2319,6 +2499,45 @@ mod tests {
 
         assert_eq!(entry_total, 9);
         assert_eq!(total.measured_size, entry_total);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_traversal_beyond_path_max_uses_directory_fds() {
+        use nix::sys::stat::mkdirat;
+        use std::os::fd::AsRawFd;
+        use std::os::unix::ffi::OsStrExt;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root = temp_dir.path().join("deep");
+        fs::create_dir(&root).unwrap();
+        let component = OsStr::new("dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd");
+        let flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        let mut directory = Dir::open(&root, flags, Mode::empty()).unwrap();
+        let mut display_path = root.clone();
+
+        for _ in 0..75 {
+            mkdirat(
+                Some(directory.as_raw_fd()),
+                component,
+                Mode::from_bits_truncate(0o755),
+            )
+            .unwrap();
+            directory =
+                Dir::openat(Some(directory.as_raw_fd()), component, flags, Mode::empty()).unwrap();
+            display_path.push(component);
+        }
+        assert!(display_path.as_os_str().as_bytes().len() > 4096);
+
+        let args = vec![
+            OsString::from("du"),
+            OsString::from("-s"),
+            root.as_os_str().to_os_string(),
+        ];
+        let semantic = du_native_semantic(args.into_iter()).unwrap();
+
+        assert_eq!(semantic.exit_code, 0);
+        assert!(semantic.stderr_text.is_empty());
     }
 
     #[test]

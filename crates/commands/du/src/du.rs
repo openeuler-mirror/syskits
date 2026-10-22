@@ -855,6 +855,28 @@ fn du_last_files0_from(args_match: &ArgMatches) -> Option<&String> {
         .and_then(|values| values.last())
 }
 
+fn du_get_dereference(args_match: &ArgMatches, files_path: &[PathBuf]) -> DuDeref {
+    let last_option = [
+        opt_flags::DEREFERENCE_ARGS,
+        opt_flags::DEREFERENCE,
+        opt_flags::NO_DEREFERENCE,
+    ]
+    .into_iter()
+    .filter(|option| {
+        args_match.value_source(option) == Some(clap::parser::ValueSource::CommandLine)
+    })
+    .filter_map(|option| args_match.index_of(option).map(|index| (index, option)))
+    .max_by_key(|(index, _)| *index)
+    .map(|(_, option)| option);
+
+    match last_option {
+        Some(opt_flags::DEREFERENCE) => DuDeref::All,
+        Some(opt_flags::DEREFERENCE_ARGS) => DuDeref::Args(files_path.to_vec()),
+        Some(opt_flags::NO_DEREFERENCE) | None => DuDeref::None,
+        Some(_) => unreachable!("all dereference options are handled"),
+    }
+}
+
 fn du_apply_posix_option_order(args: &mut Vec<OsString>, enabled: bool) {
     if !enabled {
         return;
@@ -1374,14 +1396,7 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
         all: args_match.get_flag(opt_flags::ALL),
         separate_dirs: args_match.get_flag(opt_flags::SEPARATE_DIRS),
         one_file_system: args_match.get_flag(opt_flags::ONE_FILE_SYSTEM),
-        dereference: if args_match.get_flag(opt_flags::DEREFERENCE) {
-            DuDeref::All
-        } else if args_match.get_flag(opt_flags::DEREFERENCE_ARGS) {
-            // 根据参数决定是否只对参数进行解引用
-            DuDeref::Args(files_path.clone())
-        } else {
-            DuDeref::None
-        },
+        dereference: du_get_dereference(&args_match, &files_path),
         count_links: args_match.get_flag(opt_flags::COUNT_LINKS),
         verbose: args_match.get_flag(opt_flags::VERBOSE),
         excludes: du_build_exclude_patterns(&args_match)?, // 构建排除模式列表
@@ -1563,13 +1578,7 @@ pub fn du_native_semantic(args: impl ctcore::Args) -> CTResult<DuSemantic> {
         all: args_match.get_flag(opt_flags::ALL),
         separate_dirs: args_match.get_flag(opt_flags::SEPARATE_DIRS),
         one_file_system: args_match.get_flag(opt_flags::ONE_FILE_SYSTEM),
-        dereference: if args_match.get_flag(opt_flags::DEREFERENCE) {
-            DuDeref::All
-        } else if args_match.get_flag(opt_flags::DEREFERENCE_ARGS) {
-            DuDeref::Args(files_path.clone())
-        } else {
-            DuDeref::None
-        },
+        dereference: du_get_dereference(&args_match, &files_path),
         count_links: args_match.get_flag(opt_flags::COUNT_LINKS),
         verbose: args_match.get_flag(opt_flags::VERBOSE),
         excludes: du_build_exclude_patterns(&args_match)?,
@@ -2303,6 +2312,25 @@ mod tests {
             du_get_size_format(&matches).unwrap(),
             DuSizeFormat::BlockSize(1024)
         );
+    }
+
+    #[test]
+    fn test_du_dereference_uses_last_option() {
+        let files_path = vec![PathBuf::from("tree/link")];
+        let cases: &[(&[&str], DuDeref)] = &[
+            (&["du", "-H", "-P"], DuDeref::None),
+            (&["du", "-P", "-H"], DuDeref::Args(files_path.clone())),
+            (&["du", "-H", "-L"], DuDeref::All),
+            (&["du", "-L", "-H"], DuDeref::Args(files_path.clone())),
+            (&["du", "-L", "-P"], DuDeref::None),
+            (&["du", "-P", "-L"], DuDeref::All),
+        ];
+
+        for (args, expected) in cases {
+            let matches = ct_app().try_get_matches_from(args.iter().copied()).unwrap();
+
+            assert!(du_get_dereference(&matches, &files_path) == expected.clone());
+        }
     }
 
     #[test]

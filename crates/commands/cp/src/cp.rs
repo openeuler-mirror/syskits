@@ -2661,15 +2661,7 @@ fn cp_handle_existing_dest(
     };
 
     match clobber_mode {
-        CpClobberMode::Force => {
-            if is_symlink_loop(dest_path)
-                || fs::metadata(dest_path)
-                    .map(|m| m.permissions().readonly())
-                    .unwrap_or(false)
-            {
-                let _ = fs::remove_file(dest_path);
-            }
-        }
+        CpClobberMode::Force => {}
         CpClobberMode::RemoveDestination => {
             let _ = fs::remove_file(dest_path);
         }
@@ -3334,15 +3326,7 @@ fn copy_helper(
     let copy_debug = if sour_path.as_os_str() == "/dev/null"
         && cp_opts.reflink_mode == CpReflinkMode::Always
     {
-        match copy_on_write(
-            sour_path,
-            dest_path,
-            cp_opts.reflink_mode,
-            cp_opts.sparse_mode,
-            cp_str,
-            #[cfg(target_os = "linux")]
-            is_sour_fifo,
-        ) {
+        match copy_on_write_with_force(sour_path, dest_path, cp_opts, cp_str, is_sour_fifo) {
             Ok(copy_debug) => Some(copy_debug),
             Err(error) => {
                 if !destination_existed {
@@ -3369,19 +3353,48 @@ fn copy_helper(
         None
     } else {
         // 默认情况下，进行文件或目录的实际复制操作
-        let copy_debug = copy_on_write(
-            sour_path,
-            dest_path,
-            cp_opts.reflink_mode,
-            cp_opts.sparse_mode,
-            cp_str,
-            #[cfg(target_os = "linux")]
-            is_sour_fifo,
-        )?;
+        let copy_debug =
+            copy_on_write_with_force(sour_path, dest_path, cp_opts, cp_str, is_sour_fifo)?;
         Some(copy_debug)
     };
 
     Ok(copy_debug)
+}
+
+fn copy_on_write_with_force(
+    source: &Path,
+    dest: &Path,
+    options: &CpOptions,
+    context: &str,
+    source_is_fifo: bool,
+) -> CopyResult<CopyDebug> {
+    let copy = || {
+        copy_on_write(
+            source,
+            dest,
+            options.reflink_mode,
+            options.sparse_mode,
+            context,
+            #[cfg(target_os = "linux")]
+            source_is_fifo,
+        )
+    };
+
+    match copy() {
+        Err(_)
+            if options.cp_force()
+                && cp_file_or_link_exists(dest)
+                && fs::symlink_metadata(dest)
+                    .map(|metadata| metadata.is_file() || metadata.file_type().is_symlink())
+                    .unwrap_or(false)
+                && OpenOptions::new().write(true).open(dest).is_err()
+                && !dest.is_dir() =>
+        {
+            fs::remove_file(dest)?;
+            copy()
+        }
+        result => result,
+    }
 }
 
 #[cfg(target_os = "linux")]

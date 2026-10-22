@@ -2142,9 +2142,13 @@ impl FromStr for DuThreshold {
         let value = str.trim_start_matches(|c: char| c.is_ascii_whitespace());
         // 根据字符串是否以'-'或'+'开头，计算出实际大小字符串的起始位置。
         let str_offset = usize::from(value.starts_with(&['-', '+'][..]));
+        let magnitude = &value[str_offset..];
+        if magnitude.ends_with('b') {
+            return Err(ParseSizeError::InvalidSuffix(str.to_string()));
+        }
 
         // 解析大小。
-        let str_size = parse_size_u64(&value[str_offset..])?;
+        let str_size = parse_size_u64(magnitude)?;
         let negative = value.starts_with('-');
         let max_magnitude = if negative {
             i64::MAX as u64 + 1
@@ -2359,6 +2363,18 @@ mod tests {
         assert!(matches!(
             DuThreshold::from_str("-9223372036854775809"),
             Err(ParseSizeError::SizeTooBig(_))
+        ));
+    }
+
+    #[test]
+    fn test_du_threshold_rejects_lowercase_b_suffix() {
+        assert!(matches!(
+            DuThreshold::from_str("1b"),
+            Err(ParseSizeError::InvalidSuffix(_))
+        ));
+        assert!(matches!(
+            DuThreshold::from_str("-1b"),
+            Err(ParseSizeError::InvalidSuffix(_))
         ));
     }
 

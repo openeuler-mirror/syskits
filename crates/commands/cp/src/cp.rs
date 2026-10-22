@@ -177,7 +177,7 @@ pub enum CpCopyMode {
 /// For full compatibility with GNU, these options should also combine. We
 /// currently only do a best effort imitation of that behavior, because it is
 /// difficult to achieve in clap, especially with `--no-preserve`.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct CpAttributes {
     #[cfg(unix)]
     pub ownership: CpPreserve,
@@ -3148,10 +3148,24 @@ fn copy_file(
     }
 
     // 使用带有精确 dereference 标志的引擎同步属性
+    let symbolic_link_attributes = if cp_opts.copy_mode == CpCopyMode::SymLink {
+        let mut attributes = cp_opts.attributes.clone();
+        #[cfg(unix)]
+        {
+            attributes.ownership = CpPreserve::No { explicit: false };
+        }
+        Some(attributes)
+    } else {
+        None
+    };
+    let attributes = symbolic_link_attributes
+        .as_ref()
+        .unwrap_or(&cp_opts.attributes);
+
     if let Err(e) = copy_attributes_with_deref(
         sour_path,
         dest_path,
-        &cp_opts.attributes,
+        attributes,
         cp_opts.cp_dereference(source_in_command_line),
     ) {
         if !dest_existed {

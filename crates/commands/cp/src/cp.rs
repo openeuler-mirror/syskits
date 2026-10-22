@@ -2666,11 +2666,9 @@ fn cp_handle_existing_dest(
             let _ = fs::remove_file(dest_path);
         }
         CpClobberMode::Standard => {
-            // --attributes-only 模式下不应删除目标文件，只需修改属性
-            // 删除操作会破坏硬链接并截断文件（重新创建为空文件）
-            if cp_opts.copy_mode != CpCopyMode::AttrOnly && cp_opts.cp_preserve_hard_links() {
-                let _ = fs::remove_file(dest_path);
-            }
+            // Keep an existing destination in place.  A normal copy will
+            // truncate it, while a later hard-link preservation step can
+            // replace it when it has to point at an already-copied inode.
         }
     }
 

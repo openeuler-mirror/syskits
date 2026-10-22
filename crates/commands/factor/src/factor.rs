@@ -16,7 +16,7 @@ use ctcore::Tool;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::collections::BTreeMap;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::BufRead;
 use std::io::{self, BufReader, Write, stdout};
 mod factor_algorithm;
@@ -210,6 +210,36 @@ fn invalid_short_option_character(arg: &str) -> char {
     arg.strip_prefix('-')
         .and_then(|options| options.chars().find(|option| *option != 'h'))
         .unwrap_or('-')
+}
+
+fn invalid_short_option_byte(arg: &OsStr) -> u8 {
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStrExt;
+
+    #[cfg(unix)]
+    let bytes = arg.as_bytes();
+    #[cfg(not(unix))]
+    let bytes = arg.to_string_lossy();
+    #[cfg(not(unix))]
+    let bytes = bytes.as_bytes();
+
+    bytes
+        .iter()
+        .copied()
+        .skip(1)
+        .find(|option| *option != b'h')
+        .unwrap_or(b'-')
+}
+
+fn write_invalid_option_diagnostic(
+    writer: &mut impl Write,
+    utility_name: &str,
+    invalid: u8,
+) -> io::Result<()> {
+    write!(writer, "{utility_name}: invalid option -- '")?;
+    writer.write_all(&[invalid])?;
+    writeln!(writer, "'")?;
+    writeln!(writer, "Try '{utility_name} --help' for more information.")
 }
 
 fn factor_row_from_powers(
@@ -471,12 +501,10 @@ fn validate_options(args: &[OsString]) -> CTResult<()> {
             if is_exponents_short_option_cluster(&arg_str) || arg_str == "-V" {
                 continue;
             }
-            let invalid = invalid_short_option_character(&arg_str);
-            ct_show_error!("invalid option -- '{}'", invalid);
-            eprintln!(
-                "Try '{} --help' for more information.",
-                ctcore::ct_util_name()
-            );
+            let invalid = invalid_short_option_byte(arg.as_os_str());
+            let stderr = io::stderr();
+            write_invalid_option_diagnostic(&mut stderr.lock(), ctcore::ct_util_name(), invalid)
+                .expect("failed to write invalid option diagnostic");
             return Err(CtSimpleError::new(1, ""));
         }
     }
@@ -817,6 +845,22 @@ mod tests {
                 "factor: invalid option -- 'x'\n\
                  Try 'factor --help' for more information.\n"
             ))
+        );
+    }
+
+    #[test]
+    fn test_multibyte_short_option_diagnostic_uses_first_byte() {
+        let option = OsString::from("-\u{e9}");
+        let invalid = invalid_short_option_byte(option.as_os_str());
+        let mut diagnostic = Vec::new();
+
+        write_invalid_option_diagnostic(&mut diagnostic, "factor", invalid).unwrap();
+
+        assert_eq!(invalid, 0xc3);
+        assert_eq!(
+            diagnostic,
+            b"factor: invalid option -- '\xc3'\n\
+              Try 'factor --help' for more information.\n"
         );
     }
 

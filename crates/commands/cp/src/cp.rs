@@ -1945,6 +1945,7 @@ fn copy_source(
         copy_file(
             progress_bar,
             source_path,
+            source_path,
             dest.as_path(),
             options,
             symlinked_files,
@@ -3020,6 +3021,7 @@ fn is_skipped_by_update(
 fn copy_file(
     progress_bar: &Option<ProgressBar>,
     sour_path: &Path,
+    verbose_sour_path: &Path,
     dest_path: &Path,
     cp_opts: &CpOptions,
     symlinked_files: &mut HashSet<CtFileInformation>,
@@ -3205,7 +3207,7 @@ fn copy_file(
 
     // GNU cp 行为：即便 verbose 输出失败，复制副作用也应已发生。
     if cp_opts.verbose {
-        cp_print_verbose_output(cp_opts.parents, progress_bar, sour_path, dest_path)?;
+        cp_print_verbose_output(cp_opts.parents, progress_bar, verbose_sour_path, dest_path)?;
         // 对于“stdout 初始关闭并被运行时兜底重定向”的场景（close-stdout 语义），
         // 复制已经完成，但命令仍需以写错误退出。
         if ctcore::ct_stdout_was_closed() {
@@ -3391,6 +3393,7 @@ fn copy_link(
 
 pub(crate) fn copy_recursive_link(
     sour_path: &Path,
+    verbose_sour_path: &Path,
     dest_path: &Path,
     options: &CpOptions,
     symlinked_files: &mut HashSet<CtFileInformation>,
@@ -3407,6 +3410,9 @@ pub(crate) fn copy_recursive_link(
                 fs::remove_file(dest_path)?;
             }
             fs::hard_link(existing_dest, dest_path)?;
+            if options.verbose {
+                cp_print_verbose_output(options.parents, &None, verbose_sour_path, dest_path)?;
+            }
             return Ok(());
         }
     }
@@ -3415,6 +3421,9 @@ pub(crate) fn copy_recursive_link(
     copy_attributes_with_deref(sour_path, dest_path, &options.attributes, false)?;
     if options.cp_preserve_hard_links() {
         copied_files.insert(source_info, dest_path.to_path_buf());
+    }
+    if options.verbose {
+        cp_print_verbose_output(options.parents, &None, verbose_sour_path, dest_path)?;
     }
     Ok(())
 }

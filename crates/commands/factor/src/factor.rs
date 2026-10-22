@@ -23,7 +23,7 @@ mod factor_algorithm;
 use clap::builder::OsStringValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::ct_display::locale_quote_marks;
-use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code, strip_errno};
 use ctcore::ct_show_error;
 pub use factor_algorithm::*;
 use num_bigint::BigUint;
@@ -473,6 +473,10 @@ fn stdin_tokens(line: &[u8]) -> impl Iterator<Item = &[u8]> {
         .filter(|token| !token.is_empty())
 }
 
+fn read_error_message(error: &io::Error) -> String {
+    format!("error reading input: {}", strip_errno(error))
+}
+
 pub fn factor_native_semantic(args: impl ctcore::Args) -> CTResult<FactorSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -520,7 +524,7 @@ pub fn factor_native_semantic(args: impl ctcore::Args) -> CTResult<FactorSemanti
                     semantic.exit_code = 1;
                     semantic
                         .stderr_text
-                        .push_str(&format!("factor: error reading input: {err}\n"));
+                        .push_str(&format!("factor: {}\n", read_error_message(&err)));
                     break;
                 }
             }
@@ -712,7 +716,7 @@ fn process_stdin(
             }
             Err(e) => {
                 set_ct_exit_code(1);
-                ct_show_error!("error reading input: {}", e);
+                ct_show_error!("{}", read_error_message(&e));
                 return Ok(());
             }
         }
@@ -1032,6 +1036,17 @@ mod tests {
         assert_eq!(
             stdin_tokens(input).collect::<Vec<_>>(),
             vec![b"12\r".as_slice(), "15\x0b21\x0c25\u{a0}27".as_bytes()]
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_read_error_message_omits_rust_errno_suffix() {
+        let error = io::Error::from_raw_os_error(21);
+
+        assert_eq!(
+            read_error_message(&error),
+            "error reading input: Is a directory"
         );
     }
 

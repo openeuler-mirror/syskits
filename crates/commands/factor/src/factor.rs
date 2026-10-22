@@ -312,11 +312,10 @@ fn factor_row_from_powers(
 }
 
 fn factor_row_from_token(token: &str, print_exponents: bool) -> Result<FactorRow, String> {
-    let display_token = token.trim();
     let parsed = parse_number_token(token).ok_or_else(|| {
         format!(
             "factor: {} is not a valid positive integer\n",
-            locale_quote(display_token)
+            locale_quote(token)
         )
     })?;
 
@@ -577,13 +576,12 @@ fn factors_print_str(
     is_print_exponents: bool,
     dev_debug: bool,
 ) -> io::Result<()> {
-    let display_token = num_str.trim();
     let parsed = match parse_number_token(num_str) {
         Some(parsed) => parsed,
         None => {
             ct_show_error!(
                 "{} is not a valid positive integer",
-                locale_quote(display_token)
+                locale_quote(num_str)
             );
             set_ct_exit_code(1);
             return Ok(());
@@ -926,6 +924,14 @@ mod tests {
         assert!(parse_number_token("12 ").is_none());
         assert!(parse_number_token("\t12").is_none());
         assert!(parse_number_token("\u{a0}12").is_none());
+    }
+
+    #[test]
+    fn test_invalid_operand_diagnostic_preserves_whitespace() {
+        let message = factor_row_from_token("abc ", false).unwrap_err();
+
+        assert!(message.contains("abc "));
+        assert!(!message.contains("'abc'"));
     }
 
     #[test]

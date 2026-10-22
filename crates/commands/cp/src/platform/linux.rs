@@ -409,6 +409,7 @@ where
     let mode = 0o622 & !get_umask();
     let mut dst_file = OpenOptions::new()
         .create(true)
+        .truncate(true)
         .write(true)
         .mode(mode)
         .open(&dest)?;

@@ -849,6 +849,12 @@ fn du_validate_options(args: &[OsString]) -> CTResult<()> {
     Ok(())
 }
 
+fn du_last_files0_from(args_match: &ArgMatches) -> Option<&String> {
+    args_match
+        .get_many::<String>(opt_flags::FILES0_FROM)
+        .and_then(|values| values.last())
+}
+
 /**
  * 将文件内容读取到一个String类型的vector中。
  *
@@ -1305,7 +1311,7 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     let du_max_depth = du_get_max_depth(&args_match, is_summarize)?;
 
     // 处理输入文件列表
-    let files_path = if let Some(file_from) = args_match.get_one::<String>(opt_flags::FILES0_FROM) {
+    let files_path = if let Some(file_from) = du_last_files0_from(&args_match) {
         // 从文件中读取文件列表，处理特殊值 "-" 表示标准输入
         if args_match.get_one::<String>(opt_flags::FILE).is_some() {
             return Err(std::io::Error::other(format!(
@@ -1498,7 +1504,7 @@ pub fn du_native_semantic(args: impl ctcore::Args) -> CTResult<DuSemantic> {
     du_check_option_conflicts(&args_match)?;
     let du_max_depth = du_get_max_depth(&args_match, is_summarize)?;
 
-    let files_path = if let Some(file_from) = args_match.get_one::<String>(opt_flags::FILES0_FROM) {
+    let files_path = if let Some(file_from) = du_last_files0_from(&args_match) {
         if args_match.get_one::<String>(opt_flags::FILE).is_some() {
             return Err(std::io::Error::other(format!(
                 "extra operand {}\nfile operands cannot be combined with --files0-from",
@@ -2199,6 +2205,18 @@ mod tests {
                 .get_one::<String>(opt_flags::TIME_STYLE)
                 .map(String::as_str),
             Some("long-iso")
+        );
+    }
+
+    #[test]
+    fn test_du_repeated_files0_from_uses_last_value() {
+        let matches = ct_app()
+            .try_get_matches_from(["du", "--files0-from=list-a", "--files0-from=list-b"])
+            .unwrap();
+
+        assert_eq!(
+            du_last_files0_from(&matches).map(String::as_str),
+            Some("list-b")
         );
     }
 

@@ -114,22 +114,22 @@ pub struct FactorSemantic {
     pub exit_code: i32,
 }
 
-fn parse_number_token(token: &str) -> Option<ParsedNumber> {
-    let trimmed = token.trim_start_matches(' ');
+fn parse_number_token(token: &[u8]) -> Option<ParsedNumber> {
+    let trimmed = &token[token.iter().take_while(|&&byte| byte == b' ').count()..];
     if trimmed.is_empty() {
         return None;
     }
 
-    let stripped = trimmed.strip_prefix('+').unwrap_or(trimmed);
-    if stripped.is_empty() || stripped.starts_with('-') {
+    let stripped = trimmed.strip_prefix(b"+").unwrap_or(trimmed);
+    if stripped.is_empty() || stripped.starts_with(b"-") {
         return None;
     }
 
-    if !stripped.chars().all(|c| c.is_ascii_digit()) {
+    if !stripped.iter().all(u8::is_ascii_digit) {
         return None;
     }
 
-    let value = BigUint::parse_bytes(stripped.as_bytes(), 10)?;
+    let value = BigUint::parse_bytes(stripped, 10)?;
     if let Some(n) = value.to_u64() {
         return Some(ParsedNumber::Small(n));
     }
@@ -137,33 +137,47 @@ fn parse_number_token(token: &str) -> Option<ParsedNumber> {
     Some(ParsedNumber::Big(value))
 }
 
-fn factor_quote(token: &str) -> String {
+fn push_octal_escape(quoted: &mut String, byte: u8) {
+    quoted.push_str(&format!("\\{byte:03o}"));
+}
+
+fn factor_quote(token: &[u8]) -> String {
     let (left_quote, right_quote) = locale_quote_marks();
     let unicode_locale = right_quote != "'";
     let mut quoted = left_quote;
+    let mut index = 0;
 
-    for character in token.chars() {
-        match character {
-            '\x07' => quoted.push_str("\\a"),
-            '\x08' => quoted.push_str("\\b"),
-            '\t' => quoted.push_str("\\t"),
-            '\n' => quoted.push_str("\\n"),
-            '\x0b' => quoted.push_str("\\v"),
-            '\x0c' => quoted.push_str("\\f"),
-            '\r' => quoted.push_str("\\r"),
-            '\\' => quoted.push_str("\\\\"),
-            '\'' if !unicode_locale => quoted.push_str("\\'"),
-            character if character.is_ascii_control() => {
-                quoted.push_str(&format!("\\{:03o}", u32::from(character)));
-            }
-            character if character.is_ascii() || unicode_locale => quoted.push(character),
-            character => {
-                let mut bytes = [0; 4];
-                for byte in character.encode_utf8(&mut bytes).bytes() {
-                    quoted.push_str(&format!("\\{byte:03o}"));
+    while index < token.len() {
+        let byte = token[index];
+        match byte {
+            b'\x07' => quoted.push_str("\\a"),
+            b'\x08' => quoted.push_str("\\b"),
+            b'\t' => quoted.push_str("\\t"),
+            b'\n' => quoted.push_str("\\n"),
+            b'\x0b' => quoted.push_str("\\v"),
+            b'\x0c' => quoted.push_str("\\f"),
+            b'\r' => quoted.push_str("\\r"),
+            b'\\' => quoted.push_str("\\\\"),
+            b'\'' if !unicode_locale => quoted.push_str("\\'"),
+            b' '..=b'~' => quoted.push(char::from(byte)),
+            byte if !unicode_locale || byte.is_ascii() => push_octal_escape(&mut quoted, byte),
+            byte => {
+                let remaining = &token[index..];
+                let valid_length = std::str::from_utf8(remaining)
+                    .map_or_else(|error| error.valid_up_to(), str::len);
+                if valid_length == 0 {
+                    push_octal_escape(&mut quoted, byte);
+                } else {
+                    let valid = std::str::from_utf8(&remaining[..valid_length])
+                        .expect("validated UTF-8 prefix");
+                    let character = valid.chars().next().expect("nonempty UTF-8 prefix");
+                    quoted.push(character);
+                    index += character.len_utf8();
+                    continue;
                 }
             }
         }
+        index += 1;
     }
     quoted.push_str(&right_quote);
     quoted
@@ -343,7 +357,7 @@ fn factor_row_from_powers(
     }
 }
 
-fn factor_row_from_token(token: &str, print_exponents: bool) -> Result<FactorRow, String> {
+fn factor_row_from_token(token: &[u8], print_exponents: bool) -> Result<FactorRow, String> {
     let parsed = parse_number_token(token).ok_or_else(|| {
         format!(
             "factor: {} is not a valid positive integer\n",
@@ -404,7 +418,7 @@ fn render_factor_row_classic(row: &FactorRow) -> String {
 }
 
 fn factor_semantic_from_tokens<'a>(
-    tokens: impl IntoIterator<Item = &'a str>,
+    tokens: impl IntoIterator<Item = &'a [u8]>,
     print_exponents: bool,
 ) -> FactorSemantic {
     let mut rows = Vec::new();
@@ -434,8 +448,8 @@ fn factor_semantic_from_tokens<'a>(
     }
 }
 
-fn stdin_tokens(line: &str) -> impl Iterator<Item = &str> {
-    line.split([' ', '\t', '\n'])
+fn stdin_tokens(line: &[u8]) -> impl Iterator<Item = &[u8]> {
+    line.split(|byte| matches!(byte, b' ' | b'\t' | b'\n'))
         .filter(|token| !token.is_empty())
 }
 
@@ -468,11 +482,11 @@ pub fn factor_native_semantic(args: impl ctcore::Args) -> CTResult<FactorSemanti
             stderr_text: String::new(),
             exit_code: 0,
         };
-        let mut line = String::new();
+        let mut line = Vec::new();
 
         loop {
             line.clear();
-            match stdin.read_line(&mut line) {
+            match stdin.read_until(b'\n', &mut line) {
                 Ok(0) => break,
                 Ok(_) => {
                     let line_semantic =
@@ -496,7 +510,7 @@ pub fn factor_native_semantic(args: impl ctcore::Args) -> CTResult<FactorSemanti
     }
 
     Ok(factor_semantic_from_tokens(
-        settings.numbers.iter().map(String::as_str),
+        settings.numbers.iter().map(String::as_bytes),
         settings.print_exponents,
     ))
 }
@@ -608,16 +622,16 @@ fn validate_options_with_mode(args: &[OsString], posixly_correct: bool) -> CTRes
 }
 
 /// 处理单个数字的因式分解并输出结果
-fn factors_print_str(
-    num_str: &str,
+fn factors_print_bytes(
+    token: &[u8],
     w: &mut io::BufWriter<impl io::Write>,
     is_print_exponents: bool,
     dev_debug: bool,
 ) -> io::Result<()> {
-    let parsed = match parse_number_token(num_str) {
+    let parsed = match parse_number_token(token) {
         Some(parsed) => parsed,
         None => {
-            ct_show_error!("{} is not a valid positive integer", factor_quote(num_str));
+            ct_show_error!("{} is not a valid positive integer", factor_quote(token));
             set_ct_exit_code(1);
             return Ok(());
         }
@@ -654,6 +668,15 @@ fn factors_print_str(
     w.flush()
 }
 
+fn factors_print_str(
+    num_str: &str,
+    w: &mut io::BufWriter<impl io::Write>,
+    is_print_exponents: bool,
+    dev_debug: bool,
+) -> io::Result<()> {
+    factors_print_bytes(num_str.as_bytes(), w, is_print_exponents, dev_debug)
+}
+
 /// 处理从标准输入读取的数字
 fn process_stdin(
     w: &mut io::BufWriter<impl io::Write>,
@@ -661,14 +684,14 @@ fn process_stdin(
     dev_debug: bool,
 ) -> CTResult<()> {
     let mut stdin = BufReader::new(ctcore::ct_io::stdin_reader_box());
-    let mut line = String::new();
+    let mut line = Vec::new();
     loop {
         line.clear();
-        match stdin.read_line(&mut line) {
+        match stdin.read_until(b'\n', &mut line) {
             Ok(0) => break,
             Ok(_) => {
                 for number in stdin_tokens(&line) {
-                    factors_print_str(number, w, print_exponents, dev_debug)
+                    factors_print_bytes(number, w, print_exponents, dev_debug)
                         .map_err_context(|| "write error".into())?;
                 }
             }
@@ -958,15 +981,15 @@ mod tests {
 
     #[test]
     fn test_operand_skips_only_leading_ascii_spaces() {
-        assert!(parse_number_token("  12").is_some());
-        assert!(parse_number_token("12 ").is_none());
-        assert!(parse_number_token("\t12").is_none());
-        assert!(parse_number_token("\u{a0}12").is_none());
+        assert!(parse_number_token(b"  12").is_some());
+        assert!(parse_number_token(b"12 ").is_none());
+        assert!(parse_number_token(b"\t12").is_none());
+        assert!(parse_number_token("\u{a0}12".as_bytes()).is_none());
     }
 
     #[test]
     fn test_invalid_operand_diagnostic_preserves_whitespace() {
-        let message = factor_row_from_token("abc ", false).unwrap_err();
+        let message = factor_row_from_token(b"abc ", false).unwrap_err();
 
         assert!(message.contains("abc "));
         assert!(!message.contains("'abc'"));
@@ -974,7 +997,7 @@ mod tests {
 
     #[test]
     fn test_invalid_operand_quoting_escapes_control_characters() {
-        let quoted = factor_quote("a\n\x01b");
+        let quoted = factor_quote(b"a\n\x01b");
 
         assert!(quoted.contains("a\\n\\001b"));
         assert!(!quoted.contains('\n'));
@@ -983,12 +1006,19 @@ mod tests {
 
     #[test]
     fn test_stdin_uses_only_gnu_delimiters() {
-        let input = "12\r\n15\x0b21\x0c25\u{a0}27\n";
+        let input = "12\r\n15\x0b21\x0c25\u{a0}27\n".as_bytes();
 
         assert_eq!(
             stdin_tokens(input).collect::<Vec<_>>(),
-            vec!["12\r", "15\x0b21\x0c25\u{a0}27"]
+            vec![b"12\r".as_slice(), "15\x0b21\x0c25\u{a0}27".as_bytes()]
         );
+    }
+
+    #[test]
+    fn test_non_utf8_stdin_token_is_quoted_and_processing_continues() {
+        assert!(parse_number_token(b"\xff").is_none());
+        assert!(factor_quote(b"\xff").contains("\\377"));
+        assert!(parse_number_token(b"15").is_some());
     }
 
     #[test]

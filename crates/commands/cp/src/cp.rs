@@ -3377,21 +3377,9 @@ fn copy_helper(
 
     let destination_existed = cp_file_or_link_exists(dest_path);
 
-    // /dev/null normally produces an empty regular file, but mandatory
-    // reflinks must still go through clone validation like every other source.
     let copy_debug = if sour_path.as_os_str() == "/dev/null"
-        && cp_opts.reflink_mode == CpReflinkMode::Always
+        && cp_opts.reflink_mode != CpReflinkMode::Always
     {
-        match copy_on_write_with_force(sour_path, dest_path, cp_opts, cp_str, is_sour_fifo) {
-            Ok(copy_debug) => Some(copy_debug),
-            Err(error) => {
-                if !destination_existed {
-                    let _ = fs::remove_file(dest_path);
-                }
-                return Err(error);
-            }
-        }
-    } else if sour_path.as_os_str() == "/dev/null" {
         File::create(dest_path).context(dest_path.display().to_string())?;
         None
     } else if is_sour_fifo && cp_opts.recursive && !cp_opts.copy_contents {
@@ -3409,9 +3397,15 @@ fn copy_helper(
         None
     } else {
         // 默认情况下，进行文件或目录的实际复制操作
-        let copy_debug =
-            copy_on_write_with_force(sour_path, dest_path, cp_opts, cp_str, is_sour_fifo)?;
-        Some(copy_debug)
+        match copy_on_write_with_force(sour_path, dest_path, cp_opts, cp_str, is_sour_fifo) {
+            Ok(copy_debug) => Some(copy_debug),
+            Err(error) => {
+                if cp_opts.reflink_mode == CpReflinkMode::Always && !destination_existed {
+                    let _ = fs::remove_file(dest_path);
+                }
+                return Err(error);
+            }
+        }
     };
 
     Ok(copy_debug)

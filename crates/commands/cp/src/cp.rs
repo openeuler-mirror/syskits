@@ -3168,9 +3168,7 @@ fn copy_file(
         attributes,
         cp_opts.cp_dereference(source_in_command_line),
     ) {
-        if !dest_existed {
-            fs::remove_file(dest_path).ok();
-        } else {
+        if dest_existed {
             let matches_selinux_err = match &e {
                 CpError::Error(msg) => msg.contains("failed to set the security context"),
                 _ => false,

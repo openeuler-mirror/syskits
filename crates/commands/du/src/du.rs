@@ -1198,20 +1198,40 @@ impl DuStatPrinter {
         stat_info.depth == 0 || (self.separate_dirs && stat_info.stat.is_dir)
     }
 
+    fn du_format_time(&self, seconds: u64) -> String {
+        let du_time = DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(seconds));
+        if let Some(fmt) = self.time_format.strip_prefix('+') {
+            du_format_local_time_strftime(seconds, fmt)
+                .unwrap_or_else(|| du_time.format(fmt).to_string())
+        } else {
+            du_time.format(&self.time_format).to_string()
+        }
+    }
+
     fn du_time_info(&self, du_stat: &DuStat) -> CTResult<Option<(u64, String)>> {
         if let Some(time) = self.time {
             let seconds = du_get_time_secs(time, du_stat)?;
-            let du_time = DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(seconds));
-            let time_string = if let Some(fmt) = self.time_format.strip_prefix('+') {
-                du_format_local_time_strftime(seconds, fmt)
-                    .unwrap_or_else(|| du_time.format(fmt).to_string())
-            } else {
-                du_time.format(&self.time_format).to_string()
-            };
-            Ok(Some((seconds, time_string)))
+            Ok(Some((seconds, self.du_format_time(seconds))))
         } else {
             Ok(None)
         }
+    }
+
+    fn du_add_to_total(
+        &self,
+        stat_info: &StatPrintInfo,
+        size: u64,
+        grand_total: &mut u64,
+        latest_time: &mut Option<u64>,
+    ) -> CTResult<()> {
+        if self.du_contributes_to_total(stat_info) {
+            *grand_total += size;
+            if let Some(time) = self.time {
+                let seconds = du_get_time_secs(time, &stat_info.stat)?;
+                *latest_time = Some(latest_time.map_or(seconds, |latest| latest.max(seconds)));
+            }
+        }
+        Ok(())
     }
 
     fn du_render_stat_line(&self, du_stat: &DuStat, size: u64) -> CTResult<String> {
@@ -1248,7 +1268,7 @@ impl DuStatPrinter {
         })
     }
 
-    fn du_total_row(&self, grand_total: u64) -> DuRow {
+    fn du_total_row(&self, grand_total: u64, latest_time: Option<u64>) -> DuRow {
         DuRow {
             kind: "total".into(),
             path: None,
@@ -1260,9 +1280,20 @@ impl DuStatPrinter {
             apparent_size_bytes: 0,
             allocated_bytes: 0,
             inodes: 0,
-            time_seconds: None,
-            time_display: None,
+            time_seconds: latest_time,
+            time_display: latest_time.map(|seconds| self.du_format_time(seconds)),
         }
+    }
+
+    fn du_render_total_line(&self, total_row: &DuRow) -> String {
+        let mut line = format!("{}\t", total_row.display_size);
+        if let Some(time_display) = &total_row.time_display {
+            line.push_str(time_display);
+            line.push('\t');
+        }
+        line.push_str(total_row.label.as_deref().unwrap_or_default());
+        line.push_str(&format!("{}", self.line_ending));
+        line
     }
 
     /**
@@ -1275,6 +1306,7 @@ impl DuStatPrinter {
      */
     fn du_print_stats(&self, rx_msg: &mpsc::Receiver<CTResult<StatPrintInfo>>) -> CTResult<()> {
         let mut grand_total = 0; // 初始化总统计数值。
+        let mut latest_time = None;
 
         loop {
             let received = rx_msg.recv(); // 尝试接收一个统计信息。
@@ -1284,9 +1316,7 @@ impl DuStatPrinter {
                     Ok(stat_info) => {
                         let size = self.du_choose_size(&stat_info.stat); // 根据状态选择合适的大小表示。
 
-                        if self.du_contributes_to_total(&stat_info) {
-                            grand_total += size;
-                        }
+                        self.du_add_to_total(&stat_info, size, &mut grand_total, &mut latest_time)?;
 
                         if self.du_should_print(&stat_info, size) {
                             self.du_print_stat(&stat_info.stat, size)?;
@@ -1300,13 +1330,8 @@ impl DuStatPrinter {
 
         // 如果启用了总结模式，打印总数。
         if self.total {
-            let total_row = self.du_total_row(grand_total);
-            print!(
-                "{}\t{}",
-                total_row.display_size,
-                total_row.label.clone().unwrap_or_default()
-            );
-            print!("{}", self.line_ending);
+            let total_row = self.du_total_row(grand_total, latest_time);
+            print!("{}", self.du_render_total_line(&total_row));
         }
 
         Ok(())
@@ -1712,6 +1737,7 @@ fn du_collect_semantic(
     rx_msg: &mpsc::Receiver<CTResult<StatPrintInfo>>,
 ) -> CTResult<DuSemantic> {
     let mut grand_total = 0u64;
+    let mut latest_time = None;
     let mut rows = Vec::new();
     let mut classic_text = String::new();
     let mut stderr_text = String::new();
@@ -1723,9 +1749,12 @@ fn du_collect_semantic(
             Ok(message) => match message {
                 Ok(stat_info) => {
                     let size = du_stat_printer.du_choose_size(&stat_info.stat);
-                    if du_stat_printer.du_contributes_to_total(&stat_info) {
-                        grand_total += size;
-                    }
+                    du_stat_printer.du_add_to_total(
+                        &stat_info,
+                        size,
+                        &mut grand_total,
+                        &mut latest_time,
+                    )?;
                     if du_stat_printer.du_should_print(&stat_info, size) {
                         classic_text
                             .push_str(&du_stat_printer.du_render_stat_line(&stat_info.stat, size)?);
@@ -1746,13 +1775,8 @@ fn du_collect_semantic(
     }
 
     if du_stat_printer.total {
-        let total_row = du_stat_printer.du_total_row(grand_total);
-        classic_text.push_str(&format!(
-            "{}\t{}{}",
-            total_row.display_size,
-            total_row.label.clone().unwrap_or_default(),
-            du_stat_printer.line_ending
-        ));
+        let total_row = du_stat_printer.du_total_row(grand_total, latest_time);
+        classic_text.push_str(&du_stat_printer.du_render_total_line(&total_row));
         rows.push(total_row);
     }
 
@@ -2538,6 +2562,43 @@ mod tests {
 
         assert_eq!(semantic.exit_code, 0);
         assert!(semantic.stderr_text.is_empty());
+    }
+
+    #[test]
+    fn test_grand_total_includes_latest_time() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file = temp_dir.path().join("file");
+        fs::write(&file, b"x").unwrap();
+        let args = vec![
+            OsString::from("du"),
+            OsString::from("--time"),
+            OsString::from("--time-style=iso"),
+            OsString::from("-c"),
+            file.as_os_str().to_os_string(),
+        ];
+        let semantic = du_native_semantic(args.into_iter()).unwrap();
+        let entry = semantic
+            .rows
+            .iter()
+            .find(|row| row.kind == "entry")
+            .unwrap();
+        let total = semantic
+            .rows
+            .iter()
+            .find(|row| row.kind == "total")
+            .unwrap();
+        let total_fields: Vec<_> = semantic
+            .classic_text
+            .lines()
+            .last()
+            .unwrap()
+            .split('\t')
+            .collect();
+
+        assert_eq!(total.time_seconds, entry.time_seconds);
+        assert_eq!(total.time_display, entry.time_display);
+        assert_eq!(total_fields.len(), 3);
+        assert_eq!(total_fields[1], entry.time_display.as_deref().unwrap());
     }
 
     #[test]

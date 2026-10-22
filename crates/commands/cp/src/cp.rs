@@ -38,6 +38,7 @@ use ctcore::ct_fs::{
     CtFileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file, canonicalize,
     is_symlink_loop, path_ends_with_terminator, paths_refer_to_same_file,
 };
+use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 use ctcore::{ct_backup_control, ct_update_control};
 pub use ctcore::{ct_backup_control::CtBackupMode, ct_update_control::CtUpdateMode};
@@ -2524,7 +2525,16 @@ fn cp_symlink_file(
 }
 
 fn cp_context_for(src_path: &Path, dest_path: &Path) -> String {
-    format!("{} -> {}", src_path.quote(), dest_path.quote())
+    let quoting_style = CtQuotingStyle::Shell {
+        escape: true,
+        always_quote: true,
+        show_control: true,
+    };
+    format!(
+        "{} -> {}",
+        escape_name(src_path.as_os_str(), &quoting_style),
+        escape_name(dest_path.as_os_str(), &quoting_style)
+    )
 }
 
 /// Implements a simple backup copy for the destination file.
@@ -3687,6 +3697,7 @@ mod tests {
 
         use crate::DirectorySourceKey;
         use crate::cp_aligned_ancestors;
+        use crate::cp_context_for;
         use crate::cp_copy;
         use crate::cp_disk_usage;
         use crate::cp_disk_usage_directory;
@@ -3712,6 +3723,20 @@ mod tests {
         use std::fs::File;
         use std::path::{Path, PathBuf};
         use tempfile::Builder;
+
+        #[cfg(unix)]
+        #[test]
+        fn test_cp_context_uses_gnu_shell_escape_for_non_utf8_paths() {
+            use std::ffi::OsString;
+            use std::os::unix::ffi::OsStringExt;
+
+            let source = PathBuf::from(OsString::from_vec(b"name-\xff".to_vec()));
+
+            assert_eq!(
+                cp_context_for(&source, Path::new("dest")),
+                "'name-'$'\\377' -> 'dest'"
+            );
+        }
 
         struct FailingWriter;
 

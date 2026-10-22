@@ -418,6 +418,55 @@ where
     Ok(num_bytes_copied)
 }
 
+fn copy_fifo_sparse_contents<P>(source: P, dest: P) -> std::io::Result<u64>
+where
+    P: AsRef<Path>,
+{
+    let mut src_file = File::open(&source)?;
+    let mode = 0o622 & !get_umask();
+    let mut dst_file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .mode(mode)
+        .open(&dest)?;
+
+    if !dst_file.metadata()?.is_file() {
+        let copied = io::copy(&mut src_file, &mut dst_file)?;
+        dst_file.set_permissions(src_file.metadata()?.permissions())?;
+        return Ok(copied);
+    }
+
+    let mut buffer = vec![0; 64 * 1024];
+    let mut copied = 0u64;
+    loop {
+        let read = src_file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+
+        let mut offset = 0;
+        while offset < read {
+            let is_zero = buffer[offset] == 0;
+            let mut end = offset + 1;
+            while end < read && (buffer[end] == 0) == is_zero {
+                end += 1;
+            }
+            if is_zero {
+                dst_file.seek(SeekFrom::Current((end - offset) as i64))?;
+            } else {
+                dst_file.write_all(&buffer[offset..end])?;
+            }
+            offset = end;
+        }
+        copied += read as u64;
+    }
+
+    dst_file.set_len(copied)?;
+    dst_file.set_permissions(src_file.metadata()?.permissions())?;
+    Ok(copied)
+}
+
 /// Copies `source` to `dest` using copy-on-write if possible.
 ///
 /// The `source_is_fifo` flag must be set to `true` if and only if
@@ -437,6 +486,18 @@ pub(crate) fn copy_on_write(
         reflink: CpOffloadReflinkDebug::Unsupported,
         sparse_detection: CpSparseDebug::No,
     };
+
+    if source_is_fifo && sparse_mode == CpSparseMode::Always {
+        copy_debug.offload = CpOffloadReflinkDebug::Avoided;
+        copy_debug.reflink = if reflink_mode == CpReflinkMode::Never {
+            CpOffloadReflinkDebug::No
+        } else {
+            CpOffloadReflinkDebug::Unsupported
+        };
+        copy_debug.sparse_detection = CpSparseDebug::Zeros;
+        copy_fifo_sparse_contents(source, dest).context(context)?;
+        return Ok(copy_debug);
+    }
 
     let result = match (reflink_mode, sparse_mode) {
         (CpReflinkMode::Never, CpSparseMode::Always) => {

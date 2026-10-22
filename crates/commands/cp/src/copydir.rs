@@ -397,10 +397,13 @@ pub(crate) fn copy_directory(
 
     // check if root is a prefix of target
     if path_has_prefix(target, root)? {
+        if !target.exists() {
+            fs::create_dir_all(target)?;
+        }
         return Err(format!(
             "cannot copy a directory, {}, into itself, {}",
             root.quote(),
-            target.join(root.file_name().unwrap()).quote()
+            target.quote()
         )
         .into());
     }

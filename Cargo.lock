@@ -1707,6 +1707,7 @@ dependencies = [
  "libc",
  "quick-error",
  "rust-i18n",
+ "rustix 1.0.7",
  "selinux",
  "sys-locale 0.2.4",
  "tempfile",

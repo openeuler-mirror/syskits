@@ -40,6 +40,9 @@ tempfile = { workspace = true }
 xattr = { workspace = true }
 exacl = { workspace = true, optional = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { version = "1.0.7", features = ["fs"] }
+
 [[bin]]
 name = "cp"
 path = "src/main.rs"

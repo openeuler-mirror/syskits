@@ -1898,6 +1898,12 @@ fn copy_source(
             .map(|m| m.is_dir())
             .unwrap_or(false)
     };
+    let directory_metadata =
+        if is_dir && matches!(options.attributes.timestamps, CpPreserve::Yes { .. }) {
+            fs::symlink_metadata(source_path).ok()
+        } else {
+            None
+        };
 
     if is_dir && target.exists() && target.is_dir() && !options.parents {
         let source_str = source.as_os_str().to_string_lossy();
@@ -1946,6 +1952,14 @@ fn copy_source(
 
     if res.is_ok() && is_dir {
         copy_attributes_with_deref(source_path, dest.as_path(), &options.attributes, true)?;
+        if let Some(source_metadata) = directory_metadata {
+            let destination_metadata = fs::metadata(dest.as_path())?;
+            filetime::set_file_times(
+                dest.as_path(),
+                FileTime::from_last_access_time(&source_metadata),
+                FileTime::from_last_modification_time(&destination_metadata),
+            )?;
+        }
     }
 
     if res.is_ok() && options.parents {

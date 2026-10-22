@@ -277,6 +277,7 @@ fn copy_direntry(
     if source_absolute.is_symlink() && !dereference {
         return copy_recursive_link(
             &source_absolute,
+            &source_relative,
             &local_to_target,
             options,
             symlinked_files,
@@ -316,6 +317,7 @@ fn copy_direntry(
             match copy_file(
                 progress_bar,
                 &source_absolute,
+                &source_relative,
                 local_to_target.as_path(),
                 options,
                 symlinked_files,
@@ -344,6 +346,7 @@ fn copy_direntry(
             match copy_file(
                 progress_bar,
                 &source_absolute,
+                &source_relative,
                 local_to_target.as_path(),
                 options,
                 symlinked_files,
@@ -392,6 +395,7 @@ pub(crate) fn copy_directory(
     if !options.cp_dereference(source_in_command_line) && root.is_symlink() {
         return copy_file(
             progress_bar,
+            root,
             root,
             target,
             options,

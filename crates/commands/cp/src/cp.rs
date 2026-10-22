@@ -42,7 +42,7 @@ use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 use ctcore::{ct_backup_control, ct_update_control};
 pub use ctcore::{ct_backup_control::CtBackupMode, ct_update_control::CtUpdateMode};
-use ctcore::{ct_prompt_yes, ct_show_error, ct_show_warning};
+use ctcore::{ct_show_error, ct_show_warning};
 use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
@@ -2048,7 +2048,7 @@ impl CpOverwriteMode {
                     }
                 }
 
-                if ct_prompt_yes!("{}", prompt) {
+                if cp_prompt_yes(&prompt)? {
                     Ok(())
                 } else {
                     Err(CpError::Skipped)
@@ -2057,6 +2057,21 @@ impl CpOverwriteMode {
             Self::Clobber(_) => Ok(()),
         }
     }
+}
+
+fn cp_prompt_yes(prompt: &str) -> CopyResult<bool> {
+    let stderr = io::stderr();
+    let mut stderr = stderr.lock();
+    write!(stderr, "{}: {} ", ctcore::ct_util_name(), prompt)?;
+    stderr.flush()?;
+
+    if ctcore::ct_stdin_was_closed() {
+        return Err(CpError::Error(
+            "error closing file: Bad file descriptor".to_string(),
+        ));
+    }
+
+    Ok(ctcore::ct_read_true())
 }
 
 /// Handles errors for attributes preservation. If the attribute is not required, and

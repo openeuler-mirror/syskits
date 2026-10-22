@@ -21,6 +21,8 @@ use std::ffi::{CStr, CString, c_char};
 use std::ffi::{OsStr, OsString};
 use std::io::BufRead;
 use std::io::{self, BufReader, Write, stdout};
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicBool, Ordering};
 mod factor_algorithm;
 use clap::builder::OsStringValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
@@ -37,6 +39,43 @@ pub mod miller_rabin;
 pub mod numeric;
 pub mod rho;
 pub mod table;
+
+#[cfg(target_os = "linux")]
+static FACTOR_INHERITED_SIGPIPE_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" fn factor_capture_inherited_sigpipe() {
+    let mut action = std::mem::MaybeUninit::<ctcore::libc::sigaction>::uninit();
+    if unsafe {
+        ctcore::libc::sigaction(ctcore::libc::SIGPIPE, std::ptr::null(), action.as_mut_ptr())
+    } == 0
+    {
+        let action = unsafe { action.assume_init() };
+        FACTOR_INHERITED_SIGPIPE_IGNORED.store(
+            action.sa_sigaction == ctcore::libc::SIG_IGN,
+            Ordering::Relaxed,
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static FACTOR_CAPTURE_SIGPIPE: unsafe extern "C" fn() = factor_capture_inherited_sigpipe;
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn factor_inherited_sigpipe_ignored() -> bool {
+    FACTOR_INHERITED_SIGPIPE_IGNORED.load(Ordering::Relaxed)
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn factor_terminate_with_sigpipe() -> ! {
+    unsafe {
+        ctcore::libc::signal(ctcore::libc::SIGPIPE, ctcore::libc::SIG_DFL);
+        ctcore::libc::raise(ctcore::libc::SIGPIPE);
+        ctcore::libc::_exit(128 + ctcore::libc::SIGPIPE);
+    }
+}
 
 /// 定义配置标志常量
 pub mod factor_flags {
@@ -793,6 +832,11 @@ fn factors_print_bytes(
 }
 
 fn factor_output_error(error: io::Error, arbitrary_precision: bool) -> Box<dyn CTError> {
+    #[cfg(all(target_os = "linux", not(test)))]
+    if error.kind() == io::ErrorKind::BrokenPipe && !factor_inherited_sigpipe_ignored() {
+        factor_terminate_with_sigpipe();
+    }
+
     if ctcore::ct_stdout_was_closed() {
         io::Error::from_raw_os_error(ctcore::libc::EBADF).map_err_context(|| "write error".into())
             as Box<dyn CTError>

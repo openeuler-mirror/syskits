@@ -1916,6 +1916,7 @@ pub fn ct_app() -> Command {
             .long("max-depth")
             .value_name("N")
             .overrides_with(opt_flags::MAX_DEPTH)
+            .allow_hyphen_values(true)
             .help(
                 "print the total for a directory (or file, with --all) \
                 only if it is N or fewer levels below the command \
@@ -2217,6 +2218,13 @@ mod tests {
                 .map(String::as_str),
             Some("1")
         );
+    }
+
+    #[test]
+    fn test_du_max_depth_accepts_separated_negative_argument() {
+        let matches = ct_app().try_get_matches_from(["du", "-d", "-1"]).unwrap();
+
+        assert_eq!(du_get_max_depth(&matches, false).unwrap(), None);
     }
 
     #[test]

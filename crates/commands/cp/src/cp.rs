@@ -2750,7 +2750,7 @@ fn cp_aligned_ancestors<'a>(sour_path: &'a Path, dest_path: &'a Path) -> Vec<(&'
     result
 }
 
-fn cp_print_verbose_output(
+pub(crate) fn cp_print_verbose_output(
     is_parents: bool,
     progress_bar: &Option<ProgressBar>,
     sour_path: &Path,

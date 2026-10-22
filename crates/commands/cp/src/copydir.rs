@@ -32,7 +32,7 @@ use walkdir::{DirEntry, WalkDir};
 
 use crate::{
     CopyResult, CpError, CpOptions, copy_attributes, copy_attributes_with_deref, copy_file,
-    copy_recursive_link, cp_aligned_ancestors, cp_context_for, show_error_if_needed,
+    copy_recursive_link, cp_aligned_ancestors, cp_print_verbose_output, show_error_if_needed,
 };
 
 /// Ensure a Windows path starts with a `\\?`.
@@ -305,7 +305,7 @@ fn copy_direntry(
             }
 
             if options.verbose {
-                println!("{}", cp_context_for(&source_relative, &local_to_target));
+                cp_print_verbose_output(false, progress_bar, &source_relative, &local_to_target)?;
             }
             return Ok(());
         }
@@ -387,6 +387,8 @@ pub(crate) fn copy_directory(
     copied_files: &mut HashMap<CtFileInformation, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
+    let mut copy_error = false;
+
     if !options.recursive {
         return Err(format!("-r not specified; omitting directory {}", root.quote()).into());
     }
@@ -439,7 +441,9 @@ pub(crate) fn copy_directory(
                 //     a/b -> d/a/b
                 //
                 for (x, y) in cp_aligned_ancestors(root, &target.join(root)) {
-                    println!("{} -> {}", x.display(), y.display());
+                    if cp_print_verbose_output(false, &None, x, y).is_err() {
+                        copy_error = true;
+                    }
                 }
             }
 
@@ -472,8 +476,6 @@ pub(crate) fn copy_directory(
         fs::symlink_metadata(root).ok()
     };
     let mut dirs_to_preserve = Vec::new();
-    let mut copy_error = false;
-
     // Traverse the contents of the directory, copying each one.
     for direntry_result in WalkDir::new(root)
         .same_file_system(options.one_file_system)

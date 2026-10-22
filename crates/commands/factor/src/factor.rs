@@ -20,6 +20,7 @@ use std::ffi::{OsStr, OsString};
 use std::io::BufRead;
 use std::io::{self, BufReader, Write, stdout};
 mod factor_algorithm;
+use clap::builder::OsStringValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::ct_display::locale_quote_marks;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
@@ -52,7 +53,7 @@ struct FactorFlags {
     /// 是否使用指数表示法
     print_exponents: bool,
     /// 要分解的数字列表
-    numbers: Vec<String>,
+    numbers: Vec<OsString>,
 }
 
 /// 为 `FactorFlags` 实现默认值
@@ -73,7 +74,7 @@ impl FactorFlags {
 
         // 向量类型参数提取模式
         let numbers = matches
-            .get_many::<String>(factor_flags::NUMBER)
+            .get_many::<OsString>(factor_flags::NUMBER)
             .map_or_else(Vec::new, |v| v.cloned().collect());
 
         // 构建并返回结构体
@@ -91,6 +92,17 @@ enum ParsedNumber {
 }
 
 impl ParsedNumber {}
+
+fn os_str_bytes(value: &OsStr) -> &[u8] {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        value.as_bytes()
+    }
+
+    #[cfg(not(unix))]
+    value.to_str().map_or(&[], str::as_bytes)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FactorPower {
@@ -510,7 +522,10 @@ pub fn factor_native_semantic(args: impl ctcore::Args) -> CTResult<FactorSemanti
     }
 
     Ok(factor_semantic_from_tokens(
-        settings.numbers.iter().map(String::as_bytes),
+        settings
+            .numbers
+            .iter()
+            .map(|number| os_str_bytes(number.as_os_str())),
         settings.print_exponents,
     ))
 }
@@ -668,15 +683,6 @@ fn factors_print_bytes(
     w.flush()
 }
 
-fn factors_print_str(
-    num_str: &str,
-    w: &mut io::BufWriter<impl io::Write>,
-    is_print_exponents: bool,
-    dev_debug: bool,
-) -> io::Result<()> {
-    factors_print_bytes(num_str.as_bytes(), w, is_print_exponents, dev_debug)
-}
-
 /// 处理从标准输入读取的数字
 fn process_stdin(
     w: &mut io::BufWriter<impl io::Write>,
@@ -707,14 +713,19 @@ fn process_stdin(
 
 /// 处理命令行参数中提供的数字
 fn process_numbers(
-    numbers: &[String],
+    numbers: &[OsString],
     w: &mut io::BufWriter<impl io::Write>,
     print_exponents: bool,
     dev_debug: bool,
 ) -> CTResult<()> {
     for number in numbers {
-        factors_print_str(number, w, print_exponents, dev_debug)
-            .map_err_context(|| "write error".into())?;
+        factors_print_bytes(
+            os_str_bytes(number.as_os_str()),
+            w,
+            print_exponents,
+            dev_debug,
+        )
+        .map_err_context(|| "write error".into())?;
     }
     Ok(())
 }
@@ -790,6 +801,7 @@ fn ct_app_with_mode(posixly_correct: bool) -> Command {
     let args = vec![
         Arg::new(factor_flags::NUMBER)
             .action(ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .trailing_var_arg(posixly_correct),
         Arg::new(factor_flags::EXPONENTS)
             .short('h')
@@ -949,14 +961,14 @@ mod tests {
 
     use std::io::BufWriter;
 
-    /// 测试 factors_print_str 函数 - 普通格式
+    /// 测试 factors_print_bytes 函数 - 普通格式
     #[test]
     fn test_factors_print_str_normal_format() {
         let buffer = Vec::new();
         let mut writer = BufWriter::new(buffer);
 
         // 测试数字 12 的因式分解（普通格式）
-        factors_print_str("12", &mut writer, false, false).unwrap();
+        factors_print_bytes(b"12", &mut writer, false, false).unwrap();
 
         // 获取 writer 中的 buffer
         let buffer = writer.into_inner().unwrap();
@@ -964,14 +976,14 @@ mod tests {
         assert_eq!(output, "12: 2 2 3\n");
     }
 
-    /// 测试 factors_print_str 函数 - 指数格式
+    /// 测试 factors_print_bytes 函数 - 指数格式
     #[test]
     fn test_factors_print_str_exponent_format() {
         let buffer = Vec::new();
         let mut writer = BufWriter::new(buffer);
 
         // 测试数字 12 的因式分解（指数格式）
-        factors_print_str("12", &mut writer, true, false).unwrap();
+        factors_print_bytes(b"12", &mut writer, true, false).unwrap();
 
         // 获取 writer 中的 buffer
         let buffer = writer.into_inner().unwrap();
@@ -1019,6 +1031,25 @@ mod tests {
         assert!(parse_number_token(b"\xff").is_none());
         assert!(factor_quote(b"\xff").contains("\\377"));
         assert!(parse_number_token(b"15").is_some());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_number_arguments_accept_non_utf8_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let invalid = OsString::from_vec(vec![b'1', b'2', 0xff]);
+        let matches = ct_app()
+            .try_get_matches_from(vec![
+                OsString::from("factor"),
+                OsString::from("--"),
+                invalid.clone(),
+                OsString::from("15"),
+            ])
+            .unwrap();
+        let flags = FactorFlags::new(&matches);
+
+        assert_eq!(flags.numbers, vec![invalid, OsString::from("15")]);
     }
 
     #[test]
@@ -1122,7 +1153,7 @@ mod tests {
         let mut writer = BufWriter::new(buffer);
 
         // 测试处理多个数字
-        let numbers = vec!["12".to_string(), "24".to_string()];
+        let numbers = vec![OsString::from("12"), OsString::from("24")];
         process_numbers(&numbers, &mut writer, false, false).unwrap();
 
         // 获取 writer 中的 buffer
@@ -1139,7 +1170,7 @@ mod tests {
 
         // 测试无效输入（非数字）
         // 注意：这个测试会产生警告消息，但不会失败
-        factors_print_str("abc", &mut writer, false, false).unwrap();
+        factors_print_bytes(b"abc", &mut writer, false, false).unwrap();
 
         // 获取 writer 中的 buffer
         let buffer = writer.into_inner().unwrap();
@@ -1154,10 +1185,10 @@ mod tests {
         let mut writer = BufWriter::new(buffer);
 
         // 测试 0
-        factors_print_str("0", &mut writer, false, false).unwrap();
+        factors_print_bytes(b"0", &mut writer, false, false).unwrap();
 
         // 测试 1
-        factors_print_str("1", &mut writer, false, false).unwrap();
+        factors_print_bytes(b"1", &mut writer, false, false).unwrap();
 
         // 获取 writer 中的 buffer
         let buffer = writer.into_inner().unwrap();
@@ -1172,7 +1203,7 @@ mod tests {
         let mut writer = BufWriter::new(buffer);
 
         // 测试较大的数字
-        factors_print_str("1234567", &mut writer, true, false).unwrap();
+        factors_print_bytes(b"1234567", &mut writer, true, false).unwrap();
 
         // 获取 writer 中的 buffer
         let buffer = writer.into_inner().unwrap();

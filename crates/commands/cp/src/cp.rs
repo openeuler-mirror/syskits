@@ -3389,6 +3389,18 @@ fn copy_link(
     )
 }
 
+pub(crate) fn copy_recursive_link(
+    sour_path: &Path,
+    dest_path: &Path,
+    options: &CpOptions,
+    symlinked_files: &mut HashSet<CtFileInformation>,
+) -> CopyResult<()> {
+    if cp_file_or_link_exists(dest_path) {
+        cp_handle_existing_dest(sour_path, dest_path, options, false)?;
+    }
+    copy_link(sour_path, dest_path, symlinked_files)
+}
+
 /// Generate an error message if `target` is not the correct `target_type`
 pub fn cp_verify_target_type(target_path: &Path, cp_target_type: &CpTargetType) -> CopyResult<()> {
     match (cp_target_type, target_path.is_dir()) {

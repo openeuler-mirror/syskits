@@ -1989,6 +1989,7 @@ pub fn ct_app() -> Command {
         Arg::new(opt_flags::TIME_STYLE)
             .long(opt_flags::TIME_STYLE)
             .value_name("STYLE")
+            .overrides_with(opt_flags::TIME_STYLE)
             .help(
                 "show times using style STYLE: \
                 full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'"
@@ -2184,6 +2185,20 @@ mod tests {
                 .get_one::<String>(opt_flags::TIME)
                 .map(String::as_str),
             Some("ctime")
+        );
+    }
+
+    #[test]
+    fn test_du_repeated_time_style_uses_last_value() {
+        let matches = ct_app()
+            .try_get_matches_from(["du", "--time", "--time-style=iso", "--time-style=long-iso"])
+            .unwrap();
+
+        assert_eq!(
+            matches
+                .get_one::<String>(opt_flags::TIME_STYLE)
+                .map(String::as_str),
+            Some("long-iso")
         );
     }
 

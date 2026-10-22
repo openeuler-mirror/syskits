@@ -3073,6 +3073,7 @@ fn copy_file(
     if matches!(
         cp_opts.overwrite,
         CpOverwriteMode::Clobber(CpClobberMode::RemoveDestination)
+            | CpOverwriteMode::Interactive(_)
     ) {
         source_metadata = Some(cp_source_metadata(
             sour_path,

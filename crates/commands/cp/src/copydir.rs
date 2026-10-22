@@ -32,7 +32,7 @@ use walkdir::{DirEntry, WalkDir};
 
 use crate::{
     CopyResult, CpError, CpOptions, copy_attributes, copy_attributes_with_deref, copy_file,
-    copy_recursive_link, cp_aligned_ancestors, cp_context_for,
+    copy_recursive_link, cp_aligned_ancestors, cp_context_for, show_error_if_needed,
 };
 
 /// Ensure a Windows path starts with a `\\?`.
@@ -468,6 +468,7 @@ pub(crate) fn copy_directory(
         fs::symlink_metadata(root).ok()
     };
     let mut dirs_to_preserve = Vec::new();
+    let mut copy_error = false;
 
     // Traverse the contents of the directory, copying each one.
     for direntry_result in WalkDir::new(root)
@@ -504,7 +505,7 @@ pub(crate) fn copy_directory(
                         dereference,
                     ));
                 }
-                copy_direntry(
+                if let Err(error) = copy_direntry(
                     progress_bar,
                     entry,
                     options,
@@ -512,7 +513,10 @@ pub(crate) fn copy_directory(
                     preserve_hard_links,
                     copied_files,
                     source_in_command_line,
-                )?;
+                ) {
+                    show_error_if_needed(&error);
+                    copy_error = true;
+                }
             }
             // Print an error message, but continue traversing the directory.
             Err(e) => ct_show_error!("{}", e),
@@ -555,7 +559,11 @@ pub(crate) fn copy_directory(
         }
     }
 
-    Ok(())
+    if copy_error {
+        Err(CpError::NotAllFilesCopied)
+    } else {
+        Ok(())
+    }
 }
 
 /// Decide whether the second path is a prefix of the first.

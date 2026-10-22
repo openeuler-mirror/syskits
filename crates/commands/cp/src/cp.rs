@@ -1797,7 +1797,9 @@ pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -
                         source_path.display()
                     )
                 };
-                return Err(CpError::Error(err_msg));
+                show_error_if_needed(&CpError::Error(err_msg));
+                is_non_fatal_errors = true;
+                continue;
             }
         }
 

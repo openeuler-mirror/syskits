@@ -25,7 +25,7 @@ mod factor_algorithm;
 use clap::builder::OsStringValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::ct_display::locale_quote_marks;
-use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code, strip_errno};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, set_ct_exit_code, strip_errno};
 use ctcore::ct_show_error;
 pub use factor_algorithm::*;
 use num_bigint::BigUint;
@@ -792,6 +792,21 @@ fn factors_print_bytes(
     w.flush()
 }
 
+fn factor_write_result(
+    token: &[u8],
+    w: &mut io::BufWriter<impl io::Write>,
+    print_exponents: bool,
+    dev_debug: bool,
+) -> CTResult<()> {
+    factors_print_bytes(token, w, print_exponents, dev_debug).map_err(|error| {
+        if uses_arbitrary_precision(token) {
+            CtSimpleError::new(1, factor_gettext("write error"))
+        } else {
+            error.map_err_context(|| "write error".into()) as Box<dyn CTError>
+        }
+    })
+}
+
 /// 处理从标准输入读取的数字
 fn process_stdin(
     w: &mut io::BufWriter<impl io::Write>,
@@ -815,8 +830,7 @@ fn process_stdin(
             Ok(_) => {
                 for number in stdin_tokens(&line) {
                     if uses_arbitrary_precision(number) {
-                        factors_print_bytes(number, w, print_exponents, dev_debug)
-                            .map_err_context(|| "write error".into())?;
+                        factor_write_result(number, w, print_exponents, dev_debug)?;
                     } else {
                         let mut token_output = io::BufWriter::new(Vec::new());
                         factors_print_bytes(number, &mut token_output, print_exponents, dev_debug)
@@ -868,8 +882,7 @@ fn process_numbers(
             factors_print_bytes(token, &mut native_output, print_exponents, dev_debug)
                 .map_err_context(|| "write error".into())?;
         } else {
-            factors_print_bytes(token, w, print_exponents, dev_debug)
-                .map_err_context(|| "write error".into())?;
+            factor_write_result(token, w, print_exponents, dev_debug)?;
         }
     }
 

@@ -223,6 +223,29 @@ where
     path.as_ref().display().to_string().ends_with("/.")
 }
 
+#[cfg(unix)]
+fn directory_creation_modes(source_path: &Path, options: &CpOptions) -> CopyResult<(u32, u32)> {
+    use crate::CpPreserve;
+    use std::os::unix::fs::PermissionsExt;
+
+    let source_mode = fs::metadata(source_path)?.permissions().mode() & 0o7777;
+    let (preserve_mode, explicit_no_preserve_mode) = options.cp_preserve_mode();
+    let final_mode = if preserve_mode {
+        source_mode
+    } else if explicit_no_preserve_mode {
+        0o777 & !ctcore::ct_mode::get_umask()
+    } else {
+        source_mode & !ctcore::ct_mode::get_umask()
+    };
+
+    let temporary_mode = if matches!(options.attributes.ownership, CpPreserve::Yes { .. }) {
+        0o700
+    } else {
+        final_mode | 0o700
+    };
+    Ok((temporary_mode, final_mode))
+}
+
 /// Copy a single entry during a directory traversal.
 fn copy_direntry(
     progress_bar: &Option<ProgressBar>,
@@ -264,24 +287,12 @@ fn copy_direntry(
         } else {
             fs::create_dir_all(&local_to_target)?;
 
-            // 根据 preserve 设置调整临时权限，以通过 parent-perm-race 测试
-            // 当只保留 ownership（不保留 mode）时，使用 700 防止竞态条件
-            // 当保留 mode 或默认时，使用 755
             #[cfg(unix)]
             {
-                use crate::CpPreserve;
                 use std::os::unix::fs::PermissionsExt;
 
-                let temp_mode = if !matches!(options.attributes.mode, CpPreserve::Yes { .. })
-                    && matches!(options.attributes.ownership, CpPreserve::Yes { .. })
-                {
-                    // --preserve=ownership (但不保留 mode): 使用 700，确保 group/other 无权限
-                    0o700
-                } else {
-                    // --preserve=mode 或默认情况: 使用 755
-                    0o755
-                };
-                fs::set_permissions(&local_to_target, fs::Permissions::from_mode(temp_mode))?;
+                let (temporary_mode, _) = directory_creation_modes(&source_absolute, options)?;
+                fs::set_permissions(&local_to_target, fs::Permissions::from_mode(temporary_mode))?;
             }
 
             if options.verbose {
@@ -448,8 +459,11 @@ pub(crate) fn copy_directory(
             Ok(direntry) => {
                 let entry = Entry::new(&context, &direntry, options.no_target_dir)?;
                 if entry.source_absolute.is_dir() && !ends_with_slash_dot(&entry.source_absolute) {
-                    dirs_to_preserve
-                        .push((entry.source_absolute.clone(), entry.local_to_target.clone()));
+                    dirs_to_preserve.push((
+                        entry.source_absolute.clone(),
+                        entry.local_to_target.clone(),
+                        !entry.local_to_target.exists(),
+                    ));
                 }
                 copy_direntry(
                     progress_bar,
@@ -468,9 +482,19 @@ pub(crate) fn copy_directory(
 
     // Apply attributes to all directories we traversed in post-order (deepest first).
     // This perfectly emulates GNU cp behavior and avoids read-only parent issues.
-    for (src, dest) in dirs_to_preserve.into_iter().rev() {
+    for (src, dest, created) in dirs_to_preserve.into_iter().rev() {
         if dest.exists() && dest.is_dir() {
             copy_attributes(&src, &dest, &options.attributes)?;
+            #[cfg(unix)]
+            if created
+                && !dest.is_symlink()
+                && !matches!(options.attributes.mode, crate::CpPreserve::Yes { .. })
+            {
+                use std::os::unix::fs::PermissionsExt;
+
+                let (_, final_mode) = directory_creation_modes(&src, options)?;
+                fs::set_permissions(&dest, fs::Permissions::from_mode(final_mode))?;
+            }
         }
     }
 

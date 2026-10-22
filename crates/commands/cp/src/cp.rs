@@ -3127,7 +3127,7 @@ fn copy_file(
     )?;
 
     // 如果目标不是符号链接，设置其文件权限。
-    if !dest_path.is_symlink() {
+    if !dest_path.is_symlink() && cp_opts.copy_mode != CpCopyMode::Link {
         #[cfg(unix)]
         {
             match cp_opts.attributes.mode {

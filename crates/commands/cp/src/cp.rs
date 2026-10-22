@@ -2980,7 +2980,13 @@ fn is_skipped_by_update(
                 } else {
                     fs::symlink_metadata(sour_path)
                 };
-                let d_meta = fs::symlink_metadata(dest_path);
+                let copy_source_contents =
+                    cp_opts.cp_dereference(source_in_command_line) || !sour_path.is_symlink();
+                let d_meta = if copy_source_contents {
+                    fs::metadata(dest_path)
+                } else {
+                    fs::symlink_metadata(dest_path)
+                };
 
                 if let (Ok(s_meta), Ok(d_meta)) = (s_meta, d_meta) {
                     let s_time = s_meta.modified().unwrap_or(std::time::UNIX_EPOCH);

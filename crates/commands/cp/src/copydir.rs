@@ -523,7 +523,10 @@ pub(crate) fn copy_directory(
                 }
             }
             // Print an error message, but continue traversing the directory.
-            Err(e) => ct_show_error!("{}", e),
+            Err(e) => {
+                ct_show_error!("{}", e);
+                copy_error = true;
+            }
         }
     }
 

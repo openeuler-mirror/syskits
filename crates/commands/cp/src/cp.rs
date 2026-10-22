@@ -3033,6 +3033,7 @@ fn copy_file(
     source_in_command_line: bool,
 ) -> CopyResult<()> {
     let dest_existed = dest_path.exists();
+    let mut source_metadata = None;
     if dest_path.is_symlink() {
         if CtFileInformation::from_path(dest_path, false)
             .map(|info| symlinked_files.contains(&info))
@@ -3067,6 +3068,17 @@ fn copy_file(
         cp_source_metadata(sour_path, cp_opts, source_in_command_line)?;
         ct_show_error!("not replacing {}", dest_path.quote());
         return Err(CpError::NotAllFilesCopied);
+    }
+
+    if matches!(
+        cp_opts.overwrite,
+        CpOverwriteMode::Clobber(CpClobberMode::RemoveDestination)
+    ) {
+        source_metadata = Some(cp_source_metadata(
+            sour_path,
+            cp_opts,
+            source_in_command_line,
+        )?);
     }
 
     if cp_opts.update == CtUpdateMode::ReplaceNone && dest_path.exists() {
@@ -3143,7 +3155,10 @@ fn copy_file(
     // 准备上下文并获取源文件元数据以进行复制。
     let context = cp_context_for(sour_path, dest_path);
 
-    let source_metadata = cp_source_metadata(sour_path, cp_opts, source_in_command_line)?;
+    let source_metadata = match source_metadata {
+        Some(metadata) => metadata,
+        None => cp_source_metadata(sour_path, cp_opts, source_in_command_line)?,
+    };
 
     // 计算目标文件权限，基于源文件及选项。
     let dest_permissions =

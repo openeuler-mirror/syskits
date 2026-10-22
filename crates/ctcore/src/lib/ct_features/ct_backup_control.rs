@@ -384,8 +384,15 @@ pub fn determine_backup_mode_with_activation(
     if has_backup_opt || has_b_flag || has_suffix_opt || backup_enabled {
         if let Some(method) = matches.get_one::<String>(arguments::OPT_BACKUP) {
             match_method(method, "backup type")
-        } else if let Ok(method) = env::var("VERSION_CONTROL") {
-            match_method(&method, "$VERSION_CONTROL")
+        } else if let Some(method) = env::var_os("VERSION_CONTROL") {
+            match method.to_str() {
+                Some(method) => match_method(method, "$VERSION_CONTROL"),
+                None => Err(CtBackupError::InvalidArgument(
+                    method.to_string_lossy().into_owned(),
+                    "$VERSION_CONTROL".to_owned(),
+                )
+                .into()),
+            }
         } else {
             Ok(CtBackupMode::ExistingBackup)
         }
@@ -675,6 +682,19 @@ mod tests {
         assert!(result.is_err());
         let text = format!("{}", result.unwrap_err());
         assert!(text.contains("invalid argument 'foobar' for '$VERSION_CONTROL'"));
+        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_backup_mode_rejects_non_utf8_environment_value() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let _dummy = TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
+        unsafe { env::set_var(ENV_VERSION_CONTROL, OsString::from_vec(vec![0xff])) };
+        let matches = make_app().get_matches_from(vec!["command", "-b"]);
+
+        assert!(determine_backup_mode(&matches).is_err());
         unsafe { env::remove_var(ENV_VERSION_CONTROL) };
     }
 

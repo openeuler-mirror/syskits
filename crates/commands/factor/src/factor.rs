@@ -165,6 +165,47 @@ fn uses_arbitrary_precision(token: &[u8]) -> bool {
     )
 }
 
+fn factor_line_buffered() -> bool {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        return ctcore::libc::isatty(ctcore::libc::STDIN_FILENO) == 1
+            || ctcore::libc::isatty(ctcore::libc::STDOUT_FILENO) == 1;
+    }
+
+    #[allow(unreachable_code)]
+    false
+}
+
+fn native_flush_boundary(buffer: &[u8], line_buffered: bool) -> Option<usize> {
+    if buffer.is_empty() {
+        return None;
+    }
+
+    let limit = if line_buffered {
+        buffer.len()
+    } else if buffer.len() >= 512 {
+        512
+    } else {
+        return None;
+    };
+
+    buffer[..limit]
+        .iter()
+        .rposition(|&byte| byte == b'\n')
+        .map(|index| index + 1)
+}
+
+fn flush_native_output(
+    buffer: &mut Vec<u8>,
+    boundary: usize,
+    w: &mut io::BufWriter<impl io::Write>,
+) -> io::Result<()> {
+    w.write_all(&buffer[..boundary])?;
+    w.flush()?;
+    buffer.drain(..boundary);
+    Ok(())
+}
+
 fn push_octal_escape(quoted: &mut String, byte: u8) {
     quoted.push_str(&format!("\\{byte:03o}"));
 }
@@ -765,14 +806,33 @@ fn process_stdin(
 
     let mut stdin = BufReader::new(ctcore::ct_io::stdin_reader_box());
     let mut line = Vec::new();
+    let line_buffered = factor_line_buffered();
+    let mut native_output = Vec::new();
     loop {
         line.clear();
         match stdin.read_until(b'\n', &mut line) {
             Ok(0) => break,
             Ok(_) => {
                 for number in stdin_tokens(&line) {
-                    factors_print_bytes(number, w, print_exponents, dev_debug)
-                        .map_err_context(|| "write error".into())?;
+                    if uses_arbitrary_precision(number) {
+                        factors_print_bytes(number, w, print_exponents, dev_debug)
+                            .map_err_context(|| "write error".into())?;
+                    } else {
+                        let mut token_output = io::BufWriter::new(Vec::new());
+                        factors_print_bytes(number, &mut token_output, print_exponents, dev_debug)
+                            .map_err_context(|| "write error".into())?;
+                        native_output.extend(
+                            token_output
+                                .into_inner()
+                                .map_err(|error| error.into_error())?,
+                        );
+
+                        if let Some(boundary) = native_flush_boundary(&native_output, line_buffered)
+                        {
+                            flush_native_output(&mut native_output, boundary, w)
+                                .map_err_context(|| "write error".into())?;
+                        }
+                    }
                 }
             }
             Err(e) => {
@@ -781,6 +841,11 @@ fn process_stdin(
                 return Ok(());
             }
         }
+    }
+
+    if !native_output.is_empty() {
+        w.write_all(&native_output)
+            .map_err_context(|| "write error".into())?;
     }
     Ok(())
 }
@@ -1281,6 +1346,18 @@ mod tests {
         let output = String::from_utf8(writer.into_inner().unwrap()).unwrap();
         assert!(output.starts_with(&format!("{huge}:")));
         assert!(output.ends_with("12: 2 2 3\n15: 3 5\n"));
+    }
+
+    #[test]
+    fn test_native_flush_boundary_matches_gnu_pipe_buffer() {
+        let mut output = Vec::new();
+        for _ in 0..52 {
+            output.extend_from_slice(b"123456789\n");
+        }
+
+        assert_eq!(native_flush_boundary(&output, false), Some(510));
+        assert_eq!(native_flush_boundary(&output[..10], false), None);
+        assert_eq!(native_flush_boundary(&output[..10], true), Some(10));
     }
 
     /// 测试无效输入的处理

@@ -23,6 +23,7 @@ use ctcore::ct_line_ending::CtLineEnding;
 #[cfg(not(unix))]
 use ctcore::ct_parse_glob;
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
+use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use ctcore::{ct_show, ct_show_error, ct_show_warning};
 #[cfg(not(unix))]
 use glob::Pattern;
@@ -152,6 +153,11 @@ struct DuStatPrinter {
 
 const DU_INODES_APPARENT_SIZE_WARNING: &str =
     "options --apparent-size and -b are ineffective with --inodes";
+const DU_DIAGNOSTIC_QUOTING_STYLE: CtQuotingStyle = CtQuotingStyle::Shell {
+    escape: true,
+    always_quote: true,
+    show_control: false,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuRow {
@@ -1758,7 +1764,7 @@ fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
 fn du_access_error_message(path: &Path, error: &io::Error) -> String {
     format!(
         "cannot access {}: {}",
-        path.to_string_lossy().quote(),
+        escape_name(path.as_os_str(), &DU_DIAGNOSTIC_QUOTING_STYLE),
         strip_errno(error)
     )
 }
@@ -2722,6 +2728,14 @@ mod tests {
                 .stderr_text
                 .contains("Too many levels of symbolic links")
         );
+    }
+
+    #[test]
+    fn test_access_error_uses_gnu_shell_escape_quoting() {
+        let error = io::Error::from(io::ErrorKind::NotFound);
+        let message = du_access_error_message(Path::new("bad\n\x01name"), &error);
+
+        assert!(message.starts_with("cannot access 'bad'$'\\n\\001''name': "));
     }
 
     #[test]

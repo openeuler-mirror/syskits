@@ -725,7 +725,7 @@ fn du(
                         }
                         let name = name.to_os_string();
                         let entry_path = state.path.join(&name);
-                        if du_path_is_excluded(&du_opts.excludes, &entry_path, &name) {
+                        if du_path_is_excluded(&du_opts.excludes, &entry_path) {
                             if du_opts.verbose {
                                 println!("{} ignored", entry_path.quote());
                             }
@@ -765,8 +765,7 @@ fn du(
                 match entry {
                     Ok(entry) => {
                         let entry_path = entry.path();
-                        let entry_name = entry.file_name();
-                        if du_path_is_excluded(&du_opts.excludes, &entry_path, &entry_name) {
+                        if du_path_is_excluded(&du_opts.excludes, &entry_path) {
                             if du_opts.verbose {
                                 println!("{} ignored", entry_path.quote());
                             }
@@ -1217,10 +1216,10 @@ fn du_exclude_pattern_matches_path(pattern: &Pattern, path: &Path) -> bool {
         })
 }
 
-fn du_path_is_excluded(excludes: &[Pattern], path: &Path, name: &OsStr) -> bool {
-    excludes.iter().any(|pattern| {
-        du_exclude_pattern_matches_path(pattern, path) || pattern.matches(name.to_str().unwrap())
-    })
+fn du_path_is_excluded(excludes: &[Pattern], path: &Path) -> bool {
+    excludes
+        .iter()
+        .any(|pattern| du_exclude_pattern_matches_path(pattern, path))
 }
 
 /**
@@ -2923,6 +2922,32 @@ mod tests {
         du_write_path(&mut output, &path).unwrap();
 
         assert_eq!(output, b"raw\xff");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_exclude_check_does_not_panic_on_non_utf8_name() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root = temp_dir.path().join("root");
+        fs::create_dir(&root).unwrap();
+        fs::write(
+            root.join(OsString::from_vec(vec![b'r', b'a', b'w', 0xff])),
+            b"x",
+        )
+        .unwrap();
+
+        let args = vec![
+            OsString::from("du"),
+            OsString::from("-a"),
+            OsString::from("--exclude=nomatch"),
+            root.as_os_str().to_os_string(),
+        ];
+        let semantic = du_native_semantic(args.into_iter()).unwrap();
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.rows.len(), 2);
     }
 
     #[test]

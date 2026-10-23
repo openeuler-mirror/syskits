@@ -62,6 +62,8 @@ use std::io::stdout;
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicBool, Ordering};
 use sys_locale::get_locale;
 use unicode_width::UnicodeWidthChar;
 
@@ -85,6 +87,43 @@ const EXPAND_FILE_QUOTING_STYLE: CtQuotingStyle = CtQuotingStyle::Shell {
     always_quote: false,
     show_control: false,
 };
+
+#[cfg(target_os = "linux")]
+static EXPAND_INHERITED_SIGPIPE_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" fn expand_capture_inherited_sigpipe() {
+    let mut action = std::mem::MaybeUninit::<ctcore::libc::sigaction>::uninit();
+    if unsafe {
+        ctcore::libc::sigaction(ctcore::libc::SIGPIPE, std::ptr::null(), action.as_mut_ptr())
+    } == 0
+    {
+        let action = unsafe { action.assume_init() };
+        EXPAND_INHERITED_SIGPIPE_IGNORED.store(
+            action.sa_sigaction == ctcore::libc::SIG_IGN,
+            Ordering::Relaxed,
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static EXPAND_CAPTURE_SIGPIPE: unsafe extern "C" fn() = expand_capture_inherited_sigpipe;
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn expand_inherited_sigpipe_ignored() -> bool {
+    EXPAND_INHERITED_SIGPIPE_IGNORED.load(Ordering::Relaxed)
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn expand_terminate_with_sigpipe() -> ! {
+    unsafe {
+        ctcore::libc::signal(ctcore::libc::SIGPIPE, ctcore::libc::SIG_DFL);
+        ctcore::libc::raise(ctcore::libc::SIGPIPE);
+        ctcore::libc::_exit(128 + ctcore::libc::SIGPIPE);
+    }
+}
 
 #[cfg(target_os = "linux")]
 unsafe extern "C" {
@@ -845,6 +884,11 @@ fn expand_error_detail(error: &io::Error) -> String {
 }
 
 fn expand_write_error(error: &io::Error) -> Box<dyn ctcore::ct_error::CTError> {
+    #[cfg(all(target_os = "linux", not(test)))]
+    if error.kind() == io::ErrorKind::BrokenPipe && !expand_inherited_sigpipe_ignored() {
+        expand_terminate_with_sigpipe();
+    }
+
     ctcore::ct_error::CtSimpleError::new(
         1,
         format!("write error: {}", expand_error_detail(error)),

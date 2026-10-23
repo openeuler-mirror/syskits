@@ -1731,11 +1731,11 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     // 处理输入文件列表
     let files_path = if let Some(file_from) = du_last_files0_from(&args_match) {
         // 从文件中读取文件列表，处理特殊值 "-" 表示标准输入
-        if args_match.get_one::<String>(opt_flags::FILE).is_some() {
+        if args_match.get_one::<PathBuf>(opt_flags::FILE).is_some() {
             return Err(std::io::Error::other(format!(
                 "extra operand {}\nfile operands cannot be combined with --files0-from",
                 args_match
-                    .get_one::<String>(opt_flags::FILE)
+                    .get_one::<PathBuf>(opt_flags::FILE)
                     .unwrap()
                     .quote()
             ))
@@ -1745,11 +1745,11 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
         du_read_files_from(file_from)?
     } else {
         // 直接从命令行参数获取文件列表
-        match args_match.get_one::<String>(opt_flags::FILE) {
+        match args_match.get_one::<PathBuf>(opt_flags::FILE) {
             Some(_) => args_match
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<PathBuf>(opt_flags::FILE)
                 .unwrap()
-                .map(PathBuf::from)
+                .cloned()
                 .collect(),
             None => vec![PathBuf::from(".")], // 默认使用当前目录
         }
@@ -1924,11 +1924,11 @@ pub fn du_native_semantic(args: impl ctcore::Args) -> CTResult<DuSemantic> {
     let summarize_depth_warning = du_summarize_depth_warning(is_summarize, du_max_depth);
 
     let files_path = if let Some(file_from) = du_last_files0_from(&args_match) {
-        if args_match.get_one::<String>(opt_flags::FILE).is_some() {
+        if args_match.get_one::<PathBuf>(opt_flags::FILE).is_some() {
             return Err(std::io::Error::other(format!(
                 "extra operand {}\nfile operands cannot be combined with --files0-from",
                 args_match
-                    .get_one::<String>(opt_flags::FILE)
+                    .get_one::<PathBuf>(opt_flags::FILE)
                     .unwrap()
                     .quote()
             ))
@@ -1936,11 +1936,11 @@ pub fn du_native_semantic(args: impl ctcore::Args) -> CTResult<DuSemantic> {
         }
         du_read_files_from(file_from)?
     } else {
-        match args_match.get_one::<String>(opt_flags::FILE) {
+        match args_match.get_one::<PathBuf>(opt_flags::FILE) {
             Some(_) => args_match
-                .get_many::<String>(opt_flags::FILE)
+                .get_many::<PathBuf>(opt_flags::FILE)
                 .unwrap()
-                .map(PathBuf::from)
+                .cloned()
                 .collect(),
             None => vec![PathBuf::from(".")],
         }
@@ -2481,6 +2481,7 @@ pub fn ct_app() -> Command {
         Arg::new(opt_flags::FILE)
             .hide(true)
             .value_hint(clap::ValueHint::AnyPath)
+            .value_parser(clap::builder::PathBufValueParser::new())
             .action(ArgAction::Append),
     ];
 
@@ -2868,6 +2869,28 @@ mod tests {
             diagnostic,
             b"du: invalid option -- '\xc3'\nTry 'du --help' for more information.\n"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_non_utf8_operand_reaches_traversal() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file = temp_dir
+            .path()
+            .join(OsString::from_vec(vec![b'r', b'a', b'w', 0xff]));
+        fs::write(&file, b"x").unwrap();
+
+        let args = vec![
+            OsString::from("du"),
+            OsString::from("--"),
+            file.as_os_str().to_os_string(),
+        ];
+        let semantic = du_native_semantic(args.into_iter()).unwrap();
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.rows.len(), 1);
     }
 
     #[test]

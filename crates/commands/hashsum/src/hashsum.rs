@@ -2056,7 +2056,7 @@ fn create_check_regexes(flags: &HashsumFlags) -> Result<(Regex, Regex, String), 
 
     // BSD 格式及 OpenSSL 格式正则表达式
     let bsd_re = Regex::new(&format!(
-        r"^(?P<escaped>\\)?{bsd_algorithm} *\((?P<fileName>.*)\) *= *(?P<digest>[a-fA-F0-9]{bytes_marker})",
+        r"^[ \t]*(?P<escaped>\\)?{bsd_algorithm} *\((?P<fileName>.*)\) *= *(?P<digest>[a-fA-F0-9]{bytes_marker})",
     ))
     .map_err(|_| HashsumError::InvalidRegex)?;
 
@@ -2066,7 +2066,7 @@ fn create_check_regexes(flags: &HashsumFlags) -> Result<(Regex, Regex, String), 
 /// 基于给定格式创建用于解析行的正则表达式
 fn gnu_re_template(bytes_marker: &str, format_marker: &str) -> Result<Regex, HashsumError> {
     Regex::new(&format!(
-        r"^(?P<escaped>\\)?(?P<digest>[a-fA-F0-9]{bytes_marker}) {format_marker}(?P<fileName>.*)"
+        r"^[ \t]*(?P<escaped>\\)?(?P<digest>[a-fA-F0-9]{bytes_marker})[ \t]{format_marker}(?P<fileName>.*)"
     ))
     .map_err(|_| HashsumError::InvalidRegex)
 }

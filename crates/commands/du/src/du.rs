@@ -67,6 +67,19 @@ use windows_sys::Win32::Storage::FileSystem::{
     FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
     GetFileInformationByHandleEx,
 };
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn bindtextdomain(
+        domainname: *const ctcore::libc::c_char,
+        dirname: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
+    fn dgettext(
+        domainname: *const ctcore::libc::c_char,
+        msgid: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
+}
+
 mod opt_flags {
     pub const HELP: &str = "help";
     pub const NULL: &str = "0";
@@ -1641,6 +1654,10 @@ fn du_init_locale() {
     unsafe {
         ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
     }
+    #[cfg(target_os = "linux")]
+    unsafe {
+        bindtextdomain(c"coreutils".as_ptr(), c"/usr/share/locale".as_ptr());
+    }
 }
 
 fn du_localize_decimal_point(number: String) -> String {
@@ -1762,11 +1779,37 @@ fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
 }
 
 fn du_access_error_message(path: &Path, error: &io::Error) -> String {
-    format!(
-        "cannot access {}: {}",
-        escape_name(path.as_os_str(), &DU_DIAGNOSTIC_QUOTING_STYLE),
-        strip_errno(error)
-    )
+    let quoted_path = escape_name(path.as_os_str(), &DU_DIAGNOSTIC_QUOTING_STYLE);
+    #[cfg(target_os = "linux")]
+    if let Some(message) = du_localized_access_error(&quoted_path, error) {
+        return message;
+    }
+
+    du_format_access_error("cannot access %s", &quoted_path, &strip_errno(error))
+}
+
+fn du_format_access_error(template: &str, quoted_path: &str, detail: &str) -> String {
+    format!("{}: {detail}", template.replacen("%s", quoted_path, 1))
+}
+
+#[cfg(target_os = "linux")]
+fn du_localized_access_error(quoted_path: &str, error: &io::Error) -> Option<String> {
+    let quoted_path = CString::new(quoted_path).ok()?;
+    let errno = error.raw_os_error()?;
+
+    unsafe {
+        let template = dgettext(c"coreutils".as_ptr(), c"cannot access %s".as_ptr());
+        let detail = ctcore::libc::strerror(errno);
+        if template.is_null() || detail.is_null() {
+            return None;
+        }
+
+        Some(du_format_access_error(
+            &CStr::from_ptr(template).to_string_lossy(),
+            &quoted_path.to_string_lossy(),
+            &CStr::from_ptr(detail).to_string_lossy(),
+        ))
+    }
 }
 
 #[derive(Default)]
@@ -2736,6 +2779,14 @@ mod tests {
         let message = du_access_error_message(Path::new("bad\n\x01name"), &error);
 
         assert!(message.starts_with("cannot access 'bad'$'\\n\\001''name': "));
+    }
+
+    #[test]
+    fn test_access_error_uses_localized_template_and_detail() {
+        assert_eq!(
+            du_format_access_error("无法访问 %s", "'missing'", "没有那个文件或目录"),
+            "无法访问 'missing': 没有那个文件或目录"
+        );
     }
 
     #[test]

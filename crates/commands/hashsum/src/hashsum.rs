@@ -27,6 +27,7 @@ use ctcore::{ct_display::Quotable, ct_show_warning};
 use hex::encode;
 use regex::Captures;
 use regex::Regex;
+use regex::bytes::{Captures as BytesCaptures, Regex as BytesRegex};
 use std::cmp::Ordering;
 use sys_locale::get_locale;
 
@@ -1966,27 +1967,45 @@ fn check_hash_file<W: Write>(
     no_valid_lines: &mut bool,
     no_files_verified: &mut bool,
 ) -> CTResult<Option<usize>> {
-    let (mut gnu_re, bsd_re, bytes_marker) = create_check_regexes(flags)?;
+    let (mut gnu_re, bsd_re, bytes_marker) = create_check_regexes_bytes(flags)?;
     let mut bsd_reversed = None;
     let mut local_failed_cksum = 0;
     let mut file_has_valid_lines = false;
     let mut matched_files = 0;
     let mut local_bad_format = 0;
 
-    for (i, maybe_line) in file.lines().enumerate() {
-        let line = match maybe_line {
-            Ok(l) => l,
-            Err(e) => return Err(e.map_err_context(|| "failed to read file".to_string())),
-        };
+    let mut line = Vec::new();
+    let mut line_number = 0;
+    loop {
+        line.clear();
+        if file
+            .read_until(b'\n', &mut line)
+            .map_err_context(|| "failed to read file".to_string())?
+            == 0
+        {
+            break;
+        }
+        line_number += 1;
+        if line.last() == Some(&b'\n') {
+            line.pop();
+        }
+        if line.last() == Some(&b'\r') {
+            line.pop();
+        }
 
         // 静默跳过空行和注释行
-        if line.is_empty() || line.starts_with('#') {
+        if line.is_empty() || line.starts_with(b"#") {
             continue;
         }
 
         // 尝试匹配哈希行格式
-        let parse_result =
-            parse_hash_line(line, &mut gnu_re, &bsd_re, &bytes_marker, &mut bsd_reversed);
+        let parse_result = parse_hash_line_bytes(
+            &line,
+            &mut gnu_re,
+            &bsd_re,
+            &bytes_marker,
+            &mut bsd_reversed,
+        );
 
         match parse_result {
             Ok((ck_filename, sum, binary_check, is_escaped)) => {
@@ -2014,7 +2033,7 @@ fn check_hash_file<W: Write>(
                     ctcore::ct_show_error!(
                         "{}: {}: improperly formatted {} checksum line",
                         filename.maybe_quote(),
-                        i + 1,
+                        line_number,
                         check_algorithm_name(flags)
                     );
                 }
@@ -2041,6 +2060,136 @@ fn check_hash_file<W: Write>(
     }
 
     Ok(Some(local_failed_cksum))
+}
+
+fn create_check_regexes_bytes(
+    flags: &HashsumFlags,
+) -> Result<(BytesRegex, BytesRegex, String), HashsumError> {
+    let bytes = flags.digest.output_bits() / 4;
+    let bytes_marker = if flags.algoname == "BLAKE2" || bytes == 0 {
+        "+".to_string()
+    } else {
+        format!("{{{bytes}}}")
+    };
+
+    let gnu_re = gnu_re_template_bytes(&bytes_marker, r"(?P<binary>[ \*])?")?;
+    let bsd_algorithm = if flags.algoname == "BLAKE2" {
+        r"BLAKE2b(?:-(?P<tagBits>[0-9]+))?"
+    } else {
+        flags.algoname
+    };
+    let bsd_re = BytesRegex::new(&format!(
+        r"^[ \t]*(?P<escaped>\\)?{bsd_algorithm} ?\((?P<fileName>(?-u:.*))\)[ \t]*=[ \t]*(?P<digest>[a-fA-F0-9]{bytes_marker})$",
+    ))
+    .map_err(|_| HashsumError::InvalidRegex)?;
+
+    Ok((gnu_re, bsd_re, bytes_marker))
+}
+
+fn gnu_re_template_bytes(
+    bytes_marker: &str,
+    format_marker: &str,
+) -> Result<BytesRegex, HashsumError> {
+    BytesRegex::new(&format!(
+        r"^[ \t]*(?P<escaped>\\)?(?P<digest>[a-fA-F0-9]{bytes_marker})[ \t]{format_marker}(?P<fileName>(?-u:.*))"
+    ))
+    .map_err(|_| HashsumError::InvalidRegex)
+}
+
+fn parse_hash_line_bytes(
+    line: &[u8],
+    gnu_re: &mut BytesRegex,
+    bsd_re: &BytesRegex,
+    bytes_marker: &str,
+    bsd_reversed: &mut Option<bool>,
+) -> Result<(Vec<u8>, String, bool, bool), ParseLineError> {
+    let parsed = match gnu_re.captures(line) {
+        Some(caps) => {
+            let only_trailing_marker = caps.name("binary").is_some()
+                && caps
+                    .name("fileName")
+                    .is_some_and(|name| name.as_bytes().is_empty());
+            if *bsd_reversed == Some(false) && only_trailing_marker {
+                return Err(ParseLineError::FormatError);
+            }
+            handle_byte_captures(&caps, bytes_marker, bsd_reversed, gnu_re)
+                .map_err(|_| ParseLineError::RegexError)
+        }
+        None => match bsd_re.captures(line) {
+            Some(caps) => {
+                let digest = caps.name("digest").unwrap().as_bytes();
+                if let Some(tag_bits) = caps.name("tagBits") {
+                    let valid_tag = std::str::from_utf8(tag_bits.as_bytes())
+                        .ok()
+                        .and_then(|bits| bits.parse::<usize>().ok())
+                        .is_some_and(|bits| {
+                            (8..=512).contains(&bits) && bits % 8 == 0 && digest.len() == bits / 4
+                        });
+                    if !valid_tag {
+                        return Err(ParseLineError::FormatError);
+                    }
+                }
+                Ok((
+                    caps.name("fileName").unwrap().as_bytes().to_vec(),
+                    std::str::from_utf8(digest).unwrap().to_ascii_lowercase(),
+                    true,
+                    caps.name("escaped").is_some(),
+                ))
+            }
+            None => Err(ParseLineError::FormatError),
+        },
+    };
+
+    match parsed {
+        Ok(parsed) if parsed.3 && unescape_filename_bytes(&parsed.0).is_none() => {
+            Err(ParseLineError::FormatError)
+        }
+        Ok(parsed) if bytes_marker == "+" && (parsed.1.len() % 2 != 0 || parsed.1.len() > 128) => {
+            Err(ParseLineError::FormatError)
+        }
+        result => result,
+    }
+}
+
+fn handle_byte_captures(
+    caps: &BytesCaptures,
+    bytes_marker: &str,
+    bsd_reversed: &mut Option<bool>,
+    gnu_re: &mut BytesRegex,
+) -> Result<(Vec<u8>, String, bool, bool), HashsumError> {
+    let only_trailing_marker = caps.name("binary").is_some()
+        && caps
+            .name("fileName")
+            .is_some_and(|name| name.as_bytes().is_empty());
+
+    if bsd_reversed.is_none() {
+        let is_bsd_reversed = caps.name("binary").is_none() || only_trailing_marker;
+        let format_marker = if is_bsd_reversed {
+            ""
+        } else {
+            r"(?P<binary>[ \*])"
+        };
+        *bsd_reversed = Some(is_bsd_reversed);
+        *gnu_re = gnu_re_template_bytes(bytes_marker, format_marker)?;
+    }
+
+    let file_name = if only_trailing_marker {
+        caps.name("binary").unwrap().as_bytes()
+    } else {
+        caps.name("fileName").unwrap().as_bytes()
+    };
+    let digest = caps.name("digest").unwrap().as_bytes();
+
+    Ok((
+        file_name.to_vec(),
+        std::str::from_utf8(digest).unwrap().to_ascii_lowercase(),
+        if *bsd_reversed == Some(false) {
+            caps.name("binary").unwrap().as_bytes() == b"*"
+        } else {
+            false
+        },
+        caps.name("escaped").is_some(),
+    ))
 }
 
 /// 创建用于解析哈希校验文件的正则表达式
@@ -2188,7 +2337,7 @@ fn handle_captures(
 #[allow(clippy::too_many_arguments)]
 fn verify_file_hash<W: Write>(
     flags: &mut HashsumFlags,
-    ck_filename: &str,
+    ck_filename: &[u8],
     expected_sum: String,
     binary_check: bool,
     is_escaped: bool,
@@ -2212,14 +2361,16 @@ fn verify_file_hash<W: Write>(
         flags.digest = Box::new(CtBlake2b::with_output_bytes(expected_bytes));
     }
     let ck_filename_unescaped = if is_escaped {
-        unescape_filename(ck_filename)
+        unescape_filename_bytes(ck_filename)
             .expect("escaped filenames are validated while parsing manifests")
     } else {
-        ck_filename.to_string()
+        ck_filename.to_vec()
     };
-    let (rendered_filename, prefix) = escape_filename(Path::new(&ck_filename_unescaped));
+    let ck_filename_os = OsStr::from_bytes(&ck_filename_unescaped);
+    let ck_filename_path = Path::new(ck_filename_os);
+    let (rendered_filename, needs_escape) = escape_filename_bytes(ck_filename_path);
 
-    let f = match File::open(&ck_filename_unescaped) {
+    let f = match File::open(ck_filename_path) {
         Err(e) => {
             if flags.is_ignore_missing && e.kind() == std::io::ErrorKind::NotFound {
                 return Ok(None);
@@ -2227,14 +2378,14 @@ fn verify_file_hash<W: Write>(
             *failed_open_file += 1;
             let err_msg = e.to_string();
             let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
-            ctcore::ct_show_error!("{}: {}", ck_filename.maybe_quote(), clean_err);
+            ctcore::ct_show_error!("{}: {}", ck_filename_path.maybe_quote(), clean_err);
 
             if !flags.is_status {
-                writeln!(
+                write_check_status(
                     writer,
-                    "{prefix}{}: {}",
-                    rendered_filename,
-                    t!("hashsum.check.failed_open_or_read")
+                    &rendered_filename,
+                    needs_escape,
+                    &t!("hashsum.check.failed_open_or_read"),
                 )?;
             }
             return Ok(None);
@@ -2255,14 +2406,14 @@ fn verify_file_hash<W: Write>(
             *failed_open_file += 1;
             let err_msg = e.to_string();
             let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
-            ctcore::ct_show_error!("{}: {}", ck_filename.maybe_quote(), clean_err);
+            ctcore::ct_show_error!("{}: {}", ck_filename_path.maybe_quote(), clean_err);
 
             if !flags.is_status {
-                writeln!(
+                write_check_status(
                     writer,
-                    "{prefix}{}: {}",
-                    rendered_filename,
-                    t!("hashsum.check.failed_open_or_read")
+                    &rendered_filename,
+                    needs_escape,
+                    &t!("hashsum.check.failed_open_or_read"),
                 )?;
             }
             return Ok(None);
@@ -2271,23 +2422,39 @@ fn verify_file_hash<W: Write>(
 
     if expected_sum == real_sum {
         if !flags.is_quiet {
-            writeln!(
+            write_check_status(
                 writer,
-                "{prefix}{rendered_filename}: {}",
-                t!("hashsum.check.ok")
+                &rendered_filename,
+                needs_escape,
+                &t!("hashsum.check.ok"),
             )?;
         }
         Ok(Some(true))
     } else {
         if !flags.is_status {
-            writeln!(
+            write_check_status(
                 writer,
-                "{prefix}{rendered_filename}: {}",
-                t!("hashsum.check.failed")
+                &rendered_filename,
+                needs_escape,
+                &t!("hashsum.check.failed"),
             )?;
         }
         Ok(Some(false))
     }
+}
+
+fn write_check_status<W: Write>(
+    writer: &mut W,
+    rendered_filename: &[u8],
+    needs_escape: bool,
+    status: &str,
+) -> CTResult<()> {
+    if needs_escape {
+        writer.write_all(b"\\")?;
+    }
+    writer.write_all(rendered_filename)?;
+    writeln!(writer, ": {status}")?;
+    Ok(())
 }
 
 /// 计算文件的哈希值并输出
@@ -2378,6 +2545,29 @@ fn escape_filename_bytes(filename: &Path) -> (Vec<u8>, bool) {
         }
     }
     (escaped, true)
+}
+
+fn unescape_filename_bytes(filename: &[u8]) -> Option<Vec<u8>> {
+    let mut unescaped = Vec::with_capacity(filename.len());
+    let mut index = 0;
+    while index < filename.len() {
+        if filename[index] != b'\\' {
+            unescaped.push(filename[index]);
+            index += 1;
+            continue;
+        }
+
+        index += 1;
+        let escaped = *filename.get(index)?;
+        match escaped {
+            b'\\' => unescaped.push(b'\\'),
+            b'n' => unescaped.push(b'\n'),
+            b'r' => unescaped.push(b'\r'),
+            _ => return None,
+        }
+        index += 1;
+    }
+    Some(unescaped)
 }
 
 /// 输出摘要信息

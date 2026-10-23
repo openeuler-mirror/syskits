@@ -414,6 +414,7 @@ pub fn ct_app() -> Command {
             .long(opt_flags::TABS)
             .short('t')
             .value_name("N, LIST")
+            .allow_hyphen_values(true)
             .action(ArgAction::Append)
             .help(
                 "have tabs N characters apart, not 8 or use comma separated list \
@@ -444,9 +445,18 @@ pub fn ct_app() -> Command {
 /// "--tabs=7" and "-1,3" to "--tabs=1 --tabs=3".
 fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
     let mut processed_args = Vec::with_capacity(args.len());
+    let mut consume_next_as_value = false;
 
     for arg in args {
+        if consume_next_as_value {
+            processed_args.push(arg);
+            consume_next_as_value = false;
+            continue;
+        }
+
         if let Some(arg) = arg.to_str() {
+            consume_next_as_value =
+                expand_long_option_consumes_next(arg) || expand_short_option_consumes_next(arg);
             if arg.starts_with('-') && arg[1..].chars().all(is_digit_or_comma) {
                 arg[1..]
                     .split(',')
@@ -1549,6 +1559,19 @@ mod tests {
             let result = expand_shortcuts(args);
 
             assert_eq!(result, expected);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_preserves_tabs_option_value() {
+            let args = vec![
+                OsString::from("expand"),
+                OsString::from("-t"),
+                OsString::from("-4"),
+                OsString::from("--tabs"),
+                OsString::from("-8"),
+            ];
+
+            assert_eq!(expand_shortcuts(args.clone()), args);
         }
 
         // #[test]

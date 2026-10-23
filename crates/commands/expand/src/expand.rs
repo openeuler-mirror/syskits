@@ -45,6 +45,7 @@ use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::FromIo;
 use ctcore::ct_error::set_ct_exit_code;
+use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
 
 use std::error::Error;
 use std::ffi::OsString;
@@ -194,7 +195,13 @@ impl fmt::Display for ExpandParseError {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::InvalidCharacter(s) => {
-                write!(fmt, "tab size contains invalid character(s): {}", s.quote())
+                let quoted = escape_name(
+                    s.as_ref(),
+                    &CtQuotingStyle::C {
+                        quotes: CtQuotes::Locale,
+                    },
+                );
+                write!(fmt, "tab size contains invalid character(s): {quoted}")
             }
             Self::SpecifierNotAtStartOfNumber(specifier, s) => write!(
                 fmt,
@@ -602,7 +609,7 @@ fn expand_tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ExpandP
                     return Err(ExpandParseError::TabSizeTooLarge(number.to_string()));
                 }
 
-                let invalid_suffix = number.trim_start_matches(char::is_numeric);
+                let invalid_suffix = number.trim_start_matches(|c: char| c.is_ascii_digit());
                 if invalid_suffix.starts_with('/') || invalid_suffix.starts_with('+') {
                     return Err(ExpandParseError::SpecifierNotAtStartOfNumber(
                         invalid_suffix[0..1].to_string(),
@@ -1595,6 +1602,14 @@ mod tests {
             assert_eq!(
                 result,
                 Err(ExpandParseError::InvalidCharacter("a".to_string()))
+            );
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_preserves_non_ascii_digit() {
+            assert_eq!(
+                expand_tabstops_parse("٣"),
+                Err(ExpandParseError::InvalidCharacter("٣".to_string()))
             );
         }
 

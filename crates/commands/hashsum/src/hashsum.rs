@@ -603,15 +603,13 @@ fn verify_file_hash_semantic(
         flags.digest = Box::new(CtBlake2b::with_output_bytes(expected_bytes));
     }
 
-    let (ck_filename_unescaped, prefix) = if is_escaped {
-        (
-            unescape_filename(ck_filename)
-                .expect("escaped filenames are validated while parsing manifests"),
-            "\\",
-        )
+    let ck_filename_unescaped = if is_escaped {
+        unescape_filename(ck_filename)
+            .expect("escaped filenames are validated while parsing manifests")
     } else {
-        (ck_filename.to_string(), "")
+        ck_filename.to_string()
     };
+    let (rendered_filename, prefix) = escape_filename(Path::new(&ck_filename_unescaped));
 
     let mut stderr_text = String::new();
     let mut classic_text = String::new();
@@ -629,8 +627,8 @@ fn verify_file_hash_semantic(
                         binary_marker: if binary_check { "*" } else { " " }.into(),
                         output_style: hashsum_output_style(flags).to_string(),
                         source: "manifest".into(),
-                        filename_was_escaped: is_escaped,
-                        rendered_filename: Some(ck_filename.to_string()),
+                        filename_was_escaped: !prefix.is_empty(),
+                        rendered_filename: Some(rendered_filename.clone()),
                         manifest_file: Some(manifest_file.display().to_string()),
                         expected_digest: Some(expected_sum),
                         actual_digest: None,
@@ -656,7 +654,7 @@ fn verify_file_hash_semantic(
             if !flags.is_status {
                 classic_text.push_str(&render_check_row_classic(
                     prefix,
-                    ck_filename,
+                    &rendered_filename,
                     &t!("hashsum.check.failed_open_or_read"),
                 ));
             }
@@ -670,8 +668,8 @@ fn verify_file_hash_semantic(
                     binary_marker: if binary_check { "*" } else { " " }.into(),
                     output_style: hashsum_output_style(flags).to_string(),
                     source: "manifest".into(),
-                    filename_was_escaped: is_escaped,
-                    rendered_filename: Some(ck_filename.to_string()),
+                    filename_was_escaped: !prefix.is_empty(),
+                    rendered_filename: Some(rendered_filename.clone()),
                     manifest_file: Some(manifest_file.display().to_string()),
                     expected_digest: Some(expected_sum),
                     actual_digest: None,
@@ -704,7 +702,7 @@ fn verify_file_hash_semantic(
             if !flags.is_status {
                 classic_text.push_str(&render_check_row_classic(
                     prefix,
-                    ck_filename,
+                    &rendered_filename,
                     &t!("hashsum.check.failed_open_or_read"),
                 ));
             }
@@ -718,8 +716,8 @@ fn verify_file_hash_semantic(
                     binary_marker: if binary_check { "*" } else { " " }.into(),
                     output_style: hashsum_output_style(flags).to_string(),
                     source: "manifest".into(),
-                    filename_was_escaped: is_escaped,
-                    rendered_filename: Some(ck_filename.to_string()),
+                    filename_was_escaped: !prefix.is_empty(),
+                    rendered_filename: Some(rendered_filename.clone()),
                     manifest_file: Some(manifest_file.display().to_string()),
                     expected_digest: Some(expected_sum),
                     actual_digest: None,
@@ -742,14 +740,14 @@ fn verify_file_hash_semantic(
         if !flags.is_quiet {
             classic_text.push_str(&render_check_row_classic(
                 prefix,
-                ck_filename,
+                &rendered_filename,
                 &t!("hashsum.check.ok"),
             ));
         }
     } else if !flags.is_status {
         classic_text.push_str(&render_check_row_classic(
             prefix,
-            ck_filename,
+            &rendered_filename,
             &t!("hashsum.check.failed"),
         ));
     }
@@ -764,8 +762,8 @@ fn verify_file_hash_semantic(
             binary_marker: if binary_check { "*" } else { " " }.into(),
             output_style: hashsum_output_style(flags).to_string(),
             source: "manifest".into(),
-            filename_was_escaped: is_escaped,
-            rendered_filename: Some(ck_filename.to_string()),
+            filename_was_escaped: !prefix.is_empty(),
+            rendered_filename: Some(rendered_filename),
             manifest_file: Some(manifest_file.display().to_string()),
             expected_digest: Some(expected_sum),
             actual_digest: Some(real_sum),
@@ -2213,15 +2211,13 @@ fn verify_file_hash<W: Write>(
         flags.output_bits = expected_bytes * 8;
         flags.digest = Box::new(CtBlake2b::with_output_bytes(expected_bytes));
     }
-    let (ck_filename_unescaped, prefix) = if is_escaped {
-        (
-            unescape_filename(ck_filename)
-                .expect("escaped filenames are validated while parsing manifests"),
-            "\\",
-        )
+    let ck_filename_unescaped = if is_escaped {
+        unescape_filename(ck_filename)
+            .expect("escaped filenames are validated while parsing manifests")
     } else {
-        (ck_filename.to_string(), "")
+        ck_filename.to_string()
     };
+    let (rendered_filename, prefix) = escape_filename(Path::new(&ck_filename_unescaped));
 
     let f = match File::open(&ck_filename_unescaped) {
         Err(e) => {
@@ -2236,8 +2232,8 @@ fn verify_file_hash<W: Write>(
             if !flags.is_status {
                 writeln!(
                     writer,
-                    "{}: {}",
-                    ck_filename,
+                    "{prefix}{}: {}",
+                    rendered_filename,
                     t!("hashsum.check.failed_open_or_read")
                 )?;
             }
@@ -2264,8 +2260,8 @@ fn verify_file_hash<W: Write>(
             if !flags.is_status {
                 writeln!(
                     writer,
-                    "{}: {}",
-                    ck_filename,
+                    "{prefix}{}: {}",
+                    rendered_filename,
                     t!("hashsum.check.failed_open_or_read")
                 )?;
             }
@@ -2275,14 +2271,18 @@ fn verify_file_hash<W: Write>(
 
     if expected_sum == real_sum {
         if !flags.is_quiet {
-            writeln!(writer, "{prefix}{ck_filename}: {}", t!("hashsum.check.ok"))?;
+            writeln!(
+                writer,
+                "{prefix}{rendered_filename}: {}",
+                t!("hashsum.check.ok")
+            )?;
         }
         Ok(Some(true))
     } else {
         if !flags.is_status {
             writeln!(
                 writer,
-                "{prefix}{ck_filename}: {}",
+                "{prefix}{rendered_filename}: {}",
                 t!("hashsum.check.failed")
             )?;
         }

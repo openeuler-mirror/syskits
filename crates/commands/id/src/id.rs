@@ -19,11 +19,11 @@ extern crate rust_i18n;
 use rust_i18n::t;
 use std::io::{self, Write};
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use sys_locale::get_locale;
 
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::{Quotable, locale_quote_marks};
 use ctcore::ct_entries::{self, CtPasswd};
 use ctcore::ct_error::{CTError, CTResult};
 use ctcore::ct_error::{CtSimpleError, set_ct_exit_code, strip_errno};
@@ -284,10 +284,14 @@ pub fn id_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()
         .after_help(t!("id.after_help"))
         .try_get_matches_from(raw_args)?;
 
-    let users: Vec<String> = matches
-        .get_many::<String>(id_flags::ID_ARG_USERS)
-        .map(|v| v.map(ToString::to_string).collect())
+    let raw_users: Vec<OsString> = matches
+        .get_many::<OsString>(id_flags::ID_ARG_USERS)
+        .map(|v| v.cloned().collect())
         .unwrap_or_default();
+    let users: Vec<String> = raw_users
+        .iter()
+        .map(|user| user.to_string_lossy().into_owned())
+        .collect();
 
     let mut state = id_get_state(&matches, &users);
 
@@ -323,7 +327,13 @@ pub fn id_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()
     }
 
     // 处理并展示用户信息
-    id_handle_users(writer, users, &mut state, is_default_format, line_ending);
+    id_handle_users(
+        writer,
+        raw_users,
+        &mut state,
+        is_default_format,
+        line_ending,
+    );
 
     Ok(())
 }
@@ -639,10 +649,14 @@ pub fn id_native_semantic(args: impl ctcore::Args) -> CTResult<IdSemantic> {
         .after_help(t!("id.after_help"))
         .try_get_matches_from(raw_args)?;
 
-    let users: Vec<String> = matches
-        .get_many::<String>(id_flags::ID_ARG_USERS)
-        .map(|v| v.map(ToString::to_string).collect())
+    let raw_users: Vec<OsString> = matches
+        .get_many::<OsString>(id_flags::ID_ARG_USERS)
+        .map(|v| v.cloned().collect())
         .unwrap_or_default();
+    let users: Vec<String> = raw_users
+        .iter()
+        .map(|user| user.to_string_lossy().into_owned())
+        .collect();
 
     let mut state = id_get_state(&matches, &users);
 
@@ -692,19 +706,41 @@ pub fn id_native_semantic(args: impl ctcore::Args) -> CTResult<IdSemantic> {
     ))
 }
 
-fn id_handle_users<W: Write>(
+fn id_quote_user(user: &OsStr) -> String {
+    if user.to_str().is_some() {
+        return user.quote().to_string();
+    }
+
+    let (left_quote, right_quote) = locale_quote_marks();
+    let mut quoted = left_quote;
+    for byte in user.as_bytes() {
+        if byte.is_ascii_graphic() || *byte == b' ' {
+            quoted.push(char::from(*byte));
+        } else {
+            quoted.push_str(&format!("\\{byte:03o}"));
+        }
+    }
+    quoted.push_str(&right_quote);
+    quoted
+}
+
+fn id_handle_users<W, U>(
     writer: &mut W,
-    users: Vec<String>,
+    users: Vec<U>,
     id_state: &mut IdState,
     is_default_format: bool,
     line_ending: CtLineEnding,
-) {
+) where
+    W: Write,
+    U: AsRef<OsStr>,
+{
     let delimiter = id_get_delimiter(id_state);
 
     for i in 0..=users.len() {
         let possible_pw = if id_state.is_user_specified {
-            let lookup = CtPasswd::locate_name(users[i].as_str()).or_else(|name_error| {
-                if let Ok(uid) = users[i].parse::<u32>() {
+            let user = users[i].as_ref();
+            let lookup = CtPasswd::locate_name_os(user).or_else(|name_error| {
+                if let Ok(uid) = user.to_string_lossy().parse::<u32>() {
                     CtPasswd::locate_uid(uid)
                 } else {
                     Err(name_error)
@@ -716,11 +752,11 @@ fn id_handle_users<W: Write>(
                     if matches!(error.raw_os_error(), Some(errno) if errno != 0) {
                         ct_show_error!(
                             "{}: no such user: {}",
-                            users[i].quote(),
+                            id_quote_user(user),
                             strip_errno(&error)
                         );
                     } else {
-                        ct_show_error!("{}: no such user", users[i].quote());
+                        ct_show_error!("{}: no such user", id_quote_user(user));
                     }
                     set_ct_exit_code(1);
                     if i + 1 >= users.len() {
@@ -866,7 +902,7 @@ fn id_handle_users<W: Write>(
             if id_state.is_user_specified {
                 ct_show_error!(
                     "failed to get groups for user {}: {}",
-                    users[i].quote(),
+                    id_quote_user(users[i].as_ref()),
                     strip_errno(&error)
                 );
             } else {
@@ -1022,6 +1058,7 @@ pub fn ct_app() -> Command {
             .action(ArgAction::SetTrue),
         Arg::new(id_flags::ID_ARG_USERS)
             .action(ArgAction::Append)
+            .value_parser(OsStringValueParser::new())
             .value_name(id_flags::ID_ARG_USERS)
             .value_hint(clap::ValueHint::Username),
     ];
@@ -2350,6 +2387,8 @@ mod tests {
     #[cfg(test)]
     mod ct_app_tests {
         use clap::error::ErrorKind;
+        #[cfg(target_family = "unix")]
+        use std::os::unix::ffi::OsStringExt;
 
         use super::*;
 
@@ -2415,6 +2454,21 @@ mod tests {
             let result = command.try_get_matches_from(help_args);
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_ct_app_preserves_non_utf8_user_operand() {
+            let operand = OsString::from_vec(b"missing\xff".to_vec());
+            let args = vec![OsString::from(ctcore::ct_util_name()), operand.clone()];
+            let matches = ct_app().try_get_matches_from(args).unwrap();
+
+            assert_eq!(
+                matches
+                    .get_one::<OsString>(id_flags::ID_ARG_USERS)
+                    .unwrap()
+                    .as_bytes(),
+                operand.as_bytes()
+            );
         }
 
         #[test]

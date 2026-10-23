@@ -1550,13 +1550,42 @@ impl DuStatPrinter {
     fn du_print_stat(&self, du_stat: &DuStat, size: u64) -> CTResult<()> {
         let output = io::stdout();
         let mut stdout = output.lock();
-        stdout.write_all(self.du_render_stat_prefix(du_stat, size)?.as_bytes())?;
-        du_write_path(&mut stdout, &du_stat.path)?;
-        stdout.write_all(format!("{}", self.line_ending).as_bytes())?;
-        stdout.flush()?;
-        Ok(())
+        let prefix = self.du_render_stat_prefix(du_stat, size)?;
+        let line_ending = self.line_ending.to_string();
+        let result = stdout
+            .write_all(prefix.as_bytes())
+            .and_then(|_| du_write_path(&mut stdout, &du_stat.path))
+            .and_then(|_| stdout.write_all(line_ending.as_bytes()))
+            .and_then(|_| stdout.flush());
+        du_handle_stdout_result(result)
     }
 }
+
+fn du_handle_stdout_result(result: io::Result<()>) -> CTResult<()> {
+    match result {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            du_silence_stdout_after_error();
+            Err(du_stdout_write_error(&error))
+        }
+    }
+}
+
+fn du_stdout_write_error(_error: &io::Error) -> Box<dyn CTError> {
+    CtSimpleError::new(1, "write error")
+}
+
+#[cfg(unix)]
+fn du_silence_stdout_after_error() {
+    if let Ok(dev_null) = File::options().write(true).open("/dev/null") {
+        unsafe {
+            ctcore::libc::dup2(dev_null.as_raw_fd(), ctcore::libc::STDOUT_FILENO);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn du_silence_stdout_after_error() {}
 
 #[cfg(unix)]
 fn du_write_path(writer: &mut impl Write, path: &Path) -> io::Result<()> {
@@ -10593,6 +10622,13 @@ mod tests_fn {
 
     use std::os::unix::fs::symlink;
     use tempfile::TempDir;
+
+    #[test]
+    fn test_arbitrary_stdout_error_uses_gnu_write_diagnostic() {
+        let error = io::Error::from_raw_os_error(ctcore::libc::ENOSPC);
+
+        assert_eq!(du_stdout_write_error(&error).to_string(), "write error");
+    }
 
     #[test]
     fn test_read_block_size() {

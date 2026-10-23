@@ -147,8 +147,17 @@ impl Tool for Id {
 fn id_run_buffered<W: Write>(writer: W, args: impl ctcore::Args) -> CTResult<()> {
     let mut writer = io::BufWriter::new(writer);
     id_main(&mut writer, args)?;
-    writer.flush().map_err(id_stdout_write_error)?;
-    Ok(())
+    id_flush_stdout(&mut writer, ctcore::ct_stdout_was_closed())
+}
+
+fn id_flush_stdout(writer: &mut impl Write, stdout_was_closed: bool) -> CTResult<()> {
+    let result = writer.flush();
+    if stdout_was_closed {
+        return Err(id_stdout_write_error(io::Error::from_raw_os_error(
+            ctcore::libc::EBADF,
+        )));
+    }
+    result.map_err(id_stdout_write_error)
 }
 
 fn id_stdout_write_error(error: io::Error) -> Box<dyn CTError> {
@@ -1293,6 +1302,14 @@ mod tests {
             error.to_string(),
             "write error: No space left on device"
         );
+    }
+
+    #[test]
+    fn test_closed_stdout_is_reported_as_ebadf() {
+        let mut output = Vec::new();
+        let error = id_flush_stdout(&mut output, true).unwrap_err();
+
+        assert_eq!(error.to_string(), "write error: Bad file descriptor");
     }
 
     #[test]

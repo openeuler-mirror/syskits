@@ -591,9 +591,7 @@ fn expand_tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ExpandP
                 b'/' => RemainingMode::Slash,
                 _ => break,
             };
-            if remaining_mode == RemainingMode::None {
-                remaining_mode = mode;
-            }
+            remaining_mode = mode;
             number = &number[1..];
         }
 
@@ -1600,7 +1598,11 @@ mod tests {
             );
             assert_eq!(
                 expand_tabstops_parse("+/5"),
-                Ok((RemainingMode::Plus, vec![5]))
+                Ok((RemainingMode::Slash, vec![5]))
+            );
+            assert_eq!(
+                expand_tabstops_parse("3,/+5"),
+                Ok((RemainingMode::Plus, vec![3, 5]))
             );
         }
 

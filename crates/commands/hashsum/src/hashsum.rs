@@ -2373,32 +2373,35 @@ fn verify_file_hash<W: Write>(
     let ck_filename_path = Path::new(ck_filename_os);
     let (rendered_filename, needs_escape) = escape_filename_bytes(ck_filename_path);
 
-    let f = match File::open(ck_filename_path) {
-        Err(e) => {
-            if flags.is_ignore_missing && e.kind() == std::io::ErrorKind::NotFound {
+    let mut ckf = if ck_filename_path == Path::new("-") {
+        BufReader::new(ctcore::ct_io::stdin_reader_box())
+    } else {
+        let file = match File::open(ck_filename_path) {
+            Err(e) => {
+                if flags.is_ignore_missing && e.kind() == std::io::ErrorKind::NotFound {
+                    return Ok(None);
+                }
+                *failed_open_file += 1;
+                let err_msg = e.to_string();
+                let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
+                ctcore::ct_show_error!("{}: {}", ck_filename_path.maybe_quote(), clean_err);
+
+                if !flags.is_status {
+                    write_check_status(
+                        writer,
+                        &rendered_filename,
+                        needs_escape,
+                        &t!("hashsum.check.failed_open_or_read"),
+                    )?;
+                }
                 return Ok(None);
             }
-            *failed_open_file += 1;
-            let err_msg = e.to_string();
-            let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
-            ctcore::ct_show_error!("{}: {}", ck_filename_path.maybe_quote(), clean_err);
-
-            if !flags.is_status {
-                write_check_status(
-                    writer,
-                    &rendered_filename,
-                    needs_escape,
-                    &t!("hashsum.check.failed_open_or_read"),
-                )?;
-            }
-            return Ok(None);
-        }
-        Ok(file) => file,
+            Ok(file) => file,
+        };
+        BufReader::new(Box::new(file) as Box<dyn Read>)
     };
 
     *matched_files += 1;
-
-    let mut ckf = BufReader::new(Box::new(f) as Box<dyn Read>);
 
     // 计算实际哈希值
     let real_sum = match digest_reader(&mut flags.digest, &mut ckf, binary_check, flags.output_bits)

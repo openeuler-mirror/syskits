@@ -36,6 +36,8 @@ use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fmt::Display;
 #[cfg(target_family = "unix")]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(target_os = "linux")]
 unsafe extern "C" {
@@ -50,6 +52,33 @@ unsafe extern "C" {
 }
 
 static CONTEXT_HELP_TEXT: &str = "print only the security context of the process";
+
+#[cfg(target_os = "linux")]
+static ID_INHERITED_SIGPIPE_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" fn id_capture_inherited_sigpipe() {
+    let mut action = std::mem::MaybeUninit::<ctcore::libc::sigaction>::uninit();
+    if unsafe {
+        ctcore::libc::sigaction(
+            ctcore::libc::SIGPIPE,
+            std::ptr::null(),
+            action.as_mut_ptr(),
+        )
+    } == 0
+    {
+        let action = unsafe { action.assume_init() };
+        ID_INHERITED_SIGPIPE_IGNORED.store(
+            action.sa_sigaction == ctcore::libc::SIG_IGN,
+            Ordering::Relaxed,
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static ID_CAPTURE_SIGPIPE: unsafe extern "C" fn() = id_capture_inherited_sigpipe;
 
 const ID_NO_ARGUMENT_LONG_OPTIONS: [&str; 9] = [
     "user", "group", "groups", "name", "real", "zero", "context", "help", "version",
@@ -162,12 +191,22 @@ fn id_flush_stdout(writer: &mut impl Write, stdout_was_closed: bool) -> CTResult
 
 fn id_stdout_write_error(error: io::Error) -> Box<dyn CTError> {
     #[cfg(all(target_os = "linux", not(test)))]
-    if error.kind() == io::ErrorKind::BrokenPipe {
+    if error.kind() == io::ErrorKind::BrokenPipe && !id_inherited_sigpipe_ignored() {
         id_terminate_with_sigpipe();
     }
 
     let detail = id_errno_message(&error).unwrap_or_else(|| strip_errno(&error));
     CtSimpleError::new(1, format!("{}: {detail}", id_gettext("write error")))
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn id_inherited_sigpipe_ignored() -> bool {
+    ID_INHERITED_SIGPIPE_IGNORED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn id_inherited_sigpipe_ignored() -> bool {
+    false
 }
 
 #[cfg(all(target_os = "linux", not(test)))]

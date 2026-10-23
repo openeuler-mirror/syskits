@@ -481,7 +481,12 @@ fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
                 processed_args.extend(expanded);
                 continue;
             }
-            if arg.starts_with('-') && arg[1..].chars().all(is_digit_or_comma) {
+            let shortcut = arg.strip_prefix('-').is_some_and(|body| {
+                body.is_empty()
+                    || (body.starts_with(|character: char| character.is_ascii_digit())
+                        && body.chars().all(is_digit_or_comma))
+            });
+            if shortcut {
                 arg[1..]
                     .split(',')
                     .filter(|s| !s.is_empty())
@@ -1609,6 +1614,12 @@ mod tests {
                 Some(vec![OsString::from("--tabs=4i")])
             );
             assert_eq!(super::super::expand_mixed_shortcut("-4,8"), None);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_rejects_leading_comma() {
+            let malformed = vec![OsString::from("-,"), OsString::from("-,,4")];
+            assert_eq!(expand_shortcuts(malformed.clone()), malformed);
         }
 
         // #[test]

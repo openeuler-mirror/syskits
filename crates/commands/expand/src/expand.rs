@@ -1325,7 +1325,19 @@ fn expand(options: &ExpandOptions) -> CTResult<()> {
     let stderr = io::stderr();
     let mut diagnostics = stderr.lock();
     let mut outcome = expand_to_writer(options, &mut output, &mut diagnostics)?;
-    output.flush().map_err(|error| expand_write_error(&error))?;
+    if ctcore::ct_stdout_was_closed() {
+        if output.flush().is_err() {
+            let error = io::Error::from_raw_os_error(ctcore::libc::EBADF);
+            let message = format!(
+                "expand: write error: {}\n",
+                expand_error_detail(&error)
+            );
+            expand_report_error(&mut outcome.stderr_text, &mut diagnostics, &message)?;
+            outcome.exit_code = 1;
+        }
+    } else {
+        output.flush().map_err(|error| expand_write_error(&error))?;
+    }
 
     #[cfg(unix)]
     if outcome.read_stdin {

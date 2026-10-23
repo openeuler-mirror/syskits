@@ -143,6 +143,13 @@ pub fn id_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()
 
     let mut state = id_get_state(&matches, &users);
 
+    if state.is_cflag && !state.is_selinux_supported {
+        return Err(CtSimpleError::new(
+            1,
+            "--context (-Z) works only on an SELinux-enabled kernel",
+        ));
+    }
+
     let is_default_format = id_flags_validity_checks(&mut state)?;
 
     let line_ending = CtLineEnding::from_zero_flag(state.is_zflag);
@@ -483,6 +490,14 @@ pub fn id_native_semantic(args: impl ctcore::Args) -> CTResult<IdSemantic> {
         .unwrap_or_default();
 
     let mut state = id_get_state(&matches, &users);
+
+    if state.is_cflag && !state.is_selinux_supported {
+        return Err(CtSimpleError::new(
+            1,
+            "--context (-Z) works only on an SELinux-enabled kernel",
+        ));
+    }
+
     let is_default_format = id_flags_validity_checks(&mut state)?;
     let line_ending = CtLineEnding::from_zero_flag(state.is_zflag);
 
@@ -2115,6 +2130,26 @@ mod tests {
             let result = id_main(&mut output, args.iter().map(OsString::from));
 
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_id_main_context_kernel_validation_precedes_conflicts() {
+            if selinux::kernel_support() != selinux::KernelSupport::Unsupported {
+                return;
+            }
+
+            for args in [
+                vec![ctcore::ct_util_name(), "-Z", "root"],
+                vec![ctcore::ct_util_name(), "-Z", "-u"],
+            ] {
+                let mut output = Cursor::new(Vec::new());
+                let result = id_main(&mut output, args.iter().map(OsString::from));
+
+                assert_eq!(
+                    result.unwrap_err().to_string(),
+                    "--context (-Z) works only on an SELinux-enabled kernel"
+                );
+            }
         }
 
         #[test]

@@ -443,6 +443,26 @@ pub fn ct_app() -> Command {
 
 /// Preprocess command line arguments and expand shortcuts. For example, "-7" is expanded to
 /// "--tabs=7" and "-1,3" to "--tabs=1 --tabs=3".
+fn expand_mixed_shortcut(arg: &str) -> Option<Vec<OsString>> {
+    let body = arg.strip_prefix('-')?;
+    if arg.starts_with("--") || body.chars().all(is_digit_or_comma) {
+        return None;
+    }
+
+    let digit_index = body.find(|character: char| character.is_ascii_digit())?;
+    let prefix = &body[..digit_index];
+    if !prefix.chars().all(|option| matches!(option, 'i' | 'U')) {
+        return None;
+    }
+
+    let mut expanded = Vec::with_capacity(2);
+    if !prefix.is_empty() {
+        expanded.push(OsString::from(format!("-{prefix}")));
+    }
+    expanded.push(OsString::from(format!("--tabs={}", &body[digit_index..])));
+    Some(expanded)
+}
+
 fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
     let mut processed_args = Vec::with_capacity(args.len());
     let mut consume_next_as_value = false;
@@ -457,6 +477,10 @@ fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
         if let Some(arg) = arg.to_str() {
             consume_next_as_value =
                 expand_long_option_consumes_next(arg) || expand_short_option_consumes_next(arg);
+            if let Some(expanded) = expand_mixed_shortcut(arg) {
+                processed_args.extend(expanded);
+                continue;
+            }
             if arg.starts_with('-') && arg[1..].chars().all(is_digit_or_comma) {
                 arg[1..]
                     .split(',')
@@ -1572,6 +1596,19 @@ mod tests {
             ];
 
             assert_eq!(expand_shortcuts(args.clone()), args);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_handles_mixed_numeric_clusters() {
+            assert_eq!(
+                super::super::expand_mixed_shortcut("-i4"),
+                Some(vec![OsString::from("-i"), OsString::from("--tabs=4")])
+            );
+            assert_eq!(
+                super::super::expand_mixed_shortcut("-4i"),
+                Some(vec![OsString::from("--tabs=4i")])
+            );
+            assert_eq!(super::super::expand_mixed_shortcut("-4,8"), None);
         }
 
         // #[test]

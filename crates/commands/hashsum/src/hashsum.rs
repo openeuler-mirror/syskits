@@ -2062,7 +2062,7 @@ fn create_check_regexes(flags: &HashsumFlags) -> Result<(Regex, Regex, String), 
 
     // BSD 格式及 OpenSSL 格式正则表达式
     let bsd_re = Regex::new(&format!(
-        r"^[ \t]*(?P<escaped>\\)?{bsd_algorithm} ?\((?P<fileName>.*)\)[ \t]*=[ \t]*(?P<digest>[a-fA-F0-9]{bytes_marker})",
+        r"^[ \t]*(?P<escaped>\\)?{bsd_algorithm} ?\((?P<fileName>.*)\)[ \t]*=[ \t]*(?P<digest>[a-fA-F0-9]{bytes_marker})$",
     ))
     .map_err(|_| HashsumError::InvalidRegex)?;
 

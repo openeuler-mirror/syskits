@@ -796,7 +796,7 @@ where
                 Err(e) => return Err(e.map_err_context(|| "failed to read file".to_string())),
             };
 
-            if line.is_empty() {
+            if line.is_empty() || line.starts_with('#') {
                 continue;
             }
 
@@ -1970,8 +1970,8 @@ fn check_hash_file<W: Write>(
             Err(e) => return Err(e.map_err_context(|| "failed to read file".to_string())),
         };
 
-        // 静默跳过空行
-        if line.is_empty() {
+        // 静默跳过空行和注释行
+        if line.is_empty() || line.starts_with('#') {
             continue;
         }
 

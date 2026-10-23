@@ -20,9 +20,11 @@ use ctcore::ct_error::{
     CTError, CTResult, CTsageError, CtSimpleError, FromIo, set_ct_exit_code, strip_errno,
 };
 use ctcore::ct_line_ending::CtLineEnding;
+#[cfg(not(unix))]
 use ctcore::ct_parse_glob;
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 use ctcore::{ct_show, ct_show_error, ct_show_warning};
+#[cfg(not(unix))]
 use glob::Pattern;
 #[cfg(unix)]
 use nix::dir::Dir;
@@ -124,7 +126,14 @@ struct DuTraversalOptions {
     dereference: DuDeref,
     count_links: bool,
     verbose: bool,
-    excludes: Vec<Pattern>,
+    excludes: Vec<DuExcludePattern>,
+}
+
+struct DuExcludePattern {
+    #[cfg(unix)]
+    c_pattern: CString,
+    #[cfg(not(unix))]
+    pattern: Pattern,
 }
 
 struct DuStatPrinter {
@@ -1157,15 +1166,15 @@ fn du_apply_posix_option_order(args: &mut Vec<OsString>, enabled: bool) {
 }
 
 /**
- * 将文件内容读取到一个String类型的vector中。
+ * 将文件内容按换行符读取到字节vector中。
  *
  * 参数:
  *  - filename: 实现了AsRef<Path>的类型，通常是一个字符串，代表要读取的文件路径。
  *
  * 返回值:
- *  - Vec<String>: 包含文件中每一行内容的vector。
+ *  - Vec<Vec<u8>>: 包含文件中每一行原始字节的vector。
  */
-fn du_file_as_vec(file_name: impl AsRef<Path>) -> CTResult<Vec<String>> {
+fn du_file_as_vec(file_name: impl AsRef<Path>) -> CTResult<Vec<Vec<u8>>> {
     let file_name = file_name.as_ref();
     // 打开指定的文件，失败时按普通命令错误返回，不能 panic 退出 101。
     let filename = File::open(file_name).map_err(|err| {
@@ -1174,10 +1183,8 @@ fn du_file_as_vec(file_name: impl AsRef<Path>) -> CTResult<Vec<String>> {
     // 创建一个缓冲读取器以提高读取效率。
     let buffer = BufReader::new(filename);
 
-    // 读取文件的每一行，并将它们收集到一个vector中。
-    // 如果某一行读取失败，则抛出异常。
     buffer
-        .lines()
+        .split(b'\n')
         .map(|line| {
             line.map_err(|err| {
                 CTsageError::new(1, format!("{}: {}", file_name.display(), strip_errno(&err)))
@@ -1186,6 +1193,7 @@ fn du_file_as_vec(file_name: impl AsRef<Path>) -> CTResult<Vec<String>> {
         .collect()
 }
 
+#[cfg(not(unix))]
 fn du_parse_exclude_pattern(pattern: &str) -> Result<Pattern, glob::PatternError> {
     let mut pattern = pattern.to_string();
     loop {
@@ -1207,16 +1215,52 @@ fn du_parse_exclude_pattern(pattern: &str) -> Result<Pattern, glob::PatternError
     }
 }
 
-fn du_exclude_pattern_matches_path(pattern: &Pattern, path: &Path) -> bool {
-    let path = path.to_string_lossy();
-    pattern.matches(&path)
-        || path.match_indices('/').any(|(index, _)| {
-            let suffix = &path[index + 1..];
-            !suffix.starts_with('/') && pattern.matches(suffix)
-        })
+impl DuExcludePattern {
+    fn new(pattern: Vec<u8>) -> Result<Self, String> {
+        #[cfg(unix)]
+        {
+            let c_pattern = CString::new(pattern).map_err(|error| error.to_string())?;
+            Ok(Self { c_pattern })
+        }
+        #[cfg(not(unix))]
+        {
+            let pattern = String::from_utf8_lossy(&pattern);
+            let pattern = du_parse_exclude_pattern(&pattern).map_err(|error| error.to_string())?;
+            Ok(Self { pattern })
+        }
+    }
 }
 
-fn du_path_is_excluded(excludes: &[Pattern], path: &Path) -> bool {
+#[cfg(unix)]
+fn du_exclude_pattern_matches_bytes(pattern: &DuExcludePattern, path: &[u8]) -> bool {
+    CString::new(path).is_ok_and(|path| unsafe {
+        ctcore::libc::fnmatch(pattern.c_pattern.as_ptr(), path.as_ptr(), 0) == 0
+    })
+}
+
+fn du_exclude_pattern_matches_path(pattern: &DuExcludePattern, path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        let path = path.as_os_str().as_bytes();
+        return du_exclude_pattern_matches_bytes(pattern, path)
+            || path.iter().enumerate().any(|(index, byte)| {
+                *byte == b'/'
+                    && path.get(index + 1) != Some(&b'/')
+                    && du_exclude_pattern_matches_bytes(pattern, &path[index + 1..])
+            });
+    }
+
+    #[cfg(not(unix))]
+    let path = path.to_string_lossy();
+    #[cfg(not(unix))]
+    return pattern.pattern.matches(&path)
+        || path.match_indices('/').any(|(index, _)| {
+            let suffix = &path[index + 1..];
+            !suffix.starts_with('/') && pattern.pattern.matches(suffix)
+        });
+}
+
+fn du_path_is_excluded(excludes: &[DuExcludePattern], path: &Path) -> bool {
     excludes
         .iter()
         .any(|pattern| du_exclude_pattern_matches_path(pattern, path))
@@ -1226,7 +1270,7 @@ fn du_path_is_excluded(excludes: &[Pattern], path: &Path) -> bool {
  * 根据命令行提供的 --exclude-from 和/或 --exclude 参数，构建一个忽略文件的 globset 列表。
  *
  */
-fn du_build_exclude_patterns(args_match: &ArgMatches) -> CTResult<Vec<Pattern>> {
+fn du_build_exclude_patterns(args_match: &ArgMatches) -> CTResult<Vec<DuExcludePattern>> {
     // 从 --exclude-from 参数中获取文件路径，并尝试将其内容作为排除模式。
     let mut exclude_from_patterns = Vec::new();
     for file_name in args_match
@@ -1240,17 +1284,20 @@ fn du_build_exclude_patterns(args_match: &ArgMatches) -> CTResult<Vec<Pattern>> 
     let excludes_iterator = args_match
         .get_many::<String>(opt_flags::EXCLUDE)
         .unwrap_or_default()
-        .cloned();
+        .map(|pattern| pattern.as_bytes().to_vec());
 
     // 准备存储排除模式的向量。
     let mut exclude_patterns = Vec::new();
     for f in excludes_iterator.chain(exclude_from_patterns) {
         // 如果启用了详细模式，打印正在添加的排除模式。
         if args_match.get_flag(opt_flags::VERBOSE) {
-            println!("adding {:?} to the exclude list ", &f);
+            println!(
+                "adding {:?} to the exclude list ",
+                String::from_utf8_lossy(&f)
+            );
         }
         // 尝试将排除模式字符串转换为 glob 模式，失败则返回错误。
-        match du_parse_exclude_pattern(&f) {
+        match DuExcludePattern::new(f) {
             Ok(glob) => exclude_patterns.push(glob),
             Err(err) => return Err(DuError::InvalidGlob(err.to_string()).into()),
         }
@@ -2950,6 +2997,35 @@ mod tests {
         assert_eq!(semantic.rows.len(), 2);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_exclude_file_matches_non_utf8_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root = temp_dir.path().join("root");
+        let excludes = temp_dir.path().join("excludes");
+        fs::create_dir(&root).unwrap();
+        fs::write(
+            root.join(OsString::from_vec(vec![b'r', b'a', b'w', 0xff])),
+            b"x",
+        )
+        .unwrap();
+        fs::write(&excludes, b"raw\xff\n").unwrap();
+
+        let args = vec![
+            OsString::from("du"),
+            OsString::from("-a"),
+            OsString::from("-X"),
+            excludes.as_os_str().to_os_string(),
+            root.as_os_str().to_os_string(),
+        ];
+        let semantic = du_native_semantic(args.into_iter()).unwrap();
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.rows.len(), 1);
+    }
+
     #[test]
     fn test_du_repeated_boolean_flag_is_accepted() {
         let matches = ct_app().try_get_matches_from(["du", "-hh"]).unwrap();
@@ -2959,17 +3035,23 @@ mod tests {
 
     #[test]
     fn test_incomplete_exclude_bracket_is_literal() {
-        let bracket = du_parse_exclude_pattern("[").unwrap();
-        let mixed = du_parse_exclude_pattern("foo[bar*").unwrap();
+        let bracket = DuExcludePattern::new(b"[".to_vec()).unwrap();
+        let mixed = DuExcludePattern::new(b"foo[bar*".to_vec()).unwrap();
 
-        assert!(bracket.matches("["));
-        assert!(mixed.matches("foo[bar-suffix"));
-        assert!(!mixed.matches("foobar-suffix"));
+        assert!(du_exclude_pattern_matches_path(&bracket, Path::new("[")));
+        assert!(du_exclude_pattern_matches_path(
+            &mixed,
+            Path::new("foo[bar-suffix")
+        ));
+        assert!(!du_exclude_pattern_matches_path(
+            &mixed,
+            Path::new("foobar-suffix")
+        ));
     }
 
     #[test]
     fn test_exclude_pattern_matches_path_suffix() {
-        let pattern = du_parse_exclude_pattern("sub/leaf").unwrap();
+        let pattern = DuExcludePattern::new(b"sub/leaf".to_vec()).unwrap();
 
         assert!(du_exclude_pattern_matches_path(
             &pattern,
@@ -10403,8 +10485,8 @@ mod tests_fn {
     fn test_stat_new_regular_file() {
         let temp_dir = create_temp_file_with_content("Hello, world!");
         let test_file_path = temp_dir.path().join("test_file.txt");
-        let exclude_pattern = Pattern::new("test_file.txt").unwrap();
-        let exclude_pattern: Vec<Pattern> = vec![exclude_pattern];
+        let exclude_pattern = DuExcludePattern::new(b"test_file.txt".to_vec()).unwrap();
+        let exclude_pattern = vec![exclude_pattern];
         let options = DuTraversalOptions {
             all: true,
             separate_dirs: false,
@@ -10428,8 +10510,8 @@ mod tests_fn {
     #[test]
     fn test_stat_new_directory() {
         let temp_dir = TempDir::new().unwrap();
-        let exclude_pattern = Pattern::new("test_file.txt").unwrap();
-        let exclude_pattern: Vec<Pattern> = vec![exclude_pattern];
+        let exclude_pattern = DuExcludePattern::new(b"test_file.txt".to_vec()).unwrap();
+        let exclude_pattern = vec![exclude_pattern];
         let options = DuTraversalOptions {
             all: true,
             separate_dirs: false,
@@ -10459,8 +10541,8 @@ mod tests_fn {
 
         create_temp_symlink(&test_file_path, &symlink_path);
 
-        let exclude_pattern = Pattern::new("test_file.txt").unwrap();
-        let exclude_pattern: Vec<Pattern> = vec![exclude_pattern];
+        let exclude_pattern = DuExcludePattern::new(b"test_file.txt".to_vec()).unwrap();
+        let exclude_pattern = vec![exclude_pattern];
         let options = DuTraversalOptions {
             all: true,
             separate_dirs: false,

@@ -939,45 +939,38 @@ fn create_blake2b(matches: &ArgMatches) -> CTResult<(&'static str, Box<dyn CtDig
             512,
         )),
         Some(len_str) => {
-            let parsed_n = len_str.parse::<usize>();
-            let (is_err, n) = match parsed_n {
-                Ok(v) => (false, v),
-                Err(_) => (true, 0),
+            let n = match len_str.parse::<usize>() {
+                Ok(value) => value,
+                Err(_) => {
+                    return Err(CtSimpleError::new(
+                        1,
+                        format!("invalid length: '{len_str}'"),
+                    ));
+                }
             };
 
-            // 如果显式传入了 0
-            if !is_err && n == 0 {
-                Ok((
+            if n == 0 {
+                return Ok((
                     "BLAKE2",
                     Box::new(CtBlake2b::new()) as Box<dyn CtDigest>,
                     512,
-                ))
-            } else {
-                // 如果解析失败（如超出边界）或者长度大于 512
-                if is_err || n > 512 {
-                    // 打印第一行错误（匹配 GNU 预期）
-                    ctcore::ct_show_error!("invalid length: '{}'", len_str);
-                    // 返回第二行错误并退出（匹配 GNU 预期）
-                    return Err(CtSimpleError::new(
-                        1,
-                        "maximum digest length for 'BLAKE2b' is 512 bits",
-                    ));
-                }
-
-                if n % 8 == 0 {
-                    let length_in_bytes = n / 8;
-                    Ok((
-                        "BLAKE2",
-                        Box::new(CtBlake2b::with_output_bytes(length_in_bytes)),
-                        n,
-                    ))
-                } else {
-                    Err(CtSimpleError::new(
-                        1,
-                        "Invalid length (expected a multiple of 8)",
-                    ))
-                }
+                ));
             }
+
+            if n % 8 != 0 {
+                ctcore::ct_show_error!("invalid length: '{}'", len_str);
+                return Err(CtSimpleError::new(1, "length is not a multiple of 8"));
+            }
+
+            if n > 512 {
+                ctcore::ct_show_error!("invalid length: '{}'", len_str);
+                return Err(CtSimpleError::new(
+                    1,
+                    "maximum digest length for 'BLAKE2b' is 512 bits",
+                ));
+            }
+
+            Ok(("BLAKE2", Box::new(CtBlake2b::with_output_bytes(n / 8)), n))
         }
     }
 }

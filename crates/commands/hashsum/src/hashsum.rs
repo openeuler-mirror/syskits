@@ -2313,15 +2313,22 @@ fn compute_and_output_hash<W: Write>(
             // --tag -z 组合：
             // 1. 使用 write! 而不是 writeln!
             // 2. 结尾手动添加 \0
-            // 3. filename.display() 使用原始文件名（不转义）
+            // 3. 使用原始文件名字节（不转义）
             // 4. 不输出 prefix (反斜杠前缀)
-            write!(writer, "{} ({}) = {}\0", algorithm, filename.display(), sum)?;
+            write!(writer, "{algorithm} (")?;
+            writer.write_all(filename.as_os_str().as_bytes())?;
+            write!(writer, ") = {sum}\0")?;
         } else {
             // 普通 --tag：
             // 1. 需要转义文件名
             // 2. 使用 writeln! (自动 \n 结尾)
-            let (escaped_filename, prefix) = escape_filename(filename);
-            writeln!(writer, "{prefix}{algorithm} ({escaped_filename}) = {sum}")?;
+            let (escaped_filename, needs_escape) = escape_filename_bytes(filename);
+            if needs_escape {
+                writer.write_all(b"\\")?;
+            }
+            write!(writer, "{algorithm} (")?;
+            writer.write_all(&escaped_filename)?;
+            writeln!(writer, ") = {sum}")?;
         }
     } else if flags.is_nonames {
         // 仅输出哈希值
@@ -2332,18 +2339,45 @@ fn compute_and_output_hash<W: Write>(
             // 普通 -z：
             // 1. 不转义文件名
             // 2. \0 结尾
-            let filename = filename.display();
-            write!(writer, "{sum} {binary_marker}{filename}\0")?;
+            write!(writer, "{sum} {binary_marker}")?;
+            writer.write_all(filename.as_os_str().as_bytes())?;
+            writer.write_all(b"\0")?;
         } else {
             // 默认模式：
             // 1. 转义文件名
             // 2. \n 结尾
-            let (escaped_filename, prefix) = escape_filename(filename);
-            writeln!(writer, "{prefix}{sum} {binary_marker}{escaped_filename}")?;
+            let (escaped_filename, needs_escape) = escape_filename_bytes(filename);
+            if needs_escape {
+                writer.write_all(b"\\")?;
+            }
+            write!(writer, "{sum} {binary_marker}")?;
+            writer.write_all(&escaped_filename)?;
+            writer.write_all(b"\n")?;
         }
     }
 
     Ok(())
+}
+
+fn escape_filename_bytes(filename: &Path) -> (Vec<u8>, bool) {
+    let original = filename.as_os_str().as_bytes();
+    let needs_escape = original
+        .iter()
+        .any(|byte| matches!(byte, b'\\' | b'\n' | b'\r'));
+    if !needs_escape {
+        return (original.to_vec(), false);
+    }
+
+    let mut escaped = Vec::with_capacity(original.len());
+    for byte in original {
+        match byte {
+            b'\\' => escaped.extend_from_slice(b"\\\\"),
+            b'\n' => escaped.extend_from_slice(b"\\n"),
+            b'\r' => escaped.extend_from_slice(b"\\r"),
+            _ => escaped.push(*byte),
+        }
+    }
+    (escaped, true)
 }
 
 /// 输出摘要信息

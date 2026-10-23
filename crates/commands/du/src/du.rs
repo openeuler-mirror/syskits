@@ -10,7 +10,7 @@
  */
 
 extern crate rust_i18n;
-use chrono::{DateTime, Local};
+use chrono::{Local, TimeZone};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
@@ -53,7 +53,9 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration, UNIX_EPOCH};
+#[cfg(test)]
+use std::time::Duration;
+use std::time::UNIX_EPOCH;
 use sys_locale::get_locale;
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
@@ -154,7 +156,7 @@ pub struct DuRow {
     pub apparent_size_bytes: u64,
     pub allocated_bytes: u64,
     pub inodes: u64,
-    pub time_seconds: Option<u64>,
+    pub time_seconds: Option<i64>,
     pub time_display: Option<String>,
 }
 
@@ -199,7 +201,7 @@ struct DuFileInfo {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct DuTimestamp {
-    seconds: u64,
+    seconds: i64,
     nanoseconds: u32,
 }
 
@@ -283,15 +285,15 @@ impl DuStat {
                 inode: Some(file_info),
                 created: du_birth_u64(&metadata),
                 accessed: DuTimestamp {
-                    seconds: metadata.atime() as u64,
+                    seconds: metadata.atime(),
                     nanoseconds: metadata.atime_nsec() as u32,
                 },
                 changed: DuTimestamp {
-                    seconds: metadata.ctime() as u64,
+                    seconds: metadata.ctime(),
                     nanoseconds: metadata.ctime_nsec() as u32,
                 },
                 modified: DuTimestamp {
-                    seconds: metadata.mtime() as u64,
+                    seconds: metadata.mtime(),
                     nanoseconds: metadata.mtime_nsec() as u32,
                 },
                 #[cfg(unix)]
@@ -369,15 +371,15 @@ impl DuStat {
             }),
             created: du_birth_at(dir_fd, name, should_dereference),
             accessed: DuTimestamp {
-                seconds: metadata.st_atime as u64,
+                seconds: metadata.st_atime,
                 nanoseconds: metadata.st_atime_nsec as u32,
             },
             changed: DuTimestamp {
-                seconds: metadata.st_ctime as u64,
+                seconds: metadata.st_ctime,
                 nanoseconds: metadata.st_ctime_nsec as u32,
             },
             modified: DuTimestamp {
-                seconds: metadata.st_mtime as u64,
+                seconds: metadata.st_mtime,
                 nanoseconds: metadata.st_mtime_nsec as u32,
             },
             directory: is_dir.then(|| du_open_directory_at(dir_fd, name, should_dereference)),
@@ -445,7 +447,7 @@ fn du_birth_at(dir_fd: i32, name: &OsStr, follow_symlink: bool) -> Option<DuTime
     let statx = unsafe { statx.assume_init() };
     ((statx.stx_mask & nix::libc::STATX_BTIME) != 0 && statx.stx_btime.tv_sec >= 0).then_some(
         DuTimestamp {
-            seconds: statx.stx_btime.tv_sec as u64,
+            seconds: statx.stx_btime.tv_sec,
             nanoseconds: statx.stx_btime.tv_nsec,
         },
     )
@@ -463,8 +465,10 @@ fn du_birth_at(_dir_fd: i32, _name: &OsStr, _follow_symlink: bool) -> Option<DuT
  * 如果底层文件系统不支持访问时间，函数将返回0。
  *
  */
-fn windows_time_to_unix_time(win_time: u64) -> u64 {
-    (win_time / 10_000_000).saturating_sub(11_644_473_600)
+fn windows_time_to_unix_time(win_time: u64) -> i64 {
+    i64::try_from(win_time / 10_000_000)
+        .unwrap_or(i64::MAX)
+        .saturating_sub(11_644_473_600)
 }
 
 #[cfg(windows)]
@@ -480,8 +484,10 @@ fn windows_time_nanoseconds(win_time: u64) -> u32 {
  * 如果底层文件系统不支持创建时间，函数将返回`None`。
  *
  */
-fn windows_creation_time_to_unix_time(win_time: u64) -> Option<u64> {
-    (win_time / 10_000_000).checked_sub(11_644_473_600)
+fn windows_creation_time_to_unix_time(win_time: u64) -> Option<i64> {
+    i64::try_from(win_time / 10_000_000)
+        .ok()?
+        .checked_sub(11_644_473_600)
 }
 
 #[cfg(not(windows))]
@@ -490,9 +496,11 @@ fn du_birth_u64(met_data: &Metadata) -> Option<DuTimestamp> {
         .created()
         .ok()
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map(|duration| DuTimestamp {
-            seconds: duration.as_secs(),
-            nanoseconds: duration.subsec_nanos(),
+        .and_then(|duration| {
+            Some(DuTimestamp {
+                seconds: i64::try_from(duration.as_secs()).ok()?,
+                nanoseconds: duration.subsec_nanos(),
+            })
         })
 }
 
@@ -1255,9 +1263,10 @@ impl DuStatPrinter {
     }
 
     fn du_format_time(&self, timestamp: DuTimestamp) -> String {
-        let du_time = DateTime::<Local>::from(
-            UNIX_EPOCH + Duration::new(timestamp.seconds, timestamp.nanoseconds),
-        );
+        let du_time = Local
+            .timestamp_opt(timestamp.seconds, timestamp.nanoseconds)
+            .single()
+            .expect("filesystem timestamp is outside chrono range");
         if let Some(fmt) = self.time_format.strip_prefix('+') {
             du_format_local_time_strftime(timestamp.seconds, timestamp.nanoseconds, fmt)
                 .unwrap_or_else(|| du_time.format(fmt).to_string())
@@ -1447,7 +1456,7 @@ fn du_inodes_apparent_size_warning(
 }
 
 #[cfg(unix)]
-fn du_format_local_time_strftime(seconds: u64, nanoseconds: u32, fmt: &str) -> Option<String> {
+fn du_format_local_time_strftime(seconds: i64, nanoseconds: u32, fmt: &str) -> Option<String> {
     let time = ctcore::libc::time_t::try_from(seconds).ok()?;
     let mut tm: ctcore::libc::tm = unsafe { std::mem::zeroed() };
     let mut expanded_fmt = String::with_capacity(fmt.len());
@@ -1497,7 +1506,7 @@ fn du_format_local_time_strftime(seconds: u64, nanoseconds: u32, fmt: &str) -> O
 }
 
 #[cfg(not(unix))]
-fn du_format_local_time_strftime(_seconds: u64, _nanoseconds: u32, _fmt: &str) -> Option<String> {
+fn du_format_local_time_strftime(_seconds: i64, _nanoseconds: u32, _fmt: &str) -> Option<String> {
     None
 }
 /**
@@ -2718,6 +2727,38 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn test_pre_epoch_time_is_formatted_without_panic() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file = temp_dir.path().join("file");
+        fs::write(&file, b"x").unwrap();
+        File::options()
+            .write(true)
+            .open(&file)
+            .unwrap()
+            .set_times(
+                fs::FileTimes::new().set_modified(UNIX_EPOCH - Duration::from_secs(315_532_800)),
+            )
+            .unwrap();
+
+        let args = vec![
+            OsString::from("du"),
+            OsString::from("--time"),
+            OsString::from("--time-style=+%Y"),
+            file.as_os_str().to_os_string(),
+        ];
+        let semantic = du_native_semantic(args.into_iter()).unwrap();
+        let entry = semantic
+            .rows
+            .iter()
+            .find(|row| row.kind == "entry")
+            .unwrap();
+
+        assert_eq!(entry.time_display.as_deref(), Some("1960"));
+        assert!(entry.time_seconds.unwrap() < 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn test_ctime_selection_uses_status_change_time() {
         use std::os::unix::fs::MetadataExt;
 
@@ -2748,7 +2789,7 @@ mod tests {
             .find(|row| row.kind == "entry")
             .unwrap();
 
-        assert_eq!(entry.time_seconds, Some(metadata.ctime() as u64));
+        assert_eq!(entry.time_seconds, Some(metadata.ctime()));
     }
 
     #[test]

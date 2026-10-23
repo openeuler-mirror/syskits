@@ -758,6 +758,15 @@ fn expand_file_error(file: &OsStr, error: &io::Error) -> String {
     )
 }
 
+fn expand_report_error(
+    stderr_text: &mut String,
+    diagnostics: &mut impl Write,
+    message: &str,
+) -> io::Result<()> {
+    stderr_text.push_str(message);
+    diagnostics.write_all(message.as_bytes())
+}
+
 /// Compute the number of spaces to the next tabstop.
 ///
 /// `tabstops` is the sequence of tabstop locations.
@@ -1054,9 +1063,10 @@ fn expand_line(
  * @param options 一个包含文件列表和扩展设置的结构体引用。
  * @return CTResult<ExpandRunOutcome>，如果成功则返回执行结果，如果遇到致命错误则返回Err()。
  */
-fn expand_to_writer<W: Write>(
+fn expand_to_writer<W: Write, D: Write>(
     options: &ExpandOptions,
     output: &mut W,
+    diagnostics: &mut D,
 ) -> CTResult<ExpandRunOutcome> {
     let tabstops = options.tabstops.as_ref();
     let mut buffer = Vec::new();
@@ -1068,10 +1078,8 @@ fn expand_to_writer<W: Write>(
     'files: for file in &options.files {
         let path = Path::new(file);
         if path.is_dir() {
-            stderr_text.push_str(&format!(
-                "expand: {}: Is a directory\n",
-                file.to_string_lossy()
-            ));
+            let message = format!("expand: {}: Is a directory\n", file.to_string_lossy());
+            expand_report_error(&mut stderr_text, diagnostics, &message)?;
             exit_code = 1;
             continue;
         }
@@ -1086,7 +1094,11 @@ fn expand_to_writer<W: Write>(
                     let n = match chunk_reader.read_until(b'\n', &mut buffer) {
                         Ok(size) => size,
                         Err(e) => {
-                            stderr_text.push_str(&expand_file_error(file, &e));
+                            expand_report_error(
+                                &mut stderr_text,
+                                diagnostics,
+                                &expand_file_error(file, &e),
+                            )?;
                             exit_code = 1;
                             break;
                         }
@@ -1095,9 +1107,11 @@ fn expand_to_writer<W: Write>(
                     if n == 0 {
                         if is_first_chunk {
                             if !options.uflag && first_input_has_bom == Some(true) {
-                                stderr_text.push_str(
+                                expand_report_error(
+                                    &mut stderr_text,
+                                    diagnostics,
                                     "expand: combination of files with and without BOM header\n",
-                                );
+                                )?;
                                 exit_code = 1;
                                 break 'files;
                             }
@@ -1111,9 +1125,11 @@ fn expand_to_writer<W: Write>(
                         if !options.uflag
                             && first_input_has_bom.is_some_and(|first| first != has_bom)
                         {
-                            stderr_text.push_str(
+                            expand_report_error(
+                                &mut stderr_text,
+                                diagnostics,
                                 "expand: combination of files with and without BOM header\n",
-                            );
+                            )?;
                             exit_code = 1;
                             break 'files;
                         }
@@ -1146,7 +1162,8 @@ fn expand_to_writer<W: Write>(
                 }
             }
             Err(e) => {
-                stderr_text.push_str(&format!("expand: {e}\n"));
+                let message = format!("expand: {e}\n");
+                expand_report_error(&mut stderr_text, diagnostics, &message)?;
                 exit_code = 1;
                 continue;
             }
@@ -1171,12 +1188,11 @@ fn expand_to_writer<W: Write>(
 
 fn expand(options: &ExpandOptions) -> CTResult<()> {
     let mut output = BufWriter::new(stdout());
-    let outcome = expand_to_writer(options, &mut output)?;
+    let stderr = io::stderr();
+    let mut diagnostics = stderr.lock();
+    let outcome = expand_to_writer(options, &mut output, &mut diagnostics)?;
     output.flush()?;
 
-    if !outcome.stderr_text.is_empty() {
-        eprint!("{}", outcome.stderr_text);
-    }
     if outcome.exit_code != 0 {
         set_ct_exit_code(outcome.exit_code);
     }
@@ -1192,7 +1208,8 @@ pub fn expand_native_semantic(args: impl ctcore::Args) -> CTResult<ExpandSemanti
     let args_match = ct_app().try_get_matches_from(expand_shortcuts(args))?;
     let options = ExpandOptions::new(&args_match)?;
     let mut classic_output = Vec::new();
-    let outcome = expand_to_writer(&options, &mut classic_output)?;
+    let mut diagnostics = io::sink();
+    let outcome = expand_to_writer(&options, &mut classic_output, &mut diagnostics)?;
     let classic_text = String::from_utf8_lossy(&classic_output).into_owned();
 
     Ok(ExpandSemantic {
@@ -2105,7 +2122,7 @@ mod tests {
             };
 
             let mut output = Vec::new();
-            expand_to_writer(&options, &mut output).unwrap();
+            expand_to_writer(&options, &mut output, &mut std::io::sink()).unwrap();
 
             assert_eq!(output, b"\xEF\xBB\xBFa       b\nc       d\n");
         }
@@ -2142,8 +2159,9 @@ mod tests {
                     remaining_mode: RemainingMode::None,
                 };
                 let mut output = Vec::new();
+                let mut diagnostics = Vec::new();
 
-                let outcome = expand_to_writer(&options, &mut output).unwrap();
+                let outcome = expand_to_writer(&options, &mut output, &mut diagnostics).unwrap();
 
                 assert_eq!(output, expected_output);
                 assert_eq!(outcome.exit_code, 1);
@@ -2152,6 +2170,7 @@ mod tests {
                         .stderr_text
                         .contains("combination of files with and without BOM header")
                 );
+                assert_eq!(diagnostics, outcome.stderr_text.as_bytes());
             }
         }
 

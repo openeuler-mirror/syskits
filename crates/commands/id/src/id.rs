@@ -171,6 +171,12 @@ fn id_reject_attached_long_option(args: &[OsString]) -> CTResult<()> {
             }
             continue;
         }
+        if name.is_empty() || matches.is_empty() {
+            return Err(CtSimpleError::new(
+                1,
+                format!("unrecognized option '{}'", argument.to_string_lossy()),
+            ));
+        }
         if matches.len() > 1 {
             let possibilities = matches
                 .iter()
@@ -2424,6 +2430,17 @@ mod tests {
             let error = id_reject_attached_long_option(&args).unwrap_err();
 
             assert_eq!(error.to_string(), "invalid option -- 'x'");
+        }
+
+        #[test]
+        fn test_invalid_long_option_uses_gnu_diagnostic() {
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--does-not-exist"),
+            ];
+            let error = id_reject_attached_long_option(&args).unwrap_err();
+
+            assert_eq!(error.to_string(), "unrecognized option '--does-not-exist'");
         }
 
         #[test]

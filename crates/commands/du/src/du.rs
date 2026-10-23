@@ -43,7 +43,7 @@ use std::fmt::Display;
 #[cfg(not(windows))]
 use std::fs::Metadata;
 use std::fs::{self, File};
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -51,7 +51,11 @@ use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 #[cfg(unix)]
-use std::os::{fd::AsRawFd, unix::ffi::OsStrExt, unix::ffi::OsStringExt};
+use std::os::{
+    fd::{AsRawFd, FromRawFd},
+    unix::ffi::OsStrExt,
+    unix::ffi::OsStringExt,
+};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::mpsc;
@@ -1724,7 +1728,7 @@ fn du_to_magnitude_and_suffix(n: u128, bases: &[u128], suffixes: &[&'static str]
 fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
     // 根据文件名选择读取来源：标准输入或文件。
     let reader: Box<dyn BufRead> = if filename == "-" {
-        Box::new(BufReader::new(ctcore::ct_io::stdin_reader_box()))
+        Box::new(BufReader::new(du_files0_stdin_reader()?))
     } else {
         // 检查文件名是否指向一个目录。
         let path = PathBuf::from(filename);
@@ -1771,6 +1775,38 @@ fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
     }
 
     Ok(paths_buf)
+}
+
+fn du_files0_stdin_reader() -> io::Result<Box<dyn Read>> {
+    if ctcore::ct_io::has_injected_stdin() {
+        return Ok(ctcore::ct_io::stdin_reader_box());
+    }
+
+    #[cfg(unix)]
+    if ctcore::ct_stdin_was_closed() {
+        return Err(du_closed_stdin_error());
+    }
+
+    #[cfg(unix)]
+    return du_duplicate_fd(ctcore::libc::STDIN_FILENO).map(|file| Box::new(file) as Box<dyn Read>);
+
+    #[cfg(not(unix))]
+    Ok(ctcore::ct_io::stdin_reader_box())
+}
+
+#[cfg(unix)]
+fn du_closed_stdin_error() -> io::Error {
+    io::Error::from_raw_os_error(ctcore::libc::EBADF)
+}
+
+#[cfg(unix)]
+fn du_duplicate_fd(fd: i32) -> io::Result<File> {
+    let duplicate = unsafe { ctcore::libc::fcntl(fd, ctcore::libc::F_DUPFD_CLOEXEC, 0) };
+    if duplicate < 0 {
+        return Err(io::Error::last_os_error());
+    }
+
+    Ok(unsafe { File::from_raw_fd(duplicate) })
 }
 
 #[cfg(unix)]
@@ -11079,6 +11115,18 @@ mod tests_fn {
         assert_eq!(paths.len(), 2);
         assert_eq!(paths[0].as_os_str().as_bytes(), b"raw\xff");
         assert_eq!(paths[1], PathBuf::from("ascii"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_ct_fn_closed_files0_descriptor_preserves_ebadf() {
+        let error = du_closed_stdin_error();
+
+        assert_eq!(error.raw_os_error(), Some(ctcore::libc::EBADF));
+        assert_eq!(
+            du_duplicate_fd(-1).unwrap_err().raw_os_error(),
+            Some(ctcore::libc::EBADF)
+        );
     }
 
     #[test]

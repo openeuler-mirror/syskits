@@ -1755,6 +1755,14 @@ fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
     Ok(paths_buf)
 }
 
+fn du_access_error_message(path: &Path, error: &io::Error) -> String {
+    format!(
+        "cannot access {}: {}",
+        path.to_string_lossy().quote(),
+        strip_errno(error)
+    )
+}
+
 #[derive(Default)]
 pub struct Du;
 impl Tool for Du {
@@ -1876,37 +1884,37 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
             seen_inodes.clear();
         }
         // 检查参数提供的路径是否存在
-        if let Ok(stat) = DuStat::new(&path, &du_traversal_options, true) {
-            if let Some(inode) = stat.inode {
-                // 【核心修复】：顶层入口也一样，目录必须始终过滤防重
-                if !du_traversal_options.count_links || stat.is_dir {
-                    if seen_inodes.contains(&inode) {
-                        continue;
-                    }
-                    seen_inodes.insert(inode);
-                }
+        let stat = match DuStat::new(&path, &du_traversal_options, true) {
+            Ok(stat) => stat,
+            Err(error) => {
+                // 如果无法访问路径，发送保留真实 errno 的错误信息
+                print_tx
+                    .send(Err(CtSimpleError::new(
+                        1,
+                        du_access_error_message(&path, &error),
+                    )))
+                    .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+                continue;
             }
-
-            // 从初始路径开始计算磁盘使用情况
-            let stat = du(stat, &du_traversal_options, 0, &mut seen_inodes, &print_tx)
-                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
-
-            // 发送统计结果以便打印
-            print_tx
-                .send(Ok(StatPrintInfo { stat, depth: 0 }))
-                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
-        } else {
-            // 如果无法访问路径，发送错误信息
-            print_tx
-                .send(Err(CtSimpleError::new(
-                    1,
-                    format!(
-                        "cannot access {}: No such file or directory",
-                        path.to_string_lossy().quote()
-                    ),
-                )))
-                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+        };
+        if let Some(inode) = stat.inode {
+            // 【核心修复】：顶层入口也一样，目录必须始终过滤防重
+            if !du_traversal_options.count_links || stat.is_dir {
+                if seen_inodes.contains(&inode) {
+                    continue;
+                }
+                seen_inodes.insert(inode);
+            }
         }
+
+        // 从初始路径开始计算磁盘使用情况
+        let stat = du(stat, &du_traversal_options, 0, &mut seen_inodes, &print_tx)
+            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+
+        // 发送统计结果以便打印
+        print_tx
+            .send(Ok(StatPrintInfo { stat, depth: 0 }))
+            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
     }
 
     drop(print_tx); // 释放发送者，结束接收者线程
@@ -2047,32 +2055,32 @@ pub fn du_native_semantic(args: impl ctcore::Args) -> CTResult<DuSemantic> {
             seen_inodes.clear();
         }
 
-        if let Ok(stat) = DuStat::new(&path, &du_traversal_options, true) {
-            if let Some(inode) = stat.inode {
-                if !du_traversal_options.count_links || stat.is_dir {
-                    if seen_inodes.contains(&inode) {
-                        continue;
-                    }
-                    seen_inodes.insert(inode);
-                }
+        let stat = match DuStat::new(&path, &du_traversal_options, true) {
+            Ok(stat) => stat,
+            Err(error) => {
+                print_tx
+                    .send(Err(CtSimpleError::new(
+                        1,
+                        du_access_error_message(&path, &error),
+                    )))
+                    .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+                continue;
             }
-
-            let stat = du(stat, &du_traversal_options, 0, &mut seen_inodes, &print_tx)
-                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
-            print_tx
-                .send(Ok(StatPrintInfo { stat, depth: 0 }))
-                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
-        } else {
-            print_tx
-                .send(Err(CtSimpleError::new(
-                    1,
-                    format!(
-                        "cannot access {}: No such file or directory",
-                        path.to_string_lossy().quote()
-                    ),
-                )))
-                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+        };
+        if let Some(inode) = stat.inode {
+            if !du_traversal_options.count_links || stat.is_dir {
+                if seen_inodes.contains(&inode) {
+                    continue;
+                }
+                seen_inodes.insert(inode);
+            }
         }
+
+        let stat = du(stat, &du_traversal_options, 0, &mut seen_inodes, &print_tx)
+            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+        print_tx
+            .send(Ok(StatPrintInfo { stat, depth: 0 }))
+            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
     }
 
     drop(print_tx);
@@ -2678,6 +2686,42 @@ mod tests {
         assert_eq!(roots.len(), 2);
         assert_eq!(roots[0].measured_size, roots[1].measured_size);
         assert_eq!(total.measured_size, roots[0].measured_size * 2);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_top_level_access_errors_preserve_errno() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file = temp_dir.path().join("file");
+        let child = file.join("child");
+        let loop_link = temp_dir.path().join("loop");
+        fs::write(&file, b"x").unwrap();
+        symlink("loop", &loop_link).unwrap();
+
+        let not_dir = du_native_semantic(
+            [OsString::from("du"), child.as_os_str().to_os_string()].into_iter(),
+        )
+        .unwrap();
+        let symlink_loop = du_native_semantic(
+            [
+                OsString::from("du"),
+                OsString::from("-L"),
+                loop_link.as_os_str().to_os_string(),
+            ]
+            .into_iter(),
+        )
+        .unwrap();
+
+        assert_eq!(not_dir.exit_code, 1);
+        assert!(not_dir.stderr_text.contains("Not a directory"));
+        assert_eq!(symlink_loop.exit_code, 1);
+        assert!(
+            symlink_loop
+                .stderr_text
+                .contains("Too many levels of symbolic links")
+        );
     }
 
     #[test]

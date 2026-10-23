@@ -48,9 +48,10 @@ use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
 
 use std::error::Error;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs::File;
+use std::io;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::BufWriter;
@@ -360,6 +361,39 @@ fn expand_short_option_consumes_next(arg: &str) -> bool {
     false
 }
 
+fn expand_invalid_short_option_byte(arg: &OsStr) -> Option<u8> {
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStrExt;
+
+    #[cfg(unix)]
+    let bytes = arg.as_bytes();
+    #[cfg(not(unix))]
+    let bytes = arg.to_string_lossy();
+    #[cfg(not(unix))]
+    let bytes = bytes.as_bytes();
+
+    for option in bytes.iter().copied().skip(1) {
+        match option {
+            b'i' | b'U' => {}
+            b't' | b'0'..=b'9' => return None,
+            invalid if !invalid.is_ascii() => return Some(invalid),
+            _ => return None,
+        }
+    }
+    None
+}
+
+fn write_expand_invalid_option_diagnostic(
+    writer: &mut impl Write,
+    utility_name: &str,
+    invalid: u8,
+) -> io::Result<()> {
+    write!(writer, "{utility_name}: invalid option -- '")?;
+    writer.write_all(&[invalid])?;
+    writeln!(writer, "'")?;
+    writeln!(writer, "Try '{utility_name} --help' for more information.")
+}
+
 fn expand_validate_options(args: &[OsString]) -> CTResult<()> {
     let mut index = 1;
     while index < args.len() {
@@ -392,6 +426,18 @@ fn expand_validate_options(args: &[OsString]) -> CTResult<()> {
             return Err(1.into());
         }
 
+        if arg.starts_with('-')
+            && arg != "-"
+            && let Some(invalid) = expand_invalid_short_option_byte(args[index].as_os_str())
+        {
+            let stderr = io::stderr();
+            write_expand_invalid_option_diagnostic(
+                &mut stderr.lock(),
+                &ctcore::ct_util_name(),
+                invalid,
+            )?;
+            return Err(1.into());
+        }
         if long_option_consumes_next || short_option_consumes_next {
             index += 1;
         }
@@ -1434,7 +1480,7 @@ mod tests {
             ExpandState, ExpandTabstopMode, RemainingMode, UTF8_BOM, expand_line,
             expand_native_semantic, expand_next_char_info, expand_next_tabstop, expand_open,
             expand_shortcuts, expand_tabstops_parse, expand_tabstops_parse_args, expand_to_writer,
-            expand_write_spaces,
+            expand_write_spaces, write_expand_invalid_option_diagnostic,
         };
 
         use crate::is_digit_or_comma;
@@ -1490,6 +1536,24 @@ mod tests {
             assert!(super::super::expand_short_option_consumes_next("-t"));
             assert!(super::super::expand_short_option_consumes_next("-it"));
             assert!(!super::super::expand_short_option_consumes_next("-t4"));
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_expand_multibyte_short_option_uses_first_byte() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let option = OsString::from_vec(vec![b'-', 0xc3, 0xa9]);
+            let invalid = super::super::expand_invalid_short_option_byte(option.as_os_str());
+            let mut diagnostic = Vec::new();
+            write_expand_invalid_option_diagnostic(&mut diagnostic, "expand", invalid.unwrap())
+                .unwrap();
+
+            assert_eq!(invalid, Some(0xc3));
+            assert_eq!(
+                diagnostic,
+                b"expand: invalid option -- '\xc3'\nTry 'expand --help' for more information.\n"
+            );
         }
 
         #[test]

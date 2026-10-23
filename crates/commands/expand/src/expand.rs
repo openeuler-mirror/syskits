@@ -63,6 +63,7 @@ use sys_locale::get_locale;
 use unicode_width::UnicodeWidthChar;
 
 use ctcore::Tool;
+use std::env;
 
 pub mod opt_flags {
     pub static TABS: &str = "tabs";
@@ -324,11 +325,34 @@ fn expand_max_tabstop_width(tabstops: &[usize], remaining_mode: &RemainingMode) 
 pub fn expand_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = args.collect::<Vec<_>>();
+    let mut args = args.collect::<Vec<_>>();
+    expand_apply_posix_option_order(&mut args, env::var_os("POSIXLY_CORRECT").is_some());
     expand_validate_options(&args)?;
     let args_match = ct_app().try_get_matches_from(expand_shortcuts(args))?;
 
     expand(&ExpandOptions::new(&args_match)?)
+}
+
+fn expand_apply_posix_option_order(args: &mut Vec<OsString>, enabled: bool) {
+    if !enabled {
+        return;
+    }
+
+    let mut index = 1;
+    while index < args.len() {
+        let arg = args[index].to_string_lossy();
+        if arg == "--" {
+            return;
+        }
+        if arg == "-" || !arg.starts_with('-') {
+            args.insert(index, OsString::from("--"));
+            return;
+        }
+
+        let consumes_next =
+            expand_long_option_consumes_next(&arg) || expand_short_option_consumes_next(&arg);
+        index += if consumes_next { 2 } else { 1 };
+    }
 }
 
 fn expand_long_option_with_unexpected_argument(arg: &str) -> Option<&'static str> {
@@ -1033,7 +1057,9 @@ fn expand(options: &ExpandOptions) -> CTResult<()> {
 pub fn expand_native_semantic(args: impl ctcore::Args) -> CTResult<ExpandSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args_match = ct_app().try_get_matches_from(expand_shortcuts(args.collect()))?;
+    let mut args = args.collect::<Vec<_>>();
+    expand_apply_posix_option_order(&mut args, env::var_os("POSIXLY_CORRECT").is_some());
+    let args_match = ct_app().try_get_matches_from(expand_shortcuts(args))?;
     let options = ExpandOptions::new(&args_match)?;
     let mut classic_output = Vec::new();
     let outcome = expand_to_writer(&options, &mut classic_output)?;
@@ -1432,6 +1458,34 @@ mod tests {
             assert!(super::super::expand_short_option_consumes_next("-t"));
             assert!(super::super::expand_short_option_consumes_next("-it"));
             assert!(!super::super::expand_short_option_consumes_next("-t4"));
+        }
+
+        #[test]
+        fn test_expand_posix_option_order_inserts_double_dash() {
+            let mut ordinary = vec![
+                OsString::from("expand"),
+                OsString::from("input"),
+                OsString::from("-i"),
+            ];
+            super::super::expand_apply_posix_option_order(&mut ordinary, true);
+            assert_eq!(
+                ordinary,
+                vec![
+                    OsString::from("expand"),
+                    OsString::from("--"),
+                    OsString::from("input"),
+                    OsString::from("-i"),
+                ]
+            );
+
+            let mut with_value = vec![
+                OsString::from("expand"),
+                OsString::from("-t"),
+                OsString::from("4"),
+                OsString::from("input"),
+            ];
+            super::super::expand_apply_posix_option_order(&mut with_value, true);
+            assert_eq!(with_value[3], OsString::from("--"));
         }
 
         #[test]

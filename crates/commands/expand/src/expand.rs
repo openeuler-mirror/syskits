@@ -1285,7 +1285,6 @@ fn expand_to_writer<W: Write, D: Write>(
 
                     expand_line(&buffer, output, tabstops, options, &mut state)
                         .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
-                    output.flush()?;
                 }
             }
             Err(e) => {

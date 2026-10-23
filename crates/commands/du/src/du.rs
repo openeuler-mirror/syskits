@@ -51,7 +51,7 @@ use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 #[cfg(unix)]
-use std::os::{fd::AsRawFd, unix::ffi::OsStrExt};
+use std::os::{fd::AsRawFd, unix::ffi::OsStrExt, unix::ffi::OsStringExt};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::mpsc;
@@ -1756,10 +1756,8 @@ fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
             ct_show_error!("{filename}:{line_number}: invalid zero-length file name");
             set_ct_exit_code(1);
         } else {
-            let path_str = String::from_utf8_lossy(&path).to_string();
-
             // 【核心修复】：拦截在从 stdin 读取列表时，列表内容出现 "-" 的套娃情况
-            if filename == "-" && path_str == "-" {
+            if filename == "-" && path == b"-" {
                 ct_show_error!(
                     "when reading file names from standard input, no file name of '-' allowed"
                 );
@@ -1768,7 +1766,7 @@ fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
             }
 
             // 添加非空路径到结果向量，忽略重复的路径。
-            let p = PathBuf::from(path_str);
+            let p = du_path_from_bytes(path);
             if !paths_buf.contains(&p) {
                 paths_buf.push(p);
             }
@@ -1776,6 +1774,16 @@ fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
     }
 
     Ok(paths_buf)
+}
+
+#[cfg(unix)]
+fn du_path_from_bytes(path: Vec<u8>) -> PathBuf {
+    PathBuf::from(OsString::from_vec(path))
+}
+
+#[cfg(not(unix))]
+fn du_path_from_bytes(path: Vec<u8>) -> PathBuf {
+    PathBuf::from(String::from_utf8_lossy(&path).into_owned())
 }
 
 fn du_access_error_message(path: &Path, error: &io::Error) -> String {
@@ -11017,6 +11025,20 @@ mod tests_fn {
             let result = du_read_files_from(file_from).unwrap();
             assert_eq!(result, expected);
         };
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_ct_fn_read_files_from_preserves_non_utf8_bytes() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let list = temp_dir.path().join("list");
+        fs::write(&list, b"raw\xff\0ascii\0").unwrap();
+
+        let paths = du_read_files_from(list.to_str().unwrap()).unwrap();
+
+        assert_eq!(paths.len(), 2);
+        assert_eq!(paths[0].as_os_str().as_bytes(), b"raw\xff");
+        assert_eq!(paths[1], PathBuf::from("ascii"));
     }
 
     #[test]

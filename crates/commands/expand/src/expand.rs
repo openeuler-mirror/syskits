@@ -1053,12 +1053,11 @@ fn expand_to_writer<W: Write>(
     let tabstops = options.tabstops.as_ref();
     let mut buffer = Vec::new();
     let mut state = ExpandState::default();
-    let mut is_first_file = true;
-    let mut first_file_has_bom = false;
+    let mut first_input_has_bom = None;
     let mut stderr_text = String::new();
     let mut exit_code = 0;
 
-    for file in &options.files {
+    'files: for file in &options.files {
         let path = Path::new(file);
         if path.is_dir() {
             stderr_text.push_str(&format!(
@@ -1086,15 +1085,38 @@ fn expand_to_writer<W: Write>(
                     };
 
                     if n == 0 {
+                        if is_first_chunk {
+                            if !options.uflag && first_input_has_bom == Some(true) {
+                                stderr_text.push_str(
+                                    "expand: combination of files with and without BOM header\n",
+                                );
+                                exit_code = 1;
+                                break 'files;
+                            }
+                            first_input_has_bom.get_or_insert(false);
+                        }
                         break;
                     }
 
                     if is_first_chunk {
-                        if buffer.starts_with(&UTF8_BOM) {
-                            if is_first_file && !first_file_has_bom {
+                        let has_bom = buffer.starts_with(&UTF8_BOM);
+                        if !options.uflag
+                            && first_input_has_bom.is_some_and(|first| first != has_bom)
+                        {
+                            stderr_text.push_str(
+                                "expand: combination of files with and without BOM header\n",
+                            );
+                            exit_code = 1;
+                            break 'files;
+                        }
+
+                        if first_input_has_bom.is_none() {
+                            first_input_has_bom = Some(has_bom);
+                            if has_bom {
                                 output.write_all(&UTF8_BOM)?;
-                                first_file_has_bom = true;
                             }
+                        }
+                        if has_bom {
                             buffer.drain(..UTF8_BOM.len());
                         }
                         is_first_chunk = false;
@@ -1126,7 +1148,6 @@ fn expand_to_writer<W: Write>(
             let pending = std::mem::take(&mut state.pending_utf8);
             expand_raw_bytes(&pending, output, &mut state)?;
         }
-        is_first_file = false;
     }
 
     if state.current_line_has_content {
@@ -2069,6 +2090,51 @@ mod tests {
             expand_to_writer(&options, &mut output).unwrap();
 
             assert_eq!(output, b"\xEF\xBB\xBFa       b\nc       d\n");
+        }
+
+        #[test]
+        fn test_expand_to_writer_rejects_mixed_bom_inputs_in_c_locale() {
+            let mut bom = tempfile::NamedTempFile::new().unwrap();
+            let mut plain = tempfile::NamedTempFile::new().unwrap();
+            bom.write_all(&UTF8_BOM).unwrap();
+            bom.write_all(b"a\tb\n").unwrap();
+            plain.write_all(b"c\td\n").unwrap();
+
+            for (files, expected_output) in [
+                (
+                    vec![
+                        bom.path().as_os_str().to_os_string(),
+                        plain.path().as_os_str().to_os_string(),
+                    ],
+                    b"\xEF\xBB\xBFa       b\n".as_slice(),
+                ),
+                (
+                    vec![
+                        plain.path().as_os_str().to_os_string(),
+                        bom.path().as_os_str().to_os_string(),
+                    ],
+                    b"c       d\n".as_slice(),
+                ),
+            ] {
+                let options = ExpandOptions {
+                    files,
+                    tabstops: vec![8],
+                    iflag: false,
+                    uflag: false,
+                    remaining_mode: RemainingMode::None,
+                };
+                let mut output = Vec::new();
+
+                let outcome = expand_to_writer(&options, &mut output).unwrap();
+
+                assert_eq!(output, expected_output);
+                assert_eq!(outcome.exit_code, 1);
+                assert!(
+                    outcome
+                        .stderr_text
+                        .contains("combination of files with and without BOM header")
+                );
+            }
         }
 
         #[test]

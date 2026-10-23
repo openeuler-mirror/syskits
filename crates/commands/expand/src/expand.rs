@@ -157,17 +157,18 @@ struct ExpandRunOutcome {
     line_had_tabs: Vec<bool>,
 }
 
-/// Decide whether the character is either a space or a comma.
+/// Decide whether the character is either an ASCII blank or a comma.
 ///
 /// # Examples
 ///
 /// ```rust,ignore
 /// assert!(is_space_or_comma(' '))
+/// assert!(is_space_or_comma('\t'))
 /// assert!(is_space_or_comma(','))
 /// assert!(!is_space_or_comma('a'))
 /// ```
 fn is_space_or_comma(c: char) -> bool {
-    c == ' ' || c == ','
+    c == ' ' || c == '\t' || c == ','
 }
 
 /// Decide whether the character is either a digit or a comma.
@@ -1508,6 +1509,14 @@ mod tests {
                     "+".to_string(),
                     "+16".to_string()
                 ))
+            );
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_tab_delimiter() {
+            assert_eq!(
+                expand_tabstops_parse("3\t7"),
+                Ok((RemainingMode::None, vec![3, 7]))
             );
         }
 

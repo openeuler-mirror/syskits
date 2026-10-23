@@ -77,6 +77,7 @@ static LONG_HELP: &str = "";
 
 static DEFAULT_TABSTOP: usize = 8;
 const UTF8_BOM: [u8; 3] = [0xEF, 0xBB, 0xBF];
+const SPACE_BUFFER: [u8; 8192] = [b' '; 8192];
 
 /// The mode to use when replacing tabs beyond the last one specified in
 /// the `--tabs` argument.
@@ -231,7 +232,6 @@ impl fmt::Display for ExpandParseError {
 struct ExpandOptions {
     files: Vec<String>,   // 要处理的文件名列表
     tabstops: Vec<usize>, // 制表位应停止的位置
-    tspaces: String,      // 用于制表符扩展的空格字符串
     iflag: bool,          // 标志，表示是否应用初始状态
     uflag: bool,          // 标志，表示是否假设UTF-8编码
 
@@ -284,10 +284,6 @@ impl ExpandOptions {
         let is_iflag = args_match.get_flag(opt_flags::INITIAL);
         let is_uflag = !args_match.get_flag(opt_flags::NO_UTF8);
 
-        // 预计算制表符扩展所需的最长空格数，以避免处理过程中重复分配。
-        let nspaces = expand_max_tabstop_width(&tabstops, &remaining_mode);
-        let tspaces = " ".repeat(nspaces);
-
         // 收集要处理的文件列表。如果没有指定文件，则默认使用标准输入。
         let files: Vec<String> = match args_match.get_many::<String>(opt_flags::FILES) {
             Some(s) => s.map(|v| v.to_string()).collect(),
@@ -297,41 +293,11 @@ impl ExpandOptions {
         Ok(Self {
             files,
             tabstops,
-            tspaces,
             iflag: is_iflag,
             uflag: is_uflag,
             remaining_mode,
         })
     }
-}
-
-fn expand_max_tabstop_width(tabstops: &[usize], remaining_mode: &RemainingMode) -> usize {
-    let fixed_tabstops_len = match remaining_mode {
-        RemainingMode::None => tabstops.len(),
-        RemainingMode::Slash | RemainingMode::Plus => tabstops.len().saturating_sub(1),
-    };
-
-    let mut previous = 0usize;
-    let mut max_width = 0usize;
-    for &tabstop in &tabstops[..fixed_tabstops_len] {
-        max_width = max_width.max(tabstop - previous);
-        previous = tabstop;
-    }
-
-    match remaining_mode {
-        RemainingMode::None => {
-            if tabstops.len() > 1 {
-                max_width = max_width.max(1);
-            }
-        }
-        RemainingMode::Slash | RemainingMode::Plus => {
-            if let Some(&step) = tabstops.last() {
-                max_width = max_width.max(step);
-            }
-        }
-    }
-
-    max_width.max(1)
 }
 
 pub fn expand_main(args: impl ctcore::Args) -> CTResult<()> {
@@ -919,6 +885,15 @@ fn expand_raw_bytes(
     Ok(())
 }
 
+fn expand_write_spaces(output: &mut impl Write, mut count: usize) -> std::io::Result<()> {
+    while count > 0 {
+        let chunk_size = count.min(SPACE_BUFFER.len());
+        output.write_all(&SPACE_BUFFER[..chunk_size])?;
+        count -= chunk_size;
+    }
+    Ok(())
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn expand_line(
     buffer: &[u8],
@@ -956,11 +931,7 @@ fn expand_line(
 
                 // 根据选项扩展制表符为空格或保留制表符。
                 if state.is_init || !opts.iflag {
-                    if nts <= opts.tspaces.len() {
-                        output.write_all(&opts.tspaces.as_bytes()[..nts])?;
-                    } else {
-                        output.write_all(" ".repeat(nts).as_bytes())?;
-                    };
+                    expand_write_spaces(output, nts)?;
                 } else {
                     output.write_all(&buffer[byte..byte + n_bytes])?;
                 }
@@ -1463,6 +1434,7 @@ mod tests {
             ExpandState, ExpandTabstopMode, RemainingMode, UTF8_BOM, expand_line,
             expand_native_semantic, expand_next_char_info, expand_next_tabstop, expand_open,
             expand_shortcuts, expand_tabstops_parse, expand_tabstops_parse_args, expand_to_writer,
+            expand_write_spaces,
         };
 
         use crate::is_digit_or_comma;
@@ -1853,11 +1825,17 @@ mod tests {
             ExpandOptions {
                 files: vec![],
                 tabstops: vec![tabstop],
-                tspaces: " ".repeat(tabstop),
                 iflag: false,
                 uflag,
                 remaining_mode: RemainingMode::None,
             }
+        }
+
+        #[test]
+        fn test_expand_write_spaces_uses_bounded_chunks() {
+            let mut output = Vec::new();
+            expand_write_spaces(&mut output, 20_000).unwrap();
+            assert_eq!(output, vec![b' '; 20_000]);
         }
 
         #[test]
@@ -1957,7 +1935,6 @@ mod tests {
                     second.path().to_string_lossy().to_string(),
                 ],
                 tabstops: vec![8],
-                tspaces: " ".repeat(8),
                 iflag: false,
                 uflag: true,
                 remaining_mode: RemainingMode::None,

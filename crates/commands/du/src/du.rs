@@ -725,12 +725,17 @@ fn du(
                         }
                         let name = name.to_os_string();
                         let entry_path = state.path.join(&name);
+                        if du_path_is_excluded(&du_opts.excludes, &entry_path, &name) {
+                            if du_opts.verbose {
+                                println!("{} ignored", entry_path.quote());
+                            }
+                            continue;
+                        }
                         let this_stat = DuStat::new_at(dir_fd, &name, entry_path.clone(), du_opts);
                         du_process_entry(
                             &mut state,
                             this_stat,
                             &entry_path,
-                            &name,
                             du_opts,
                             du_depth,
                             du_seen_inodes,
@@ -760,11 +765,17 @@ fn du(
                 match entry {
                     Ok(entry) => {
                         let entry_path = entry.path();
+                        let entry_name = entry.file_name();
+                        if du_path_is_excluded(&du_opts.excludes, &entry_path, &entry_name) {
+                            if du_opts.verbose {
+                                println!("{} ignored", entry_path.quote());
+                            }
+                            continue;
+                        }
                         du_process_entry(
                             &mut state,
                             DuStat::new(&entry_path, du_opts, false),
                             &entry_path,
-                            &entry.file_name(),
                             du_opts,
                             du_depth,
                             du_seen_inodes,
@@ -785,7 +796,6 @@ fn du_process_entry(
     state: &mut DuStat,
     this_stat: io::Result<DuStat>,
     entry_path: &Path,
-    entry_name: &OsStr,
     du_opts: &DuTraversalOptions,
     du_depth: usize,
     du_seen_inodes: &mut HashSet<DuFileInfo>,
@@ -800,17 +810,6 @@ fn du_process_entry(
             return Ok(());
         }
     };
-
-    for pattern in &du_opts.excludes {
-        if du_exclude_pattern_matches_path(pattern, &this_stat.path)
-            || pattern.matches(entry_name.to_str().unwrap())
-        {
-            if du_opts.verbose {
-                println!("{} ignored", &this_stat.path.quote());
-            }
-            return Ok(());
-        }
-    }
 
     // 默认模式下避免重复统计同一 inode；--count-links 时不过滤。
     if !du_opts.count_links || this_stat.is_dir {
@@ -1216,6 +1215,12 @@ fn du_exclude_pattern_matches_path(pattern: &Pattern, path: &Path) -> bool {
             let suffix = &path[index + 1..];
             !suffix.starts_with('/') && pattern.matches(suffix)
         })
+}
+
+fn du_path_is_excluded(excludes: &[Pattern], path: &Path, name: &OsStr) -> bool {
+    excludes.iter().any(|pattern| {
+        du_exclude_pattern_matches_path(pattern, path) || pattern.matches(name.to_str().unwrap())
+    })
 }
 
 /**
@@ -2894,6 +2899,29 @@ mod tests {
             &pattern,
             Path::new("root/other/leaf")
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_excluded_dangling_link_is_skipped_before_stat() {
+        use std::os::unix::fs::symlink;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root = temp_dir.path().join("root");
+        fs::create_dir(&root).unwrap();
+        symlink("missing", root.join("dangling")).unwrap();
+
+        let args = vec![
+            OsString::from("du"),
+            OsString::from("-L"),
+            OsString::from("--exclude=dangling"),
+            root.as_os_str().to_os_string(),
+        ];
+        let semantic = du_native_semantic(args.into_iter()).unwrap();
+
+        assert_eq!(semantic.exit_code, 0);
+        assert!(semantic.stderr_text.is_empty());
+        assert!(!semantic.classic_text.contains("dangling"));
     }
 
     #[test]

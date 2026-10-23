@@ -447,16 +447,31 @@ fn id_write_optional_label<W: Write>(writer: &mut W, value: u32, label: Option<&
 fn id_default_classic_text(row: &IdRow) -> String {
     let mut text = String::new();
     if let Some(uid) = &row.uid {
-        text.push_str(&format!("uid={}({})", uid.id, uid.label));
+        text.push_str(&format!("{}{}({})", id_gettext("uid="), uid.id, uid.label));
     }
     if let Some(gid) = &row.gid {
-        text.push_str(&format!(" gid={}({})", gid.id, gid.label));
+        text.push_str(&format!(
+            "{}{}({})",
+            id_gettext(" gid="),
+            gid.id,
+            gid.label
+        ));
     }
     if let Some(euid) = &row.euid {
-        text.push_str(&format!(" euid={}({})", euid.id, euid.label));
+        text.push_str(&format!(
+            "{}{}({})",
+            id_gettext(" euid="),
+            euid.id,
+            euid.label
+        ));
     }
     if let Some(egid) = &row.egid {
-        text.push_str(&format!(" egid={}({})", egid.id, egid.label));
+        text.push_str(&format!(
+            "{}{}({})",
+            id_gettext(" egid="),
+            egid.id,
+            egid.label
+        ));
     }
     if !row.groups.is_empty() {
         let groups = row
@@ -465,10 +480,12 @@ fn id_default_classic_text(row: &IdRow) -> String {
             .map(|group| format!("{}({})", group.id, group.label))
             .collect::<Vec<_>>()
             .join(",");
-        text.push_str(&format!(" groups={groups}"));
+        text.push_str(&id_gettext(" groups="));
+        text.push_str(&groups);
     }
     if let Some(context) = &row.context {
-        text.push_str(&format!(" context={context}"));
+        text.push_str(&id_gettext(" context="));
+        text.push_str(context);
     }
     text
 }
@@ -1180,18 +1197,18 @@ fn id_print<W: Write>(writer: &mut W, id_state: &IdState, groups: &[u32]) {
     let euid = id_state.ids.as_ref().map(|ids| ids.euid).unwrap_or(65535);
     let egid = id_state.ids.as_ref().map(|ids| ids.egid).unwrap_or(65535);
 
-    write!(writer, "uid=").unwrap();
+    write!(writer, "{}", id_gettext("uid=")).unwrap();
     id_write_optional_label(writer, uid, ct_entries::uid2usr_os(uid).ok().as_deref());
-    write!(writer, " gid=").unwrap();
+    write!(writer, "{}", id_gettext(" gid=")).unwrap();
     id_write_optional_label(writer, gid, ct_entries::gid2grp_os(gid).ok().as_deref());
 
     if !id_state.is_user_specified && (euid != uid) {
-        write!(writer, " euid=").unwrap();
+        write!(writer, "{}", id_gettext(" euid=")).unwrap();
         id_write_optional_label(writer, euid, ct_entries::uid2usr_os(euid).ok().as_deref());
     }
 
     if !id_state.is_user_specified && (egid != gid) {
-        write!(writer, " egid=").unwrap();
+        write!(writer, "{}", id_gettext(" egid=")).unwrap();
         id_write_optional_label(writer, egid, ct_entries::gid2grp_os(egid).ok().as_deref());
     }
 
@@ -1199,7 +1216,7 @@ fn id_print<W: Write>(writer: &mut W, id_state: &IdState, groups: &[u32]) {
         return;
     }
 
-    write!(writer, " groups=").unwrap();
+    write!(writer, "{}", id_gettext(" groups=")).unwrap();
     for (index, &gr) in groups.iter().enumerate() {
         if index != 0 {
             write!(writer, ",").unwrap();
@@ -1214,7 +1231,13 @@ fn id_print<W: Write>(writer: &mut W, id_state: &IdState, groups: &[u32]) {
         // print SElinux context (does not depend on "-Z")
         if let Ok(context) = SecurityContext::current(false) {
             let bytes = context.as_bytes();
-            write!(writer, " context={}", String::from_utf8_lossy(bytes)).unwrap();
+            write!(
+                writer,
+                "{}{}",
+                id_gettext(" context="),
+                String::from_utf8_lossy(bytes)
+            )
+            .unwrap();
         }
     }
 }

@@ -2092,7 +2092,7 @@ fn parse_hash_line(
     bytes_marker: &str,
     bsd_reversed: &mut Option<bool>,
 ) -> Result<(String, String, bool, bool), ParseLineError> {
-    match gnu_re.captures(&line) {
+    let parsed = match gnu_re.captures(&line) {
         Some(caps) => {
             let only_trailing_marker = caps.name("binary").is_some()
                 && caps
@@ -2113,6 +2113,13 @@ fn parse_hash_line(
             )),
             None => Err(ParseLineError::FormatError),
         },
+    };
+
+    match parsed {
+        Ok(parsed) if bytes_marker == "+" && parsed.1.len() % 2 != 0 => {
+            Err(ParseLineError::FormatError)
+        }
+        result => result,
     }
 }
 

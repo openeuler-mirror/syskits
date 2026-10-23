@@ -2399,10 +2399,33 @@ fn output_summary(bad_format: usize, failed_cksum: usize, failed_open_file: usiz
 ///
 /// 返回去除转义后的文件名
 fn unescape_filename(filename: &str) -> String {
-    filename
-        .replace("\\\\", "\\")
-        .replace("\\n", "\n")
-        .replace("\\r", "\r")
+    let mut unescaped = String::with_capacity(filename.len());
+    let mut escaped = false;
+
+    for character in filename.chars() {
+        if escaped {
+            match character {
+                '\\' => unescaped.push('\\'),
+                'n' => unescaped.push('\n'),
+                'r' => unescaped.push('\r'),
+                other => {
+                    unescaped.push('\\');
+                    unescaped.push(other);
+                }
+            }
+            escaped = false;
+        } else if character == '\\' {
+            escaped = true;
+        } else {
+            unescaped.push(character);
+        }
+    }
+
+    if escaped {
+        unescaped.push('\\');
+    }
+
+    unescaped
 }
 
 /// 对文件名进行转义处理

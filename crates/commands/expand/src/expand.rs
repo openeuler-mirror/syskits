@@ -844,6 +844,13 @@ fn expand_error_detail(error: &io::Error) -> String {
     ctcore::ct_error::strip_errno(error)
 }
 
+fn expand_write_error(error: &io::Error) -> Box<dyn ctcore::ct_error::CTError> {
+    ctcore::ct_error::CtSimpleError::new(
+        1,
+        format!("write error: {}", expand_error_detail(error)),
+    )
+}
+
 fn expand_stdin_was_closed() -> bool {
     #[cfg(unix)]
     {
@@ -1284,7 +1291,7 @@ fn expand_to_writer<W: Write, D: Write>(
                     }
 
                     expand_line(&buffer, output, tabstops, options, &mut state)
-                        .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+                        .map_err(|e| expand_write_error(&e))?;
                 }
             }
             Err(e) => {
@@ -1318,7 +1325,7 @@ fn expand(options: &ExpandOptions) -> CTResult<()> {
     let stderr = io::stderr();
     let mut diagnostics = stderr.lock();
     let mut outcome = expand_to_writer(options, &mut output, &mut diagnostics)?;
-    output.flush()?;
+    output.flush().map_err(|error| expand_write_error(&error))?;
 
     #[cfg(unix)]
     if outcome.read_stdin {

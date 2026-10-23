@@ -604,7 +604,11 @@ fn verify_file_hash_semantic(
     }
 
     let (ck_filename_unescaped, prefix) = if is_escaped {
-        (unescape_filename(ck_filename), "\\")
+        (
+            unescape_filename(ck_filename)
+                .expect("escaped filenames are validated while parsing manifests"),
+            "\\",
+        )
     } else {
         (ck_filename.to_string(), "")
     };
@@ -2128,6 +2132,9 @@ fn parse_hash_line(
     };
 
     match parsed {
+        Ok(parsed) if parsed.3 && unescape_filename(&parsed.0).is_none() => {
+            Err(ParseLineError::FormatError)
+        }
         Ok(parsed) if bytes_marker == "+" && (parsed.1.len() % 2 != 0 || parsed.1.len() > 128) => {
             Err(ParseLineError::FormatError)
         }
@@ -2207,7 +2214,11 @@ fn verify_file_hash<W: Write>(
         flags.digest = Box::new(CtBlake2b::with_output_bytes(expected_bytes));
     }
     let (ck_filename_unescaped, prefix) = if is_escaped {
-        (unescape_filename(ck_filename), "\\")
+        (
+            unescape_filename(ck_filename)
+                .expect("escaped filenames are validated while parsing manifests"),
+            "\\",
+        )
     } else {
         (ck_filename.to_string(), "")
     };
@@ -2398,7 +2409,7 @@ fn output_summary(bad_format: usize, failed_cksum: usize, failed_open_file: usiz
 /// # 返回值
 ///
 /// 返回去除转义后的文件名
-fn unescape_filename(filename: &str) -> String {
+fn unescape_filename(filename: &str) -> Option<String> {
     let mut unescaped = String::with_capacity(filename.len());
     let mut escaped = false;
 
@@ -2408,10 +2419,7 @@ fn unescape_filename(filename: &str) -> String {
                 '\\' => unescaped.push('\\'),
                 'n' => unescaped.push('\n'),
                 'r' => unescaped.push('\r'),
-                other => {
-                    unescaped.push('\\');
-                    unescaped.push(other);
-                }
+                _ => return None,
             }
             escaped = false;
         } else if character == '\\' {
@@ -2422,10 +2430,10 @@ fn unescape_filename(filename: &str) -> String {
     }
 
     if escaped {
-        unescaped.push('\\');
+        return None;
     }
 
-    unescaped
+    Some(unescaped)
 }
 
 /// 对文件名进行转义处理
@@ -2826,7 +2834,7 @@ mod tests {
             // 测试没有转义字符的情况
             let filename = "normal_filename.txt";
             let unescaped = unescape_filename(filename);
-            assert_eq!(unescaped, "normal_filename.txt");
+            assert_eq!(unescaped.as_deref(), Some("normal_filename.txt"));
         }
 
         #[test]
@@ -2834,7 +2842,7 @@ mod tests {
             // 测试包含反斜杠的情况
             let filename = "file\\\\with\\\\backslashes.txt";
             let unescaped = unescape_filename(filename);
-            assert_eq!(unescaped, "file\\with\\backslashes.txt");
+            assert_eq!(unescaped.as_deref(), Some("file\\with\\backslashes.txt"));
         }
 
         #[test]
@@ -2842,7 +2850,7 @@ mod tests {
             // 测试包含换行符的情况
             let filename = "file\\nwith\\nnewlines.txt";
             let unescaped = unescape_filename(filename);
-            assert_eq!(unescaped, "file\nwith\nnewlines.txt");
+            assert_eq!(unescaped.as_deref(), Some("file\nwith\nnewlines.txt"));
         }
 
         #[test]
@@ -2850,7 +2858,10 @@ mod tests {
             // 测试包含回车符的情况
             let filename = "file\\rwith\\rcarriage-returns.txt";
             let unescaped = unescape_filename(filename);
-            assert_eq!(unescaped, "file\rwith\rcarriage-returns.txt");
+            assert_eq!(
+                unescaped.as_deref(),
+                Some("file\rwith\rcarriage-returns.txt")
+            );
         }
 
         #[test]
@@ -2858,7 +2869,7 @@ mod tests {
             // 测试混合多种转义字符的情况
             let filename = "file\\\\with\\nmixed\\rescapes.txt";
             let unescaped = unescape_filename(filename);
-            assert_eq!(unescaped, "file\\with\nmixed\rescapes.txt");
+            assert_eq!(unescaped.as_deref(), Some("file\\with\nmixed\rescapes.txt"));
         }
 
         #[test]
@@ -2866,7 +2877,13 @@ mod tests {
             // 测试空字符串的情况
             let filename = "";
             let unescaped = unescape_filename(filename);
-            assert_eq!(unescaped, "");
+            assert_eq!(unescaped.as_deref(), Some(""));
+        }
+
+        #[test]
+        fn test_unescape_filename_rejects_invalid_escapes() {
+            assert_eq!(unescape_filename("file\\q"), None);
+            assert_eq!(unescape_filename("file\\"), None);
         }
     }
 

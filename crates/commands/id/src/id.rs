@@ -707,18 +707,46 @@ pub fn id_native_semantic(args: impl ctcore::Args) -> CTResult<IdSemantic> {
 }
 
 fn id_quote_user(user: &OsStr) -> String {
-    if user.to_str().is_some() {
-        return user.quote().to_string();
-    }
-
     let (left_quote, right_quote) = locale_quote_marks();
-    let mut quoted = left_quote;
-    for byte in user.as_bytes() {
-        if byte.is_ascii_graphic() || *byte == b' ' {
-            quoted.push(char::from(*byte));
-        } else {
-            quoted.push_str(&format!("\\{byte:03o}"));
+    id_quote_user_with_marks(user, &left_quote, &right_quote)
+}
+
+fn id_quote_user_with_marks(user: &OsStr, left_quote: &str, right_quote: &str) -> String {
+    let mut quoted = left_quote.to_string();
+    let user = user.as_bytes();
+    let right_quote_bytes = right_quote.as_bytes();
+    let mut index = 0;
+    while index < user.len() {
+        if !right_quote_bytes.is_empty() && user[index..].starts_with(right_quote_bytes) {
+            quoted.push('\\');
+            quoted.push_str(right_quote);
+            index += right_quote_bytes.len();
+            continue;
         }
+
+        let byte = user[index];
+        match byte {
+            b'\x07' => quoted.push_str("\\a"),
+            b'\x08' => quoted.push_str("\\b"),
+            b'\x0c' => quoted.push_str("\\f"),
+            b'\n' => quoted.push_str("\\n"),
+            b'\r' => quoted.push_str("\\r"),
+            b'\t' => quoted.push_str("\\t"),
+            b'\x0b' => quoted.push_str("\\v"),
+            b'\\' => quoted.push_str("\\\\"),
+            b' '..=b'~' => quoted.push(char::from(byte)),
+            byte if byte.is_ascii() => quoted.push_str(&format!("\\{byte:03o}")),
+            _ => match std::str::from_utf8(&user[index..]) {
+                Ok(valid) => {
+                    let character = valid.chars().next().unwrap();
+                    quoted.push(character);
+                    index += character.len_utf8();
+                    continue;
+                }
+                Err(_) => quoted.push_str(&format!("\\{byte:03o}")),
+            },
+        }
+        index += 1;
     }
     quoted.push_str(&right_quote);
     quoted
@@ -1161,6 +1189,18 @@ mod tests {
     mod id_handle_users_tests {
         use super::*;
         use std::io::Cursor;
+
+        #[test]
+        fn test_quote_user_uses_gnu_control_byte_escaping() {
+            assert_eq!(
+                id_quote_user_with_marks(OsStr::new("missing\x01"), "‘", "’"),
+                "‘missing\\001’"
+            );
+            assert_eq!(
+                id_quote_user_with_marks(OsStr::new("line\nfeed"), "'", "'"),
+                "'line\\nfeed'"
+            );
+        }
 
         #[test]
         fn test_empty_user_lookup_reports_enoent() {

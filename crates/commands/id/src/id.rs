@@ -724,6 +724,20 @@ fn id_quote_user(user: &OsStr) -> String {
     quoted
 }
 
+fn id_lookup_user(user: &OsStr) -> io::Result<CtPasswd> {
+    if user.is_empty() {
+        return Err(io::Error::from_raw_os_error(ctcore::libc::ENOENT));
+    }
+
+    CtPasswd::locate_name_os(user).or_else(|name_error| {
+        if let Ok(uid) = user.to_string_lossy().parse::<u32>() {
+            CtPasswd::locate_uid(uid)
+        } else {
+            Err(name_error)
+        }
+    })
+}
+
 fn id_handle_users<W, U>(
     writer: &mut W,
     users: Vec<U>,
@@ -739,13 +753,7 @@ fn id_handle_users<W, U>(
     for i in 0..=users.len() {
         let possible_pw = if id_state.is_user_specified {
             let user = users[i].as_ref();
-            let lookup = CtPasswd::locate_name_os(user).or_else(|name_error| {
-                if let Ok(uid) = user.to_string_lossy().parse::<u32>() {
-                    CtPasswd::locate_uid(uid)
-                } else {
-                    Err(name_error)
-                }
-            });
+            let lookup = id_lookup_user(user);
             match lookup {
                 Ok(p) => Some(p),
                 Err(error) => {
@@ -1153,6 +1161,13 @@ mod tests {
     mod id_handle_users_tests {
         use super::*;
         use std::io::Cursor;
+
+        #[test]
+        fn test_empty_user_lookup_reports_enoent() {
+            let error = id_lookup_user(OsStr::new("")).unwrap_err();
+
+            assert_eq!(error.raw_os_error(), Some(ctcore::libc::ENOENT));
+        }
 
         #[test]
         fn test_id_handle_users_single_user_root() {

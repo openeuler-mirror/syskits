@@ -31,7 +31,9 @@ use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_process::{getegid, geteuid, getgid, getuid};
 use ctcore::ct_show_error;
 use selinux::SecurityContext;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
+#[cfg(target_family = "unix")]
+use std::os::unix::ffi::OsStrExt;
 
 static CONTEXT_HELP_TEXT: &str = "print only the security context of the process";
 
@@ -205,10 +207,12 @@ fn id_gid_entity(gid: u32, stderr_text: &mut String, exit_code: &mut i32) -> IdE
     }
 }
 
-fn id_optional_label(value: u32, label: Option<String>) -> String {
-    match label {
-        Some(label) => format!("{value}({label})"),
-        None => value.to_string(),
+fn id_write_optional_label<W: Write>(writer: &mut W, value: u32, label: Option<&OsStr>) {
+    write!(writer, "{value}").unwrap();
+    if let Some(label) = label {
+        writer.write_all(b"(").unwrap();
+        writer.write_all(label.as_bytes()).unwrap();
+        writer.write_all(b")").unwrap();
     }
 }
 
@@ -593,30 +597,46 @@ fn id_handle_users<W: Write>(
 
         if id_state.is_gflag {
             let gid_string = if id_state.is_nflag {
-                ct_entries::gid2grp(gid).unwrap_or_else(|_| {
-                    ct_show_error!("cannot find name for group ID {}", gid);
-                    set_ct_exit_code(1);
-                    gid.to_string()
-                })
+                match ct_entries::gid2grp_os(gid) {
+                    Ok(name) => {
+                        writer.write_all(name.as_bytes()).unwrap();
+                        String::new()
+                    }
+                    Err(_) => {
+                        ct_show_error!("cannot find name for group ID {}", gid);
+                        set_ct_exit_code(1);
+                        gid.to_string()
+                    }
+                }
             } else {
                 gid.to_string()
             };
 
-            write!(writer, "{gid_string}").unwrap();
+            if !gid_string.is_empty() {
+                write!(writer, "{gid_string}").unwrap();
+            }
         }
 
         if id_state.is_uflag {
             let name_string = if id_state.is_nflag {
-                ct_entries::uid2usr(uid).unwrap_or_else(|_| {
-                    ct_show_error!("cannot find name for user ID {}", uid);
-                    set_ct_exit_code(1);
-                    uid.to_string()
-                })
+                match ct_entries::uid2usr_os(uid) {
+                    Ok(name) => {
+                        writer.write_all(name.as_bytes()).unwrap();
+                        String::new()
+                    }
+                    Err(_) => {
+                        ct_show_error!("cannot find name for user ID {}", uid);
+                        set_ct_exit_code(1);
+                        uid.to_string()
+                    }
+                }
             } else {
                 uid.to_string()
             };
 
-            write!(writer, "{name_string}").unwrap();
+            if !name_string.is_empty() {
+                write!(writer, "{name_string}").unwrap();
+            }
         }
 
         let groups_result = if !is_default_format && !id_state.is_gsflag {
@@ -642,21 +662,23 @@ fn id_handle_users<W: Write>(
         };
 
         if id_state.is_gsflag {
-            let groups_string = groups
-                .iter()
-                .map(|&id| {
-                    if id_state.is_nflag {
-                        ct_entries::gid2grp(id).unwrap_or_else(|_| {
+            for (index, &id) in groups.iter().enumerate() {
+                if index != 0 {
+                    writer.write_all(delimiter.as_bytes()).unwrap();
+                }
+                if id_state.is_nflag {
+                    match ct_entries::gid2grp_os(id) {
+                        Ok(name) => writer.write_all(name.as_bytes()).unwrap(),
+                        Err(_) => {
                             ct_show_error!("cannot find name for group ID {}", id);
                             set_ct_exit_code(1);
-                            id.to_string()
-                        })
-                    } else {
-                        id.to_string()
+                            write!(writer, "{id}").unwrap();
+                        }
                     }
-                })
-                .collect::<Vec<_>>()
-                .join(&delimiter);
+                } else {
+                    write!(writer, "{id}").unwrap();
+                }
+            }
 
             let delimit = if id_state.is_zflag && id_state.is_user_specified && users.len() > 1 {
                 "\0"
@@ -664,7 +686,7 @@ fn id_handle_users<W: Write>(
                 ""
             };
 
-            write!(writer, "{groups_string}{delimit}").unwrap();
+            writer.write_all(delimit.as_bytes()).unwrap();
         }
 
         if is_default_format {
@@ -727,14 +749,6 @@ fn id_flags_validity_checks(state: &mut IdState) -> CTResult<bool> {
         ));
     }
     Ok(is_default_format)
-}
-
-fn id_format_uid_default(uid: u32) -> String {
-    id_optional_label(uid, ct_entries::uid2usr(uid).ok())
-}
-
-fn id_format_gid_default(gid: u32) -> String {
-    id_optional_label(gid, ct_entries::gid2grp(gid).ok())
 }
 
 fn id_get_state(matches: &clap::ArgMatches, users: &[String]) -> IdState {
@@ -839,27 +853,32 @@ fn id_print<W: Write>(writer: &mut W, id_state: &IdState, groups: &[u32]) {
     let euid = id_state.ids.as_ref().map(|ids| ids.euid).unwrap_or(65535);
     let egid = id_state.ids.as_ref().map(|ids| ids.egid).unwrap_or(65535);
 
-    write!(writer, "uid={}", id_format_uid_default(uid)).unwrap();
-    write!(writer, " gid={}", id_format_gid_default(gid)).unwrap();
+    write!(writer, "uid=").unwrap();
+    id_write_optional_label(writer, uid, ct_entries::uid2usr_os(uid).ok().as_deref());
+    write!(writer, " gid=").unwrap();
+    id_write_optional_label(writer, gid, ct_entries::gid2grp_os(gid).ok().as_deref());
 
     if !id_state.is_user_specified && (euid != uid) {
-        write!(writer, " euid={}", id_format_uid_default(euid)).unwrap();
+        write!(writer, " euid=").unwrap();
+        id_write_optional_label(writer, euid, ct_entries::uid2usr_os(euid).ok().as_deref());
     }
 
     if !id_state.is_user_specified && (egid != gid) {
-        write!(writer, " egid={}", id_format_gid_default(egid)).unwrap();
+        write!(writer, " egid=").unwrap();
+        id_write_optional_label(writer, egid, ct_entries::gid2grp_os(egid).ok().as_deref());
     }
 
     if groups.is_empty() {
         return;
     }
 
-    let groups_string = groups
-        .iter()
-        .map(|&gr| id_format_gid_default(gr))
-        .collect::<Vec<_>>()
-        .join(",");
-    write!(writer, " groups={groups_string}").unwrap();
+    write!(writer, " groups=").unwrap();
+    for (index, &gr) in groups.iter().enumerate() {
+        if index != 0 {
+            write!(writer, ",").unwrap();
+        }
+        id_write_optional_label(writer, gr, ct_entries::gid2grp_os(gr).ok().as_deref());
+    }
 
     if id_state.is_selinux_supported
         && !id_state.is_user_specified
@@ -1530,6 +1549,17 @@ mod tests {
     #[cfg(test)]
     mod id_print_tests {
         use super::*;
+        use std::os::unix::ffi::OsStringExt;
+
+        #[test]
+        fn test_id_write_optional_label_preserves_non_utf8_name() {
+            let label = OsString::from_vec(vec![b'u', 0xff]);
+            let mut output = Vec::new();
+
+            id_write_optional_label(&mut output, 424242, Some(label.as_os_str()));
+
+            assert_eq!(output, b"424242(u\xff)");
+        }
 
         /// 检测是否在容器环境中运行
         fn is_container() -> bool {

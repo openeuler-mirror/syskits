@@ -140,9 +140,15 @@ impl Tool for Id {
 
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout_info = io::stdout();
-        let mut stdout_writer = stdout_info.lock();
-        id_main(&mut stdout_writer, args.iter().cloned())
+        id_run_buffered(stdout_info.lock(), args.iter().cloned())
     }
+}
+
+fn id_run_buffered<W: Write>(writer: W, args: impl ctcore::Args) -> CTResult<()> {
+    let mut writer = io::BufWriter::new(writer);
+    id_main(&mut writer, args)?;
+    writer.flush()?;
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -1261,6 +1267,17 @@ mod tests {
         // 测试 execute 方法
         let args = vec![OsString::from("id")];
         assert!(tool.execute(&args).is_ok());
+    }
+
+    #[test]
+    fn test_buffered_run_flushes_complete_output() {
+        let mut output = Vec::new();
+        let args = [OsString::from("id"), OsString::from("root")];
+
+        id_run_buffered(&mut output, args.into_iter()).unwrap();
+
+        assert!(output.ends_with(b"\n"));
+        assert!(output.starts_with(b"uid=0(root)"));
     }
 
     #[test]

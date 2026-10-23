@@ -26,7 +26,7 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_entries::{self, CtPasswd, Locate};
 use ctcore::ct_error::CTResult;
-use ctcore::ct_error::{CtSimpleError, set_ct_exit_code};
+use ctcore::ct_error::{CtSimpleError, set_ct_exit_code, strip_errno};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_process::{getegid, geteuid, getgid, getuid};
 use ctcore::ct_show_error;
@@ -361,17 +361,37 @@ fn id_build_rows(
 
         let euid = geteuid();
         let egid = getegid();
-        let groups = if let Some(passwd) = possible_pw.as_ref() {
-            passwd.belongs_to()
+        let groups_result = if let Some(passwd) = possible_pw.as_ref() {
+            Ok(passwd.belongs_to())
         } else if state.is_gsflag {
-            id_group_list_for_current_process(
-                getgid(),
-                egid,
-                ct_entries::get_groups_gnu(Some(egid)).unwrap_or_default(),
-            )
+            ct_entries::get_groups_gnu(Some(egid))
+                .map(|groups| id_group_list_for_current_process(getgid(), egid, groups))
         } else {
             ct_entries::get_groups_gnu(Some(if is_default_format { egid } else { gid }))
-                .unwrap_or_default()
+        };
+        let (groups, groups_failed) = match groups_result {
+            Ok(groups) => (groups, false),
+            Err(error) => {
+                exit_code = 1;
+                if let Some(user) = subject.as_ref() {
+                    stderr_text.push_str(&format!(
+                        "id: failed to get groups for user {}: {}\n",
+                        user.quote(),
+                        strip_errno(&error)
+                    ));
+                } else {
+                    stderr_text.push_str(&format!(
+                        "id: failed to get groups for the current process: {}\n",
+                        strip_errno(&error)
+                    ));
+                }
+                let partial_groups = if state.is_gsflag {
+                    id_group_list_for_current_process(getgid(), egid, Vec::new())
+                } else {
+                    Vec::new()
+                };
+                (partial_groups, true)
+            }
         };
 
         let mut row = IdRow {
@@ -419,6 +439,7 @@ fn id_build_rows(
                 .collect();
             if state.is_selinux_supported
                 && !state.is_user_specified
+                && !groups_failed
                 && std::env::var_os("POSIXLY_CORRECT").is_none()
                 && let Ok(context) = SecurityContext::current(false)
             {
@@ -584,17 +605,24 @@ fn id_handle_users<W: Write>(
             write!(writer, "{name_string}").unwrap();
         }
 
-        let groups = if id_state.is_user_specified {
-            possible_pw.as_ref().map(|p| p.belongs_to()).unwrap()
+        let groups_result = if id_state.is_user_specified {
+            Ok(possible_pw.as_ref().map(|p| p.belongs_to()).unwrap())
         } else if id_state.is_gsflag {
-            id_group_list_for_current_process(
-                process_rgid,
-                process_egid,
-                ct_entries::get_groups_gnu(Some(process_egid)).unwrap(),
-            )
+            ct_entries::get_groups_gnu(Some(process_egid))
+                .map(|groups| id_group_list_for_current_process(process_rgid, process_egid, groups))
         } else {
             ct_entries::get_groups_gnu(Some(if is_default_format { process_egid } else { gid }))
-                .unwrap()
+        };
+        let (groups, groups_error) = match groups_result {
+            Ok(groups) => (groups, None),
+            Err(error) => {
+                let partial_groups = if id_state.is_gsflag {
+                    id_group_list_for_current_process(process_rgid, process_egid, Vec::new())
+                } else {
+                    Vec::new()
+                };
+                (partial_groups, Some(error))
+            }
         };
 
         if id_state.is_gsflag {
@@ -625,6 +653,21 @@ fn id_handle_users<W: Write>(
 
         if is_default_format {
             id_print(writer, id_state, &groups);
+        }
+        if let Some(error) = groups_error {
+            if id_state.is_user_specified {
+                ct_show_error!(
+                    "failed to get groups for user {}: {}",
+                    users[i].quote(),
+                    strip_errno(&error)
+                );
+            } else {
+                ct_show_error!(
+                    "failed to get groups for the current process: {}",
+                    strip_errno(&error)
+                );
+            }
+            set_ct_exit_code(1);
         }
         write!(writer, "{line_ending}").unwrap();
 
@@ -789,6 +832,10 @@ fn id_print<W: Write>(writer: &mut W, id_state: &IdState, groups: &[u32]) {
 
     if !id_state.is_user_specified && (egid != gid) {
         write!(writer, " egid={}", id_format_gid_default(egid)).unwrap();
+    }
+
+    if groups.is_empty() {
+        return;
     }
 
     let groups_string = groups
@@ -1717,6 +1764,7 @@ mod tests {
 
             assert!(output_str.contains("uid=65535"));
             assert!(output_str.contains("gid=65535"));
+            assert!(!output_str.contains("groups="));
         }
 
         #[test]

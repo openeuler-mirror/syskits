@@ -269,29 +269,23 @@ fn validate_gnu_hashsum_options(args: &[OsString], program: &str) -> CTResult<()
 }
 
 fn hashsum_last_mode_arg(matches: &ArgMatches) -> Option<bool> {
-    let has_binary = matches.get_flag(hashsum_flags::BINARY);
-    let has_text = matches.get_flag(hashsum_flags::TEXT);
-
-    match (has_binary, has_text) {
-        (true, false) => return Some(true),
-        (false, true) => return Some(false),
-        (false, false) => return None,
-        (true, true) => {}
-    }
-
-    let binary_index = matches
-        .indices_of(hashsum_flags::BINARY)
-        .and_then(|mut indices| indices.next_back());
-    let text_index = matches
-        .indices_of(hashsum_flags::TEXT)
-        .and_then(|mut indices| indices.next_back());
-
-    match (binary_index, text_index) {
-        (Some(binary), Some(text)) => Some(binary > text),
-        (Some(_), None) => Some(true),
-        (None, Some(_)) => Some(false),
-        (None, None) => None,
-    }
+    [
+        (hashsum_flags::BINARY, true),
+        (hashsum_flags::TEXT, false),
+        (hashsum_flags::TAG, true),
+    ]
+    .into_iter()
+    .filter_map(|(option, binary)| {
+        if !matches.get_flag(option) {
+            return None;
+        }
+        matches
+            .indices_of(option)
+            .and_then(|mut indices| indices.next_back())
+            .map(|index| (index, binary))
+    })
+    .max_by_key(|(index, _)| *index)
+    .map(|(_, binary)| binary)
 }
 
 impl HashsumFlags {
@@ -321,6 +315,10 @@ impl HashsumFlags {
         let is_warn_explicit = matches.get_flag(hashsum_flags::WARN);
         let is_ignore_missing = matches.get_flag(hashsum_flags::IGNORE_MISSING);
         let is_zero = matches.get_flag(hashsum_flags::ZERO);
+
+        if is_tag && !is_binary {
+            return Err(CTsageError::new(1, "--tag does not support --text mode"));
+        }
 
         if !is_check {
             for (is_present, option_name) in [
@@ -1627,8 +1625,7 @@ fn create_common_command() -> Command {
         Arg::new(hashsum_flags::TAG)
             .long(hashsum_flags::TAG)
             .help(t!("hashsum.clap.tag"))
-            .action(ArgAction::SetTrue)
-            .conflicts_with(hashsum_flags::TEXT),
+            .action(ArgAction::SetTrue),
         Arg::new(hashsum_flags::TEXT)
             .short('t')
             .long(hashsum_flags::TEXT)

@@ -1336,7 +1336,7 @@ impl DuStatPrinter {
         Ok(())
     }
 
-    fn du_render_stat_line(&self, du_stat: &DuStat, size: u64) -> CTResult<String> {
+    fn du_render_stat_prefix(&self, du_stat: &DuStat, size: u64) -> CTResult<String> {
         let mut line = String::new();
         if let Some((_, time_string)) = self.du_time_info(du_stat)? {
             line.push_str(&self.du_convert_size(size));
@@ -1347,6 +1347,11 @@ impl DuStatPrinter {
             line.push_str(&self.du_convert_size(size));
             line.push('\t');
         }
+        Ok(line)
+    }
+
+    fn du_render_stat_line(&self, du_stat: &DuStat, size: u64) -> CTResult<String> {
+        let mut line = self.du_render_stat_prefix(du_stat, size)?;
         line.push_str(&du_stat.path.display().to_string());
         line.push_str(&format!("{}", self.line_ending));
         Ok(line)
@@ -1472,9 +1477,23 @@ impl DuStatPrinter {
      *
      */
     fn du_print_stat(&self, du_stat: &DuStat, size: u64) -> CTResult<()> {
-        print!("{}", self.du_render_stat_line(du_stat, size)?);
+        let output = io::stdout();
+        let mut stdout = output.lock();
+        stdout.write_all(self.du_render_stat_prefix(du_stat, size)?.as_bytes())?;
+        du_write_path(&mut stdout, &du_stat.path)?;
+        stdout.write_all(format!("{}", self.line_ending).as_bytes())?;
         Ok(())
     }
+}
+
+#[cfg(unix)]
+fn du_write_path(writer: &mut impl Write, path: &Path) -> io::Result<()> {
+    writer.write_all(path.as_os_str().as_bytes())
+}
+
+#[cfg(not(unix))]
+fn du_write_path(writer: &mut impl Write, path: &Path) -> io::Result<()> {
+    write!(writer, "{}", path.display())
 }
 
 fn du_inodes_apparent_size_warning(
@@ -2891,6 +2910,19 @@ mod tests {
 
         assert_eq!(semantic.exit_code, 0);
         assert_eq!(semantic.rows.len(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_path_output_preserves_non_utf8_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let path = PathBuf::from(OsString::from_vec(vec![b'r', b'a', b'w', 0xff]));
+        let mut output = Vec::new();
+
+        du_write_path(&mut output, &path).unwrap();
+
+        assert_eq!(output, b"raw\xff");
     }
 
     #[test]

@@ -338,10 +338,19 @@ fn id_build_rows(
             None
         };
 
-        let (uid, gid) = possible_pw.as_ref().map(|p| (p.uid, p.gid)).unwrap_or((
-            if state.is_rflag { getuid() } else { geteuid() },
-            if state.is_rflag { getgid() } else { getegid() },
-        ));
+        let (uid, gid) = possible_pw
+            .as_ref()
+            .map(|p| (p.uid, p.gid))
+            .unwrap_or_else(|| {
+                if is_default_format {
+                    (getuid(), getgid())
+                } else {
+                    (
+                        if state.is_rflag { getuid() } else { geteuid() },
+                        if state.is_rflag { getgid() } else { getegid() },
+                    )
+                }
+            });
 
         let euid = geteuid();
         let egid = getegid();
@@ -354,7 +363,8 @@ fn id_build_rows(
                 ct_entries::get_groups_gnu(Some(egid)).unwrap_or_default(),
             )
         } else {
-            ct_entries::get_groups_gnu(Some(gid)).unwrap_or_default()
+            ct_entries::get_groups_gnu(Some(if is_default_format { egid } else { gid }))
+                .unwrap_or_default()
         };
 
         let mut row = IdRow {
@@ -503,18 +513,27 @@ fn id_handle_users<W: Write>(
 
         let process_rgid = getgid();
         let process_egid = getegid();
-        let (uid, gid) = possible_pw.as_ref().map(|p| (p.uid, p.gid)).unwrap_or((
-            if id_state.is_rflag {
-                getuid()
-            } else {
-                geteuid()
-            },
-            if id_state.is_rflag {
-                process_rgid
-            } else {
-                process_egid
-            },
-        ));
+        let (uid, gid) = possible_pw
+            .as_ref()
+            .map(|p| (p.uid, p.gid))
+            .unwrap_or_else(|| {
+                if is_default_format {
+                    (getuid(), process_rgid)
+                } else {
+                    (
+                        if id_state.is_rflag {
+                            getuid()
+                        } else {
+                            geteuid()
+                        },
+                        if id_state.is_rflag {
+                            process_rgid
+                        } else {
+                            process_egid
+                        },
+                    )
+                }
+            });
 
         id_state.ids = Some(Ids {
             uid,
@@ -560,7 +579,12 @@ fn id_handle_users<W: Write>(
                 ct_entries::get_groups_gnu(Some(process_egid)).unwrap(),
             )
         } else {
-            ct_entries::get_groups_gnu(Some(gid)).unwrap()
+            ct_entries::get_groups_gnu(Some(if is_default_format {
+                process_egid
+            } else {
+                gid
+            }))
+            .unwrap()
         };
 
         if id_state.is_gsflag {

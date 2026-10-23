@@ -729,6 +729,29 @@ fn id_flags_validity_checks(state: &mut IdState) -> CTResult<bool> {
         !(state.is_uflag || state.is_gflag || state.is_gsflag)
     };
 
+    if state.is_user_specified && state.is_cflag {
+        return Err(CtSimpleError::new(
+            1,
+            "cannot print security context when user specified",
+        ));
+    }
+
+    let only_choice_count = [
+        state.is_uflag,
+        state.is_gflag,
+        state.is_gsflag,
+        state.is_cflag,
+    ]
+    .into_iter()
+    .filter(|enabled| *enabled)
+    .count();
+    if only_choice_count > 1 {
+        return Err(CtSimpleError::new(
+            1,
+            "cannot print \"only\" of more than one choice",
+        ));
+    }
+
     if (state.is_nflag || state.is_rflag) && is_default_format && !state.is_cflag {
         return Err(CtSimpleError::new(
             1,
@@ -740,12 +763,6 @@ fn id_flags_validity_checks(state: &mut IdState) -> CTResult<bool> {
         return Err(CtSimpleError::new(
             1,
             "option --zero not permitted in default format",
-        ));
-    }
-    if state.is_user_specified && state.is_cflag {
-        return Err(CtSimpleError::new(
-            1,
-            "cannot print security context when user specified",
         ));
     }
     Ok(is_default_format)
@@ -776,25 +793,18 @@ pub fn ct_app() -> Command {
         Arg::new(id_flags::ID_EFFECTIVE_USER)
             .short('u')
             .long(id_flags::ID_EFFECTIVE_USER)
-            .conflicts_with(id_flags::ID_GROUP)
             .help(t!("id.clap.id_effective_user"))
             .overrides_with(id_flags::ID_EFFECTIVE_USER)
             .action(ArgAction::SetTrue),
         Arg::new(id_flags::ID_GROUP)
             .short('g')
             .long(id_flags::ID_GROUP)
-            .conflicts_with(id_flags::ID_EFFECTIVE_USER)
             .help(t!("id.clap.id_group"))
             .overrides_with(id_flags::ID_GROUP)
             .action(ArgAction::SetTrue),
         Arg::new(id_flags::ID_GROUPS)
             .short('G')
             .long(id_flags::ID_GROUPS)
-            .conflicts_with_all([
-                id_flags::ID_GROUP,
-                id_flags::ID_EFFECTIVE_USER,
-                id_flags::ID_CONTEXT,
-            ])
             .help(
                 "Display only the different group IDs as white-space separated numbers, \
                       in no particular order.",
@@ -832,7 +842,6 @@ pub fn ct_app() -> Command {
         Arg::new(id_flags::ID_CONTEXT)
             .short('Z')
             .long(id_flags::ID_CONTEXT)
-            .conflicts_with_all([id_flags::ID_GROUP, id_flags::ID_EFFECTIVE_USER])
             .help(CONTEXT_HELP_TEXT)
             .overrides_with(id_flags::ID_CONTEXT)
             .action(ArgAction::SetTrue),
@@ -1308,7 +1317,7 @@ mod tests {
                 is_nflag: false,
                 is_uflag: true,
                 is_gflag: false,
-                is_gsflag: true,
+                is_gsflag: false,
                 is_rflag: false,
                 is_zflag: false,
                 is_cflag: false,
@@ -1320,6 +1329,22 @@ mod tests {
             let result = id_flags_validity_checks(&mut state);
             assert!(result.is_ok());
             assert!(!result.unwrap()); // 非默认格式返回 false
+        }
+
+        #[test]
+        fn test_invalid_flags_multiple_only_choices() {
+            let matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "-ug"])
+                .expect("GNU-compatible option parsing should defer the conflict");
+            let users = Vec::new();
+            let mut state = id_get_state(&matches, &users);
+
+            let result = id_flags_validity_checks(&mut state);
+
+            assert_eq!(
+                result.unwrap_err().to_string(),
+                "cannot print \"only\" of more than one choice"
+            );
         }
 
         #[test]

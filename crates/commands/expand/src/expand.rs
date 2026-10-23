@@ -750,6 +750,14 @@ fn expand_open(file_path: &OsStr) -> CTResult<BufReader<Box<dyn Read + 'static>>
     }
 }
 
+fn expand_file_error(file: &OsStr, error: &io::Error) -> String {
+    format!(
+        "expand: {}: {}\n",
+        file.to_string_lossy(),
+        ctcore::ct_error::strip_errno(error)
+    )
+}
+
 /// Compute the number of spaces to the next tabstop.
 ///
 /// `tabstops` is the sequence of tabstop locations.
@@ -1078,7 +1086,7 @@ fn expand_to_writer<W: Write>(
                     let n = match chunk_reader.read_until(b'\n', &mut buffer) {
                         Ok(size) => size,
                         Err(e) => {
-                            stderr_text.push_str(&format!("expand: {e}\n"));
+                            stderr_text.push_str(&expand_file_error(file, &e));
                             exit_code = 1;
                             break;
                         }
@@ -1522,10 +1530,10 @@ mod tests {
         use crate::ExpandParseError::SpecifierNotAtStartOfNumber;
         use crate::{
             CharType, DEFAULT_TABSTOP, ExpandCharInfo, ExpandOptions, ExpandParseError, ExpandRow,
-            ExpandState, ExpandTabstopMode, RemainingMode, UTF8_BOM, expand_line,
-            expand_native_semantic, expand_next_char_info, expand_next_tabstop, expand_open,
-            expand_shortcuts, expand_tabstops_parse, expand_tabstops_parse_args, expand_to_writer,
-            expand_write_spaces, write_expand_invalid_option_diagnostic,
+            ExpandState, ExpandTabstopMode, RemainingMode, UTF8_BOM, expand_file_error,
+            expand_line, expand_native_semantic, expand_next_char_info, expand_next_tabstop,
+            expand_open, expand_shortcuts, expand_tabstops_parse, expand_tabstops_parse_args,
+            expand_to_writer, expand_write_spaces, write_expand_invalid_option_diagnostic,
         };
 
         use crate::is_digit_or_comma;
@@ -1924,6 +1932,16 @@ mod tests {
             assert_eq!(output, content);
 
             std::fs::remove_file(file_path).unwrap();
+        }
+
+        #[test]
+        fn test_expand_file_error_includes_operand_without_rust_errno_suffix() {
+            let error = std::io::Error::from_raw_os_error(ctcore::libc::EIO);
+
+            assert_eq!(
+                expand_file_error(std::ffi::OsStr::new("input"), &error),
+                "expand: input: Input/output error\n"
+            );
         }
 
         #[cfg(unix)]

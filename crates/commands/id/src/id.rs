@@ -161,8 +161,22 @@ fn id_flush_stdout(writer: &mut impl Write, stdout_was_closed: bool) -> CTResult
 }
 
 fn id_stdout_write_error(error: io::Error) -> Box<dyn CTError> {
+    #[cfg(all(target_os = "linux", not(test)))]
+    if error.kind() == io::ErrorKind::BrokenPipe {
+        id_terminate_with_sigpipe();
+    }
+
     let detail = id_errno_message(&error).unwrap_or_else(|| strip_errno(&error));
     CtSimpleError::new(1, format!("{}: {detail}", id_gettext("write error")))
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn id_terminate_with_sigpipe() -> ! {
+    unsafe {
+        ctcore::libc::signal(ctcore::libc::SIGPIPE, ctcore::libc::SIG_DFL);
+        ctcore::libc::raise(ctcore::libc::SIGPIPE);
+        ctcore::libc::_exit(128 + ctcore::libc::SIGPIPE);
+    }
 }
 
 #[derive(Debug)]
@@ -416,7 +430,8 @@ pub fn id_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()
         &mut state,
         is_default_format,
         line_ending,
-    );
+    )
+    .map_err(id_stdout_write_error)?;
 
     Ok(())
 }
@@ -455,13 +470,18 @@ fn id_gid_entity(gid: u32, stderr_text: &mut String, exit_code: &mut i32) -> IdE
     }
 }
 
-fn id_write_optional_label<W: Write>(writer: &mut W, value: u32, label: Option<&OsStr>) {
-    write!(writer, "{value}").unwrap();
+fn id_write_optional_label<W: Write>(
+    writer: &mut W,
+    value: u32,
+    label: Option<&OsStr>,
+) -> io::Result<()> {
+    write!(writer, "{value}")?;
     if let Some(label) = label {
-        writer.write_all(b"(").unwrap();
-        writer.write_all(label.as_bytes()).unwrap();
-        writer.write_all(b")").unwrap();
+        writer.write_all(b"(")?;
+        writer.write_all(label.as_bytes())?;
+        writer.write_all(b")")?;
     }
+    Ok(())
 }
 
 fn id_default_classic_text(row: &IdRow) -> String {
@@ -874,7 +894,8 @@ fn id_handle_users<W, U>(
     id_state: &mut IdState,
     is_default_format: bool,
     line_ending: CtLineEnding,
-) where
+) -> io::Result<()>
+where
     W: Write,
     U: AsRef<OsStr>,
 {
@@ -945,7 +966,7 @@ fn id_handle_users<W, U>(
             let gid_string = if id_state.is_nflag {
                 match ct_entries::gid2grp_os(gid) {
                     Ok(name) => {
-                        writer.write_all(name.as_bytes()).unwrap();
+                        writer.write_all(name.as_bytes())?;
                         String::new()
                     }
                     Err(_) => {
@@ -959,7 +980,7 @@ fn id_handle_users<W, U>(
             };
 
             if !gid_string.is_empty() {
-                write!(writer, "{gid_string}").unwrap();
+                write!(writer, "{gid_string}")?;
             }
         }
 
@@ -967,7 +988,7 @@ fn id_handle_users<W, U>(
             let name_string = if id_state.is_nflag {
                 match ct_entries::uid2usr_os(uid) {
                     Ok(name) => {
-                        writer.write_all(name.as_bytes()).unwrap();
+                        writer.write_all(name.as_bytes())?;
                         String::new()
                     }
                     Err(_) => {
@@ -981,7 +1002,7 @@ fn id_handle_users<W, U>(
             };
 
             if !name_string.is_empty() {
-                write!(writer, "{name_string}").unwrap();
+                write!(writer, "{name_string}")?;
             }
         }
 
@@ -1010,19 +1031,19 @@ fn id_handle_users<W, U>(
         if id_state.is_gsflag {
             for (index, &id) in groups.iter().enumerate() {
                 if index != 0 {
-                    writer.write_all(delimiter.as_bytes()).unwrap();
+                    writer.write_all(delimiter.as_bytes())?;
                 }
                 if id_state.is_nflag {
                     match ct_entries::gid2grp_os(id) {
-                        Ok(name) => writer.write_all(name.as_bytes()).unwrap(),
+                        Ok(name) => writer.write_all(name.as_bytes())?,
                         Err(_) => {
                             ct_show_error!("cannot find name for group ID {}", id);
                             set_ct_exit_code(1);
-                            write!(writer, "{id}").unwrap();
+                            write!(writer, "{id}")?;
                         }
                     }
                 } else {
-                    write!(writer, "{id}").unwrap();
+                write!(writer, "{id}")?;
                 }
             }
 
@@ -1032,11 +1053,11 @@ fn id_handle_users<W, U>(
                 ""
             };
 
-            writer.write_all(delimit.as_bytes()).unwrap();
+            writer.write_all(delimit.as_bytes())?;
         }
 
         if is_default_format {
-            id_print(writer, id_state, &groups);
+            id_print(writer, id_state, &groups)?;
         }
         if let Some(error) = groups_error {
             if id_state.is_user_specified {
@@ -1053,12 +1074,14 @@ fn id_handle_users<W, U>(
             }
             set_ct_exit_code(1);
         }
-        write!(writer, "{line_ending}").unwrap();
+        write!(writer, "{line_ending}")?;
 
         if i + 1 >= users.len() {
             break;
         }
     }
+
+    Ok(())
 }
 
 fn id_get_delimiter(state: &mut IdState) -> String {
@@ -1211,37 +1234,37 @@ pub fn ct_app() -> Command {
         .args(&args)
 }
 
-fn id_print<W: Write>(writer: &mut W, id_state: &IdState, groups: &[u32]) {
+fn id_print<W: Write>(writer: &mut W, id_state: &IdState, groups: &[u32]) -> io::Result<()> {
     let uid = id_state.ids.as_ref().map(|ids| ids.uid).unwrap_or(65535);
     let gid = id_state.ids.as_ref().map(|ids| ids.gid).unwrap_or(65535);
     let euid = id_state.ids.as_ref().map(|ids| ids.euid).unwrap_or(65535);
     let egid = id_state.ids.as_ref().map(|ids| ids.egid).unwrap_or(65535);
 
-    write!(writer, "{}", id_gettext("uid=")).unwrap();
-    id_write_optional_label(writer, uid, ct_entries::uid2usr_os(uid).ok().as_deref());
-    write!(writer, "{}", id_gettext(" gid=")).unwrap();
-    id_write_optional_label(writer, gid, ct_entries::gid2grp_os(gid).ok().as_deref());
+    write!(writer, "{}", id_gettext("uid="))?;
+    id_write_optional_label(writer, uid, ct_entries::uid2usr_os(uid).ok().as_deref())?;
+    write!(writer, "{}", id_gettext(" gid="))?;
+    id_write_optional_label(writer, gid, ct_entries::gid2grp_os(gid).ok().as_deref())?;
 
     if !id_state.is_user_specified && (euid != uid) {
-        write!(writer, "{}", id_gettext(" euid=")).unwrap();
-        id_write_optional_label(writer, euid, ct_entries::uid2usr_os(euid).ok().as_deref());
+        write!(writer, "{}", id_gettext(" euid="))?;
+        id_write_optional_label(writer, euid, ct_entries::uid2usr_os(euid).ok().as_deref())?;
     }
 
     if !id_state.is_user_specified && (egid != gid) {
-        write!(writer, "{}", id_gettext(" egid=")).unwrap();
-        id_write_optional_label(writer, egid, ct_entries::gid2grp_os(egid).ok().as_deref());
+        write!(writer, "{}", id_gettext(" egid="))?;
+        id_write_optional_label(writer, egid, ct_entries::gid2grp_os(egid).ok().as_deref())?;
     }
 
     if groups.is_empty() {
-        return;
+        return Ok(());
     }
 
-    write!(writer, "{}", id_gettext(" groups=")).unwrap();
+    write!(writer, "{}", id_gettext(" groups="))?;
     for (index, &gr) in groups.iter().enumerate() {
         if index != 0 {
-            write!(writer, ",").unwrap();
+            write!(writer, ",")?;
         }
-        id_write_optional_label(writer, gr, ct_entries::gid2grp_os(gr).ok().as_deref());
+        id_write_optional_label(writer, gr, ct_entries::gid2grp_os(gr).ok().as_deref())?;
     }
 
     if id_state.is_selinux_supported
@@ -1256,10 +1279,10 @@ fn id_print<W: Write>(writer: &mut W, id_state: &IdState, groups: &[u32]) {
                 "{}{}",
                 id_gettext(" context="),
                 String::from_utf8_lossy(bytes)
-            )
-            .unwrap();
+            )?;
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1310,6 +1333,26 @@ mod tests {
         let error = id_flush_stdout(&mut output, true).unwrap_err();
 
         assert_eq!(error.to_string(), "write error: Bad file descriptor");
+    }
+
+    #[test]
+    fn test_broken_pipe_is_returned_as_write_error_in_tests() {
+        struct BrokenPipeWriter;
+
+        impl Write for BrokenPipeWriter {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                Ok(bytes.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Err(io::Error::from_raw_os_error(ctcore::libc::EPIPE))
+            }
+        }
+
+        let mut writer = BrokenPipeWriter;
+        let error = id_flush_stdout(&mut writer, false).unwrap_err();
+
+        assert_eq!(error.to_string(), "write error: Broken pipe");
     }
 
     #[test]
@@ -1377,7 +1420,7 @@ mod tests {
             let line_ending = CtLineEnding::Newline;
             let mut output = Cursor::new(Vec::new());
 
-            id_handle_users(&mut output, users, &mut state, true, line_ending);
+            id_handle_users(&mut output, users, &mut state, true, line_ending).unwrap();
 
             let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
             assert!(output_str.contains("uid=0"));
@@ -1404,7 +1447,7 @@ mod tests {
             let line_ending = CtLineEnding::Newline;
             let mut output = Cursor::new(Vec::new());
 
-            id_handle_users(&mut output, users, &mut state, true, line_ending);
+            id_handle_users(&mut output, users, &mut state, true, line_ending).unwrap();
 
             let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
             assert!(output_str.contains("uid="));
@@ -1431,7 +1474,7 @@ mod tests {
             let line_ending = CtLineEnding::Newline;
             let mut output = Cursor::new(Vec::new());
 
-            id_handle_users(&mut output, users, &mut state, false, line_ending);
+            id_handle_users(&mut output, users, &mut state, false, line_ending).unwrap();
 
             let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
 
@@ -1458,7 +1501,7 @@ mod tests {
             let line_ending = CtLineEnding::Newline;
             let mut output = Cursor::new(Vec::new());
 
-            id_handle_users(&mut output, users, &mut state, false, line_ending);
+            id_handle_users(&mut output, users, &mut state, false, line_ending).unwrap();
 
             let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
 
@@ -1485,7 +1528,7 @@ mod tests {
             let line_ending = CtLineEnding::Newline;
             let mut output = Cursor::new(Vec::new());
 
-            id_handle_users(&mut output, users, &mut state, false, line_ending);
+            id_handle_users(&mut output, users, &mut state, false, line_ending).unwrap();
 
             let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
 
@@ -1513,7 +1556,7 @@ mod tests {
             let line_ending = CtLineEnding::Newline;
             let mut output = Cursor::new(Vec::new());
 
-            id_handle_users(&mut output, users, &mut state, false, line_ending);
+            id_handle_users(&mut output, users, &mut state, false, line_ending).unwrap();
 
             let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
 
@@ -1544,7 +1587,7 @@ mod tests {
             let line_ending = CtLineEnding::Newline;
             let mut output = Cursor::new(Vec::new());
 
-            id_handle_users(&mut output, users, &mut state, true, line_ending);
+            id_handle_users(&mut output, users, &mut state, true, line_ending).unwrap();
 
             let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
             assert!(output_str.contains("uid=0"));
@@ -1571,7 +1614,7 @@ mod tests {
             let line_ending = CtLineEnding::Newline;
             let mut output = Cursor::new(Vec::new());
 
-            id_handle_users(&mut output, users, &mut state, false, line_ending);
+            id_handle_users(&mut output, users, &mut state, false, line_ending).unwrap();
 
             let output_str = String::from_utf8(output.into_inner()).expect("输出不是有效的 UTF-8");
             assert!(output_str.contains("\0"));
@@ -1999,7 +2042,7 @@ mod tests {
             let label = OsString::from_vec(vec![b'u', 0xff]);
             let mut output = Vec::new();
 
-            id_write_optional_label(&mut output, 424242, Some(label.as_os_str()));
+            id_write_optional_label(&mut output, 424242, Some(label.as_os_str())).unwrap();
 
             assert_eq!(output, b"424242(u\xff)");
         }
@@ -2049,7 +2092,7 @@ mod tests {
             let groups = vec![1000, 10, 20];
 
             let mut output = Vec::new();
-            id_print(&mut output, &id_state, &groups);
+            id_print(&mut output, &id_state, &groups).unwrap();
             let output_str = String::from_utf8(output).expect("输出不是有效的 UTF-8");
 
             assert!(output_str.contains("uid=1000"));
@@ -2081,7 +2124,7 @@ mod tests {
             let groups = vec![1000, 10, 20];
 
             let mut output = Vec::new();
-            id_print(&mut output, &id_state, &groups);
+            id_print(&mut output, &id_state, &groups).unwrap();
             let output_str = String::from_utf8(output).expect("输出不是有效的 UTF-8");
 
             assert!(output_str.contains("uid=1000"));
@@ -2113,7 +2156,7 @@ mod tests {
             let groups = vec![1000, 10, 20];
 
             let mut output = Vec::new();
-            id_print(&mut output, &id_state, &groups);
+            id_print(&mut output, &id_state, &groups).unwrap();
             let output_str = String::from_utf8(output).expect("输出不是有效的 UTF-8");
 
             assert!(output_str.contains("uid=2000"));
@@ -2147,7 +2190,7 @@ mod tests {
             let groups = vec![1000, 10, 20];
 
             let mut output = Vec::new();
-            id_print(&mut output, &id_state, &groups);
+            id_print(&mut output, &id_state, &groups).unwrap();
             let output_str = String::from_utf8(output).expect("输出不是有效的 UTF-8");
 
             assert!(output_str.contains("uid=1000"));
@@ -2186,7 +2229,7 @@ mod tests {
             let groups = vec![1000, 10, 20];
 
             let mut output = Vec::new();
-            id_print(&mut output, &id_state, &groups);
+            id_print(&mut output, &id_state, &groups).unwrap();
             let output_str = String::from_utf8(output).expect("输出不是有效的 UTF-8");
 
             assert!(output_str.contains("groups=1000"));
@@ -2216,7 +2259,7 @@ mod tests {
             let groups = vec![2000, 20, 30];
 
             let mut output = Vec::new();
-            id_print(&mut output, &id_state, &groups);
+            id_print(&mut output, &id_state, &groups).unwrap();
             let output_str = String::from_utf8(output).expect("输出不是有效的 UTF-8");
 
             assert!(output_str.contains("uid=2000"));
@@ -2248,7 +2291,7 @@ mod tests {
             let groups = vec![];
 
             let mut output = Vec::new();
-            id_print(&mut output, &id_state, &groups);
+            id_print(&mut output, &id_state, &groups).unwrap();
             let output_str = String::from_utf8(output).expect("输出不是有效的 UTF-8");
 
             assert!(output_str.contains("uid=65535"));
@@ -2281,7 +2324,7 @@ mod tests {
             let groups = vec![unknown_gid];
 
             let mut output = Vec::new();
-            id_print(&mut output, &id_state, &groups);
+            id_print(&mut output, &id_state, &groups).unwrap();
             let output_str = String::from_utf8(output).expect("输出不是有效的 UTF-8");
 
             assert!(output_str.contains(&format!(" gid={unknown_gid}")));

@@ -40,10 +40,8 @@ use clap::ArgMatches;
 use clap::Command;
 use clap::crate_version;
 
-use ctcore::ct_display::Quotable;
 use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
-use ctcore::ct_error::FromIo;
 use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_locale::{LcCategory, hard_locale};
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
@@ -80,6 +78,11 @@ static LONG_HELP: &str = "";
 static DEFAULT_TABSTOP: usize = 8;
 const UTF8_BOM: [u8; 3] = [0xEF, 0xBB, 0xBF];
 const SPACE_BUFFER: [u8; 8192] = [b' '; 8192];
+const EXPAND_FILE_QUOTING_STYLE: CtQuotingStyle = CtQuotingStyle::Shell {
+    escape: true,
+    always_quote: false,
+    show_control: false,
+};
 
 /// The mode to use when replacing tabs beyond the last one specified in
 /// the `--tabs` argument.
@@ -199,33 +202,39 @@ impl fmt::Display for ExpandParseError {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::InvalidCharacter(s) => {
-                let quoted = escape_name(
-                    s.as_ref(),
-                    &CtQuotingStyle::C {
-                        quotes: CtQuotes::Locale,
-                    },
-                );
+                let quoted = expand_quote_tab_value(s);
                 write!(fmt, "tab size contains invalid character(s): {quoted}")
             }
             Self::SpecifierNotAtStartOfNumber(specifier, s) => write!(
                 fmt,
                 "{} specifier not at start of number: {}",
-                specifier.quote(),
-                s.quote(),
+                expand_quote_tab_value(specifier),
+                expand_quote_tab_value(s),
             ),
             Self::SpecifierOnlyAllowedWithLastValue(specifier) => write!(
                 fmt,
                 "{} specifier only allowed with the last value",
-                specifier.quote()
+                expand_quote_tab_value(specifier)
             ),
             Self::SpecifierConflict => {
                 write!(fmt, "'/' specifier is mutually exclusive with '+'")
             }
             Self::TabSizeCannotBeZero => write!(fmt, "tab size cannot be 0"),
-            Self::TabSizeTooLarge(s) => write!(fmt, "tab stop is too large {}", s.quote()),
+            Self::TabSizeTooLarge(s) => {
+                write!(fmt, "tab stop is too large {}", expand_quote_tab_value(s))
+            }
             Self::TabSizesMustBeAscending => write!(fmt, "tab sizes must be ascending"),
         }
     }
+}
+
+fn expand_quote_tab_value(value: &str) -> String {
+    escape_name(
+        OsStr::new(value),
+        &CtQuotingStyle::C {
+            quotes: CtQuotes::Locale,
+        },
+    )
 }
 
 /// 表示应用程序的配置选项。
@@ -739,21 +748,21 @@ fn expand_tabstops_parse_args(
     }
 }
 
-fn expand_open(file_path: &OsStr) -> CTResult<BufReader<Box<dyn Read + 'static>>> {
+fn expand_open(file_path: &OsStr) -> io::Result<BufReader<Box<dyn Read + 'static>>> {
     let file_buffer;
     if file_path == OsStr::new("-") {
         Ok(BufReader::new(ctcore::ct_io::stdin_reader_box()))
     } else {
-        file_buffer = File::open(Path::new(file_path))
-            .map_err_context(|| file_path.to_string_lossy().into_owned())?;
+        file_buffer = File::open(Path::new(file_path))?;
         Ok(BufReader::new(Box::new(file_buffer) as Box<dyn Read>))
     }
 }
 
 fn expand_file_error(file: &OsStr, error: &io::Error) -> String {
+    let quoted_file = escape_name(file, &EXPAND_FILE_QUOTING_STYLE);
     format!(
         "expand: {}: {}\n",
-        file.to_string_lossy(),
+        quoted_file,
         ctcore::ct_error::strip_errno(error)
     )
 }
@@ -1078,7 +1087,8 @@ fn expand_to_writer<W: Write, D: Write>(
     'files: for file in &options.files {
         let path = Path::new(file);
         if path.is_dir() {
-            let message = format!("expand: {}: Is a directory\n", file.to_string_lossy());
+            let message =
+                expand_file_error(file, &io::Error::from_raw_os_error(ctcore::libc::EISDIR));
             expand_report_error(&mut stderr_text, diagnostics, &message)?;
             exit_code = 1;
             continue;
@@ -1162,7 +1172,7 @@ fn expand_to_writer<W: Write, D: Write>(
                 }
             }
             Err(e) => {
-                let message = format!("expand: {e}\n");
+                let message = expand_file_error(file, &e);
                 expand_report_error(&mut stderr_text, diagnostics, &message)?;
                 exit_code = 1;
                 continue;
@@ -1958,6 +1968,20 @@ mod tests {
             assert_eq!(
                 expand_file_error(std::ffi::OsStr::new("input"), &error),
                 "expand: input: Input/output error\n"
+            );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_expand_file_error_shell_escapes_control_bytes() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let file = OsString::from_vec(b"missing\nbyte-\x01".to_vec());
+            let error = std::io::Error::from_raw_os_error(ctcore::libc::ENOENT);
+
+            assert_eq!(
+                expand_file_error(&file, &error),
+                "expand: 'missing'$'\\n''byte-'$'\\001': No such file or directory\n"
             );
         }
 

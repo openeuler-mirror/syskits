@@ -272,7 +272,7 @@ impl ExpandOptions {
     fn new(args_match: &ArgMatches) -> Result<Self, ExpandParseError> {
         // 从命令行解析自定义制表位，或使用默认值。
         let (remaining_mode, tabstops) = match args_match.get_many::<String>(opt_flags::TABS) {
-            Some(s) => expand_tabstops_parse(&s.map(|s| s.as_str()).collect::<Vec<_>>().join(","))?,
+            Some(s) => expand_tabstops_parse_args(&s.map(|s| s.as_str()).collect::<Vec<_>>())?,
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 
@@ -665,11 +665,56 @@ fn expand_tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ExpandP
         remaining_mode = RemainingMode::None;
     }
 
-    // 如果制表位数量小于2，则重置剩余模式为 None
-    if numbers.len() < 2 {
-        remaining_mode = RemainingMode::None;
-    }
     Ok((remaining_mode, numbers))
+}
+
+fn expand_tabstops_parse_args(
+    args: &[&str],
+) -> Result<(RemainingMode, Vec<usize>), ExpandParseError> {
+    let mut tabstops = Vec::new();
+    let mut remaining_step = None;
+
+    for arg in args {
+        if arg.trim_matches(is_space_or_comma).is_empty() {
+            continue;
+        }
+
+        let (mode, mut parsed) = expand_tabstops_parse(arg)?;
+        if mode == RemainingMode::None {
+            tabstops.extend(parsed);
+            continue;
+        }
+
+        let step = parsed.pop().expect("remaining mode requires a tab stop");
+        tabstops.extend(parsed);
+        if let Some((previous_mode, _)) = remaining_step {
+            return Err(ExpandParseError::SpecifierOnlyAllowedWithLastValue(
+                match previous_mode {
+                    RemainingMode::Slash => "/",
+                    RemainingMode::Plus => "+",
+                    RemainingMode::None => unreachable!(),
+                }
+                .to_string(),
+            ));
+        }
+        remaining_step = Some((mode, step));
+    }
+
+    for pair in tabstops.windows(2) {
+        if pair[0] >= pair[1] {
+            return Err(ExpandParseError::TabSizesMustBeAscending);
+        }
+    }
+
+    match (tabstops.is_empty(), remaining_step) {
+        (true, None) => Ok((RemainingMode::None, vec![DEFAULT_TABSTOP])),
+        (true, Some((_, step))) => Ok((RemainingMode::None, vec![step])),
+        (false, Some((mode, step))) => {
+            tabstops.push(step);
+            Ok((mode, tabstops))
+        }
+        (false, None) => Ok((RemainingMode::None, tabstops)),
+    }
 }
 
 fn expand_open(file_path: &str) -> CTResult<BufReader<Box<dyn Read + 'static>>> {
@@ -1409,7 +1454,7 @@ mod tests {
             CharType, DEFAULT_TABSTOP, ExpandCharInfo, ExpandOptions, ExpandParseError, ExpandRow,
             ExpandState, ExpandTabstopMode, RemainingMode, UTF8_BOM, expand_line,
             expand_native_semantic, expand_next_char_info, expand_next_tabstop, expand_open,
-            expand_shortcuts, expand_tabstops_parse, expand_to_writer,
+            expand_shortcuts, expand_tabstops_parse, expand_tabstops_parse_args, expand_to_writer,
         };
 
         use crate::is_digit_or_comma;
@@ -1524,6 +1569,14 @@ mod tests {
             assert_eq!(
                 expand_tabstops_parse("3\t7"),
                 Ok((RemainingMode::None, vec![3, 7]))
+            );
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_repeated_arguments() {
+            assert_eq!(
+                expand_tabstops_parse_args(&["3,/4", "7"]),
+                Ok((RemainingMode::Slash, vec![3, 7, 4]))
             );
         }
 

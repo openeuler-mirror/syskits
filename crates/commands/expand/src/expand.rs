@@ -466,11 +466,23 @@ fn expand_mixed_shortcut(arg: &str) -> Option<Vec<OsString>> {
 fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
     let mut processed_args = Vec::with_capacity(args.len());
     let mut consume_next_as_value = false;
+    let mut options_ended = false;
 
     for arg in args {
         if consume_next_as_value {
             processed_args.push(arg);
             consume_next_as_value = false;
+            continue;
+        }
+
+        if options_ended {
+            processed_args.push(arg);
+            continue;
+        }
+
+        if arg == "--" {
+            processed_args.push(arg);
+            options_ended = true;
             continue;
         }
 
@@ -1620,6 +1632,16 @@ mod tests {
         fn test_expand_shortcuts_rejects_leading_comma() {
             let malformed = vec![OsString::from("-,"), OsString::from("-,,4")];
             assert_eq!(expand_shortcuts(malformed.clone()), malformed);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_preserves_arguments_after_double_dash() {
+            let args = vec![
+                OsString::from("expand"),
+                OsString::from("--"),
+                OsString::from("-4"),
+            ];
+            assert_eq!(expand_shortcuts(args.clone()), args);
         }
 
         // #[test]

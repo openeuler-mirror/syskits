@@ -324,9 +324,63 @@ fn expand_max_tabstop_width(tabstops: &[usize], remaining_mode: &RemainingMode) 
 pub fn expand_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args_match = ct_app().try_get_matches_from(expand_shortcuts(args.collect()))?;
+    let args = args.collect::<Vec<_>>();
+    expand_validate_options(&args)?;
+    let args_match = ct_app().try_get_matches_from(expand_shortcuts(args))?;
 
     expand(&ExpandOptions::new(&args_match)?)
+}
+
+fn expand_long_option_with_unexpected_argument(arg: &str) -> Option<&'static str> {
+    let (candidate, _) = arg.strip_prefix("--")?.split_once('=')?;
+    (!candidate.is_empty() && "initial".starts_with(candidate)).then_some("initial")
+}
+
+fn expand_long_option_consumes_next(arg: &str) -> bool {
+    let Some(candidate) = arg.strip_prefix("--") else {
+        return false;
+    };
+    !candidate.contains('=') && !candidate.is_empty() && "tabs".starts_with(candidate)
+}
+
+fn expand_short_option_consumes_next(arg: &str) -> bool {
+    let Some(options) = arg.strip_prefix('-') else {
+        return false;
+    };
+
+    for (index, option) in options.char_indices() {
+        match option {
+            't' => return index + option.len_utf8() == options.len(),
+            '0'..='9' => return false,
+            _ => {}
+        }
+    }
+    false
+}
+
+fn expand_validate_options(args: &[OsString]) -> CTResult<()> {
+    let mut index = 1;
+    while index < args.len() {
+        let arg = args[index].to_string_lossy();
+        if arg == "--" {
+            break;
+        }
+
+        if let Some(option) = expand_long_option_with_unexpected_argument(&arg) {
+            ctcore::ct_show_error!("option '--{option}' doesn't allow an argument");
+            eprintln!(
+                "Try '{} --help' for more information.",
+                ctcore::ct_help_utility_name()
+            );
+            return Err(1.into());
+        }
+
+        if expand_long_option_consumes_next(&arg) || expand_short_option_consumes_next(&arg) {
+            index += 1;
+        }
+        index += 1;
+    }
+    Ok(())
 }
 
 pub fn ct_app() -> Command {
@@ -1287,6 +1341,22 @@ mod tests {
             assert!(is_digit_or_comma('1'));
             assert!(is_digit_or_comma(','));
             assert!(!is_digit_or_comma('a'));
+        }
+
+        #[test]
+        fn test_expand_long_option_with_unexpected_argument() {
+            assert_eq!(
+                super::super::expand_long_option_with_unexpected_argument("--initial=value"),
+                Some("initial")
+            );
+            assert_eq!(
+                super::super::expand_long_option_with_unexpected_argument("--i=value"),
+                Some("initial")
+            );
+            assert_eq!(
+                super::super::expand_long_option_with_unexpected_argument("--tabs=4"),
+                None
+            );
         }
 
         #[test]

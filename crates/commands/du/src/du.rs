@@ -802,7 +802,7 @@ fn du_process_entry(
     };
 
     for pattern in &du_opts.excludes {
-        if pattern.matches(&this_stat.path.to_string_lossy())
+        if du_exclude_pattern_matches_path(pattern, &this_stat.path)
             || pattern.matches(entry_name.to_str().unwrap())
         {
             if du_opts.verbose {
@@ -1207,6 +1207,15 @@ fn du_parse_exclude_pattern(pattern: &str) -> Result<Pattern, glob::PatternError
             }
         }
     }
+}
+
+fn du_exclude_pattern_matches_path(pattern: &Pattern, path: &Path) -> bool {
+    let path = path.to_string_lossy();
+    pattern.matches(&path)
+        || path.match_indices('/').any(|(index, _)| {
+            let suffix = &path[index + 1..];
+            !suffix.starts_with('/') && pattern.matches(suffix)
+        })
 }
 
 /**
@@ -1782,7 +1791,7 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
         if !&du_traversal_options.excludes.is_empty() {
             let path_string = path.to_string_lossy();
             for pattern in &du_traversal_options.excludes {
-                if pattern.matches(&path_string) {
+                if du_exclude_pattern_matches_path(pattern, &path) {
                     // 如果目录被排除，则在 verbose 模式下打印信息，并跳过该目录
                     if du_traversal_options.verbose {
                         println!("{} ignored", path_string.quote());
@@ -1957,9 +1966,8 @@ pub fn du_native_semantic(args: impl ctcore::Args) -> CTResult<DuSemantic> {
 
     'loop_file: for path in files_path {
         if !du_traversal_options.excludes.is_empty() {
-            let path_string = path.to_string_lossy();
             for pattern in &du_traversal_options.excludes {
-                if pattern.matches(&path_string) {
+                if du_exclude_pattern_matches_path(pattern, &path) {
                     continue 'loop_file;
                 }
             }
@@ -2872,6 +2880,20 @@ mod tests {
         assert!(bracket.matches("["));
         assert!(mixed.matches("foo[bar-suffix"));
         assert!(!mixed.matches("foobar-suffix"));
+    }
+
+    #[test]
+    fn test_exclude_pattern_matches_path_suffix() {
+        let pattern = du_parse_exclude_pattern("sub/leaf").unwrap();
+
+        assert!(du_exclude_pattern_matches_path(
+            &pattern,
+            Path::new("root/sub/leaf")
+        ));
+        assert!(!du_exclude_pattern_matches_path(
+            &pattern,
+            Path::new("root/other/leaf")
+        ));
     }
 
     #[test]

@@ -45,6 +45,7 @@ use ctcore::ct_error::CTError;
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::FromIo;
 use ctcore::ct_error::set_ct_exit_code;
+use ctcore::ct_locale::{LcCategory, hard_locale};
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
 
 use std::error::Error;
@@ -283,7 +284,7 @@ impl ExpandOptions {
 
         // 从命令行参数中提取初始和UTF-8标志。
         let is_iflag = args_match.get_flag(opt_flags::INITIAL);
-        let is_uflag = !args_match.get_flag(opt_flags::NO_UTF8);
+        let is_uflag = !args_match.get_flag(opt_flags::NO_UTF8) && hard_locale(LcCategory::LcCtype);
 
         // 收集要处理的文件列表。如果没有指定文件，则默认使用标准输入。
         let files: Vec<OsString> = match args_match.get_many::<OsString>(opt_flags::FILES) {

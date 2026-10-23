@@ -309,12 +309,34 @@ impl HashsumFlags {
             .try_get_one(hashsum_flags::NO_NAMES)
             .unwrap_or(None)
             .unwrap_or(&false);
-        let is_status_explicit = matches.get_flag(hashsum_flags::STATUS);
-        let is_quiet_explicit = matches.get_flag(hashsum_flags::QUIET);
         let is_strict = matches.get_flag(hashsum_flags::STRICT);
-        let is_warn_explicit = matches.get_flag(hashsum_flags::WARN);
         let is_ignore_missing = matches.get_flag(hashsum_flags::IGNORE_MISSING);
         let is_zero = matches.get_flag(hashsum_flags::ZERO);
+
+        let last_control = [
+            hashsum_flags::STATUS,
+            hashsum_flags::WARN,
+            hashsum_flags::QUIET,
+        ]
+        .into_iter()
+        .filter_map(|option| {
+            if !matches.get_flag(option) {
+                return None;
+            }
+            matches
+                .indices_of(option)
+                .and_then(|mut indices| indices.next_back())
+                .map(|index| (index, option))
+        })
+        .max_by_key(|(index, _)| *index)
+        .map(|(_, option)| option);
+
+        let (is_status, is_quiet, is_warn) = match last_control {
+            Some(hashsum_flags::STATUS) => (true, true, false),
+            Some(hashsum_flags::WARN) => (false, false, true),
+            Some(hashsum_flags::QUIET) => (false, true, false),
+            _ => (false, false, false),
+        };
 
         if is_tag && !is_binary {
             return Err(CTsageError::new(1, "--tag does not support --text mode"));
@@ -322,10 +344,10 @@ impl HashsumFlags {
 
         if !is_check {
             for (is_present, option_name) in [
-                (is_quiet_explicit, "--quiet"),
-                (is_status_explicit, "--status"),
+                (is_quiet, "--quiet"),
+                (is_status, "--status"),
                 (is_strict, "--strict"),
-                (is_warn_explicit, "--warn"),
+                (is_warn, "--warn"),
                 (is_ignore_missing, "--ignore-missing"),
             ] {
                 if is_present {
@@ -361,12 +383,6 @@ impl HashsumFlags {
                 "the --binary and --text options are meaningless when verifying checksums",
             ));
         }
-
-        let is_status = is_status_explicit;
-        // quiet 模式在明确指定或 status 模式下激活
-        let is_quiet = is_quiet_explicit || is_status;
-        // status 模式下禁用警告
-        let is_warn = is_warn_explicit && !is_status;
 
         Ok(Self {
             algoname,

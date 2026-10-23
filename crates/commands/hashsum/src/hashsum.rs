@@ -2055,7 +2055,7 @@ fn create_check_regexes(flags: &HashsumFlags) -> Result<(Regex, Regex, String), 
     let gnu_re = gnu_re_template(&bytes_marker, r"(?P<binary>[ \*])?")?;
 
     let bsd_algorithm = if flags.algoname == "BLAKE2" {
-        r"BLAKE2b(?:-[0-9]+)?"
+        r"BLAKE2b(?:-(?P<tagBits>[0-9]+))?"
     } else {
         flags.algoname
     };
@@ -2105,12 +2105,23 @@ fn parse_hash_line(
                 .map_err(|_| ParseLineError::RegexError)
         }
         None => match bsd_re.captures(&line) {
-            Some(caps) => Ok((
-                caps.name("fileName").unwrap().as_str().to_string(),
-                caps.name("digest").unwrap().as_str().to_ascii_lowercase(),
-                true,
-                caps.name("escaped").is_some(),
-            )),
+            Some(caps) => {
+                let digest = caps.name("digest").unwrap().as_str();
+                if let Some(tag_bits) = caps.name("tagBits") {
+                    let valid_tag = tag_bits.as_str().parse::<usize>().is_ok_and(|bits| {
+                        (8..=512).contains(&bits) && bits % 8 == 0 && digest.len() == bits / 4
+                    });
+                    if !valid_tag {
+                        return Err(ParseLineError::FormatError);
+                    }
+                }
+                Ok((
+                    caps.name("fileName").unwrap().as_str().to_string(),
+                    digest.to_ascii_lowercase(),
+                    true,
+                    caps.name("escaped").is_some(),
+                ))
+            }
             None => Err(ParseLineError::FormatError),
         },
     };

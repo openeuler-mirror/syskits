@@ -147,8 +147,13 @@ impl Tool for Id {
 fn id_run_buffered<W: Write>(writer: W, args: impl ctcore::Args) -> CTResult<()> {
     let mut writer = io::BufWriter::new(writer);
     id_main(&mut writer, args)?;
-    writer.flush()?;
+    writer.flush().map_err(id_stdout_write_error)?;
     Ok(())
+}
+
+fn id_stdout_write_error(error: io::Error) -> Box<dyn CTError> {
+    let detail = id_errno_message(&error).unwrap_or_else(|| strip_errno(&error));
+    CtSimpleError::new(1, format!("{}: {detail}", id_gettext("write error")))
 }
 
 #[derive(Debug)]
@@ -1278,6 +1283,16 @@ mod tests {
 
         assert!(output.ends_with(b"\n"));
         assert!(output.starts_with(b"uid=0(root)"));
+    }
+
+    #[test]
+    fn test_stdout_error_has_gnu_write_error_prefix() {
+        let error = id_stdout_write_error(io::Error::from_raw_os_error(ctcore::libc::ENOSPC));
+
+        assert_eq!(
+            error.to_string(),
+            "write error: No space left on device"
+        );
     }
 
     #[test]

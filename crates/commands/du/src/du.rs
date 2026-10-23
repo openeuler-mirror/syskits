@@ -1553,6 +1553,7 @@ impl DuStatPrinter {
         stdout.write_all(self.du_render_stat_prefix(du_stat, size)?.as_bytes())?;
         du_write_path(&mut stdout, &du_stat.path)?;
         stdout.write_all(format!("{}", self.line_ending).as_bytes())?;
+        stdout.flush()?;
         Ok(())
     }
 }
@@ -1716,16 +1717,45 @@ fn du_to_magnitude_and_suffix(n: u128, bases: &[u128], suffixes: &[&'static str]
     }
 }
 
-/**
- * 从给定的文件名或标准输入读取文件。
- *
- * 如果文件名是"-"，则从标准输入读取。如果文件名是目录，则返回错误。
- * 尝试打开文件，如果文件不存在或打开时发生其他错误，则返回相应的错误。
- *
- * 文件名通过零字节分隔。读取的路径按输入顺序添加到结果向量中。
- * 如果遇到零字节分隔的空路径，则视为错误。
- */
-fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
+struct DuFiles0Paths {
+    filename: String,
+    records: std::io::Split<Box<dyn BufRead>>,
+    record_number: usize,
+}
+
+impl Iterator for DuFiles0Paths {
+    type Item = io::Result<PathBuf>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let path = match self.records.next()? {
+                Ok(path) => path,
+                Err(error) => return Some(Err(error)),
+            };
+            self.record_number += 1;
+
+            if path.is_empty() {
+                ct_show_error!(
+                    "{}:{}: invalid zero-length file name",
+                    self.filename,
+                    self.record_number
+                );
+                set_ct_exit_code(1);
+                continue;
+            }
+
+            if self.filename == "-" && path == b"-" {
+                ct_show_error!("{DU_FILES0_STDIN_DASH_DIAGNOSTIC}");
+                set_ct_exit_code(1);
+                continue;
+            }
+
+            return Some(Ok(du_path_from_bytes(path)));
+        }
+    }
+}
+
+fn du_files_from_iter(filename: &str) -> io::Result<DuFiles0Paths> {
     // 根据文件名选择读取来源：标准输入或文件。
     let reader: Box<dyn BufRead> = if filename == "-" {
         Box::new(BufReader::new(du_files0_stdin_reader()?))
@@ -1750,31 +1780,15 @@ fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
         }
     };
 
-    let mut paths_buf = Vec::new();
+    Ok(DuFiles0Paths {
+        filename: filename.to_string(),
+        records: reader.split(b'\0'),
+        record_number: 0,
+    })
+}
 
-    // 遍历读取的内容，根据零字节分隔的路径进行处理。
-    for (i, line) in reader.split(b'\0').enumerate() {
-        let path = line?;
-
-        // 空路径被视为错误。
-        if path.is_empty() {
-            let line_number = i + 1;
-            ct_show_error!("{filename}:{line_number}: invalid zero-length file name");
-            set_ct_exit_code(1);
-        } else {
-            // 【核心修复】：拦截在从 stdin 读取列表时，列表内容出现 "-" 的套娃情况
-            if filename == "-" && path == b"-" {
-                ct_show_error!("{DU_FILES0_STDIN_DASH_DIAGNOSTIC}");
-                set_ct_exit_code(1);
-                continue; // 拒绝将 '-' 加入执行队列，避免后续报 cannot access 的错
-            }
-
-            // 保留每条记录；是否按inode去重由后续-l遍历选项决定。
-            paths_buf.push(du_path_from_bytes(path));
-        }
-    }
-
-    Ok(paths_buf)
+fn du_read_files_from(filename: &str) -> io::Result<Vec<PathBuf>> {
+    du_files_from_iter(filename)?.collect()
 }
 
 fn du_files0_stdin_reader() -> io::Result<Box<dyn Read>> {
@@ -1891,9 +1905,9 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
         ct_show_warning!("{warning}");
     }
 
-    // 处理输入文件列表
-    let files_path = if let Some(file_from) = du_last_files0_from(&args_match) {
-        // 从文件中读取文件列表，处理特殊值 "-" 表示标准输入
+    // 处理输入文件列表。--files0-from保留为惰性来源，避免在遍历前读到EOF。
+    let files_from = du_last_files0_from(&args_match).cloned();
+    let files_path = if files_from.is_some() {
         if args_match.get_one::<PathBuf>(opt_flags::FILE).is_some() {
             return Err(std::io::Error::other(format!(
                 "extra operand {}\nfile operands cannot be combined with --files0-from",
@@ -1904,8 +1918,7 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
             ))
             .into());
         }
-
-        du_read_files_from(file_from)?
+        Vec::new()
     } else {
         // 直接从命令行参数获取文件列表
         match args_match.get_one::<PathBuf>(opt_flags::FILE) {
@@ -1923,7 +1936,7 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     let du_size_format = du_get_size_format(&args_match)?;
 
     // 解析遍历选项
-    let du_traversal_options = DuTraversalOptions {
+    let mut du_traversal_options = DuTraversalOptions {
         all: args_match.get_flag(opt_flags::ALL),
         separate_dirs: args_match.get_flag(opt_flags::SEPARATE_DIRS),
         one_file_system: args_match.get_flag(opt_flags::ONE_FILE_SYSTEM),
@@ -1946,6 +1959,13 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
         ct_show_warning!("{warning}");
     }
 
+    let path_source: Box<dyn Iterator<Item = io::Result<PathBuf>>> =
+        if let Some(file_from) = files_from.as_deref() {
+            Box::new(du_files_from_iter(file_from)?)
+        } else {
+            Box::new(files_path.into_iter().map(Ok::<_, io::Error>))
+        };
+
     // 使用独立线程进行输出打印，以便在计算仍在进行时能打印完成的结果
     let (print_tx, rx) = mpsc::channel::<CTResult<StatPrintInfo>>();
     let printing_thread = thread::spawn(move || du_stat_printer.du_print_stats(&rx));
@@ -1954,7 +1974,15 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     let mut seen_inodes: HashSet<DuFileInfo> = HashSet::new();
 
     // 遍历文件列表，对每个文件进行统计
-    'loop_file: for path in files_path {
+    'loop_file: for path in path_source {
+        let path = path?;
+        if files_from.is_some() {
+            if let DuDeref::Args(paths) = &mut du_traversal_options.dereference {
+                paths.clear();
+                paths.push(path.clone());
+            }
+        }
+
         // 如果配置了排除模式，则检查当前路径是否被排除
         if !&du_traversal_options.excludes.is_empty() {
             let path_string = path.to_string_lossy();
@@ -11115,6 +11143,17 @@ mod tests_fn {
         assert_eq!(paths.len(), 2);
         assert_eq!(paths[0].as_os_str().as_bytes(), b"raw\xff");
         assert_eq!(paths[1], PathBuf::from("ascii"));
+    }
+
+    #[test]
+    fn test_ct_fn_files0_iterator_yields_records_incrementally() {
+        ctcore::ct_io::with_injected_stdin(b"first\0second\0".to_vec(), || {
+            let mut paths = du_files_from_iter("-").unwrap();
+
+            assert_eq!(paths.next().unwrap().unwrap(), PathBuf::from("first"));
+            assert_eq!(paths.next().unwrap().unwrap(), PathBuf::from("second"));
+            assert!(paths.next().is_none());
+        });
     }
 
     #[cfg(unix)]

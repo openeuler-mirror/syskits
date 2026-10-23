@@ -183,6 +183,7 @@ enum ExpandParseError {
     InvalidCharacter(String),
     SpecifierNotAtStartOfNumber(String, String),
     SpecifierOnlyAllowedWithLastValue(String),
+    SpecifierConflict,
     TabSizeCannotBeZero,
     TabSizeTooLarge(String),
     TabSizesMustBeAscending,
@@ -214,6 +215,9 @@ impl fmt::Display for ExpandParseError {
                 "{} specifier only allowed with the last value",
                 specifier.quote()
             ),
+            Self::SpecifierConflict => {
+                write!(fmt, "'/' specifier is mutually exclusive with '+'")
+            }
             Self::TabSizeCannotBeZero => write!(fmt, "tab size cannot be 0"),
             Self::TabSizeTooLarge(s) => write!(fmt, "tab stop is too large {}", s.quote()),
             Self::TabSizesMustBeAscending => write!(fmt, "tab sizes must be ascending"),
@@ -632,6 +636,9 @@ fn expand_tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ExpandP
 
         // 检查是否已使用修饰符，以及是否只能与最后一个值一起使用
         if let Some(specifier) = used_specifier {
+            if specifier != remaining_mode {
+                return Err(ExpandParseError::SpecifierConflict);
+            }
             return Err(ExpandParseError::SpecifierOnlyAllowedWithLastValue(
                 match specifier {
                     RemainingMode::Slash => "/",
@@ -686,6 +693,9 @@ fn expand_tabstops_parse_args(
         let step = parsed.pop().expect("remaining mode requires a tab stop");
         tabstops.extend(parsed);
         if let Some((previous_mode, _)) = remaining_step {
+            if previous_mode != mode {
+                return Err(ExpandParseError::SpecifierConflict);
+            }
             return Err(ExpandParseError::SpecifierOnlyAllowedWithLastValue(
                 match previous_mode {
                     RemainingMode::Slash => "/",
@@ -1639,6 +1649,18 @@ mod tests {
                     "+".to_string(),
                     "+8/12".to_string()
                 ))
+            );
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_conflicting_specifiers() {
+            assert_eq!(
+                expand_tabstops_parse("3,/4,+5"),
+                Err(ExpandParseError::SpecifierConflict)
+            );
+            assert_eq!(
+                expand_tabstops_parse_args(&["3,/4", "+5"]),
+                Err(ExpandParseError::SpecifierConflict)
             );
         }
 

@@ -25,13 +25,15 @@ use sys_locale::get_locale;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_entries::{self, CtPasswd};
-use ctcore::ct_error::CTResult;
+use ctcore::ct_error::{CTError, CTResult};
 use ctcore::ct_error::{CtSimpleError, set_ct_exit_code, strip_errno};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_process::{getegid, geteuid, getgid, getuid};
 use ctcore::ct_show_error;
 use selinux::SecurityContext;
+use std::error::Error;
 use std::ffi::{OsStr, OsString};
+use std::fmt::Display;
 #[cfg(target_family = "unix")]
 use std::os::unix::ffi::OsStrExt;
 
@@ -131,6 +133,49 @@ impl Tool for Id {
     }
 }
 
+#[derive(Debug)]
+struct IdOptionError {
+    diagnostic: Vec<u8>,
+}
+
+impl IdOptionError {
+    fn invalid_short(option: u8) -> Self {
+        Self {
+            diagnostic: [b"invalid option -- '".as_slice(), &[option], b"'"].concat(),
+        }
+    }
+}
+
+impl Display for IdOptionError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match std::str::from_utf8(&self.diagnostic) {
+            Ok(diagnostic) => formatter.write_str(diagnostic),
+            Err(_) => {
+                let mut stderr = io::stderr().lock();
+                let _ = stderr
+                    .write_all(ctcore::ct_util_name().as_bytes())
+                    .and_then(|_| stderr.write_all(b": "))
+                    .and_then(|_| stderr.write_all(&self.diagnostic))
+                    .and_then(|_| stderr.write_all(b"\n"))
+                    .and_then(|_| stderr.flush());
+                Ok(())
+            }
+        }
+    }
+}
+
+impl Error for IdOptionError {}
+
+impl CTError for IdOptionError {
+    fn code(&self) -> i32 {
+        1
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
 fn id_reject_attached_long_option(args: &[OsString]) -> CTResult<()> {
     for argument in args.iter().skip(1) {
         let bytes = argument.as_bytes();
@@ -141,8 +186,11 @@ fn id_reject_attached_long_option(args: &[OsString]) -> CTResult<()> {
             if let Some(invalid) = bytes[1..]
                 .iter()
                 .copied()
-                .find(|option| !b"agnruzGZ".contains(option) && option.is_ascii())
+                .find(|option| !b"agnruzGZ".contains(option))
             {
+                if !invalid.is_ascii() {
+                    return Err(Box::new(IdOptionError::invalid_short(invalid)));
+                }
                 return Err(CtSimpleError::new(
                     1,
                     format!("invalid option -- '{}'", char::from(invalid)),
@@ -2441,6 +2489,13 @@ mod tests {
             let error = id_reject_attached_long_option(&args).unwrap_err();
 
             assert_eq!(error.to_string(), "unrecognized option '--does-not-exist'");
+        }
+
+        #[test]
+        fn test_invalid_short_option_preserves_original_byte() {
+            let error = IdOptionError::invalid_short(0xff);
+
+            assert_eq!(error.diagnostic, b"invalid option -- '\xff'");
         }
 
         #[test]

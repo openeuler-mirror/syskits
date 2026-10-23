@@ -637,7 +637,10 @@ fn verify_file_hash_semantic(
 
             let err_msg = e.to_string();
             let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
-            stderr_text.push_str(&hashsum_error_line(&format!("{ck_filename}: {clean_err}")));
+            stderr_text.push_str(&hashsum_error_line(&format!(
+                "{}: {clean_err}",
+                ck_filename.maybe_quote()
+            )));
             if !flags.is_status {
                 classic_text.push_str(&render_check_row_classic(
                     prefix,
@@ -682,7 +685,10 @@ fn verify_file_hash_semantic(
         Err(e) => {
             let err_msg = e.to_string();
             let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
-            stderr_text.push_str(&hashsum_error_line(&format!("{ck_filename}: {clean_err}")));
+            stderr_text.push_str(&hashsum_error_line(&format!(
+                "{}: {clean_err}",
+                ck_filename.maybe_quote()
+            )));
             if !flags.is_status {
                 classic_text.push_str(&render_check_row_classic(
                     prefix,
@@ -2087,8 +2093,17 @@ fn parse_hash_line(
     bsd_reversed: &mut Option<bool>,
 ) -> Result<(String, String, bool, bool), ParseLineError> {
     match gnu_re.captures(&line) {
-        Some(caps) => handle_captures(&caps, bytes_marker, bsd_reversed, gnu_re)
-            .map_err(|_| ParseLineError::RegexError),
+        Some(caps) => {
+            let only_trailing_marker = caps.name("binary").is_some()
+                && caps
+                    .name("fileName")
+                    .is_some_and(|name| name.as_str().is_empty());
+            if *bsd_reversed == Some(false) && only_trailing_marker {
+                return Err(ParseLineError::FormatError);
+            }
+            handle_captures(&caps, bytes_marker, bsd_reversed, gnu_re)
+                .map_err(|_| ParseLineError::RegexError)
+        }
         None => match bsd_re.captures(&line) {
             Some(caps) => Ok((
                 caps.name("fileName").unwrap().as_str().to_string(),
@@ -2108,8 +2123,13 @@ fn handle_captures(
     bsd_reversed: &mut Option<bool>,
     gnu_re: &mut Regex,
 ) -> Result<(String, String, bool, bool), HashsumError> {
+    let only_trailing_marker = caps.name("binary").is_some()
+        && caps
+            .name("fileName")
+            .is_some_and(|name| name.as_str().is_empty());
+
     if bsd_reversed.is_none() {
-        let is_bsd_reversed = caps.name("binary").is_none();
+        let is_bsd_reversed = caps.name("binary").is_none() || only_trailing_marker;
         let format_marker = if is_bsd_reversed {
             ""
         } else {
@@ -2121,9 +2141,14 @@ fn handle_captures(
     }
 
     let is_escaped = caps.name("escaped").is_some();
+    let file_name = if only_trailing_marker {
+        caps.name("binary").unwrap().as_str()
+    } else {
+        caps.name("fileName").unwrap().as_str()
+    };
 
     Ok((
-        caps.name("fileName").unwrap().as_str().to_string(),
+        file_name.to_string(),
         caps.name("digest").unwrap().as_str().to_ascii_lowercase(),
         if *bsd_reversed == Some(false) {
             // 如果不是BSD反向格式，检查二进制标记
@@ -2176,7 +2201,7 @@ fn verify_file_hash<W: Write>(
             *failed_open_file += 1;
             let err_msg = e.to_string();
             let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
-            ctcore::ct_show_error!("{}: {}", ck_filename, clean_err);
+            ctcore::ct_show_error!("{}: {}", ck_filename.maybe_quote(), clean_err);
 
             if !flags.is_status {
                 writeln!(
@@ -2204,7 +2229,7 @@ fn verify_file_hash<W: Write>(
             *failed_open_file += 1;
             let err_msg = e.to_string();
             let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
-            ctcore::ct_show_error!("{}: {}", ck_filename, clean_err);
+            ctcore::ct_show_error!("{}: {}", ck_filename.maybe_quote(), clean_err);
 
             if !flags.is_status {
                 writeln!(

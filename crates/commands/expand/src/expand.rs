@@ -231,7 +231,7 @@ impl fmt::Display for ExpandParseError {
 ///
 /// 此结构体包括输入文件、制表位位置以及制表符和空格扩展的选项等设置。
 struct ExpandOptions {
-    files: Vec<String>,   // 要处理的文件名列表
+    files: Vec<OsString>, // 要处理的文件名列表
     tabstops: Vec<usize>, // 制表位应停止的位置
     iflag: bool,          // 标志，表示是否应用初始状态
     uflag: bool,          // 标志，表示是否假设UTF-8编码
@@ -286,9 +286,9 @@ impl ExpandOptions {
         let is_uflag = !args_match.get_flag(opt_flags::NO_UTF8);
 
         // 收集要处理的文件列表。如果没有指定文件，则默认使用标准输入。
-        let files: Vec<String> = match args_match.get_many::<String>(opt_flags::FILES) {
-            Some(s) => s.map(|v| v.to_string()).collect(),
-            None => vec!["-".to_owned()],
+        let files: Vec<OsString> = match args_match.get_many::<OsString>(opt_flags::FILES) {
+            Some(s) => s.cloned().collect(),
+            None => vec![OsString::from("-")],
         };
 
         Ok(Self {
@@ -476,6 +476,7 @@ pub fn ct_app() -> Command {
         Arg::new(opt_flags::FILES)
             .action(ArgAction::Append)
             .hide(true)
+            .value_parser(clap::builder::OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
     ];
 
@@ -737,12 +738,13 @@ fn expand_tabstops_parse_args(
     }
 }
 
-fn expand_open(file_path: &str) -> CTResult<BufReader<Box<dyn Read + 'static>>> {
+fn expand_open(file_path: &OsStr) -> CTResult<BufReader<Box<dyn Read + 'static>>> {
     let file_buffer;
-    if file_path == "-" {
+    if file_path == OsStr::new("-") {
         Ok(BufReader::new(ctcore::ct_io::stdin_reader_box()))
     } else {
-        file_buffer = File::open(file_path).map_err_context(|| file_path.to_string())?;
+        file_buffer = File::open(Path::new(file_path))
+            .map_err_context(|| file_path.to_string_lossy().into_owned())?;
         Ok(BufReader::new(Box::new(file_buffer) as Box<dyn Read>))
     }
 }
@@ -1039,12 +1041,16 @@ fn expand_to_writer<W: Write>(
     let mut exit_code = 0;
 
     for file in &options.files {
-        if Path::new(file).is_dir() {
-            stderr_text.push_str(&format!("expand: {file}: Is a directory\n"));
+        let path = Path::new(file);
+        if path.is_dir() {
+            stderr_text.push_str(&format!(
+                "expand: {}: Is a directory\n",
+                file.to_string_lossy()
+            ));
             exit_code = 1;
             continue;
         }
-        match expand_open(file) {
+        match expand_open(file.as_os_str()) {
             Ok(mut fh) => {
                 let mut is_first_chunk = true;
                 loop {
@@ -1738,7 +1744,7 @@ mod tests {
             );
         }
 
-        use std::ffi::OsString;
+        use std::ffi::{OsStr, OsString};
         use std::fs::File;
         use std::io::{Read, Write};
 
@@ -1873,12 +1879,30 @@ mod tests {
             let content = "test content";
             file.write_all(content.as_bytes()).unwrap();
 
-            let mut reader = expand_open(file_path).unwrap();
+            let mut reader = expand_open(OsStr::new(file_path)).unwrap();
             let mut output = String::new();
             reader.read_to_string(&mut output).unwrap();
             assert_eq!(output, content);
 
             std::fs::remove_file(file_path).unwrap();
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_expand_accepts_non_utf8_operand() {
+            use std::os::unix::ffi::OsStringExt;
+
+            let temp_dir = tempfile::tempdir().unwrap();
+            let file = temp_dir
+                .path()
+                .join(OsString::from_vec(vec![b'r', b'a', b'w', b'-', 0xff]));
+            std::fs::write(&file, b"A\tB\n").unwrap();
+
+            let semantic = expand_native_semantic(
+                vec![OsString::from("expand"), file.into_os_string()].into_iter(),
+            )
+            .unwrap();
+            assert_eq!(semantic.classic_text, "A       B\n");
         }
 
         fn test_options(tabstop: usize) -> ExpandOptions {
@@ -1995,8 +2019,8 @@ mod tests {
 
             let options = ExpandOptions {
                 files: vec![
-                    first.path().to_string_lossy().to_string(),
-                    second.path().to_string_lossy().to_string(),
+                    first.path().as_os_str().to_os_string(),
+                    second.path().as_os_str().to_os_string(),
                 ],
                 tabstops: vec![8],
                 iflag: false,

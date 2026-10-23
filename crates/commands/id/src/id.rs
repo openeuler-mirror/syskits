@@ -326,7 +326,14 @@ fn id_build_rows(
 
     for subject in subjects {
         let possible_pw = if let Some(user) = subject.as_ref() {
-            match CtPasswd::locate(user.as_str()) {
+            let lookup = CtPasswd::locate_name(user.as_str()).or_else(|name_error| {
+                if let Ok(uid) = user.parse::<u32>() {
+                    CtPasswd::locate(uid)
+                } else {
+                    Err(name_error)
+                }
+            });
+            match lookup {
                 Ok(passwd) => Some(passwd),
                 Err(_) => {
                     exit_code = 1;
@@ -495,7 +502,14 @@ fn id_handle_users<W: Write>(
 
     for i in 0..=users.len() {
         let possible_pw = if id_state.is_user_specified {
-            match CtPasswd::locate(users[i].as_str()) {
+            let lookup = CtPasswd::locate_name(users[i].as_str()).or_else(|name_error| {
+                if let Ok(uid) = users[i].parse::<u32>() {
+                    CtPasswd::locate(uid)
+                } else {
+                    Err(name_error)
+                }
+            });
+            match lookup {
                 Ok(p) => Some(p),
                 Err(_) => {
                     ct_show_error!("{}: no such user", users[i].quote());
@@ -579,12 +593,8 @@ fn id_handle_users<W: Write>(
                 ct_entries::get_groups_gnu(Some(process_egid)).unwrap(),
             )
         } else {
-            ct_entries::get_groups_gnu(Some(if is_default_format {
-                process_egid
-            } else {
-                gid
-            }))
-            .unwrap()
+            ct_entries::get_groups_gnu(Some(if is_default_format { process_egid } else { gid }))
+                .unwrap()
         };
 
         if id_state.is_gsflag {

@@ -249,12 +249,35 @@ fn id_reject_attached_long_option(args: &[OsString]) -> CTResult<()> {
     Ok(())
 }
 
+fn id_apply_posix_option_order(args: &mut Vec<OsString>, enabled: bool) {
+    if !enabled {
+        return;
+    }
+
+    let mut index = 1;
+    while index < args.len() {
+        let bytes = args[index].as_os_str().as_bytes();
+        if bytes == b"--" {
+            return;
+        }
+        if bytes == b"-" || !bytes.starts_with(b"-") {
+            args.insert(index, OsString::from("--"));
+            return;
+        }
+        index += 1;
+    }
+}
+
 pub fn id_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
-    let raw_args = args.collect::<Vec<_>>();
+    let mut raw_args = args.collect::<Vec<_>>();
+    id_apply_posix_option_order(
+        &mut raw_args,
+        std::env::var_os("POSIXLY_CORRECT").is_some(),
+    );
     id_reject_attached_long_option(&raw_args)?;
 
     let matches = ct_app()
@@ -605,7 +628,11 @@ pub fn id_native_semantic(args: impl ctcore::Args) -> CTResult<IdSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
-    let raw_args = args.collect::<Vec<_>>();
+    let mut raw_args = args.collect::<Vec<_>>();
+    id_apply_posix_option_order(
+        &mut raw_args,
+        std::env::var_os("POSIXLY_CORRECT").is_some(),
+    );
     id_reject_attached_long_option(&raw_args)?;
 
     let matches = ct_app()
@@ -2496,6 +2523,19 @@ mod tests {
             let error = IdOptionError::invalid_short(0xff);
 
             assert_eq!(error.diagnostic, b"invalid option -- '\xff'");
+        }
+
+        #[test]
+        fn test_posix_option_order_stops_after_first_operand() {
+            let mut args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("root"),
+                OsString::from("-u"),
+            ];
+
+            id_apply_posix_option_order(&mut args, true);
+
+            assert_eq!(args[1], OsString::from("--"));
         }
 
         #[test]

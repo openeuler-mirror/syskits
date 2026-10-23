@@ -1188,6 +1188,27 @@ fn du_file_as_vec(file_name: impl AsRef<Path>) -> CTResult<Vec<String>> {
         .collect()
 }
 
+fn du_parse_exclude_pattern(pattern: &str) -> Result<Pattern, glob::PatternError> {
+    let mut pattern = pattern.to_string();
+    loop {
+        match ct_parse_glob::ct_from_str(&pattern) {
+            Ok(pattern) => return Ok(pattern),
+            Err(error) => {
+                let mut characters: Vec<_> = pattern.chars().collect();
+                if characters.get(error.pos) != Some(&'[')
+                    || characters
+                        .get(error.pos + 1..)
+                        .is_some_and(|suffix| suffix.contains(&']'))
+                {
+                    return Err(error);
+                }
+                characters.splice(error.pos..=error.pos, ['[', '[', ']']);
+                pattern = characters.into_iter().collect();
+            }
+        }
+    }
+}
+
 /**
  * 根据命令行提供的 --exclude-from 和/或 --exclude 参数，构建一个忽略文件的 globset 列表。
  *
@@ -1216,7 +1237,7 @@ fn du_build_exclude_patterns(args_match: &ArgMatches) -> CTResult<Vec<Pattern>> 
             println!("adding {:?} to the exclude list ", &f);
         }
         // 尝试将排除模式字符串转换为 glob 模式，失败则返回错误。
-        match ct_parse_glob::ct_from_str(&f) {
+        match du_parse_exclude_pattern(&f) {
             Ok(glob) => exclude_patterns.push(glob),
             Err(err) => return Err(DuError::InvalidGlob(err.to_string()).into()),
         }
@@ -2841,6 +2862,16 @@ mod tests {
         let matches = ct_app().try_get_matches_from(["du", "-hh"]).unwrap();
 
         assert!(matches.get_flag(opt_flags::HUMAN_READABLE));
+    }
+
+    #[test]
+    fn test_incomplete_exclude_bracket_is_literal() {
+        let bracket = du_parse_exclude_pattern("[").unwrap();
+        let mixed = du_parse_exclude_pattern("foo[bar*").unwrap();
+
+        assert!(bracket.matches("["));
+        assert!(mixed.matches("foo[bar-suffix"));
+        assert!(!mixed.matches("foobar-suffix"));
     }
 
     #[test]

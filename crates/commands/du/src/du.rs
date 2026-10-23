@@ -1552,6 +1552,12 @@ impl DuStatPrinter {
         let mut stdout = output.lock();
         let prefix = self.du_render_stat_prefix(du_stat, size)?;
         let line_ending = self.line_ending.to_string();
+
+        #[cfg(unix)]
+        if ctcore::ct_stdout_was_closed() {
+            return du_handle_stdout_result(Err(io::Error::from_raw_os_error(ctcore::libc::EBADF)));
+        }
+
         let result = stdout
             .write_all(prefix.as_bytes())
             .and_then(|_| du_write_path(&mut stdout, &du_stat.path))
@@ -1571,7 +1577,12 @@ fn du_handle_stdout_result(result: io::Result<()>) -> CTResult<()> {
     }
 }
 
-fn du_stdout_write_error(_error: &io::Error) -> Box<dyn CTError> {
+fn du_stdout_write_error(error: &io::Error) -> Box<dyn CTError> {
+    #[cfg(unix)]
+    if error.raw_os_error() == Some(ctcore::libc::EBADF) {
+        return CtSimpleError::new(1, format!("write error: {}", strip_errno(error)));
+    }
+
     CtSimpleError::new(1, "write error")
 }
 
@@ -10628,6 +10639,16 @@ mod tests_fn {
         let error = io::Error::from_raw_os_error(ctcore::libc::ENOSPC);
 
         assert_eq!(du_stdout_write_error(&error).to_string(), "write error");
+    }
+
+    #[test]
+    fn test_closed_stdout_error_preserves_bad_file_descriptor() {
+        let error = io::Error::from_raw_os_error(ctcore::libc::EBADF);
+
+        assert_eq!(
+            du_stdout_write_error(&error).to_string(),
+            "write error: Bad file descriptor"
+        );
     }
 
     #[test]

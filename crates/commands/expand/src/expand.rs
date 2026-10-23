@@ -943,6 +943,23 @@ fn expand_write_spaces(output: &mut impl Write, mut count: usize) -> std::io::Re
     Ok(())
 }
 
+fn expand_is_blank(is_u_flag: bool, bytes: &[u8]) -> bool {
+    if !is_u_flag {
+        return matches!(bytes.first(), Some(b' ' | b'\t'));
+    }
+
+    from_utf8(bytes)
+        .ok()
+        .and_then(|text| text.chars().next())
+        .is_some_and(|ch| {
+            ch.is_whitespace()
+                && !matches!(
+                    ch,
+                    '\n' | '\r' | '\x0b' | '\x0c' | '\u{0085}' | '\u{2028}' | '\u{2029}'
+                )
+        })
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn expand_line(
     buffer: &[u8],
@@ -1003,7 +1020,7 @@ fn expand_line(
                 if byte_is_newline {
                     state.is_init = true;
                     finish_expand_line(state);
-                } else if buffer[byte] != 0x20 {
+                } else if !expand_is_blank(opts.uflag, &buffer[byte..byte + n_bytes]) {
                     state.is_init = false;
                     state.current_line_has_content = true;
                 } else {
@@ -2007,6 +2024,25 @@ mod tests {
                     ..ExpandState::default()
                 }
             );
+        }
+
+        #[test]
+        fn test_expand_initial_recognizes_multibyte_blank() {
+            let mut opts = test_options_with_utf8(4, true);
+            opts.iflag = true;
+            let mut output = Vec::new();
+            let mut state = ExpandState::default();
+
+            expand_line(
+                "　\tX\n".as_bytes(),
+                &mut output,
+                &opts.tabstops,
+                &opts,
+                &mut state,
+            )
+            .unwrap();
+
+            assert_eq!(output, "　  X\n".as_bytes());
         }
 
         #[test]

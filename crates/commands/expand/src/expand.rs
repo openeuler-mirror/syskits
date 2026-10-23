@@ -585,16 +585,16 @@ fn expand_tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ExpandP
         }
 
         let mut number = word;
-        match word.as_bytes()[0] {
-            b'+' => {
-                remaining_mode = RemainingMode::Plus;
-                number = &word[1..];
+        while let Some(prefix) = number.as_bytes().first() {
+            let mode = match prefix {
+                b'+' => RemainingMode::Plus,
+                b'/' => RemainingMode::Slash,
+                _ => break,
+            };
+            if remaining_mode == RemainingMode::None {
+                remaining_mode = mode;
             }
-            b'/' => {
-                remaining_mode = RemainingMode::Slash;
-                number = &word[1..];
-            }
-            _ => {}
+            number = &number[1..];
         }
 
         if number.is_empty() {
@@ -1590,6 +1590,18 @@ mod tests {
         fn test_expand_tabstops_parse_plus_remaining_step() {
             let result = expand_tabstops_parse("3,7,+4");
             assert_eq!(result, Ok((RemainingMode::Plus, vec![3, 7, 4])));
+        }
+
+        #[test]
+        fn test_expand_tabstops_parse_repeated_prefixes() {
+            assert_eq!(
+                expand_tabstops_parse("//5"),
+                Ok((RemainingMode::Slash, vec![5]))
+            );
+            assert_eq!(
+                expand_tabstops_parse("+/5"),
+                Ok((RemainingMode::Plus, vec![5]))
+            );
         }
 
         #[test]

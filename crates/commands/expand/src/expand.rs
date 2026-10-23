@@ -375,7 +375,22 @@ fn expand_validate_options(args: &[OsString]) -> CTResult<()> {
             return Err(1.into());
         }
 
-        if expand_long_option_consumes_next(&arg) || expand_short_option_consumes_next(&arg) {
+        let long_option_consumes_next = expand_long_option_consumes_next(&arg);
+        let short_option_consumes_next = expand_short_option_consumes_next(&arg);
+        if (long_option_consumes_next || short_option_consumes_next) && index + 1 == args.len() {
+            if long_option_consumes_next {
+                ctcore::ct_show_error!("option '--tabs' requires an argument");
+            } else {
+                ctcore::ct_show_error!("option requires an argument -- 't'");
+            }
+            eprintln!(
+                "Try '{} --help' for more information.",
+                ctcore::ct_help_utility_name()
+            );
+            return Err(1.into());
+        }
+
+        if long_option_consumes_next || short_option_consumes_next {
             index += 1;
         }
         index += 1;
@@ -1357,6 +1372,15 @@ mod tests {
                 super::super::expand_long_option_with_unexpected_argument("--tabs=4"),
                 None
             );
+        }
+
+        #[test]
+        fn test_expand_tabs_option_consumes_next_argument() {
+            assert!(super::super::expand_long_option_consumes_next("--tabs"));
+            assert!(super::super::expand_long_option_consumes_next("--t"));
+            assert!(super::super::expand_short_option_consumes_next("-t"));
+            assert!(super::super::expand_short_option_consumes_next("-it"));
+            assert!(!super::super::expand_short_option_consumes_next("-t4"));
         }
 
         #[test]

@@ -1518,6 +1518,7 @@ fn create_common_command() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .args_override_self(true)
         .args(&args)
 }
 

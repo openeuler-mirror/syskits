@@ -493,6 +493,14 @@ fn tag_algorithm_name(flags: &HashsumFlags) -> String {
     }
 }
 
+fn check_algorithm_name(flags: &HashsumFlags) -> &'static str {
+    if flags.algoname == "BLAKE2" {
+        "BLAKE2b"
+    } else {
+        flags.algoname
+    }
+}
+
 fn render_compute_row_classic(
     flags: &HashsumFlags,
     filename: &Path,
@@ -842,7 +850,7 @@ where
                             "{}: {}: improperly formatted {} checksum line",
                             manifest.maybe_quote(),
                             i + 1,
-                            flags.algoname
+                            check_algorithm_name(&flags)
                         )));
                     }
                 }
@@ -2012,7 +2020,7 @@ fn check_hash_file<W: Write>(
                         "{}: {}: improperly formatted {} checksum line",
                         filename.maybe_quote(),
                         i + 1,
-                        flags.algoname
+                        check_algorithm_name(flags)
                     );
                 }
             }

@@ -29,7 +29,6 @@ use ctcore::ct_error::{CTError, CTResult};
 use ctcore::ct_error::{CtSimpleError, set_ct_exit_code, strip_errno};
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_process::{getegid, geteuid, getgid, getuid};
-use ctcore::ct_show_error;
 use selinux::SecurityContext;
 use std::error::Error;
 use std::ffi::{CStr, CString, OsStr, OsString};
@@ -286,6 +285,18 @@ fn id_gettext(message: &str) -> String {
         }
     }
     message.to_string()
+}
+
+fn id_write_stderr_diagnostic<W: Write>(writer: &mut W, message: &str) {
+    let diagnostic = format!("{}: {message}\n", ctcore::ct_util_name());
+    let _ = writer
+        .write_all(diagnostic.as_bytes())
+        .and_then(|_| writer.flush());
+}
+
+fn id_show_error(message: impl AsRef<str>) {
+    let mut stderr = io::stderr().lock();
+    id_write_stderr_diagnostic(&mut stderr, message.as_ref());
 }
 
 fn id_errno_message(error: &io::Error) -> Option<String> {
@@ -947,17 +958,7 @@ where
             match lookup {
                 Ok(p) => Some(p),
                 Err(error) => {
-                    if matches!(error.raw_os_error(), Some(errno) if errno != 0) {
-                        ct_show_error!(
-                            "{}",
-                            id_no_such_user_diagnostic(&id_quote_user(user), &error)
-                        );
-                    } else {
-                        ct_show_error!(
-                            "{}",
-                            id_no_such_user_diagnostic(&id_quote_user(user), &error)
-                        );
-                    }
+                    id_show_error(id_no_such_user_diagnostic(&id_quote_user(user), &error));
                     set_ct_exit_code(1);
                     if i + 1 >= users.len() {
                         break;
@@ -1009,7 +1010,7 @@ where
                         String::new()
                     }
                     Err(_) => {
-                        ct_show_error!("cannot find name for group ID {}", gid);
+                        id_show_error(format!("cannot find name for group ID {gid}"));
                         set_ct_exit_code(1);
                         gid.to_string()
                     }
@@ -1031,7 +1032,7 @@ where
                         String::new()
                     }
                     Err(_) => {
-                        ct_show_error!("cannot find name for user ID {}", uid);
+                        id_show_error(format!("cannot find name for user ID {uid}"));
                         set_ct_exit_code(1);
                         uid.to_string()
                     }
@@ -1076,7 +1077,7 @@ where
                     match ct_entries::gid2grp_os(id) {
                         Ok(name) => writer.write_all(name.as_bytes())?,
                         Err(_) => {
-                            ct_show_error!("cannot find name for group ID {}", id);
+                            id_show_error(format!("cannot find name for group ID {id}"));
                             set_ct_exit_code(1);
                             write!(writer, "{id}")?;
                         }
@@ -1100,16 +1101,16 @@ where
         }
         if let Some(error) = groups_error {
             if id_state.is_user_specified {
-                ct_show_error!(
+                id_show_error(format!(
                     "failed to get groups for user {}: {}",
                     id_quote_user(users[i].as_ref()),
                     strip_errno(&error)
-                );
+                ));
             } else {
-                ct_show_error!(
+                id_show_error(format!(
                     "failed to get groups for the current process: {}",
                     strip_errno(&error)
-                );
+                ));
             }
             set_ct_exit_code(1);
         }
@@ -1364,6 +1365,24 @@ mod tests {
             error.to_string(),
             "write error: No space left on device"
         );
+    }
+
+    #[test]
+    fn test_stderr_diagnostic_ignores_write_errors() {
+        struct FailingWriter;
+
+        impl Write for FailingWriter {
+            fn write(&mut self, _bytes: &[u8]) -> io::Result<usize> {
+                Err(io::Error::from_raw_os_error(ctcore::libc::ENOSPC))
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Err(io::Error::from_raw_os_error(ctcore::libc::ENOSPC))
+            }
+        }
+
+        let mut writer = FailingWriter;
+        id_write_stderr_diagnostic(&mut writer, "cannot find name for user ID 424242");
     }
 
     #[test]

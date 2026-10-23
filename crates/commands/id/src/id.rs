@@ -361,7 +361,9 @@ fn id_build_rows(
 
         let euid = geteuid();
         let egid = getegid();
-        let groups_result = if let Some(passwd) = possible_pw.as_ref() {
+        let groups_result = if !is_default_format && !state.is_gsflag {
+            Ok(Vec::new())
+        } else if let Some(passwd) = possible_pw.as_ref() {
             Ok(passwd.belongs_to())
         } else if state.is_gsflag {
             ct_entries::get_groups_gnu(Some(egid))
@@ -605,7 +607,9 @@ fn id_handle_users<W: Write>(
             write!(writer, "{name_string}").unwrap();
         }
 
-        let groups_result = if id_state.is_user_specified {
+        let groups_result = if !is_default_format && !id_state.is_gsflag {
+            Ok(Vec::new())
+        } else if id_state.is_user_specified {
             Ok(possible_pw.as_ref().map(|p| p.belongs_to()).unwrap())
         } else if id_state.is_gsflag {
             ct_entries::get_groups_gnu(Some(process_egid))

@@ -36,9 +36,35 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::iter;
 use std::num::ParseIntError;
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
 const NAME: &str = "hashsum";
+
+const GNU_HASHSUM_COMMANDS: &[&str] = &[
+    "md5sum",
+    "sha1sum",
+    "sha224sum",
+    "sha256sum",
+    "sha384sum",
+    "sha512sum",
+    "b2sum",
+];
+
+const GNU_COMMON_LONG_OPTIONS: &[&str] = &[
+    "check",
+    "ignore-missing",
+    "quiet",
+    "status",
+    "warn",
+    "strict",
+    "tag",
+    "zero",
+    "binary",
+    "text",
+    "help",
+    "version",
+];
 
 /// 定义 hashsum 命令行标志的常量
 pub mod hashsum_flags {
@@ -119,6 +145,129 @@ impl Default for HashsumFlags {
     }
 }
 
+fn validate_gnu_hashsum_options(args: &[OsString], program: &str) -> CTResult<()> {
+    if !GNU_HASHSUM_COMMANDS.contains(&program) {
+        return Ok(());
+    }
+
+    let mut long_options = GNU_COMMON_LONG_OPTIONS.to_vec();
+    if program == "b2sum" {
+        long_options.insert(0, "length");
+    }
+
+    let mut index = 1;
+    while index < args.len() {
+        let argument = args[index].as_os_str().as_bytes();
+        if argument == b"--" {
+            break;
+        }
+
+        if let Some(long_argument) = argument.strip_prefix(b"--") {
+            if long_argument.is_empty() {
+                break;
+            }
+
+            let option_end = long_argument
+                .iter()
+                .position(|byte| *byte == b'=')
+                .unwrap_or(long_argument.len());
+            let option_name = String::from_utf8_lossy(&long_argument[..option_end]);
+            let supplied_value = option_end < long_argument.len();
+            let mut candidates = long_options
+                .iter()
+                .copied()
+                .filter(|candidate| candidate.starts_with(option_name.as_ref()))
+                .collect::<Vec<_>>();
+
+            if let Some(exact) = candidates
+                .iter()
+                .position(|candidate| *candidate == option_name)
+            {
+                candidates = vec![candidates[exact]];
+            }
+
+            if candidates.is_empty() {
+                return Err(CTsageError::new(
+                    1,
+                    format!(
+                        "unrecognized option '{}'",
+                        args[index].as_os_str().to_string_lossy()
+                    ),
+                ));
+            }
+
+            if candidates.len() > 1 {
+                let possibilities = candidates
+                    .iter()
+                    .map(|candidate| format!("'--{candidate}'"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                return Err(CTsageError::new(
+                    1,
+                    format!(
+                        "option '{}' is ambiguous; possibilities: {possibilities}",
+                        args[index].as_os_str().to_string_lossy()
+                    ),
+                ));
+            }
+
+            let option = candidates[0];
+            if option == "help" || option == "version" {
+                return Ok(());
+            }
+
+            if option == "length" {
+                if !supplied_value {
+                    index += 1;
+                    if index == args.len() {
+                        return Err(CTsageError::new(
+                            1,
+                            "option '--length' requires an argument",
+                        ));
+                    }
+                }
+            } else if supplied_value {
+                return Err(CTsageError::new(
+                    1,
+                    format!("option '--{option}' doesn't allow an argument"),
+                ));
+            }
+        } else if argument.starts_with(b"-") && argument.len() > 1 {
+            let mut short_index = 1;
+            while short_index < argument.len() {
+                let option = argument[short_index];
+                if program == "b2sum" && option == b'l' {
+                    if short_index + 1 == argument.len() {
+                        index += 1;
+                        if index == args.len() {
+                            return Err(CTsageError::new(1, "option requires an argument -- 'l'"));
+                        }
+                    }
+                    break;
+                }
+
+                // -q and -s are retained as syskits extensions.
+                if !matches!(
+                    option,
+                    b'b' | b'c' | b't' | b'w' | b'z' | b'q' | b's' | b'h' | b'V'
+                ) {
+                    let option = char::from(option);
+                    return Err(CTsageError::new(1, format!("invalid option -- '{option}'")));
+                }
+
+                if matches!(option, b'h' | b'V') {
+                    return Ok(());
+                }
+                short_index += 1;
+            }
+        }
+
+        index += 1;
+    }
+
+    Ok(())
+}
+
 fn hashsum_last_mode_arg(matches: &ArgMatches) -> Option<bool> {
     let has_binary = matches.get_flag(hashsum_flags::BINARY);
     let has_text = matches.get_flag(hashsum_flags::TEXT);
@@ -196,6 +345,13 @@ impl HashsumFlags {
             return Err(CTsageError::new(
                 1,
                 "the --zero option is not supported when verifying checksums",
+            ));
+        }
+
+        if is_check && is_tag {
+            return Err(CTsageError::new(
+                1,
+                "the --tag option is meaningless when verifying checksums",
             ));
         }
 
@@ -1274,6 +1430,8 @@ pub fn hashsum_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResu
 
     let args_vec: Vec<OsString> = iter::once(program).chain(args_iter).collect();
 
+    validate_gnu_hashsum_options(&args_vec, &binary_name)?;
+
     let matches = match ct_app(&binary_name).try_get_matches_from(args_vec) {
         Ok(m) => m,
         Err(e) => {
@@ -1310,6 +1468,7 @@ pub fn hashsum_native_semantic(args: impl ctcore::Args) -> CTResult<HashsumSeman
         .to_string();
 
     let args_vec: Vec<OsString> = iter::once(program).chain(args_iter).collect();
+    validate_gnu_hashsum_options(&args_vec, &binary_name)?;
     let matches = match ct_app(&binary_name).try_get_matches_from(args_vec) {
         Ok(m) => m,
         Err(e) => {
@@ -1464,8 +1623,7 @@ fn create_common_command() -> Command {
             .short('c')
             .long(hashsum_flags::CHECK)
             .help(t!("hashsum.clap.check"))
-            .action(ArgAction::SetTrue)
-            .conflicts_with(hashsum_flags::TAG),
+            .action(ArgAction::SetTrue),
         Arg::new(hashsum_flags::TAG)
             .long(hashsum_flags::TAG)
             .help(t!("hashsum.clap.tag"))

@@ -778,12 +778,14 @@ pub fn ct_app() -> Command {
             .long(id_flags::ID_EFFECTIVE_USER)
             .conflicts_with(id_flags::ID_GROUP)
             .help(t!("id.clap.id_effective_user"))
+            .overrides_with(id_flags::ID_EFFECTIVE_USER)
             .action(ArgAction::SetTrue),
         Arg::new(id_flags::ID_GROUP)
             .short('g')
             .long(id_flags::ID_GROUP)
             .conflicts_with(id_flags::ID_EFFECTIVE_USER)
             .help(t!("id.clap.id_group"))
+            .overrides_with(id_flags::ID_GROUP)
             .action(ArgAction::SetTrue),
         Arg::new(id_flags::ID_GROUPS)
             .short('G')
@@ -797,6 +799,7 @@ pub fn ct_app() -> Command {
                 "Display only the different group IDs as white-space separated numbers, \
                       in no particular order.",
             )
+            .overrides_with(id_flags::ID_GROUPS)
             .action(ArgAction::SetTrue),
         Arg::new(id_flags::ID_NAME)
             .short('n')
@@ -806,6 +809,7 @@ pub fn ct_app() -> Command {
                       instead of the number.\nIf any of the ID numbers cannot be mapped into \
                       names, the number will be displayed as usual.",
             )
+            .overrides_with(id_flags::ID_NAME)
             .action(ArgAction::SetTrue),
         Arg::new(id_flags::ID_REAL_ID)
             .short('r')
@@ -814,6 +818,7 @@ pub fn ct_app() -> Command {
                 "Display the real ID for the -G, -g and -u options instead of \
                       the effective ID.",
             )
+            .overrides_with(id_flags::ID_REAL_ID)
             .action(ArgAction::SetTrue),
         Arg::new(id_flags::ID_ZERO)
             .short('z')
@@ -822,16 +827,19 @@ pub fn ct_app() -> Command {
                 "delimit entries with NUL characters, not whitespace;\n\
                       not permitted in default format",
             )
+            .overrides_with(id_flags::ID_ZERO)
             .action(ArgAction::SetTrue),
         Arg::new(id_flags::ID_CONTEXT)
             .short('Z')
             .long(id_flags::ID_CONTEXT)
             .conflicts_with_all([id_flags::ID_GROUP, id_flags::ID_EFFECTIVE_USER])
             .help(CONTEXT_HELP_TEXT)
+            .overrides_with(id_flags::ID_CONTEXT)
             .action(ArgAction::SetTrue),
         Arg::new(id_flags::ID_IGNORE)
             .short('a')
             .help(t!("id.clap.id_ignore"))
+            .overrides_with(id_flags::ID_IGNORE)
             .action(ArgAction::SetTrue),
         Arg::new(id_flags::ID_ARG_USERS)
             .action(ArgAction::Append)
@@ -2224,6 +2232,14 @@ mod tests {
         fn test_ct_app_short_option_user() {
             let command = ct_app();
             let args = vec![ctcore::ct_util_name(), "-u"];
+            let executable = command.try_get_matches_from(args);
+            assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_repeated_boolean_option_is_idempotent() {
+            let command = ct_app();
+            let args = vec![ctcore::ct_util_name(), "-uu"];
             let executable = command.try_get_matches_from(args);
             assert!(executable.is_ok());
         }

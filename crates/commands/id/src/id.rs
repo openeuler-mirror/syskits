@@ -137,6 +137,19 @@ fn id_reject_attached_long_option(args: &[OsString]) -> CTResult<()> {
         if bytes == b"--" {
             break;
         }
+        if bytes.starts_with(b"-") && !bytes.starts_with(b"--") && bytes.len() > 1 {
+            if let Some(invalid) = bytes[1..]
+                .iter()
+                .copied()
+                .find(|option| !b"agnruzGZ".contains(option) && option.is_ascii())
+            {
+                return Err(CtSimpleError::new(
+                    1,
+                    format!("invalid option -- '{}'", char::from(invalid)),
+                ));
+            }
+            continue;
+        }
         let Some(option) = bytes.strip_prefix(b"--") else {
             continue;
         };
@@ -2403,6 +2416,14 @@ mod tests {
 
                 assert!(id_reject_attached_long_option(&args).is_ok());
             }
+        }
+
+        #[test]
+        fn test_invalid_short_option_uses_gnu_diagnostic() {
+            let args = vec![OsString::from(ctcore::ct_util_name()), OsString::from("-x")];
+            let error = id_reject_attached_long_option(&args).unwrap_err();
+
+            assert_eq!(error.to_string(), "invalid option -- 'x'");
         }
 
         #[test]

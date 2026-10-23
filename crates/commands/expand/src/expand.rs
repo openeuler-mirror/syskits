@@ -518,9 +518,8 @@ fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
                 continue;
             }
             let shortcut = arg.strip_prefix('-').is_some_and(|body| {
-                body.is_empty()
-                    || (body.starts_with(|character: char| character.is_ascii_digit())
-                        && body.chars().all(is_digit_or_comma))
+                body.starts_with(|character: char| character.is_ascii_digit())
+                    && body.chars().all(is_digit_or_comma)
             });
             if shortcut {
                 arg[1..]
@@ -1694,6 +1693,17 @@ mod tests {
                 OsString::from("expand"),
                 OsString::from("--"),
                 OsString::from("-4"),
+            ];
+            assert_eq!(expand_shortcuts(args.clone()), args);
+        }
+
+        #[test]
+        fn test_expand_shortcuts_preserves_stdin_operand() {
+            let args = vec![
+                OsString::from("expand"),
+                OsString::from("first"),
+                OsString::from("-"),
+                OsString::from("second"),
             ];
             assert_eq!(expand_shortcuts(args.clone()), args);
         }

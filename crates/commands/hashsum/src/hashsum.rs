@@ -2360,12 +2360,15 @@ fn verify_file_hash<W: Write>(
         flags.output_bits = expected_bytes * 8;
         flags.digest = Box::new(CtBlake2b::with_output_bytes(expected_bytes));
     }
-    let ck_filename_unescaped = if is_escaped {
+    let mut ck_filename_unescaped = if is_escaped {
         unescape_filename_bytes(ck_filename)
             .expect("escaped filenames are validated while parsing manifests")
     } else {
         ck_filename.to_vec()
     };
+    if let Some(nul) = ck_filename_unescaped.iter().position(|byte| *byte == b'\0') {
+        ck_filename_unescaped.truncate(nul);
+    }
     let ck_filename_os = OsStr::from_bytes(&ck_filename_unescaped);
     let ck_filename_path = Path::new(ck_filename_os);
     let (rendered_filename, needs_escape) = escape_filename_bytes(ck_filename_path);

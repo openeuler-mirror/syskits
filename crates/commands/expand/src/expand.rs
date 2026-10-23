@@ -47,6 +47,8 @@ use ctcore::ct_locale::{LcCategory, hard_locale};
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
 
 use std::error::Error;
+#[cfg(target_os = "linux")]
+use std::ffi::{CStr, CString};
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs::File;
@@ -83,6 +85,47 @@ const EXPAND_FILE_QUOTING_STYLE: CtQuotingStyle = CtQuotingStyle::Shell {
     always_quote: false,
     show_control: false,
 };
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn bindtextdomain(
+        domainname: *const ctcore::libc::c_char,
+        dirname: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
+    fn dgettext(
+        domainname: *const ctcore::libc::c_char,
+        msgid: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
+}
+
+fn expand_init_locale() {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    #[cfg(target_os = "linux")]
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+        bindtextdomain(c"coreutils".as_ptr(), c"/usr/share/locale".as_ptr());
+    }
+}
+
+fn expand_gettext(message: &str) -> String {
+    #[cfg(target_os = "linux")]
+    if let Ok(message_id) = CString::new(message) {
+        let translated = unsafe { dgettext(c"coreutils".as_ptr(), message_id.as_ptr()) };
+        if !translated.is_null() {
+            return unsafe { CStr::from_ptr(translated) }
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+
+    message.to_owned()
+}
+
+fn expand_gettext_one(message: &str, argument: &str) -> String {
+    expand_gettext(message).replacen("%s", argument, 1)
+}
 
 /// The mode to use when replacing tabs beyond the last one specified in
 /// the `--tabs` argument.
@@ -203,27 +246,51 @@ impl fmt::Display for ExpandParseError {
         match self {
             Self::InvalidCharacter(s) => {
                 let quoted = expand_quote_tab_value(s);
-                write!(fmt, "tab size contains invalid character(s): {quoted}")
+                fmt.write_str(&expand_gettext_one(
+                    "tab size contains invalid character(s): %s",
+                    &quoted,
+                ))
             }
-            Self::SpecifierNotAtStartOfNumber(specifier, s) => write!(
-                fmt,
-                "{} specifier not at start of number: {}",
-                expand_quote_tab_value(specifier),
-                expand_quote_tab_value(s),
-            ),
-            Self::SpecifierOnlyAllowedWithLastValue(specifier) => write!(
-                fmt,
-                "{} specifier only allowed with the last value",
-                expand_quote_tab_value(specifier)
-            ),
-            Self::SpecifierConflict => {
-                write!(fmt, "'/' specifier is mutually exclusive with '+'")
+            Self::SpecifierNotAtStartOfNumber(specifier, s) => {
+                let message = match specifier.as_str() {
+                    "/" => "'/' specifier not at start of number: %s",
+                    "+" => "'+' specifier not at start of number: %s",
+                    _ => {
+                        return write!(
+                            fmt,
+                            "{} specifier not at start of number: {}",
+                            expand_quote_tab_value(specifier),
+                            expand_quote_tab_value(s)
+                        );
+                    }
+                };
+                fmt.write_str(&expand_gettext_one(message, &expand_quote_tab_value(s)))
             }
-            Self::TabSizeCannotBeZero => write!(fmt, "tab size cannot be 0"),
-            Self::TabSizeTooLarge(s) => {
-                write!(fmt, "tab stop is too large {}", expand_quote_tab_value(s))
+            Self::SpecifierOnlyAllowedWithLastValue(specifier) => {
+                let message = match specifier.as_str() {
+                    "/" => "'/' specifier only allowed with the last value",
+                    "+" => "'+' specifier only allowed with the last value",
+                    _ => {
+                        return write!(
+                            fmt,
+                            "{} specifier only allowed with the last value",
+                            expand_quote_tab_value(specifier)
+                        );
+                    }
+                };
+                fmt.write_str(&expand_gettext(message))
             }
-            Self::TabSizesMustBeAscending => write!(fmt, "tab sizes must be ascending"),
+            Self::SpecifierConflict => fmt.write_str(&expand_gettext(
+                "'/' specifier is mutually exclusive with '+'",
+            )),
+            Self::TabSizeCannotBeZero => fmt.write_str(&expand_gettext("tab size cannot be 0")),
+            Self::TabSizeTooLarge(s) => fmt.write_str(&expand_gettext_one(
+                "tab stop is too large %s",
+                &expand_quote_tab_value(s),
+            )),
+            Self::TabSizesMustBeAscending => {
+                fmt.write_str(&expand_gettext("tab sizes must be ascending"))
+            }
         }
     }
 }
@@ -312,8 +379,7 @@ impl ExpandOptions {
 }
 
 pub fn expand_main(args: impl ctcore::Args) -> CTResult<()> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    expand_init_locale();
     let mut args = args.collect::<Vec<_>>();
     expand_apply_posix_option_order(&mut args, env::var_os("POSIXLY_CORRECT").is_some());
     expand_validate_options(&args)?;
@@ -760,11 +826,21 @@ fn expand_open(file_path: &OsStr) -> io::Result<BufReader<Box<dyn Read + 'static
 
 fn expand_file_error(file: &OsStr, error: &io::Error) -> String {
     let quoted_file = escape_name(file, &EXPAND_FILE_QUOTING_STYLE);
-    format!(
-        "expand: {}: {}\n",
-        quoted_file,
-        ctcore::ct_error::strip_errno(error)
-    )
+    format!("expand: {quoted_file}: {}\n", expand_error_detail(error))
+}
+
+fn expand_error_detail(error: &io::Error) -> String {
+    #[cfg(target_os = "linux")]
+    if let Some(errno) = error.raw_os_error() {
+        let detail = unsafe { ctcore::libc::strerror(errno) };
+        if !detail.is_null() {
+            return unsafe { CStr::from_ptr(detail) }
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+
+    ctcore::ct_error::strip_errno(error)
 }
 
 fn expand_report_error(
@@ -1117,11 +1193,13 @@ fn expand_to_writer<W: Write, D: Write>(
                     if n == 0 {
                         if is_first_chunk {
                             if !options.uflag && first_input_has_bom == Some(true) {
-                                expand_report_error(
-                                    &mut stderr_text,
-                                    diagnostics,
-                                    "expand: combination of files with and without BOM header\n",
-                                )?;
+                                let message = format!(
+                                    "expand: {}\n",
+                                    expand_gettext(
+                                        "combination of files with and without BOM header"
+                                    )
+                                );
+                                expand_report_error(&mut stderr_text, diagnostics, &message)?;
                                 exit_code = 1;
                                 break 'files;
                             }
@@ -1135,11 +1213,11 @@ fn expand_to_writer<W: Write, D: Write>(
                         if !options.uflag
                             && first_input_has_bom.is_some_and(|first| first != has_bom)
                         {
-                            expand_report_error(
-                                &mut stderr_text,
-                                diagnostics,
-                                "expand: combination of files with and without BOM header\n",
-                            )?;
+                            let message = format!(
+                                "expand: {}\n",
+                                expand_gettext("combination of files with and without BOM header")
+                            );
+                            expand_report_error(&mut stderr_text, diagnostics, &message)?;
                             exit_code = 1;
                             break 'files;
                         }
@@ -1211,8 +1289,7 @@ fn expand(options: &ExpandOptions) -> CTResult<()> {
 }
 
 pub fn expand_native_semantic(args: impl ctcore::Args) -> CTResult<ExpandSemantic> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    expand_init_locale();
     let mut args = args.collect::<Vec<_>>();
     expand_apply_posix_option_order(&mut args, env::var_os("POSIXLY_CORRECT").is_some());
     let args_match = ct_app().try_get_matches_from(expand_shortcuts(args))?;
@@ -1558,9 +1635,10 @@ mod tests {
         use crate::{
             CharType, DEFAULT_TABSTOP, ExpandCharInfo, ExpandOptions, ExpandParseError, ExpandRow,
             ExpandState, ExpandTabstopMode, RemainingMode, UTF8_BOM, expand_file_error,
-            expand_line, expand_native_semantic, expand_next_char_info, expand_next_tabstop,
-            expand_open, expand_shortcuts, expand_tabstops_parse, expand_tabstops_parse_args,
-            expand_to_writer, expand_write_spaces, write_expand_invalid_option_diagnostic,
+            expand_gettext, expand_line, expand_native_semantic, expand_next_char_info,
+            expand_next_tabstop, expand_open, expand_shortcuts, expand_tabstops_parse,
+            expand_tabstops_parse_args, expand_to_writer, expand_write_spaces,
+            write_expand_invalid_option_diagnostic,
         };
 
         use crate::is_digit_or_comma;
@@ -1968,6 +2046,14 @@ mod tests {
             assert_eq!(
                 expand_file_error(std::ffi::OsStr::new("input"), &error),
                 "expand: input: Input/output error\n"
+            );
+        }
+
+        #[test]
+        fn test_expand_gettext_preserves_unknown_message() {
+            assert_eq!(
+                expand_gettext("expand test untranslated message"),
+                "expand test untranslated message"
             );
         }
 

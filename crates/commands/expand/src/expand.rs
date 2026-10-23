@@ -889,10 +889,7 @@ fn expand_write_error(error: &io::Error) -> Box<dyn ctcore::ct_error::CTError> {
         expand_terminate_with_sigpipe();
     }
 
-    ctcore::ct_error::CtSimpleError::new(
-        1,
-        format!("write error: {}", expand_error_detail(error)),
-    )
+    ctcore::ct_error::CtSimpleError::new(1, format!("write error: {}", expand_error_detail(error)))
 }
 
 fn expand_stdin_was_closed() -> bool {
@@ -919,13 +916,9 @@ fn expand_close_stdin() -> io::Result<()> {
     }
 }
 
-fn expand_report_error(
-    stderr_text: &mut String,
-    diagnostics: &mut impl Write,
-    message: &str,
-) -> io::Result<()> {
+fn expand_report_error(stderr_text: &mut String, diagnostics: &mut impl Write, message: &str) {
     stderr_text.push_str(message);
-    diagnostics.write_all(message.as_bytes())
+    let _ = diagnostics.write_all(message.as_bytes());
 }
 
 /// Compute the number of spaces to the next tabstop.
@@ -1245,7 +1238,7 @@ fn expand_to_writer<W: Write, D: Write>(
                     OsStr::new("-"),
                     &io::Error::from_raw_os_error(ctcore::libc::EBADF),
                 );
-                expand_report_error(&mut stderr_text, diagnostics, &message)?;
+                expand_report_error(&mut stderr_text, diagnostics, &message);
                 exit_code = 1;
                 continue;
             }
@@ -1255,7 +1248,7 @@ fn expand_to_writer<W: Write, D: Write>(
         if path.is_dir() {
             let message =
                 expand_file_error(file, &io::Error::from_raw_os_error(ctcore::libc::EISDIR));
-            expand_report_error(&mut stderr_text, diagnostics, &message)?;
+            expand_report_error(&mut stderr_text, diagnostics, &message);
             exit_code = 1;
             continue;
         }
@@ -1274,7 +1267,7 @@ fn expand_to_writer<W: Write, D: Write>(
                                 &mut stderr_text,
                                 diagnostics,
                                 &expand_file_error(file, &e),
-                            )?;
+                            );
                             exit_code = 1;
                             break;
                         }
@@ -1289,7 +1282,7 @@ fn expand_to_writer<W: Write, D: Write>(
                                         "combination of files with and without BOM header"
                                     )
                                 );
-                                expand_report_error(&mut stderr_text, diagnostics, &message)?;
+                                expand_report_error(&mut stderr_text, diagnostics, &message);
                                 exit_code = 1;
                                 break 'files;
                             }
@@ -1307,7 +1300,7 @@ fn expand_to_writer<W: Write, D: Write>(
                                 "expand: {}\n",
                                 expand_gettext("combination of files with and without BOM header")
                             );
-                            expand_report_error(&mut stderr_text, diagnostics, &message)?;
+                            expand_report_error(&mut stderr_text, diagnostics, &message);
                             exit_code = 1;
                             break 'files;
                         }
@@ -1340,7 +1333,7 @@ fn expand_to_writer<W: Write, D: Write>(
             }
             Err(e) => {
                 let message = expand_file_error(file, &e);
-                expand_report_error(&mut stderr_text, diagnostics, &message)?;
+                expand_report_error(&mut stderr_text, diagnostics, &message);
                 exit_code = 1;
                 continue;
             }
@@ -1372,11 +1365,8 @@ fn expand(options: &ExpandOptions) -> CTResult<()> {
     if ctcore::ct_stdout_was_closed() {
         if output.flush().is_err() {
             let error = io::Error::from_raw_os_error(ctcore::libc::EBADF);
-            let message = format!(
-                "expand: write error: {}\n",
-                expand_error_detail(&error)
-            );
-            expand_report_error(&mut outcome.stderr_text, &mut diagnostics, &message)?;
+            let message = format!("expand: write error: {}\n", expand_error_detail(&error));
+            expand_report_error(&mut outcome.stderr_text, &mut diagnostics, &message);
             outcome.exit_code = 1;
         }
     } else {
@@ -1387,7 +1377,7 @@ fn expand(options: &ExpandOptions) -> CTResult<()> {
     if outcome.read_stdin {
         if let Err(error) = expand_close_stdin() {
             let message = expand_file_error(OsStr::new("-"), &error);
-            expand_report_error(&mut outcome.stderr_text, &mut diagnostics, &message)?;
+            expand_report_error(&mut outcome.stderr_text, &mut diagnostics, &message);
             outcome.exit_code = 1;
         }
     }
@@ -1443,6 +1433,28 @@ impl Tool for Expand {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+
+    struct FailingDiagnostics;
+
+    impl std::io::Write for FailingDiagnostics {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::from_raw_os_error(ctcore::libc::EBADF))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Err(std::io::Error::from_raw_os_error(ctcore::libc::EBADF))
+        }
+    }
+
+    #[test]
+    fn test_expand_report_error_ignores_diagnostic_write_failure() {
+        let mut stderr_text = String::new();
+        let mut diagnostics = FailingDiagnostics;
+
+        expand_report_error(&mut stderr_text, &mut diagnostics, "expand: missing\n");
+
+        assert_eq!(stderr_text, "expand: missing\n");
+    }
 
     #[test]
     fn test_tool_implementation() {

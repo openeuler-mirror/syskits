@@ -24,7 +24,7 @@ use sys_locale::get_locale;
 
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_entries::{self, CtPasswd, Locate};
+use ctcore::ct_entries::{self, CtPasswd};
 use ctcore::ct_error::CTResult;
 use ctcore::ct_error::{CtSimpleError, set_ct_exit_code, strip_errno};
 use ctcore::ct_line_ending::CtLineEnding;
@@ -328,16 +328,20 @@ fn id_build_rows(
         let possible_pw = if let Some(user) = subject.as_ref() {
             let lookup = CtPasswd::locate_name(user.as_str()).or_else(|name_error| {
                 if let Ok(uid) = user.parse::<u32>() {
-                    CtPasswd::locate(uid)
+                    CtPasswd::locate_uid(uid)
                 } else {
                     Err(name_error)
                 }
             });
             match lookup {
                 Ok(passwd) => Some(passwd),
-                Err(_) => {
+                Err(error) => {
                     exit_code = 1;
-                    stderr_text.push_str(&format!("id: {}: no such user\n", user.quote()));
+                    stderr_text.push_str(&format!("id: {}: no such user", user.quote()));
+                    if matches!(error.raw_os_error(), Some(errno) if errno != 0) {
+                        stderr_text.push_str(&format!(": {}", strip_errno(&error)));
+                    }
+                    stderr_text.push('\n');
                     continue;
                 }
             }
@@ -527,15 +531,23 @@ fn id_handle_users<W: Write>(
         let possible_pw = if id_state.is_user_specified {
             let lookup = CtPasswd::locate_name(users[i].as_str()).or_else(|name_error| {
                 if let Ok(uid) = users[i].parse::<u32>() {
-                    CtPasswd::locate(uid)
+                    CtPasswd::locate_uid(uid)
                 } else {
                     Err(name_error)
                 }
             });
             match lookup {
                 Ok(p) => Some(p),
-                Err(_) => {
-                    ct_show_error!("{}: no such user", users[i].quote());
+                Err(error) => {
+                    if matches!(error.raw_os_error(), Some(errno) if errno != 0) {
+                        ct_show_error!(
+                            "{}: no such user: {}",
+                            users[i].quote(),
+                            strip_errno(&error)
+                        );
+                    } else {
+                        ct_show_error!("{}: no such user", users[i].quote());
+                    }
                     set_ct_exit_code(1);
                     if i + 1 >= users.len() {
                         break;

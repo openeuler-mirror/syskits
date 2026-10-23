@@ -48,6 +48,7 @@ use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::ptr;
 use std::sync::Mutex;
 
+use nix::errno::Errno;
 use once_cell::sync::Lazy;
 
 unsafe extern "C" {
@@ -181,6 +182,29 @@ unsafe fn cstr2osstring(ptr: *const c_char) -> Option<OsString> {
 }
 
 impl CtPasswd {
+    /// Locate a passwd entry by UID while preserving NSS lookup errors.
+    pub fn locate_uid(uid: uid_t) -> IOResult<Self> {
+        let _guard = PW_LOCK.lock();
+        // SAFETY: We hold PW_LOCK and copy the static NSS result before unlocking.
+        unsafe {
+            Errno::clear();
+            let data = getpwuid(uid);
+            if !data.is_null() {
+                Ok(Self::from_raw(ptr::read(data as *const _)))
+            } else {
+                let errno = Errno::last_raw();
+                if errno == 0 {
+                    Err(IOError::new(
+                        ErrorKind::NotFound,
+                        format!("No such id: {uid}"),
+                    ))
+                } else {
+                    Err(IOError::from_raw_os_error(errno))
+                }
+            }
+        }
+    }
+
     /// Locate a passwd entry by user name only.
     ///
     /// Unlike `Locate<&str>`, this follows `getpwnam` semantics and does not
@@ -529,6 +553,16 @@ mod test {
             }
         }
     }
+
+    #[test]
+    fn test_locate_uid_clears_stale_errno() {
+        Errno::EIO.set();
+        let error = CtPasswd::locate_uid(uid_t::MAX).unwrap_err();
+
+        assert_eq!(error.kind(), ErrorKind::NotFound);
+        assert_eq!(error.raw_os_error(), None);
+    }
+
     #[test]
     fn test_belongs_to() {
         let test_user = CtPasswd {

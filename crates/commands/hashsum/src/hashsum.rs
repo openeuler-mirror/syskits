@@ -353,6 +353,15 @@ impl HashsumFlags {
             ));
         }
 
+        if is_check
+            && (matches.get_flag(hashsum_flags::BINARY) || matches.get_flag(hashsum_flags::TEXT))
+        {
+            return Err(CTsageError::new(
+                1,
+                "the --binary and --text options are meaningless when verifying checksums",
+            ));
+        }
+
         let is_status = is_status_explicit;
         // quiet 模式在明确指定或 status 模式下激活
         let is_quiet = is_quiet_explicit || is_status;

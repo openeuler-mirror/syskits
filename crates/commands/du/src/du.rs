@@ -24,7 +24,7 @@ use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_parse_glob;
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
-use ctcore::{ct_show, ct_show_error, ct_show_warning};
+use ctcore::{ct_show_error, ct_show_warning};
 #[cfg(not(unix))]
 use glob::Pattern;
 #[cfg(unix)]
@@ -1535,7 +1535,7 @@ impl DuStatPrinter {
                             self.du_print_stat(&stat_info.stat, size)?;
                         }
                     }
-                    Err(e) => ct_show!(e), // 处理接收错误。
+                    Err(error) => du_show_error(error.as_ref()),
                 },
                 Err(_) => break, // 如果接收通道被关闭，则退出循环。
             }
@@ -1600,6 +1600,20 @@ impl DuStatPrinter {
             .and_then(|_| stdout.flush());
         du_handle_stdout_result(result)
     }
+}
+
+fn du_show_error(error: &dyn CTError) {
+    set_ct_exit_code(error.code());
+    let stderr = io::stderr();
+    let mut stderr = stderr.lock();
+    du_write_error_diagnostic_ignoring_errors(&mut stderr, error);
+}
+
+fn du_write_error_diagnostic_ignoring_errors(writer: &mut impl Write, error: &dyn CTError) {
+    let diagnostic = format!("{}: {error}\n", ctcore::ct_util_name());
+    let _ = writer
+        .write_all(diagnostic.as_bytes())
+        .and_then(|_| writer.flush());
 }
 
 fn du_handle_stdout_result(result: io::Result<()>) -> CTResult<()> {
@@ -10689,6 +10703,26 @@ mod tests_fn {
 
     use std::os::unix::fs::symlink;
     use tempfile::TempDir;
+
+    struct FailingDiagnosticWriter;
+
+    impl Write for FailingDiagnosticWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::from_raw_os_error(ctcore::libc::ENOSPC))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Err(io::Error::from_raw_os_error(ctcore::libc::ENOSPC))
+        }
+    }
+
+    #[test]
+    fn test_stderr_write_error_is_ignored_without_panic() {
+        let error = CtSimpleError::new(1, "ordinary failure");
+        let mut writer = FailingDiagnosticWriter;
+
+        du_write_error_diagnostic_ignoring_errors(&mut writer, error.as_ref());
+    }
 
     #[test]
     fn test_arbitrary_stdout_error_uses_gnu_write_diagnostic() {

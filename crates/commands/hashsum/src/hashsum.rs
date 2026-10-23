@@ -2116,7 +2116,7 @@ fn parse_hash_line(
     };
 
     match parsed {
-        Ok(parsed) if bytes_marker == "+" && parsed.1.len() % 2 != 0 => {
+        Ok(parsed) if bytes_marker == "+" && (parsed.1.len() % 2 != 0 || parsed.1.len() > 128) => {
             Err(ParseLineError::FormatError)
         }
         result => result,

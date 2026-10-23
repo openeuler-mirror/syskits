@@ -205,6 +205,7 @@ struct ExpandRunOutcome {
     stderr_text: String,
     exit_code: i32,
     line_had_tabs: Vec<bool>,
+    read_stdin: bool,
 }
 
 /// Decide whether the character is either an ASCII blank or a comma.
@@ -843,6 +844,30 @@ fn expand_error_detail(error: &io::Error) -> String {
     ctcore::ct_error::strip_errno(error)
 }
 
+fn expand_stdin_was_closed() -> bool {
+    #[cfg(unix)]
+    {
+        return ctcore::ct_stdin_was_closed() && !ctcore::ct_io::has_injected_stdin();
+    }
+
+    #[cfg(not(unix))]
+    false
+}
+
+#[cfg(unix)]
+fn expand_close_stdin() -> io::Result<()> {
+    if ctcore::ct_stdin_was_closed() {
+        return Err(io::Error::from_raw_os_error(ctcore::libc::EBADF));
+    }
+
+    let result = unsafe { ctcore::libc::close(ctcore::libc::STDIN_FILENO) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
 fn expand_report_error(
     stderr_text: &mut String,
     diagnostics: &mut impl Write,
@@ -1159,8 +1184,22 @@ fn expand_to_writer<W: Write, D: Write>(
     let mut first_input_has_bom = None;
     let mut stderr_text = String::new();
     let mut exit_code = 0;
+    let mut read_stdin = false;
 
     'files: for file in &options.files {
+        if file == OsStr::new("-") {
+            read_stdin = true;
+            if expand_stdin_was_closed() {
+                let message = expand_file_error(
+                    OsStr::new("-"),
+                    &io::Error::from_raw_os_error(ctcore::libc::EBADF),
+                );
+                expand_report_error(&mut stderr_text, diagnostics, &message)?;
+                exit_code = 1;
+                continue;
+            }
+        }
+
         let path = Path::new(file);
         if path.is_dir() {
             let message =
@@ -1271,6 +1310,7 @@ fn expand_to_writer<W: Write, D: Write>(
         stderr_text,
         exit_code,
         line_had_tabs: state.line_had_tabs,
+        read_stdin,
     })
 }
 
@@ -1278,8 +1318,17 @@ fn expand(options: &ExpandOptions) -> CTResult<()> {
     let mut output = BufWriter::new(stdout());
     let stderr = io::stderr();
     let mut diagnostics = stderr.lock();
-    let outcome = expand_to_writer(options, &mut output, &mut diagnostics)?;
+    let mut outcome = expand_to_writer(options, &mut output, &mut diagnostics)?;
     output.flush()?;
+
+    #[cfg(unix)]
+    if outcome.read_stdin {
+        if let Err(error) = expand_close_stdin() {
+            let message = expand_file_error(OsStr::new("-"), &error);
+            expand_report_error(&mut outcome.stderr_text, &mut diagnostics, &message)?;
+            outcome.exit_code = 1;
+        }
+    }
 
     if outcome.exit_code != 0 {
         set_ct_exit_code(outcome.exit_code);

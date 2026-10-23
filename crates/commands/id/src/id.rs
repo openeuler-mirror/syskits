@@ -140,15 +140,39 @@ fn id_reject_attached_long_option(args: &[OsString]) -> CTResult<()> {
         let Some(option) = bytes.strip_prefix(b"--") else {
             continue;
         };
-        let Some(equal) = option.iter().position(|byte| *byte == b'=') else {
-            continue;
-        };
-        let name = &option[..equal];
+        let equal = option.iter().position(|byte| *byte == b'=');
+        let name = equal.map_or(option, |index| &option[..index]);
         let matches = ID_NO_ARGUMENT_LONG_OPTIONS
             .iter()
             .filter(|candidate| candidate.as_bytes().starts_with(name))
             .collect::<Vec<_>>();
-        if matches.len() == 1 {
+        if let Some(exact) = matches
+            .iter()
+            .find(|candidate| candidate.as_bytes() == name)
+        {
+            if equal.is_some() {
+                return Err(CtSimpleError::new(
+                    1,
+                    format!("option '--{exact}' doesn't allow an argument"),
+                ));
+            }
+            continue;
+        }
+        if matches.len() > 1 {
+            let possibilities = matches
+                .iter()
+                .map(|candidate| format!("'--{candidate}'"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            return Err(CtSimpleError::new(
+                1,
+                format!(
+                    "option '{}' is ambiguous; possibilities: {possibilities}",
+                    argument.to_string_lossy()
+                ),
+            ));
+        }
+        if equal.is_some() && matches.len() == 1 {
             return Err(CtSimpleError::new(
                 1,
                 format!("option '--{}' doesn't allow an argument", matches[0]),
@@ -2353,6 +2377,32 @@ mod tests {
                 error.to_string(),
                 "option '--user' doesn't allow an argument"
             );
+        }
+
+        #[test]
+        fn test_ambiguous_long_option_lists_matching_options() {
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--gro"),
+            ];
+            let error = id_reject_attached_long_option(&args).unwrap_err();
+
+            assert_eq!(
+                error.to_string(),
+                "option '--gro' is ambiguous; possibilities: '--group' '--groups'"
+            );
+        }
+
+        #[test]
+        fn test_exact_long_option_takes_precedence_over_prefix_matches() {
+            for option in ["--group", "--groups"] {
+                let args = vec![
+                    OsString::from(ctcore::ct_util_name()),
+                    OsString::from(option),
+                ];
+
+                assert!(id_reject_attached_long_option(&args).is_ok());
+            }
         }
 
         #[test]

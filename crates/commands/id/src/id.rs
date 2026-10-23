@@ -37,6 +37,10 @@ use std::os::unix::ffi::OsStrExt;
 
 static CONTEXT_HELP_TEXT: &str = "print only the security context of the process";
 
+const ID_NO_ARGUMENT_LONG_OPTIONS: [&str; 9] = [
+    "user", "group", "groups", "name", "real", "zero", "context", "help", "version",
+];
+
 mod id_flags {
     // pub const ID_AUDIT: &str = "audit"; // GNU's id does not have this
     pub const ID_CONTEXT: &str = "context";
@@ -127,14 +131,44 @@ impl Tool for Id {
     }
 }
 
+fn id_reject_attached_long_option(args: &[OsString]) -> CTResult<()> {
+    for argument in args.iter().skip(1) {
+        let bytes = argument.as_bytes();
+        if bytes == b"--" {
+            break;
+        }
+        let Some(option) = bytes.strip_prefix(b"--") else {
+            continue;
+        };
+        let Some(equal) = option.iter().position(|byte| *byte == b'=') else {
+            continue;
+        };
+        let name = &option[..equal];
+        let matches = ID_NO_ARGUMENT_LONG_OPTIONS
+            .iter()
+            .filter(|candidate| candidate.as_bytes().starts_with(name))
+            .collect::<Vec<_>>();
+        if matches.len() == 1 {
+            return Err(CtSimpleError::new(
+                1,
+                format!("option '--{}' doesn't allow an argument", matches[0]),
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn id_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
+    let raw_args = args.collect::<Vec<_>>();
+    id_reject_attached_long_option(&raw_args)?;
+
     let matches = ct_app()
         .after_help(t!("id.after_help"))
-        .try_get_matches_from(args)?;
+        .try_get_matches_from(raw_args)?;
 
     let users: Vec<String> = matches
         .get_many::<String>(id_flags::ID_ARG_USERS)
@@ -480,9 +514,12 @@ pub fn id_native_semantic(args: impl ctcore::Args) -> CTResult<IdSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
+    let raw_args = args.collect::<Vec<_>>();
+    id_reject_attached_long_option(&raw_args)?;
+
     let matches = ct_app()
         .after_help(t!("id.after_help"))
-        .try_get_matches_from(args)?;
+        .try_get_matches_from(raw_args)?;
 
     let users: Vec<String> = matches
         .get_many::<String>(id_flags::ID_ARG_USERS)
@@ -2302,6 +2339,20 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-uu"];
             let executable = command.try_get_matches_from(args);
             assert!(executable.is_ok());
+        }
+
+        #[test]
+        fn test_attached_long_option_argument_uses_gnu_diagnostic() {
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("--us=value"),
+            ];
+            let error = id_reject_attached_long_option(&args).unwrap_err();
+
+            assert_eq!(
+                error.to_string(),
+                "option '--user' doesn't allow an argument"
+            );
         }
 
         #[test]

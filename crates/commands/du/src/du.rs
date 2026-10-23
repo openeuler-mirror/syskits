@@ -58,6 +58,8 @@ use std::os::{
 };
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::thread;
 #[cfg(test)]
@@ -177,6 +179,39 @@ const DU_DIAGNOSTIC_QUOTING_STYLE: CtQuotingStyle = CtQuotingStyle::Shell {
     always_quote: true,
     show_control: false,
 };
+
+#[cfg(target_os = "linux")]
+static DU_INHERITED_SIGPIPE_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" fn du_capture_inherited_sigpipe() {
+    let mut action = std::mem::MaybeUninit::<ctcore::libc::sigaction>::uninit();
+    if unsafe {
+        ctcore::libc::sigaction(ctcore::libc::SIGPIPE, std::ptr::null(), action.as_mut_ptr())
+    } == 0
+    {
+        let action = unsafe { action.assume_init() };
+        DU_INHERITED_SIGPIPE_IGNORED.store(
+            action.sa_sigaction == ctcore::libc::SIG_IGN,
+            Ordering::Relaxed,
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static DU_CAPTURE_SIGPIPE: unsafe extern "C" fn() = du_capture_inherited_sigpipe;
+
+#[cfg(target_os = "linux")]
+fn du_inherited_sigpipe_ignored() -> bool {
+    DU_INHERITED_SIGPIPE_IGNORED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn du_inherited_sigpipe_ignored() -> bool {
+    false
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DuRow {
@@ -1570,11 +1605,18 @@ impl DuStatPrinter {
 fn du_handle_stdout_result(result: io::Result<()>) -> CTResult<()> {
     match result {
         Ok(()) => Ok(()),
+        Err(error) if du_stdout_is_broken_pipe(&error) && !du_inherited_sigpipe_ignored() => {
+            du_terminate_with_sigpipe()
+        }
         Err(error) => {
             du_silence_stdout_after_error();
             Err(du_stdout_write_error(&error))
         }
     }
+}
+
+fn du_stdout_is_broken_pipe(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::BrokenPipe
 }
 
 fn du_stdout_write_error(error: &io::Error) -> Box<dyn CTError> {
@@ -1584,6 +1626,20 @@ fn du_stdout_write_error(error: &io::Error) -> Box<dyn CTError> {
     }
 
     CtSimpleError::new(1, "write error")
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn du_terminate_with_sigpipe() -> ! {
+    unsafe {
+        ctcore::libc::signal(ctcore::libc::SIGPIPE, ctcore::libc::SIG_DFL);
+        ctcore::libc::raise(ctcore::libc::SIGPIPE);
+        ctcore::libc::_exit(128 + ctcore::libc::SIGPIPE);
+    }
+}
+
+#[cfg(any(not(target_os = "linux"), test))]
+fn du_terminate_with_sigpipe() -> ! {
+    panic!("stdout pipe is broken")
 }
 
 #[cfg(unix)]
@@ -10649,6 +10705,13 @@ mod tests_fn {
             du_stdout_write_error(&error).to_string(),
             "write error: Bad file descriptor"
         );
+    }
+
+    #[test]
+    fn test_broken_pipe_error_is_detected_for_sigpipe() {
+        let error = io::Error::from(io::ErrorKind::BrokenPipe);
+
+        assert!(du_stdout_is_broken_pipe(&error));
     }
 
     #[test]

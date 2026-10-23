@@ -166,6 +166,8 @@ struct DuStatPrinter {
 
 const DU_INODES_APPARENT_SIZE_WARNING: &str =
     "options --apparent-size and -b are ineffective with --inodes";
+const DU_FILES0_STDIN_DASH_DIAGNOSTIC: &str =
+    "when reading file names from stdin, no file name of '-' allowed";
 const DU_DIAGNOSTIC_QUOTING_STYLE: CtQuotingStyle = CtQuotingStyle::Shell {
     escape: true,
     always_quote: true,
@@ -1758,9 +1760,7 @@ fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
         } else {
             // 【核心修复】：拦截在从 stdin 读取列表时，列表内容出现 "-" 的套娃情况
             if filename == "-" && path == b"-" {
-                ct_show_error!(
-                    "when reading file names from standard input, no file name of '-' allowed"
-                );
+                ct_show_error!("{DU_FILES0_STDIN_DASH_DIAGNOSTIC}");
                 set_ct_exit_code(1);
                 continue; // 拒绝将 '-' 加入执行队列，避免后续报 cannot access 的错
             }
@@ -2826,6 +2826,14 @@ mod tests {
         assert_eq!(
             du_format_access_error("无法访问 %s", "'missing'", "没有那个文件或目录"),
             "无法访问 'missing': 没有那个文件或目录"
+        );
+    }
+
+    #[test]
+    fn test_files0_stdin_dash_uses_gnu_wording() {
+        assert_eq!(
+            DU_FILES0_STDIN_DASH_DIAGNOSTIC,
+            "when reading file names from stdin, no file name of '-' allowed"
         );
     }
 

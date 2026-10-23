@@ -1716,7 +1716,7 @@ fn du_to_magnitude_and_suffix(n: u128, bases: &[u128], suffixes: &[&'static str]
  * 如果文件名是"-"，则从标准输入读取。如果文件名是目录，则返回错误。
  * 尝试打开文件，如果文件不存在或打开时发生其他错误，则返回相应的错误。
  *
- * 文件名通过零字节分隔。读取的路径被添加到结果向量中，重复的路径被忽略。
+ * 文件名通过零字节分隔。读取的路径按输入顺序添加到结果向量中。
  * 如果遇到零字节分隔的空路径，则视为错误。
  */
 fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
@@ -1765,11 +1765,8 @@ fn du_read_files_from(filename: &str) -> Result<Vec<PathBuf>, std::io::Error> {
                 continue; // 拒绝将 '-' 加入执行队列，避免后续报 cannot access 的错
             }
 
-            // 添加非空路径到结果向量，忽略重复的路径。
-            let p = du_path_from_bytes(path);
-            if !paths_buf.contains(&p) {
-                paths_buf.push(p);
-            }
+            // 保留每条记录；是否按inode去重由后续-l遍历选项决定。
+            paths_buf.push(du_path_from_bytes(path));
         }
     }
 
@@ -2742,6 +2739,41 @@ mod tests {
 
         assert_eq!(roots.len(), 2);
         assert_eq!(roots[0].measured_size, roots[1].measured_size);
+        assert_eq!(total.measured_size, roots[0].measured_size * 2);
+    }
+
+    #[test]
+    fn test_count_links_preserves_repeated_files0_records() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file = temp_dir.path().join("file");
+        let list = temp_dir.path().join("list");
+        fs::write(&file, b"x").unwrap();
+        let mut records = file.as_os_str().as_encoded_bytes().to_vec();
+        records.push(0);
+        records.extend_from_slice(file.as_os_str().as_encoded_bytes());
+        records.push(0);
+        fs::write(&list, records).unwrap();
+
+        let args = vec![
+            OsString::from("du"),
+            OsString::from("-l"),
+            OsString::from("-c"),
+            OsString::from("--files0-from"),
+            list.as_os_str().to_os_string(),
+        ];
+        let semantic = du_native_semantic(args.into_iter()).unwrap();
+        let roots: Vec<_> = semantic
+            .rows
+            .iter()
+            .filter(|row| row.kind == "entry" && row.depth == 0)
+            .collect();
+        let total = semantic
+            .rows
+            .iter()
+            .find(|row| row.kind == "total")
+            .unwrap();
+
+        assert_eq!(roots.len(), 2);
         assert_eq!(total.measured_size, roots[0].measured_size * 2);
     }
 

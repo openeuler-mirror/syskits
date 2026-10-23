@@ -32,10 +32,22 @@ use ctcore::ct_process::{getegid, geteuid, getgid, getuid};
 use ctcore::ct_show_error;
 use selinux::SecurityContext;
 use std::error::Error;
-use std::ffi::{OsStr, OsString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fmt::Display;
 #[cfg(target_family = "unix")]
 use std::os::unix::ffi::OsStrExt;
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn bindtextdomain(
+        domainname: *const ctcore::libc::c_char,
+        dirname: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
+    fn dgettext(
+        domainname: *const ctcore::libc::c_char,
+        msgid: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
+}
 
 static CONTEXT_HELP_TEXT: &str = "print only the security context of the process";
 
@@ -176,6 +188,56 @@ impl CTError for IdOptionError {
     }
 }
 
+fn id_init_gettext() {
+    #[cfg(unix)]
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
+    #[cfg(target_os = "linux")]
+    unsafe {
+        bindtextdomain(c"coreutils".as_ptr(), c"/usr/share/locale".as_ptr());
+    }
+}
+
+fn id_gettext(message: &str) -> String {
+    #[cfg(target_os = "linux")]
+    {
+        let Ok(message) = CString::new(message) else {
+            return message.to_string();
+        };
+        let translated = unsafe { dgettext(c"coreutils".as_ptr(), message.as_ptr()) };
+        if !translated.is_null() {
+            return unsafe { CStr::from_ptr(translated) }
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+    message.to_string()
+}
+
+fn id_errno_message(error: &io::Error) -> Option<String> {
+    let errno = error.raw_os_error()?;
+    #[cfg(target_os = "linux")]
+    unsafe {
+        let message = ctcore::libc::strerror(errno);
+        if !message.is_null() {
+            return Some(CStr::from_ptr(message).to_string_lossy().into_owned());
+        }
+    }
+    None
+}
+
+fn id_no_such_user_diagnostic(quoted_user: &str, error: &io::Error) -> String {
+    let mut message = id_gettext("%s: no such user").replacen("%s", quoted_user, 1);
+    if error.raw_os_error().is_some()
+        && let Some(detail) = id_errno_message(error)
+    {
+        message.push_str(": ");
+        message.push_str(&detail);
+    }
+    message
+}
+
 fn id_reject_attached_long_option(args: &[OsString]) -> CTResult<()> {
     for argument in args.iter().skip(1) {
         let bytes = argument.as_bytes();
@@ -272,6 +334,7 @@ pub fn id_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    id_init_gettext();
 
     let mut raw_args = args.collect::<Vec<_>>();
     id_apply_posix_option_order(
@@ -506,10 +569,11 @@ fn id_build_rows(
                 Ok(passwd) => Some(passwd),
                 Err(error) => {
                     exit_code = 1;
-                    stderr_text.push_str(&format!("id: {}: no such user", user.quote()));
-                    if matches!(error.raw_os_error(), Some(errno) if errno != 0) {
-                        stderr_text.push_str(&format!(": {}", strip_errno(&error)));
-                    }
+                    stderr_text.push_str("id: ");
+                    stderr_text.push_str(&id_no_such_user_diagnostic(
+                        &id_quote_user(OsStr::new(user)),
+                        &error,
+                    ));
                     stderr_text.push('\n');
                     continue;
                 }
@@ -637,6 +701,7 @@ fn id_build_rows(
 pub fn id_native_semantic(args: impl ctcore::Args) -> CTResult<IdSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    id_init_gettext();
 
     let mut raw_args = args.collect::<Vec<_>>();
     id_apply_posix_option_order(
@@ -787,12 +852,14 @@ fn id_handle_users<W, U>(
                 Err(error) => {
                     if matches!(error.raw_os_error(), Some(errno) if errno != 0) {
                         ct_show_error!(
-                            "{}: no such user: {}",
-                            id_quote_user(user),
-                            strip_errno(&error)
+                            "{}",
+                            id_no_such_user_diagnostic(&id_quote_user(user), &error)
                         );
                     } else {
-                        ct_show_error!("{}: no such user", id_quote_user(user));
+                        ct_show_error!(
+                            "{}",
+                            id_no_such_user_diagnostic(&id_quote_user(user), &error)
+                        );
                     }
                     set_ct_exit_code(1);
                     if i + 1 >= users.len() {
@@ -1189,6 +1256,15 @@ mod tests {
     mod id_handle_users_tests {
         use super::*;
         use std::io::Cursor;
+
+        #[test]
+        fn test_no_such_user_diagnostic_includes_user_and_errno() {
+            let error = io::Error::from_raw_os_error(ctcore::libc::ENOENT);
+            let diagnostic = id_no_such_user_diagnostic("'missing'", &error);
+
+            assert!(diagnostic.contains("'missing'"));
+            assert!(diagnostic.contains("No such file or directory"));
+        }
 
         #[test]
         fn test_quote_user_uses_gnu_control_byte_escaping() {

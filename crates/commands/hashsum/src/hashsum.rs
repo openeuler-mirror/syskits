@@ -1906,6 +1906,7 @@ where
         if flags.is_check {
             let bad_format_before = bad_format;
             let failed_open_before = failed_open_file;
+            let mut manifest_no_files_verified = false;
             let check_result = check_hash_file(
                 &mut flags,
                 filename,
@@ -1914,7 +1915,7 @@ where
                 &mut bad_format,
                 &mut failed_open_file,
                 &mut no_valid_lines,
-                &mut no_files_verified,
+                &mut manifest_no_files_verified,
                 &mut bsd_reversed,
             )?;
 
@@ -1925,6 +1926,10 @@ where
                         failed,
                         failed_open_file - failed_open_before,
                     )?;
+                }
+                if manifest_no_files_verified {
+                    ctcore::ct_show_error!("{}: no file was verified", filename.display());
+                    no_files_verified = true;
                 }
                 failed_cksum += failed;
             }
@@ -2080,8 +2085,6 @@ fn check_hash_file<W: Write>(
     } else {
         *bad_format += local_bad_format;
         if flags.is_ignore_missing && matched_files == 0 {
-            // --ignore-missing 虽然能忽略不存在的文件，但如果所有的都没找到，同样要报错
-            ctcore::ct_show_error!("{}: no file was verified", filename.display());
             *no_files_verified = true;
         }
     }
@@ -2442,8 +2445,6 @@ fn verify_file_hash<W: Write>(
         BufReader::new(Box::new(file) as Box<dyn Read>)
     };
 
-    *matched_files += 1;
-
     // 计算实际哈希值
     let real_sum = match digest_reader(&mut flags.digest, &mut ckf, binary_check, flags.output_bits)
     {
@@ -2468,6 +2469,7 @@ fn verify_file_hash<W: Write>(
     };
 
     if expected_sum == real_sum {
+        *matched_files += 1;
         if !flags.is_quiet {
             write_check_status(
                 writer,

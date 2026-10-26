@@ -278,6 +278,9 @@ pub fn get_base_input<'a>(
             }
             Ok(Box::new(BufReader::new(file_buf))) //作为 Box<dyn Read> 类型转换
         }
+        None if ctcore::ct_stdin_was_closed() => Err(read_error(
+            std::io::Error::from_raw_os_error(ctcore::libc::EBADF),
+        )),
         None => Ok(ctcore::ct_io::stdin_reader_box()),
     }
 }

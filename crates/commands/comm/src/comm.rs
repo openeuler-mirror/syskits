@@ -12,7 +12,8 @@
 // spell-checker:ignore (ToDO) delim mkdelim
 
 extern crate rust_i18n;
-use ctcore::ct_error::{CTResult, FromIo};
+use ctcore::ct_display::Quotable;
+use ctcore::ct_error::{CTResult, CTsageError, FromIo};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_line_ending::CtLineEnding;
@@ -37,6 +38,177 @@ mod opt_flags {
     pub const FILE_2: &str = "FILE2";
     pub const TOTAL: &str = "total";
     pub const ZERO_TERMINATED: &str = "zero-terminated";
+}
+
+const GNU_COMM_LONG_OPTIONS: &[&str] = &[
+    "check-order",
+    "nocheck-order",
+    "output-delimiter",
+    "total",
+    "zero-terminated",
+    "help",
+    "version",
+];
+
+fn resolve_gnu_comm_long_option(option_name: &[u8]) -> Vec<&'static str> {
+    let mut candidates = GNU_COMM_LONG_OPTIONS
+        .iter()
+        .copied()
+        .filter(|candidate| candidate.as_bytes().starts_with(option_name))
+        .collect::<Vec<_>>();
+
+    if let Some(exact) = candidates
+        .iter()
+        .position(|candidate| candidate.as_bytes() == option_name)
+    {
+        candidates = vec![candidates[exact]];
+    }
+    candidates
+}
+
+fn validate_gnu_comm_options(args: &[OsString]) -> CTResult<()> {
+    let mut index = 1;
+    while index < args.len() {
+        let argument = args[index].as_os_str().as_encoded_bytes();
+        if argument == b"--" {
+            break;
+        }
+
+        if let Some(long_argument) = argument.strip_prefix(b"--") {
+            if long_argument.is_empty() {
+                break;
+            }
+
+            let option_end = long_argument
+                .iter()
+                .position(|byte| *byte == b'=')
+                .unwrap_or(long_argument.len());
+            let supplied_value = option_end < long_argument.len();
+            let candidates = resolve_gnu_comm_long_option(&long_argument[..option_end]);
+
+            if candidates.is_empty() {
+                return Err(CTsageError::new(
+                    1,
+                    format!(
+                        "unrecognized option '{}'",
+                        args[index].as_os_str().to_string_lossy()
+                    ),
+                ));
+            }
+            if candidates.len() > 1 {
+                let possibilities = candidates
+                    .iter()
+                    .map(|candidate| format!("'--{candidate}'"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                return Err(CTsageError::new(
+                    1,
+                    format!(
+                        "option '{}' is ambiguous; possibilities: {possibilities}",
+                        args[index].as_os_str().to_string_lossy()
+                    ),
+                ));
+            }
+
+            let option = candidates[0];
+            if option == "output-delimiter" {
+                if !supplied_value {
+                    index += 1;
+                    if index == args.len() {
+                        return Err(CTsageError::new(
+                            1,
+                            "option '--output-delimiter' requires an argument",
+                        ));
+                    }
+                }
+            } else if supplied_value {
+                return Err(CTsageError::new(
+                    1,
+                    format!("option '--{option}' doesn't allow an argument"),
+                ));
+            } else if matches!(option, "help" | "version") {
+                return Ok(());
+            }
+        } else if argument.starts_with(b"-") && argument.len() > 1 {
+            for option in &argument[1..] {
+                // -h and -V are retained as syskits extensions.
+                if !matches!(option, b'1' | b'2' | b'3' | b'z' | b'h' | b'V') {
+                    return Err(CTsageError::new(
+                        1,
+                        format!("invalid option -- '{}'", char::from(*option)),
+                    ));
+                }
+                if matches!(option, b'h' | b'V') {
+                    return Ok(());
+                }
+            }
+        }
+
+        index += 1;
+    }
+    Ok(())
+}
+
+fn validate_gnu_comm_operands(args: &[OsString]) -> CTResult<()> {
+    let mut operands = Vec::new();
+    let mut options_enabled = true;
+    let mut index = 1;
+
+    while index < args.len() {
+        let argument = args[index].as_os_str().as_encoded_bytes();
+        if options_enabled && argument == b"--" {
+            options_enabled = false;
+            index += 1;
+            continue;
+        }
+
+        if options_enabled {
+            if let Some(long_argument) = argument.strip_prefix(b"--") {
+                let option_end = long_argument
+                    .iter()
+                    .position(|byte| *byte == b'=')
+                    .unwrap_or(long_argument.len());
+                let option = resolve_gnu_comm_long_option(&long_argument[..option_end])[0];
+                if matches!(option, "help" | "version") {
+                    return Ok(());
+                }
+                if option == "output-delimiter" && option_end == long_argument.len() {
+                    index += 2;
+                } else {
+                    index += 1;
+                }
+                continue;
+            }
+            if argument.starts_with(b"-") && argument.len() > 1 {
+                if argument[1..]
+                    .iter()
+                    .any(|option| matches!(option, b'h' | b'V'))
+                {
+                    return Ok(());
+                }
+                index += 1;
+                continue;
+            }
+        }
+
+        operands.push(&args[index]);
+        index += 1;
+    }
+
+    if operands.len() < 2 {
+        let message = match operands.last() {
+            Some(operand) => format!("missing operand after {}", operand.as_os_str().quote()),
+            None => "missing operand".to_string(),
+        };
+        return Err(CTsageError::new(1, message));
+    }
+    if operands.len() > 2 {
+        return Err(CTsageError::new(
+            1,
+            format!("extra operand {}", operands[2].as_os_str().quote()),
+        ));
+    }
+    Ok(())
 }
 enum CommInput {
     Reader(BufReader<Box<dyn Read>>),
@@ -553,6 +725,9 @@ fn open_file(file_name: &str, line_ending: CtLineEnding) -> io::Result<CommLineR
 pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = args.into_iter().collect::<Vec<_>>();
+    validate_gnu_comm_options(&args)?;
+    validate_gnu_comm_operands(&args)?;
     let matches = ct_app().try_get_matches_from(args)?;
     let line_ending = CtLineEnding::from_zero_flag(matches.get_flag(opt_flags::ZERO_TERMINATED));
     let tmp_file1 = matches.get_one::<String>(opt_flags::FILE_1).unwrap();
@@ -582,6 +757,9 @@ pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
 pub fn comm_native_semantic(args: impl ctcore::Args) -> CTResult<CommSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = args.into_iter().collect::<Vec<_>>();
+    validate_gnu_comm_options(&args)?;
+    validate_gnu_comm_operands(&args)?;
     let matches = ct_app().try_get_matches_from(args)?;
     let line_ending = CtLineEnding::from_zero_flag(matches.get_flag(opt_flags::ZERO_TERMINATED));
     let tmp_file1 = matches.get_one::<String>(opt_flags::FILE_1).unwrap();
@@ -773,8 +951,10 @@ mod tests {
         use crate::opt_flags::DELIMITER_DEFAULT;
         use crate::opt_flags::FILE_1;
         use crate::opt_flags::FILE_2;
+        use crate::{validate_gnu_comm_operands, validate_gnu_comm_options};
 
         use clap::error::ErrorKind;
+        use std::ffi::OsString;
 
         #[test]
         fn test_ct_app_version() {
@@ -952,6 +1132,55 @@ mod tests {
             assert!(matches.get_flag(opt_flags::TOTAL));
             assert!(!matches.get_flag("check_order"));
             assert!(matches.get_flag("nocheck_order"));
+        }
+
+        #[test]
+        fn test_gnu_option_diagnostics() {
+            let cases = [
+                (
+                    vec!["comm", "--definitely-unknown", "left", "right"],
+                    "unrecognized option '--definitely-unknown'",
+                ),
+                (
+                    vec!["comm", "--total=value", "left", "right"],
+                    "option '--total' doesn't allow an argument",
+                ),
+                (
+                    vec!["comm", "--output-delimiter"],
+                    "option '--output-delimiter' requires an argument",
+                ),
+                (
+                    vec!["comm", "-1x", "left", "right"],
+                    "invalid option -- 'x'",
+                ),
+            ];
+
+            for (args, expected) in cases {
+                let args = args.into_iter().map(OsString::from).collect::<Vec<_>>();
+                let error = validate_gnu_comm_options(&args).unwrap_err();
+                assert_eq!(error.to_string(), expected);
+                assert!(error.usage());
+            }
+        }
+
+        #[test]
+        fn test_gnu_operand_diagnostics() {
+            let cases = [
+                (vec!["comm"], "missing operand"),
+                (vec!["comm", "left"], "missing operand after 'left'"),
+                (
+                    vec!["comm", "left", "right", "extra"],
+                    "extra operand 'extra'",
+                ),
+            ];
+
+            for (args, expected) in cases {
+                let args = args.into_iter().map(OsString::from).collect::<Vec<_>>();
+                validate_gnu_comm_options(&args).unwrap();
+                let error = validate_gnu_comm_operands(&args).unwrap_err();
+                assert_eq!(error.to_string(), expected);
+                assert!(error.usage());
+            }
         }
 
         #[test]

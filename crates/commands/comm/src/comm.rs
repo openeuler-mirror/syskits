@@ -21,6 +21,7 @@ use ctcore::ct_locale::strcoll_compare;
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read};
+use std::mem;
 use std::path::Path;
 
 use clap::builder::ValueParser;
@@ -28,6 +29,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use std::cell::RefCell;
 use std::ffi::{CStr, CString, OsStr, OsString};
+use std::os::fd::IntoRawFd;
 use std::os::unix::ffi::OsStrExt;
 use std::rc::Rc;
 use sys_locale::get_locale;
@@ -248,8 +250,10 @@ fn validate_gnu_comm_operands(args: &[OsString]) -> CTResult<()> {
     Ok(())
 }
 enum CommInput {
+    File(BufReader<File>),
     Reader(BufReader<Box<dyn Read>>),
     Shared(Rc<RefCell<BufReader<Box<dyn Read>>>>),
+    Closed,
 }
 struct CommLineReader {
     line_ending: CtLineEnding,
@@ -288,8 +292,10 @@ impl CommLineReader {
         let comm_line_ending = self.line_ending.into();
 
         let result = match &mut self.input {
+            CommInput::File(r) => r.read_until(comm_line_ending, buf),
             CommInput::Reader(r) => r.read_until(comm_line_ending, buf),
             CommInput::Shared(r) => r.borrow_mut().read_until(comm_line_ending, buf),
+            CommInput::Closed => Err(io::Error::from_raw_os_error(ctcore::libc::EBADF)),
         };
 
         if !buf.ends_with(&[comm_line_ending]) {
@@ -297,6 +303,21 @@ impl CommLineReader {
         }
 
         result
+    }
+
+    fn close(&mut self) -> io::Result<()> {
+        let input = mem::replace(&mut self.input, CommInput::Closed);
+        match input {
+            CommInput::File(reader) => {
+                let fd = reader.into_inner().into_raw_fd();
+                if unsafe { ctcore::libc::close(fd) } == 0 {
+                    Ok(())
+                } else {
+                    Err(io::Error::last_os_error())
+                }
+            }
+            CommInput::Reader(_) | CommInput::Shared(_) | CommInput::Closed => Ok(()),
+        }
     }
 }
 #[derive(PartialEq, Debug)]
@@ -831,6 +852,11 @@ fn comm_with_writer<W: std::io::Write>(
         }
     }
 
+    a.close()
+        .map_err_context(|| comm_quote_operand(a.name.as_os_str()))?;
+    b.close()
+        .map_err_context(|| comm_quote_operand(b.name.as_os_str()))?;
+
     // 根据选项输出总计数行
     if opts.get_flag(opt_flags::TOTAL) {
         let line_ending = CtLineEnding::from_zero_flag(opts.get_flag(opt_flags::ZERO_TERMINATED));
@@ -917,7 +943,7 @@ fn open_file(
         _ => {
             let f = File::open(Path::new(file_name))?;
             Ok(
-                CommLineReader::new(CommInput::Reader(BufReader::new(Box::new(f))), line_ending)
+                CommLineReader::new(CommInput::File(BufReader::new(f)), line_ending)
                     .named(file_name.to_os_string()),
             )
         }

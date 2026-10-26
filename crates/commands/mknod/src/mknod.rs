@@ -308,6 +308,15 @@ fn parse_device_number(s: &str) -> Result<u64, String> {
     }
 }
 
+fn parse_device_component(raw: &str, component: &str) -> CTResult<u64> {
+    parse_device_number(raw).map_err(|_| {
+        CtSimpleError::new(
+            1,
+            format!("invalid {component} device number {}", raw.quote()),
+        )
+    })
+}
+
 // 函数：根据给定的主、次设备号构造一个dev_t值。
 #[inline(always)]
 fn make_dev(maj: u64, min: u64) -> dev_t {
@@ -545,24 +554,18 @@ fn mknod_processing(
     } else {
         // 对于块设备和字符设备，需要主、次设备号
         match (
-            args_match.get_one::<u64>("major"),
-            args_match.get_one::<u64>("minor"),
+            args_match.get_one::<String>("major"),
+            args_match.get_one::<String>("minor"),
         ) {
             (_, None) | (None, _) => Err(CTsageError::new(
                 1,
                 "Special files require major and minor device numbers.",
             )),
-            (Some(&major), Some(&minor)) => {
-                let raw_major = args_match
-                    .get_raw("major")
-                    .and_then(|mut values| values.next())
-                    .expect("major was parsed from an argument");
-                let raw_minor = args_match
-                    .get_raw("minor")
-                    .and_then(|mut values| values.next())
-                    .expect("minor was parsed from an argument");
-                validate_device_number_range(major, raw_major, "major")?;
-                validate_device_number_range(minor, raw_minor, "minor")?;
+            (Some(raw_major), Some(raw_minor)) => {
+                let major = parse_device_component(raw_major, "major")?;
+                let minor = parse_device_component(raw_minor, "minor")?;
+                validate_device_number_range(major, OsStr::new(raw_major), "major")?;
+                validate_device_number_range(minor, OsStr::new(raw_minor), "minor")?;
 
                 // 检查设备号是否有效（NODEV检查）
                 #[cfg(target_os = "linux")]
@@ -572,7 +575,7 @@ fn mknod_processing(
                     if dev == NODEV {
                         return Err(CtSimpleError::new(
                             1,
-                            format!("invalid device {major} {minor}"),
+                            format!("invalid device {raw_major} {raw_minor}"),
                         ));
                     }
                 }
@@ -663,12 +666,10 @@ pub fn ct_app() -> Command {
             .value_parser(parse_type),
         Arg::new("major")
             .value_name("MAJOR")
-            .help(t!("mknod.clap.major"))
-            .value_parser(parse_device_number),
+            .help(t!("mknod.clap.major")),
         Arg::new("minor")
             .value_name("MINOR")
-            .help(t!("mknod.clap.minor"))
-            .value_parser(parse_device_number),
+            .help(t!("mknod.clap.minor")),
     ];
 
     Command::new(utility_name)
@@ -768,7 +769,8 @@ mod tests {
 
     mod tests_mknod_main {
         use crate::{
-            ct_app, get_mode, mknod_main, parse_device_number, validate_device_number_range,
+            ct_app, get_mode, mknod_main, parse_device_component, parse_device_number,
+            validate_device_number_range,
         };
 
         use std::ffi::{OsStr, OsString};
@@ -863,6 +865,22 @@ mod tests {
                 .unwrap_err()
                 .to_string(),
                 "invalid minor device number '0x100000000'"
+            );
+        }
+
+        #[test]
+        fn test_invalid_device_component_diagnostic() {
+            assert_eq!(
+                parse_device_component("08", "major")
+                    .unwrap_err()
+                    .to_string(),
+                "invalid major device number '08'"
+            );
+            assert_eq!(
+                parse_device_component("0x", "minor")
+                    .unwrap_err()
+                    .to_string(),
+                "invalid minor device number '0x'"
             );
         }
     }

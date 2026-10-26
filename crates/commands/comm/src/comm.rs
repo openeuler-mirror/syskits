@@ -254,6 +254,7 @@ enum CommInput {
 struct CommLineReader {
     line_ending: CtLineEnding,
     input: CommInput,
+    name: OsString,
 }
 
 impl CommLineReader {
@@ -261,7 +262,13 @@ impl CommLineReader {
         Self {
             input: comm_input,
             line_ending,
+            name: OsString::new(),
         }
+    }
+
+    fn named(mut self, name: impl Into<OsString>) -> Self {
+        self.name = name.into();
+        self
     }
 
     fn read_line(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
@@ -322,6 +329,12 @@ fn trim_line_ending(line: &[u8], line_ending: CtLineEnding) -> &[u8] {
 
 fn comm_line_value(line: &[u8], line_ending: CtLineEnding) -> String {
     String::from_utf8_lossy(trim_line_ending(line, line_ending)).into_owned()
+}
+
+fn comm_read_line(reader: &mut CommLineReader, buf: &mut Vec<u8>) -> CTResult<usize> {
+    let result = reader.read_line(buf);
+    let context = comm_quote_operand(reader.name.as_os_str());
+    result.map_err_context(|| context)
 }
 
 fn comm_quote_operand(path: &OsStr) -> String {
@@ -567,18 +580,14 @@ fn comm_with_writer<W: std::io::Write>(
 
     // 初始化用于读取数据的缓冲区及读取状态
     let ra = &mut Vec::new();
-    let mut na = a
-        .read_line(ra)
-        .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+    let mut na = comm_read_line(a, ra)?;
     let mut prev_ra = Vec::new();
     if na > 0 {
         prev_ra.extend_from_slice(ra);
     }
 
     let rb = &mut Vec::new();
-    let mut nb = b
-        .read_line(rb)
-        .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+    let mut nb = comm_read_line(b, rb)?;
     let mut prev_rb = Vec::new();
     let mut prev_prev_ra = Vec::new();
     let mut prev_prev_rb = Vec::new();
@@ -615,9 +624,7 @@ fn comm_with_writer<W: std::io::Write>(
                 rows.push(comm_row("left", ra, a.line_ending, true, false));
             }
             ra.clear();
-            na = a
-                .read_line(ra)
-                .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+            na = comm_read_line(a, ra)?;
             if na > 0 {
                 if handle_check_order_issue(
                     &mut stderr_text,
@@ -670,9 +677,7 @@ fn comm_with_writer<W: std::io::Write>(
                 rows.push(comm_row("right", rb, b.line_ending, false, true));
             }
             rb.clear();
-            nb = b
-                .read_line(rb)
-                .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+            nb = comm_read_line(b, rb)?;
             if nb > 0 {
                 if handle_check_order_issue(
                     &mut stderr_text,
@@ -725,9 +730,7 @@ fn comm_with_writer<W: std::io::Write>(
             }
             ra.clear();
             rb.clear();
-            na = a
-                .read_line(ra)
-                .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+            na = comm_read_line(a, ra)?;
             if na > 0 {
                 if handle_check_order_issue(
                     &mut stderr_text,
@@ -769,9 +772,7 @@ fn comm_with_writer<W: std::io::Write>(
                     exit_code: 1,
                 });
             }
-            nb = b
-                .read_line(rb)
-                .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+            nb = comm_read_line(b, rb)?;
             if nb > 0 {
                 if handle_check_order_issue(
                     &mut stderr_text,
@@ -898,13 +899,14 @@ fn open_file(
         b"-" => Ok(CommLineReader::new(
             CommInput::Reader(BufReader::new(ctcore::ct_io::stdin_reader_box())),
             line_ending,
-        )),
+        )
+        .named(file_name.to_os_string())),
         _ => {
             let f = File::open(Path::new(file_name))?;
-            Ok(CommLineReader::new(
-                CommInput::Reader(BufReader::new(Box::new(f))),
-                line_ending,
-            ))
+            Ok(
+                CommLineReader::new(CommInput::Reader(BufReader::new(Box::new(f))), line_ending)
+                    .named(file_name.to_os_string()),
+            )
         }
     }
 }
@@ -914,8 +916,8 @@ fn open_shared_stdin(line_ending: CtLineEnding) -> (CommLineReader, CommLineRead
         ctcore::ct_io::stdin_reader_box(),
     )));
     (
-        CommLineReader::new(CommInput::Shared(Rc::clone(&input)), line_ending),
-        CommLineReader::new(CommInput::Shared(input), line_ending),
+        CommLineReader::new(CommInput::Shared(Rc::clone(&input)), line_ending).named("-"),
+        CommLineReader::new(CommInput::Shared(input), line_ending).named("-"),
     )
 }
 

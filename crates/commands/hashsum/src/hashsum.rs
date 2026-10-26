@@ -1921,21 +1921,27 @@ where
                 &mut bsd_reversed,
             )?;
 
-            if let Some(failed) = check_result {
-                if !flags.is_status {
-                    output_summary(
-                        bad_format - bad_format_before,
-                        failed,
-                        failed_open_file - failed_open_before,
-                    )?;
-                }
-                if manifest_no_files_verified {
+            match check_result {
+                CheckFileOutcome::Checked(failed) => {
                     if !flags.is_status {
-                        ctcore::ct_show_error!("{}: no file was verified", filename.display());
+                        output_summary(
+                            bad_format - bad_format_before,
+                            failed,
+                            failed_open_file - failed_open_before,
+                        )?;
                     }
-                    no_files_verified = true;
+                    if manifest_no_files_verified {
+                        if !flags.is_status {
+                            ctcore::ct_show_error!("{}: no file was verified", filename.display());
+                        }
+                        no_files_verified = true;
+                    }
+                    failed_cksum += failed;
                 }
-                failed_cksum += failed;
+                CheckFileOutcome::ReadError => {
+                    missing_file += 1;
+                    ctcore::ct_show_error!("{}: read error", filename.maybe_quote());
+                }
             }
         } else {
             match compute_and_output_hash(&mut flags, filename, &mut file, binary_marker, writer) {
@@ -1990,6 +1996,11 @@ fn open_file(filename: &Path) -> CTResult<BufReader<Box<dyn Read>>> {
 }
 
 /// 从文件中读取哈希值并与计算的哈希值进行比较
+enum CheckFileOutcome {
+    Checked(usize),
+    ReadError,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn check_hash_file<W: Write>(
     flags: &mut HashsumFlags,
@@ -2001,7 +2012,7 @@ fn check_hash_file<W: Write>(
     no_valid_lines: &mut bool,
     no_files_verified: &mut bool,
     bsd_reversed: &mut Option<bool>,
-) -> CTResult<Option<usize>> {
+) -> CTResult<CheckFileOutcome> {
     let (mut gnu_re, bsd_re, bytes_marker) = create_check_regexes_bytes(flags)?;
     if let Some(is_bsd_reversed) = *bsd_reversed {
         let format_marker = if is_bsd_reversed {
@@ -2020,12 +2031,10 @@ fn check_hash_file<W: Write>(
     let mut line_number = 0;
     loop {
         line.clear();
-        if file
-            .read_until(b'\n', &mut line)
-            .map_err_context(|| "failed to read file".to_string())?
-            == 0
-        {
-            break;
+        match file.read_until(b'\n', &mut line) {
+            Ok(0) => break,
+            Ok(_) => {}
+            Err(_) => return Ok(CheckFileOutcome::ReadError),
         }
         line_number += 1;
         if line.last() == Some(&b'\n') {
@@ -2111,7 +2120,7 @@ fn check_hash_file<W: Write>(
         }
     }
 
-    Ok(Some(local_failed_cksum))
+    Ok(CheckFileOutcome::Checked(local_failed_cksum))
 }
 
 fn manifest_entry_is_stdin(filename: &[u8], is_escaped: bool) -> bool {

@@ -303,6 +303,7 @@ pub fn handle_base_input<R: Read, W: Write>(
     } else {
         match input_data.encode(&mut writer) {
             Ok(_) => Ok(()),
+            Err(CtEncodeError::ReadError(err)) => Err(read_error(err)),
             Err(CtEncodeError::InvalidInput) => Err(CtSimpleError::new(1, "invalid input")),
             Err(_) => Err(CtSimpleError::new(
                 1,

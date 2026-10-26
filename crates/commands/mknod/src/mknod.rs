@@ -689,7 +689,7 @@ fn get_mode(matches: &ArgMatches) -> Result<mode_t, String> {
     match matches.get_one::<String>("mode") {
         None => Ok(MODE_RW_UGO),
         Some(str_mode) => parse_mknod_mode(str_mode)
-            .map_err(|e| format!("invalid mode ({e})"))
+            .map_err(|_| "invalid mode".to_string())
             .and_then(|mode| {
                 if mode > 0o777 {
                     Err("mode must specify only file permission bits".to_string())
@@ -844,6 +844,16 @@ mod tests {
             assert_eq!(parse_mknod_mode("a=X"), Ok(0));
             assert_eq!(parse_mknod_mode("u+s=u"), Ok(0o666));
             assert_eq!(parse_mknod_mode("g+s=g"), Ok(0o666));
+        }
+
+        #[test]
+        fn test_invalid_modes_use_gnu_diagnostic() {
+            for mode in ["999", "u=rw,", "not-a-mode"] {
+                let matches = ct_app()
+                    .try_get_matches_from(["mknod", "-m", mode, "file", "p"])
+                    .unwrap();
+                assert_eq!(get_mode(&matches), Err("invalid mode".to_string()));
+            }
         }
 
         #[test]

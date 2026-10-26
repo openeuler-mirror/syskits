@@ -630,22 +630,27 @@ fn args_init() -> Vec<Arg> {
         Arg::new(opt_flags::COLUMN_1)
             .short('1')
             .help(t!("comm.clap.column_1"))
+            .overrides_with(opt_flags::COLUMN_1)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::COLUMN_2)
             .short('2')
             .help(t!("comm.clap.column_2"))
+            .overrides_with(opt_flags::COLUMN_2)
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::COLUMN_3)
             .short('3')
             .help(t!("comm.clap.column_3"))
+            .overrides_with(opt_flags::COLUMN_3)
             .action(ArgAction::SetTrue),
         Arg::new("check_order")
             .long("check-order")
             .help(t!("comm.clap.check_order"))
+            .overrides_with("check_order")
             .action(ArgAction::SetTrue),
         Arg::new("nocheck_order")
             .long("nocheck-order")
             .help(t!("comm.clap.nocheck_order"))
+            .overrides_with("nocheck_order")
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::DELIMITER)
             .long(opt_flags::DELIMITER)
@@ -669,6 +674,7 @@ fn args_init() -> Vec<Arg> {
         Arg::new(opt_flags::TOTAL)
             .long(opt_flags::TOTAL)
             .help(t!("comm.clap.total"))
+            .overrides_with(opt_flags::TOTAL)
             .action(ArgAction::SetTrue),
         Arg::new("help")
             .long("help")
@@ -906,8 +912,7 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-11", "file1", "file2"];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+            assert!(result.unwrap().get_flag(opt_flags::COLUMN_1));
         }
 
         #[test]
@@ -916,8 +921,7 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-22", "file1", "file2"];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+            assert!(result.unwrap().get_flag(opt_flags::COLUMN_2));
         }
 
         #[test]
@@ -926,8 +930,28 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-33", "file1", "file2"];
             let result = command.try_get_matches_from(args);
 
-            assert!(result.is_err());
-            assert_eq!(result.unwrap_err().kind(), ErrorKind::ArgumentConflict);
+            assert!(result.unwrap().get_flag(opt_flags::COLUMN_3));
+        }
+
+        #[test]
+        fn test_ct_app_repeated_long_flags() {
+            let command = ct_app();
+            let args = vec![
+                ctcore::ct_util_name(),
+                "--total",
+                "--total",
+                "--check-order",
+                "--check-order",
+                "--nocheck-order",
+                "--nocheck-order",
+                "file1",
+                "file2",
+            ];
+            let matches = command.try_get_matches_from(args).unwrap();
+
+            assert!(matches.get_flag(opt_flags::TOTAL));
+            assert!(matches.get_flag("check_order"));
+            assert!(matches.get_flag("nocheck_order"));
         }
 
         #[test]

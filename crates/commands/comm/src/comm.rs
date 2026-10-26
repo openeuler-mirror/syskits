@@ -358,6 +358,36 @@ fn comm_error_line(message: &str) -> String {
     format!("comm: {message}\n")
 }
 
+fn xmemcoll_compare(mut left: &[u8], mut right: &[u8]) -> Ordering {
+    loop {
+        let left_end = left
+            .iter()
+            .position(|byte| *byte == 0)
+            .unwrap_or(left.len());
+        let right_end = right
+            .iter()
+            .position(|byte| *byte == 0)
+            .unwrap_or(right.len());
+
+        let order = strcoll_compare(&left[..left_end], &right[..right_end], false);
+        if order != Ordering::Equal {
+            return order;
+        }
+
+        let left_has_nul = left_end < left.len();
+        let right_has_nul = right_end < right.len();
+        match (left_has_nul, right_has_nul) {
+            (false, false) => return Ordering::Equal,
+            (false, true) => return Ordering::Less,
+            (true, false) => return Ordering::Greater,
+            (true, true) => {
+                left = &left[left_end + 1..];
+                right = &right[right_end + 1..];
+            }
+        }
+    }
+}
+
 fn check_order(
     prev: &[u8],
     current: &[u8],
@@ -373,7 +403,7 @@ fn check_order(
         // Drop trailing newlines for comparison
         let prev_cmp = &prev[..prev.len().saturating_sub(1)];
         let curr_cmp = &current[..current.len().saturating_sub(1)];
-        let order = strcoll_compare(prev_cmp, curr_cmp, false);
+        let order = xmemcoll_compare(prev_cmp, curr_cmp);
 
         if order == Ordering::Greater {
             let msg = t!("comm.messages.not_sorted", file_num = file_idx);
@@ -473,10 +503,9 @@ fn comm_with_writer<W: std::io::Write>(
             (0, 0) => break, // 两行都读取完毕，退出循环
             (0, _) => Ordering::Greater,
             (_, 0) => Ordering::Less,
-            _ => strcoll_compare(
+            _ => xmemcoll_compare(
                 trim_line_ending(ra, a.line_ending),
                 trim_line_ending(rb, b.line_ending),
-                false,
             ),
         };
 

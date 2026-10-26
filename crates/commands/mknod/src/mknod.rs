@@ -29,7 +29,7 @@ use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOT
 use libc::{dev_t, mode_t};
 use selinux::label::{Labeler, back_end::File as FileBackEnd};
 use selinux::{self, SecurityContext};
-use std::ffi::{CString, OsStr, OsString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::io;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
@@ -351,7 +351,31 @@ fn quote_operand(name: &OsStr) -> String {
 }
 
 fn creation_error_message(file_name: &OsStr, error: &io::Error) -> String {
-    format!("{}: {}", quote_operand(file_name), strip_errno(error))
+    format!(
+        "{}: {}",
+        quote_operand(file_name),
+        localized_io_error(error)
+    )
+}
+
+fn localized_io_error(error: &io::Error) -> String {
+    if let Some(errno) = error.raw_os_error() {
+        let message = unsafe { libc::strerror(errno) };
+        if !message.is_null() {
+            return unsafe { CStr::from_ptr(message) }
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+    strip_errno(error)
+}
+
+fn initialize_mknod_locale() {
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+    }
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
 }
 
 // Windows平台不支持mknod，因此定义一个空实现。
@@ -549,8 +573,7 @@ fn report_unsupported_context_warnings(request: &SecurityContextRequest) {
 }
 
 pub fn mknod_main(args: impl ctcore::Args) -> CTResult<()> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    initialize_mknod_locale();
     let mut raw_args: Vec<OsString> = args.into_iter().collect();
     apply_posix_option_order(&mut raw_args, std::env::var_os("POSIXLY_CORRECT").is_some());
     validate_gnu_mknod_options(&raw_args)?;
@@ -663,7 +686,7 @@ fn mknod_processing(
                     format!(
                         "cannot set permissions of {}: {}",
                         file_name.quote(),
-                        strip_errno(&err)
+                        localized_io_error(&err)
                     ),
                 ));
             }

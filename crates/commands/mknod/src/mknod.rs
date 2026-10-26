@@ -28,11 +28,11 @@ use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name_with_chars};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 use libc::{dev_t, mode_t};
 use selinux::label::{Labeler, back_end::File as FileBackEnd};
-use selinux::{self, SecurityContext};
+use selinux::{self, OpaqueSecurityContext, SecurityClass, SecurityContext};
 use std::ffi::{CStr, CString, OsStr, OsString};
 use std::io::{self, Write};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
 // 常量：用于设置文件模式的权限位。
@@ -386,6 +386,13 @@ fn report_warning(message: &str) {
     );
 }
 
+fn selinux_errno_message(error: &selinux::errors::Error) -> String {
+    std::error::Error::source(error)
+        .and_then(|source| source.downcast_ref::<io::Error>())
+        .map(localized_io_error)
+        .unwrap_or_else(|| error.to_string())
+}
+
 // Windows平台不支持mknod，因此定义一个空实现。
 #[cfg(windows)]
 fn _mknod(file_name: &OsStr, mode: mode_t, dev: dev_t) -> io::Result<()> {
@@ -462,51 +469,93 @@ fn set_security_context(
         return Ok(());
     }
 
-    let labeler = match Labeler::<FileBackEnd>::restorecon_default(false) {
+    let labeler = match Labeler::<FileBackEnd>::new(&[], false) {
         Ok(l) => l,
         Err(e) => {
-            report_warning(&format!("cannot create SELinux labeler: {e}"));
-            return Ok(());
-        }
-    };
-
-    let file_access_mode = mode_to_file_access_mode(file_mode);
-    let path = Path::new(file_path);
-
-    // 将相对路径转换为绝对路径，以便 SELinux 策略引擎能正确匹配正则
-    let abs_path = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map(|p| p.join(path))
-            .unwrap_or_else(|_| path.to_path_buf())
-    };
-
-    // 传入 abs_path 而不是 path
-    let default_context = match labeler.look_up_by_path(&abs_path, Some(file_access_mode)) {
-        Ok(ctx) => ctx,
-        Err(e) => {
             report_warning(&format!(
-                "cannot look up default SELinux context for {}: {e}",
-                file_path.to_string_lossy()
+                "ignoring --context: {}",
+                selinux_errno_message(&e)
             ));
             return Ok(());
         }
     };
 
-    if let Err(e) = default_context.set_for_new_file_system_objects(false) {
-        report_warning(&format!("cannot set default file creation context: {e}"));
-    }
-
+    let _ = set_default_security_context(&labeler, file_path, file_mode);
     Ok(())
 }
 
-// 将mode_t转换为selinux::FileAccessMode
-// FileAccessMode是一个包装mode_t的结构体，直接传递mode即可
-fn mode_to_file_access_mode(mode: mode_t) -> selinux::FileAccessMode {
-    // FileAccessMode::new()接受mode_t并返回Option<FileAccessMode>
-    // 如果mode为0则返回None，但在mknod中mode总是非零的（包含文件类型位）
-    selinux::FileAccessMode::new(mode).expect("mode should be non-zero in mknod context")
+fn canonicalize_missing_path(path: &Path) -> io::Result<PathBuf> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+
+    let Some(file_name) = absolute.file_name() else {
+        return std::fs::canonicalize(absolute);
+    };
+    let parent = absolute.parent().unwrap_or_else(|| Path::new("/"));
+    Ok(std::fs::canonicalize(parent)?.join(file_name))
+}
+
+fn compute_create_context(
+    source: &SecurityContext<'_>,
+    target: &SecurityContext<'_>,
+    target_class: SecurityClass,
+) -> Result<CString, ()> {
+    let mut context = std::ptr::null_mut();
+    let result = unsafe {
+        selinux_sys::security_compute_create(
+            source.as_ptr(),
+            target.as_ptr(),
+            target_class.value(),
+            &raw mut context,
+        )
+    };
+    if result < 0 || context.is_null() {
+        return Err(());
+    }
+
+    let owned_context = unsafe { CStr::from_ptr(context).to_owned() };
+    unsafe {
+        selinux_sys::freecon(context);
+    }
+    Ok(owned_context)
+}
+
+fn replace_context_type(transition: &CStr, default: &CStr) -> Result<CString, ()> {
+    let default = OpaqueSecurityContext::from_c_str(default).map_err(|_| ())?;
+    let transition = OpaqueSecurityContext::from_c_str(transition).map_err(|_| ())?;
+    let default_type = default.the_type().map_err(|_| ())?;
+    transition.set_type(&default_type).map_err(|_| ())?;
+    transition.to_c_string().map_err(|_| ())
+}
+
+fn set_default_security_context(
+    labeler: &Labeler<FileBackEnd>,
+    file_path: &OsStr,
+    file_mode: mode_t,
+) -> Result<(), ()> {
+    let path = canonicalize_missing_path(Path::new(file_path)).map_err(|_| ())?;
+    let file_access_mode = selinux::FileAccessMode::new(file_mode).ok_or(())?;
+    let default_context = labeler
+        .look_up_by_path(&path, Some(file_access_mode))
+        .map_err(|_| ())?;
+
+    let source_context = SecurityContext::current(false).map_err(|_| ())?;
+    let parent = path.parent().unwrap_or_else(|| Path::new("/"));
+    let target_context = SecurityContext::of_path(parent, true, false)
+        .map_err(|_| ())?
+        .ok_or(())?;
+    let target_class = SecurityClass::try_from(file_access_mode).map_err(|_| ())?;
+    let transition_context =
+        compute_create_context(&source_context, &target_context, target_class)?;
+
+    let default_context = default_context.to_c_string().map_err(|_| ())?.ok_or(())?;
+    let creation_context = replace_context_type(&transition_context, &default_context)?;
+    SecurityContext::from_c_str(&creation_context, false)
+        .set_for_new_file_system_objects(false)
+        .map_err(|_| ())
 }
 
 pub fn os_str_to_c_string(os_str: &OsStr) -> CString {
@@ -853,7 +902,7 @@ mod tests {
     mod tests_mknod_main {
         use crate::{
             ct_app, get_mode, mknod_main, parse_device_component, parse_device_number,
-            parse_mknod_mode, validate_device_number_range,
+            parse_mknod_mode, replace_context_type, validate_device_number_range,
         };
 
         use std::ffi::{OsStr, OsString};
@@ -981,6 +1030,19 @@ mod tests {
                     .unwrap_err()
                     .to_string(),
                 "invalid minor device number '0x'"
+            );
+        }
+
+        #[test]
+        fn test_default_selinux_context_only_replaces_type() {
+            let transition = c"process_u:process_r:transition_t:s0";
+            let default = c"system_u:object_r:device_t:s0:c1";
+
+            assert_eq!(
+                replace_context_type(transition, default)
+                    .expect("context type replacement should succeed")
+                    .as_bytes(),
+                b"process_u:process_r:device_t:s0"
             );
         }
     }

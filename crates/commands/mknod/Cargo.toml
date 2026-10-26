@@ -22,6 +22,7 @@ clap = { workspace = true }
 libc = { workspace = true }
 ctcore = { workspace = true, features = ["mode"] }
 selinux = { workspace = true }
+selinux-sys = { workspace = true }
 
 [[bin]]
 name = "mknod"

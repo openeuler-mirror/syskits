@@ -20,7 +20,7 @@ use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo, strip_errno};
 use ctcore::ct_line_ending::CtLineEnding;
 use std::ffi::OsString;
 use std::fs::File;
@@ -194,6 +194,7 @@ fn apply_posix_option_order(args: &mut Vec<OsString>, posixly_correct: bool) {
 enum InputSource {
     File(BufReader<File>),
     Stdin,
+    Failed,
 }
 
 /// 存储粘贴操作的配置参数
@@ -236,6 +237,7 @@ struct PasteContext<W: Write> {
     delimiter_positions: Vec<(usize, u8)>,
     rows: Vec<PasteRow>,
     emitted_rows: usize,
+    had_errors: bool,
     writer: W,
 }
 
@@ -290,13 +292,26 @@ impl PasteFlags {
 impl<W: Write> PasteContext<W> {
     fn new(flags: &PasteFlags, writer: W) -> CTResult<Self> {
         let mut files = Vec::with_capacity(flags.files.len());
+        let mut had_errors = false;
         for name in &flags.files {
             let file = if name.as_os_str().as_bytes() == b"-" {
                 InputSource::Stdin
             } else {
                 let path = Path::new(name);
-                let r = File::open(path).map_err_context(String::new)?;
-                InputSource::File(BufReader::new(r))
+                match File::open(path) {
+                    Ok(file) => InputSource::File(BufReader::new(file)),
+                    Err(error) if flags.is_serial => {
+                        eprintln!(
+                            "{}: {}: {}",
+                            ctcore::ct_util_name(),
+                            name.to_string_lossy(),
+                            strip_errno(&error)
+                        );
+                        had_errors = true;
+                        InputSource::Failed
+                    }
+                    Err(error) => return Err(error.map_err_context(String::new)),
+                }
             };
             files.push(file);
         }
@@ -310,6 +325,7 @@ impl<W: Write> PasteContext<W> {
             delimiter_positions: Vec::new(),
             rows: Vec::new(),
             emitted_rows: 0,
+            had_errors,
             writer,
         })
     }
@@ -408,6 +424,7 @@ impl<W: Write> PasteContext<W> {
                 &mut self.writer,
                 line_ending,
             ),
+            InputSource::Failed => Ok(false),
         }
     }
 
@@ -437,6 +454,9 @@ impl<W: Write> PasteContext<W> {
 
     fn paste_serial(&mut self) -> CTResult<()> {
         for i in 0..self.files.len() {
+            if matches!(self.files[i], InputSource::Failed) {
+                continue;
+            }
             self.output.clear();
             self.delimiter_positions.clear();
             let mut delim_length = 1;
@@ -492,8 +512,8 @@ impl<W: Write> PasteContext<W> {
         Ok(())
     }
 
-    fn into_rows(self) -> Vec<PasteRow> {
-        self.rows
+    fn into_result(self) -> (Vec<PasteRow>, bool) {
+        (self.rows, self.had_errors)
     }
 }
 
@@ -536,17 +556,24 @@ pub fn paste_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult
 }
 
 fn paste_exec<W: Write>(writer: &mut W, flags: PasteFlags) -> CTResult<()> {
-    paste_exec_collect(writer, flags).map(|_| ())
+    let (_, had_errors) = paste_exec_collect(writer, flags)?;
+    if had_errors {
+        ctcore::ct_error::set_ct_exit_code(1);
+    }
+    Ok(())
 }
 
-fn paste_exec_collect<W: Write>(writer: &mut W, flags: PasteFlags) -> CTResult<Vec<PasteRow>> {
+fn paste_exec_collect<W: Write>(
+    writer: &mut W,
+    flags: PasteFlags,
+) -> CTResult<(Vec<PasteRow>, bool)> {
     let mut context = PasteContext::new(&flags, writer)?;
     if flags.is_serial {
         context.paste_serial()?;
     } else {
         context.paste_parallel()?;
     }
-    Ok(context.into_rows())
+    Ok(context.into_result())
 }
 
 pub fn paste_native_semantic(args: impl ctcore::Args) -> CTResult<PasteSemantic> {
@@ -566,14 +593,14 @@ pub fn paste_native_semantic(args: impl ctcore::Args) -> CTResult<PasteSemantic>
     };
 
     let mut classic_output = Vec::new();
-    let rows = paste_exec_collect(&mut classic_output, flags)?;
+    let (rows, had_errors) = paste_exec_collect(&mut classic_output, flags)?;
 
     Ok(PasteSemantic {
         mode,
         rows,
         classic_text: String::from_utf8_lossy(&classic_output).into_owned(),
         stderr_text: String::new(),
-        exit_code: 0,
+        exit_code: i32::from(had_errors),
     })
 }
 

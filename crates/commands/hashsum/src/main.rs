@@ -11,6 +11,7 @@
 
 pub fn main() {
     use ctcore::Tool;
+    use std::io::Write;
 
     ctcore::ct_panic::ct_mute_set_panic_hook();
     ctcore::ct_ensure_standard_fds();
@@ -22,10 +23,15 @@ pub fn main() {
         Err(error) => {
             let message = error.to_string();
             if !message.is_empty() {
-                ctcore::ct_show_error!("{message}");
+                let _ = writeln!(
+                    std::io::stderr().lock(),
+                    "{}: {message}",
+                    ctcore::ct_util_name()
+                );
             }
             if error.usage() {
-                eprintln!(
+                let _ = writeln!(
+                    std::io::stderr().lock(),
                     "Try '{} --help' for more information.",
                     ctcore::ct_help_utility_name()
                 );

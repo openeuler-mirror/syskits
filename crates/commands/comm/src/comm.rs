@@ -32,6 +32,8 @@ use std::ffi::{CStr, CString, OsStr, OsString};
 use std::os::fd::{FromRawFd, IntoRawFd};
 use std::os::unix::ffi::OsStrExt;
 use std::rc::Rc;
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use sys_locale::get_locale;
 
 mod opt_flags {
@@ -55,6 +57,33 @@ const GNU_COMM_LONG_OPTIONS: &[&str] = &[
     "help",
     "version",
 ];
+
+#[cfg(target_os = "linux")]
+static COMM_INHERITED_SIGPIPE_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" fn comm_capture_inherited_sigpipe() {
+    let mut action = std::mem::MaybeUninit::<ctcore::libc::sigaction>::uninit();
+    if unsafe {
+        ctcore::libc::sigaction(
+            ctcore::libc::SIGPIPE,
+            std::ptr::null(),
+            action.as_mut_ptr(),
+        )
+    } == 0
+    {
+        let action = unsafe { action.assume_init() };
+        COMM_INHERITED_SIGPIPE_IGNORED.store(
+            action.sa_sigaction == ctcore::libc::SIG_IGN,
+            AtomicOrdering::Relaxed,
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static COMM_CAPTURE_SIGPIPE: unsafe extern "C" fn() = comm_capture_inherited_sigpipe;
 
 fn resolve_gnu_comm_long_option(option_name: &[u8]) -> Vec<&'static str> {
     let mut candidates = GNU_COMM_LONG_OPTIONS
@@ -487,6 +516,17 @@ fn comm_error_line(message: &str) -> String {
 }
 
 fn comm_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
+    #[cfg(all(target_os = "linux", not(test)))]
+    if error.kind() == io::ErrorKind::BrokenPipe
+        && !COMM_INHERITED_SIGPIPE_IGNORED.load(AtomicOrdering::Relaxed)
+    {
+        unsafe {
+            ctcore::libc::signal(ctcore::libc::SIGPIPE, ctcore::libc::SIG_DFL);
+            ctcore::libc::raise(ctcore::libc::SIGPIPE);
+            ctcore::libc::_exit(128 + ctcore::libc::SIGPIPE);
+        }
+    }
+
     let error = if ctcore::ct_stdout_was_closed() {
         io::Error::from_raw_os_error(ctcore::libc::EBADF)
     } else {

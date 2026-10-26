@@ -69,6 +69,18 @@ const GNU_COMMON_LONG_OPTIONS: &[&str] = &[
     "version",
 ];
 
+macro_rules! hashsum_show_error {
+    ($($args:tt)+) => ({
+        let mut stderr = io::stderr().lock();
+        let _ = writeln!(
+            stderr,
+            "{}: {}",
+            ctcore::ct_util_name(),
+            format_args!($($args)+)
+        );
+    });
+}
+
 #[cfg(target_os = "linux")]
 static HASHSUM_INHERITED_SIGPIPE_IGNORED: AtomicBool = AtomicBool::new(false);
 
@@ -1926,7 +1938,7 @@ where
             stdin_read_error = true;
             let error = io::Error::from_raw_os_error(ctcore::libc::EBADF).to_string();
             let detail = error.split(" (os error").next().unwrap_or(&error);
-            ctcore::ct_show_error!("-: {detail}");
+            hashsum_show_error!("-: {detail}");
             continue;
         }
         let mut file = match open_classic_file(filename) {
@@ -1935,7 +1947,7 @@ where
                 missing_file += 1;
                 let message = e.to_string();
                 let detail = message.split(" (os error").next().unwrap_or(&message);
-                ctcore::ct_show_error!("{}: {}", filename.maybe_quote(), detail);
+                hashsum_show_error!("{}: {}", filename.maybe_quote(), detail);
                 continue;
             }
         };
@@ -1967,7 +1979,7 @@ where
                     }
                     if manifest_no_files_verified {
                         if !flags.is_status {
-                            ctcore::ct_show_error!("{}: no file was verified", filename.display());
+                            hashsum_show_error!("{}: no file was verified", filename.display());
                         }
                         no_files_verified = true;
                     }
@@ -1975,7 +1987,7 @@ where
                 }
                 CheckFileOutcome::ReadError => {
                     missing_file += 1;
-                    ctcore::ct_show_error!("{}: read error", filename.maybe_quote());
+                    hashsum_show_error!("{}: read error", filename.maybe_quote());
                 }
             }
         } else {
@@ -1985,7 +1997,7 @@ where
                     missing_file += 1;
                     let message = error.to_string();
                     let detail = message.split(" (os error").next().unwrap_or(&message);
-                    ctcore::ct_show_error!("{}: {}", filename.maybe_quote(), detail);
+                    hashsum_show_error!("{}: {}", filename.maybe_quote(), detail);
                 }
                 Err(HashsumIoError::Write(error)) => return Err(hashsum_write_error(error)),
             }
@@ -1995,7 +2007,7 @@ where
     if stdin_read_error {
         let error = io::Error::from_raw_os_error(ctcore::libc::EBADF).to_string();
         let detail = error.split(" (os error").next().unwrap_or(&error);
-        ctcore::ct_show_error!("standard input: {detail}");
+        hashsum_show_error!("standard input: {detail}");
     }
 
     // 把所有失败的指标汇总在这里退出，包括 no_files_verified
@@ -2129,7 +2141,7 @@ fn check_hash_file<W: Write>(
                         filename.maybe_quote().to_string()
                     };
                     // 使用 ct_show_error! 避免前缀多出 'warning:'，以完全匹配 GNU 输出
-                    ctcore::ct_show_error!(
+                    hashsum_show_error!(
                         "{}: {}: improperly formatted {} checksum line",
                         manifest_name,
                         line_number,
@@ -2150,7 +2162,7 @@ fn check_hash_file<W: Write>(
         } else {
             filename.display().to_string()
         };
-        ctcore::ct_show_error!(
+        hashsum_show_error!(
             "{}: no properly formatted checksum lines found",
             manifest_name
         );
@@ -2500,7 +2512,7 @@ fn verify_file_hash<W: Write>(
                 *failed_open_file += 1;
                 let err_msg = e.to_string();
                 let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
-                ctcore::ct_show_error!("{}: {}", ck_filename_path.maybe_quote(), clean_err);
+                hashsum_show_error!("{}: {}", ck_filename_path.maybe_quote(), clean_err);
 
                 if !flags.is_status {
                     write_check_status(
@@ -2526,7 +2538,7 @@ fn verify_file_hash<W: Write>(
             *failed_open_file += 1;
             let err_msg = e.to_string();
             let clean_err = err_msg.split(" (os error").next().unwrap_or(&err_msg);
-            ctcore::ct_show_error!("{}: {}", ck_filename_path.maybe_quote(), clean_err);
+            hashsum_show_error!("{}: {}", ck_filename_path.maybe_quote(), clean_err);
 
             if !flags.is_status {
                 write_check_status(
@@ -2724,14 +2736,14 @@ fn unescape_filename_bytes(filename: &[u8]) -> Option<Vec<u8>> {
 fn output_summary(bad_format: usize, failed_cksum: usize, failed_open_file: usize) -> CTResult<()> {
     // 根据错误统计输出最终摘要信息
     match bad_format.cmp(&1) {
-        Ordering::Equal => ctcore::ct_show_error!(
+        Ordering::Equal => hashsum_show_error!(
             "WARNING: {}",
             t!(
                 "hashsum.check.line_improperly_formatted",
                 count = bad_format
             )
         ),
-        Ordering::Greater => ctcore::ct_show_error!(
+        Ordering::Greater => hashsum_show_error!(
             "WARNING: {}",
             t!(
                 "hashsum.check.lines_improperly_formatted",
@@ -2742,14 +2754,14 @@ fn output_summary(bad_format: usize, failed_cksum: usize, failed_open_file: usiz
     };
 
     match failed_open_file.cmp(&1) {
-        Ordering::Equal => ctcore::ct_show_error!(
+        Ordering::Equal => hashsum_show_error!(
             "WARNING: {}",
             t!(
                 "hashsum.check.file_could_not_be_read",
                 count = failed_open_file
             )
         ),
-        Ordering::Greater => ctcore::ct_show_error!(
+        Ordering::Greater => hashsum_show_error!(
             "WARNING: {}",
             t!(
                 "hashsum.check.files_could_not_be_read",
@@ -2760,11 +2772,11 @@ fn output_summary(bad_format: usize, failed_cksum: usize, failed_open_file: usiz
     }
 
     match failed_cksum.cmp(&1) {
-        Ordering::Equal => ctcore::ct_show_error!(
+        Ordering::Equal => hashsum_show_error!(
             "WARNING: {}",
             t!("hashsum.check.checksum_did_not_match", count = failed_cksum)
         ),
-        Ordering::Greater => ctcore::ct_show_error!(
+        Ordering::Greater => hashsum_show_error!(
             "WARNING: {}",
             t!(
                 "hashsum.check.checksums_did_not_match",

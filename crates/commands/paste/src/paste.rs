@@ -296,6 +296,7 @@ struct PasteContext<W: Write> {
     emitted_rows: usize,
     had_errors: bool,
     used_stdin: bool,
+    stdin_was_closed: bool,
     writer: W,
 }
 
@@ -349,6 +350,21 @@ impl PasteFlags {
 
 impl<W: Write> PasteContext<W> {
     fn new(flags: &PasteFlags, writer: W) -> CTResult<Self> {
+        let stdin_was_closed = ctcore::ct_stdin_was_closed();
+        if stdin_was_closed && !flags.is_serial {
+            let has_stdin = flags
+                .files
+                .iter()
+                .any(|name| name.as_os_str().as_bytes() == b"-");
+            let has_other_input = flags
+                .files
+                .iter()
+                .any(|name| name.as_os_str().as_bytes() != b"-");
+            if has_stdin && has_other_input {
+                return Err(CtSimpleError::new(1, "standard input is closed"));
+            }
+        }
+
         let mut files = Vec::with_capacity(flags.files.len());
         let had_errors = false;
         for name in &flags.files {
@@ -382,6 +398,7 @@ impl<W: Write> PasteContext<W> {
             emitted_rows: 0,
             had_errors,
             used_stdin: false,
+            stdin_was_closed,
             writer,
         })
     }
@@ -464,6 +481,15 @@ impl<W: Write> PasteContext<W> {
     }
 
     fn process_line_at(&mut self, index: usize) -> CTResult<bool> {
+        if matches!(self.files[index], InputSource::Stdin) && self.stdin_was_closed {
+            self.used_stdin = true;
+            let error = io::Error::from_raw_os_error(libc::EBADF);
+            report_operand_error(std::ffi::OsStr::new("-"), &error);
+            self.had_errors = true;
+            self.files[index] = InputSource::Failed;
+            return Ok(false);
+        }
+
         let line_ending = self.line_ending as u8;
         let (result, name) = match &mut self.files[index] {
             InputSource::File { name, reader } => (
@@ -517,6 +543,13 @@ impl<W: Write> PasteContext<W> {
 
     fn finish_stdin(&mut self) {
         if !self.used_stdin || ctcore::ct_io::has_injected_stdin() {
+            return;
+        }
+
+        if self.stdin_was_closed {
+            let error = io::Error::from_raw_os_error(libc::EBADF);
+            report_operand_error(std::ffi::OsStr::new("-"), &error);
+            self.had_errors = true;
             return;
         }
 

@@ -21,6 +21,7 @@ use ctcore::ct_locale::strcoll_compare;
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read};
+use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 
 use clap::builder::ValueParser;
@@ -255,6 +256,8 @@ struct CommLineReader {
     line_ending: CtLineEnding,
     input: CommInput,
     name: OsString,
+    pending: Option<Vec<u8>>,
+    is_fifo: bool,
 }
 
 impl CommLineReader {
@@ -263,6 +266,8 @@ impl CommLineReader {
             input: comm_input,
             line_ending,
             name: OsString::new(),
+            pending: None,
+            is_fifo: false,
         }
     }
 
@@ -271,7 +276,23 @@ impl CommLineReader {
         self
     }
 
+    fn fifo(mut self, is_fifo: bool) -> Self {
+        self.is_fifo = is_fifo;
+        self
+    }
+
+    fn pending(mut self, line: Option<Vec<u8>>) -> Self {
+        self.pending = line;
+        self
+    }
+
     fn read_line(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        if let Some(pending) = self.pending.take() {
+            let length = pending.len();
+            buf.extend_from_slice(&pending);
+            return Ok(length);
+        }
+
         let comm_line_ending = self.line_ending.into();
 
         let result = match &mut self.input {
@@ -900,12 +921,15 @@ fn open_file(
             CommInput::Reader(BufReader::new(ctcore::ct_io::stdin_reader_box())),
             line_ending,
         )
-        .named(file_name.to_os_string())),
+        .named(file_name.to_os_string())
+        .fifo(false)),
         _ => {
             let f = File::open(Path::new(file_name))?;
+            let is_fifo = f.metadata()?.file_type().is_fifo();
             Ok(
                 CommLineReader::new(CommInput::Reader(BufReader::new(Box::new(f))), line_ending)
-                    .named(file_name.to_os_string()),
+                    .named(file_name.to_os_string())
+                    .fifo(is_fifo),
             )
         }
     }
@@ -921,6 +945,31 @@ fn open_shared_stdin(line_ending: CtLineEnding) -> (CommLineReader, CommLineRead
     )
 }
 
+fn open_inputs(
+    file1: &OsString,
+    file2: &OsString,
+    line_ending: CtLineEnding,
+) -> CTResult<(CommLineReader, CommLineReader)> {
+    if file1 == "-" && file2 == "-" {
+        return Ok(open_shared_stdin(line_ending));
+    }
+
+    let mut first =
+        open_file(file1, line_ending).map_err_context(|| comm_quote_operand(file1.as_os_str()))?;
+    let pending = if !first.is_fifo {
+        let mut line = Vec::new();
+        let length = comm_read_line(&mut first, &mut line)?;
+        (length > 0).then_some(line)
+    } else {
+        None
+    };
+    first = first.pending(pending);
+
+    let second =
+        open_file(file2, line_ending).map_err_context(|| comm_quote_operand(file2.as_os_str()))?;
+    Ok((first, second))
+}
+
 pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -934,16 +983,7 @@ pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
     let tmp_file1 = matches.get_one::<OsString>(opt_flags::FILE_1).unwrap();
     let tmp_file2 = matches.get_one::<OsString>(opt_flags::FILE_2).unwrap();
     let both_stdin = tmp_file1 == "-" && tmp_file2 == "-";
-    let (mut f1, mut f2) = if both_stdin {
-        open_shared_stdin(line_ending)
-    } else {
-        (
-            open_file(tmp_file1, line_ending)
-                .map_err_context(|| comm_quote_operand(tmp_file1.as_os_str()))?,
-            open_file(tmp_file2, line_ending)
-                .map_err_context(|| comm_quote_operand(tmp_file2.as_os_str()))?,
-        )
-    };
+    let (mut f1, mut f2) = open_inputs(tmp_file1, tmp_file2, line_ending)?;
 
     let mut stdout = std::io::stdout().lock();
     let outcome = comm_with_writer(&mut f1, &mut f2, &matches, &mut stdout)?;
@@ -975,16 +1015,7 @@ pub fn comm_native_semantic(args: impl ctcore::Args) -> CTResult<CommSemantic> {
     let tmp_file1 = matches.get_one::<OsString>(opt_flags::FILE_1).unwrap();
     let tmp_file2 = matches.get_one::<OsString>(opt_flags::FILE_2).unwrap();
     let both_stdin = tmp_file1 == "-" && tmp_file2 == "-";
-    let (mut f1, mut f2) = if both_stdin {
-        open_shared_stdin(line_ending)
-    } else {
-        (
-            open_file(tmp_file1, line_ending)
-                .map_err_context(|| comm_quote_operand(tmp_file1.as_os_str()))?,
-            open_file(tmp_file2, line_ending)
-                .map_err_context(|| comm_quote_operand(tmp_file2.as_os_str()))?,
-        )
-    };
+    let (mut f1, mut f2) = open_inputs(tmp_file1, tmp_file2, line_ending)?;
     let mut output = Vec::new();
     let outcome = comm_with_writer(&mut f1, &mut f2, &matches, &mut output)?;
 

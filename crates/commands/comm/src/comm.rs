@@ -622,9 +622,9 @@ fn comm_with_writer<W: std::io::Write>(
             if !opts.get_flag(opt_flags::COLUMN_3) {
                 out.write_all(&delim_col_3)
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
-                out.write_all(ra)
+                out.write_all(rb)
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
-                rows.push(comm_row("both", ra, a.line_ending, true, true));
+                rows.push(comm_row("both", rb, b.line_ending, true, true));
             }
             ra.clear();
             rb.clear();

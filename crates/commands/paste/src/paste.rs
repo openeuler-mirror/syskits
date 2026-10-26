@@ -465,8 +465,12 @@ impl<W: Write> PasteContext<W> {
 fn paste_unescape(s: &str) -> String {
     s.replace("\\\\", "\u{FFFF}")
         .replace("\\0", "\0")
+        .replace("\\b", "\x08")
+        .replace("\\f", "\x0c")
         .replace("\\n", "\n")
+        .replace("\\r", "\r")
         .replace("\\t", "\t")
+        .replace("\\v", "\x0b")
         .replace("\u{FFFF}", "\\")
 }
 
@@ -1125,8 +1129,12 @@ mod tests {
 
     #[test]
     fn test_paste_unescape() {
+        assert_eq!(paste_unescape("\\b"), "\x08");
+        assert_eq!(paste_unescape("\\f"), "\x0c");
         assert_eq!(paste_unescape("\\n"), "\n");
+        assert_eq!(paste_unescape("\\r"), "\r");
         assert_eq!(paste_unescape("\\t"), "\t");
+        assert_eq!(paste_unescape("\\v"), "\x0b");
         assert_eq!(paste_unescape("\\\\"), "\\");
         assert_eq!(paste_unescape("\\\\n"), "\\n");
         assert_eq!(paste_unescape("a\\\\nb"), "a\\nb");

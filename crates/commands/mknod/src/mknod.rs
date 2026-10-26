@@ -396,6 +396,7 @@ pub fn ct_app() -> Command {
         .after_help(after_info)
         .about(application_info)
         .infer_long_args(true)
+        .args_override_self(true)
         .disable_help_flag(true)
         .disable_version_flag(true)
         .args(&args)
@@ -604,6 +605,28 @@ mod tests {
             let result = command.try_get_matches_from(args);
 
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_ct_app_repeated_options() {
+            let matches = ct_app()
+                .try_get_matches_from([
+                    ctcore::ct_util_name(),
+                    "-m",
+                    "600",
+                    "--mode=700",
+                    "-Z",
+                    "-Z",
+                    "--context",
+                    "--context",
+                    "file",
+                    "p",
+                ])
+                .unwrap();
+
+            assert_eq!(matches.get_one::<String>("mode").unwrap(), "700");
+            assert!(matches.get_flag("ctx"));
+            assert!(matches.contains_id("context"));
         }
 
         #[test]

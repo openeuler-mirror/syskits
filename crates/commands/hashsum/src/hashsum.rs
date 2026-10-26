@@ -1904,6 +1904,8 @@ where
         };
 
         if flags.is_check {
+            let bad_format_before = bad_format;
+            let failed_open_before = failed_open_file;
             let check_result = check_hash_file(
                 &mut flags,
                 filename,
@@ -1917,15 +1919,18 @@ where
             )?;
 
             if let Some(failed) = check_result {
+                if !flags.is_status {
+                    output_summary(
+                        bad_format - bad_format_before,
+                        failed,
+                        failed_open_file - failed_open_before,
+                    )?;
+                }
                 failed_cksum += failed;
             }
         } else {
             compute_and_output_hash(&mut flags, filename, &mut file, binary_marker, writer)?;
         }
-    }
-
-    if !flags.is_status {
-        output_summary(bad_format, failed_cksum, failed_open_file)?;
     }
 
     // 把所有失败的指标汇总在这里退出，包括 no_files_verified

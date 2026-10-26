@@ -78,7 +78,8 @@ fn quote_operand(name: &std::ffi::OsStr) -> String {
 }
 
 fn report_operand_error(name: &std::ffi::OsStr, error: &io::Error) {
-    eprintln!(
+    let _ = writeln!(
+        io::stderr().lock(),
         "{}: {}: {}",
         ctcore::ct_util_name(),
         quote_operand(name),

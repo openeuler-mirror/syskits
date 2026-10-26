@@ -24,7 +24,7 @@ use clap::builder::ValueParser;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, strip_errno};
-use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name_with_chars};
+use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name, escape_name_with_chars};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 use libc::{dev_t, mode_t};
 use selinux::label::{Labeler, back_end::File as FileBackEnd};
@@ -43,6 +43,10 @@ const MKNOD_DIAGNOSTIC_QUOTING_STYLE: CtQuotingStyle = CtQuotingStyle::Shell {
     escape: true,
     always_quote: false,
     show_control: true,
+};
+
+const MKNOD_CONTEXT_QUOTING_STYLE: CtQuotingStyle = CtQuotingStyle::C {
+    quotes: CtQuotes::Locale,
 };
 
 const GNU_MKNOD_LONG_OPTIONS: &[&str] = &["context", "mode", "help", "version"];
@@ -350,6 +354,10 @@ fn quote_operand(name: &OsStr) -> String {
     }
 }
 
+fn quote_security_context(context: &OsStr) -> String {
+    escape_name(context, &MKNOD_CONTEXT_QUOTING_STYLE)
+}
+
 fn creation_error_message(file_name: &OsStr, error: &io::Error) -> String {
     format!(
         "{}: {}",
@@ -462,7 +470,13 @@ fn set_security_context(
         let c_context = os_str_to_c_string(ctx);
         SecurityContext::from_c_str(&c_context, false)
             .set_for_new_file_system_objects(false)
-            .map_err(|e| format!("failed to set default file creation context: {e}"))?;
+            .map_err(|error| {
+                format!(
+                    "failed to set default file creation context to {}: {}",
+                    quote_security_context(ctx),
+                    selinux_errno_message(&error)
+                )
+            })?;
     }
 
     if !request.use_default {

@@ -29,7 +29,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use std::cell::RefCell;
 use std::ffi::{CStr, CString, OsStr, OsString};
-use std::os::fd::IntoRawFd;
+use std::os::fd::{FromRawFd, IntoRawFd};
 use std::os::unix::ffi::OsStrExt;
 use std::rc::Rc;
 use sys_locale::get_locale;
@@ -369,7 +369,7 @@ impl<'a> CommDiagnostics<'a> {
         if let Some(writer) = self.writer.as_mut() {
             writer
                 .write_all(message.as_bytes())
-                .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+                .map_err(comm_write_error)?;
         }
         self.buffered.push_str(message);
         Ok(())
@@ -484,6 +484,22 @@ fn comm_total_row(total_col_1: usize, total_col_2: usize, total_col_3: usize) ->
 
 fn comm_error_line(message: &str) -> String {
     format!("{}: {message}\n", ctcore::ct_util_name())
+}
+
+fn comm_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
+    ctcore::ct_error::CtSimpleError::new(
+        1,
+        format!("write error: {}", ctcore::ct_error::strip_errno(&error)),
+    )
+}
+
+fn comm_stdout_file() -> CTResult<File> {
+    let fd = unsafe { ctcore::libc::dup(ctcore::libc::STDOUT_FILENO) };
+    if fd < 0 {
+        return Err(io::Error::last_os_error()
+            .map_err_context(|| "standard output".to_string()));
+    }
+    Ok(unsafe { File::from_raw_fd(fd) })
 }
 
 #[cfg(target_os = "linux")]
@@ -683,7 +699,7 @@ fn comm_with_writer<W: std::io::Write>(
             seen_unpairable = true;
             if !opts.get_flag(opt_flags::COLUMN_1) {
                 out.write_all(ra)
-                    .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+                    .map_err(comm_write_error)?;
                 if collect_rows {
                     rows.push(comm_row("left", ra, a.line_ending, true, false));
                 }
@@ -736,9 +752,9 @@ fn comm_with_writer<W: std::io::Write>(
             seen_unpairable = true;
             if !opts.get_flag(opt_flags::COLUMN_2) {
                 out.write_all(&delim_col_2)
-                    .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+                    .map_err(comm_write_error)?;
                 out.write_all(rb)
-                    .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+                    .map_err(comm_write_error)?;
                 if collect_rows {
                     rows.push(comm_row("right", rb, b.line_ending, false, true));
                 }
@@ -790,9 +806,9 @@ fn comm_with_writer<W: std::io::Write>(
         } else if ord == Ordering::Equal {
             if !opts.get_flag(opt_flags::COLUMN_3) {
                 out.write_all(&delim_col_3)
-                    .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+                    .map_err(comm_write_error)?;
                 out.write_all(rb)
-                    .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+                    .map_err(comm_write_error)?;
                 if collect_rows {
                     rows.push(comm_row("both", rb, b.line_ending, true, true));
                 }
@@ -887,6 +903,8 @@ fn comm_with_writer<W: std::io::Write>(
         }
     }
 
+    out.flush().map_err(comm_write_error)?;
+
     a.close()
         .map_err_context(|| comm_quote_operand(a.name.as_os_str()))?;
     b.close()
@@ -898,23 +916,25 @@ fn comm_with_writer<W: std::io::Write>(
         let total_str = comm_gettext("total");
         let col_sep = comm_get_del_im(opts)?;
         write!(out, "{total_col_1}")
-            .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+            .map_err(comm_write_error)?;
         out.write_all(&col_sep)
-            .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+            .map_err(comm_write_error)?;
         write!(out, "{total_col_2}")
-            .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+            .map_err(comm_write_error)?;
         out.write_all(&col_sep)
-            .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+            .map_err(comm_write_error)?;
         write!(out, "{total_col_3}")
-            .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+            .map_err(comm_write_error)?;
         out.write_all(&col_sep)
-            .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+            .map_err(comm_write_error)?;
         write!(out, "{total_str}{line_ending}")
-            .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+            .map_err(comm_write_error)?;
         if collect_rows {
             rows.push(comm_total_row(total_col_1, total_col_2, total_col_3));
         }
     }
+
+    out.flush().map_err(comm_write_error)?;
 
     if issued_warning[0] || issued_warning[1] {
         stderr_text.push(&comm_error_line(&comm_gettext(
@@ -1042,16 +1062,23 @@ pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
     let both_stdin = tmp_file1 == "-" && tmp_file2 == "-";
     let (mut f1, mut f2) = open_inputs(tmp_file1, tmp_file2, line_ending)?;
 
-    let mut stdout = std::io::stdout().lock();
+    let mut stdout = comm_stdout_file()?;
     let mut stderr = std::io::stderr().lock();
-    let outcome = comm_with_writer(
+    let outcome = match comm_with_writer(
         &mut f1,
         &mut f2,
         &matches,
         &mut stdout,
         Some(&mut stderr),
         false,
-    )?;
+    ) {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            mem::forget(stdout);
+            return Err(error);
+        }
+    };
+    drop(stdout);
     if both_stdin {
         return Err(ctcore::ct_error::CtSimpleError::new(
             1,

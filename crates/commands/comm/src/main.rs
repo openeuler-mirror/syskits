@@ -9,4 +9,35 @@
  * See the Mulan PSL v2 for more details.
  */
 
-ctcore::ct_bin!(ct_comm, Comm);
+pub fn main() {
+    use ctcore::Tool;
+    use std::io::Write;
+
+    ctcore::ct_panic::ct_mute_set_panic_hook();
+    ctcore::ct_ensure_standard_fds();
+
+    let args = ctcore::ct_os_args().collect::<Vec<_>>();
+    let tool = ct_comm::Comm;
+    let result = tool.execute(&args);
+    let code = match result {
+        Ok(()) => ctcore::ct_error::get_ct_exit_code(),
+        Err(error) => {
+            let message = error.to_string();
+            if !message.is_empty() {
+                eprintln!("{}: {message}", ctcore::ct_util_name());
+            }
+            if error.usage() {
+                eprintln!(
+                    "Try '{} --help' for more information.",
+                    ctcore::ct_util_name()
+                );
+            }
+            error.code()
+        }
+    };
+
+    if let Err(error) = std::io::stdout().flush() {
+        eprintln!("Error flushing stdout: {error}");
+    }
+    std::process::exit(code);
+}

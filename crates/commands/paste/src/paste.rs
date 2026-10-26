@@ -404,29 +404,14 @@ impl<W: Write> PasteContext<W> {
     }
 
     fn write_row_bytes(&mut self, row: &[u8]) -> CTResult<()> {
-        let mut classic_bytes = Vec::with_capacity(row.len());
-        let mut segment_start = 0;
-        for &(position, delimiter) in &self.delimiter_positions {
-            if position >= row.len() {
-                break;
-            }
-            classic_bytes.extend_from_slice(
-                String::from_utf8_lossy(&row[segment_start..position]).as_bytes(),
-            );
-            classic_bytes.push(delimiter);
-            segment_start = position + 1;
-        }
-        classic_bytes
-            .extend_from_slice(String::from_utf8_lossy(&row[segment_start..]).as_bytes());
-
-        let rendered = String::from_utf8_lossy(&classic_bytes).into_owned();
+        let rendered = String::from_utf8_lossy(row).into_owned();
         self.emitted_rows += 1;
         self.rows.push(PasteRow {
             row_index: self.emitted_rows,
             line: rendered.clone(),
         });
         self.writer
-            .write_all(&classic_bytes)
+            .write_all(row)
             .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
         self.writer
             .write_all(&[self.line_ending as u8])
@@ -1433,6 +1418,25 @@ mod tests {
 
             let mut output = Vec::new();
             assert!(paste_exec(&mut output, flags).is_err());
+        }
+
+        #[test]
+        fn test_paste_preserves_non_utf8_input_bytes() -> CTResult<()> {
+            let temp_dir = tempfile::tempdir()?;
+            let file_path = temp_dir.path().join("input");
+            std::fs::write(&file_path, b"A\xffB\n")?;
+            let flags = PasteFlags {
+                is_serial: false,
+                delimiters: "\t".into(),
+                files: vec![file_path.into_os_string()],
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let mut output = Vec::new();
+            paste_exec(&mut output, flags)?;
+
+            assert_eq!(output, b"A\xffB\n");
+            Ok(())
         }
     }
 

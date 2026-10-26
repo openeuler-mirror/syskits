@@ -2559,9 +2559,10 @@ enum HashsumIoError {
     Write(io::Error),
 }
 
-fn hashsum_write_error(error: io::Error) -> Box<dyn CTError> {
+fn hashsum_write_error(_error: io::Error) -> Box<dyn CTError> {
     if ctcore::ct_stdout_was_closed() {
-        error.map_err_context(|| "write error".to_string())
+        io::Error::from_raw_os_error(ctcore::libc::EBADF)
+            .map_err_context(|| "write error".to_string())
     } else {
         CtSimpleError::new(1, "write error")
     }

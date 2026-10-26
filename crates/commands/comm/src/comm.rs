@@ -21,7 +21,6 @@ use ctcore::ct_locale::strcoll_compare;
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read};
-use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 
 use clap::builder::ValueParser;
@@ -257,7 +256,6 @@ struct CommLineReader {
     input: CommInput,
     name: OsString,
     pending: Option<Vec<u8>>,
-    is_fifo: bool,
 }
 
 impl CommLineReader {
@@ -267,17 +265,11 @@ impl CommLineReader {
             line_ending,
             name: OsString::new(),
             pending: None,
-            is_fifo: false,
         }
     }
 
     fn named(mut self, name: impl Into<OsString>) -> Self {
         self.name = name.into();
-        self
-    }
-
-    fn fifo(mut self, is_fifo: bool) -> Self {
-        self.is_fifo = is_fifo;
         self
     }
 
@@ -918,18 +910,15 @@ fn open_file(
     let file_name = file_name.as_ref();
     match file_name.as_bytes() {
         b"-" => Ok(CommLineReader::new(
-            CommInput::Reader(BufReader::new(ctcore::ct_io::stdin_reader_box())),
+        CommInput::Reader(BufReader::new(ctcore::ct_io::stdin_reader_box())),
             line_ending,
         )
-        .named(file_name.to_os_string())
-        .fifo(false)),
+        .named(file_name.to_os_string())),
         _ => {
             let f = File::open(Path::new(file_name))?;
-            let is_fifo = f.metadata()?.file_type().is_fifo();
             Ok(
                 CommLineReader::new(CommInput::Reader(BufReader::new(Box::new(f))), line_ending)
-                    .named(file_name.to_os_string())
-                    .fifo(is_fifo),
+                    .named(file_name.to_os_string()),
             )
         }
     }
@@ -956,13 +945,9 @@ fn open_inputs(
 
     let mut first =
         open_file(file1, line_ending).map_err_context(|| comm_quote_operand(file1.as_os_str()))?;
-    let pending = if !first.is_fifo {
-        let mut line = Vec::new();
-        let length = comm_read_line(&mut first, &mut line)?;
-        (length > 0).then_some(line)
-    } else {
-        None
-    };
+    let mut line = Vec::new();
+    let length = comm_read_line(&mut first, &mut line)?;
+    let pending = (length > 0).then_some(line);
     first = first.pending(pending);
 
     let second =

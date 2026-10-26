@@ -463,15 +463,29 @@ impl<W: Write> PasteContext<W> {
 }
 
 fn paste_unescape(s: &str) -> String {
-    s.replace("\\\\", "\u{FFFF}")
+    let escaped = s
+        .replace("\\\\", "\u{FFFF}")
         .replace("\\0", "\0")
         .replace("\\b", "\x08")
         .replace("\\f", "\x0c")
         .replace("\\n", "\n")
         .replace("\\r", "\r")
         .replace("\\t", "\t")
-        .replace("\\v", "\x0b")
-        .replace("\u{FFFF}", "\\")
+        .replace("\\v", "\x0b");
+
+    let mut output = String::with_capacity(escaped.len());
+    let mut chars = escaped.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            match chars.next() {
+                Some(escaped_char) => output.push(escaped_char),
+                None => output.push('\\'),
+            }
+        } else {
+            output.push(ch);
+        }
+    }
+    output.replace('\u{FFFF}', "\\")
 }
 
 pub fn paste_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
@@ -1138,6 +1152,8 @@ mod tests {
         assert_eq!(paste_unescape("\\\\"), "\\");
         assert_eq!(paste_unescape("\\\\n"), "\\n");
         assert_eq!(paste_unescape("a\\\\nb"), "a\\nb");
+        assert_eq!(paste_unescape("\\q"), "q");
+        assert_eq!(paste_unescape("a\\qb"), "aqb");
     }
 
     #[test]

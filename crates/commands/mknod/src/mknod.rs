@@ -660,7 +660,11 @@ fn mknod_processing(
                 let err = std::io::Error::last_os_error();
                 return Err(CtSimpleError::new(
                     1,
-                    format!("cannot set permissions of {}: {}", file_name.quote(), err),
+                    format!(
+                        "cannot set permissions of {}: {}",
+                        file_name.quote(),
+                        strip_errno(&err)
+                    ),
                 ));
             }
         }

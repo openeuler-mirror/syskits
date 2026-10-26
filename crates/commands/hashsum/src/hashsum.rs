@@ -1888,6 +1888,7 @@ where
     let mut missing_file = 0;
     let mut no_valid_lines = false;
     let mut no_files_verified = false;
+    let mut bsd_reversed = None;
 
     let binary_marker = if flags.is_binary { "*" } else { " " };
 
@@ -1912,6 +1913,7 @@ where
                 &mut failed_open_file,
                 &mut no_valid_lines,
                 &mut no_files_verified,
+                &mut bsd_reversed,
             )?;
 
             if let Some(failed) = check_result {
@@ -1966,9 +1968,17 @@ fn check_hash_file<W: Write>(
     failed_open_file: &mut usize,
     no_valid_lines: &mut bool,
     no_files_verified: &mut bool,
+    bsd_reversed: &mut Option<bool>,
 ) -> CTResult<Option<usize>> {
     let (mut gnu_re, bsd_re, bytes_marker) = create_check_regexes_bytes(flags)?;
-    let mut bsd_reversed = None;
+    if let Some(is_bsd_reversed) = *bsd_reversed {
+        let format_marker = if is_bsd_reversed {
+            ""
+        } else {
+            r"(?P<binary>[ \*])"
+        };
+        gnu_re = gnu_re_template_bytes(&bytes_marker, format_marker)?;
+    }
     let mut local_failed_cksum = 0;
     let mut file_has_valid_lines = false;
     let mut matched_files = 0;
@@ -1999,20 +2009,15 @@ fn check_hash_file<W: Write>(
         }
 
         // 尝试匹配哈希行格式
-        let parse_result = parse_hash_line_bytes(
-            &line,
-            &mut gnu_re,
-            &bsd_re,
-            &bytes_marker,
-            &mut bsd_reversed,
-        )
-        .and_then(|parsed| {
-            if filename == Path::new("-") && manifest_entry_is_stdin(&parsed.0, parsed.3) {
-                Err(ParseLineError::FormatError)
-            } else {
-                Ok(parsed)
-            }
-        });
+        let parse_result =
+            parse_hash_line_bytes(&line, &mut gnu_re, &bsd_re, &bytes_marker, bsd_reversed)
+                .and_then(|parsed| {
+                    if filename == Path::new("-") && manifest_entry_is_stdin(&parsed.0, parsed.3) {
+                        Err(ParseLineError::FormatError)
+                    } else {
+                        Ok(parsed)
+                    }
+                });
 
         match parse_result {
             Ok((ck_filename, sum, binary_check, is_escaped)) => {

@@ -149,6 +149,39 @@ fn validate_gnu_comm_options(args: &[OsString]) -> CTResult<()> {
     Ok(())
 }
 
+fn apply_posix_option_order(args: &mut Vec<OsString>, posixly_correct: bool) {
+    if !posixly_correct {
+        return;
+    }
+
+    let mut index = 1;
+    while index < args.len() {
+        let argument = args[index].as_os_str().as_encoded_bytes();
+        if argument == b"--" {
+            return;
+        }
+        if argument == b"-" || !argument.starts_with(b"-") {
+            args.insert(index, OsString::from("--"));
+            return;
+        }
+
+        if let Some(long_argument) = argument.strip_prefix(b"--") {
+            let option = long_argument
+                .split(|byte| *byte == b'=')
+                .next()
+                .unwrap_or_default();
+            if !option.is_empty()
+                && b"output-delimiter".starts_with(option)
+                && !long_argument.contains(&b'=')
+            {
+                index += 2;
+                continue;
+            }
+        }
+        index += 1;
+    }
+}
+
 fn validate_gnu_comm_operands(args: &[OsString]) -> CTResult<()> {
     let mut operands = Vec::new();
     let mut options_enabled = true;
@@ -725,7 +758,8 @@ fn open_file(file_name: &str, line_ending: CtLineEnding) -> io::Result<CommLineR
 pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = args.into_iter().collect::<Vec<_>>();
+    let mut args = args.into_iter().collect::<Vec<_>>();
+    apply_posix_option_order(&mut args, std::env::var_os("POSIXLY_CORRECT").is_some());
     validate_gnu_comm_options(&args)?;
     validate_gnu_comm_operands(&args)?;
     let matches = ct_app().try_get_matches_from(args)?;
@@ -757,7 +791,8 @@ pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
 pub fn comm_native_semantic(args: impl ctcore::Args) -> CTResult<CommSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = args.into_iter().collect::<Vec<_>>();
+    let mut args = args.into_iter().collect::<Vec<_>>();
+    apply_posix_option_order(&mut args, std::env::var_os("POSIXLY_CORRECT").is_some());
     validate_gnu_comm_options(&args)?;
     validate_gnu_comm_operands(&args)?;
     let matches = ct_app().try_get_matches_from(args)?;
@@ -951,7 +986,9 @@ mod tests {
         use crate::opt_flags::DELIMITER_DEFAULT;
         use crate::opt_flags::FILE_1;
         use crate::opt_flags::FILE_2;
-        use crate::{validate_gnu_comm_operands, validate_gnu_comm_options};
+        use crate::{
+            apply_posix_option_order, validate_gnu_comm_operands, validate_gnu_comm_options,
+        };
 
         use clap::error::ErrorKind;
         use std::ffi::OsString;
@@ -1181,6 +1218,24 @@ mod tests {
                 assert_eq!(error.to_string(), expected);
                 assert!(error.usage());
             }
+        }
+
+        #[test]
+        fn test_posix_option_order_stops_at_first_operand() {
+            let mut args = ["comm", "left", "-1", "right"]
+                .into_iter()
+                .map(OsString::from)
+                .collect::<Vec<_>>();
+
+            apply_posix_option_order(&mut args, true);
+
+            assert_eq!(
+                args,
+                ["comm", "--", "left", "-1", "right"]
+                    .into_iter()
+                    .map(OsString::from)
+                    .collect::<Vec<_>>()
+            );
         }
 
         #[test]

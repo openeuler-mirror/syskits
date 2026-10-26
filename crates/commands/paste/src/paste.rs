@@ -20,11 +20,12 @@ use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_line_ending::CtLineEnding;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write, stdout};
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -33,6 +34,119 @@ mod paste_flags {
     pub const PASTE_SERIAL: &str = "serial";
     pub const PASTE_FILE: &str = "file";
     pub const PASTE_ZERO_TERMINATED: &str = "zero-terminated";
+}
+
+const GNU_PASTE_LONG_OPTIONS: &[&str] =
+    &["serial", "delimiters", "zero-terminated", "help", "version"];
+
+fn validate_gnu_paste_options(args: &[OsString]) -> CTResult<()> {
+    let mut index = 1;
+    while index < args.len() {
+        let argument = args[index].as_os_str().as_bytes();
+        if argument == b"--" {
+            break;
+        }
+
+        if let Some(long_argument) = argument.strip_prefix(b"--") {
+            if long_argument.is_empty() {
+                break;
+            }
+
+            let option_end = long_argument
+                .iter()
+                .position(|byte| *byte == b'=')
+                .unwrap_or(long_argument.len());
+            let option_name = String::from_utf8_lossy(&long_argument[..option_end]);
+            let supplied_value = option_end < long_argument.len();
+            let mut candidates = GNU_PASTE_LONG_OPTIONS
+                .iter()
+                .copied()
+                .filter(|candidate| candidate.starts_with(option_name.as_ref()))
+                .collect::<Vec<_>>();
+
+            if let Some(exact) = candidates
+                .iter()
+                .position(|candidate| *candidate == option_name)
+            {
+                candidates = vec![candidates[exact]];
+            }
+
+            if candidates.is_empty() {
+                return Err(CTsageError::new(
+                    1,
+                    format!(
+                        "unrecognized option '{}'",
+                        args[index].as_os_str().to_string_lossy()
+                    ),
+                ));
+            }
+
+            if candidates.len() > 1 {
+                let possibilities = candidates
+                    .iter()
+                    .map(|candidate| format!("'--{candidate}'"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                return Err(CTsageError::new(
+                    1,
+                    format!(
+                        "option '{}' is ambiguous; possibilities: {possibilities}",
+                        args[index].as_os_str().to_string_lossy()
+                    ),
+                ));
+            }
+
+            let option = candidates[0];
+            if option == "delimiters" {
+                if !supplied_value {
+                    index += 1;
+                    if index == args.len() {
+                        return Err(CTsageError::new(
+                            1,
+                            "option '--delimiters' requires an argument",
+                        ));
+                    }
+                }
+            } else if supplied_value {
+                return Err(CTsageError::new(
+                    1,
+                    format!("option '--{option}' doesn't allow an argument"),
+                ));
+            } else if matches!(option, "help" | "version") {
+                return Ok(());
+            }
+        } else if argument.starts_with(b"-") && argument.len() > 1 {
+            let mut short_index = 1;
+            while short_index < argument.len() {
+                let option = argument[short_index];
+                if option == b'd' {
+                    if short_index + 1 == argument.len() {
+                        index += 1;
+                        if index == args.len() {
+                            return Err(CTsageError::new(1, "option requires an argument -- 'd'"));
+                        }
+                    }
+                    break;
+                }
+
+                // -h and -V are retained as syskits extensions.
+                if !matches!(option, b's' | b'z' | b'h' | b'V') {
+                    return Err(CTsageError::new(
+                        1,
+                        format!("invalid option -- '{}'", char::from(option)),
+                    ));
+                }
+                if matches!(option, b'h' | b'V') {
+                    return Ok(());
+                }
+                short_index += 1;
+            }
+        }
+
+        index += 1;
+    }
+
+    Ok(())
 }
 
 /// 表示一个输入源，可以是文件或标准输入
@@ -319,6 +433,8 @@ pub fn paste_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = args.into_iter().collect::<Vec<_>>();
+    validate_gnu_paste_options(&args)?;
     let matches = ct_app().try_get_matches_from(args)?;
     let flags = PasteFlags::new(&matches)?;
     flags.validate_delimiters()?;
@@ -343,6 +459,8 @@ fn paste_exec_collect<W: Write>(writer: &mut W, flags: PasteFlags) -> CTResult<V
 pub fn paste_native_semantic(args: impl ctcore::Args) -> CTResult<PasteSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
+    let args = args.into_iter().collect::<Vec<_>>();
+    validate_gnu_paste_options(&args)?;
     let matches = ct_app().try_get_matches_from(args)?;
     let flags = PasteFlags::new(&matches)?;
     flags.validate_delimiters()?;
@@ -773,6 +891,26 @@ mod tests {
                     .unwrap(),
                 ","
             );
+        }
+
+        #[test]
+        fn test_gnu_option_diagnostics() {
+            for (args, expected) in [
+                (
+                    vec!["paste", "--definitely-unknown"],
+                    "unrecognized option '--definitely-unknown'",
+                ),
+                (
+                    vec!["paste", "--serial=yes"],
+                    "option '--serial' doesn't allow an argument",
+                ),
+                (vec!["paste", "-d"], "option requires an argument -- 'd'"),
+                (vec!["paste", "-sx"], "invalid option -- 'x'"),
+            ] {
+                let args = args.into_iter().map(OsString::from).collect::<Vec<_>>();
+                let error = validate_gnu_paste_options(&args).unwrap_err();
+                assert_eq!(error.to_string(), expected);
+            }
         }
     }
 

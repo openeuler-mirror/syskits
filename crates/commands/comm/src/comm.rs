@@ -459,7 +459,7 @@ fn comm_total_row(total_col_1: usize, total_col_2: usize, total_col_3: usize) ->
 }
 
 fn comm_error_line(message: &str) -> String {
-    format!("comm: {message}\n")
+    format!("{}: {message}\n", ctcore::ct_util_name())
 }
 
 #[cfg(target_os = "linux")]

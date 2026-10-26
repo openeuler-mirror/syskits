@@ -339,7 +339,7 @@ impl<R: Read> Data<R> {
                     if self.alphabet.contains(&c) {
                         char_buf.push(c);
                     }
-                } else if c != b'\r' && c != b'\n' {
+                } else if c != b'\n' {
                     char_buf.push(c);
                 }
             }
@@ -827,6 +827,15 @@ mod test {
         let mut out = Vec::new();
         assert!(data.decode(&mut out).is_err());
         assert_eq!(out, b"HF@");
+    }
+
+    #[test]
+    fn test_data_decode_base32_rejects_carriage_return_without_ignore_garbage() {
+        let input = Cursor::new(b"MZXW6===\r\n".to_vec());
+        let mut data = Data::new(input, Format::Base32);
+        let mut out = Vec::new();
+        assert!(data.decode(&mut out).is_err());
+        assert_eq!(out, b"foo");
     }
 
     #[test]

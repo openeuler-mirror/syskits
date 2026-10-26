@@ -25,7 +25,9 @@ use std::path::Path;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
+use std::cell::RefCell;
 use std::ffi::OsString;
+use std::rc::Rc;
 use sys_locale::get_locale;
 
 mod opt_flags {
@@ -245,6 +247,7 @@ fn validate_gnu_comm_operands(args: &[OsString]) -> CTResult<()> {
 }
 enum CommInput {
     Reader(BufReader<Box<dyn Read>>),
+    Shared(Rc<RefCell<BufReader<Box<dyn Read>>>>),
 }
 struct CommLineReader {
     line_ending: CtLineEnding,
@@ -264,6 +267,7 @@ impl CommLineReader {
 
         let result = match &mut self.input {
             CommInput::Reader(r) => r.read_until(comm_line_ending, buf),
+            CommInput::Shared(r) => r.borrow_mut().read_until(comm_line_ending, buf),
         };
 
         if !buf.ends_with(&[comm_line_ending]) {
@@ -755,6 +759,16 @@ fn open_file(file_name: &str, line_ending: CtLineEnding) -> io::Result<CommLineR
     }
 }
 
+fn open_shared_stdin(line_ending: CtLineEnding) -> (CommLineReader, CommLineReader) {
+    let input = Rc::new(RefCell::new(BufReader::new(
+        ctcore::ct_io::stdin_reader_box(),
+    )));
+    (
+        CommLineReader::new(CommInput::Shared(Rc::clone(&input)), line_ending),
+        CommLineReader::new(CommInput::Shared(input), line_ending),
+    )
+}
+
 pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
@@ -767,21 +781,26 @@ pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
     let line_ending = CtLineEnding::from_zero_flag(matches.get_flag(opt_flags::ZERO_TERMINATED));
     let tmp_file1 = matches.get_one::<String>(opt_flags::FILE_1).unwrap();
     let tmp_file2 = matches.get_one::<String>(opt_flags::FILE_2).unwrap();
-
-    if tmp_file1 == "-" && tmp_file2 == "-" {
-        return Err(ctcore::ct_error::CtSimpleError::new(
-            1,
-            t!("comm.messages.both_stdin"),
-        ));
-    }
-
-    let mut f1 = open_file(tmp_file1, line_ending).map_err_context(|| tmp_file1.to_string())?;
-    let mut f2 = open_file(tmp_file2, line_ending).map_err_context(|| tmp_file2.to_string())?;
+    let both_stdin = tmp_file1 == "-" && tmp_file2 == "-";
+    let (mut f1, mut f2) = if both_stdin {
+        open_shared_stdin(line_ending)
+    } else {
+        (
+            open_file(tmp_file1, line_ending).map_err_context(|| tmp_file1.to_string())?,
+            open_file(tmp_file2, line_ending).map_err_context(|| tmp_file2.to_string())?,
+        )
+    };
 
     let mut stdout = std::io::stdout().lock();
     let outcome = comm_with_writer(&mut f1, &mut f2, &matches, &mut stdout)?;
     if !outcome.stderr_text.is_empty() {
         eprint!("{}", outcome.stderr_text);
+    }
+    if both_stdin {
+        return Err(ctcore::ct_error::CtSimpleError::new(
+            1,
+            "-: Bad file descriptor",
+        ));
     }
     if outcome.exit_code != 0 {
         return Err(ctcore::ct_error::CtSimpleError::new(outcome.exit_code, ""));
@@ -801,18 +820,24 @@ pub fn comm_native_semantic(args: impl ctcore::Args) -> CTResult<CommSemantic> {
     let line_ending = CtLineEnding::from_zero_flag(matches.get_flag(opt_flags::ZERO_TERMINATED));
     let tmp_file1 = matches.get_one::<String>(opt_flags::FILE_1).unwrap();
     let tmp_file2 = matches.get_one::<String>(opt_flags::FILE_2).unwrap();
-
-    if tmp_file1 == "-" && tmp_file2 == "-" {
-        return Err(ctcore::ct_error::CtSimpleError::new(
-            1,
-            t!("comm.messages.both_stdin"),
-        ));
-    }
-
-    let mut f1 = open_file(tmp_file1, line_ending).map_err_context(|| tmp_file1.to_string())?;
-    let mut f2 = open_file(tmp_file2, line_ending).map_err_context(|| tmp_file2.to_string())?;
+    let both_stdin = tmp_file1 == "-" && tmp_file2 == "-";
+    let (mut f1, mut f2) = if both_stdin {
+        open_shared_stdin(line_ending)
+    } else {
+        (
+            open_file(tmp_file1, line_ending).map_err_context(|| tmp_file1.to_string())?,
+            open_file(tmp_file2, line_ending).map_err_context(|| tmp_file2.to_string())?,
+        )
+    };
     let mut output = Vec::new();
     let outcome = comm_with_writer(&mut f1, &mut f2, &matches, &mut output)?;
+
+    if both_stdin {
+        return Err(ctcore::ct_error::CtSimpleError::new(
+            1,
+            "-: Bad file descriptor",
+        ));
+    }
 
     Ok(CommSemantic {
         rows: outcome.rows,
@@ -944,6 +969,21 @@ mod tests {
         let help_args: Vec<OsString> = vec![OsString::from("comm"), OsString::from("--help")];
         let help_result = comm.execute(&help_args);
         assert!(help_result.is_err());
+    }
+
+    #[test]
+    fn test_shared_stdin_consumes_records_in_operand_order() {
+        ctcore::ct_io::with_injected_stdin(b"first\nsecond\n".to_vec(), || {
+            let line_ending = CtLineEnding::from_zero_flag(false);
+            let (mut first, mut second) = open_shared_stdin(line_ending);
+            let mut buffer = Vec::new();
+
+            assert_eq!(first.read_line(&mut buffer).unwrap(), 6);
+            assert_eq!(buffer, b"first\n");
+            buffer.clear();
+            assert_eq!(second.read_line(&mut buffer).unwrap(), 7);
+            assert_eq!(buffer, b"second\n");
+        });
     }
 
     // 这里是 `comm` 命令的使用说明和示例：

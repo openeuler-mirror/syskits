@@ -9,4 +9,30 @@
  * See the Mulan PSL v2 for more details.
  */
 
-ctcore::ct_bin!(ct_hashsum, Hashsum);
+pub fn main() {
+    use ctcore::Tool;
+
+    ctcore::ct_panic::ct_mute_set_panic_hook();
+    ctcore::ct_ensure_standard_fds();
+
+    let args = ctcore::ct_os_args().collect::<Vec<_>>();
+    let tool = ct_hashsum::Hashsum;
+    let code = match tool.execute(&args) {
+        Ok(()) => ctcore::ct_error::get_ct_exit_code(),
+        Err(error) => {
+            let message = error.to_string();
+            if !message.is_empty() {
+                ctcore::ct_show_error!("{message}");
+            }
+            if error.usage() {
+                eprintln!(
+                    "Try '{} --help' for more information.",
+                    ctcore::ct_help_utility_name()
+                );
+            }
+            error.code()
+        }
+    };
+
+    std::process::exit(code);
+}

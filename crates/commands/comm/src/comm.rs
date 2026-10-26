@@ -763,6 +763,7 @@ pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
     validate_gnu_comm_options(&args)?;
     validate_gnu_comm_operands(&args)?;
     let matches = ct_app().try_get_matches_from(args)?;
+    comm_get_del_im(&matches)?;
     let line_ending = CtLineEnding::from_zero_flag(matches.get_flag(opt_flags::ZERO_TERMINATED));
     let tmp_file1 = matches.get_one::<String>(opt_flags::FILE_1).unwrap();
     let tmp_file2 = matches.get_one::<String>(opt_flags::FILE_2).unwrap();
@@ -796,6 +797,7 @@ pub fn comm_native_semantic(args: impl ctcore::Args) -> CTResult<CommSemantic> {
     validate_gnu_comm_options(&args)?;
     validate_gnu_comm_operands(&args)?;
     let matches = ct_app().try_get_matches_from(args)?;
+    comm_get_del_im(&matches)?;
     let line_ending = CtLineEnding::from_zero_flag(matches.get_flag(opt_flags::ZERO_TERMINATED));
     let tmp_file1 = matches.get_one::<String>(opt_flags::FILE_1).unwrap();
     let tmp_file2 = matches.get_one::<String>(opt_flags::FILE_2).unwrap();
@@ -980,7 +982,6 @@ mod tests {
 
     #[cfg(test)]
     mod tests_ct_app {
-        use crate::ct_app;
         use crate::opt_flags;
         use crate::opt_flags::DELIMITER;
         use crate::opt_flags::DELIMITER_DEFAULT;
@@ -989,6 +990,7 @@ mod tests {
         use crate::{
             apply_posix_option_order, validate_gnu_comm_operands, validate_gnu_comm_options,
         };
+        use crate::{comm_get_del_im, ct_app};
 
         use clap::error::ErrorKind;
         use std::ffi::OsString;
@@ -1235,6 +1237,34 @@ mod tests {
                     .into_iter()
                     .map(OsString::from)
                     .collect::<Vec<_>>()
+            );
+        }
+
+        #[test]
+        fn test_output_delimiter_conflicts() {
+            let same = ct_app()
+                .try_get_matches_from([
+                    "comm",
+                    "--output-delimiter=X",
+                    "--output-delimiter=X",
+                    "left",
+                    "right",
+                ])
+                .unwrap();
+            assert_eq!(comm_get_del_im(&same).unwrap(), "X");
+
+            let different = ct_app()
+                .try_get_matches_from([
+                    "comm",
+                    "--output-delimiter=X",
+                    "--output-delimiter=Y",
+                    "left",
+                    "right",
+                ])
+                .unwrap();
+            assert_eq!(
+                comm_get_del_im(&different).unwrap_err().to_string(),
+                "multiple output delimiters specified"
             );
         }
 

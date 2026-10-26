@@ -9,7 +9,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::Read;
 use std::io::Write;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
@@ -51,6 +51,7 @@ pub struct BaseConfig {
     pub base_ignore_garbage: bool,
     pub base_wrap_cols: Option<usize>,
     pub base_to_read: Option<String>,
+    pub base_to_read_os: Option<OsString>,
 }
 
 pub mod opt_flags {
@@ -62,27 +63,29 @@ pub mod opt_flags {
 
 impl BaseConfig {
     pub fn from(options: &clap::ArgMatches) -> CTResult<Self> {
-        let f: Option<String> = match options.get_many::<String>(opt_flags::BASE_FILE) {
+        let f: Option<OsString> = match options.get_many::<OsString>(opt_flags::BASE_FILE) {
             Some(mut var) => {
                 let path_name = var.next().unwrap();
                 if let Some(extra_operand) = var.next() {
                     return Err(CTsageError::new(
                         BASE_CMD_PARSE_ERROR,
-                        format!("extra operand {}", extra_operand.quote(),),
+                        format!("extra operand {}", extra_operand.as_os_str().quote()),
                     ));
                 }
 
-                match path_name.as_ref() {
-                    "-" => None,
-                    _ => {
-                        if !Path::exists(Path::new(path_name)) {
-                            return Err(CtSimpleError::new(
-                                BASE_CMD_PARSE_ERROR,
-                                format!("{}: No such file or directory", path_name.maybe_quote()),
-                            ));
-                        }
-                        Some(path_name.clone())
+                if path_name.as_os_str() == OsStr::new("-") {
+                    None
+                } else {
+                    if !Path::exists(Path::new(path_name.as_os_str())) {
+                        return Err(CtSimpleError::new(
+                            BASE_CMD_PARSE_ERROR,
+                            format!(
+                                "{}: No such file or directory",
+                                path_name.as_os_str().maybe_quote()
+                            ),
+                        ));
                     }
+                    Some(path_name.clone())
                 }
             }
             None => None,
@@ -97,7 +100,8 @@ impl BaseConfig {
             base_decode: options.get_flag(opt_flags::BASE_DECODE),
             base_ignore_garbage: options.get_flag(opt_flags::BASE_IGNORE_GARBAGE),
             base_wrap_cols: cols,
-            base_to_read: f,
+            base_to_read: f.as_ref().map(|path| path.to_string_lossy().into_owned()),
+            base_to_read_os: f,
         })
     }
 }
@@ -253,6 +257,7 @@ fn base_args_init() -> Vec<Arg> {
         Arg::new(opt_flags::BASE_FILE)
             .index(1)
             .action(clap::ArgAction::Append)
+            .value_parser(clap::builder::OsStringValueParser::new())
             .value_hint(clap::ValueHint::FilePath),
     ];
     base_args
@@ -262,7 +267,11 @@ pub fn get_base_input<'a>(
     ct_config: &BaseConfig,
     _ct_stdin_ref: &'a Stdin,
 ) -> CTResult<Box<dyn Read + 'a>> {
-    match &ct_config.base_to_read {
+    let base_name = ct_config
+        .base_to_read_os
+        .as_deref()
+        .or_else(|| ct_config.base_to_read.as_ref().map(OsStr::new));
+    match base_name {
         Some(base_name) => {
             let file_buf = File::open(Path::new(base_name))
                 .map_err_context(|| base_name.maybe_quote().to_string())?;

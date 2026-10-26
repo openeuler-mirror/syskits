@@ -1248,7 +1248,8 @@ impl Tool for Hashsum {
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let stdout = std::io::stdout();
         let mut out = stdout.lock();
-        hashsum_main(&mut out, args.iter().cloned())
+        hashsum_main(&mut out, args.iter().cloned())?;
+        out.flush().map_err(hashsum_write_error)
     }
 }
 
@@ -1961,7 +1962,7 @@ where
                     let detail = message.split(" (os error").next().unwrap_or(&message);
                     ctcore::ct_show_error!("{}: {}", filename.maybe_quote(), detail);
                 }
-                Err(HashsumIoError::Write(error)) => return Err(error.into()),
+                Err(HashsumIoError::Write(error)) => return Err(hashsum_write_error(error)),
             }
         }
     }
@@ -2556,6 +2557,14 @@ fn write_check_status<W: Write>(
 enum HashsumIoError {
     Read(io::Error),
     Write(io::Error),
+}
+
+fn hashsum_write_error(error: io::Error) -> Box<dyn CTError> {
+    if ctcore::ct_stdout_was_closed() {
+        error.map_err_context(|| "write error".to_string())
+    } else {
+        CtSimpleError::new(1, "write error")
+    }
 }
 
 fn compute_and_output_hash<W: Write>(

@@ -21,6 +21,7 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo, strip_errno};
+use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use ctcore::ct_line_ending::CtLineEnding;
 use std::ffi::OsString;
 use std::fs::File;
@@ -38,6 +39,20 @@ mod paste_flags {
 
 const GNU_PASTE_LONG_OPTIONS: &[&str] =
     &["serial", "delimiters", "zero-terminated", "help", "version"];
+
+const PASTE_DIAGNOSTIC_QUOTING_STYLE: CtQuotingStyle = CtQuotingStyle::Shell {
+    escape: true,
+    always_quote: false,
+    show_control: true,
+};
+
+fn quote_operand(name: &std::ffi::OsStr) -> String {
+    if name.is_empty() {
+        "''".to_string()
+    } else {
+        escape_name(name, &PASTE_DIAGNOSTIC_QUOTING_STYLE)
+    }
+}
 
 fn validate_gnu_paste_options(args: &[OsString]) -> CTResult<()> {
     let mut index = 1;
@@ -303,7 +318,9 @@ impl<W: Write> PasteContext<W> {
                 let path = Path::new(name);
                 match File::open(path) {
                     Ok(file) => InputSource::File(BufReader::new(file)),
-                    Err(error) => return Err(error.map_err_context(String::new)),
+                    Err(error) => {
+                        return Err(error.map_err_context(|| quote_operand(name.as_os_str())));
+                    }
                 }
             };
             files.push(file);
@@ -456,7 +473,7 @@ impl<W: Write> PasteContext<W> {
                         eprintln!(
                             "{}: {}: {}",
                             ctcore::ct_util_name(),
-                            name.to_string_lossy(),
+                            quote_operand(name.as_os_str()),
                             strip_errno(&error)
                         );
                         self.had_errors = true;

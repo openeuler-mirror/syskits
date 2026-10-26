@@ -26,6 +26,7 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write, stdout};
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -193,6 +194,7 @@ fn apply_posix_option_order(args: &mut Vec<OsString>, posixly_correct: bool) {
 /// 表示一个输入源，可以是文件或标准输入
 enum InputSource {
     File(BufReader<File>),
+    Deferred(OsString),
     Stdin,
     Failed,
 }
@@ -299,6 +301,14 @@ impl<W: Write> PasteContext<W> {
             } else {
                 let path = Path::new(name);
                 match File::open(path) {
+                    Ok(file)
+                        if flags.is_serial
+                            && file
+                                .metadata()
+                                .is_ok_and(|metadata| !metadata.file_type().is_fifo()) =>
+                    {
+                        InputSource::Deferred(name.clone())
+                    }
                     Ok(file) => InputSource::File(BufReader::new(file)),
                     Err(error) if flags.is_serial => {
                         eprintln!(
@@ -424,6 +434,7 @@ impl<W: Write> PasteContext<W> {
                 &mut self.writer,
                 line_ending,
             ),
+            InputSource::Deferred(_) => unreachable!("serial inputs are opened before reading"),
             InputSource::Failed => Ok(false),
         }
     }
@@ -454,6 +465,22 @@ impl<W: Write> PasteContext<W> {
 
     fn paste_serial(&mut self) -> CTResult<()> {
         for i in 0..self.files.len() {
+            if let InputSource::Deferred(name) = &self.files[i] {
+                let name = name.clone();
+                match File::open(Path::new(&name)) {
+                    Ok(file) => self.files[i] = InputSource::File(BufReader::new(file)),
+                    Err(error) => {
+                        eprintln!(
+                            "{}: {}: {}",
+                            ctcore::ct_util_name(),
+                            name.to_string_lossy(),
+                            strip_errno(&error)
+                        );
+                        self.had_errors = true;
+                        self.files[i] = InputSource::Failed;
+                    }
+                }
+            }
             if matches!(self.files[i], InputSource::Failed) {
                 continue;
             }
@@ -466,6 +493,9 @@ impl<W: Write> PasteContext<W> {
                 delim_count += 1;
             }
             self.write_output(delim_length)?;
+            if matches!(self.files[i], InputSource::File(_)) {
+                self.files[i] = InputSource::Failed;
+            }
         }
         Ok(())
     }

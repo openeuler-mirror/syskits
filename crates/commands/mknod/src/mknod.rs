@@ -29,7 +29,7 @@ use libc::{dev_t, mode_t};
 use selinux::label::{Labeler, back_end::File as FileBackEnd};
 use selinux::{self, SecurityContext};
 use std::ffi::{CString, OsStr, OsString};
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -481,8 +481,8 @@ fn parse_security_context_request(args: &[OsString]) -> SecurityContextRequest {
             continue;
         }
 
-        if let Some(value) = arg.to_str().and_then(|arg| arg.strip_prefix("--context=")) {
-            request = SecurityContextRequest::Explicit(OsString::from(value));
+        if let Some(value) = arg.as_os_str().as_bytes().strip_prefix(b"--context=") {
+            request = SecurityContextRequest::Explicit(OsString::from_vec(value.to_vec()));
         }
     }
 
@@ -915,7 +915,7 @@ mod tests {
 
         use clap::error::ErrorKind;
         use std::ffi::OsString;
-        use std::os::unix::ffi::OsStringExt;
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
         #[test]
         fn test_ct_app_version() {
@@ -1102,6 +1102,24 @@ mod tests {
             match request {
                 SecurityContextRequest::Explicit(value) => assert!(value.is_empty()),
                 _ => panic!("expected explicit empty context"),
+            }
+        }
+
+        #[test]
+        fn test_non_utf8_explicit_context_is_preserved() {
+            let value = OsString::from_vec(b"value-\xff".to_vec());
+            let mut argument = b"--context=".to_vec();
+            argument.extend_from_slice(value.as_os_str().as_bytes());
+            let request = parse_security_context_request(&[
+                OsString::from("mknod"),
+                OsString::from_vec(argument),
+                OsString::from("file"),
+                OsString::from("p"),
+            ]);
+
+            match request {
+                SecurityContextRequest::Explicit(context) => assert_eq!(context, value),
+                _ => panic!("expected explicit context"),
             }
         }
     }

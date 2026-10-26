@@ -183,6 +183,106 @@ fn apply_posix_option_order(args: &mut Vec<OsString>, posixly_correct: bool) {
     }
 }
 
+fn validate_gnu_mknod_operands(args: &[OsString]) -> CTResult<()> {
+    let mut operands = Vec::new();
+    let mut options_enabled = true;
+    let mut index = 1;
+
+    while index < args.len() {
+        let argument = args[index].as_os_str().as_bytes();
+        if options_enabled && argument == b"--" {
+            options_enabled = false;
+            index += 1;
+            continue;
+        }
+
+        if options_enabled {
+            if let Some(long_argument) = argument.strip_prefix(b"--") {
+                let option_end = long_argument
+                    .iter()
+                    .position(|byte| *byte == b'=')
+                    .unwrap_or(long_argument.len());
+                let option = &long_argument[..option_end];
+                if b"help".starts_with(option) || b"version".starts_with(option) {
+                    return Ok(());
+                }
+                if b"mode".starts_with(option) && option_end == long_argument.len() {
+                    index += 2;
+                    continue;
+                }
+                index += 1;
+                continue;
+            }
+
+            if let Some(short_options) = argument.strip_prefix(b"-")
+                && !short_options.is_empty()
+            {
+                if short_options
+                    .iter()
+                    .any(|option| matches!(option, b'h' | b'V'))
+                {
+                    return Ok(());
+                }
+                if let Some(mode_index) = short_options.iter().position(|byte| *byte == b'm')
+                    && mode_index + 1 == short_options.len()
+                {
+                    index += 2;
+                    continue;
+                }
+                index += 1;
+                continue;
+            }
+        }
+
+        operands.push(&args[index]);
+        index += 1;
+    }
+
+    let expected_operands = if operands.get(1).is_some_and(|operand| {
+        operand
+            .as_os_str()
+            .as_bytes()
+            .first()
+            .is_some_and(|byte| *byte == b'p')
+    }) {
+        2
+    } else {
+        4
+    };
+
+    if operands.len() < expected_operands {
+        let mut message = match operands.last() {
+            Some(operand) => format!("missing operand after {}", operand.as_os_str().quote()),
+            None => "missing operand".to_string(),
+        };
+        if expected_operands == 4 && operands.len() == 2 {
+            message.push_str("\nSpecial files require major and minor device numbers.");
+        }
+        return Err(CTsageError::new(1, message));
+    }
+
+    if operands.len() > expected_operands {
+        let mut message = format!(
+            "extra operand {}",
+            operands[expected_operands].as_os_str().quote()
+        );
+        if expected_operands == 2 && operands.len() == 4 {
+            message.push_str("\nFifos do not have major and minor device numbers.");
+        }
+        return Err(CTsageError::new(1, message));
+    }
+
+    let type_bytes = operands[1].as_os_str().as_bytes();
+    if !matches!(type_bytes.first(), Some(b'b' | b'c' | b'u' | b'p')) {
+        return Err(CTsageError::new(
+            1,
+            format!("invalid device type {}", operands[1].as_os_str().quote()),
+        ));
+    }
+
+    Ok(())
+}
+
 // 函数：解析设备号，支持十进制、十六进制和八进制格式
 fn parse_device_number(s: &str) -> Result<u64, String> {
     if s.starts_with("0x") || s.starts_with("0X") {
@@ -366,6 +466,7 @@ pub fn mknod_main(args: impl ctcore::Args) -> CTResult<()> {
     let mut raw_args: Vec<OsString> = args.into_iter().collect();
     apply_posix_option_order(&mut raw_args, std::env::var_os("POSIXLY_CORRECT").is_some());
     validate_gnu_mknod_options(&raw_args)?;
+    validate_gnu_mknod_operands(&raw_args)?;
     let context_request = parse_security_context_request(&raw_args);
     // 从命令行参数中解析选项和参数
     let args_match = ct_app().try_get_matches_from(raw_args)?;
@@ -708,7 +809,8 @@ mod tests {
     mod tests_mknod_app {
         use crate::{
             SecurityContextRequest, apply_posix_option_order, ct_app,
-            parse_security_context_request, validate_gnu_mknod_options,
+            parse_security_context_request, validate_gnu_mknod_operands,
+            validate_gnu_mknod_options,
         };
 
         use clap::error::ErrorKind;
@@ -830,6 +932,31 @@ mod tests {
                 .map(OsString::from)
                 .collect::<Vec<_>>()
             );
+        }
+
+        #[test]
+        fn test_gnu_operand_diagnostics() {
+            for (args, expected) in [
+                (vec!["mknod"], "missing operand"),
+                (vec!["mknod", "x"], "missing operand after 'x'"),
+                (
+                    vec!["mknod", "x", "b"],
+                    "missing operand after 'b'\nSpecial files require major and minor device numbers.",
+                ),
+                (
+                    vec!["mknod", "x", "p", "1", "2"],
+                    "extra operand '1'\nFifos do not have major and minor device numbers.",
+                ),
+                (
+                    vec!["mknod", "x", "c", "1", "2", "extra"],
+                    "extra operand 'extra'",
+                ),
+                (vec!["mknod", "x", "q", "1", "2"], "invalid device type 'q'"),
+            ] {
+                let args = args.into_iter().map(OsString::from).collect::<Vec<_>>();
+                let error = validate_gnu_mknod_operands(&args).unwrap_err();
+                assert_eq!(error.to_string(), expected);
+            }
         }
 
         #[test]

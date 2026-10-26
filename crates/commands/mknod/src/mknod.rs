@@ -348,22 +348,20 @@ enum MknodFileType {
     Fifo,
 }
 
-enum SecurityContextRequest {
-    Absent,
-    Default,
-    Explicit(OsString),
+#[derive(Default)]
+struct SecurityContextRequest {
+    explicit_context: Option<OsString>,
+    use_default: bool,
+    explicit_occurrences: usize,
 }
 
 impl SecurityContextRequest {
     fn explicit_context(&self) -> Option<&OsString> {
-        match self {
-            Self::Explicit(value) => Some(value),
-            _ => None,
-        }
+        self.explicit_context.as_ref()
     }
 
     fn is_set(&self) -> bool {
-        !matches!(self, Self::Absent)
+        self.explicit_context.is_some() || self.use_default
     }
 }
 
@@ -398,66 +396,62 @@ fn _mknod(file_name: &OsStr, mode: mode_t, dev: dev_t) -> i32 {
 }
 
 fn set_security_context(
-    context: Option<&OsString>,
+    request: &SecurityContextRequest,
     file_path: &OsStr,
     file_mode: mode_t,
 ) -> Result<(), String> {
     if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
-        if context.is_some() {
-            eprintln!(
-                "mknod: warning: ignoring --context; it requires an SELinux/SMACK-enabled kernel"
-            );
-        }
         return Ok(());
     }
 
-    match context {
-        Some(ctx) => {
-            let c_context = os_str_to_c_string(ctx);
-            SecurityContext::from_c_str(&c_context, false)
-                .set_for_new_file_system_objects(false)
-                .map_err(|e| format!("failed to set default file creation context: {e}"))
-        }
-        None => {
-            let labeler = match Labeler::<FileBackEnd>::restorecon_default(false) {
-                Ok(l) => l,
-                Err(e) => {
-                    eprintln!("mknod: warning: cannot create SELinux labeler: {e}");
-                    return Ok(());
-                }
-            };
-
-            let file_access_mode = mode_to_file_access_mode(file_mode);
-            let path = Path::new(file_path);
-
-            // 将相对路径转换为绝对路径，以便 SELinux 策略引擎能正确匹配正则
-            let abs_path = if path.is_absolute() {
-                path.to_path_buf()
-            } else {
-                std::env::current_dir()
-                    .map(|p| p.join(path))
-                    .unwrap_or_else(|_| path.to_path_buf())
-            };
-
-            // 传入 abs_path 而不是 path
-            let default_context = match labeler.look_up_by_path(&abs_path, Some(file_access_mode)) {
-                Ok(ctx) => ctx,
-                Err(e) => {
-                    eprintln!(
-                        "mknod: warning: cannot look up default SELinux context for {}: {e}",
-                        file_path.to_string_lossy()
-                    );
-                    return Ok(());
-                }
-            };
-
-            if let Err(e) = default_context.set_for_new_file_system_objects(false) {
-                eprintln!("mknod: warning: cannot set default file creation context: {e}");
-            }
-
-            Ok(())
-        }
+    if let Some(ctx) = request.explicit_context() {
+        let c_context = os_str_to_c_string(ctx);
+        SecurityContext::from_c_str(&c_context, false)
+            .set_for_new_file_system_objects(false)
+            .map_err(|e| format!("failed to set default file creation context: {e}"))?;
     }
+
+    if !request.use_default {
+        return Ok(());
+    }
+
+    let labeler = match Labeler::<FileBackEnd>::restorecon_default(false) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("mknod: warning: cannot create SELinux labeler: {e}");
+            return Ok(());
+        }
+    };
+
+    let file_access_mode = mode_to_file_access_mode(file_mode);
+    let path = Path::new(file_path);
+
+    // 将相对路径转换为绝对路径，以便 SELinux 策略引擎能正确匹配正则
+    let abs_path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map(|p| p.join(path))
+            .unwrap_or_else(|_| path.to_path_buf())
+    };
+
+    // 传入 abs_path 而不是 path
+    let default_context = match labeler.look_up_by_path(&abs_path, Some(file_access_mode)) {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            eprintln!(
+                "mknod: warning: cannot look up default SELinux context for {}: {e}",
+                file_path.to_string_lossy()
+            );
+            return Ok(());
+        }
+    };
+
+    if let Err(e) = default_context.set_for_new_file_system_objects(false) {
+        eprintln!("mknod: warning: cannot set default file creation context: {e}");
+    }
+
+    Ok(())
 }
 
 // 将mode_t转换为selinux::FileAccessMode
@@ -473,23 +467,70 @@ pub fn os_str_to_c_string(os_str: &OsStr) -> CString {
 }
 
 fn parse_security_context_request(args: &[OsString]) -> SecurityContextRequest {
-    let mut request = SecurityContextRequest::Absent;
-
-    for arg in args.iter().skip(1) {
-        if arg == "--" {
+    let mut request = SecurityContextRequest::default();
+    let mut index = 1;
+    while index < args.len() {
+        let argument = args[index].as_os_str().as_bytes();
+        if argument == b"--" {
             break;
         }
-        if arg == "-Z" || arg == "--context" {
-            request = SecurityContextRequest::Default;
+
+        if let Some(long_argument) = argument.strip_prefix(b"--") {
+            let option_end = long_argument
+                .iter()
+                .position(|byte| *byte == b'=')
+                .unwrap_or(long_argument.len());
+            let option = &long_argument[..option_end];
+            if !option.is_empty() && b"context".starts_with(option) {
+                if option_end < long_argument.len() {
+                    request.explicit_context =
+                        Some(OsString::from_vec(long_argument[option_end + 1..].to_vec()));
+                    request.explicit_occurrences += 1;
+                } else {
+                    request.use_default = true;
+                }
+            } else if !option.is_empty()
+                && b"mode".starts_with(option)
+                && option_end == long_argument.len()
+            {
+                index += 1;
+            }
+            index += 1;
             continue;
         }
 
-        if let Some(value) = arg.as_os_str().as_bytes().strip_prefix(b"--context=") {
-            request = SecurityContextRequest::Explicit(OsString::from_vec(value.to_vec()));
+        if let Some(short_options) = argument.strip_prefix(b"-") {
+            let mut short_index = 0;
+            while short_index < short_options.len() {
+                match short_options[short_index] {
+                    b'Z' => request.use_default = true,
+                    b'm' => {
+                        if short_index + 1 == short_options.len() {
+                            index += 1;
+                        }
+                        break;
+                    }
+                    _ => {}
+                }
+                short_index += 1;
+            }
         }
+
+        index += 1;
     }
 
     request
+}
+
+fn report_unsupported_context_warnings(request: &SecurityContextRequest) {
+    if selinux::kernel_support() != selinux::KernelSupport::Unsupported {
+        return;
+    }
+    for _ in 0..request.explicit_occurrences {
+        eprintln!(
+            "mknod: warning: ignoring --context; it requires an SELinux/SMACK-enabled kernel"
+        );
+    }
 }
 
 pub fn mknod_main(args: impl ctcore::Args) -> CTResult<()> {
@@ -498,8 +539,9 @@ pub fn mknod_main(args: impl ctcore::Args) -> CTResult<()> {
     let mut raw_args: Vec<OsString> = args.into_iter().collect();
     apply_posix_option_order(&mut raw_args, std::env::var_os("POSIXLY_CORRECT").is_some());
     validate_gnu_mknod_options(&raw_args)?;
-    validate_gnu_mknod_operands(&raw_args)?;
     let context_request = parse_security_context_request(&raw_args);
+    report_unsupported_context_warnings(&context_request);
+    validate_gnu_mknod_operands(&raw_args)?;
     // 从命令行参数中解析选项和参数
     let args_match = ct_app().try_get_matches_from(raw_args)?;
 
@@ -535,7 +577,7 @@ fn mknod_processing(
 
     if context_request.is_set() {
         // 传入 full_mode 而不是 mode
-        set_security_context(context_request.explicit_context(), file_name, full_mode)
+        set_security_context(context_request, file_name, full_mode)
             .map_err(|e| CtSimpleError::new(1, e))?;
     }
     // 如果既没有-Z也没有--context，则不设置SELinux上下文
@@ -911,9 +953,8 @@ mod tests {
 
     mod tests_mknod_app {
         use crate::{
-            SecurityContextRequest, apply_posix_option_order, ct_app,
-            parse_security_context_request, parse_type, validate_gnu_mknod_operands,
-            validate_gnu_mknod_options,
+            apply_posix_option_order, ct_app, parse_security_context_request, parse_type,
+            validate_gnu_mknod_operands, validate_gnu_mknod_options,
         };
 
         use clap::error::ErrorKind;
@@ -1091,7 +1132,8 @@ mod tests {
                 std::ffi::OsString::from("file"),
                 std::ffi::OsString::from("p"),
             ]);
-            assert!(matches!(request, SecurityContextRequest::Default));
+            assert!(request.use_default);
+            assert!(request.explicit_context.is_none());
         }
 
         #[test]
@@ -1102,10 +1144,8 @@ mod tests {
                 std::ffi::OsString::from("file"),
                 std::ffi::OsString::from("p"),
             ]);
-            match request {
-                SecurityContextRequest::Explicit(value) => assert!(value.is_empty()),
-                _ => panic!("expected explicit empty context"),
-            }
+            assert_eq!(request.explicit_context, Some(OsString::new()));
+            assert_eq!(request.explicit_occurrences, 1);
         }
 
         #[test]
@@ -1120,10 +1160,8 @@ mod tests {
                 OsString::from("p"),
             ]);
 
-            match request {
-                SecurityContextRequest::Explicit(context) => assert_eq!(context, value),
-                _ => panic!("expected explicit context"),
-            }
+            assert_eq!(request.explicit_context, Some(value));
+            assert_eq!(request.explicit_occurrences, 1);
         }
 
         #[test]
@@ -1135,7 +1173,23 @@ mod tests {
                 OsString::from("p"),
             ]);
 
-            assert!(matches!(request, SecurityContextRequest::Absent));
+            assert!(!request.is_set());
+        }
+
+        #[test]
+        fn test_context_requests_preserve_explicit_warning_and_default_state() {
+            let request = parse_security_context_request(&[
+                OsString::from("mknod"),
+                OsString::from("--context=first"),
+                OsString::from("-Z"),
+                OsString::from("--context=last"),
+                OsString::from("file"),
+                OsString::from("p"),
+            ]);
+
+            assert_eq!(request.explicit_context, Some(OsString::from("last")));
+            assert!(request.use_default);
+            assert_eq!(request.explicit_occurrences, 2);
         }
     }
 }

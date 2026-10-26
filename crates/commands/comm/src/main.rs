@@ -11,7 +11,7 @@
 
 pub fn main() {
     use ctcore::Tool;
-    use std::io::Write;
+    use std::io::{self, Write};
 
     ctcore::ct_panic::ct_mute_set_panic_hook();
     ctcore::ct_ensure_standard_fds();
@@ -19,15 +19,17 @@ pub fn main() {
     let args = ctcore::ct_os_args().collect::<Vec<_>>();
     let tool = ct_comm::Comm;
     let result = tool.execute(&args);
+    let mut stderr = io::stderr().lock();
     let code = match result {
         Ok(()) => ctcore::ct_error::get_ct_exit_code(),
         Err(error) => {
             let message = error.to_string();
             if !message.is_empty() {
-                eprintln!("{}: {message}", ctcore::ct_util_name());
+                let _ = writeln!(stderr, "{}: {message}", ctcore::ct_util_name());
             }
             if error.usage() {
-                eprintln!(
+                let _ = writeln!(
+                    stderr,
                     "Try '{} --help' for more information.",
                     ctcore::ct_util_name()
                 );
@@ -37,7 +39,7 @@ pub fn main() {
     };
 
     if let Err(error) = std::io::stdout().flush() {
-        eprintln!("Error flushing stdout: {error}");
+        let _ = writeln!(stderr, "Error flushing stdout: {error}");
     }
     std::process::exit(code);
 }

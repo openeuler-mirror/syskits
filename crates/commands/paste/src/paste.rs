@@ -26,7 +26,6 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Write, stdout};
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -294,32 +293,16 @@ impl PasteFlags {
 impl<W: Write> PasteContext<W> {
     fn new(flags: &PasteFlags, writer: W) -> CTResult<Self> {
         let mut files = Vec::with_capacity(flags.files.len());
-        let mut had_errors = false;
+        let had_errors = false;
         for name in &flags.files {
             let file = if name.as_os_str().as_bytes() == b"-" {
                 InputSource::Stdin
+            } else if flags.is_serial {
+                InputSource::Deferred(name.clone())
             } else {
                 let path = Path::new(name);
                 match File::open(path) {
-                    Ok(file)
-                        if flags.is_serial
-                            && file
-                                .metadata()
-                                .is_ok_and(|metadata| !metadata.file_type().is_fifo()) =>
-                    {
-                        InputSource::Deferred(name.clone())
-                    }
                     Ok(file) => InputSource::File(BufReader::new(file)),
-                    Err(error) if flags.is_serial => {
-                        eprintln!(
-                            "{}: {}: {}",
-                            ctcore::ct_util_name(),
-                            name.to_string_lossy(),
-                            strip_errno(&error)
-                        );
-                        had_errors = true;
-                        InputSource::Failed
-                    }
                     Err(error) => return Err(error.map_err_context(String::new)),
                 }
             };

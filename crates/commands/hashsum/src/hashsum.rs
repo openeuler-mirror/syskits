@@ -17,13 +17,13 @@ use clap::builder::ValueParser;
 use clap::crate_version;
 use clap::{Arg, ArgMatches, Command};
 use ctcore::Tool;
+use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTError, CTResult, FromIo};
 use ctcore::ct_error::{CTsageError, CtSimpleError};
 use ctcore::ct_sum::{
     CtBlake2b, CtBlake3, CtDigest, CtDigestWriter, Md5, Sha1, Sha3_224, Sha3_256, Sha3_384,
     Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256,
 };
-use ctcore::{ct_display::Quotable, ct_show_warning};
 use hex::encode;
 use regex::Captures;
 use regex::Regex;
@@ -1894,11 +1894,13 @@ where
 
     for filename in files {
         let filename = Path::new(filename);
-        let mut file = match open_file(filename) {
+        let mut file = match open_classic_file(filename) {
             Ok(f) => f,
             Err(e) => {
                 missing_file += 1;
-                ct_show_warning!("{}: {}", filename.display(), e);
+                let message = e.to_string();
+                let detail = message.split(" (os error").next().unwrap_or(&message);
+                ctcore::ct_show_error!("{}: {}", filename.maybe_quote(), detail);
                 continue;
             }
         };
@@ -1956,6 +1958,15 @@ where
     }
 
     Ok(())
+}
+
+fn open_classic_file(filename: &Path) -> io::Result<BufReader<Box<dyn Read>>> {
+    let file: Box<dyn Read> = if filename == Path::new("-") {
+        ctcore::ct_io::stdin_reader_box()
+    } else {
+        Box::new(File::open(filename)?)
+    };
+    Ok(BufReader::new(file))
 }
 
 /// 打开文件或使用标准输入

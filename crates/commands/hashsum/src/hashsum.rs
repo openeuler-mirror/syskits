@@ -39,6 +39,8 @@ use std::iter;
 use std::num::ParseIntError;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
+#[cfg(target_os = "linux")]
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 
 const NAME: &str = "hashsum";
 
@@ -66,6 +68,29 @@ const GNU_COMMON_LONG_OPTIONS: &[&str] = &[
     "help",
     "version",
 ];
+
+#[cfg(target_os = "linux")]
+static HASHSUM_INHERITED_SIGPIPE_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" fn hashsum_capture_inherited_sigpipe() {
+    let mut action = std::mem::MaybeUninit::<ctcore::libc::sigaction>::uninit();
+    if unsafe {
+        ctcore::libc::sigaction(ctcore::libc::SIGPIPE, std::ptr::null(), action.as_mut_ptr())
+    } == 0
+    {
+        let action = unsafe { action.assume_init() };
+        HASHSUM_INHERITED_SIGPIPE_IGNORED.store(
+            action.sa_sigaction == ctcore::libc::SIG_IGN,
+            AtomicOrdering::Relaxed,
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static HASHSUM_CAPTURE_SIGPIPE: unsafe extern "C" fn() = hashsum_capture_inherited_sigpipe;
 
 /// 定义 hashsum 命令行标志的常量
 pub mod hashsum_flags {
@@ -2559,7 +2584,19 @@ enum HashsumIoError {
     Write(io::Error),
 }
 
-fn hashsum_write_error(_error: io::Error) -> Box<dyn CTError> {
+fn hashsum_write_error(error: io::Error) -> Box<dyn CTError> {
+    #[cfg(all(target_os = "linux", not(test)))]
+    if error.kind() == io::ErrorKind::BrokenPipe
+        && !HASHSUM_INHERITED_SIGPIPE_IGNORED.load(AtomicOrdering::Relaxed)
+    {
+        unsafe {
+            ctcore::libc::signal(ctcore::libc::SIGPIPE, ctcore::libc::SIG_DFL);
+            ctcore::libc::raise(ctcore::libc::SIGPIPE);
+            ctcore::libc::_exit(128 + ctcore::libc::SIGPIPE);
+        }
+    }
+    let _ = error;
+
     if ctcore::ct_stdout_was_closed() {
         io::Error::from_raw_os_error(ctcore::libc::EBADF)
             .map_err_context(|| "write error".to_string())

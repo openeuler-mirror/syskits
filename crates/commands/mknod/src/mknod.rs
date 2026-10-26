@@ -30,7 +30,7 @@ use libc::{dev_t, mode_t};
 use selinux::label::{Labeler, back_end::File as FileBackEnd};
 use selinux::{self, SecurityContext};
 use std::ffi::{CStr, CString, OsStr, OsString};
-use std::io;
+use std::io::{self, Write};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
 use sys_locale::get_locale;
@@ -378,6 +378,14 @@ fn initialize_mknod_locale() {
     rust_i18n::set_locale(&lang_code);
 }
 
+fn report_warning(message: &str) {
+    let _ = writeln!(
+        io::stderr().lock(),
+        "{}: warning: {message}",
+        ctcore::ct_util_name()
+    );
+}
+
 // Windows平台不支持mknod，因此定义一个空实现。
 #[cfg(windows)]
 fn _mknod(file_name: &OsStr, mode: mode_t, dev: dev_t) -> io::Result<()> {
@@ -457,7 +465,7 @@ fn set_security_context(
     let labeler = match Labeler::<FileBackEnd>::restorecon_default(false) {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("mknod: warning: cannot create SELinux labeler: {e}");
+            report_warning(&format!("cannot create SELinux labeler: {e}"));
             return Ok(());
         }
     };
@@ -478,16 +486,16 @@ fn set_security_context(
     let default_context = match labeler.look_up_by_path(&abs_path, Some(file_access_mode)) {
         Ok(ctx) => ctx,
         Err(e) => {
-            eprintln!(
-                "mknod: warning: cannot look up default SELinux context for {}: {e}",
+            report_warning(&format!(
+                "cannot look up default SELinux context for {}: {e}",
                 file_path.to_string_lossy()
-            );
+            ));
             return Ok(());
         }
     };
 
     if let Err(e) = default_context.set_for_new_file_system_objects(false) {
-        eprintln!("mknod: warning: cannot set default file creation context: {e}");
+        report_warning(&format!("cannot set default file creation context: {e}"));
     }
 
     Ok(())
@@ -566,9 +574,7 @@ fn report_unsupported_context_warnings(request: &SecurityContextRequest) {
         return;
     }
     for _ in 0..request.explicit_occurrences {
-        eprintln!(
-            "mknod: warning: ignoring --context; it requires an SELinux/SMACK-enabled kernel"
-        );
+        report_warning("ignoring --context; it requires an SELinux/SMACK-enabled kernel");
     }
 }
 

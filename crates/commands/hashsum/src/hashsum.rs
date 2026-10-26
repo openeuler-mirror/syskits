@@ -1938,7 +1938,16 @@ where
                 failed_cksum += failed;
             }
         } else {
-            compute_and_output_hash(&mut flags, filename, &mut file, binary_marker, writer)?;
+            match compute_and_output_hash(&mut flags, filename, &mut file, binary_marker, writer) {
+                Ok(()) => {}
+                Err(HashsumIoError::Read(error)) => {
+                    missing_file += 1;
+                    let message = error.to_string();
+                    let detail = message.split(" (os error").next().unwrap_or(&message);
+                    ctcore::ct_show_error!("{}: {}", filename.maybe_quote(), detail);
+                }
+                Err(HashsumIoError::Write(error)) => return Err(error.into()),
+            }
         }
     }
 
@@ -2520,72 +2529,80 @@ fn write_check_status<W: Write>(
 }
 
 /// 计算文件的哈希值并输出
+enum HashsumIoError {
+    Read(io::Error),
+    Write(io::Error),
+}
+
 fn compute_and_output_hash<W: Write>(
     flags: &mut HashsumFlags,
     filename: &Path,
     file: &mut BufReader<Box<dyn Read>>,
     binary_marker: &str,
     writer: &mut W,
-) -> CTResult<()> {
+) -> Result<(), HashsumIoError> {
     let sum = digest_reader(&mut flags.digest, file, flags.is_binary, flags.output_bits)
-        .map_err_context(|| "failed to read input".to_string())?;
+        .map_err(HashsumIoError::Read)?;
 
     // 逻辑修正：
     // 1. --tag 优先级最高，决定输出格式。
     // 2. 在 --tag 内部，需要检查 --zero 来决定结尾符是 \n 还是 \0，以及是否转义文件名。
     // 3. --zero 模式下，文件名不应转义 (disable file name escaping)。
 
-    if flags.is_tag {
-        let algorithm = tag_algorithm_name(flags);
-        // BSD 风格输出格式: ALGO (filename) = checksum
-        if flags.is_zero {
-            // --tag -z 组合：
-            // 1. 使用 write! 而不是 writeln!
-            // 2. 结尾手动添加 \0
-            // 3. 使用原始文件名字节（不转义）
-            // 4. 不输出 prefix (反斜杠前缀)
-            write!(writer, "{algorithm} (")?;
-            writer.write_all(filename.as_os_str().as_bytes())?;
-            write!(writer, ") = {sum}\0")?;
-        } else {
-            // 普通 --tag：
-            // 1. 需要转义文件名
-            // 2. 使用 writeln! (自动 \n 结尾)
-            let (escaped_filename, needs_escape) = escape_filename_bytes(filename);
-            if needs_escape {
-                writer.write_all(b"\\")?;
+    let write_result = (|| -> io::Result<()> {
+        if flags.is_tag {
+            let algorithm = tag_algorithm_name(flags);
+            // BSD 风格输出格式: ALGO (filename) = checksum
+            if flags.is_zero {
+                // --tag -z 组合：
+                // 1. 使用 write! 而不是 writeln!
+                // 2. 结尾手动添加 \0
+                // 3. 使用原始文件名字节（不转义）
+                // 4. 不输出 prefix (反斜杠前缀)
+                write!(writer, "{algorithm} (")?;
+                writer.write_all(filename.as_os_str().as_bytes())?;
+                write!(writer, ") = {sum}\0")?;
+            } else {
+                // 普通 --tag：
+                // 1. 需要转义文件名
+                // 2. 使用 writeln! (自动 \n 结尾)
+                let (escaped_filename, needs_escape) = escape_filename_bytes(filename);
+                if needs_escape {
+                    writer.write_all(b"\\")?;
+                }
+                write!(writer, "{algorithm} (")?;
+                writer.write_all(&escaped_filename)?;
+                writeln!(writer, ") = {sum}")?;
             }
-            write!(writer, "{algorithm} (")?;
-            writer.write_all(&escaped_filename)?;
-            writeln!(writer, ") = {sum}")?;
-        }
-    } else if flags.is_nonames {
-        // 仅输出哈希值
-        writeln!(writer, "{sum}")?;
-    } else {
-        // 标准 GNU 格式输出: checksum  filename
-        if flags.is_zero {
-            // 普通 -z：
-            // 1. 不转义文件名
-            // 2. \0 结尾
-            write!(writer, "{sum} {binary_marker}")?;
-            writer.write_all(filename.as_os_str().as_bytes())?;
-            writer.write_all(b"\0")?;
+        } else if flags.is_nonames {
+            // 仅输出哈希值
+            writeln!(writer, "{sum}")?;
         } else {
-            // 默认模式：
-            // 1. 转义文件名
-            // 2. \n 结尾
-            let (escaped_filename, needs_escape) = escape_filename_bytes(filename);
-            if needs_escape {
-                writer.write_all(b"\\")?;
+            // 标准 GNU 格式输出: checksum  filename
+            if flags.is_zero {
+                // 普通 -z：
+                // 1. 不转义文件名
+                // 2. \0 结尾
+                write!(writer, "{sum} {binary_marker}")?;
+                writer.write_all(filename.as_os_str().as_bytes())?;
+                writer.write_all(b"\0")?;
+            } else {
+                // 默认模式：
+                // 1. 转义文件名
+                // 2. \n 结尾
+                let (escaped_filename, needs_escape) = escape_filename_bytes(filename);
+                if needs_escape {
+                    writer.write_all(b"\\")?;
+                }
+                write!(writer, "{sum} {binary_marker}")?;
+                writer.write_all(&escaped_filename)?;
+                writer.write_all(b"\n")?;
             }
-            write!(writer, "{sum} {binary_marker}")?;
-            writer.write_all(&escaped_filename)?;
-            writer.write_all(b"\n")?;
         }
-    }
+        Ok(())
+    })();
 
-    Ok(())
+    write_result.map_err(HashsumIoError::Write)
 }
 
 fn escape_filename_bytes(filename: &Path) -> (Vec<u8>, bool) {

@@ -616,6 +616,7 @@ fn comm_with_writer<W: std::io::Write>(
     opts: &ArgMatches,
     out: &mut W,
     stderr: Option<&mut dyn Write>,
+    collect_rows: bool,
 ) -> CTResult<CommRunOutcome> {
     // 根据选项获取分隔符
     let delim = comm_get_del_im(opts)?;
@@ -683,7 +684,9 @@ fn comm_with_writer<W: std::io::Write>(
             if !opts.get_flag(opt_flags::COLUMN_1) {
                 out.write_all(ra)
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
-                rows.push(comm_row("left", ra, a.line_ending, true, false));
+                if collect_rows {
+                    rows.push(comm_row("left", ra, a.line_ending, true, false));
+                }
             }
             ra.clear();
             na = comm_read_line(a, ra)?;
@@ -736,7 +739,9 @@ fn comm_with_writer<W: std::io::Write>(
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
                 out.write_all(rb)
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
-                rows.push(comm_row("right", rb, b.line_ending, false, true));
+                if collect_rows {
+                    rows.push(comm_row("right", rb, b.line_ending, false, true));
+                }
             }
             rb.clear();
             nb = comm_read_line(b, rb)?;
@@ -788,7 +793,9 @@ fn comm_with_writer<W: std::io::Write>(
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
                 out.write_all(rb)
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
-                rows.push(comm_row("both", rb, b.line_ending, true, true));
+                if collect_rows {
+                    rows.push(comm_row("both", rb, b.line_ending, true, true));
+                }
             }
             ra.clear();
             rb.clear();
@@ -904,7 +911,9 @@ fn comm_with_writer<W: std::io::Write>(
             .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
         write!(out, "{total_str}{line_ending}")
             .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
-        rows.push(comm_total_row(total_col_1, total_col_2, total_col_3));
+        if collect_rows {
+            rows.push(comm_total_row(total_col_1, total_col_2, total_col_3));
+        }
     }
 
     if issued_warning[0] || issued_warning[1] {
@@ -1035,7 +1044,14 @@ pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
 
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
-    let outcome = comm_with_writer(&mut f1, &mut f2, &matches, &mut stdout, Some(&mut stderr))?;
+    let outcome = comm_with_writer(
+        &mut f1,
+        &mut f2,
+        &matches,
+        &mut stdout,
+        Some(&mut stderr),
+        false,
+    )?;
     if both_stdin {
         return Err(ctcore::ct_error::CtSimpleError::new(
             1,
@@ -1063,7 +1079,7 @@ pub fn comm_native_semantic(args: impl ctcore::Args) -> CTResult<CommSemantic> {
     let both_stdin = tmp_file1 == "-" && tmp_file2 == "-";
     let (mut f1, mut f2) = open_inputs(tmp_file1, tmp_file2, line_ending)?;
     let mut output = Vec::new();
-    let outcome = comm_with_writer(&mut f1, &mut f2, &matches, &mut output, None)?;
+    let outcome = comm_with_writer(&mut f1, &mut f2, &matches, &mut output, None, true)?;
 
     if both_stdin {
         return Err(ctcore::ct_error::CtSimpleError::new(

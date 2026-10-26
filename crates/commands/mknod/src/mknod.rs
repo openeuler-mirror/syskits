@@ -36,6 +36,116 @@ use sys_locale::get_locale;
 // 常量：用于设置文件模式的权限位。
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 
+const GNU_MKNOD_LONG_OPTIONS: &[&str] = &["context", "mode", "help", "version"];
+
+fn validate_gnu_mknod_options(args: &[OsString]) -> CTResult<()> {
+    let mut index = 1;
+    while index < args.len() {
+        let argument = args[index].as_os_str().as_bytes();
+        if argument == b"--" {
+            break;
+        }
+
+        if let Some(long_argument) = argument.strip_prefix(b"--") {
+            if long_argument.is_empty() {
+                break;
+            }
+
+            let option_end = long_argument
+                .iter()
+                .position(|byte| *byte == b'=')
+                .unwrap_or(long_argument.len());
+            let option_name = String::from_utf8_lossy(&long_argument[..option_end]);
+            let supplied_value = option_end < long_argument.len();
+            let mut candidates = GNU_MKNOD_LONG_OPTIONS
+                .iter()
+                .copied()
+                .filter(|candidate| candidate.starts_with(option_name.as_ref()))
+                .collect::<Vec<_>>();
+
+            if let Some(exact) = candidates
+                .iter()
+                .position(|candidate| *candidate == option_name)
+            {
+                candidates = vec![candidates[exact]];
+            }
+
+            if candidates.is_empty() {
+                return Err(CTsageError::new(
+                    1,
+                    format!(
+                        "unrecognized option '{}'",
+                        args[index].as_os_str().to_string_lossy()
+                    ),
+                ));
+            }
+
+            if candidates.len() > 1 {
+                let possibilities = candidates
+                    .iter()
+                    .map(|candidate| format!("'--{candidate}'"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                return Err(CTsageError::new(
+                    1,
+                    format!(
+                        "option '{}' is ambiguous; possibilities: {possibilities}",
+                        args[index].as_os_str().to_string_lossy()
+                    ),
+                ));
+            }
+
+            match candidates[0] {
+                "mode" if !supplied_value => {
+                    index += 1;
+                    if index == args.len() {
+                        return Err(CTsageError::new(1, "option '--mode' requires an argument"));
+                    }
+                }
+                "context" => {}
+                option if supplied_value => {
+                    return Err(CTsageError::new(
+                        1,
+                        format!("option '--{option}' doesn't allow an argument"),
+                    ));
+                }
+                "help" | "version" => return Ok(()),
+                _ => {}
+            }
+        } else if argument.starts_with(b"-") && argument.len() > 1 {
+            let mut short_index = 1;
+            while short_index < argument.len() {
+                let option = argument[short_index];
+                if option == b'm' {
+                    if short_index + 1 == argument.len() {
+                        index += 1;
+                        if index == args.len() {
+                            return Err(CTsageError::new(1, "option requires an argument -- 'm'"));
+                        }
+                    }
+                    break;
+                }
+
+                // -h and -V are retained as syskits extensions.
+                if !matches!(option, b'Z' | b'h' | b'V') {
+                    return Err(CTsageError::new(
+                        1,
+                        format!("invalid option -- '{}'", char::from(option)),
+                    ));
+                }
+                if matches!(option, b'h' | b'V') {
+                    return Ok(());
+                }
+                short_index += 1;
+            }
+        }
+
+        index += 1;
+    }
+
+    Ok(())
+}
+
 // 函数：解析设备号，支持十进制、十六进制和八进制格式
 fn parse_device_number(s: &str) -> Result<u64, String> {
     if s.starts_with("0x") || s.starts_with("0X") {
@@ -217,6 +327,7 @@ pub fn mknod_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let raw_args: Vec<OsString> = args.into_iter().collect();
+    validate_gnu_mknod_options(&raw_args)?;
     let context_request = parse_security_context_request(&raw_args);
     // 从命令行参数中解析选项和参数
     let args_match = ct_app().try_get_matches_from(raw_args)?;
@@ -556,9 +667,13 @@ mod tests {
     }
 
     mod tests_mknod_app {
-        use crate::{SecurityContextRequest, ct_app, parse_security_context_request};
+        use crate::{
+            SecurityContextRequest, ct_app, parse_security_context_request,
+            validate_gnu_mknod_options,
+        };
 
         use clap::error::ErrorKind;
+        use std::ffi::OsString;
 
         #[test]
         fn test_ct_app_version() {
@@ -627,6 +742,26 @@ mod tests {
             assert_eq!(matches.get_one::<String>("mode").unwrap(), "700");
             assert!(matches.get_flag("ctx"));
             assert!(matches.contains_id("context"));
+        }
+
+        #[test]
+        fn test_gnu_option_diagnostics() {
+            for (args, expected) in [
+                (
+                    vec!["mknod", "--definitely-unknown", "x", "p"],
+                    "unrecognized option '--definitely-unknown'",
+                ),
+                (vec!["mknod", "-m"], "option requires an argument -- 'm'"),
+                (
+                    vec!["mknod", "--mode"],
+                    "option '--mode' requires an argument",
+                ),
+                (vec!["mknod", "-x", "x", "p"], "invalid option -- 'x'"),
+            ] {
+                let args = args.into_iter().map(OsString::from).collect::<Vec<_>>();
+                let error = validate_gnu_mknod_options(&args).unwrap_err();
+                assert_eq!(error.to_string(), expected);
+            }
         }
 
         #[test]

@@ -23,10 +23,12 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read};
 use std::path::Path;
 
+use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use std::cell::RefCell;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
+use std::os::unix::ffi::OsStrExt;
 use std::rc::Rc;
 use sys_locale::get_locale;
 
@@ -531,7 +533,7 @@ fn comm_with_writer<W: std::io::Write>(
         } else if ord == Ordering::Greater {
             seen_unpairable = true;
             if !opts.get_flag(opt_flags::COLUMN_2) {
-                write!(out, "{delim_col_2}")
+                out.write_all(&delim_col_2)
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
                 out.write_all(rb)
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
@@ -585,7 +587,7 @@ fn comm_with_writer<W: std::io::Write>(
             total_col_2 += 1;
         } else if ord == Ordering::Equal {
             if !opts.get_flag(opt_flags::COLUMN_3) {
-                write!(out, "{delim_col_3}")
+                out.write_all(&delim_col_3)
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
                 out.write_all(ra)
                     .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
@@ -690,11 +692,20 @@ fn comm_with_writer<W: std::io::Write>(
         let line_ending = CtLineEnding::from_zero_flag(opts.get_flag(opt_flags::ZERO_TERMINATED));
         let total_str = t!("comm.messages.total");
         let col_sep = comm_get_del_im(opts)?;
-        write!(
-            out,
-            "{total_col_1}{col_sep}{total_col_2}{col_sep}{total_col_3}{col_sep}{total_str}{line_ending}"
-        )
-        .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+        write!(out, "{total_col_1}")
+            .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+        out.write_all(&col_sep)
+            .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+        write!(out, "{total_col_2}")
+            .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+        out.write_all(&col_sep)
+            .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+        write!(out, "{total_col_3}")
+            .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+        out.write_all(&col_sep)
+            .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+        write!(out, "{total_str}{line_ending}")
+            .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
         rows.push(comm_total_row(total_col_1, total_col_2, total_col_3));
     }
 
@@ -716,10 +727,10 @@ fn comm_with_writer<W: std::io::Write>(
     })
 }
 
-fn comm_get_del_im(options: &ArgMatches) -> CTResult<&str> {
+fn comm_get_del_im(options: &ArgMatches) -> CTResult<Vec<u8>> {
     // 获取所有分隔符值，检查是否一致
-    let delims: Vec<&String> = options
-        .get_many::<String>(opt_flags::DELIMITER)
+    let delims: Vec<&OsString> = options
+        .get_many::<OsString>(opt_flags::DELIMITER)
         .map(|v| v.collect())
         .unwrap_or_default();
 
@@ -727,7 +738,7 @@ fn comm_get_del_im(options: &ArgMatches) -> CTResult<&str> {
     if delims.len() > 1 {
         let first = delims[0];
         for delim in &delims[1..] {
-            if delim.as_str() != first.as_str() {
+            if delim != &first {
                 // 多个不同的分隔符被指定，报错
                 return Err(ctcore::ct_error::CtSimpleError::new(
                     1,
@@ -737,15 +748,24 @@ fn comm_get_del_im(options: &ArgMatches) -> CTResult<&str> {
         }
     }
 
-    Ok(match delims.last().map(|s| s.as_str()).unwrap_or("\t") {
-        "" => "\0",
-        delim => delim,
+    let delim = delims
+        .last()
+        .map(|value| value.as_os_str().as_bytes())
+        .unwrap_or(opt_flags::DELIMITER_DEFAULT.as_bytes());
+    Ok(if delim.is_empty() {
+        vec![0]
+    } else {
+        delim.to_vec()
     })
 }
 
-fn open_file(file_name: &str, line_ending: CtLineEnding) -> io::Result<CommLineReader> {
-    match file_name {
-        "-" => Ok(CommLineReader::new(
+fn open_file(
+    file_name: impl AsRef<OsStr>,
+    line_ending: CtLineEnding,
+) -> io::Result<CommLineReader> {
+    let file_name = file_name.as_ref();
+    match file_name.as_bytes() {
+        b"-" => Ok(CommLineReader::new(
             CommInput::Reader(BufReader::new(ctcore::ct_io::stdin_reader_box())),
             line_ending,
         )),
@@ -779,15 +799,17 @@ pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
     let matches = ct_app().try_get_matches_from(args)?;
     comm_get_del_im(&matches)?;
     let line_ending = CtLineEnding::from_zero_flag(matches.get_flag(opt_flags::ZERO_TERMINATED));
-    let tmp_file1 = matches.get_one::<String>(opt_flags::FILE_1).unwrap();
-    let tmp_file2 = matches.get_one::<String>(opt_flags::FILE_2).unwrap();
+    let tmp_file1 = matches.get_one::<OsString>(opt_flags::FILE_1).unwrap();
+    let tmp_file2 = matches.get_one::<OsString>(opt_flags::FILE_2).unwrap();
     let both_stdin = tmp_file1 == "-" && tmp_file2 == "-";
     let (mut f1, mut f2) = if both_stdin {
         open_shared_stdin(line_ending)
     } else {
         (
-            open_file(tmp_file1, line_ending).map_err_context(|| tmp_file1.to_string())?,
-            open_file(tmp_file2, line_ending).map_err_context(|| tmp_file2.to_string())?,
+            open_file(tmp_file1, line_ending)
+                .map_err_context(|| tmp_file1.to_string_lossy().into_owned())?,
+            open_file(tmp_file2, line_ending)
+                .map_err_context(|| tmp_file2.to_string_lossy().into_owned())?,
         )
     };
 
@@ -818,15 +840,17 @@ pub fn comm_native_semantic(args: impl ctcore::Args) -> CTResult<CommSemantic> {
     let matches = ct_app().try_get_matches_from(args)?;
     comm_get_del_im(&matches)?;
     let line_ending = CtLineEnding::from_zero_flag(matches.get_flag(opt_flags::ZERO_TERMINATED));
-    let tmp_file1 = matches.get_one::<String>(opt_flags::FILE_1).unwrap();
-    let tmp_file2 = matches.get_one::<String>(opt_flags::FILE_2).unwrap();
+    let tmp_file1 = matches.get_one::<OsString>(opt_flags::FILE_1).unwrap();
+    let tmp_file2 = matches.get_one::<OsString>(opt_flags::FILE_2).unwrap();
     let both_stdin = tmp_file1 == "-" && tmp_file2 == "-";
     let (mut f1, mut f2) = if both_stdin {
         open_shared_stdin(line_ending)
     } else {
         (
-            open_file(tmp_file1, line_ending).map_err_context(|| tmp_file1.to_string())?,
-            open_file(tmp_file2, line_ending).map_err_context(|| tmp_file2.to_string())?,
+            open_file(tmp_file1, line_ending)
+                .map_err_context(|| tmp_file1.to_string_lossy().into_owned())?,
+            open_file(tmp_file2, line_ending)
+                .map_err_context(|| tmp_file2.to_string_lossy().into_owned())?,
         )
     };
     let mut output = Vec::new();
@@ -896,6 +920,7 @@ fn args_init() -> Vec<Arg> {
             .long(opt_flags::DELIMITER)
             .help(t!("comm.clap.delimiter"))
             .value_name("STR")
+            .value_parser(ValueParser::os_string())
             .default_value(opt_flags::DELIMITER_DEFAULT)
             .hide_default_value(true)
             .action(ArgAction::Append),
@@ -907,9 +932,11 @@ fn args_init() -> Vec<Arg> {
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::FILE_1)
             .required(true)
+            .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(opt_flags::FILE_2)
             .required(true)
+            .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(opt_flags::TOTAL)
             .long(opt_flags::TOTAL)
@@ -1291,7 +1318,7 @@ mod tests {
                     "right",
                 ])
                 .unwrap();
-            assert_eq!(comm_get_del_im(&same).unwrap(), "X");
+            assert_eq!(comm_get_del_im(&same).unwrap(), b"X");
 
             let different = ct_app()
                 .try_get_matches_from([
@@ -1383,7 +1410,7 @@ mod tests {
             assert_eq!(
                 result
                     .unwrap()
-                    .get_one::<String>(opt_flags::FILE_1)
+                    .get_one::<OsString>(opt_flags::FILE_1)
                     .unwrap(),
                 expected_result
             );
@@ -1403,7 +1430,7 @@ mod tests {
             assert_eq!(
                 result
                     .unwrap()
-                    .get_one::<String>(opt_flags::FILE_2)
+                    .get_one::<OsString>(opt_flags::FILE_2)
                     .unwrap(),
                 test_file_path
             );
@@ -1425,7 +1452,7 @@ mod tests {
             assert_eq!(
                 result
                     .unwrap()
-                    .get_one::<String>(opt_flags::DELIMITER)
+                    .get_one::<OsString>(opt_flags::DELIMITER)
                     .unwrap(),
                 expected_result
             );
@@ -1447,7 +1474,7 @@ mod tests {
             assert_eq!(
                 result
                     .unwrap()
-                    .get_one::<String>(opt_flags::DELIMITER)
+                    .get_one::<OsString>(opt_flags::DELIMITER)
                     .unwrap(),
                 expected_result
             );
@@ -1977,6 +2004,7 @@ mod tests {
         use crate::opt_flags::FILE_2;
         use crate::opt_flags::TOTAL;
         use crate::opt_flags::ZERO_TERMINATED;
+        use std::ffi::OsString;
 
         #[test]
         fn tests_ct_opt_flags_column_1() {
@@ -1990,7 +2018,7 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args);
 
             let binding = matches.expect("REASON");
-            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+            let filename1 = binding.get_one::<OsString>(FILE_1).unwrap();
 
             assert_eq!(filename1, expected_result);
         }
@@ -2007,7 +2035,7 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args);
 
             let binding = matches.expect("REASON");
-            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+            let filename1 = binding.get_one::<OsString>(FILE_1).unwrap();
 
             assert_eq!(filename1, expected_result);
         }
@@ -2024,7 +2052,7 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args);
 
             let binding = matches.expect("REASON");
-            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+            let filename1 = binding.get_one::<OsString>(FILE_1).unwrap();
 
             assert_eq!(filename1, expected_result);
         }
@@ -2041,7 +2069,7 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args);
 
             let binding = matches.expect("REASON");
-            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+            let filename1 = binding.get_one::<OsString>(FILE_1).unwrap();
 
             assert_eq!(filename1, expected_result);
         }
@@ -2058,7 +2086,7 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args);
 
             let binding = matches.expect("REASON");
-            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+            let filename1 = binding.get_one::<OsString>(FILE_1).unwrap();
 
             assert_eq!(filename1, expected_result);
         }
@@ -2075,7 +2103,7 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args);
 
             let binding = matches.expect("REASON");
-            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+            let filename1 = binding.get_one::<OsString>(FILE_1).unwrap();
 
             assert_eq!(filename1, expected_result);
         }
@@ -2091,7 +2119,7 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args);
 
             let binding = matches.expect("REASON");
-            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+            let filename1 = binding.get_one::<OsString>(FILE_1).unwrap();
 
             assert_eq!(filename1, expected_result);
         }
@@ -2108,7 +2136,7 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args);
 
             let binding = matches.expect("REASON");
-            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+            let filename1 = binding.get_one::<OsString>(FILE_1).unwrap();
 
             assert_eq!(filename1, expected_result);
         }
@@ -2124,7 +2152,7 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args);
 
             let binding = matches.expect("REASON");
-            let filename1 = binding.get_one::<String>(FILE_1).unwrap();
+            let filename1 = binding.get_one::<OsString>(FILE_1).unwrap();
 
             assert_eq!(filename1, expected_result);
         }

@@ -13,7 +13,7 @@
 
 extern crate rust_i18n;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CTsageError, FromIo};
+use ctcore::ct_error::{CTResult, CTsageError};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::ct_line_ending::CtLineEnding;
@@ -418,10 +418,32 @@ fn comm_line_value(line: &[u8], line_ending: CtLineEnding) -> String {
     String::from_utf8_lossy(trim_line_ending(line, line_ending)).into_owned()
 }
 
+#[cfg(target_os = "linux")]
+fn comm_errno_text(error: &io::Error) -> String {
+    if let Some(errno) = error.raw_os_error() {
+        let message = unsafe { ctcore::libc::strerror(errno) };
+        if !message.is_null() {
+            return unsafe { CStr::from_ptr(message) }
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+    ctcore::ct_error::strip_errno(error)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn comm_errno_text(error: &io::Error) -> String {
+    ctcore::ct_error::strip_errno(error)
+}
+
+fn comm_io_error(context: String, error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
+    ctcore::ct_error::CtSimpleError::new(1, format!("{context}: {}", comm_errno_text(&error)))
+}
+
 fn comm_read_line(reader: &mut CommLineReader, buf: &mut Vec<u8>) -> CTResult<usize> {
     let result = reader.read_line(buf);
     let context = comm_quote_operand(reader.name.as_os_str());
-    result.map_err_context(|| context)
+    result.map_err(|error| comm_io_error(context, error))
 }
 
 fn comm_quote_operand(path: &OsStr) -> String {
@@ -534,15 +556,17 @@ fn comm_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
     };
     ctcore::ct_error::CtSimpleError::new(
         1,
-        format!("write error: {}", ctcore::ct_error::strip_errno(&error)),
+        format!("write error: {}", comm_errno_text(&error)),
     )
 }
 
 fn comm_stdout_file() -> CTResult<File> {
     let fd = unsafe { ctcore::libc::dup(ctcore::libc::STDOUT_FILENO) };
     if fd < 0 {
-        return Err(io::Error::last_os_error()
-            .map_err_context(|| "standard output".to_string()));
+        return Err(comm_io_error(
+            "standard output".to_string(),
+            io::Error::last_os_error(),
+        ));
     }
     Ok(unsafe { File::from_raw_fd(fd) })
 }
@@ -565,6 +589,16 @@ fn comm_gettext(message: &str) -> String {
         }
     }
 }
+
+#[cfg(target_os = "linux")]
+fn comm_initialize_locale() {
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn comm_initialize_locale() {}
 
 #[cfg(not(target_os = "linux"))]
 fn comm_gettext(message: &str) -> String {
@@ -950,10 +984,10 @@ fn comm_with_writer<W: std::io::Write>(
 
     out.flush().map_err(comm_write_error)?;
 
-    a.close()
-        .map_err_context(|| comm_quote_operand(a.name.as_os_str()))?;
-    b.close()
-        .map_err_context(|| comm_quote_operand(b.name.as_os_str()))?;
+    let a_name = comm_quote_operand(a.name.as_os_str());
+    a.close().map_err(|error| comm_io_error(a_name, error))?;
+    let b_name = comm_quote_operand(b.name.as_os_str());
+    b.close().map_err(|error| comm_io_error(b_name, error))?;
 
     // 根据选项输出总计数行
     if opts.get_flag(opt_flags::TOTAL) {
@@ -1074,25 +1108,30 @@ fn open_inputs(
 ) -> CTResult<(CommLineReader, CommLineReader)> {
     if file1 == "-" && file2 == "-" {
         if ctcore::ct_stdin_was_closed() {
-            return Err(io::Error::from_raw_os_error(ctcore::libc::EBADF)
-                .map_err_context(|| comm_quote_operand(OsStr::new("-"))));
+            return Err(comm_io_error(
+                comm_quote_operand(OsStr::new("-")),
+                io::Error::from_raw_os_error(ctcore::libc::EBADF),
+            ));
         }
         return Ok(open_shared_stdin(line_ending));
     }
 
-    let mut first =
-        open_file(file1, line_ending).map_err_context(|| comm_quote_operand(file1.as_os_str()))?;
+    let first_name = comm_quote_operand(file1.as_os_str());
+    let mut first = open_file(file1, line_ending)
+        .map_err(|error| comm_io_error(first_name, error))?;
     let mut line = Vec::new();
     let length = comm_read_line(&mut first, &mut line)?;
     let pending = (length > 0).then_some(line);
     first = first.pending(pending);
 
-    let second =
-        open_file(file2, line_ending).map_err_context(|| comm_quote_operand(file2.as_os_str()))?;
+    let second_name = comm_quote_operand(file2.as_os_str());
+    let second = open_file(file2, line_ending)
+        .map_err(|error| comm_io_error(second_name, error))?;
     Ok((first, second))
 }
 
 pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
+    comm_initialize_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let mut args = args.into_iter().collect::<Vec<_>>();
@@ -1137,6 +1176,7 @@ pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
 }
 
 pub fn comm_native_semantic(args: impl ctcore::Args) -> CTResult<CommSemantic> {
+    comm_initialize_locale();
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let mut args = args.into_iter().collect::<Vec<_>>();

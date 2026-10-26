@@ -25,7 +25,7 @@ use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use ctcore::ct_line_ending::CtLineEnding;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Write, stdout};
+use std::io::{self, BufRead, BufReader, Read, Write, stdout};
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use sys_locale::get_locale;
@@ -52,6 +52,15 @@ fn quote_operand(name: &std::ffi::OsStr) -> String {
     } else {
         escape_name(name, &PASTE_DIAGNOSTIC_QUOTING_STYLE)
     }
+}
+
+fn report_operand_error(name: &std::ffi::OsStr, error: &io::Error) {
+    eprintln!(
+        "{}: {}: {}",
+        ctcore::ct_util_name(),
+        quote_operand(name),
+        strip_errno(error)
+    );
 }
 
 fn validate_gnu_paste_options(args: &[OsString]) -> CTResult<()> {
@@ -207,10 +216,18 @@ fn apply_posix_option_order(args: &mut Vec<OsString>, posixly_correct: bool) {
 
 /// 表示一个输入源，可以是文件或标准输入
 enum InputSource {
-    File(BufReader<File>),
+    File {
+        name: OsString,
+        reader: BufReader<File>,
+    },
     Deferred(OsString),
     Stdin,
     Failed,
+}
+
+enum ProcessStreamError {
+    Read(io::Error),
+    Write(Box<dyn ctcore::ct_error::CTError>),
 }
 
 /// 存储粘贴操作的配置参数
@@ -317,7 +334,10 @@ impl<W: Write> PasteContext<W> {
             } else {
                 let path = Path::new(name);
                 match File::open(path) {
-                    Ok(file) => InputSource::File(BufReader::new(file)),
+                    Ok(file) => InputSource::File {
+                        name: name.clone(),
+                        reader: BufReader::new(file),
+                    },
                     Err(error) => {
                         return Err(error.map_err_context(|| quote_operand(name.as_os_str())));
                     }
@@ -377,13 +397,13 @@ impl<W: Write> PasteContext<W> {
         delimiter_positions: &mut Vec<(usize, u8)>,
         writer: &mut W,
         line_ending: u8,
-    ) -> CTResult<bool> {
+    ) -> Result<bool, ProcessStreamError> {
         let mut has_content = false;
 
         loop {
             let buf = reader
                 .fill_buf()
-                .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+                .map_err(ProcessStreamError::Read)?;
             if buf.is_empty() {
                 return Ok(has_content);
             }
@@ -400,7 +420,9 @@ impl<W: Write> PasteContext<W> {
             if output.len() > 65536 {
                 writer
                     .write_all(output)
-                    .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+                    .map_err(|error| {
+                        ProcessStreamError::Write(CtSimpleError::new(1, error.to_string()))
+                    })?;
                 output.clear();
                 delimiter_positions.clear();
             }
@@ -417,25 +439,40 @@ impl<W: Write> PasteContext<W> {
 
     fn process_line_at(&mut self, index: usize) -> CTResult<bool> {
         let line_ending = self.line_ending as u8;
-        match &mut self.files[index] {
-            InputSource::File(reader) => {
+        let (result, name) = match &mut self.files[index] {
+            InputSource::File { name, reader } => (
                 Self::process_stream(
                     reader,
                     &mut self.output,
                     &mut self.delimiter_positions,
                     &mut self.writer,
                     line_ending,
-                )
-            }
-            InputSource::Stdin => Self::process_stream(
-                &mut self.stdin,
-                &mut self.output,
-                &mut self.delimiter_positions,
-                &mut self.writer,
-                line_ending,
+                ),
+                name.clone(),
+            ),
+            InputSource::Stdin => (
+                Self::process_stream(
+                    &mut self.stdin,
+                    &mut self.output,
+                    &mut self.delimiter_positions,
+                    &mut self.writer,
+                    line_ending,
+                ),
+                OsString::from("-"),
             ),
             InputSource::Deferred(_) => unreachable!("serial inputs are opened before reading"),
-            InputSource::Failed => Ok(false),
+            InputSource::Failed => return Ok(false),
+        };
+
+        match result {
+            Ok(has_content) => Ok(has_content),
+            Err(ProcessStreamError::Read(error)) => {
+                report_operand_error(name.as_os_str(), &error);
+                self.had_errors = true;
+                self.files[index] = InputSource::Failed;
+                Ok(false)
+            }
+            Err(ProcessStreamError::Write(error)) => Err(error),
         }
     }
 
@@ -468,14 +505,14 @@ impl<W: Write> PasteContext<W> {
             if let InputSource::Deferred(name) = &self.files[i] {
                 let name = name.clone();
                 match File::open(Path::new(&name)) {
-                    Ok(file) => self.files[i] = InputSource::File(BufReader::new(file)),
+                    Ok(file) => {
+                        self.files[i] = InputSource::File {
+                            name,
+                            reader: BufReader::new(file),
+                        };
+                    }
                     Err(error) => {
-                        eprintln!(
-                            "{}: {}: {}",
-                            ctcore::ct_util_name(),
-                            quote_operand(name.as_os_str()),
-                            strip_errno(&error)
-                        );
+                        report_operand_error(name.as_os_str(), &error);
                         self.had_errors = true;
                         self.files[i] = InputSource::Failed;
                     }
@@ -493,7 +530,7 @@ impl<W: Write> PasteContext<W> {
                 delim_count += 1;
             }
             self.write_output(delim_length)?;
-            if matches!(self.files[i], InputSource::File(_)) {
+            if matches!(self.files[i], InputSource::File { .. }) {
                 self.files[i] = InputSource::Failed;
             }
         }

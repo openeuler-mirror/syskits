@@ -397,10 +397,7 @@ impl<R: Read> Data<R> {
                     .or_else(|| decode_base64_short_tail(self.format, &char_buf));
                 if let Some(decoded) = decoded {
                     writer.write_all(&decoded)?;
-                    if char_buf.contains(&b'=') {
-                        return Err(invalid_input().into());
-                    }
-                    return Ok(());
+                    return Err(invalid_input().into());
                 }
                 return Err(invalid_input().into());
             }
@@ -780,7 +777,7 @@ mod test {
         let input = Cursor::new(b"ab".to_vec());
         let mut data = Data::new(input, Format::Base64);
         let mut out = Vec::new();
-        assert!(data.decode(&mut out).is_ok());
+        assert!(data.decode(&mut out).is_err());
         assert_eq!(out, b"i");
     }
 
@@ -789,7 +786,7 @@ mod test {
         let input = Cursor::new(b"YWI".to_vec());
         let mut data = Data::new(input, Format::Base64);
         let mut out = Vec::new();
-        assert!(data.decode(&mut out).is_ok());
+        assert!(data.decode(&mut out).is_err());
         assert_eq!(out, b"ab");
     }
 

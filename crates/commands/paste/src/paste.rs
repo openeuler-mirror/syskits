@@ -20,10 +20,10 @@ use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, FromIo, strip_errno};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, strip_errno};
 use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use ctcore::ct_line_ending::CtLineEnding;
-use std::ffi::OsString;
+use std::ffi::{CStr, OsString};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Write, stdout};
 use std::os::fd::IntoRawFd;
@@ -77,13 +77,33 @@ fn quote_operand(name: &std::ffi::OsStr) -> String {
     }
 }
 
+fn localized_io_error(error: &io::Error) -> String {
+    if let Some(errno) = error.raw_os_error() {
+        let message = unsafe { libc::strerror(errno) };
+        if !message.is_null() {
+            return unsafe { CStr::from_ptr(message) }
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+    strip_errno(error)
+}
+
+fn initialize_paste_locale() {
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+    }
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+}
+
 fn report_operand_error(name: &std::ffi::OsStr, error: &io::Error) {
     let _ = writeln!(
         io::stderr().lock(),
         "{}: {}: {}",
         ctcore::ct_util_name(),
         quote_operand(name),
-        strip_errno(error)
+        localized_io_error(error)
     );
 }
 
@@ -271,7 +291,7 @@ fn paste_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
     } else {
         error
     };
-    error.map_err_context(|| "write error".to_string())
+    CtSimpleError::new(1, format!("write error: {}", localized_io_error(&error)))
 }
 
 unsafe extern "C" {
@@ -435,7 +455,14 @@ impl<W: Write> PasteContext<W> {
                         reader: BufReader::new(file),
                     },
                     Err(error) => {
-                        return Err(error.map_err_context(|| quote_operand(name.as_os_str())));
+                        return Err(CtSimpleError::new(
+                            1,
+                            format!(
+                                "{}: {}",
+                                quote_operand(name.as_os_str()),
+                                localized_io_error(&error)
+                            ),
+                        ));
                     }
                 }
             };
@@ -733,9 +760,7 @@ fn paste_unescape(s: &[u8]) -> Vec<u8> {
 }
 
 pub fn paste_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
-    // 设置语言
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    initialize_paste_locale();
     let mut args = args.into_iter().collect::<Vec<_>>();
     apply_posix_option_order(&mut args, std::env::var_os("POSIXLY_CORRECT").is_some());
     validate_gnu_paste_options(&args)?;
@@ -777,8 +802,7 @@ fn paste_exec_context<W: Write>(
 }
 
 pub fn paste_native_semantic(args: impl ctcore::Args) -> CTResult<PasteSemantic> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    initialize_paste_locale();
     let mut args = args.into_iter().collect::<Vec<_>>();
     apply_posix_option_order(&mut args, std::env::var_os("POSIXLY_CORRECT").is_some());
     validate_gnu_paste_options(&args)?;

@@ -26,6 +26,7 @@ use ctcore::ct_line_ending::CtLineEnding;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Write, stdout};
+use std::os::fd::IntoRawFd;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use sys_locale::get_locale;
@@ -230,6 +231,29 @@ enum ProcessStreamError {
     Write(Box<dyn ctcore::ct_error::CTError>),
 }
 
+unsafe extern "C" {
+    #[link_name = "stdin"]
+    static mut C_STDIN: *mut libc::FILE;
+}
+
+fn close_file(reader: BufReader<File>) -> io::Result<()> {
+    let fd = reader.into_inner().into_raw_fd();
+    let stream = unsafe { libc::fdopen(fd, c"r".as_ptr()) };
+    if stream.is_null() {
+        let error = io::Error::last_os_error();
+        unsafe {
+            libc::close(fd);
+        }
+        return Err(error);
+    }
+
+    if unsafe { libc::fclose(stream) } == libc::EOF {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
 /// 存储粘贴操作的配置参数
 #[derive(Debug)]
 struct PasteFlags {
@@ -271,6 +295,7 @@ struct PasteContext<W: Write> {
     rows: Vec<PasteRow>,
     emitted_rows: usize,
     had_errors: bool,
+    used_stdin: bool,
     writer: W,
 }
 
@@ -356,6 +381,7 @@ impl<W: Write> PasteContext<W> {
             rows: Vec::new(),
             emitted_rows: 0,
             had_errors,
+            used_stdin: false,
             writer,
         })
     }
@@ -450,16 +476,19 @@ impl<W: Write> PasteContext<W> {
                 ),
                 name.clone(),
             ),
-            InputSource::Stdin => (
-                Self::process_stream(
+            InputSource::Stdin => {
+                self.used_stdin = true;
+                (
+                    Self::process_stream(
                     &mut self.stdin,
                     &mut self.output,
                     &mut self.delimiter_positions,
                     &mut self.writer,
                     line_ending,
-                ),
-                OsString::from("-"),
-            ),
+                    ),
+                    OsString::from("-"),
+                )
+            }
             InputSource::Deferred(_) => unreachable!("serial inputs are opened before reading"),
             InputSource::Failed => return Ok(false),
         };
@@ -473,6 +502,30 @@ impl<W: Write> PasteContext<W> {
                 Ok(false)
             }
             Err(ProcessStreamError::Write(error)) => Err(error),
+        }
+    }
+
+    fn finish_input_at(&mut self, index: usize) {
+        let source = std::mem::replace(&mut self.files[index], InputSource::Failed);
+        if let InputSource::File { name, reader } = source
+            && let Err(error) = close_file(reader)
+        {
+            report_operand_error(name.as_os_str(), &error);
+            self.had_errors = true;
+        }
+    }
+
+    fn finish_stdin(&mut self) {
+        if !self.used_stdin || ctcore::ct_io::has_injected_stdin() {
+            return;
+        }
+
+        let replacement = BufReader::new(Box::new(io::empty()) as Box<dyn Read>);
+        drop(std::mem::replace(&mut self.stdin, replacement));
+        if unsafe { libc::fclose(C_STDIN) } == libc::EOF {
+            let error = io::Error::last_os_error();
+            report_operand_error(std::ffi::OsStr::new("-"), &error);
+            self.had_errors = true;
         }
     }
 
@@ -530,9 +583,7 @@ impl<W: Write> PasteContext<W> {
                 delim_count += 1;
             }
             self.write_output(delim_length)?;
-            if matches!(self.files[i], InputSource::File { .. }) {
-                self.files[i] = InputSource::Failed;
-            }
+            self.finish_input_at(i);
         }
         Ok(())
     }
@@ -559,6 +610,7 @@ impl<W: Write> PasteContext<W> {
                 }
 
                 if !self.process_line_at(i)? {
+                    self.finish_input_at(i);
                     *eof_item = true;
                     eof_count += 1;
                 } else {
@@ -640,6 +692,7 @@ fn paste_exec_collect<W: Write>(
     } else {
         context.paste_parallel()?;
     }
+    context.finish_stdin();
     Ok(context.into_result())
 }
 

@@ -2638,21 +2638,6 @@ fn output_summary(bad_format: usize, failed_cksum: usize, failed_open_file: usiz
         Ordering::Less => {}
     };
 
-    match failed_cksum.cmp(&1) {
-        Ordering::Equal => ctcore::ct_show_error!(
-            "WARNING: {}",
-            t!("hashsum.check.checksum_did_not_match", count = failed_cksum)
-        ),
-        Ordering::Greater => ctcore::ct_show_error!(
-            "WARNING: {}",
-            t!(
-                "hashsum.check.checksums_did_not_match",
-                count = failed_cksum
-            )
-        ),
-        Ordering::Less => {}
-    }
-
     match failed_open_file.cmp(&1) {
         Ordering::Equal => ctcore::ct_show_error!(
             "WARNING: {}",
@@ -2666,6 +2651,21 @@ fn output_summary(bad_format: usize, failed_cksum: usize, failed_open_file: usiz
             t!(
                 "hashsum.check.files_could_not_be_read",
                 count = failed_open_file
+            )
+        ),
+        Ordering::Less => {}
+    }
+
+    match failed_cksum.cmp(&1) {
+        Ordering::Equal => ctcore::ct_show_error!(
+            "WARNING: {}",
+            t!("hashsum.check.checksum_did_not_match", count = failed_cksum)
+        ),
+        Ordering::Greater => ctcore::ct_show_error!(
+            "WARNING: {}",
+            t!(
+                "hashsum.check.checksums_did_not_match",
+                count = failed_cksum
             )
         ),
         Ordering::Less => {}

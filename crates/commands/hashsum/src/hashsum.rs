@@ -1889,11 +1889,20 @@ where
     let mut no_valid_lines = false;
     let mut no_files_verified = false;
     let mut bsd_reversed = None;
+    let mut stdin_read_error = false;
 
     let binary_marker = if flags.is_binary { "*" } else { " " };
 
     for filename in files {
         let filename = Path::new(filename);
+        if filename == Path::new("-") && ctcore::ct_stdin_was_closed() {
+            missing_file += 1;
+            stdin_read_error = true;
+            let error = io::Error::from_raw_os_error(ctcore::libc::EBADF).to_string();
+            let detail = error.split(" (os error").next().unwrap_or(&error);
+            ctcore::ct_show_error!("-: {detail}");
+            continue;
+        }
         let mut file = match open_classic_file(filename) {
             Ok(f) => f,
             Err(e) => {
@@ -1955,6 +1964,12 @@ where
                 Err(HashsumIoError::Write(error)) => return Err(error.into()),
             }
         }
+    }
+
+    if stdin_read_error {
+        let error = io::Error::from_raw_os_error(ctcore::libc::EBADF).to_string();
+        let detail = error.split(" (os error").next().unwrap_or(&error);
+        ctcore::ct_show_error!("standard input: {detail}");
     }
 
     // 把所有失败的指标汇总在这里退出，包括 no_files_verified

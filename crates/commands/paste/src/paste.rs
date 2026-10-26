@@ -231,6 +231,10 @@ enum ProcessStreamError {
     Write(Box<dyn ctcore::ct_error::CTError>),
 }
 
+fn paste_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
+    error.map_err_context(|| "write error".to_string())
+}
+
 unsafe extern "C" {
     #[link_name = "stdin"]
     static mut C_STDIN: *mut libc::FILE;
@@ -425,10 +429,10 @@ impl<W: Write> PasteContext<W> {
         }
         self.writer
             .write_all(row)
-            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+            .map_err(paste_write_error)?;
         self.writer
             .write_all(&[self.line_ending as u8])
-            .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
+            .map_err(paste_write_error)?;
         Ok(())
     }
 
@@ -461,9 +465,7 @@ impl<W: Write> PasteContext<W> {
             if output.len() > 65536 {
                 writer
                     .write_all(output)
-                    .map_err(|error| {
-                        ProcessStreamError::Write(CtSimpleError::new(1, error.to_string()))
-                    })?;
+                    .map_err(|error| ProcessStreamError::Write(paste_write_error(error)))?;
                 output.clear();
                 delimiter_positions.clear();
             }
@@ -817,7 +819,8 @@ impl Tool for Paste {
 
     fn execute(&self, args: &[OsString]) -> CTResult<()> {
         let mut stdout = stdout().lock();
-        paste_main(&mut stdout, args.iter().cloned())
+        paste_main(&mut stdout, args.iter().cloned())?;
+        stdout.flush().map_err(paste_write_error)
     }
 }
 

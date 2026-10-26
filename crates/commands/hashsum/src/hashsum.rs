@@ -2005,7 +2005,14 @@ fn check_hash_file<W: Write>(
             &bsd_re,
             &bytes_marker,
             &mut bsd_reversed,
-        );
+        )
+        .and_then(|parsed| {
+            if filename == Path::new("-") && manifest_entry_is_stdin(&parsed.0, parsed.3) {
+                Err(ParseLineError::FormatError)
+            } else {
+                Ok(parsed)
+            }
+        });
 
         match parse_result {
             Ok((ck_filename, sum, binary_check, is_escaped)) => {
@@ -2029,10 +2036,15 @@ fn check_hash_file<W: Write>(
             Err(ParseLineError::FormatError) => {
                 local_bad_format += 1;
                 if flags.is_warn {
+                    let manifest_name = if filename == Path::new("-") {
+                        "'standard input'".to_string()
+                    } else {
+                        filename.maybe_quote().to_string()
+                    };
                     // 使用 ct_show_error! 避免前缀多出 'warning:'，以完全匹配 GNU 输出
                     ctcore::ct_show_error!(
                         "{}: {}: improperly formatted {} checksum line",
-                        filename.maybe_quote(),
+                        manifest_name,
                         line_number,
                         check_algorithm_name(flags)
                     );
@@ -2046,9 +2058,14 @@ fn check_hash_file<W: Write>(
 
     if !file_has_valid_lines {
         *no_valid_lines = true;
+        let manifest_name = if filename == Path::new("-") {
+            "'standard input'".to_string()
+        } else {
+            filename.display().to_string()
+        };
         ctcore::ct_show_error!(
             "{}: no properly formatted checksum lines found",
-            filename.display()
+            manifest_name
         );
     } else {
         *bad_format += local_bad_format;
@@ -2060,6 +2077,20 @@ fn check_hash_file<W: Write>(
     }
 
     Ok(Some(local_failed_cksum))
+}
+
+fn manifest_entry_is_stdin(filename: &[u8], is_escaped: bool) -> bool {
+    let decoded = if is_escaped {
+        unescape_filename_bytes(filename)
+            .expect("escaped filenames are validated while parsing manifests")
+    } else {
+        filename.to_vec()
+    };
+    let end = decoded
+        .iter()
+        .position(|byte| *byte == b'\0')
+        .unwrap_or(decoded.len());
+    &decoded[..end] == b"-"
 }
 
 fn create_check_regexes_bytes(

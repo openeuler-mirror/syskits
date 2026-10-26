@@ -1928,7 +1928,9 @@ where
                     )?;
                 }
                 if manifest_no_files_verified {
-                    ctcore::ct_show_error!("{}: no file was verified", filename.display());
+                    if !flags.is_status {
+                        ctcore::ct_show_error!("{}: no file was verified", filename.display());
+                    }
                     no_files_verified = true;
                 }
                 failed_cksum += failed;

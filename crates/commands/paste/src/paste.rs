@@ -442,8 +442,10 @@ impl<W: Write> PasteContext<W> {
             self.output.clear();
             self.delimiter_positions.clear();
             let mut delim_length = 1;
+            let mut delim_count = 0;
             while self.process_line_at(i)? {
-                delim_length = self.add_delimiter(0);
+                delim_length = self.add_delimiter(delim_count);
+                delim_count += 1;
             }
             self.write_output(delim_length)?;
         }
@@ -1094,6 +1096,23 @@ mod tests {
             paste_exec(&mut output, flags)?;
 
             assert_eq!(String::from_utf8_lossy(&output), expected);
+            Ok(())
+        }
+
+        #[test]
+        fn test_paste_serial_cycles_delimiters() -> CTResult<()> {
+            let (_temp_dir, file_path) = create_test_file("1\n2\n3\n4\n");
+            let flags = PasteFlags {
+                is_serial: true,
+                delimiters: ":,".into(),
+                files: vec![file_path.into()],
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let mut output = Vec::new();
+            paste_exec(&mut output, flags)?;
+
+            assert_eq!(output, b"1:2,3:4\n");
             Ok(())
         }
 

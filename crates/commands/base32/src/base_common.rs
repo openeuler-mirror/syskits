@@ -9,8 +9,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
+use std::ffi::OsString;
 use std::io::Read;
 use std::io::Write;
+use std::os::unix::ffi::OsStrExt;
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_encoding::CtDecodeError;
@@ -137,7 +139,39 @@ pub fn base_parsing_command_args(
     base_usage: String,
 ) -> CTResult<BaseConfig> {
     let command = base_common_app(base_about, base_usage);
-    BaseConfig::from(&command.try_get_matches_from(base_args)?)
+    let args = normalize_base_args_for_posix(
+        base_args,
+        std::env::var_os("POSIXLY_CORRECT").is_some(),
+    );
+    BaseConfig::from(&command.try_get_matches_from(args)?)
+}
+
+fn normalize_base_args_for_posix(
+    base_args: impl ctcore::Args,
+    posixly_correct: bool,
+) -> Vec<OsString> {
+    let mut args: Vec<_> = base_args.collect();
+    if !posixly_correct {
+        return args;
+    }
+
+    // GNU getopt stops option processing at the first operand in POSIX mode.
+    // Insert an explicit terminator so clap keeps following operands out of
+    // option parsing as well.
+    for index in 1..args.len() {
+        let argument = args[index].as_os_str().as_bytes();
+        if argument == b"--" {
+            break;
+        }
+        if argument == b"-" || !argument.starts_with(b"-") {
+            if index + 1 < args.len() {
+                args.insert(index + 1, OsString::from("--"));
+            }
+            break;
+        }
+    }
+
+    args
 }
 
 pub fn base_common_app(about: String, usage: String) -> Command {
@@ -589,6 +623,24 @@ mod test {
         assert_eq!(
             parse_wrap_cols("").unwrap_err().to_string(),
             "invalid wrap size: ''"
+        );
+    }
+
+    #[test]
+    fn test_normalize_base_args_stops_options_after_first_operand() {
+        let args = ["base32", "input", "-d"];
+        let normalized = normalize_base_args_for_posix(
+            args.iter().map(OsString::from),
+            true,
+        );
+        assert_eq!(
+            normalized,
+            vec![
+                OsString::from("base32"),
+                OsString::from("input"),
+                OsString::from("--"),
+                OsString::from("-d"),
+            ]
         );
     }
 

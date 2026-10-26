@@ -149,6 +149,47 @@ fn validate_gnu_paste_options(args: &[OsString]) -> CTResult<()> {
     Ok(())
 }
 
+fn apply_posix_option_order(args: &mut Vec<OsString>, posixly_correct: bool) {
+    if !posixly_correct {
+        return;
+    }
+
+    let mut index = 1;
+    while index < args.len() {
+        let argument = args[index].as_os_str().as_bytes();
+        if argument == b"--" {
+            return;
+        }
+        if argument == b"-" || !argument.starts_with(b"-") {
+            args.insert(index, OsString::from("--"));
+            return;
+        }
+
+        if let Some(long_argument) = argument.strip_prefix(b"--") {
+            let option = long_argument
+                .split(|byte| *byte == b'=')
+                .next()
+                .unwrap_or_default();
+            if !option.is_empty()
+                && b"delimiters".starts_with(option)
+                && !long_argument.contains(&b'=')
+            {
+                index += 2;
+                continue;
+            }
+        } else if let Some(short_options) = argument.strip_prefix(b"-") {
+            if let Some(delimiter_index) = short_options.iter().position(|byte| *byte == b'd') {
+                if delimiter_index + 1 == short_options.len() {
+                    index += 2;
+                    continue;
+                }
+            }
+        }
+
+        index += 1;
+    }
+}
+
 /// 表示一个输入源，可以是文件或标准输入
 enum InputSource {
     File(BufReader<File>),
@@ -433,7 +474,8 @@ pub fn paste_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = args.into_iter().collect::<Vec<_>>();
+    let mut args = args.into_iter().collect::<Vec<_>>();
+    apply_posix_option_order(&mut args, std::env::var_os("POSIXLY_CORRECT").is_some());
     validate_gnu_paste_options(&args)?;
     let matches = ct_app().try_get_matches_from(args)?;
     let flags = PasteFlags::new(&matches)?;
@@ -459,7 +501,8 @@ fn paste_exec_collect<W: Write>(writer: &mut W, flags: PasteFlags) -> CTResult<V
 pub fn paste_native_semantic(args: impl ctcore::Args) -> CTResult<PasteSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let args = args.into_iter().collect::<Vec<_>>();
+    let mut args = args.into_iter().collect::<Vec<_>>();
+    apply_posix_option_order(&mut args, std::env::var_os("POSIXLY_CORRECT").is_some());
     validate_gnu_paste_options(&args)?;
     let matches = ct_app().try_get_matches_from(args)?;
     let flags = PasteFlags::new(&matches)?;
@@ -911,6 +954,24 @@ mod tests {
                 let error = validate_gnu_paste_options(&args).unwrap_err();
                 assert_eq!(error.to_string(), expected);
             }
+        }
+
+        #[test]
+        fn test_posix_option_order_stops_at_first_operand() {
+            let mut args = ["paste", "-d", ",", "input", "-s"]
+                .into_iter()
+                .map(OsString::from)
+                .collect::<Vec<_>>();
+
+            apply_posix_option_order(&mut args, true);
+
+            assert_eq!(
+                args,
+                ["paste", "-d", ",", "--", "input", "-s"]
+                    .into_iter()
+                    .map(OsString::from)
+                    .collect::<Vec<_>>()
+            );
         }
     }
 

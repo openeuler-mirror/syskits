@@ -285,6 +285,9 @@ fn validate_gnu_mknod_operands(args: &[OsString]) -> CTResult<()> {
 
 // 函数：解析设备号，支持十进制、十六进制和八进制格式
 fn parse_device_number(s: &str) -> Result<u64, String> {
+    let s = s.trim_start_matches(|character: char| {
+        matches!(character, ' ' | '\t' | '\n' | '\r' | '\u{b}' | '\u{c}')
+    });
     if s.starts_with("0x") || s.starts_with("0X") {
         // 十六进制格式
         u64::from_str_radix(&s[2..], 16)
@@ -814,6 +817,12 @@ mod tests {
         fn test_device_number_zero() {
             assert_eq!(parse_device_number("0"), Ok(0));
             assert_eq!(parse_device_number("00"), Ok(0));
+        }
+
+        #[test]
+        fn test_device_number_leading_whitespace() {
+            assert_eq!(parse_device_number(" \t\n\r\u{b}\u{c}0x10"), Ok(16));
+            assert!(parse_device_number("10 ").is_err());
         }
     }
 

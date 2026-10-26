@@ -20,7 +20,7 @@ use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_locale::strcoll_compare;
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::mem;
 use std::path::Path;
 
@@ -352,6 +352,30 @@ struct CommRunOutcome {
     exit_code: i32,
 }
 
+struct CommDiagnostics<'a> {
+    writer: Option<&'a mut dyn Write>,
+    buffered: String,
+}
+
+impl<'a> CommDiagnostics<'a> {
+    fn new(writer: Option<&'a mut dyn Write>) -> Self {
+        Self {
+            writer,
+            buffered: String::new(),
+        }
+    }
+
+    fn push(&mut self, message: &str) -> CTResult<()> {
+        if let Some(writer) = self.writer.as_mut() {
+            writer
+                .write_all(message.as_bytes())
+                .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
+        }
+        self.buffered.push_str(message);
+        Ok(())
+    }
+}
+
 enum CommRuntimeIssue {
     Warn(String),
     Fail(String),
@@ -562,17 +586,20 @@ fn check_order(
     None
 }
 
-fn handle_check_order_issue(stderr_text: &mut String, issue: Option<CommRuntimeIssue>) -> bool {
+fn handle_check_order_issue(
+    diagnostics: &mut CommDiagnostics,
+    issue: Option<CommRuntimeIssue>,
+) -> CTResult<bool> {
     match issue {
         Some(CommRuntimeIssue::Warn(message)) => {
-            stderr_text.push_str(&comm_error_line(&message));
-            false
+            diagnostics.push(&comm_error_line(&message))?;
+            Ok(false)
         }
         Some(CommRuntimeIssue::Fail(message)) => {
-            stderr_text.push_str(&comm_error_line(&message));
-            true
+            diagnostics.push(&comm_error_line(&message))?;
+            Ok(true)
         }
-        None => false,
+        None => Ok(false),
     }
 }
 
@@ -588,6 +615,7 @@ fn comm_with_writer<W: std::io::Write>(
     b: &mut CommLineReader,
     opts: &ArgMatches,
     out: &mut W,
+    stderr: Option<&mut dyn Write>,
 ) -> CTResult<CommRunOutcome> {
     // 根据选项获取分隔符
     let delim = comm_get_del_im(opts)?;
@@ -634,7 +662,7 @@ fn comm_with_writer<W: std::io::Write>(
     let mut total_col_2 = 0;
     let mut total_col_3 = 0;
     let mut rows = Vec::new();
-    let mut stderr_text = String::new();
+    let mut stderr_text = CommDiagnostics::new(stderr);
 
     // 循环读取并比较两组数据，直到两组都读取完毕
     while na > 0 || nb > 0 {
@@ -670,10 +698,10 @@ fn comm_with_writer<W: std::io::Write>(
                         &mut issued_warning,
                         seen_unpairable,
                     ),
-                ) {
+                )? {
                     return Ok(CommRunOutcome {
                         rows,
-                        stderr_text,
+                        stderr_text: stderr_text.buffered,
                         exit_code: 1,
                     });
                 }
@@ -692,11 +720,11 @@ fn comm_with_writer<W: std::io::Write>(
                         &mut issued_warning,
                         seen_unpairable,
                     ),
-                )
+                )?
             {
                 return Ok(CommRunOutcome {
                     rows,
-                    stderr_text,
+                    stderr_text: stderr_text.buffered,
                     exit_code: 1,
                 });
             }
@@ -723,10 +751,10 @@ fn comm_with_writer<W: std::io::Write>(
                         &mut issued_warning,
                         seen_unpairable,
                     ),
-                ) {
+                )? {
                     return Ok(CommRunOutcome {
                         rows,
-                        stderr_text,
+                        stderr_text: stderr_text.buffered,
                         exit_code: 1,
                     });
                 }
@@ -745,11 +773,11 @@ fn comm_with_writer<W: std::io::Write>(
                         &mut issued_warning,
                         seen_unpairable,
                     ),
-                )
+                )?
             {
                 return Ok(CommRunOutcome {
                     rows,
-                    stderr_text,
+                    stderr_text: stderr_text.buffered,
                     exit_code: 1,
                 });
             }
@@ -776,10 +804,10 @@ fn comm_with_writer<W: std::io::Write>(
                         &mut issued_warning,
                         seen_unpairable,
                     ),
-                ) {
+                )? {
                     return Ok(CommRunOutcome {
                         rows,
-                        stderr_text,
+                        stderr_text: stderr_text.buffered,
                         exit_code: 1,
                     });
                 }
@@ -798,11 +826,11 @@ fn comm_with_writer<W: std::io::Write>(
                         &mut issued_warning,
                         seen_unpairable,
                     ),
-                )
+                )?
             {
                 return Ok(CommRunOutcome {
                     rows,
-                    stderr_text,
+                    stderr_text: stderr_text.buffered,
                     exit_code: 1,
                 });
             }
@@ -818,10 +846,10 @@ fn comm_with_writer<W: std::io::Write>(
                         &mut issued_warning,
                         seen_unpairable,
                     ),
-                ) {
+                )? {
                     return Ok(CommRunOutcome {
                         rows,
-                        stderr_text,
+                        stderr_text: stderr_text.buffered,
                         exit_code: 1,
                     });
                 }
@@ -840,11 +868,11 @@ fn comm_with_writer<W: std::io::Write>(
                         &mut issued_warning,
                         seen_unpairable,
                     ),
-                )
+                )?
             {
                 return Ok(CommRunOutcome {
                     rows,
-                    stderr_text,
+                    stderr_text: stderr_text.buffered,
                     exit_code: 1,
                 });
             }
@@ -880,19 +908,19 @@ fn comm_with_writer<W: std::io::Write>(
     }
 
     if issued_warning[0] || issued_warning[1] {
-        stderr_text.push_str(&comm_error_line(&comm_gettext(
+        stderr_text.push(&comm_error_line(&comm_gettext(
             "input is not in sorted order",
-        )));
+        )))?;
         return Ok(CommRunOutcome {
             rows,
-            stderr_text,
+            stderr_text: stderr_text.buffered,
             exit_code: 1,
         });
     }
 
     Ok(CommRunOutcome {
         rows,
-        stderr_text,
+        stderr_text: stderr_text.buffered,
         exit_code: 0,
     })
 }
@@ -1006,10 +1034,8 @@ pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
     let (mut f1, mut f2) = open_inputs(tmp_file1, tmp_file2, line_ending)?;
 
     let mut stdout = std::io::stdout().lock();
-    let outcome = comm_with_writer(&mut f1, &mut f2, &matches, &mut stdout)?;
-    if !outcome.stderr_text.is_empty() {
-        eprint!("{}", outcome.stderr_text);
-    }
+    let mut stderr = std::io::stderr().lock();
+    let outcome = comm_with_writer(&mut f1, &mut f2, &matches, &mut stdout, Some(&mut stderr))?;
     if both_stdin {
         return Err(ctcore::ct_error::CtSimpleError::new(
             1,
@@ -1037,7 +1063,7 @@ pub fn comm_native_semantic(args: impl ctcore::Args) -> CTResult<CommSemantic> {
     let both_stdin = tmp_file1 == "-" && tmp_file2 == "-";
     let (mut f1, mut f2) = open_inputs(tmp_file1, tmp_file2, line_ending)?;
     let mut output = Vec::new();
-    let outcome = comm_with_writer(&mut f1, &mut f2, &matches, &mut output)?;
+    let outcome = comm_with_writer(&mut f1, &mut f2, &matches, &mut output, None)?;
 
     if both_stdin {
         return Err(ctcore::ct_error::CtSimpleError::new(

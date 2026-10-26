@@ -291,7 +291,12 @@ fn parse_device_number(s: &str) -> Result<u64, String> {
             .map_err(|e| format!("invalid hexadecimal device number: {e}"))
     } else if let Some(stripped) = s.strip_prefix('0') {
         // 八进制格式
-        u64::from_str_radix(stripped, 8).map_err(|e| format!("invalid octal device number: {e}"))
+        if stripped.is_empty() {
+            Ok(0)
+        } else {
+            u64::from_str_radix(stripped, 8)
+                .map_err(|e| format!("invalid octal device number: {e}"))
+        }
     } else {
         // 十进制格式
         s.parse::<u64>()
@@ -737,7 +742,7 @@ mod tests {
     }
 
     mod tests_mknod_main {
-        use crate::{ct_app, get_mode, mknod_main};
+        use crate::{ct_app, get_mode, mknod_main, parse_device_number};
 
         use std::ffi::OsString;
 
@@ -803,6 +808,12 @@ mod tests {
 
                 assert!(get_mode(&matches).is_err());
             }
+        }
+
+        #[test]
+        fn test_device_number_zero() {
+            assert_eq!(parse_device_number("0"), Ok(0));
+            assert_eq!(parse_device_number("00"), Ok(0));
         }
     }
 

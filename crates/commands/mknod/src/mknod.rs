@@ -35,6 +35,7 @@ use sys_locale::get_locale;
 
 // 常量：用于设置文件模式的权限位。
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+const MAX_DEVICE_COMPONENT: u64 = u32::MAX as u64;
 
 const GNU_MKNOD_LONG_OPTIONS: &[&str] = &["context", "mode", "help", "version"];
 
@@ -314,6 +315,16 @@ fn make_dev(maj: u64, min: u64) -> dev_t {
     ((min & 0xff) | ((maj & 0xfff) << 8) | ((min & !0xff) << 12) | ((maj & !0xfff) << 32)) as dev_t
 }
 
+fn validate_device_number_range(value: u64, raw: &OsStr, component: &str) -> CTResult<()> {
+    if value > MAX_DEVICE_COMPONENT {
+        return Err(CtSimpleError::new(
+            1,
+            format!("invalid {component} device number {}", raw.quote()),
+        ));
+    }
+    Ok(())
+}
+
 // Windows平台不支持mknod，因此定义一个空实现。
 #[cfg(windows)]
 fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
@@ -542,6 +553,17 @@ fn mknod_processing(
                 "Special files require major and minor device numbers.",
             )),
             (Some(&major), Some(&minor)) => {
+                let raw_major = args_match
+                    .get_raw("major")
+                    .and_then(|mut values| values.next())
+                    .expect("major was parsed from an argument");
+                let raw_minor = args_match
+                    .get_raw("minor")
+                    .and_then(|mut values| values.next())
+                    .expect("minor was parsed from an argument");
+                validate_device_number_range(major, raw_major, "major")?;
+                validate_device_number_range(minor, raw_minor, "minor")?;
+
                 // 检查设备号是否有效（NODEV检查）
                 #[cfg(target_os = "linux")]
                 {
@@ -745,9 +767,11 @@ mod tests {
     }
 
     mod tests_mknod_main {
-        use crate::{ct_app, get_mode, mknod_main, parse_device_number};
+        use crate::{
+            ct_app, get_mode, mknod_main, parse_device_number, validate_device_number_range,
+        };
 
-        use std::ffi::OsString;
+        use std::ffi::{OsStr, OsString};
 
         #[test]
         fn test_mknod_main_version() {
@@ -823,6 +847,23 @@ mod tests {
         fn test_device_number_leading_whitespace() {
             assert_eq!(parse_device_number(" \t\n\r\u{b}\u{c}0x10"), Ok(16));
             assert!(parse_device_number("10 ").is_err());
+        }
+
+        #[test]
+        fn test_device_number_range() {
+            assert!(
+                validate_device_number_range(u32::MAX.into(), OsStr::new("max"), "major").is_ok()
+            );
+            assert_eq!(
+                validate_device_number_range(
+                    u64::from(u32::MAX) + 1,
+                    OsStr::new("0x100000000"),
+                    "minor"
+                )
+                .unwrap_err()
+                .to_string(),
+                "invalid minor device number '0x100000000'"
+            );
         }
     }
 

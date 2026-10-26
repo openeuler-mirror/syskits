@@ -103,8 +103,15 @@ impl BaseConfig {
 }
 
 fn parse_wrap_cols(num: &str) -> CTResult<usize> {
-    let digits = num.strip_prefix('+').unwrap_or(num);
-    if digits.is_empty() || num.starts_with('-') || !digits.bytes().all(|b| b.is_ascii_digit()) {
+    // xstrtoimax, used by GNU base32, accepts leading ASCII whitespace and
+    // an optional sign.  Its caller rejects negative values except -0.
+    let number = num.trim_start_matches(|c: char| c.is_ascii_whitespace());
+    let (negative, digits) = match number.as_bytes().first() {
+        Some(b'+') => (false, &number[1..]),
+        Some(b'-') => (true, &number[1..]),
+        _ => (false, number),
+    };
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
         return Err(invalid_wrap_size(num));
     }
 
@@ -119,7 +126,9 @@ fn parse_wrap_cols(num: &str) -> CTResult<usize> {
         };
     }
 
-    if value > isize::MAX as u128 {
+    if negative && value != 0 {
+        Err(invalid_wrap_size(num))
+    } else if value > isize::MAX as u128 {
         Ok(0)
     } else {
         Ok(value as usize)
@@ -139,10 +148,8 @@ pub fn base_parsing_command_args(
     base_usage: String,
 ) -> CTResult<BaseConfig> {
     let command = base_common_app(base_about, base_usage);
-    let args = normalize_base_args_for_posix(
-        base_args,
-        std::env::var_os("POSIXLY_CORRECT").is_some(),
-    );
+    let args =
+        normalize_base_args_for_posix(base_args, std::env::var_os("POSIXLY_CORRECT").is_some());
     BaseConfig::from(&command.try_get_matches_from(args)?)
 }
 
@@ -611,6 +618,14 @@ mod test {
     }
 
     #[test]
+    fn test_parse_wrap_cols_accepts_leading_whitespace_and_negative_zero() {
+        assert_eq!(parse_wrap_cols(" 1").unwrap(), 1);
+        assert_eq!(parse_wrap_cols("\t+2").unwrap(), 2);
+        assert_eq!(parse_wrap_cols("-0").unwrap(), 0);
+        assert_eq!(parse_wrap_cols("-00").unwrap(), 0);
+    }
+
+    #[test]
     fn test_parse_wrap_cols_rejects_invalid_or_negative_values() {
         assert_eq!(
             parse_wrap_cols("-1").unwrap_err().to_string(),
@@ -629,10 +644,7 @@ mod test {
     #[test]
     fn test_normalize_base_args_stops_options_after_first_operand() {
         let args = ["base32", "input", "-d"];
-        let normalized = normalize_base_args_for_posix(
-            args.iter().map(OsString::from),
-            true,
-        );
+        let normalized = normalize_base_args_for_posix(args.iter().map(OsString::from), true);
         assert_eq!(
             normalized,
             vec![

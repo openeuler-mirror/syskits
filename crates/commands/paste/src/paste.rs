@@ -292,7 +292,7 @@ struct PasteContext<W: Write> {
     line_ending: CtLineEnding,
     output: Vec<u8>,
     delimiter_positions: Vec<(usize, u8)>,
-    rows: Vec<PasteRow>,
+    rows: Option<Vec<PasteRow>>,
     emitted_rows: usize,
     had_errors: bool,
     used_stdin: bool,
@@ -350,6 +350,18 @@ impl PasteFlags {
 
 impl<W: Write> PasteContext<W> {
     fn new(flags: &PasteFlags, writer: W) -> CTResult<Self> {
+        Self::new_with_row_collection(flags, writer, true)
+    }
+
+    fn new_classic(flags: &PasteFlags, writer: W) -> CTResult<Self> {
+        Self::new_with_row_collection(flags, writer, false)
+    }
+
+    fn new_with_row_collection(
+        flags: &PasteFlags,
+        writer: W,
+        collect_rows: bool,
+    ) -> CTResult<Self> {
         let stdin_was_closed = ctcore::ct_stdin_was_closed();
         if stdin_was_closed && !flags.is_serial {
             let has_stdin = flags
@@ -394,7 +406,7 @@ impl<W: Write> PasteContext<W> {
             line_ending: flags.line_ending,
             output: Vec::new(),
             delimiter_positions: Vec::new(),
-            rows: Vec::new(),
+            rows: collect_rows.then(Vec::new),
             emitted_rows: 0,
             had_errors,
             used_stdin: false,
@@ -404,12 +416,13 @@ impl<W: Write> PasteContext<W> {
     }
 
     fn write_row_bytes(&mut self, row: &[u8]) -> CTResult<()> {
-        let rendered = String::from_utf8_lossy(row).into_owned();
-        self.emitted_rows += 1;
-        self.rows.push(PasteRow {
-            row_index: self.emitted_rows,
-            line: rendered.clone(),
-        });
+        if let Some(rows) = &mut self.rows {
+            self.emitted_rows += 1;
+            rows.push(PasteRow {
+                row_index: self.emitted_rows,
+                line: String::from_utf8_lossy(row).into_owned(),
+            });
+        }
         self.writer
             .write_all(row)
             .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
@@ -650,7 +663,7 @@ impl<W: Write> PasteContext<W> {
     }
 
     fn into_result(self) -> (Vec<PasteRow>, bool) {
-        (self.rows, self.had_errors)
+        (self.rows.unwrap_or_default(), self.had_errors)
     }
 }
 
@@ -693,7 +706,8 @@ pub fn paste_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult
 }
 
 fn paste_exec<W: Write>(writer: &mut W, flags: PasteFlags) -> CTResult<()> {
-    let (_, had_errors) = paste_exec_collect(writer, flags)?;
+    let context = PasteContext::new_classic(&flags, writer)?;
+    let (_, had_errors) = paste_exec_context(context, flags.is_serial)?;
     if had_errors {
         ctcore::ct_error::set_ct_exit_code(1);
     }
@@ -704,8 +718,15 @@ fn paste_exec_collect<W: Write>(
     writer: &mut W,
     flags: PasteFlags,
 ) -> CTResult<(Vec<PasteRow>, bool)> {
-    let mut context = PasteContext::new(&flags, writer)?;
-    if flags.is_serial {
+    let context = PasteContext::new(&flags, writer)?;
+    paste_exec_context(context, flags.is_serial)
+}
+
+fn paste_exec_context<W: Write>(
+    mut context: PasteContext<W>,
+    is_serial: bool,
+) -> CTResult<(Vec<PasteRow>, bool)> {
+    if is_serial {
         context.paste_serial()?;
     } else {
         context.paste_parallel()?;

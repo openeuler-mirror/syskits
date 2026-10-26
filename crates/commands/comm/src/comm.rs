@@ -487,6 +487,11 @@ fn comm_error_line(message: &str) -> String {
 }
 
 fn comm_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
+    let error = if ctcore::ct_stdout_was_closed() {
+        io::Error::from_raw_os_error(ctcore::libc::EBADF)
+    } else {
+        error
+    };
     ctcore::ct_error::CtSimpleError::new(
         1,
         format!("write error: {}", ctcore::ct_error::strip_errno(&error)),

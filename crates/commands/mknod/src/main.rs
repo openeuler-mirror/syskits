@@ -9,4 +9,34 @@
  * See the Mulan PSL v2 for more details.
  */
 
-ctcore::ct_bin!(ct_mknod, Mknod);
+pub fn main() {
+    use ctcore::Tool;
+    use std::io::Write;
+
+    ctcore::ct_panic::ct_mute_set_panic_hook();
+    ctcore::ct_ensure_standard_fds();
+
+    let args = ctcore::ct_os_args().collect::<Vec<_>>();
+    let tool = ct_mknod::Mknod;
+    let result = tool.execute(&args);
+    let code = match result {
+        Ok(()) => ctcore::ct_error::get_ct_exit_code(),
+        Err(error) => {
+            let message = error.to_string();
+            let mut stderr = std::io::stderr().lock();
+            if !message.is_empty() {
+                let _ = writeln!(stderr, "{}: {message}", ctcore::ct_util_name());
+            }
+            if error.usage() {
+                let _ = writeln!(
+                    stderr,
+                    "Try '{} --help' for more information.",
+                    ctcore::ct_help_utility_name()
+                );
+            }
+            error.code()
+        }
+    };
+
+    std::process::exit(code);
+}

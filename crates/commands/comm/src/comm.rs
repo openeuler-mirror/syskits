@@ -324,6 +324,63 @@ fn comm_line_value(line: &[u8], line_ending: CtLineEnding) -> String {
     String::from_utf8_lossy(trim_line_ending(line, line_ending)).into_owned()
 }
 
+fn comm_quote_operand(path: &OsStr) -> String {
+    let bytes = path.as_bytes();
+    let has_control = bytes.iter().any(|byte| *byte < 0x20 || *byte == 0x7f);
+    let needs_quotes = bytes.iter().any(|byte| {
+        !matches!(
+            *byte,
+            b'a'..=b'z'
+                | b'A'..=b'Z'
+                | b'0'..=b'9'
+                | b'_' | b'/' | b'.' | b'-'
+        )
+    });
+
+    if !needs_quotes {
+        return String::from_utf8_lossy(bytes).into_owned();
+    }
+
+    if !has_control && bytes.contains(&b'\'') {
+        let value = String::from_utf8_lossy(bytes)
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"");
+        return format!("\"{value}\"");
+    }
+
+    if !has_control {
+        return format!("'{}'", String::from_utf8_lossy(bytes));
+    }
+
+    let mut quoted = String::from("'");
+    for byte in bytes {
+        let escape = match byte {
+            b'\x07' => Some("\\a"),
+            b'\x08' => Some("\\b"),
+            b'\t' => Some("\\t"),
+            b'\n' => Some("\\n"),
+            b'\x0b' => Some("\\v"),
+            b'\x0c' => Some("\\f"),
+            b'\r' => Some("\\r"),
+            0x00..=0x1f | 0x7f => None,
+            _ => {
+                quoted.push(*byte as char);
+                continue;
+            }
+        };
+        quoted.push_str("'$'");
+        if let Some(escape) = escape {
+            quoted.push_str(escape);
+        } else {
+            quoted.push_str(&format!("\\{:03o}", byte));
+        }
+        quoted.push('\'');
+        quoted.push('\'');
+    }
+    quoted.push('\'');
+    quoted
+}
+
 fn comm_row(
     kind: &str,
     line: &[u8],
@@ -880,9 +937,9 @@ pub fn comm_main(args: impl ctcore::Args) -> CTResult<i32> {
     } else {
         (
             open_file(tmp_file1, line_ending)
-                .map_err_context(|| tmp_file1.to_string_lossy().into_owned())?,
+                .map_err_context(|| comm_quote_operand(tmp_file1.as_os_str()))?,
             open_file(tmp_file2, line_ending)
-                .map_err_context(|| tmp_file2.to_string_lossy().into_owned())?,
+                .map_err_context(|| comm_quote_operand(tmp_file2.as_os_str()))?,
         )
     };
 
@@ -921,9 +978,9 @@ pub fn comm_native_semantic(args: impl ctcore::Args) -> CTResult<CommSemantic> {
     } else {
         (
             open_file(tmp_file1, line_ending)
-                .map_err_context(|| tmp_file1.to_string_lossy().into_owned())?,
+                .map_err_context(|| comm_quote_operand(tmp_file1.as_os_str()))?,
             open_file(tmp_file2, line_ending)
-                .map_err_context(|| tmp_file2.to_string_lossy().into_owned())?,
+                .map_err_context(|| comm_quote_operand(tmp_file2.as_os_str()))?,
         )
     };
     let mut output = Vec::new();

@@ -935,11 +935,16 @@ fn open_file(
 ) -> io::Result<CommLineReader> {
     let file_name = file_name.as_ref();
     match file_name.as_bytes() {
-        b"-" => Ok(CommLineReader::new(
-        CommInput::Reader(BufReader::new(ctcore::ct_io::stdin_reader_box())),
-            line_ending,
-        )
-        .named(file_name.to_os_string())),
+        b"-" => {
+            if ctcore::ct_stdin_was_closed() {
+                return Err(io::Error::from_raw_os_error(ctcore::libc::EBADF));
+            }
+            Ok(CommLineReader::new(
+                CommInput::Reader(BufReader::new(ctcore::ct_io::stdin_reader_box())),
+                line_ending,
+            )
+            .named(file_name.to_os_string()))
+        }
         _ => {
             let f = File::open(Path::new(file_name))?;
             Ok(
@@ -966,6 +971,10 @@ fn open_inputs(
     line_ending: CtLineEnding,
 ) -> CTResult<(CommLineReader, CommLineReader)> {
     if file1 == "-" && file2 == "-" {
+        if ctcore::ct_stdin_was_closed() {
+            return Err(io::Error::from_raw_os_error(ctcore::libc::EBADF)
+                .map_err_context(|| comm_quote_operand(OsStr::new("-"))));
+        }
         return Ok(open_shared_stdin(line_ending));
     }
 

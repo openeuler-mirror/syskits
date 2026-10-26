@@ -476,6 +476,9 @@ fn parse_security_context_request(args: &[OsString]) -> SecurityContextRequest {
     let mut request = SecurityContextRequest::Absent;
 
     for arg in args.iter().skip(1) {
+        if arg == "--" {
+            break;
+        }
         if arg == "-Z" || arg == "--context" {
             request = SecurityContextRequest::Default;
             continue;
@@ -1121,6 +1124,18 @@ mod tests {
                 SecurityContextRequest::Explicit(context) => assert_eq!(context, value),
                 _ => panic!("expected explicit context"),
             }
+        }
+
+        #[test]
+        fn test_context_scanner_stops_at_double_dash() {
+            let request = parse_security_context_request(&[
+                OsString::from("mknod"),
+                OsString::from("--"),
+                OsString::from("--context=not-an-option"),
+                OsString::from("p"),
+            ]);
+
+            assert!(matches!(request, SecurityContextRequest::Absent));
         }
     }
 }

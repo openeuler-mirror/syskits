@@ -232,6 +232,11 @@ enum ProcessStreamError {
 }
 
 fn paste_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
+    let error = if ctcore::ct_stdout_was_closed() {
+        io::Error::from_raw_os_error(libc::EBADF)
+    } else {
+        error
+    };
     error.map_err_context(|| "write error".to_string())
 }
 

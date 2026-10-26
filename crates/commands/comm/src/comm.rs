@@ -645,12 +645,12 @@ fn args_init() -> Vec<Arg> {
         Arg::new("check_order")
             .long("check-order")
             .help(t!("comm.clap.check_order"))
-            .overrides_with("check_order")
+            .overrides_with_all(["check_order", "nocheck_order"])
             .action(ArgAction::SetTrue),
         Arg::new("nocheck_order")
             .long("nocheck-order")
             .help(t!("comm.clap.nocheck_order"))
-            .overrides_with("nocheck_order")
+            .overrides_with_all(["check_order", "nocheck_order"])
             .action(ArgAction::SetTrue),
         Arg::new(opt_flags::DELIMITER)
             .long(opt_flags::DELIMITER)
@@ -950,7 +950,7 @@ mod tests {
             let matches = command.try_get_matches_from(args).unwrap();
 
             assert!(matches.get_flag(opt_flags::TOTAL));
-            assert!(matches.get_flag("check_order"));
+            assert!(!matches.get_flag("check_order"));
             assert!(matches.get_flag("nocheck_order"));
         }
 

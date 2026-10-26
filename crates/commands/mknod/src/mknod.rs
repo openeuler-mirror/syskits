@@ -23,12 +23,14 @@ use clap::ArgAction;
 use clap::builder::ValueParser;
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, set_ct_exit_code};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, strip_errno};
+use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name_with_chars};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 use libc::{dev_t, mode_t};
 use selinux::label::{Labeler, back_end::File as FileBackEnd};
 use selinux::{self, SecurityContext};
 use std::ffi::{CString, OsStr, OsString};
+use std::io;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::Path;
 use sys_locale::get_locale;
@@ -36,6 +38,12 @@ use sys_locale::get_locale;
 // 常量：用于设置文件模式的权限位。
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 const MAX_DEVICE_COMPONENT: u64 = u32::MAX as u64;
+
+const MKNOD_DIAGNOSTIC_QUOTING_STYLE: CtQuotingStyle = CtQuotingStyle::Shell {
+    escape: true,
+    always_quote: false,
+    show_control: true,
+};
 
 const GNU_MKNOD_LONG_OPTIONS: &[&str] = &["context", "mode", "help", "version"];
 
@@ -334,9 +342,21 @@ fn validate_device_number_range(value: u64, raw: &OsStr, component: &str) -> CTR
     Ok(())
 }
 
+fn quote_operand(name: &OsStr) -> String {
+    if name.is_empty() {
+        "''".to_string()
+    } else {
+        escape_name_with_chars(name, &MKNOD_DIAGNOSTIC_QUOTING_STYLE, ":")
+    }
+}
+
+fn creation_error_message(file_name: &OsStr, error: &io::Error) -> String {
+    format!("{}: {}", quote_operand(file_name), strip_errno(error))
+}
+
 // Windows平台不支持mknod，因此定义一个空实现。
 #[cfg(windows)]
-fn _mknod(file_name: &OsStr, mode: mode_t, dev: dev_t) -> i32 {
+fn _mknod(file_name: &OsStr, mode: mode_t, dev: dev_t) -> io::Result<()> {
     panic!("Unsupported for windows platform")
 }
 
@@ -367,7 +387,7 @@ impl SecurityContextRequest {
 
 // Unix平台的_mknod实现。
 #[cfg(unix)]
-fn _mknod(file_name: &OsStr, mode: mode_t, dev: dev_t) -> i32 {
+fn _mknod(file_name: &OsStr, mode: mode_t, dev: dev_t) -> io::Result<()> {
     let c_str = CString::new(file_name.as_bytes()).expect("Failed to convert to CString");
 
     // 检查是否设置了文件模式的权限位
@@ -378,20 +398,15 @@ fn _mknod(file_name: &OsStr, mode: mode_t, dev: dev_t) -> i32 {
         let last_umask = if set_umask { libc::umask(0) } else { 0 };
 
         // 执行mknod系统调用
-        let errno = libc::mknod(c_str.as_ptr(), mode, dev);
+        let result = libc::mknod(c_str.as_ptr(), mode, dev);
+        let error = (result == -1).then(io::Error::last_os_error);
 
         // 如果设置了umask，将其恢复到原始值
         if set_umask {
             libc::umask(last_umask);
         }
 
-        // 处理系统调用失败的情况
-        if errno == -1 {
-            let c_str = CString::new(ctcore::ct_execute_phrase().as_bytes())
-                .expect("Failed to convert to CString");
-            libc::perror(c_str.as_ptr());
-        }
-        errno
+        error.map_or(Ok(()), Err)
     }
 }
 
@@ -590,16 +605,8 @@ fn mknod_processing(
                 "Fifos do not have major and minor device numbers.",
             ))
         } else {
-            let exit_code = _mknod(file_name, S_IFIFO | mode, 0);
-            set_ct_exit_code(exit_code);
-            if exit_code == 0 {
-                Ok(())
-            } else {
-                Err(CtSimpleError::new(
-                    1,
-                    format!("failed to create FIFO: {}", file_name.to_string_lossy()),
-                ))
-            }
+            _mknod(file_name, S_IFIFO | mode, 0)
+                .map_err(|error| CtSimpleError::new(1, creation_error_message(file_name, &error)))
         }
     } else {
         // 对于块设备和字符设备，需要主、次设备号
@@ -631,20 +638,14 @@ fn mknod_processing(
                 }
 
                 let dev = make_dev(major, minor);
-                let exit_code = match file_type {
+                let create_result = match file_type {
                     MknodFileType::Block => _mknod(file_name, S_IFBLK | mode, dev),
                     MknodFileType::Character => _mknod(file_name, S_IFCHR | mode, dev),
                     _ => unreachable!("file_type was validated to be only block or character"),
                 };
-                set_ct_exit_code(exit_code);
-                if exit_code == 0 {
-                    Ok(())
-                } else {
-                    Err(CtSimpleError::new(
-                        1,
-                        format!("failed to create device: {}", file_name.to_string_lossy()),
-                    ))
-                }
+                create_result.map_err(|error| {
+                    CtSimpleError::new(1, creation_error_message(file_name, &error))
+                })
             }
         }
     };

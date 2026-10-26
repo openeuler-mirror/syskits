@@ -12,7 +12,7 @@
 use std::ffi::OsString;
 use std::io::Read;
 use std::io::Write;
-use std::os::unix::ffi::OsStrExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
 use ctcore::ct_display::Quotable;
 use ctcore::ct_encoding::CtDecodeError;
@@ -148,9 +148,42 @@ pub fn base_parsing_command_args(
     base_usage: String,
 ) -> CTResult<BaseConfig> {
     let command = base_common_app(base_about, base_usage);
-    let args =
-        normalize_base_args_for_posix(base_args, std::env::var_os("POSIXLY_CORRECT").is_some());
+    let args = normalize_base_short_wrap_equals(base_args.collect());
+    let args = normalize_base_args_for_posix(
+        args.into_iter(),
+        std::env::var_os("POSIXLY_CORRECT").is_some(),
+    );
     BaseConfig::from(&command.try_get_matches_from(args)?)
+}
+
+fn normalize_base_short_wrap_equals(mut args: Vec<OsString>) -> Vec<OsString> {
+    let mut index = 1;
+    while index < args.len() {
+        let argument = args[index].as_os_str().as_bytes();
+        if argument == b"--" {
+            break;
+        }
+        if argument.len() < 3 || argument[0] != b'-' || argument[1] == b'-' {
+            index += 1;
+            continue;
+        }
+
+        // getopt treats the equals sign in a short option such as -w=2 as
+        // part of the option argument. Split it so parse_wrap_cols sees
+        // "=2" and reports the same invalid wrap size as GNU base32.
+        if let Some(w_index) = argument.iter().position(|byte| *byte == b'w') {
+            if argument.get(w_index + 1) == Some(&b'=') {
+                let option = OsString::from_vec(argument[..=w_index].to_vec());
+                let value = OsString::from_vec(argument[w_index + 1..].to_vec());
+                args[index] = option;
+                args.insert(index + 1, value);
+                index += 2;
+                continue;
+            }
+        }
+        index += 1;
+    }
+    args
 }
 
 fn normalize_base_args_for_posix(
@@ -652,6 +685,22 @@ mod test {
                 OsString::from("input"),
                 OsString::from("--"),
                 OsString::from("-d"),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_normalize_base_short_wrap_equals_splits_value() {
+        let args = ["base32", "-dw=2", "input"];
+        let normalized =
+            normalize_base_short_wrap_equals(args.iter().map(OsString::from).collect());
+        assert_eq!(
+            normalized,
+            vec![
+                OsString::from("base32"),
+                OsString::from("-dw"),
+                OsString::from("=2"),
+                OsString::from("input"),
             ]
         );
     }

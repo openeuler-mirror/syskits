@@ -146,6 +146,43 @@ fn validate_gnu_mknod_options(args: &[OsString]) -> CTResult<()> {
     Ok(())
 }
 
+fn apply_posix_option_order(args: &mut Vec<OsString>, posixly_correct: bool) {
+    if !posixly_correct {
+        return;
+    }
+
+    let mut index = 1;
+    while index < args.len() {
+        let argument = args[index].as_os_str().as_bytes();
+        if argument == b"--" {
+            return;
+        }
+        if argument == b"-" || !argument.starts_with(b"-") {
+            args.insert(index, OsString::from("--"));
+            return;
+        }
+
+        if let Some(long_argument) = argument.strip_prefix(b"--") {
+            let option = long_argument
+                .split(|byte| *byte == b'=')
+                .next()
+                .unwrap_or_default();
+            if !option.is_empty() && b"mode".starts_with(option) && !long_argument.contains(&b'=') {
+                index += 2;
+                continue;
+            }
+        } else if let Some(short_options) = argument.strip_prefix(b"-")
+            && let Some(mode_index) = short_options.iter().position(|byte| *byte == b'm')
+            && mode_index + 1 == short_options.len()
+        {
+            index += 2;
+            continue;
+        }
+
+        index += 1;
+    }
+}
+
 // 函数：解析设备号，支持十进制、十六进制和八进制格式
 fn parse_device_number(s: &str) -> Result<u64, String> {
     if s.starts_with("0x") || s.starts_with("0X") {
@@ -326,7 +363,8 @@ fn parse_security_context_request(args: &[OsString]) -> SecurityContextRequest {
 pub fn mknod_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let raw_args: Vec<OsString> = args.into_iter().collect();
+    let mut raw_args: Vec<OsString> = args.into_iter().collect();
+    apply_posix_option_order(&mut raw_args, std::env::var_os("POSIXLY_CORRECT").is_some());
     validate_gnu_mknod_options(&raw_args)?;
     let context_request = parse_security_context_request(&raw_args);
     // 从命令行参数中解析选项和参数
@@ -668,8 +706,8 @@ mod tests {
 
     mod tests_mknod_app {
         use crate::{
-            SecurityContextRequest, ct_app, parse_security_context_request,
-            validate_gnu_mknod_options,
+            SecurityContextRequest, apply_posix_option_order, ct_app,
+            parse_security_context_request, validate_gnu_mknod_options,
         };
 
         use clap::error::ErrorKind;
@@ -762,6 +800,26 @@ mod tests {
                 let error = validate_gnu_mknod_options(&args).unwrap_err();
                 assert_eq!(error.to_string(), expected);
             }
+        }
+
+        #[test]
+        fn test_posix_option_order_stops_at_first_operand() {
+            let mut args = ["mknod", "-Z", "--mode", "600", "file", "p", "-m", "700"]
+                .into_iter()
+                .map(OsString::from)
+                .collect::<Vec<_>>();
+
+            apply_posix_option_order(&mut args, true);
+
+            assert_eq!(
+                args,
+                [
+                    "mknod", "-Z", "--mode", "600", "--", "file", "p", "-m", "700"
+                ]
+                .into_iter()
+                .map(OsString::from)
+                .collect::<Vec<_>>()
+            );
         }
 
         #[test]

@@ -412,11 +412,9 @@ impl<W: Write> PasteContext<W> {
     }
 
     fn write_output(&mut self, delim_length: usize) -> CTResult<()> {
-        if !self.output.is_empty() {
-            let row_end = self.output.len().saturating_sub(delim_length);
-            let row = self.output[..row_end].to_vec();
-            self.write_row_bytes(&row)?;
-        }
+        let row_end = self.output.len().saturating_sub(delim_length);
+        let row = self.output[..row_end].to_vec();
+        self.write_row_bytes(&row)?;
         Ok(())
     }
 
@@ -885,7 +883,7 @@ mod tests {
             let mut context = PasteContext::new(&flags, &mut output)?;
             context.write_output(0)?;
 
-            assert_eq!(output.len(), 0);
+            assert_eq!(output, b"\n");
             Ok(())
         }
     }
@@ -1113,6 +1111,23 @@ mod tests {
             paste_exec(&mut output, flags)?;
 
             assert_eq!(output, b"1:2,3:4\n");
+            Ok(())
+        }
+
+        #[test]
+        fn test_paste_serial_empty_input_emits_terminator() -> CTResult<()> {
+            let (_temp_dir, file_path) = create_test_file("");
+            let flags = PasteFlags {
+                is_serial: true,
+                delimiters: "\t".into(),
+                files: vec![file_path.into()],
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let mut output = Vec::new();
+            paste_exec(&mut output, flags)?;
+
+            assert_eq!(output, b"\n");
             Ok(())
         }
 

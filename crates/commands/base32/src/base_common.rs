@@ -15,6 +15,7 @@ use std::io::Write;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
 use ctcore::ct_display::Quotable;
+use ctcore::ct_display::locale_quote;
 use ctcore::ct_encoding::CtDecodeError;
 use ctcore::ct_encoding::CtEncodeError;
 use ctcore::ct_encoding::Data;
@@ -133,7 +134,7 @@ fn parse_wrap_cols(num: &str) -> CTResult<usize> {
 fn invalid_wrap_size(num: &str) -> Box<dyn CTError> {
     CtSimpleError::new(
         BASE_CMD_PARSE_ERROR,
-        format!("invalid wrap size: {}", num.quote()),
+        format!("invalid wrap size: {}", locale_quote(num)),
     )
 }
 
@@ -666,15 +667,15 @@ mod test {
     fn test_parse_wrap_cols_rejects_invalid_or_negative_values() {
         assert_eq!(
             parse_wrap_cols("-1").unwrap_err().to_string(),
-            "invalid wrap size: '-1'"
+            format!("invalid wrap size: {}", locale_quote("-1"))
         );
         assert_eq!(
             parse_wrap_cols("123x").unwrap_err().to_string(),
-            "invalid wrap size: '123x'"
+            format!("invalid wrap size: {}", locale_quote("123x"))
         );
         assert_eq!(
             parse_wrap_cols("").unwrap_err().to_string(),
-            "invalid wrap size: ''"
+            format!("invalid wrap size: {}", locale_quote(""))
         );
     }
 

@@ -230,9 +230,10 @@ pub struct PasteSemantic {
 struct PasteContext<W: Write> {
     files: Vec<InputSource>,
     stdin: BufReader<Box<dyn Read>>,
-    delimiters: Vec<char>,
+    delimiters: Vec<u8>,
     line_ending: CtLineEnding,
     output: Vec<u8>,
+    delimiter_positions: Vec<(usize, u8)>,
     rows: Vec<PasteRow>,
     emitted_rows: usize,
     writer: W,
@@ -302,9 +303,10 @@ impl<W: Write> PasteContext<W> {
         Ok(Self {
             files,
             stdin: BufReader::new(ctcore::ct_io::stdin_reader_box()),
-            delimiters: paste_unescape(&flags.delimiters).chars().collect(),
+            delimiters: paste_unescape(&flags.delimiters).into_bytes(),
             line_ending: flags.line_ending,
             output: Vec::new(),
+            delimiter_positions: Vec::new(),
             rows: Vec::new(),
             emitted_rows: 0,
             writer,
@@ -312,14 +314,29 @@ impl<W: Write> PasteContext<W> {
     }
 
     fn write_row_bytes(&mut self, row: &[u8]) -> CTResult<()> {
-        let rendered = String::from_utf8_lossy(row).into_owned();
+        let mut classic_bytes = Vec::with_capacity(row.len());
+        let mut segment_start = 0;
+        for &(position, delimiter) in &self.delimiter_positions {
+            if position >= row.len() {
+                break;
+            }
+            classic_bytes.extend_from_slice(
+                String::from_utf8_lossy(&row[segment_start..position]).as_bytes(),
+            );
+            classic_bytes.push(delimiter);
+            segment_start = position + 1;
+        }
+        classic_bytes
+            .extend_from_slice(String::from_utf8_lossy(&row[segment_start..]).as_bytes());
+
+        let rendered = String::from_utf8_lossy(&classic_bytes).into_owned();
         self.emitted_rows += 1;
         self.rows.push(PasteRow {
             row_index: self.emitted_rows,
             line: rendered.clone(),
         });
         self.writer
-            .write_all(rendered.as_bytes())
+            .write_all(&classic_bytes)
             .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
         self.writer
             .write_all(&[self.line_ending as u8])
@@ -330,6 +347,7 @@ impl<W: Write> PasteContext<W> {
     fn process_stream(
         reader: &mut dyn BufRead,
         output: &mut Vec<u8>,
+        delimiter_positions: &mut Vec<(usize, u8)>,
         writer: &mut W,
         line_ending: u8,
     ) -> CTResult<bool> {
@@ -357,6 +375,7 @@ impl<W: Write> PasteContext<W> {
                     .write_all(output)
                     .map_err(|e| CtSimpleError::new(1, e.to_string()))?;
                 output.clear();
+                delimiter_positions.clear();
             }
 
             if hit_eol {
@@ -373,11 +392,18 @@ impl<W: Write> PasteContext<W> {
         let line_ending = self.line_ending as u8;
         match &mut self.files[index] {
             InputSource::File(reader) => {
-                Self::process_stream(reader, &mut self.output, &mut self.writer, line_ending)
+                Self::process_stream(
+                    reader,
+                    &mut self.output,
+                    &mut self.delimiter_positions,
+                    &mut self.writer,
+                    line_ending,
+                )
             }
             InputSource::Stdin => Self::process_stream(
                 &mut self.stdin,
                 &mut self.output,
+                &mut self.delimiter_positions,
                 &mut self.writer,
                 line_ending,
             ),
@@ -400,20 +426,20 @@ impl<W: Write> PasteContext<W> {
         }
 
         let delimiter = self.delimiters[delim_count % self.delimiters.len()];
-        if delimiter == '\0' {
+        if delimiter == b'\0' {
             return 0;
         }
 
-        let mut buf = [0; 4];
-        let ch = delimiter.encode_utf8(&mut buf);
-        let delim_length = ch.len();
-        self.output.extend_from_slice(&buf[..delim_length]);
-        delim_length
+        self.delimiter_positions
+            .push((self.output.len(), delimiter));
+        self.output.push(delimiter);
+        1
     }
 
     fn paste_serial(&mut self) -> CTResult<()> {
         for i in 0..self.files.len() {
             self.output.clear();
+            self.delimiter_positions.clear();
             let mut delim_length = 1;
             while self.process_line_at(i)? {
                 delim_length = self.add_delimiter(0);
@@ -429,6 +455,7 @@ impl<W: Write> PasteContext<W> {
 
         loop {
             self.output.clear();
+            self.delimiter_positions.clear();
             let mut eof_count = 0;
             let mut has_content = false;
 
@@ -818,6 +845,24 @@ mod tests {
             assert_eq!(len1, 1); // ':'
             assert_eq!(len2, 1); // '|'
             assert_eq!(String::from_utf8_lossy(&context.output), "test:|");
+        }
+
+        #[test]
+        fn test_add_delimiter_cycles_utf8_bytes() {
+            let flags = PasteFlags {
+                is_serial: false,
+                delimiters: "é".to_string(),
+                files: vec![],
+                line_ending: CtLineEnding::Newline,
+            };
+
+            let mut output = Vec::new();
+            let mut context = PasteContext::new(&flags, &mut output).unwrap();
+            context.output.extend_from_slice(b"test");
+
+            assert_eq!(context.add_delimiter(0), 1);
+            assert_eq!(context.add_delimiter(1), 1);
+            assert_eq!(context.output, b"test\xc3\xa9");
         }
 
         #[test]

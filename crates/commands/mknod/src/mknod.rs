@@ -701,7 +701,9 @@ fn get_mode(matches: &ArgMatches) -> Result<mode_t, String> {
 }
 
 fn parse_mknod_mode(str_mode: &str) -> Result<mode_t, String> {
-    if str_mode.contains(',') && !str_mode.chars().any(|c| c.is_ascii_digit()) {
+    if str_mode.chars().any(|c| c.is_ascii_digit()) {
+        ctcore::ct_mode::parse_mode(str_mode)
+    } else {
         let mut mode = MODE_RW_UGO;
         let umask = ctcore::ct_mode::get_umask();
         for part in str_mode.split(',') {
@@ -711,8 +713,6 @@ fn parse_mknod_mode(str_mode: &str) -> Result<mode_t, String> {
             mode = ctcore::ct_mode::parse_symbolic(mode, part, umask, false)?;
         }
         Ok(mode as mode_t)
-    } else {
-        ctcore::ct_mode::parse_mode(str_mode)
     }
 }
 
@@ -770,7 +770,7 @@ mod tests {
     mod tests_mknod_main {
         use crate::{
             ct_app, get_mode, mknod_main, parse_device_component, parse_device_number,
-            validate_device_number_range,
+            parse_mknod_mode, validate_device_number_range,
         };
 
         use std::ffi::{OsStr, OsString};
@@ -837,6 +837,13 @@ mod tests {
 
                 assert!(get_mode(&matches).is_err());
             }
+        }
+
+        #[test]
+        fn test_mknod_symbolic_mode_uses_nondirectory_semantics() {
+            assert_eq!(parse_mknod_mode("a=X"), Ok(0));
+            assert_eq!(parse_mknod_mode("u+s=u"), Ok(0o666));
+            assert_eq!(parse_mknod_mode("g+s=g"), Ok(0o666));
         }
 
         #[test]

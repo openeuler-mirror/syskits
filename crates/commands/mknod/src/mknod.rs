@@ -336,7 +336,7 @@ fn validate_device_number_range(value: u64, raw: &OsStr, component: &str) -> CTR
 
 // Windows平台不支持mknod，因此定义一个空实现。
 #[cfg(windows)]
-fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
+fn _mknod(file_name: &OsStr, mode: mode_t, dev: dev_t) -> i32 {
     panic!("Unsupported for windows platform")
 }
 
@@ -369,8 +369,8 @@ impl SecurityContextRequest {
 
 // Unix平台的_mknod实现。
 #[cfg(unix)]
-fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
-    let c_str = CString::new(file_name).expect("Failed to convert to CString");
+fn _mknod(file_name: &OsStr, mode: mode_t, dev: dev_t) -> i32 {
+    let c_str = CString::new(file_name.as_bytes()).expect("Failed to convert to CString");
 
     // 检查是否设置了文件模式的权限位
     let set_umask = mode & MODE_RW_UGO != MODE_RW_UGO;
@@ -399,7 +399,7 @@ fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
 
 fn set_security_context(
     context: Option<&OsString>,
-    file_path: &str,
+    file_path: &OsStr,
     file_mode: mode_t,
 ) -> Result<(), String> {
     if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
@@ -444,7 +444,8 @@ fn set_security_context(
                 Ok(ctx) => ctx,
                 Err(e) => {
                     eprintln!(
-                        "mknod: warning: cannot look up default SELinux context for {file_path}: {e}"
+                        "mknod: warning: cannot look up default SELinux context for {}: {e}",
+                        file_path.to_string_lossy()
                     );
                     return Ok(());
                 }
@@ -502,19 +503,23 @@ pub fn mknod_main(args: impl ctcore::Args) -> CTResult<()> {
     let mode = get_mode(&args_match).map_err(|e| CtSimpleError::new(1, e))?;
 
     let file_name = args_match
-        .get_one::<String>("name")
+        .get_one::<OsString>("name")
         .expect("Missing argument 'NAME'");
 
-    let file_type = args_match.get_one::<MknodFileType>("type").unwrap();
+    let type_argument = args_match
+        .get_one::<OsString>("type")
+        .expect("Missing argument 'TYPE'");
+    let file_type =
+        parse_type(type_argument.as_os_str()).map_err(|error| CtSimpleError::new(1, error))?;
 
     // 根据文件类型执行不同的操作
-    mknod_processing(&args_match, mode, file_name, file_type, &context_request)
+    mknod_processing(&args_match, mode, file_name, &file_type, &context_request)
 }
 
 fn mknod_processing(
     args_match: &ArgMatches,
     mode: mode_t,
-    file_name: &str,
+    file_name: &OsStr,
     file_type: &MknodFileType,
     context_request: &SecurityContextRequest,
 ) -> CTResult<()> {
@@ -547,7 +552,7 @@ fn mknod_processing(
             } else {
                 Err(CtSimpleError::new(
                     1,
-                    format!("failed to create FIFO: {file_name}"),
+                    format!("failed to create FIFO: {}", file_name.to_string_lossy()),
                 ))
             }
         }
@@ -592,7 +597,7 @@ fn mknod_processing(
                 } else {
                     Err(CtSimpleError::new(
                         1,
-                        format!("failed to create device: {file_name}"),
+                        format!("failed to create device: {}", file_name.to_string_lossy()),
                     ))
                 }
             }
@@ -603,7 +608,8 @@ fn mknod_processing(
     // 这与GNU的lchmod()调用等价（对于非符号链接文件）
     if result.is_ok() && args_match.contains_id("mode") {
         unsafe {
-            let c_path = CString::new(file_name).expect("Failed to convert path to CString");
+            let c_path =
+                CString::new(file_name.as_bytes()).expect("Failed to convert path to CString");
             if libc::chmod(c_path.as_ptr(), mode) != 0 {
                 let err = std::io::Error::last_os_error();
                 return Err(CtSimpleError::new(
@@ -658,12 +664,13 @@ pub fn ct_app() -> Command {
             .value_name("NAME")
             .help(t!("mknod.clap.name"))
             .required(true)
+            .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::AnyPath),
         Arg::new("type")
             .value_name("TYPE")
             .help(t!("mknod.clap.type"))
             .required(true)
-            .value_parser(parse_type),
+            .value_parser(ValueParser::os_string()),
         Arg::new("major")
             .value_name("MAJOR")
             .help(t!("mknod.clap.major")),
@@ -717,17 +724,14 @@ fn parse_mknod_mode(str_mode: &str) -> Result<mode_t, String> {
 }
 
 // 解析文件类型参数。
-fn parse_type(tpe: &str) -> Result<MknodFileType, String> {
-    // 仅根据第一个字符解析文件类型
-    tpe.chars()
-        .next()
-        .ok_or_else(|| "missing device type".to_string())
-        .and_then(|first_char| match first_char {
-            'b' => Ok(MknodFileType::Block),
-            'c' | 'u' => Ok(MknodFileType::Character),
-            'p' => Ok(MknodFileType::Fifo),
-            _ => Err(format!("invalid device type {}", tpe.quote())),
-        })
+fn parse_type(tpe: &OsStr) -> Result<MknodFileType, String> {
+    match tpe.as_bytes().first() {
+        Some(b'b') => Ok(MknodFileType::Block),
+        Some(b'c' | b'u') => Ok(MknodFileType::Character),
+        Some(b'p') => Ok(MknodFileType::Fifo),
+        None => Err("missing device type".to_string()),
+        _ => Err(format!("invalid device type {}", tpe.quote())),
+    }
 }
 
 #[derive(Default)]
@@ -905,12 +909,13 @@ mod tests {
     mod tests_mknod_app {
         use crate::{
             SecurityContextRequest, apply_posix_option_order, ct_app,
-            parse_security_context_request, validate_gnu_mknod_operands,
+            parse_security_context_request, parse_type, validate_gnu_mknod_operands,
             validate_gnu_mknod_options,
         };
 
         use clap::error::ErrorKind;
         use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
 
         #[test]
         fn test_ct_app_version() {
@@ -988,6 +993,21 @@ mod tests {
                 .unwrap();
 
             assert_eq!(matches.get_one::<String>("mode").unwrap(), "-w");
+        }
+
+        #[test]
+        fn test_ct_app_accepts_non_utf8_name_and_type() {
+            let name = OsString::from_vec(b"name-\xff".to_vec());
+            let file_type = OsString::from_vec(b"p\xfe".to_vec());
+            let matches = ct_app()
+                .try_get_matches_from([OsString::from("mknod"), name.clone(), file_type.clone()])
+                .unwrap();
+
+            assert_eq!(matches.get_one::<OsString>("name"), Some(&name));
+            assert!(matches!(
+                parse_type(file_type.as_os_str()),
+                Ok(crate::MknodFileType::Fifo)
+            ));
         }
 
         #[test]

@@ -63,6 +63,11 @@ pub mod opt_flags {
 
 impl BaseConfig {
     pub fn from(options: &clap::ArgMatches) -> CTResult<Self> {
+        let cols = options
+            .get_one::<String>(opt_flags::BASE_WRAP)
+            .map(|num| parse_wrap_cols(num))
+            .transpose()?;
+
         let f: Option<OsString> = match options.get_many::<OsString>(opt_flags::BASE_FILE) {
             Some(mut var) => {
                 let path_name = var.next().unwrap();
@@ -81,11 +86,6 @@ impl BaseConfig {
             }
             None => None,
         };
-
-        let cols = options
-            .get_one::<String>(opt_flags::BASE_WRAP)
-            .map(|num| parse_wrap_cols(num))
-            .transpose()?;
 
         Ok(Self {
             base_decode: options.get_flag(opt_flags::BASE_DECODE),

@@ -370,17 +370,10 @@ impl<R: Read> Data<R> {
         }
 
         if use_base32_compat {
-            if char_buf.contains(&b'=') {
-                return Err(invalid_input().into());
-            }
-
-            while char_buf.len() < 8 {
-                char_buf.push(b'=');
-            }
-            let ok = decode_base32_quantum(self.format, &char_buf, &mut writer)?;
-            if ok {
-                return Ok(());
-            }
+            // GNU base32 requires every final quantum to contain all eight
+            // characters (including any required padding).  Do not infer
+            // missing padding for an unfilled tail: it is invalid input and
+            // must not produce a partial decoded byte.
             return Err(invalid_input().into());
         }
 
@@ -837,21 +830,21 @@ mod test {
     }
 
     #[test]
-    fn test_data_decode_base32_unpadded_short_tail_is_accepted() {
+    fn test_data_decode_base32_unpadded_short_tail_is_rejected() {
         let input = Cursor::new(b"MY".to_vec());
         let mut data = Data::new(input, Format::Base32);
         let mut out = Vec::new();
-        assert!(data.decode(&mut out).is_ok());
-        assert_eq!(out, b"f");
+        assert!(data.decode(&mut out).is_err());
+        assert!(out.is_empty());
     }
 
     #[test]
-    fn test_data_decode_base32_invalid_unpadded_tail_keeps_partial_output() {
+    fn test_data_decode_base32_invalid_unpadded_tail_emits_no_output() {
         let input = Cursor::new(b"ABC".to_vec());
         let mut data = Data::new(input, Format::Base32);
         let mut out = Vec::new();
         assert!(data.decode(&mut out).is_err());
-        assert_eq!(out, vec![0]);
+        assert!(out.is_empty());
     }
 
     #[test]

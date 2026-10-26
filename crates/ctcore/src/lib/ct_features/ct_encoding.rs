@@ -35,6 +35,7 @@ pub enum CtDecodeError {
 pub enum CtEncodeError {
     Z85InputLenNotMultipleOf4,
     InvalidInput,
+    ReadError(io::Error),
 }
 
 pub type DecodeResult = Result<Vec<u8>, CtDecodeError>;
@@ -434,7 +435,7 @@ impl<R: Read> Data<R> {
                     }
                     Ok(())
                 }
-                Err(_) => Err(CtEncodeError::InvalidInput),
+                Err(error) => Err(CtEncodeError::ReadError(error)),
             }
         } else {
             let mut buf = vec![0; chunk_size + 1024];
@@ -446,7 +447,7 @@ impl<R: Read> Data<R> {
                     Ok(0) => break,
                     Ok(n) => n,
                     Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-                    Err(_) => return Err(CtEncodeError::InvalidInput),
+                    Err(error) => return Err(CtEncodeError::ReadError(error)),
                 };
                 buf_len += n;
 
@@ -559,6 +560,14 @@ mod test {
 
         fn flush(&mut self) -> io::Result<()> {
             Ok(())
+        }
+    }
+
+    struct AlwaysFailReader;
+
+    impl Read for AlwaysFailReader {
+        fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+            Err(io::Error::new(io::ErrorKind::PermissionDenied, "Permission denied"))
         }
     }
     #[test]
@@ -870,5 +879,15 @@ mod test {
         let mut data = Data::new(input, Format::Base58).line_wrap(76);
         let result = data.encode(FailOnNewlineWriter);
         assert!(matches!(result, Err(CtEncodeError::InvalidInput)));
+    }
+
+    #[test]
+    fn test_data_encode_preserves_read_error() {
+        let mut data = Data::new(AlwaysFailReader, Format::Base32);
+        let result = data.encode(Vec::new());
+        assert!(matches!(
+            result,
+            Err(CtEncodeError::ReadError(error)) if error.kind() == io::ErrorKind::PermissionDenied
+        ));
     }
 }

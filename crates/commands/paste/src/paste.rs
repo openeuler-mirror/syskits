@@ -400,6 +400,7 @@ pub fn ct_app() -> Command {
         .about(application_info)
         .override_usage(usage_description)
         .infer_long_args(true)
+        .args_override_self(true)
         .args(&args)
 }
 
@@ -745,6 +746,33 @@ mod tests {
                 .unwrap()
                 .collect();
             assert_eq!(files.len(), 3);
+        }
+
+        #[test]
+        fn test_ct_app_repeated_options() {
+            let matches = ct_app()
+                .try_get_matches_from([
+                    ctcore::ct_util_name(),
+                    "-s",
+                    "-s",
+                    "-z",
+                    "-z",
+                    "-d",
+                    ":",
+                    "-d",
+                    ",",
+                    "file.txt",
+                ])
+                .unwrap();
+
+            assert!(matches.get_flag(paste_flags::PASTE_SERIAL));
+            assert!(matches.get_flag(paste_flags::PASTE_ZERO_TERMINATED));
+            assert_eq!(
+                matches
+                    .get_one::<String>(paste_flags::PASTE_DELIMITER)
+                    .unwrap(),
+                ","
+            );
         }
     }
 

@@ -200,8 +200,8 @@ enum InputSource {
 #[derive(Debug)]
 struct PasteFlags {
     is_serial: bool,
-    delimiters: String,
-    files: Vec<String>,
+    delimiters: OsString,
+    files: Vec<OsString>,
     line_ending: CtLineEnding,
 }
 
@@ -251,11 +251,11 @@ impl PasteFlags {
         Ok(Self {
             is_serial: matches.get_flag(paste_flags::PASTE_SERIAL),
             delimiters: matches
-                .get_one::<String>(paste_flags::PASTE_DELIMITER)
+                .get_one::<OsString>(paste_flags::PASTE_DELIMITER)
                 .unwrap()
                 .clone(),
             files: matches
-                .get_many::<String>(paste_flags::PASTE_FILE)
+                .get_many::<OsString>(paste_flags::PASTE_FILE)
                 .unwrap()
                 .cloned()
                 .collect(),
@@ -268,6 +268,7 @@ impl PasteFlags {
     fn validate_delimiters(&self) -> CTResult<()> {
         let trailing_backslashes = self
             .delimiters
+            .as_os_str()
             .as_bytes()
             .iter()
             .rev()
@@ -278,7 +279,7 @@ impl PasteFlags {
                 1,
                 format!(
                     "delimiter list ends with an unescaped backslash: {}",
-                    self.delimiters
+                    self.delimiters.to_string_lossy()
                 ),
             ));
         }
@@ -290,7 +291,7 @@ impl<W: Write> PasteContext<W> {
     fn new(flags: &PasteFlags, writer: W) -> CTResult<Self> {
         let mut files = Vec::with_capacity(flags.files.len());
         for name in &flags.files {
-            let file = if name == "-" {
+            let file = if name.as_os_str().as_bytes() == b"-" {
                 InputSource::Stdin
             } else {
                 let path = Path::new(name);
@@ -303,7 +304,7 @@ impl<W: Write> PasteContext<W> {
         Ok(Self {
             files,
             stdin: BufReader::new(ctcore::ct_io::stdin_reader_box()),
-            delimiters: paste_unescape(&flags.delimiters).into_bytes(),
+            delimiters: paste_unescape(flags.delimiters.as_os_str().as_bytes()),
             line_ending: flags.line_ending,
             output: Vec::new(),
             delimiter_positions: Vec::new(),
@@ -496,25 +497,25 @@ impl<W: Write> PasteContext<W> {
     }
 }
 
-fn paste_unescape(s: &str) -> String {
-    let mut output = String::with_capacity(s.len());
-    let mut chars = s.chars();
-    while let Some(ch) = chars.next() {
-        if ch != '\\' {
-            output.push(ch);
+fn paste_unescape(s: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(s.len());
+    let mut bytes = s.iter().copied();
+    while let Some(byte) = bytes.next() {
+        if byte != b'\\' {
+            output.push(byte);
             continue;
         }
 
-        match chars.next() {
-            Some('0') => output.push('\0'),
-            Some('b') => output.push('\x08'),
-            Some('f') => output.push('\x0c'),
-            Some('n') => output.push('\n'),
-            Some('r') => output.push('\r'),
-            Some('t') => output.push('\t'),
-            Some('v') => output.push('\x0b'),
-            Some(escaped_char) => output.push(escaped_char),
-            None => output.push('\\'),
+        match bytes.next() {
+            Some(b'0') => output.push(0),
+            Some(b'b') => output.push(0x08),
+            Some(b'f') => output.push(0x0c),
+            Some(b'n') => output.push(b'\n'),
+            Some(b'r') => output.push(b'\r'),
+            Some(b't') => output.push(b'\t'),
+            Some(b'v') => output.push(0x0b),
+            Some(escaped_byte) => output.push(escaped_byte),
+            None => output.push(b'\\'),
         }
     }
     output
@@ -570,7 +571,7 @@ pub fn paste_native_semantic(args: impl ctcore::Args) -> CTResult<PasteSemantic>
     Ok(PasteSemantic {
         mode,
         rows,
-        classic_text: String::from_utf8(classic_output).expect("paste output should be utf-8"),
+        classic_text: String::from_utf8_lossy(&classic_output).into_owned(),
         stderr_text: String::new(),
         exit_code: 0,
     })
@@ -593,11 +594,13 @@ pub fn ct_app() -> Command {
             .help(t!("paste.clap.paste_delimiter"))
             .value_name("LIST")
             .default_value("\t")
-            .hide_default_value(true),
+            .hide_default_value(true)
+            .value_parser(clap::builder::ValueParser::os_string()),
         Arg::new(paste_flags::PASTE_FILE)
             .value_name("FILE")
             .action(ArgAction::Append)
             .default_value("-")
+            .value_parser(clap::builder::ValueParser::os_string())
             .value_hint(clap::ValueHint::FilePath),
         Arg::new(paste_flags::PASTE_ZERO_TERMINATED)
             .long(paste_flags::PASTE_ZERO_TERMINATED)
@@ -636,6 +639,7 @@ impl Tool for Paste {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
     use tempfile::Builder;
 
     mod paste_flags_tests {
@@ -655,8 +659,11 @@ mod tests {
             let flags = PasteFlags::new(&matches).unwrap();
 
             assert!(flags.is_serial);
-            assert_eq!(flags.delimiters, ",");
-            assert_eq!(flags.files, vec!["file1.txt", "file2.txt"]);
+            assert_eq!(flags.delimiters, OsString::from(","));
+            assert_eq!(
+                flags.files,
+                vec![OsString::from("file1.txt"), OsString::from("file2.txt")]
+            );
             assert_eq!(flags.line_ending, CtLineEnding::Newline);
         }
 
@@ -664,8 +671,8 @@ mod tests {
         fn test_validate_delimiters_valid() {
             let flags = PasteFlags {
                 is_serial: false,
-                delimiters: ",:".to_string(),
-                files: vec!["file.txt".to_string()],
+                delimiters: ",:".into(),
+                files: vec!["file.txt".into()],
                 line_ending: CtLineEnding::Newline,
             };
             assert!(flags.validate_delimiters().is_ok());
@@ -676,8 +683,8 @@ mod tests {
             for delimiters in ["\\", "\\\\\\", "\\\\\\\\\\"] {
                 let flags = PasteFlags {
                     is_serial: false,
-                    delimiters: delimiters.to_string(),
-                    files: vec!["file.txt".to_string()],
+                    delimiters: delimiters.into(),
+                    files: vec!["file.txt".into()],
                     line_ending: CtLineEnding::Newline,
                 };
                 assert!(flags.validate_delimiters().is_err());
@@ -697,15 +704,15 @@ mod tests {
             let args = vec![ctcore::ct_util_name(), "-d", ":|", "file.txt"];
             let matches = ct_app().try_get_matches_from(args).unwrap();
             let flags = PasteFlags::new(&matches).unwrap();
-            assert_eq!(flags.delimiters, ":|");
+            assert_eq!(flags.delimiters, OsString::from(":|"));
         }
 
         #[test]
         fn test_validate_delimiters_with_escaped_backslash() {
             let flags = PasteFlags {
                 is_serial: false,
-                delimiters: "\\\\".to_string(),
-                files: vec!["file.txt".to_string()],
+                delimiters: "\\\\".into(),
+                files: vec!["file.txt".into()],
                 line_ending: CtLineEnding::Newline,
             };
             assert!(flags.validate_delimiters().is_ok());
@@ -727,8 +734,8 @@ mod tests {
             let (_temp_dir, file_path) = create_test_file("test\nline\n");
             let flags = PasteFlags {
                 is_serial: false,
-                delimiters: "\t".to_string(),
-                files: vec![file_path],
+                delimiters: "\t".into(),
+                files: vec![file_path.into()],
                 line_ending: CtLineEnding::Newline,
             };
 
@@ -749,7 +756,7 @@ mod tests {
         fn test_add_delimiter() {
             let flags = PasteFlags {
                 is_serial: false,
-                delimiters: ",".to_string(),
+                delimiters: ",".into(),
                 files: vec![],
                 line_ending: CtLineEnding::Newline,
             };
@@ -767,7 +774,7 @@ mod tests {
         fn test_write_output() -> CTResult<()> {
             let flags = PasteFlags {
                 is_serial: false,
-                delimiters: ",".to_string(),
+                delimiters: ",".into(),
                 files: vec![],
                 line_ending: CtLineEnding::Newline,
             };
@@ -785,8 +792,8 @@ mod tests {
         fn test_process_line_with_stdin() -> CTResult<()> {
             let flags = PasteFlags {
                 is_serial: false,
-                delimiters: "\t".to_string(),
-                files: vec!["-".to_string()],
+                delimiters: "\t".into(),
+                files: vec!["-".into()],
                 line_ending: CtLineEnding::Newline,
             };
 
@@ -812,8 +819,8 @@ mod tests {
             let (_temp_dir, file_path) = create_test_file("test\0line\0");
             let flags = PasteFlags {
                 is_serial: false,
-                delimiters: "\t".to_string(),
-                files: vec![file_path],
+                delimiters: "\t".into(),
+                files: vec![file_path.into()],
                 line_ending: CtLineEnding::Nul,
             };
 
@@ -829,7 +836,7 @@ mod tests {
         fn test_add_delimiter_with_multiple_chars() {
             let flags = PasteFlags {
                 is_serial: false,
-                delimiters: ":|".to_string(),
+                delimiters: ":|".into(),
                 files: vec![],
                 line_ending: CtLineEnding::Newline,
             };
@@ -849,7 +856,7 @@ mod tests {
         fn test_add_delimiter_cycles_utf8_bytes() {
             let flags = PasteFlags {
                 is_serial: false,
-                delimiters: "é".to_string(),
+                delimiters: "é".into(),
                 files: vec![],
                 line_ending: CtLineEnding::Newline,
             };
@@ -867,7 +874,7 @@ mod tests {
         fn test_write_output_empty() -> CTResult<()> {
             let flags = PasteFlags {
                 is_serial: false,
-                delimiters: ",".to_string(),
+                delimiters: ",".into(),
                 files: vec![],
                 line_ending: CtLineEnding::Newline,
             };
@@ -901,6 +908,28 @@ mod tests {
             let args = [ctcore::ct_util_name(), "--invalid-flag"];
             let mut output = Vec::new();
             assert!(paste_main(&mut output, args.iter().map(OsString::from)).is_err());
+        }
+
+        #[test]
+        fn test_paste_main_non_utf8_arguments() -> CTResult<()> {
+            let temp_dir = tempfile::tempdir()?;
+            let file_path = temp_dir
+                .path()
+                .join(OsString::from_vec(b"input-\xff".to_vec()));
+            std::fs::write(&file_path, b"N\n")?;
+
+            let args = vec![
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-d"),
+                OsString::from_vec(vec![0xfe, b',']),
+                file_path.clone().into_os_string(),
+                file_path.into_os_string(),
+            ];
+            let mut output = Vec::new();
+            paste_main(&mut output, args.into_iter())?;
+
+            assert_eq!(output, b"N\xfeN\n");
+            Ok(())
         }
     }
 
@@ -937,9 +966,9 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args).unwrap();
             assert_eq!(
                 matches
-                    .get_one::<String>(paste_flags::PASTE_DELIMITER)
+                    .get_one::<OsString>(paste_flags::PASTE_DELIMITER)
                     .unwrap(),
-                ","
+                &OsString::from(",")
             );
         }
 
@@ -950,9 +979,9 @@ mod tests {
             assert!(matches.get_flag(paste_flags::PASTE_SERIAL));
             assert_eq!(
                 matches
-                    .get_one::<String>(paste_flags::PASTE_DELIMITER)
+                    .get_one::<OsString>(paste_flags::PASTE_DELIMITER)
                     .unwrap(),
-                ","
+                &OsString::from(",")
             );
         }
 
@@ -973,7 +1002,7 @@ mod tests {
             ];
             let matches = ct_app().try_get_matches_from(args).unwrap();
             let files: Vec<_> = matches
-                .get_many::<String>(paste_flags::PASTE_FILE)
+                .get_many::<OsString>(paste_flags::PASTE_FILE)
                 .unwrap()
                 .collect();
             assert_eq!(files.len(), 3);
@@ -1000,9 +1029,9 @@ mod tests {
             assert!(matches.get_flag(paste_flags::PASTE_ZERO_TERMINATED));
             assert_eq!(
                 matches
-                    .get_one::<String>(paste_flags::PASTE_DELIMITER)
+                    .get_one::<OsString>(paste_flags::PASTE_DELIMITER)
                     .unwrap(),
-                ","
+                &OsString::from(",")
             );
         }
 
@@ -1056,8 +1085,8 @@ mod tests {
             let (_temp_dir, file_path) = create_test_file(test_input);
             let flags = PasteFlags {
                 is_serial: true,
-                delimiters: ",".to_string(),
-                files: vec![file_path],
+                delimiters: ",".into(),
+                files: vec![file_path.into()],
                 line_ending: CtLineEnding::Newline,
             };
 
@@ -1076,8 +1105,8 @@ mod tests {
             let (_temp_dir, file_path) = create_test_file(test_input);
             let flags = PasteFlags {
                 is_serial: true,
-                delimiters: ",".to_string(),
-                files: vec![file_path],
+                delimiters: ",".into(),
+                files: vec![file_path.into()],
                 line_ending: CtLineEnding::Nul,
             };
 
@@ -1106,11 +1135,11 @@ mod tests {
 
             let flags = PasteFlags {
                 is_serial: false,
-                delimiters: "\t".to_string(),
+                delimiters: "\t".into(),
                 files: vec![
-                    file1_path.to_str().unwrap().to_string(),
-                    file2_path.to_str().unwrap().to_string(),
-                    file3_path.to_str().unwrap().to_string(),
+                    file1_path.into_os_string(),
+                    file2_path.into_os_string(),
+                    file3_path.into_os_string(),
                 ],
                 line_ending: CtLineEnding::Newline,
             };
@@ -1130,8 +1159,8 @@ mod tests {
             let (_temp_dir, file_path) = create_test_file(test_input);
             let flags = PasteFlags {
                 is_serial: true,
-                delimiters: "\\n".to_string(),
-                files: vec![file_path],
+                delimiters: "\\n".into(),
+                files: vec![file_path.into()],
                 line_ending: CtLineEnding::Newline,
             };
 
@@ -1150,8 +1179,8 @@ mod tests {
             let (_temp_dir, file_path) = create_test_file(test_input);
             let flags = PasteFlags {
                 is_serial: true,
-                delimiters: "\\\\".to_string(),
-                files: vec![file_path],
+                delimiters: "\\\\".into(),
+                files: vec![file_path.into()],
                 line_ending: CtLineEnding::Newline,
             };
 
@@ -1167,8 +1196,8 @@ mod tests {
             let (_temp_dir, file_path) = create_test_file("");
             let flags = PasteFlags {
                 is_serial: false,
-                delimiters: "\t".to_string(),
-                files: vec![file_path],
+                delimiters: "\t".into(),
+                files: vec![file_path.into()],
                 line_ending: CtLineEnding::Newline,
             };
 
@@ -1183,8 +1212,8 @@ mod tests {
         fn test_paste_with_nonexistent_file() {
             let flags = PasteFlags {
                 is_serial: false,
-                delimiters: "\t".to_string(),
-                files: vec!["nonexistent.txt".to_string()],
+                delimiters: "\t".into(),
+                files: vec!["nonexistent.txt".into()],
                 line_ending: CtLineEnding::Newline,
             };
 
@@ -1195,25 +1224,26 @@ mod tests {
 
     #[test]
     fn test_paste_unescape() {
-        assert_eq!(paste_unescape("\\b"), "\x08");
-        assert_eq!(paste_unescape("\\f"), "\x0c");
-        assert_eq!(paste_unescape("\\n"), "\n");
-        assert_eq!(paste_unescape("\\r"), "\r");
-        assert_eq!(paste_unescape("\\t"), "\t");
-        assert_eq!(paste_unescape("\\v"), "\x0b");
-        assert_eq!(paste_unescape("\\\\"), "\\");
-        assert_eq!(paste_unescape("\\\\n"), "\\n");
-        assert_eq!(paste_unescape("a\\\\nb"), "a\\nb");
-        assert_eq!(paste_unescape("\\q"), "q");
-        assert_eq!(paste_unescape("a\\qb"), "aqb");
-        assert_eq!(paste_unescape("\u{FFFF}"), "\u{FFFF}");
+        assert_eq!(paste_unescape(b"\\b"), b"\x08");
+        assert_eq!(paste_unescape(b"\\f"), b"\x0c");
+        assert_eq!(paste_unescape(b"\\n"), b"\n");
+        assert_eq!(paste_unescape(b"\\r"), b"\r");
+        assert_eq!(paste_unescape(b"\\t"), b"\t");
+        assert_eq!(paste_unescape(b"\\v"), b"\x0b");
+        assert_eq!(paste_unescape(b"\\\\"), b"\\");
+        assert_eq!(paste_unescape(b"\\\\n"), b"\\n");
+        assert_eq!(paste_unescape(b"a\\\\nb"), b"a\\nb");
+        assert_eq!(paste_unescape(b"\\q"), b"q");
+        assert_eq!(paste_unescape(b"a\\qb"), b"aqb");
+        assert_eq!(paste_unescape("\u{FFFF}".as_bytes()), "\u{FFFF}".as_bytes());
+        assert_eq!(paste_unescape(&[0xfe, b',']), [0xfe, b',']);
     }
 
     #[test]
     fn test_paste_unescape_empty_delimiter() {
-        assert_eq!(paste_unescape("\\0"), "\0");
-        assert_eq!(paste_unescape("\\0,"), "\0,");
-        assert_eq!(paste_unescape("\\\\0"), "\\0");
+        assert_eq!(paste_unescape(b"\\0"), b"\0");
+        assert_eq!(paste_unescape(b"\\0,"), b"\0,");
+        assert_eq!(paste_unescape(b"\\\\0"), b"\\0");
     }
 
     // Helper function for creating test files

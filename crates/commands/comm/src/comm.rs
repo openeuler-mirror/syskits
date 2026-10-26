@@ -27,7 +27,7 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use std::cell::RefCell;
-use std::ffi::{OsStr, OsString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::rc::Rc;
 use sys_locale::get_locale;
@@ -358,6 +358,42 @@ fn comm_error_line(message: &str) -> String {
     format!("comm: {message}\n")
 }
 
+#[cfg(target_os = "linux")]
+fn comm_gettext(message: &str) -> String {
+    let original = message.to_owned();
+    let Ok(message) = CString::new(message) else {
+        return original;
+    };
+
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+        bindtextdomain(c"coreutils".as_ptr(), c"/usr/share/locale".as_ptr());
+        let translated = dgettext(c"coreutils".as_ptr(), message.as_ptr());
+        if translated.is_null() {
+            original
+        } else {
+            CStr::from_ptr(translated).to_string_lossy().into_owned()
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn comm_gettext(message: &str) -> String {
+    message.to_owned()
+}
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn bindtextdomain(
+        domainname: *const std::ffi::c_char,
+        dirname: *const std::ffi::c_char,
+    ) -> *mut std::ffi::c_char;
+    fn dgettext(
+        domainname: *const std::ffi::c_char,
+        msgid: *const std::ffi::c_char,
+    ) -> *mut std::ffi::c_char;
+}
+
 fn xmemcoll_compare(mut left: &[u8], mut right: &[u8]) -> Ordering {
     loop {
         let left_end = left
@@ -406,7 +442,11 @@ fn check_order(
         let order = xmemcoll_compare(prev_cmp, curr_cmp);
 
         if order == Ordering::Greater {
-            let msg = t!("comm.messages.not_sorted", file_num = file_idx);
+            let msg = comm_gettext("file %d is not in sorted order").replacen(
+                "%d",
+                &file_idx.to_string(),
+                1,
+            );
             if *check_opt == CheckOrderOption::Enabled {
                 return Some(CommRuntimeIssue::Fail(msg.to_string()));
             } else {
@@ -723,7 +763,7 @@ fn comm_with_writer<W: std::io::Write>(
     // 根据选项输出总计数行
     if opts.get_flag(opt_flags::TOTAL) {
         let line_ending = CtLineEnding::from_zero_flag(opts.get_flag(opt_flags::ZERO_TERMINATED));
-        let total_str = t!("comm.messages.total");
+        let total_str = comm_gettext("total");
         let col_sep = comm_get_del_im(opts)?;
         write!(out, "{total_col_1}")
             .map_err(|e| ctcore::ct_error::CtSimpleError::new(1, e.to_string()))?;
@@ -743,9 +783,9 @@ fn comm_with_writer<W: std::io::Write>(
     }
 
     if issued_warning[0] || issued_warning[1] {
-        stderr_text.push_str(&comm_error_line(
-            &t!("comm.messages.input_not_sorted").to_string(),
-        ));
+        stderr_text.push_str(&comm_error_line(&comm_gettext(
+            "input is not in sorted order",
+        )));
         return Ok(CommRunOutcome {
             rows,
             stderr_text,

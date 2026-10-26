@@ -506,6 +506,7 @@ pub fn ct_app() -> Command {
             .short('m')
             .long("mode")
             .value_name("MODE")
+            .allow_hyphen_values(true)
             .help(t!("mknod.clap.mode")),
         Arg::new("ctx")
             .short('Z')
@@ -780,6 +781,15 @@ mod tests {
             assert_eq!(matches.get_one::<String>("mode").unwrap(), "700");
             assert!(matches.get_flag("ctx"));
             assert!(matches.contains_id("context"));
+        }
+
+        #[test]
+        fn test_ct_app_accepts_separate_hyphen_mode() {
+            let matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), "-m", "-w", "file", "p"])
+                .unwrap();
+
+            assert_eq!(matches.get_one::<String>("mode").unwrap(), "-w");
         }
 
         #[test]

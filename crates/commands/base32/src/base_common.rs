@@ -76,15 +76,6 @@ impl BaseConfig {
                 if path_name.as_os_str() == OsStr::new("-") {
                     None
                 } else {
-                    if !Path::exists(Path::new(path_name.as_os_str())) {
-                        return Err(CtSimpleError::new(
-                            BASE_CMD_PARSE_ERROR,
-                            format!(
-                                "{}: No such file or directory",
-                                path_name.as_os_str().maybe_quote()
-                            ),
-                        ));
-                    }
                     Some(path_name.clone())
                 }
             }

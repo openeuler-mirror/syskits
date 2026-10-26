@@ -1525,6 +1525,9 @@ impl Tool for B3sum {
 /// * `args` - 命令行参数
 ///
 pub fn hashsum_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);

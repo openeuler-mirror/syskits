@@ -265,7 +265,14 @@ impl PasteFlags {
     }
 
     fn validate_delimiters(&self) -> CTResult<()> {
-        if self.delimiters.ends_with('\\') && !self.delimiters.ends_with("\\\\") {
+        let trailing_backslashes = self
+            .delimiters
+            .as_bytes()
+            .iter()
+            .rev()
+            .take_while(|byte| **byte == b'\\')
+            .count();
+        if trailing_backslashes % 2 == 1 {
             return Err(CtSimpleError::new(
                 1,
                 format!(
@@ -641,13 +648,15 @@ mod tests {
 
         #[test]
         fn test_validate_delimiters_invalid() {
-            let flags = PasteFlags {
-                is_serial: false,
-                delimiters: "\\".to_string(),
-                files: vec!["file.txt".to_string()],
-                line_ending: CtLineEnding::Newline,
-            };
-            assert!(flags.validate_delimiters().is_err());
+            for delimiters in ["\\", "\\\\\\", "\\\\\\\\\\"] {
+                let flags = PasteFlags {
+                    is_serial: false,
+                    delimiters: delimiters.to_string(),
+                    files: vec!["file.txt".to_string()],
+                    line_ending: CtLineEnding::Newline,
+                };
+                assert!(flags.validate_delimiters().is_err());
+            }
         }
 
         #[test]

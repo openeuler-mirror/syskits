@@ -19,6 +19,7 @@ use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use std::ffi::CStr;
 use std::ffi::OsString;
+use std::io::Write;
 use sys_locale::get_locale;
 
 unsafe extern "C" {
@@ -26,16 +27,18 @@ unsafe extern "C" {
     pub fn getlogin() -> *const libc::c_char;
 }
 
-fn get_user_login() -> Option<String> {
+fn get_user_login_bytes() -> Option<Vec<u8>> {
     unsafe {
         let login_name: *const libc::c_char = getlogin();
         match login_name.is_null() {
             true => None,
-            false => {
-                Some(String::from_utf8_lossy(CStr::from_ptr(login_name).to_bytes()).to_string())
-            }
+            false => Some(CStr::from_ptr(login_name).to_bytes().to_vec()),
         }
     }
+}
+
+fn get_user_login() -> Option<String> {
+    get_user_login_bytes().map(|name| String::from_utf8_lossy(&name).into_owned())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -133,8 +136,13 @@ pub fn logname_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&lang_code);
     let _ = ct_app().try_get_matches_from(args)?;
 
-    match get_user_login() {
-        Some(userlogin) => println!("{userlogin}"),
+    match get_user_login_bytes() {
+        Some(userlogin) => {
+            let stdout = std::io::stdout();
+            let mut output = stdout.lock();
+            output.write_all(&userlogin).unwrap();
+            output.write_all(b"\n").unwrap();
+        }
         None => return Err(CtSimpleError::new(1, "no login name".to_string())),
     }
 

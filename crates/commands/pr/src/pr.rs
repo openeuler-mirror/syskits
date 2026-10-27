@@ -727,6 +727,10 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
+    let program_name = args
+        .first()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "pr".to_string());
     if let Some(stderr_text) = pr_early_option_error(&args) {
         return Ok(PrSemantic {
             rows: Vec::new(),
@@ -798,7 +802,7 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
         let options = match result_options {
             Ok(options) => options,
             Err(err) => {
-                semantic.stderr_text = pr_error_text(&matches, &err);
+                semantic.stderr_text = pr_error_text(&matches, &err, &program_name);
                 semantic.exit_code = 1;
                 return Ok(semantic);
             }
@@ -829,11 +833,11 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
             ) => {
                 semantic
                     .stderr_text
-                    .push_str(&pr_error_text(&matches, &error));
+                    .push_str(&pr_error_text(&matches, &error, &program_name));
                 semantic.exit_code = 1;
             }
             Err(error) => {
-                semantic.stderr_text = pr_error_text(&matches, &error);
+                semantic.stderr_text = pr_error_text(&matches, &error, &program_name);
                 semantic.exit_code = 1;
                 return Ok(semantic);
             }
@@ -1126,16 +1130,21 @@ fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
     recreated_args
 }
 
-fn pr_error_text(arg_matches: &ArgMatches, pr_err: &PrError) -> String {
+fn pr_error_text(arg_matches: &ArgMatches, pr_err: &PrError, program_name: &str) -> String {
     if arg_matches.get_flag(pr_flags::PR_NO_FILE_WARNINGS) {
         String::new()
-    } else if matches!(pr_err, PrError::EncounteredErrors(_)) {
-        format!(
-            "{pr_err}\nTry '{} --help' for more information.\n",
-            ctcore::ct_help_utility_name()
-        )
     } else {
-        format!("{pr_err}\n")
+        let rendered = pr_err.to_string();
+        let rendered = rendered
+            .strip_prefix("pr: ")
+            .map_or(rendered.clone(), |message| {
+                format!("{program_name}: {message}")
+            });
+        if matches!(pr_err, PrError::EncounteredErrors(_)) {
+            format!("{rendered}\nTry '{program_name} --help' for more information.\n")
+        } else {
+            format!("{rendered}\n")
+        }
     }
 }
 
@@ -6986,6 +6995,13 @@ mod tests {
         fn test_pr_numeric_value_trims_only_leading_ascii_whitespace() {
             assert_eq!(pr_numeric_value(" \t42"), "42");
             assert_eq!(pr_numeric_value("42 "), "42 ");
+        }
+
+        #[test]
+        fn test_pr_error_text_uses_actual_program_name() {
+            let matches = create_matches_with_args("");
+            let error = PrError::NotExists("missing".to_string());
+            assert!(pr_error_text(&matches, &error, "custom-pr").starts_with("custom-pr: "));
         }
 
         #[test]

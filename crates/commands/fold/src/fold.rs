@@ -711,8 +711,8 @@ pub fn ct_app() -> Command {
 
 /// 处理过时的参数。
 ///
-/// 该函数检查命令行参数列表，查找以单个连字符（-）开头且后跟数字的参数。
-/// 如果找到这样的参数，则将其改写为等价的 -wWIDTH，并保留原始顺序。
+/// 该函数检查命令行参数列表，查找过时的数字宽度短选项。
+/// 如果找到这样的参数，则将数字及其后缀改写为等价的 -wWIDTH，并保留前面的短选项簇。
 ///
 /// # 参数
 ///
@@ -739,7 +739,10 @@ fn handle_obsolete(args: &[OsString]) -> (Vec<OsString>, Option<String>) {
             continue;
         }
 
-        if let Some(width) = obsolete_width_arg(arg) {
+        if let Some((short_options, width)) = obsolete_width_arg(arg) {
+            if !short_options.is_empty() {
+                result.push(OsString::from(format!("-{short_options}")));
+            }
             result.push(OsString::from(format!("-w{width}")));
             obsolete = Some(width.to_owned());
         } else {
@@ -750,18 +753,19 @@ fn handle_obsolete(args: &[OsString]) -> (Vec<OsString>, Option<String>) {
     (result, obsolete)
 }
 
-fn obsolete_width_arg(arg: &OsStr) -> Option<&str> {
+fn obsolete_width_arg(arg: &OsStr) -> Option<(&str, &str)> {
     let arg = arg.to_str()?;
     if arg.starts_with("--") {
         return None;
     }
 
-    let width = arg.strip_prefix('-')?;
-    if width.chars().next().is_some_and(|c| c.is_ascii_digit()) {
-        Some(width)
-    } else {
-        None
-    }
+    let short_options_and_width = arg.strip_prefix('-')?;
+    let width_start = short_options_and_width.find(|character: char| character.is_ascii_digit())?;
+    let (short_options, width) = short_options_and_width.split_at(width_start);
+    short_options
+        .chars()
+        .all(|option| matches!(option, 'b' | 'c' | 's'))
+        .then_some((short_options, width))
 }
 
 /// 对文件内容进行折叠处理
@@ -1556,6 +1560,30 @@ mod tests {
             let (result, obsolete) = handle_obsolete(&args);
             assert_eq!(result, os_args(&["foo", " -1 ", "bar"]));
             assert_eq!(obsolete, None);
+        }
+
+        #[test]
+        fn handle_obsolete_preserves_boolean_short_option_cluster() {
+            for (argument, expected_options, expected_width) in [
+                ("-b5", "-b", "5"),
+                ("-c10", "-c", "10"),
+                ("-s10", "-s", "10"),
+                ("-bs10", "-bs", "10"),
+            ] {
+                let args = os_args(&["fold", argument, "input"]);
+                let (result, obsolete) = handle_obsolete(&args);
+
+                assert_eq!(
+                    result,
+                    os_args(&[
+                        "fold",
+                        expected_options,
+                        &format!("-w{expected_width}"),
+                        "input"
+                    ])
+                );
+                assert_eq!(obsolete.as_deref(), Some(expected_width));
+            }
         }
     }
 

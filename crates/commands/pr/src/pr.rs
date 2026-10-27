@@ -1225,13 +1225,16 @@ fn pr_build_options(
     paths: &[&str],
     args: &[String],
 ) -> Result<PrOutputOptions, PrError> {
-    let is_omit_pagination = pr_effective_omit_pagination(arg_matches, args);
+    let mut is_omit_pagination = pr_effective_omit_pagination(arg_matches, args);
     let number = parse_number(arg_matches)?;
     let (start_page, end_page) = parse_start_end_page(arg_matches, args)?;
     let offset_spaces = parse_offset_spaces(arg_matches)?;
 
     let is_form_feed_used = arg_matches.get_flag(pr_flags::PR_FORM_FEED);
     let page_length = parse_page_length(arg_matches, is_form_feed_used)?;
+    if page_length <= PR_HEADER_LINES_PER_PAGE + PR_TRAILER_LINES_PER_PAGE {
+        is_omit_pagination = false;
+    }
     let (is_display_header_and_trailer, content_lines_per_page) =
         parse_content_lines_per_page(arg_matches, page_length);
 

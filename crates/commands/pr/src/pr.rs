@@ -157,7 +157,7 @@ struct PrOutputOptions {
 #[derive(Debug)]
 struct PrFileLine {
     file_id: usize,
-    line_number: usize,
+    line_number: i64,
     page_number: usize,
     group_key: usize,
     line_content: Result<String, std::io::Error>,
@@ -216,7 +216,7 @@ pub struct PrSemanticRow {
     pub section: String,
     pub file: Option<String>,
     pub file_id: usize,
-    pub line_index: Option<usize>,
+    pub line_index: Option<i64>,
     pub group_key: usize,
     pub text: String,
 }
@@ -246,7 +246,7 @@ struct PrInputLines {
 struct PrNumberingMode {
     width: usize,
     separator: String,
-    first_number: usize,
+    first_number: i64,
 }
 
 impl Default for PrNumberingMode {
@@ -501,6 +501,7 @@ pub fn ct_app() -> Command {
             .short('N')
             .long(pr_flags::PR_FIRST_LINE_NUMBER)
             .help(t!("pr.clap.pr_first_line_number"))
+            .allow_hyphen_values(true)
             .value_name("NUMBER"),
         Arg::new(pr_flags::PR_OMIT_HEADER)
             .short('t')
@@ -968,8 +969,14 @@ fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
     let mut stop_rewrite = false;
     let mut page_option_seen = false;
     let mut valued_optional_options = String::new();
+    let mut preserve_as_option_value = false;
     for arg in args {
         let arg = arg.as_ref();
+        if preserve_as_option_value {
+            recreated_args.push(arg.to_os_string());
+            preserve_as_option_value = false;
+            continue;
+        }
         if stop_rewrite {
             recreated_args.push(arg.to_os_string());
             continue;
@@ -983,6 +990,12 @@ fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
             recreated_args.push(arg.to_os_string());
             continue;
         };
+
+        if arg == "-N" || arg == "--first-line-number" {
+            recreated_args.push(OsString::from(arg));
+            preserve_as_option_value = true;
+            continue;
+        }
 
         if arg == "--pages" || arg.starts_with("--pages=") {
             page_option_seen = true;
@@ -1436,6 +1449,12 @@ fn parse_column_mode_options(
             Ok(value)
         };
 
+        if token == "-N" || token == "--first-line-number" {
+            tokens.next();
+            old_style_digits.clear();
+            continue;
+        }
+
         if pr_is_numeric_option_cluster(token) {
             for byte in token.bytes().skip(1) {
                 if byte.is_ascii_digit() {
@@ -1692,8 +1711,7 @@ fn parse_content_line_separator(is_double_space: bool) -> String {
 
 fn parse_number(arg_matches: &ArgMatches) -> Result<Option<PrNumberingMode>, PrError> {
     let default_first_number = PrNumberingMode::default().first_number;
-    let first_number = pr_parse_usize(arg_matches, pr_flags::PR_FIRST_LINE_NUMBER)
-        .unwrap_or(Ok(default_first_number))?;
+    let first_number = pr_parse_first_line_number(arg_matches)?.unwrap_or(default_first_number);
 
     match arg_matches.get_one::<String>(pr_flags::PR_NUMBER_LINES) {
         Some(value) => parse_number_lines_value(value, first_number).map(Some),
@@ -1705,6 +1723,25 @@ fn parse_number(arg_matches: &ArgMatches) -> Result<Option<PrNumberingMode>, PrE
     }
 }
 
+fn pr_parse_first_line_number(arg_matches: &ArgMatches) -> Result<Option<i64>, PrError> {
+    let Some(value) = arg_matches.get_one::<String>(pr_flags::PR_FIRST_LINE_NUMBER) else {
+        return Ok(None);
+    };
+    let number = pr_numeric_value(value).parse::<i64>().map_err(|_| {
+        PrError::EncounteredErrors(format!(
+            "invalid -first-line-number argument {}",
+            value.quote()
+        ))
+    })?;
+    if number < i64::from(i32::MIN) || number > i64::from(i32::MAX) {
+        return Err(pr_bounded_usize_error(
+            pr_flags::PR_FIRST_LINE_NUMBER,
+            value,
+        ));
+    }
+    Ok(Some(number))
+}
+
 fn invalid_number_lines_arg(value: &str) -> PrError {
     PrError::EncounteredErrors(format!(
         "'-n' extra characters or invalid number in the argument: {}",
@@ -1712,7 +1749,7 @@ fn invalid_number_lines_arg(value: &str) -> PrError {
     ))
 }
 
-fn parse_number_lines_value(value: &str, first_number: usize) -> Result<PrNumberingMode, PrError> {
+fn parse_number_lines_value(value: &str, first_number: i64) -> Result<PrNumberingMode, PrError> {
     if value.is_empty() {
         return Err(PrError::EncounteredErrors(format!(
             "'-n': Invalid argument: {}",
@@ -3263,7 +3300,7 @@ fn render_join_lines_segments(
 }
 fn pr_get_formatted_line_number(
     output_opts: &PrOutputOptions,
-    line_number: usize,
+    line_number: i64,
     index: usize,
 ) -> String {
     let should_show_line_number =
@@ -3435,7 +3472,7 @@ fn pr_trailer_content(output_opts: &PrOutputOptions) -> Vec<String> {
 /// 返回要打印文件的起始行号。
 /// 如果指定了 -N，则第一行的行号会发生变化。
 /// 默认为 1。
-fn pr_get_start_line_number(output_opts: &PrOutputOptions) -> usize {
+fn pr_get_start_line_number(output_opts: &PrOutputOptions) -> i64 {
     output_opts
         .number
         .as_ref()
@@ -5167,7 +5204,7 @@ mod tests {
                 .iter()
                 .enumerate()
                 .map(|(i, &content)| PrFileLine {
-                    line_number: i + 1,
+                    line_number: i64::try_from(i + 1).unwrap(),
                     file_id: 0,
                     page_number: 0,
                     group_key: 0,
@@ -6656,6 +6693,14 @@ mod tests {
             assert_eq!(
                 pr_recreate_arguments(&["pr", "-n=3", "-s=", "-e=4", "-i="]),
                 vec!["pr", "-n==3", "-s==", "-e==4", "-i=="]
+            );
+        }
+
+        #[test]
+        fn test_pr_recreate_arguments_preserves_negative_first_line_number() {
+            assert_eq!(
+                pr_recreate_arguments(&["pr", "-N", "-3", "file.txt"]),
+                vec!["pr", "-N", "-3", "file.txt"]
             );
         }
 

@@ -1225,6 +1225,7 @@ fn pr_build_options(
     paths: &[&str],
     args: &[String],
 ) -> Result<PrOutputOptions, PrError> {
+    let is_omit_pagination = pr_effective_omit_pagination(arg_matches, args);
     let number = parse_number(arg_matches)?;
     let (start_page, end_page) = parse_start_end_page(arg_matches, args)?;
     let offset_spaces = parse_offset_spaces(arg_matches)?;
@@ -1302,12 +1303,33 @@ fn pr_build_options(
         line_width,
         show_control_chars: arg_matches.get_flag(pr_flags::PR_SHOW_CONTROL_CHARS),
         show_nonprinting: arg_matches.get_flag(pr_flags::PR_SHOW_NONPRINTING),
-        is_omit_pagination: arg_matches.get_flag("omit-pagination"),
+        is_omit_pagination,
         is_pad_columns,
         line_separator: "\n".to_string(),
         expand_tabs,
         output_tabs,
     })
+}
+
+fn pr_effective_omit_pagination(arg_matches: &ArgMatches, args: &[String]) -> bool {
+    let mut effective = None;
+    for arg in args.iter().skip(1).take_while(|arg| arg.as_str() != "--") {
+        match arg.as_str() {
+            "--omit-header" => effective = Some(false),
+            "--omit-pagination" => effective = Some(true),
+            arg if arg.starts_with('-') && !arg.starts_with("--") => {
+                for option in arg[1..].chars() {
+                    match option {
+                        't' => effective = Some(false),
+                        'T' => effective = Some(true),
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    effective.unwrap_or_else(|| arg_matches.get_flag("omit-pagination"))
 }
 
 fn parse_tab_args(arg_matches: &ArgMatches, name: &str) -> Result<Option<(char, usize)>, PrError> {
@@ -7017,6 +7039,18 @@ mod tests {
         fn test_omit_header_uses_full_page_length() {
             let matches = create_matches_with_args("-t -l 11");
             assert_eq!(parse_content_lines_per_page(&matches, 11), (false, 11));
+        }
+
+        #[test]
+        fn test_last_pagination_option_wins() {
+            let matches = create_matches_with_args("-T -t");
+            assert!(!pr_effective_omit_pagination(
+                &matches,
+                &build_args("-T -t")
+            ));
+
+            let matches = create_matches_with_args("-t -T");
+            assert!(pr_effective_omit_pagination(&matches, &build_args("-t -T")));
         }
         use clap::ArgMatches;
 

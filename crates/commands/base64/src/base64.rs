@@ -25,7 +25,7 @@ use sys_locale::get_locale;
 use ctcore::{
     Tool,
     ct_encoding::Format,
-    ct_error::{CTError, CTResult, FromIo},
+    ct_error::{CTError, CTResult, CtSimpleError, FromIo, strip_errno},
 };
 
 use std::ffi::OsString;
@@ -68,6 +68,20 @@ impl Tool for Base64 {
 }
 
 pub fn base64_main<W: std::io::Write>(args: impl ctcore::Args, mut writer: W) -> CTResult<()> {
+    base64_main_impl(args, &mut writer, false)
+}
+
+pub fn base64_cli_main(args: &[OsString]) -> CTResult<()> {
+    let stdout = std::io::stdout();
+    let mut writer = stdout.lock();
+    base64_main_impl(args.iter().cloned(), &mut writer, true)
+}
+
+fn base64_main_impl<W: std::io::Write>(
+    args: impl ctcore::Args,
+    mut writer: W,
+    close_stdin: bool,
+) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let format_mod = Format::Base64;
@@ -78,15 +92,48 @@ pub fn base64_main<W: std::io::Write>(args: impl ctcore::Args, mut writer: W) ->
 
     let stdin_info = stdin();
     let mut input_info: Box<dyn Read> = base_common::get_base_input(&config_mod, &stdin_info)?;
+    let uses_stdin = config_mod.base_to_read_os.is_none();
 
-    base_common::handle_base_input(
+    let result = base_common::handle_base_input(
         &mut input_info,
         &mut writer,
         format_mod,
         config_mod.base_wrap_cols,
         config_mod.base_ignore_garbage,
         config_mod.base_decode,
-    )
+    );
+    drop(input_info);
+
+    result?;
+    if close_stdin && uses_stdin && !ctcore::ct_io::has_injected_stdin() {
+        close_standard_input().map_err(|error| {
+            CtSimpleError::new(
+                1,
+                format!("closing standard input: {}", strip_errno(&error)),
+            )
+        })?;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    #[link_name = "stdin"]
+    static mut C_STDIN: *mut ctcore::libc::FILE;
+}
+
+#[cfg(target_os = "linux")]
+fn close_standard_input() -> std::io::Result<()> {
+    if unsafe { ctcore::libc::fclose(C_STDIN) } == ctcore::libc::EOF {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn close_standard_input() -> std::io::Result<()> {
+    Ok(())
 }
 
 fn base64_render_error_text(err: &dyn CTError) -> String {

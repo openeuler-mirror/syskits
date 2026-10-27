@@ -16,7 +16,6 @@ fn write_stderr(args: std::fmt::Arguments<'_>) {
 }
 
 pub fn main() {
-    use ctcore::Tool;
     use std::io::Write;
 
     ctcore::ct_panic::ct_mute_set_panic_hook();
@@ -24,8 +23,7 @@ pub fn main() {
     let _ = ctcore::ct_signals::enable_pipe_errors();
 
     let args = ctcore::ct_os_args().collect::<Vec<_>>();
-    let tool = ct_base64::Base64::default();
-    let result = tool.execute(&args);
+    let result = ct_base64::base64_cli_main(&args);
     let mut write_error_reported = false;
     let mut code = match result {
         Ok(()) => ctcore::ct_error::get_ct_exit_code(),

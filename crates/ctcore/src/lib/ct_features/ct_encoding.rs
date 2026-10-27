@@ -401,10 +401,7 @@ impl<R: Read> Data<R> {
                             }
                             char_buf.drain(..8);
                         } else {
-                            let mut block = char_buf[..block_size].to_vec();
-                            if matches!(format, Base16) {
-                                block.make_ascii_uppercase();
-                            }
+                            let block = char_buf[..block_size].to_vec();
                             if matches!(format, Base64 | Base64Url) {
                                 if !decode_base64_quantum(format, &block, &mut *writer)
                                     .map_err(CtDecodeError::WriteError)?
@@ -457,7 +454,9 @@ impl<R: Read> Data<R> {
 
             for &c in &read_buf[..n] {
                 if self.ignore_garbage {
-                    if self.alphabet.contains(&c) {
+                    if self.alphabet.contains(&c)
+                        && !(matches!(format, Base16) && c.is_ascii_lowercase())
+                    {
                         char_buf.push(c);
                     }
                 } else if c != b'\n' {
@@ -480,10 +479,6 @@ impl<R: Read> Data<R> {
             // missing padding for an unfilled tail: it is invalid input and
             // must not produce a partial decoded byte.
             return Err(invalid_input().into());
-        }
-
-        if matches!(self.format, Base16) {
-            char_buf.make_ascii_uppercase();
         }
 
         if matches!(self.format, Base64 | Base64Url) {
@@ -993,6 +988,17 @@ mod test {
         let mut out = Vec::new();
         assert!(data.decode(&mut out).is_err());
         assert_eq!(out, vec![0x88]);
+    }
+
+    #[test]
+    fn test_data_decode_base16_rejects_lowercase() {
+        for ignore_garbage in [false, true] {
+            let mut data =
+                Data::new(Cursor::new(b"6a"), Format::Base16).ignore_garbage(ignore_garbage);
+            let mut out = Vec::new();
+            assert!(data.decode(&mut out).is_err());
+            assert!(out.is_empty());
+        }
     }
 
     #[test]

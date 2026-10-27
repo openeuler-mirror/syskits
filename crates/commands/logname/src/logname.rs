@@ -16,7 +16,7 @@ use clap::{Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError};
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
 use std::ffi::{CStr, OsStr, OsString};
 use std::io::Write;
@@ -71,8 +71,59 @@ fn quote_logname_operand(operand: &OsStr) -> String {
     )
 }
 
+fn gnu_logname_option_error(args: &[OsString]) -> Option<Box<dyn CTError>> {
+    const LONG_OPTIONS: [&[u8]; 2] = [b"help", b"version"];
+
+    for argument in args.iter().skip(1) {
+        let bytes = argument.as_os_str().as_bytes();
+        if bytes == b"--" || bytes == b"-" || !bytes.starts_with(b"-") {
+            break;
+        }
+
+        if let Some(long_argument) = bytes.strip_prefix(b"--") {
+            let value_index = long_argument.iter().position(|byte| *byte == b'=');
+            let name = &long_argument[..value_index.unwrap_or(long_argument.len())];
+            let matches = LONG_OPTIONS
+                .iter()
+                .copied()
+                .filter(|option| !name.is_empty() && option.starts_with(name))
+                .collect::<Vec<_>>();
+            let Some(option) = matches.first() else {
+                let argument = std::str::from_utf8(bytes).ok()?;
+                return Some(CTsageError::new(
+                    1,
+                    format!("unrecognized option '{argument}'"),
+                ));
+            };
+            if value_index.is_some() {
+                let option = std::str::from_utf8(option).expect("GNU option names are ASCII");
+                return Some(CTsageError::new(
+                    1,
+                    format!("option '--{option}' doesn't allow an argument"),
+                ));
+            }
+
+            // GNU exits as soon as --help or --version is recognized.
+            return None;
+        }
+
+        let invalid = bytes[1];
+        if invalid.is_ascii() && bytes != b"-h" && bytes != b"-V" {
+            return Some(CTsageError::new(
+                1,
+                format!("invalid option -- '{}'", invalid as char),
+            ));
+        }
+        return None;
+    }
+    None
+}
+
 fn parse_logname_args(args: impl ctcore::Args) -> CTResult<()> {
     let args: Vec<_> = args.collect();
+    if let Some(error) = gnu_logname_option_error(&args) {
+        return Err(error);
+    }
     match ct_app().try_get_matches_from(args.clone()) {
         Ok(_) => Ok(()),
         Err(error) if error.kind() == clap::error::ErrorKind::UnknownArgument => {

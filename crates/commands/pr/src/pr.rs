@@ -2763,7 +2763,7 @@ fn pr_write_multicolumn_table(
                 .rposition(|cell| cell.is_some())
                 .map(|i| i + 1)
                 .unwrap_or(0)
-        } else if output_opts.merge_files_print.is_some() || across_mode {
+        } else if output_opts.merge_files_print.is_some() {
             columns
         } else {
             row.iter()

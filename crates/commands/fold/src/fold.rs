@@ -270,7 +270,7 @@ pub struct FoldSemantic {
 }
 
 struct FoldRunOutcome {
-    stderr_text: String,
+    stderr_bytes: Vec<u8>,
     exit_code: i32,
 }
 
@@ -823,8 +823,8 @@ fn fold_option_consumes_next_argument(argument: &[u8]) -> bool {
 /// - 如果折叠成功，返回`Ok(())`；如果发生错误，返回`Err`。
 fn fold<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResult<()> {
     let outcome = fold_with_writer(writer, fold_flags)?;
-    if !outcome.stderr_text.is_empty() {
-        eprint!("{}", outcome.stderr_text);
+    if !outcome.stderr_bytes.is_empty() {
+        std::io::stderr().write_all(&outcome.stderr_bytes)?;
     }
     if outcome.exit_code != 0 {
         set_ct_exit_code(outcome.exit_code);
@@ -833,7 +833,7 @@ fn fold<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResult<()> {
 }
 
 fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResult<FoldRunOutcome> {
-    let mut stderr_text = String::new();
+    let mut stderr_bytes = Vec::new();
     let mut exit_code = 0;
 
     for filename in &fold_flags.files {
@@ -850,8 +850,11 @@ fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResul
                         std::io::ErrorKind::PermissionDenied => "Permission denied".to_string(),
                         _ => e.to_string(),
                     };
-                    let filename = filename.to_string_lossy();
-                    stderr_text.push_str(&format!("fold: {filename}: {error_msg}\n"));
+                    stderr_bytes.extend_from_slice(b"fold: ");
+                    stderr_bytes.extend_from_slice(filename.as_os_str().as_encoded_bytes());
+                    stderr_bytes.extend_from_slice(b": ");
+                    stderr_bytes.extend_from_slice(error_msg.as_bytes());
+                    stderr_bytes.push(b'\n');
                     continue;
                 }
             }
@@ -872,13 +875,16 @@ fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResul
 
         let outcome = fold_file_generic(writer, buffer, spaces, width, mode)?;
         if let Some(error) = outcome.read_error {
-            let filename = filename.to_string_lossy();
-            stderr_text.push_str(&format!("fold: {filename}: {}\n", strip_errno(&error)));
+            stderr_bytes.extend_from_slice(b"fold: ");
+            stderr_bytes.extend_from_slice(filename.as_os_str().as_encoded_bytes());
+            stderr_bytes.extend_from_slice(b": ");
+            stderr_bytes.extend_from_slice(strip_errno(&error).as_bytes());
+            stderr_bytes.push(b'\n');
             exit_code = 1;
         }
     }
     Ok(FoldRunOutcome {
-        stderr_text,
+        stderr_bytes,
         exit_code,
     })
 }
@@ -922,7 +928,7 @@ pub fn fold_native_semantic(args: impl ctcore::Args) -> CTResult<FoldSemantic> {
         rows: fold_rows_from_output(&classic_text),
         classic_text,
         classic_bytes: classic_output,
-        stderr_text: outcome.stderr_text,
+        stderr_text: String::from_utf8_lossy(&outcome.stderr_bytes).into_owned(),
         exit_code: outcome.exit_code,
     })
 }
@@ -1781,6 +1787,28 @@ mod tests {
             fold_main(&mut writer, [OsString::from("fold"), path].into_iter())?;
 
             assert_eq!(writer, b"invalid-name-content\n");
+            Ok(())
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn fold_missing_file_diagnostic_preserves_non_utf8_filename() -> CTResult<()> {
+            use std::os::unix::ffi::OsStringExt;
+
+            let filename = OsString::from_vec(b"./missing-\xff".to_vec());
+            let flags = FoldFlags {
+                bytes: false,
+                characters: false,
+                spaces: false,
+                width: 80,
+                files: vec![filename],
+            };
+            let outcome = fold_with_writer(&mut Vec::new(), &flags)?;
+
+            assert_eq!(
+                outcome.stderr_bytes,
+                b"fold: ./missing-\xff: No such file or directory\n"
+            );
             Ok(())
         }
 

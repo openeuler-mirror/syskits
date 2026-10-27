@@ -467,15 +467,26 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
                     let remaining = output[blank_pos..].to_vec();
                     output = remaining;
 
-                    let column_adjustment = if is_cr_after_last_blank {
-                        last_blank_increment
+                    if single_byte_locale && mode != CountMode::Bytes {
+                        column = output.iter().fold(0usize, |column, byte| match *byte {
+                            b'\x08' => column.saturating_sub(1),
+                            b'\r' => 0,
+                            b'\t' => column
+                                .checked_add(FOLD_TAB_WIDTH - column % FOLD_TAB_WIDTH)
+                                .unwrap_or(usize::MAX),
+                            _ => column.checked_add(1).unwrap_or(usize::MAX),
+                        });
                     } else {
-                        bs_following_last_blank_num
-                    };
-                    // GNU performs this expression with size_t arithmetic.
-                    column = column
-                        .wrapping_sub(last_blank_column)
-                        .wrapping_add(column_adjustment);
+                        let column_adjustment = if is_cr_after_last_blank {
+                            last_blank_increment
+                        } else {
+                            bs_following_last_blank_num
+                        };
+                        // GNU performs this expression with size_t arithmetic.
+                        column = column
+                            .wrapping_sub(last_blank_column)
+                            .wrapping_add(column_adjustment);
+                    }
                     last_blank_pos = None;
                     last_blank_column = 0;
                     last_blank_increment = 0;
@@ -1704,6 +1715,22 @@ mod tests {
             )?;
 
             assert_eq!(writer, b"a \n\r\n\t");
+            Ok(())
+        }
+
+        #[test]
+        fn fold_single_byte_space_split_recomputes_column_after_cr() -> CTResult<()> {
+            let mut writer = Vec::new();
+            fold_file_multibyte_unified(
+                &mut writer,
+                BufReader::new(b"a bc\rdefgh".as_slice()),
+                true,
+                4,
+                CountMode::Columns,
+                true,
+            )?;
+
+            assert_eq!(writer, b"a \nbc\rdefg\nh");
             Ok(())
         }
 

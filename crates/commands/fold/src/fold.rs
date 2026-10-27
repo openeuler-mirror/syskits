@@ -633,6 +633,9 @@ fn parse_fold_width(width: Option<&str>) -> CTResult<usize> {
     let Some(width) = width else {
         return Ok(80);
     };
+    let numeric_width = width.trim_start_matches(|character: char| {
+        matches!(character, ' ' | '\t' | '\n' | '\r' | '\x0b' | '\x0c')
+    });
     let value_too_large = || {
         CtSimpleError::new(
             1,
@@ -640,14 +643,16 @@ fn parse_fold_width(width: Option<&str>) -> CTResult<usize> {
         )
     };
 
-    match width.parse::<usize>() {
+    match numeric_width.parse::<usize>() {
         Ok(0) => Err(CtSimpleError::new(
             1,
             format!("invalid number of columns: '{width}': Numerical result out of range"),
         )),
         Ok(width) if width <= FOLD_MAX_WIDTH => Ok(width),
         Ok(_) => Err(value_too_large()),
-        Err(_) if !width.is_empty() && width.chars().all(|c| c.is_ascii_digit()) => {
+        Err(_)
+            if !numeric_width.is_empty() && numeric_width.chars().all(|c| c.is_ascii_digit()) =>
+        {
             Err(value_too_large())
         }
         Err(_) => Err(CtSimpleError::new(
@@ -1551,6 +1556,21 @@ mod tests {
             let (result, obsolete) = handle_obsolete(&args);
             assert_eq!(result, os_args(&["foo", " -1 ", "bar"]));
             assert_eq!(obsolete, None);
+        }
+    }
+
+    #[cfg(test)]
+    mod parse_fold_width_tests {
+        use super::*;
+
+        #[test]
+        fn accepts_leading_ascii_whitespace() {
+            assert_eq!(parse_fold_width(Some(" \t\n\r\x0b\x0c8")).unwrap(), 8);
+        }
+
+        #[test]
+        fn rejects_trailing_ascii_whitespace() {
+            assert!(parse_fold_width(Some("8 ")).is_err());
         }
     }
 

@@ -24,17 +24,10 @@ fn write_error(program_name: &std::ffi::OsStr, message: &str) {
 
 fn write_usage(program_name: &std::ffi::OsStr) {
     use std::io::Write;
-    use std::os::unix::ffi::OsStrExt;
 
     std::io::stderr()
         .lock()
-        .write_all(b"Try '")
-        .and_then(|_| std::io::stderr().lock().write_all(program_name.as_bytes()))
-        .and_then(|_| {
-            std::io::stderr()
-                .lock()
-                .write_all(b" --help' for more information.\n")
-        })
+        .write_all(&ct_logname::logname_usage_message(program_name))
         .unwrap();
 }
 

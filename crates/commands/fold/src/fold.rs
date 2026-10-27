@@ -452,7 +452,7 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
                 if uses_column_rules && !convfail && wide_char == libc::wchar_t::from(b'\x08') {
                     column.saturating_sub(1)
                 } else {
-                    column + increment
+                    column.checked_add(increment).unwrap_or(usize::MAX)
                 };
 
             // 检查是否会超过宽度
@@ -1688,6 +1688,22 @@ mod tests {
             )?;
 
             assert_eq!(writer.output, b"x\n");
+            Ok(())
+        }
+
+        #[test]
+        fn fold_single_byte_space_cr_tab_rescans_after_wrapped_column() -> CTResult<()> {
+            let mut writer = Vec::new();
+            fold_file_multibyte_unified(
+                &mut writer,
+                BufReader::new(b"a \r\t".as_slice()),
+                true,
+                4,
+                CountMode::Columns,
+                true,
+            )?;
+
+            assert_eq!(writer, b"a \n\r\n\t");
             Ok(())
         }
 

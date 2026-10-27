@@ -101,7 +101,9 @@ impl BaseConfig {
 fn parse_wrap_cols(num: &str) -> CTResult<usize> {
     // xstrtoimax, used by GNU base32, accepts leading ASCII whitespace and
     // an optional sign.  Its caller rejects negative values except -0.
-    let number = num.trim_start_matches(|c: char| c.is_ascii_whitespace());
+    let number = num.trim_start_matches(|c: char| {
+        c.is_ascii_whitespace() || c == '\u{0b}'
+    });
     let (negative, digits) = match number.as_bytes().first() {
         Some(b'+') => (false, &number[1..]),
         Some(b'-') => (true, &number[1..]),
@@ -661,6 +663,7 @@ mod test {
     fn test_parse_wrap_cols_accepts_leading_whitespace_and_negative_zero() {
         assert_eq!(parse_wrap_cols(" 1").unwrap(), 1);
         assert_eq!(parse_wrap_cols("\t+2").unwrap(), 2);
+        assert_eq!(parse_wrap_cols("\u{0b}3").unwrap(), 3);
         assert_eq!(parse_wrap_cols("-0").unwrap(), 0);
         assert_eq!(parse_wrap_cols("-00").unwrap(), 0);
     }

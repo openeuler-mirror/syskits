@@ -557,6 +557,7 @@ mod test {
     use std::ffi::OsString;
     use std::fs;
     use std::fs::File;
+    use std::os::unix::ffi::OsStringExt;
 
     use clap::error::ErrorKind;
     use std::io::{self, Write};
@@ -608,6 +609,19 @@ mod test {
             error.contains("invalid wrap size"),
             "unexpected error: {error}"
         );
+    }
+
+    #[test]
+    fn test_basenc_non_utf8_wrap_value_preserves_raw_byte() {
+        let args = vec![
+            OsString::from(ctcore::ct_util_name()),
+            OsString::from("--base64"),
+            OsString::from("--wrap"),
+            OsString::from_vec(vec![0xff]),
+        ];
+        let result = basenc_parse_cmd_args(args.into_iter());
+        let error = result.err().expect("non-UTF-8 wrap must be rejected");
+        assert_eq!(error.to_string(), "invalid wrap size: '\\377'");
     }
 
     // 创建文件并写入内容

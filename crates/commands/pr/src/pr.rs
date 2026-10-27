@@ -1265,7 +1265,9 @@ fn pr_build_options(
     let is_merge_mode = parse_merge_mode(arg_matches, column_mode_options.as_ref())?;
 
     let is_pad_columns = (arg_matches.contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR)
-        || !arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR))
+        || !arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
+        || arg_matches.contains_id(pr_flags::PR_COLUMN_WIDTH)
+        || arg_matches.contains_id(pr_flags::PR_PAGE_WIDTH))
         && !is_join_lines;
     let expand_tabs = parse_tab_args(arg_matches, "expand-tabs")?;
     let expand_tabs =

@@ -126,6 +126,14 @@ fn tsort_error_detail(error: &std::io::Error) -> String {
     strip_errno(error)
 }
 
+pub fn tsort_write_error_message(error: &std::io::Error) -> String {
+    format!(
+        "{}: {}",
+        tsort_gettext("write error"),
+        tsort_error_detail(error)
+    )
+}
+
 fn tsort_program_name(args: &[OsString]) -> &[u8] {
     args.first()
         .map(|name| name.as_os_str().as_encoded_bytes())
@@ -247,7 +255,8 @@ pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
     for event in &outcome.output_events {
         match event {
             TsortOutputEvent::Stdout(range) => {
-                write_tsort_output(&mut stdout, &outcome.classic_bytes[range.clone()])?;
+                write_tsort_output(&mut stdout, &outcome.classic_bytes[range.clone()])
+                    .map_err(|error| CtSimpleError::new(1, tsort_write_error_message(&error)))?;
             }
             TsortOutputEvent::Stderr(range) => {
                 write_tsort_output(&mut stderr, &outcome.stderr_bytes[range.clone()])?;

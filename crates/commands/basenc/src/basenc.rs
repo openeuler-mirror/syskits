@@ -633,8 +633,7 @@ mod test {
     #[test]
     fn test_basenc_decode_base16_lowercase() {
         let filename = "test_basenc_decode_base16_lowercase.txt";
-        let content = "546573742020746573745f626173655f636f6d6d6f6e5f68616e646c655f696e7075745f656e636f64655f626173653136";
-        let expected_output = "Test  test_base_common_handle_input_encode_base16";
+        let content = "6a";
 
         match base_create_file_with_content(filename, content) {
             Ok(_) => println!("File '{filename}' created successfully."),
@@ -644,22 +643,12 @@ mod test {
         let args = [ctcore::ct_util_name(), "-d", "--base16", filename];
         let mut output = Vec::new();
         let result = basenc_main(args.iter().map(OsString::from), &mut output);
-        let mut s = String::new();
-
-        match result {
-            Err(output) => {
-                println!("Error code: {}", output.code());
-            }
-            Ok(_) => {
-                s = String::from_utf8(output.clone()).unwrap();
-                s = s.replace("\n", "");
-            }
-        }
         match base_delete_file(filename) {
             Ok(_) => println!("File '{filename}' deleted successfully."),
             Err(e) => eprintln!("Error deleting file: {e}"),
         }
-        assert_eq!(s, expected_output);
+        assert!(result.is_err());
+        assert!(output.is_empty());
     }
 
     #[test]

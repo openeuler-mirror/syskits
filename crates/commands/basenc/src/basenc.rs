@@ -558,6 +558,7 @@ mod test {
     use std::fs;
     use std::fs::File;
     use std::os::unix::ffi::OsStringExt;
+    use std::path::Path;
 
     use clap::error::ErrorKind;
     use std::io::{self, Write};
@@ -635,6 +636,34 @@ mod test {
         let result = basenc_parse_cmd_args(args.into_iter());
         let error = result.err().expect("extra operand must be rejected");
         assert_eq!(error.to_string(), "extra operand 'extra-\\377'");
+    }
+
+    #[test]
+    fn test_basenc_non_utf8_file_operand_uses_raw_linux_path() {
+        let existing = OsString::from_vec(b"test-basenc-input-\xff".to_vec());
+        let missing = OsString::from_vec(b"test-basenc-missing-\xff".to_vec());
+        fs::write(Path::new(&existing), b"abc").expect("create non-UTF-8 file");
+
+        let mut output = Vec::new();
+        let existing_args = vec![
+            OsString::from(ctcore::ct_util_name()),
+            OsString::from("--base64"),
+            existing.clone(),
+        ];
+        let result = basenc_main(existing_args.into_iter(), &mut output);
+        assert!(result.is_ok());
+        assert_eq!(output, b"YWJj\n");
+        fs::remove_file(Path::new(&existing)).expect("remove non-UTF-8 file");
+
+        let missing_args = vec![
+            OsString::from(ctcore::ct_util_name()),
+            OsString::from("--base64"),
+            missing,
+        ];
+        let result = basenc_main(missing_args.into_iter(), Vec::new());
+        let error = result.err().expect("missing non-UTF-8 file must fail");
+        assert!(error.to_string().contains("test-basenc-missing-"));
+        assert!(error.to_string().contains("\\377"));
     }
 
     // 创建文件并写入内容

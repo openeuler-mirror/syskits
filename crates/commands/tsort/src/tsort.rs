@@ -139,6 +139,29 @@ fn tsort_diagnostic(program_name: &[u8], message: &[u8]) -> Vec<u8> {
     diagnostic
 }
 
+fn tsort_read_error_diagnostic(
+    program_name: &[u8],
+    input_file: &OsStr,
+    error: &std::io::Error,
+) -> Vec<u8> {
+    let quoted_file = quote_tsort_filename(input_file);
+    let mut message = tsort_format_message("%s: read error", &[quoted_file.as_bytes()]);
+    message.extend_from_slice(b": ");
+    message.extend_from_slice(tsort_error_detail(error).as_bytes());
+    tsort_diagnostic(program_name, &message)
+}
+
+#[cfg(target_os = "linux")]
+fn tsort_stdin_is_unreadable() -> bool {
+    let flags = unsafe { libc::fcntl(libc::STDIN_FILENO, libc::F_GETFL) };
+    flags < 0 || flags & libc::O_ACCMODE == libc::O_WRONLY
+}
+
+#[cfg(not(target_os = "linux"))]
+fn tsort_stdin_is_unreadable() -> bool {
+    false
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TsortRow {
     pub row_index: usize,
@@ -393,26 +416,24 @@ fn tsort_error_bytes_outcome(stderr_bytes: Vec<u8>, had_cycle: bool) -> TsortRun
 
 fn tsort_read_input(input_file: &OsStr, program_name: &[u8]) -> Result<Vec<u8>, Vec<u8>> {
     let mut input: Box<dyn Read> = if input_file == OsStr::new("-") {
-        if ctcore::ct_stdin_was_closed() && !ctcore::ct_io::has_injected_stdin() {
-            let quoted_file = quote_tsort_filename(input_file);
-            let mut message = tsort_format_message("%s: read error", &[quoted_file.as_bytes()]);
-            message.extend_from_slice(b": ");
-            message.extend_from_slice(
-                tsort_error_detail(&std::io::Error::from_raw_os_error(libc::EBADF)).as_bytes(),
-            );
-            return Err(tsort_diagnostic(program_name, &message));
+        if (ctcore::ct_stdin_was_closed() || tsort_stdin_is_unreadable())
+            && !ctcore::ct_io::has_injected_stdin()
+        {
+            return Err(tsort_read_error_diagnostic(
+                program_name,
+                input_file,
+                &std::io::Error::from_raw_os_error(libc::EBADF),
+            ));
         }
         ctcore::ct_io::stdin_reader_box()
     } else {
         let path = Path::new(input_file);
         if path.is_dir() {
-            let quoted_file = quote_tsort_filename(input_file);
-            let mut message = tsort_format_message("%s: read error", &[quoted_file.as_bytes()]);
-            message.extend_from_slice(b": ");
-            message.extend_from_slice(
-                tsort_error_detail(&std::io::Error::from_raw_os_error(libc::EISDIR)).as_bytes(),
-            );
-            return Err(tsort_diagnostic(program_name, &message));
+            return Err(tsort_read_error_diagnostic(
+                program_name,
+                input_file,
+                &std::io::Error::from_raw_os_error(libc::EISDIR),
+            ));
         }
         Box::new(File::open(path).map_err(|err| {
             let message = format!(
@@ -427,7 +448,7 @@ fn tsort_read_input(input_file: &OsStr, program_name: &[u8]) -> Result<Vec<u8>, 
     let mut input_buffer = Vec::new();
     input
         .read_to_end(&mut input_buffer)
-        .map_err(|err| tsort_diagnostic(program_name, err.to_string().as_bytes()))?;
+        .map_err(|err| tsort_read_error_diagnostic(program_name, input_file, &err))?;
     Ok(input_buffer)
 }
 

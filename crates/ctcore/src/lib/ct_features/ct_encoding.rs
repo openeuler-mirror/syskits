@@ -57,6 +57,8 @@ pub enum Format {
 }
 use self::Format::*;
 
+const BASE64_DECODE_INPUT_BLOCK_SIZE: usize = 5600;
+
 const BASE2LSBF: Encoding = new_encoding! {
     symbols: "01",
     bit_order: LeastSignificantFirst,
@@ -375,8 +377,16 @@ impl<R: Read> Data<R> {
 
         let invalid_input = || io::Error::new(io::ErrorKind::InvalidData, "invalid input");
         let use_base32_compat = matches!(self.format, Base32 | Base32Hex);
+        let scan_base64url_block = self.format as u8 == Base64Url as u8 && !self.ignore_garbage;
         let format = self.format;
-        let mut read_buf = [0; 8192];
+        let mut read_buf = vec![
+            0;
+            if scan_base64url_block {
+                BASE64_DECODE_INPUT_BLOCK_SIZE
+            } else {
+                8192
+            }
+        ];
         let mut char_buf = Vec::with_capacity(8192);
         let process_complete_blocks =
             |char_buf: &mut Vec<u8>, writer: &mut W| -> Result<(), CtDecodeError> {
@@ -414,7 +424,20 @@ impl<R: Read> Data<R> {
             };
 
         loop {
-            let n = match self.input.read(&mut read_buf) {
+            let n = match if scan_base64url_block {
+                let mut filled = 0;
+                while filled < read_buf.len() {
+                    match self.input.read(&mut read_buf[filled..]) {
+                        Ok(0) => break,
+                        Ok(n) => filled += n,
+                        Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                        Err(e) => return Err(e.into()),
+                    }
+                }
+                Ok(filled)
+            } else {
+                self.input.read(&mut read_buf)
+            } {
                 Ok(0) => {
                     process_complete_blocks(&mut char_buf, &mut writer)?;
                     break;
@@ -427,6 +450,10 @@ impl<R: Read> Data<R> {
                 Err(e) => return Err(e.into()),
             };
 
+            if scan_base64url_block && read_buf[..n].iter().any(|c| matches!(c, b'+' | b'/')) {
+                return Err(invalid_input().into());
+            }
+
             for &c in &read_buf[..n] {
                 if self.ignore_garbage {
                     if self.alphabet.contains(&c) {
@@ -435,6 +462,10 @@ impl<R: Read> Data<R> {
                 } else if c != b'\n' {
                     char_buf.push(c);
                 }
+            }
+
+            if scan_base64url_block {
+                process_complete_blocks(&mut char_buf, &mut writer)?;
             }
         }
 
@@ -914,6 +945,24 @@ mod test {
             assert!(data.decode(&mut out).is_err());
             assert_eq!(out, b"f");
         }
+    }
+
+    #[test]
+    fn test_data_decode_base64url_rejects_forbidden_buffer_without_output() {
+        let mut data = Data::new(Cursor::new(b"Zm9vZg+/"), Format::Base64Url);
+        let mut out = Vec::new();
+        assert!(data.decode(&mut out).is_err());
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn test_data_decode_base64url_keeps_output_from_previous_input_block() {
+        let mut input = vec![b'A'; BASE64_DECODE_INPUT_BLOCK_SIZE];
+        input.extend_from_slice(b"Zg+/");
+        let mut data = Data::new(Cursor::new(input), Format::Base64Url);
+        let mut out = Vec::new();
+        assert!(data.decode(&mut out).is_err());
+        assert_eq!(out, vec![0; 4200]);
     }
 
     #[test]

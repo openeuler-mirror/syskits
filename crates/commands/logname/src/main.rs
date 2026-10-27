@@ -29,6 +29,26 @@ fn write_usage(program_name: &std::ffi::OsStr) {
         .write_all(&ct_logname::logname_usage_message(program_name));
 }
 
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    #[link_name = "stdout"]
+    static mut C_STDOUT: *mut ctcore::libc::FILE;
+}
+
+#[cfg(target_os = "linux")]
+fn close_standard_output() -> std::io::Result<()> {
+    if unsafe { ctcore::libc::fclose(C_STDOUT) } == ctcore::libc::EOF {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn close_standard_output() -> std::io::Result<()> {
+    Ok(())
+}
+
 pub fn main() {
     use ctcore::Tool;
     use std::io::Write;
@@ -61,6 +81,17 @@ pub fn main() {
     };
 
     if let Err(error) = std::io::stdout().flush() {
+        if !write_error_reported {
+            write_error(
+                program_name,
+                &format!("write error: {}", ctcore::ct_error::strip_errno(&error)),
+            );
+            write_error_reported = true;
+        }
+        code = 1;
+    }
+
+    if let Err(error) = close_standard_output() {
         if !write_error_reported {
             write_error(
                 program_name,

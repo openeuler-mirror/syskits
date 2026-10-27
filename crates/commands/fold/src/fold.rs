@@ -467,15 +467,19 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
                     let remaining = output[blank_pos..].to_vec();
                     output = remaining;
 
-                    if single_byte_locale && mode != CountMode::Bytes {
-                        column = output.iter().fold(0usize, |column, byte| match *byte {
-                            b'\x08' => column.saturating_sub(1),
-                            b'\r' => 0,
-                            b'\t' => column
-                                .checked_add(FOLD_TAB_WIDTH - column % FOLD_TAB_WIDTH)
-                                .unwrap_or(usize::MAX),
-                            _ => column.checked_add(1).unwrap_or(usize::MAX),
-                        });
+                    if single_byte_locale {
+                        column = if mode == CountMode::Bytes {
+                            output.len()
+                        } else {
+                            output.iter().fold(0usize, |column, byte| match *byte {
+                                b'\x08' => column.saturating_sub(1),
+                                b'\r' => 0,
+                                b'\t' => column
+                                    .checked_add(FOLD_TAB_WIDTH - column % FOLD_TAB_WIDTH)
+                                    .unwrap_or(usize::MAX),
+                                _ => column.checked_add(1).unwrap_or(usize::MAX),
+                            })
+                        };
                     } else {
                         let column_adjustment = if is_cr_after_last_blank {
                             last_blank_increment
@@ -1731,6 +1735,22 @@ mod tests {
             )?;
 
             assert_eq!(writer, b"a \nbc\rdefg\nh");
+            Ok(())
+        }
+
+        #[test]
+        fn fold_single_byte_byte_mode_recomputes_backspace_as_a_byte() -> CTResult<()> {
+            let mut writer = Vec::new();
+            fold_file_multibyte_unified(
+                &mut writer,
+                BufReader::new(b"\xaa\t\x08Cg".as_slice()),
+                true,
+                3,
+                CountMode::Bytes,
+                true,
+            )?;
+
+            assert_eq!(writer, b"\xaa\t\n\x08Cg");
             Ok(())
         }
 

@@ -223,7 +223,7 @@ impl Display for LognameRawDiagnostic {
                 .and_then(|_| stderr.write_all(&self.message))
                 .and_then(|_| stderr.write_all(b"\n"))
         };
-        result.and_then(|_| stderr.flush()).unwrap();
+        let _ = result.and_then(|_| stderr.flush());
         Ok(())
     }
 }

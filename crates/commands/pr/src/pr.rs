@@ -884,6 +884,34 @@ fn pr_split_optional_argument_cluster(arg: &str) -> Option<Vec<OsString>> {
     None
 }
 
+fn pr_optional_option_occurrence(arg: &str) -> Option<(char, bool)> {
+    let long_option = [
+        ("--number-lines", 'n'),
+        ("--expand-tabs", 'e'),
+        ("--output-tabs", 'i'),
+        ("--separator", 's'),
+    ];
+    for (name, option) in long_option {
+        if arg == name {
+            return Some((option, false));
+        }
+        if arg
+            .strip_prefix(name)
+            .is_some_and(|rest| rest.starts_with('='))
+        {
+            return Some((option, true));
+        }
+    }
+
+    let cluster = arg.strip_prefix('-')?;
+    for (index, option) in cluster.char_indices() {
+        if matches!(option, 'n' | 'e' | 'i' | 's') {
+            return Some((option, index + option.len_utf8() < cluster.len()));
+        }
+    }
+    None
+}
+
 fn pr_semantic_from_clap_error(error: clap::Error) -> PrSemantic {
     let rendered = error.to_string();
     if error.use_stderr() {
@@ -938,6 +966,7 @@ fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
     let mut recreated_args = Vec::with_capacity(args.len());
     let mut stop_rewrite = false;
     let mut page_option_seen = false;
+    let mut valued_optional_options = String::new();
     for arg in args {
         let arg = arg.as_ref();
         if stop_rewrite {
@@ -958,6 +987,15 @@ fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
             page_option_seen = true;
             recreated_args.push(OsString::from(arg));
             continue;
+        }
+
+        if let Some((option, has_value)) = pr_optional_option_occurrence(arg) {
+            if !has_value && valued_optional_options.contains(option) {
+                continue;
+            }
+            if has_value && !valued_optional_options.contains(option) {
+                valued_optional_options.push(option);
+            }
         }
 
         if let Some(split) = pr_split_optional_argument_cluster(arg) {
@@ -6522,6 +6560,26 @@ mod tests {
             assert_eq!(
                 pr_recreate_arguments(&["pr", "-te:4", "file.txt"]),
                 vec!["pr", "-t", "-e=:4", "file.txt"]
+            );
+        }
+
+        #[test]
+        fn test_pr_recreate_arguments_keeps_valued_optional_arguments() {
+            assert_eq!(
+                pr_recreate_arguments(&["pr", "-n:3", "-n", "file.txt"]),
+                vec!["pr", "-n=:3", "file.txt"]
+            );
+            assert_eq!(
+                pr_recreate_arguments(&["pr", "-e:4", "-e", "file.txt"]),
+                vec!["pr", "-e=:4", "file.txt"]
+            );
+            assert_eq!(
+                pr_recreate_arguments(&["pr", "-i:4", "-i", "file.txt"]),
+                vec!["pr", "-i=:4", "file.txt"]
+            );
+            assert_eq!(
+                pr_recreate_arguments(&["pr", "-s:", "-s", "file.txt"]),
+                vec!["pr", "-s=:", "file.txt"]
             );
         }
 

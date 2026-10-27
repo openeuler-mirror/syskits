@@ -508,7 +508,22 @@ impl<R: Read> Data<R> {
                     Ok(0) => break,
                     Ok(n) => n,
                     Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-                    Err(error) => return Err(CtEncodeError::ReadError(error)),
+                    Err(error) => {
+                        if buf_len > 0 {
+                            let encoded = encode(self.format, &buf[..buf_len])?;
+                            current_col = wrap_write_stream(
+                                &mut writer,
+                                self.line_wrap,
+                                &encoded,
+                                current_col,
+                            )
+                            .map_err(CtEncodeError::WriteError)?;
+                            if current_col > 0 && self.line_wrap > 0 {
+                                writeln!(writer).map_err(CtEncodeError::WriteError)?;
+                            }
+                        }
+                        return Err(CtEncodeError::ReadError(error));
+                    }
                 };
                 buf_len += n;
 
@@ -629,6 +644,21 @@ mod test {
     impl Read for AlwaysFailReader {
         fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
             Err(io::Error::new(io::ErrorKind::PermissionDenied, "Permission denied"))
+        }
+    }
+
+    struct ReadThenFail {
+        emitted: bool,
+    }
+
+    impl Read for ReadThenFail {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            if self.emitted {
+                return Err(io::Error::from_raw_os_error(libc::EIO));
+            }
+            self.emitted = true;
+            buf[..5].copy_from_slice(b"abcde");
+            Ok(5)
         }
     }
     #[test]
@@ -977,5 +1007,14 @@ mod test {
             result,
             Err(CtEncodeError::ReadError(error)) if error.kind() == io::ErrorKind::PermissionDenied
         ));
+    }
+
+    #[test]
+    fn test_data_encode_writes_partial_input_before_read_error() {
+        let mut data = Data::new(ReadThenFail { emitted: false }, Format::Base64);
+        let mut output = Vec::new();
+        let result = data.encode(&mut output);
+        assert!(matches!(result, Err(CtEncodeError::ReadError(_))));
+        assert_eq!(output, b"YWJjZGU=\n");
     }
 }

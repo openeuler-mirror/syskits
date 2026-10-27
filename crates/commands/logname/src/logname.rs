@@ -119,8 +119,39 @@ fn gnu_logname_option_error(args: &[OsString]) -> Option<Box<dyn CTError>> {
     None
 }
 
+fn normalize_logname_args(mut args: Vec<OsString>, posixly_correct: bool) -> Vec<OsString> {
+    if posixly_correct || args.len() < 3 {
+        return args;
+    }
+
+    let option_end = args
+        .iter()
+        .position(|argument| argument.as_os_str().as_bytes() == b"--")
+        .unwrap_or(args.len());
+    let mut reordered = Vec::with_capacity(args.len());
+    reordered.push(args.remove(0));
+
+    for argument in &args[..option_end - 1] {
+        let bytes = argument.as_os_str().as_bytes();
+        if bytes.len() > 1 && bytes.starts_with(b"-") {
+            reordered.push(argument.clone());
+        }
+    }
+    for argument in &args[..option_end - 1] {
+        let bytes = argument.as_os_str().as_bytes();
+        if bytes.len() <= 1 || !bytes.starts_with(b"-") {
+            reordered.push(argument.clone());
+        }
+    }
+    reordered.extend(args[option_end - 1..].iter().cloned());
+    reordered
+}
+
 fn parse_logname_args(args: impl ctcore::Args) -> CTResult<()> {
-    let args: Vec<_> = args.collect();
+    let args = normalize_logname_args(
+        args.collect(),
+        std::env::var_os("POSIXLY_CORRECT").is_some(),
+    );
     if let Some(error) = gnu_logname_option_error(&args) {
         return Err(error);
     }

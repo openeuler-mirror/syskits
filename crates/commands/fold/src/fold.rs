@@ -94,7 +94,7 @@ use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, set_ct_exit_code, strip_errno};
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
 use rust_i18n::t;
-use std::ffi::{OsStr, OsString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 use std::path::Path;
@@ -119,6 +119,15 @@ unsafe extern "C" {
     fn wcwidth(wide_char: libc::wchar_t) -> libc::c_int;
 }
 
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn bindtextdomain(
+        domainname: *const libc::c_char,
+        dirname: *const libc::c_char,
+    ) -> *mut libc::c_char;
+    fn dgettext(domainname: *const libc::c_char, msgid: *const libc::c_char) -> *mut libc::c_char;
+}
+
 #[cfg(target_env = "gnu")]
 unsafe extern "C" {
     fn __ctype_get_mb_cur_max() -> usize;
@@ -126,6 +135,45 @@ unsafe extern "C" {
 
 // 支持的语言环境
 rust_i18n::i18n!("locales", fallback = "en");
+
+fn fold_init_locale() {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    #[cfg(target_os = "linux")]
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+        bindtextdomain(c"coreutils".as_ptr(), c"/usr/share/locale".as_ptr());
+    }
+}
+
+fn fold_gettext(message: &str) -> String {
+    #[cfg(target_os = "linux")]
+    if let Ok(message_id) = CString::new(message) {
+        let translated = unsafe { dgettext(c"coreutils".as_ptr(), message_id.as_ptr()) };
+        if !translated.is_null() {
+            return unsafe { CStr::from_ptr(translated) }
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+
+    message.to_owned()
+}
+
+fn fold_error_detail(error: &std::io::Error) -> String {
+    #[cfg(target_os = "linux")]
+    if let Some(errno) = error.raw_os_error() {
+        let detail = unsafe { libc::strerror(errno) };
+        if !detail.is_null() {
+            return unsafe { CStr::from_ptr(detail) }
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+
+    strip_errno(error)
+}
 
 // 各种参数选项的常量定义
 mod fold_flags {
@@ -582,9 +630,7 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
 ///
 /// 返回一个Result，表示操作成功或失败
 pub fn fold_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()> {
-    // 设置语言
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    fold_init_locale();
     let raw_args = args.collect::<Vec<_>>();
     let (matches, obs_width) = match fold_arg_matches(raw_args.iter().cloned()) {
         Ok(m) => m,
@@ -703,7 +749,7 @@ fn quote_fold_width(width: &OsStr) -> String {
     escape_name(
         width,
         &CtQuotingStyle::C {
-            quotes: CtQuotes::Single,
+            quotes: CtQuotes::Locale,
         },
     )
 }
@@ -719,13 +765,10 @@ fn parse_fold_width(width: Option<&OsStr>) -> CTResult<usize> {
         .unwrap_or(width_bytes.len());
     let numeric_width = &width_bytes[numeric_start..];
     let quoted_width = quote_fold_width(width);
+    let invalid_columns = fold_gettext("invalid number of columns");
     let value_too_large = || {
-        CtSimpleError::new(
-            1,
-            format!(
-                "invalid number of columns: {quoted_width}: Value too large for defined data type"
-            ),
-        )
+        let detail = fold_error_detail(&std::io::Error::from_raw_os_error(libc::EOVERFLOW));
+        CtSimpleError::new(1, format!("{invalid_columns}: {quoted_width}: {detail}"))
     };
 
     let parsed_width = std::str::from_utf8(numeric_width)
@@ -734,7 +777,10 @@ fn parse_fold_width(width: Option<&OsStr>) -> CTResult<usize> {
     match parsed_width {
         Some(0) => Err(CtSimpleError::new(
             1,
-            format!("invalid number of columns: {quoted_width}: Numerical result out of range"),
+            format!(
+                "{invalid_columns}: {quoted_width}: {}",
+                fold_error_detail(&std::io::Error::from_raw_os_error(libc::ERANGE))
+            ),
         )),
         Some(width) if width <= FOLD_MAX_WIDTH => Ok(width),
         Some(_) => Err(value_too_large()),
@@ -743,7 +789,7 @@ fn parse_fold_width(width: Option<&OsStr>) -> CTResult<usize> {
         }
         None => Err(CtSimpleError::new(
             1,
-            format!("invalid number of columns: {quoted_width}"),
+            format!("{invalid_columns}: {quoted_width}"),
         )),
     }
 }
@@ -930,11 +976,7 @@ fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResul
             match File::open(Path::new(filename)) {
                 Ok(f) => Box::new(f) as Box<dyn Read>,
                 Err(e) => {
-                    let error_msg = match e.kind() {
-                        std::io::ErrorKind::NotFound => "No such file or directory".to_string(),
-                        std::io::ErrorKind::PermissionDenied => "Permission denied".to_string(),
-                        _ => e.to_string(),
-                    };
+                    let error_msg = fold_error_detail(&e);
                     stderr_bytes.extend_from_slice(b"fold: ");
                     stderr_bytes.extend_from_slice(filename.as_os_str().as_encoded_bytes());
                     stderr_bytes.extend_from_slice(b": ");
@@ -963,7 +1005,7 @@ fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResul
             stderr_bytes.extend_from_slice(b"fold: ");
             stderr_bytes.extend_from_slice(filename.as_os_str().as_encoded_bytes());
             stderr_bytes.extend_from_slice(b": ");
-            stderr_bytes.extend_from_slice(strip_errno(&error).as_bytes());
+            stderr_bytes.extend_from_slice(fold_error_detail(&error).as_bytes());
             stderr_bytes.push(b'\n');
             exit_code = 1;
         }
@@ -975,8 +1017,7 @@ fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResul
 }
 
 pub fn fold_native_semantic(args: impl ctcore::Args) -> CTResult<FoldSemantic> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    fold_init_locale();
     let mut os_args: Vec<OsString> = args.collect();
     fold_apply_posix_option_order(&mut os_args, std::env::var_os("POSIXLY_CORRECT").is_some());
     let (args, obs_width) = handle_obsolete(&os_args);
@@ -1766,8 +1807,12 @@ mod tests {
         fn quotes_non_utf8_width_bytes_in_numeric_error() {
             use std::os::unix::ffi::OsStrExt;
 
-            let error = parse_fold_width(Some(OsStr::from_bytes(b"\xff"))).unwrap_err();
-            assert_eq!(error.to_string(), "invalid number of columns: '\\377'");
+            let width = OsStr::from_bytes(b"\xff");
+            let error = parse_fold_width(Some(width)).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                format!("invalid number of columns: {}", quote_fold_width(width))
+            );
         }
     }
 

@@ -15,6 +15,26 @@ fn write_stderr(args: std::fmt::Arguments<'_>) {
     let _ = std::io::stderr().lock().write_fmt(args);
 }
 
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    #[link_name = "stdout"]
+    static mut C_STDOUT: *mut ctcore::libc::FILE;
+}
+
+#[cfg(target_os = "linux")]
+fn close_standard_output() -> std::io::Result<()> {
+    if unsafe { ctcore::libc::fclose(C_STDOUT) } == ctcore::libc::EOF {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn close_standard_output() -> std::io::Result<()> {
+    Ok(())
+}
+
 pub fn main() {
     use std::io::Write;
 
@@ -44,6 +64,18 @@ pub fn main() {
     };
 
     if let Err(err) = std::io::stdout().flush() {
+        if !write_error_reported {
+            write_stderr(format_args!(
+                "{}: write error: {}\n",
+                ctcore::ct_util_name(),
+                ctcore::ct_error::strip_errno(&err)
+            ));
+            write_error_reported = true;
+        }
+        code = 1;
+    }
+
+    if let Err(err) = close_standard_output() {
         if !write_error_reported {
             write_stderr(format_args!(
                 "{}: write error: {}\n",

@@ -3074,6 +3074,29 @@ fn pr_get_rendered_line_for_printing(
                 min_width += parallel_number_field_width.unwrap_or(0);
             }
 
+            if columns > 1
+                && output_opts.merge_files_print.is_none()
+                && !formatted_line_number.is_empty()
+            {
+                let content_width = min_width.saturating_sub(numbering_width).max(1);
+                let number_text = if index == 0 {
+                    formatted_line_number.clone()
+                } else {
+                    pr_take_display_suffix(
+                        &formatted_line_number,
+                        min_width.saturating_sub(content_width),
+                    )
+                };
+                let mut numbered = format!(
+                    "{number_text}{}",
+                    pr_take_display_width(&content, content_width, 8)
+                );
+                if should_pad && !is_string_sep && !has_no_separator {
+                    numbered.push(' ');
+                }
+                return Ok((numbered, false));
+            }
+
             if should_pad {
                 // For implicit separators (default tab/space), pad includes +1 for separator.
                 // For explicit string separators (-S), the separator is appended via `sep`, so no +1.
@@ -3203,6 +3226,20 @@ fn pr_take_display_width(s: &str, max_width: usize, tab_width: usize) -> String 
     }
 
     result
+}
+
+fn pr_take_display_suffix(s: &str, max_width: usize) -> String {
+    let mut width = 0usize;
+    let mut chars = Vec::new();
+    for c in s.chars().rev() {
+        let char_width = UnicodeWidthChar::width(c).unwrap_or(0);
+        if width + char_width > max_width {
+            break;
+        }
+        width += char_width;
+        chars.push(c);
+    }
+    chars.into_iter().rev().collect()
 }
 
 fn discard_backspace_underflow(s: &str, initial_col: usize) -> String {
@@ -7046,6 +7083,11 @@ mod tests {
         fn test_pr_numeric_value_trims_only_leading_ascii_whitespace() {
             assert_eq!(pr_numeric_value(" \t42"), "42");
             assert_eq!(pr_numeric_value("42 "), "42 ");
+        }
+
+        #[test]
+        fn test_pr_take_display_suffix_respects_width() {
+            assert_eq!(pr_take_display_suffix("    3   ", 4), "3   ");
         }
 
         #[test]

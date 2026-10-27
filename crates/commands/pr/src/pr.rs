@@ -1375,11 +1375,11 @@ fn parse_content_lines_per_page(arg_matches: &ArgMatches, page_length: usize) ->
         page_length <= (PR_HEADER_LINES_PER_PAGE + PR_TRAILER_LINES_PER_PAGE);
 
     let is_omit_pagination = arg_matches.get_flag("omit-pagination");
-    let is_display_header_and_trailer = !is_page_length_le_ht
-        && !arg_matches.get_flag(pr_flags::PR_OMIT_HEADER)
-        && !is_omit_pagination;
+    let is_omit_header = arg_matches.get_flag(pr_flags::PR_OMIT_HEADER);
+    let is_display_header_and_trailer =
+        !is_page_length_le_ht && !is_omit_header && !is_omit_pagination;
 
-    let content_lines_per_page = if is_page_length_le_ht || is_omit_pagination {
+    let content_lines_per_page = if is_page_length_le_ht || is_omit_header || is_omit_pagination {
         page_length
     } else {
         page_length - (PR_HEADER_LINES_PER_PAGE + PR_TRAILER_LINES_PER_PAGE)
@@ -7011,6 +7011,12 @@ mod tests {
 
             let matches = create_matches_with_args("-e=:2147483648");
             assert!(parse_tab_args(&matches, "expand-tabs").is_err());
+        }
+
+        #[test]
+        fn test_omit_header_uses_full_page_length() {
+            let matches = create_matches_with_args("-t -l 11");
+            assert_eq!(parse_content_lines_per_page(&matches, 11), (false, 11));
         }
         use clap::ArgMatches;
 

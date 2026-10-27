@@ -76,7 +76,10 @@ impl BaseConfig {
                 if let Some(extra_operand) = var.next() {
                     return Err(CTsageError::new(
                         BASE_CMD_PARSE_ERROR,
-                        format!("extra operand {}", extra_operand.as_os_str().quote()),
+                        format!(
+                            "extra operand {}",
+                            quote_base_diagnostic_argument(extra_operand)
+                        ),
                     ));
                 }
 
@@ -963,6 +966,20 @@ mod test {
             assert_eq!(error.to_string(), *expected, "arguments: {args:?}");
             assert!(error.usage());
         }
+    }
+
+    #[test]
+    fn test_extra_operand_quotes_non_utf8_bytes() {
+        let args = vec![
+            OsString::from("base32"),
+            OsString::from("input"),
+            OsString::from_vec(vec![0xff]),
+        ];
+        let error =
+            base_parsing_command_args(args.into_iter(), BASE32_ABOUT.into(), BASE32_USAGE.into())
+                .err()
+                .expect("the extra operand should be rejected");
+        assert_eq!(error.to_string(), "extra operand '\\377'");
     }
 
     struct FailRead {

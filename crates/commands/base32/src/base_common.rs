@@ -359,7 +359,7 @@ pub fn normalize_base_short_wrap_equals(mut args: Vec<OsString>) -> Vec<OsString
     args
 }
 
-fn normalize_base_args_for_posix(
+pub fn normalize_base_args_for_posix(
     base_args: impl ctcore::Args,
     posixly_correct: bool,
 ) -> Vec<OsString> {

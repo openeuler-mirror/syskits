@@ -134,6 +134,13 @@ pub fn tsort_write_error_message(error: &std::io::Error) -> String {
     )
 }
 
+pub fn is_tsort_write_error_message(message: &str) -> bool {
+    let prefix = tsort_gettext("write error");
+    message
+        .strip_prefix(&prefix)
+        .is_some_and(|suffix| suffix.starts_with(':'))
+}
+
 fn tsort_program_name(args: &[OsString]) -> &[u8] {
     args.first()
         .map(|name| name.as_os_str().as_encoded_bytes())

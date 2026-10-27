@@ -721,6 +721,15 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
+    if pr_has_invalid_bare_plus(&args) {
+        return Ok(PrSemantic {
+            rows: Vec::new(),
+            classic_text: String::new(),
+            classic_bytes: Vec::new(),
+            stderr_text: "pr: invalid + argument ''\n".to_string(),
+            exit_code: 1,
+        });
+    }
     let option_args = args
         .iter()
         .map(|arg| arg.to_string_lossy().into_owned())
@@ -817,6 +826,28 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
     }
 
     Ok(semantic)
+}
+
+fn pr_has_invalid_bare_plus<T: AsRef<OsStr>>(args: &[T]) -> bool {
+    let page_option_regex = Regex::new(r"^\+[1-9]\d*(?::\d*)?$").unwrap();
+    let mut page_option_seen = false;
+
+    for arg in args.iter().skip(1) {
+        let arg = arg.as_ref();
+        if arg == OsStr::new("--") {
+            break;
+        }
+        let Some(arg) = arg.to_str() else {
+            continue;
+        };
+        if arg == "+" && !page_option_seen {
+            return true;
+        }
+        if arg == "--pages" || arg.starts_with("--pages=") || page_option_regex.is_match(arg) {
+            page_option_seen = true;
+        }
+    }
+    false
 }
 
 fn pr_semantic_from_clap_error(error: clap::Error) -> PrSemantic {
@@ -6386,6 +6417,14 @@ mod tests {
                 result,
                 args.into_iter().map(OsString::from).collect::<Vec<_>>()
             );
+        }
+
+        #[test]
+        fn test_pr_has_invalid_bare_plus_before_page_option() {
+            assert!(pr_has_invalid_bare_plus(&["pr", "+", "file"]));
+            assert!(!pr_has_invalid_bare_plus(&["pr", "+1", "+", "file"]));
+            assert!(!pr_has_invalid_bare_plus(&["pr", "--pages=1", "+", "file"]));
+            assert!(!pr_has_invalid_bare_plus(&["pr", "--", "+"]));
         }
 
         #[test]

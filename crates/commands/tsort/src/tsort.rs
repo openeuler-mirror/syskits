@@ -51,6 +51,8 @@ unsafe extern "C" {
         dirname: *const libc::c_char,
     ) -> *mut libc::c_char;
     fn dgettext(domainname: *const libc::c_char, msgid: *const libc::c_char) -> *mut libc::c_char;
+    #[link_name = "stdin"]
+    static mut C_STDIN: *mut libc::FILE;
 }
 
 fn tsort_init_locale() {
@@ -157,6 +159,20 @@ fn tsort_stdin_is_unreadable() -> bool {
     flags < 0 || flags & libc::O_ACCMODE == libc::O_WRONLY
 }
 
+#[cfg(target_os = "linux")]
+fn close_standard_input() -> std::io::Result<()> {
+    if unsafe { libc::fclose(C_STDIN) } == libc::EOF {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn close_standard_input() -> std::io::Result<()> {
+    Ok(())
+}
+
 #[cfg(not(target_os = "linux"))]
 fn tsort_stdin_is_unreadable() -> bool {
     false
@@ -222,7 +238,7 @@ pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
         return Err(CtSimpleError::new(1, ""));
     }
 
-    let outcome = tsort_run(raw_args.into_iter())?;
+    let outcome = tsort_run_impl(raw_args.into_iter(), !cfg!(test))?;
     let stdout = std::io::stdout();
     let stderr = std::io::stderr();
     let mut stdout = stdout.lock();
@@ -261,12 +277,16 @@ pub fn tsort_native_semantic(args: impl ctcore::Args) -> CTResult<TsortSemantic>
 }
 
 fn tsort_run(args: impl ctcore::Args) -> CTResult<TsortRunOutcome> {
+    tsort_run_impl(args, false)
+}
+
+fn tsort_run_impl(args: impl ctcore::Args, close_stdin: bool) -> CTResult<TsortRunOutcome> {
     tsort_init_locale();
     let mut raw_args = args.collect::<Vec<_>>();
     tsort_apply_posix_option_order(&mut raw_args, std::env::var_os("POSIXLY_CORRECT").is_some());
     let program_name = tsort_program_name(&raw_args).to_vec();
     let matches = ct_app().try_get_matches_from(raw_args)?;
-    Ok(tsort_run_from_matches(&matches, &program_name))
+    Ok(tsort_run_from_matches(&matches, &program_name, close_stdin))
 }
 
 fn tsort_apply_posix_option_order(args: &mut Vec<OsString>, posixly_correct: bool) {
@@ -327,7 +347,11 @@ fn tsort_option_error_outcome(args: &[OsString]) -> Option<TsortRunOutcome> {
     None
 }
 
-fn tsort_run_from_matches(matches: &clap::ArgMatches, program_name: &[u8]) -> TsortRunOutcome {
+fn tsort_run_from_matches(
+    matches: &clap::ArgMatches,
+    program_name: &[u8],
+    close_stdin: bool,
+) -> TsortRunOutcome {
     let input_files: Vec<&OsString> = matches
         .get_many::<OsString>(tsort_flags::TSORT_FILE)
         .map(|v| v.collect())
@@ -376,7 +400,26 @@ fn tsort_run_from_matches(matches: &clap::ArgMatches, program_name: &[u8]) -> Ts
         graph.add_edge(chunk[0].clone(), chunk[1].clone());
     }
 
-    graph.tsort_exe_with_program(input_file, program_name)
+    let mut outcome = graph.tsort_exe_with_program(input_file, program_name);
+    if close_stdin
+        && !ctcore::ct_io::has_injected_stdin()
+        && let Err(error) = close_standard_input()
+    {
+        let input_label = if input_file == OsStr::new("-") {
+            tsort_gettext("standard input")
+        } else {
+            quote_tsort_filename(input_file)
+        };
+        let message = format!("{input_label}: {}", tsort_error_detail(&error));
+        push_tsort_stderr(
+            program_name,
+            &mut outcome.stderr_bytes,
+            &mut outcome.output_events,
+            message,
+        );
+        outcome.exit_code = 1;
+    }
+    outcome
 }
 
 pub fn ct_app() -> Command {

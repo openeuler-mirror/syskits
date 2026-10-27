@@ -867,7 +867,8 @@ fn pr_write_semantic_diagnostics(semantic: &PrSemantic) -> CTResult<()> {
 /// # 参数
 /// * `args` - 命令行参数
 fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
-    let column_page_option_regex = Regex::new(r"^[-+]\d+.*").unwrap();
+    let column_option_regex = Regex::new(r"^-\d+$").unwrap();
+    let page_option_regex = Regex::new(r"^\+[1-9]\d*(?::\d*)?$").unwrap();
 
     let mut recreated_args = Vec::with_capacity(args.len());
     let mut stop_rewrite = false;
@@ -907,7 +908,7 @@ fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
             }
         }
 
-        if column_page_option_regex.is_match(arg) {
+        if column_option_regex.is_match(arg) || page_option_regex.is_match(arg) {
             continue;
         }
 
@@ -6350,6 +6351,16 @@ mod tests {
             let result = pr_recreate_arguments(&args);
 
             assert_eq!(result, vec!["pr", "-t", "file.txt"]);
+        }
+
+        #[test]
+        fn test_pr_recreate_arguments_preserves_malformed_old_options() {
+            let args = vec!["pr", "-2x", "+2x", "+0", "file.txt"];
+            let result = pr_recreate_arguments(&args);
+            assert_eq!(
+                result,
+                args.into_iter().map(OsString::from).collect::<Vec<_>>()
+            );
         }
 
         #[test]

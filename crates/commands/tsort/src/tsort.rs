@@ -259,6 +259,7 @@ pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
     let mut stdout = stdout.lock();
     let mut stderr = stderr.lock();
     let mut stdout_error = None;
+    let mut stderr_error = None;
     let stdout_was_closed = ctcore::ct_stdout_was_closed();
 
     for event in &outcome.output_events {
@@ -275,12 +276,20 @@ pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
                 }
             }
             TsortOutputEvent::Stderr(range) => {
-                write_tsort_output(&mut stderr, &outcome.stderr_bytes[range.clone()])?;
+                if stderr_error.is_none()
+                    && let Err(error) =
+                        write_tsort_output(&mut stderr, &outcome.stderr_bytes[range.clone()])
+                {
+                    stderr_error = Some(error);
+                }
             }
         }
     }
     if outcome.exit_code != 0 {
         set_ct_exit_code(outcome.exit_code);
+    }
+    if stderr_error.is_some() {
+        set_ct_exit_code(1);
     }
     if let Some(error) = stdout_error {
         return Err(CtSimpleError::new(1, tsort_write_error_message(&error)));

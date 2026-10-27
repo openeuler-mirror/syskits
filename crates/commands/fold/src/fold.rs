@@ -92,6 +92,7 @@ use clap::error::ErrorKind;
 use clap::{Arg, ArgAction, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CtSimpleError, set_ct_exit_code, strip_errno};
+use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
 use rust_i18n::t;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -602,9 +603,9 @@ fn fold_flags_from_matches(
     matches: &clap::ArgMatches,
     obs_width: Option<String>,
 ) -> CTResult<FoldFlags> {
-    let width_arg = match matches.get_one::<String>(fold_flags::FOLD_WIDTH) {
-        Some(v) => Some(v.as_str()),
-        None => obs_width.as_deref(),
+    let width_arg = match matches.get_one::<OsString>(fold_flags::FOLD_WIDTH) {
+        Some(value) => Some(value.as_os_str()),
+        None => obs_width.as_deref().map(OsStr::new),
     };
     let width = parse_fold_width(width_arg)?;
 
@@ -630,35 +631,51 @@ fn fold_arg_matches(
     Ok((matches, obs_width))
 }
 
-fn parse_fold_width(width: Option<&str>) -> CTResult<usize> {
+fn quote_fold_width(width: &OsStr) -> String {
+    escape_name(
+        width,
+        &CtQuotingStyle::C {
+            quotes: CtQuotes::Single,
+        },
+    )
+}
+
+fn parse_fold_width(width: Option<&OsStr>) -> CTResult<usize> {
     let Some(width) = width else {
         return Ok(80);
     };
-    let numeric_width = width.trim_start_matches(|character: char| {
-        matches!(character, ' ' | '\t' | '\n' | '\r' | '\x0b' | '\x0c')
-    });
+    let width_bytes = width.as_encoded_bytes();
+    let numeric_start = width_bytes
+        .iter()
+        .position(|byte| !matches!(byte, b' ' | b'\t' | b'\n' | b'\r' | b'\x0b' | b'\x0c'))
+        .unwrap_or(width_bytes.len());
+    let numeric_width = &width_bytes[numeric_start..];
+    let quoted_width = quote_fold_width(width);
     let value_too_large = || {
         CtSimpleError::new(
             1,
-            format!("invalid number of columns: '{width}': Value too large for defined data type"),
+            format!(
+                "invalid number of columns: {quoted_width}: Value too large for defined data type"
+            ),
         )
     };
 
-    match numeric_width.parse::<usize>() {
-        Ok(0) => Err(CtSimpleError::new(
+    let parsed_width = std::str::from_utf8(numeric_width)
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok());
+    match parsed_width {
+        Some(0) => Err(CtSimpleError::new(
             1,
-            format!("invalid number of columns: '{width}': Numerical result out of range"),
+            format!("invalid number of columns: {quoted_width}: Numerical result out of range"),
         )),
-        Ok(width) if width <= FOLD_MAX_WIDTH => Ok(width),
-        Ok(_) => Err(value_too_large()),
-        Err(_)
-            if !numeric_width.is_empty() && numeric_width.chars().all(|c| c.is_ascii_digit()) =>
-        {
+        Some(width) if width <= FOLD_MAX_WIDTH => Ok(width),
+        Some(_) => Err(value_too_large()),
+        None if !numeric_width.is_empty() && numeric_width.iter().all(u8::is_ascii_digit) => {
             Err(value_too_large())
         }
-        Err(_) => Err(CtSimpleError::new(
+        None => Err(CtSimpleError::new(
             1,
-            format!("invalid number of columns: '{width}'"),
+            format!("invalid number of columns: {quoted_width}"),
         )),
     }
 }
@@ -692,7 +709,7 @@ pub fn ct_app() -> Command {
             .short('w')
             .help(t!("fold.clap.fold_width"))
             .value_name("WIDTH")
-            .value_parser(clap::builder::StringValueParser::new())
+            .value_parser(clap::builder::OsStringValueParser::new())
             .allow_hyphen_values(true)
             .overrides_with(fold_flags::FOLD_WIDTH),
         Arg::new(fold_flags::FOLD_FILE)
@@ -1461,7 +1478,7 @@ mod tests {
             let matches = command.try_get_matches_from(args).unwrap();
             assert!(matches.get_flag("characters"));
             assert!(matches.get_flag("spaces"));
-            assert_eq!(matches.get_one::<String>("width").unwrap(), "20");
+            assert_eq!(matches.get_one::<OsString>("width").unwrap(), "20");
         }
 
         #[test]
@@ -1640,12 +1657,24 @@ mod tests {
 
         #[test]
         fn accepts_leading_ascii_whitespace() {
-            assert_eq!(parse_fold_width(Some(" \t\n\r\x0b\x0c8")).unwrap(), 8);
+            assert_eq!(
+                parse_fold_width(Some(OsStr::new(" \t\n\r\x0b\x0c8"))).unwrap(),
+                8
+            );
         }
 
         #[test]
         fn rejects_trailing_ascii_whitespace() {
-            assert!(parse_fold_width(Some("8 ")).is_err());
+            assert!(parse_fold_width(Some(OsStr::new("8 "))).is_err());
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn quotes_non_utf8_width_bytes_in_numeric_error() {
+            use std::os::unix::ffi::OsStrExt;
+
+            let error = parse_fold_width(Some(OsStr::from_bytes(b"\xff"))).unwrap_err();
+            assert_eq!(error.to_string(), "invalid number of columns: '\\377'");
         }
     }
 

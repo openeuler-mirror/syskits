@@ -16,6 +16,7 @@ use clap::{Arg, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, set_ct_exit_code, strip_errno};
+use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name_bytes};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::collections::{BTreeMap, HashMap};
@@ -181,13 +182,16 @@ fn tsort_run_from_matches(matches: &clap::ArgMatches) -> TsortRunOutcome {
         .unwrap_or_default();
 
     if input_files.len() > 1 {
-        return tsort_error_outcome(
-            format!(
-                "tsort: extra operand '{}'\ntsort: Try 'tsort --help' for more information.\n",
-                input_files[1].to_string_lossy()
-            ),
-            false,
+        let quoted_operand = escape_name_bytes(
+            input_files[1],
+            &CtQuotingStyle::C {
+                quotes: CtQuotes::Single,
+            },
         );
+        let mut diagnostic = b"tsort: extra operand ".to_vec();
+        diagnostic.extend_from_slice(&quoted_operand);
+        diagnostic.extend_from_slice(b"\nTry 'tsort --help' for more information.\n");
+        return tsort_error_bytes_outcome(diagnostic, false);
     }
 
     let input_file = input_files

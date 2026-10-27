@@ -25,10 +25,13 @@ use ctcore::{
 
 use ctcore::Tool;
 use ctcore::ct_error::UClapError;
+use std::error::Error;
 use std::ffi::OsString;
+use std::fmt::{Display, Formatter};
 use std::io::Cursor;
-use std::io::Read;
 use std::io::stdin;
+use std::io::{Read, Write};
+use std::os::unix::ffi::OsStrExt;
 
 const BASE64_ENCODINGS: &[(&str, Format, &str)] = &[
     ("base64", Format::Base64, "same as 'base64' program"),
@@ -100,12 +103,200 @@ pub fn ct_app() -> Command {
     ct_cmd
 }
 
+const BASENC_LONG_OPTIONS: &[(&[u8], bool, bool)] = &[
+    (b"decode", false, true),
+    (b"wrap", true, true),
+    (b"ignore-garbage", false, true),
+    (b"base64", false, true),
+    (b"base64url", false, true),
+    (b"base32", false, true),
+    (b"base32hex", false, true),
+    (b"base16", false, true),
+    (b"base2msbf", false, true),
+    (b"base2lsbf", false, true),
+    (b"z85", false, true),
+    // base58 is a syskits extension and is omitted from GNU ambiguity lists.
+    (b"base58", false, false),
+    (b"help", false, true),
+    (b"version", false, true),
+];
+
+#[derive(Debug)]
+struct BasencNonUtf8OptionError {
+    diagnostic: Vec<u8>,
+}
+
+impl Display for BasencNonUtf8OptionError {
+    fn fmt(&self, _formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut stderr = std::io::stderr().lock();
+        let _ = stderr
+            .write_all(ctcore::ct_util_name().as_bytes())
+            .and_then(|_| stderr.write_all(b": "))
+            .and_then(|_| stderr.write_all(&self.diagnostic))
+            .and_then(|_| stderr.write_all(b"\n"))
+            .and_then(|_| stderr.flush());
+        Ok(())
+    }
+}
+
+impl Error for BasencNonUtf8OptionError {}
+
+impl ctcore::ct_error::CTError for BasencNonUtf8OptionError {
+    fn code(&self) -> i32 {
+        1
+    }
+}
+
+fn basenc_non_utf8_option_error(args: &[OsString]) -> Option<BasencNonUtf8OptionError> {
+    for argument in args.iter().skip(1) {
+        let bytes = argument.as_os_str().as_bytes();
+        if bytes == b"--" {
+            break;
+        }
+        if !bytes.starts_with(b"-") || bytes == b"-" {
+            continue;
+        }
+
+        if let Some(long_argument) = bytes.strip_prefix(b"--") {
+            let name_end = long_argument
+                .iter()
+                .position(|byte| *byte == b'=')
+                .unwrap_or(long_argument.len());
+            if long_argument[..name_end].iter().all(u8::is_ascii) {
+                continue;
+            }
+            return Some(BasencNonUtf8OptionError {
+                diagnostic: [b"unrecognized option '".as_slice(), bytes, b"'"].concat(),
+            });
+        }
+
+        let short_options = &bytes[1..];
+        if short_options.first() == Some(&b'w') {
+            continue;
+        }
+        let byte = short_options.iter().find(|byte| !byte.is_ascii())?;
+        return Some(BasencNonUtf8OptionError {
+            diagnostic: [b"invalid option -- '".as_slice(), &[*byte], b"'"].concat(),
+        });
+    }
+    None
+}
+
+fn basenc_gnu_option_error(args: &[OsString]) -> Option<Box<dyn ctcore::ct_error::CTError>> {
+    let mut index = 1;
+    while index < args.len() {
+        let argument = args[index].as_os_str().as_bytes();
+        if argument == b"--" {
+            break;
+        }
+
+        if let Some(long_argument) = argument.strip_prefix(b"--") {
+            if long_argument.is_empty() {
+                break;
+            }
+            let value_index = long_argument.iter().position(|byte| *byte == b'=');
+            let name = &long_argument[..value_index.unwrap_or(long_argument.len())];
+            let candidates: Vec<_> = if let Some(exact) = BASENC_LONG_OPTIONS
+                .iter()
+                .find(|(option, _, _)| *option == name)
+                .copied()
+            {
+                vec![exact]
+            } else {
+                BASENC_LONG_OPTIONS
+                    .iter()
+                    .filter(|(option, _, _)| option.starts_with(name))
+                    .copied()
+                    .collect()
+            };
+            if candidates.is_empty() {
+                let text = std::str::from_utf8(argument).ok()?;
+                return Some(CTsageError::new(
+                    BASE_CMD_PARSE_ERROR,
+                    format!("unrecognized option '{text}'"),
+                ));
+            }
+
+            let visible: Vec<_> = candidates
+                .iter()
+                .filter(|(_, _, visible)| *visible)
+                .copied()
+                .collect();
+            if visible.len() > 1 {
+                let possibilities = visible
+                    .iter()
+                    .map(|(option, _, _)| format!("'--{}'", std::str::from_utf8(option).unwrap()))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let text = std::str::from_utf8(argument).ok()?;
+                return Some(CTsageError::new(
+                    BASE_CMD_PARSE_ERROR,
+                    format!("option '{text}' is ambiguous; possibilities: {possibilities}"),
+                ));
+            }
+
+            let (option, takes_value, _) = *visible.first().or_else(|| candidates.first())?;
+            let option = std::str::from_utf8(option).expect("GNU option names are ASCII");
+            if value_index.is_some() && !takes_value {
+                return Some(CTsageError::new(
+                    BASE_CMD_PARSE_ERROR,
+                    format!("option '--{option}' doesn't allow an argument"),
+                ));
+            }
+            if value_index.is_none() && takes_value {
+                if index + 1 == args.len() {
+                    return Some(CTsageError::new(
+                        BASE_CMD_PARSE_ERROR,
+                        format!("option '--{option}' requires an argument"),
+                    ));
+                }
+                index += 1;
+            }
+        } else if argument.len() > 1 && argument[0] == b'-' {
+            let short_options = &argument[1..];
+            let mut option_index = 0;
+            while option_index < short_options.len() {
+                match short_options[option_index] {
+                    b'd' | b'i' | b'h' | b'V' => option_index += 1,
+                    b'w' => {
+                        if option_index + 1 == short_options.len() {
+                            if index + 1 == args.len() {
+                                return Some(CTsageError::new(
+                                    BASE_CMD_PARSE_ERROR,
+                                    "option requires an argument -- 'w'",
+                                ));
+                            }
+                            index += 1;
+                        }
+                        break;
+                    }
+                    invalid if invalid.is_ascii() => {
+                        return Some(CTsageError::new(
+                            BASE_CMD_PARSE_ERROR,
+                            format!("invalid option -- '{}'", invalid as char),
+                        ));
+                    }
+                    _ => return None,
+                }
+            }
+        }
+        index += 1;
+    }
+    None
+}
+
 fn basenc_parse_cmd_args(args: impl ctcore::Args) -> CTResult<(BaseConfig, Format)> {
     let args = base_common::normalize_base_short_wrap_equals(args.collect());
     let args = base_common::normalize_base_args_for_posix(
         args.into_iter(),
         std::env::var_os("POSIXLY_CORRECT").is_some(),
     );
+    if let Some(error) = basenc_non_utf8_option_error(&args) {
+        return Err(Box::new(error));
+    }
+    if let Some(error) = basenc_gnu_option_error(&args) {
+        return Err(error);
+    }
     let args_match = match ct_app().try_get_matches_from(args.clone()) {
         Ok(matches) => matches,
         Err(e) => {
@@ -392,7 +583,7 @@ mod test {
         let mut output = Vec::new();
         let err = basenc_main(args.iter().map(OsString::from), &mut output).unwrap_err();
         assert_eq!(err.code(), 1);
-        assert_eq!(err.to_string(), "foobar");
+        assert_eq!(err.to_string(), "unrecognized option '--foobar'");
         assert!(err.usage());
     }
 

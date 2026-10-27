@@ -334,6 +334,7 @@ pub fn handle_base_input<R: Read, W: Write>(
         match input_data.encode(&mut writer) {
             Ok(_) => Ok(()),
             Err(CtEncodeError::ReadError(err)) => Err(read_error(err)),
+            Err(CtEncodeError::WriteError(err)) => Err(write_error(err)),
             Err(CtEncodeError::InvalidInput) => Err(CtSimpleError::new(1, "invalid input")),
             Err(_) => Err(CtSimpleError::new(
                 1,
@@ -345,6 +346,7 @@ pub fn handle_base_input<R: Read, W: Write>(
 
 fn decode_error(err: CtDecodeError) -> Box<dyn CTError> {
     match err {
+        CtDecodeError::WriteError(e) => write_error(e),
         CtDecodeError::Io(e)
             if e.kind() == std::io::ErrorKind::InvalidData
                 && strip_errno(&e) == "invalid input" =>
@@ -358,6 +360,10 @@ fn decode_error(err: CtDecodeError) -> Box<dyn CTError> {
 
 fn read_error(err: std::io::Error) -> Box<dyn CTError> {
     CtSimpleError::new(1, format!("read error: {}", strip_errno(&err)))
+}
+
+fn write_error(err: std::io::Error) -> Box<dyn CTError> {
+    CtSimpleError::new(1, format!("write error: {}", strip_errno(&err)))
 }
 
 pub fn handle_base_input_to_writer<R: Read, W: Write>(
@@ -789,6 +795,18 @@ mod test {
         kind: io::ErrorKind,
     }
 
+    struct FailWrite;
+
+    impl Write for FailWrite {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::from_raw_os_error(ctcore::libc::ENOSPC))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
     impl Read for FailRead {
         fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
             Err(io::Error::new(self.kind, "Is a directory"))
@@ -836,6 +854,23 @@ mod test {
         .expect_err("read failure should be reported");
 
         assert_eq!(err.to_string(), "read error: Is a directory");
+    }
+
+    #[test]
+    fn test_handle_base_input_reports_write_errors() {
+        for (input, decode) in [(b"hello".as_slice(), false), (b"Zm8=", true)] {
+            let error = handle_base_input(
+                &mut Cursor::new(input),
+                FailWrite,
+                Format::Base64,
+                Some(76),
+                false,
+                decode,
+            )
+            .err()
+            .expect("the writer should fail");
+            assert_eq!(error.to_string(), "write error: No space left on device");
+        }
     }
 
     #[test]

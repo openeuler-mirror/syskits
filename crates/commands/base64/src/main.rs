@@ -9,6 +9,12 @@
  * See the Mulan PSL v2 for more details.
  */
 
+fn write_stderr(args: std::fmt::Arguments<'_>) {
+    use std::io::Write;
+
+    let _ = std::io::stderr().lock().write_fmt(args);
+}
+
 pub fn main() {
     use ctcore::Tool;
     use std::io::Write;
@@ -27,13 +33,13 @@ pub fn main() {
             let message = err.to_string();
             write_error_reported = message.starts_with("write error:");
             if !message.is_empty() {
-                ctcore::ct_show_error!("{message}");
+                write_stderr(format_args!("{}: {message}\n", ctcore::ct_util_name()));
             }
             if err.usage() {
-                eprintln!(
-                    "Try '{} --help' for more information.",
+                write_stderr(format_args!(
+                    "Try '{} --help' for more information.\n",
                     ctcore::ct_help_utility_name()
-                );
+                ));
             }
             err.code()
         }
@@ -41,10 +47,11 @@ pub fn main() {
 
     if let Err(err) = std::io::stdout().flush() {
         if !write_error_reported {
-            ctcore::ct_show_error!(
-                "write error: {}",
+            write_stderr(format_args!(
+                "{}: write error: {}\n",
+                ctcore::ct_util_name(),
                 ctcore::ct_error::strip_errno(&err)
-            );
+            ));
         }
         code = 1;
     }

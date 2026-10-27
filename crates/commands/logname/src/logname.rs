@@ -80,9 +80,12 @@ struct LognameRawDiagnostic {
 
 impl Display for LognameRawDiagnostic {
     fn fmt(&self, _formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        let program_name = ctcore::ct_os_args()
+            .next()
+            .unwrap_or_else(|| OsString::from("logname"));
         let mut stderr = std::io::stderr().lock();
         let _ = stderr
-            .write_all(ctcore::ct_util_name().as_bytes())
+            .write_all(program_name.as_os_str().as_bytes())
             .and_then(|_| stderr.write_all(b": "))
             .and_then(|_| stderr.write_all(&self.message))
             .and_then(|_| stderr.write_all(b"\n"))

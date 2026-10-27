@@ -9,4 +9,45 @@
  * See the Mulan PSL v2 for more details.
  */
 
-ctcore::ct_bin!(ct_basenc, Basenc);
+pub fn main() {
+    use ctcore::Tool;
+    use std::io::Write;
+
+    ctcore::ct_panic::ct_mute_set_panic_hook();
+    ctcore::ct_ensure_standard_fds();
+
+    let args = ctcore::ct_os_args().collect::<Vec<_>>();
+    let tool = ct_basenc::Basenc;
+    let result = tool.execute(&args);
+    let mut write_error_reported = false;
+    let mut code = match result {
+        Ok(()) => ctcore::ct_error::get_ct_exit_code(),
+        Err(err) => {
+            let message = err.to_string();
+            write_error_reported = message.starts_with("write error:");
+            if !message.is_empty() {
+                eprintln!("{}: {message}", ctcore::ct_util_name());
+            }
+            if err.usage() {
+                eprintln!(
+                    "Try '{} --help' for more information.",
+                    ctcore::ct_help_utility_name()
+                );
+            }
+            err.code()
+        }
+    };
+
+    if let Err(err) = std::io::stdout().flush() {
+        if !write_error_reported {
+            eprintln!(
+                "{}: write error: {}",
+                ctcore::ct_util_name(),
+                ctcore::ct_error::strip_errno(&err)
+            );
+        }
+        code = 1;
+    }
+
+    std::process::exit(code);
+}

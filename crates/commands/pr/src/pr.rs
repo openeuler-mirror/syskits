@@ -47,6 +47,8 @@ const PR_DEFAULT_COLUMN_SEPARATOR: &char = &' ';
 const PR_FF: u8 = 0x0C_u8;
 const PR_RAW_BYTE_CHAR_BASE: u32 = 0xF0000;
 const PR_INT_MAX: usize = i32::MAX as usize;
+const PR_DEFAULT_FIRST_NUMBER: i64 = i64::MAX;
+const PR_NO_LINE_NUMBER: i64 = i64::MIN;
 // 根据locale选择时间格式
 fn get_pr_date_time_format() -> &'static str {
     if std::env::var_os("POSIXLY_CORRECT").is_some() && !hard_locale_time() {
@@ -254,7 +256,7 @@ impl Default for PrNumberingMode {
         Self {
             width: 5,
             separator: PR_TAB.to_string(),
-            first_number: 0,
+            first_number: PR_DEFAULT_FIRST_NUMBER,
         }
     }
 }
@@ -263,7 +265,7 @@ impl Default for PrFileLine {
     fn default() -> Self {
         Self {
             file_id: 0,
-            line_number: 0,
+            line_number: PR_NO_LINE_NUMBER,
             page_number: 0,
             group_key: 0,
             line_content: Ok(String::new()),
@@ -1944,7 +1946,7 @@ fn pr_push_page_rows(
             section: "content".into(),
             file: paths.get(line.file_id).map(|path| (*path).to_string()),
             file_id: line.file_id,
-            line_index: (line.line_number != 0).then_some(line.line_number),
+            line_index: (line.line_number != PR_NO_LINE_NUMBER).then_some(line.line_number),
             group_key: body_group_base + line.group_key.max(index),
             text,
         });
@@ -2055,7 +2057,7 @@ fn pr_read_stream_and_create_pages(
     let renumber_from_first_printed_page = output_opts
         .number
         .as_ref()
-        .is_some_and(|number| number.first_number != 0);
+        .is_some_and(|number| number.first_number != PR_DEFAULT_FIRST_NUMBER);
     let last_page = output_opts.end_page;
     let lines_needed_per_page = pr_lines_to_read_for_page(output_opts);
     let is_omit_pagination = output_opts.is_omit_pagination;
@@ -2067,7 +2069,7 @@ fn pr_read_stream_and_create_pages(
                 let is_form_feed_marker = line.form_feeds_after > 0
                     && matches!(line.line_content.as_ref(), Ok(content) if content.is_empty());
                 let line_number = if is_form_feed_marker {
-                    0
+                    PR_NO_LINE_NUMBER
                 } else {
                     let current = *next_line_number;
                     *next_line_number += 1;
@@ -2174,7 +2176,7 @@ fn pr_read_stream_and_create_pages(
                         let is_form_feed_marker = line.form_feeds_after > 0
                             && matches!(line.line_content.as_ref(), Ok(content) if content.is_empty());
                         let line_number = if is_form_feed_marker {
-                            0
+                            PR_NO_LINE_NUMBER
                         } else {
                             let current = *next_line_number;
                             *next_line_number += 1;
@@ -2231,7 +2233,7 @@ fn pr_collect_semantic_for_merge(
     let renumber_from_first_printed_page = output_opts
         .number
         .as_ref()
-        .is_some_and(|number| number.first_number != 0);
+        .is_some_and(|number| number.first_number != PR_DEFAULT_FIRST_NUMBER);
     let mut next_merge_line_number = None;
 
     for page_index in start_page_index..=last_page_index {
@@ -2283,7 +2285,7 @@ fn pr_collect_semantic_for_merge(
                 next_merge_line_number = Some(current.saturating_add(1));
                 current
             } else {
-                0
+                PR_NO_LINE_NUMBER
             };
 
             for (file_id, page_lines) in page_lines_by_file.iter().enumerate() {
@@ -3305,7 +3307,7 @@ fn pr_get_formatted_line_number(
 ) -> String {
     let should_show_line_number =
         output_opts.number.is_some() && (output_opts.merge_files_print.is_none() || index == 0);
-    if should_show_line_number && line_number != 0 {
+    if should_show_line_number && line_number != PR_NO_LINE_NUMBER {
         let line_str = line_number.to_string();
         let num_opt = output_opts.number.as_ref().unwrap();
         let width = num_opt.width;
@@ -3477,7 +3479,7 @@ fn pr_get_start_line_number(output_opts: &PrOutputOptions) -> i64 {
         .number
         .as_ref()
         .map(|i| {
-            if i.first_number == 0 {
+            if i.first_number == PR_DEFAULT_FIRST_NUMBER {
                 1
             } else {
                 i.first_number

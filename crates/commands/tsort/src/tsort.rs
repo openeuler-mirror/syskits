@@ -14,9 +14,8 @@
 extern crate rust_i18n;
 use clap::{Arg, Command, crate_version};
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, set_ct_exit_code, strip_errno};
-use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name_bytes};
+use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name, escape_name_bytes};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::collections::{BTreeMap, HashMap};
@@ -29,6 +28,20 @@ use sys_locale::get_locale;
 
 mod tsort_flags {
     pub const TSORT_FILE: &str = "file";
+}
+
+const TSORT_FILENAME_QUOTING_STYLE: CtQuotingStyle = CtQuotingStyle::Shell {
+    escape: true,
+    always_quote: false,
+    show_control: true,
+};
+
+fn quote_tsort_filename(filename: &OsStr) -> String {
+    if filename.is_empty() {
+        "''".to_string()
+    } else {
+        escape_name(filename, &TSORT_FILENAME_QUOTING_STYLE)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -231,7 +244,7 @@ fn tsort_run_from_matches(matches: &clap::ArgMatches) -> TsortRunOutcome {
         return tsort_error_outcome(
             format!(
                 "tsort: {}: input contains an odd number of tokens\n",
-                input_file.maybe_quote()
+                quote_tsort_filename(input_file)
             ),
             false,
         );
@@ -291,13 +304,13 @@ fn tsort_read_input(input_file: &OsStr) -> Result<Vec<u8>, String> {
         if path.is_dir() {
             return Err(format!(
                 "tsort: {}: read error: Is a directory\n",
-                input_file.maybe_quote()
+                quote_tsort_filename(input_file)
             ));
         }
         Box::new(File::open(path).map_err(|err| {
             format!(
                 "tsort: {}: {}\n",
-                input_file.maybe_quote(),
+                quote_tsort_filename(input_file),
                 strip_errno(&err)
             )
         })?) as Box<dyn Read>
@@ -511,7 +524,7 @@ impl TSortGraph {
                         push_tsort_stderr(
                             stderr_bytes,
                             output_events,
-                            format!("{}: input contains a loop:", filename.maybe_quote()),
+                            format!("{}: input contains a loop:", quote_tsort_filename(filename)),
                         );
 
                         // 回溯打印环 (GNU: while (loop) ... until loop == k)

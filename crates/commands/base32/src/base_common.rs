@@ -152,7 +152,99 @@ pub fn base_parsing_command_args(
         args.into_iter(),
         std::env::var_os("POSIXLY_CORRECT").is_some(),
     );
-    BaseConfig::from(&command.try_get_matches_from(args)?)
+    let matches = command
+        .try_get_matches_from(args.clone())
+        .map_err(|error| gnu_base_option_error(&args).unwrap_or_else(|| error.into()))?;
+    BaseConfig::from(&matches)
+}
+
+fn gnu_base_option_error(args: &[OsString]) -> Option<Box<dyn CTError>> {
+    const LONG_OPTIONS: [(&[u8], bool); 5] = [
+        (b"decode", false),
+        (b"ignore-garbage", false),
+        (b"wrap", true),
+        (b"help", false),
+        (b"version", false),
+    ];
+
+    let mut index = 1;
+    while index < args.len() {
+        let argument = args[index].as_os_str().as_bytes();
+        if argument == b"--" {
+            break;
+        }
+
+        if let Some(long_argument) = argument.strip_prefix(b"--") {
+            let value_index = long_argument.iter().position(|byte| *byte == b'=');
+            let name = &long_argument[..value_index.unwrap_or(long_argument.len())];
+            let mut matches = LONG_OPTIONS
+                .iter()
+                .filter(|(option, _)| !name.is_empty() && option.starts_with(name));
+            let matched = matches.next();
+            if matches.next().is_some() {
+                index += 1;
+                continue;
+            }
+            let Some((canonical_name, takes_value)) = matched else {
+                let argument = std::str::from_utf8(argument).ok()?;
+                return Some(CTsageError::new(
+                    BASE_CMD_PARSE_ERROR,
+                    format!("unrecognized option '{argument}'"),
+                ));
+            };
+            let canonical_name = std::str::from_utf8(canonical_name).expect("ASCII option name");
+
+            if value_index.is_some() && !takes_value {
+                return Some(CTsageError::new(
+                    BASE_CMD_PARSE_ERROR,
+                    format!("option '--{canonical_name}' doesn't allow an argument"),
+                ));
+            }
+            if value_index.is_none() && *takes_value {
+                if index + 1 == args.len() {
+                    return Some(CTsageError::new(
+                        BASE_CMD_PARSE_ERROR,
+                        format!("option '--{canonical_name}' requires an argument"),
+                    ));
+                }
+                index += 2;
+                continue;
+            }
+            index += 1;
+            continue;
+        }
+
+        if argument.len() > 1 && argument[0] == b'-' {
+            let mut option_index = 1;
+            while option_index < argument.len() {
+                match argument[option_index] {
+                    b'd' | b'i' | b'h' | b'V' => option_index += 1,
+                    b'w' => {
+                        if option_index + 1 == argument.len() {
+                            if index + 1 == args.len() {
+                                return Some(CTsageError::new(
+                                    BASE_CMD_PARSE_ERROR,
+                                    "option requires an argument -- 'w'",
+                                ));
+                            }
+                            index += 1;
+                        }
+                        break;
+                    }
+                    invalid if invalid.is_ascii() => {
+                        return Some(CTsageError::new(
+                            BASE_CMD_PARSE_ERROR,
+                            format!("invalid option -- '{}'", invalid as char),
+                        ));
+                    }
+                    _ => return None,
+                }
+            }
+        }
+        index += 1;
+    }
+
+    None
 }
 
 fn normalize_base_short_wrap_equals(mut args: Vec<OsString>) -> Vec<OsString> {
@@ -789,6 +881,39 @@ mod test {
                 OsString::from("input"),
             ]
         );
+    }
+
+    #[test]
+    fn test_base_option_errors_match_gnu_getopt_diagnostics() {
+        let cases: &[(&[&str], &str)] = &[
+            (
+                &["base32", "--wrap"],
+                "option '--wrap' requires an argument",
+            ),
+            (&["base32", "-w"], "option requires an argument -- 'w'"),
+            (&["base32", "--unknown"], "unrecognized option '--unknown'"),
+            (&["base32", "-dx"], "invalid option -- 'x'"),
+            (
+                &["base32", "--decode=x"],
+                "option '--decode' doesn't allow an argument",
+            ),
+            (
+                &["base32", "--dec=x"],
+                "option '--decode' doesn't allow an argument",
+            ),
+        ];
+
+        for (args, expected) in cases {
+            let error = base_parsing_command_args(
+                args.iter().map(OsString::from),
+                BASE32_ABOUT.into(),
+                BASE32_USAGE.into(),
+            )
+            .err()
+            .expect("the option syntax should be rejected");
+            assert_eq!(error.to_string(), *expected, "arguments: {args:?}");
+            assert!(error.usage());
+        }
     }
 
     struct FailRead {

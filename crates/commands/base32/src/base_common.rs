@@ -750,8 +750,8 @@ fn decode_alphabet(format: Format) -> &'static [u8] {
         Format::Base64 => b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=+/",
         Format::Base64Url => b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789=_-",
         Format::Base32Hex => b"0123456789ABCDEFGHIJKLMNOPQRSTUV=",
-        Format::Base16 => b"0123456789ABCDEF",
-        Format::Base2Lsbf | Format::Base2Msbf => b"01",
+        Format::Base16 => b"0123456789ABCDEF=",
+        Format::Base2Lsbf | Format::Base2Msbf => b"01=",
         Format::Base58 => b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz",
         Format::Z85 => {
             b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#"

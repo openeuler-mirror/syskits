@@ -140,28 +140,50 @@ fn decode_base64_short_tail(f: Format, input: &[u8]) -> Option<Vec<u8>> {
     Some(out)
 }
 
-fn decode_base64_quantum(f: Format, input: &[u8]) -> Option<Vec<u8>> {
+fn decode_base64_quantum<W: Write>(f: Format, input: &[u8], mut writer: W) -> io::Result<bool> {
     if input.len() != 4 {
-        return None;
+        return Ok(false);
     }
 
-    let a = base64_digit(f, input[0])?;
-    let b = base64_digit(f, input[1])?;
-    let mut out = vec![(a << 2) | (b >> 4)];
+    let a = match base64_digit(f, input[0]) {
+        Some(value) => value,
+        None => return Ok(false),
+    };
+    let b = match base64_digit(f, input[1]) {
+        Some(value) => value,
+        None => return Ok(false),
+    };
+    let mut out = [0_u8; 3];
+    out[0] = (a << 2) | (b >> 4);
 
     if input[2] == b'=' {
-        return (input[3] == b'=').then_some(out);
+        writer.write_all(&out[..1])?;
+        return Ok(input[3] == b'=');
     }
 
-    let c = base64_digit(f, input[2])?;
-    out.push(((b & 0x0f) << 4) | (c >> 2));
+    let c = match base64_digit(f, input[2]) {
+        Some(value) => value,
+        None => {
+            writer.write_all(&out[..1])?;
+            return Ok(false);
+        }
+    };
+    out[1] = ((b & 0x0f) << 4) | (c >> 2);
     if input[3] == b'=' {
-        return Some(out);
+        writer.write_all(&out[..2])?;
+        return Ok(true);
     }
 
-    let d = base64_digit(f, input[3])?;
-    out.push(((c & 0x03) << 6) | d);
-    Some(out)
+    let d = match base64_digit(f, input[3]) {
+        Some(value) => value,
+        None => {
+            writer.write_all(&out[..2])?;
+            return Ok(false);
+        }
+    };
+    out[2] = ((c & 0x03) << 6) | d;
+    writer.write_all(&out)?;
+    Ok(true)
 }
 
 fn base32_value(f: Format, byte: u8) -> Option<u8> {
@@ -382,15 +404,14 @@ impl<R: Read> Data<R> {
                         if matches!(self.format, Base16) {
                             block.make_ascii_uppercase();
                         }
-                        let decoded = if matches!(self.format, Base64 | Base64Url) {
-                            match decode_base64_quantum(self.format, &block) {
-                                Some(decoded) => decoded,
-                                None => return Err(invalid_input().into()),
+                        if matches!(self.format, Base64 | Base64Url) {
+                            if !decode_base64_quantum(self.format, &block, &mut writer)? {
+                                return Err(invalid_input().into());
                             }
                         } else {
-                            decode(self.format, &block)?
-                        };
-                        writer.write_all(&decoded)?;
+                            let decoded = decode(self.format, &block)?;
+                            writer.write_all(&decoded)?;
+                        }
                         char_buf.drain(..block_size);
                     }
                 }
@@ -836,6 +857,16 @@ mod test {
             let mut data = Data::new(Cursor::new(input), Format::Base64);
             let mut out = Vec::new();
             assert!(data.decode(&mut out).is_ok());
+            assert_eq!(out, expected);
+        }
+    }
+
+    #[test]
+    fn test_data_decode_base64_preserves_prefix_before_invalid_input() {
+        for (input, expected) in [(b"Zm!8".as_slice(), b"f".as_slice()), (b"AA=A", b"\0")] {
+            let mut data = Data::new(Cursor::new(input), Format::Base64);
+            let mut out = Vec::new();
+            assert!(data.decode(&mut out).is_err());
             assert_eq!(out, expected);
         }
     }

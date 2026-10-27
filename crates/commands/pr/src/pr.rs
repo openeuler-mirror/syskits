@@ -850,6 +850,18 @@ fn pr_has_invalid_bare_plus<T: AsRef<OsStr>>(args: &[T]) -> bool {
     false
 }
 
+fn pr_is_numeric_option_cluster(arg: &str) -> bool {
+    let Some(cluster) = arg.strip_prefix('-') else {
+        return false;
+    };
+    cluster.len() > 1
+        && cluster.bytes().any(|byte| byte.is_ascii_digit())
+        && cluster.bytes().any(|byte| !byte.is_ascii_digit())
+        && cluster
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || b"abcdfFJmrtTv".contains(&byte))
+}
+
 fn pr_semantic_from_clap_error(error: clap::Error) -> PrSemantic {
     let rendered = error.to_string();
     if error.use_stderr() {
@@ -923,6 +935,17 @@ fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
         if arg == "--pages" || arg.starts_with("--pages=") {
             page_option_seen = true;
             recreated_args.push(OsString::from(arg));
+            continue;
+        }
+
+        if pr_is_numeric_option_cluster(arg) {
+            let flags = arg
+                .bytes()
+                .skip(1)
+                .filter(|byte| !byte.is_ascii_digit())
+                .map(char::from)
+                .collect::<String>();
+            recreated_args.push(OsString::from(format!("-{flags}")));
             continue;
         }
 
@@ -1289,6 +1312,18 @@ fn parse_column_mode_options(
                 ))
             })
         };
+
+        if pr_is_numeric_option_cluster(token) {
+            for byte in token.bytes().skip(1) {
+                if byte.is_ascii_digit() {
+                    old_style_digits.push(char::from(byte));
+                    column_option_value = Some(parse_old_style(&old_style_digits)?);
+                } else {
+                    old_style_digits.clear();
+                }
+            }
+            continue;
+        }
 
         if token.starts_with('-')
             && token.len() > 1
@@ -6396,6 +6431,18 @@ mod tests {
         }
 
         #[test]
+        fn test_pr_recreate_arguments_splits_numeric_option_clusters() {
+            assert_eq!(
+                pr_recreate_arguments(&["pr", "-2t", "file.txt"]),
+                vec!["pr", "-t", "file.txt"]
+            );
+            assert_eq!(
+                pr_recreate_arguments(&["pr", "-td2", "file.txt"]),
+                vec!["pr", "-td", "file.txt"]
+            );
+        }
+
+        #[test]
         fn test_pr_recreate_arguments_preserves_malformed_old_options() {
             let args = vec!["pr", "-2x", "+2x", "+0", "file.txt"];
             let result = pr_recreate_arguments(&args);
@@ -7431,6 +7478,14 @@ mod tests {
             assert!(result.is_some());
             let options = result.unwrap();
             assert_eq!(options.columns, 2);
+
+            let matches = create_matches_with_args("-t");
+            let result = parse_column_mode_options(&matches, &build_args("-2t")).unwrap();
+            assert_eq!(result.unwrap().columns, 2);
+
+            let matches = create_matches_with_args("-td");
+            let result = parse_column_mode_options(&matches, &build_args("-td2")).unwrap();
+            assert_eq!(result.unwrap().columns, 2);
 
             // 测试列参数按出现顺序覆盖（最后的 -2 覆盖 --columns=1）
             let matches = create_matches_with_args("--columns=1");

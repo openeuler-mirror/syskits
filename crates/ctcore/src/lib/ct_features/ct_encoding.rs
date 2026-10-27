@@ -136,8 +136,9 @@ fn decode_base64_short_tail(f: Format, input: &[u8]) -> Option<Vec<u8>> {
         if input[2] == b'=' {
             return Some(out);
         }
-        let c = base64_digit(f, input[2])?;
-        out.push(((b & 0x0f) << 4) | (c >> 2));
+        if let Some(c) = base64_digit(f, input[2]) {
+            out.push(((b & 0x0f) << 4) | (c >> 2));
+        }
     }
 
     Some(out)
@@ -903,6 +904,16 @@ mod test {
         let mut out = Vec::new();
         assert!(data.decode(&mut out).is_err());
         assert_eq!(out, b"g");
+    }
+
+    #[test]
+    fn test_data_decode_base64_short_tail_preserves_prefix_before_invalid_input() {
+        for format in [Format::Base64, Format::Base64Url] {
+            let mut data = Data::new(Cursor::new(b"Zg!"), format);
+            let mut out = Vec::new();
+            assert!(data.decode(&mut out).is_err());
+            assert_eq!(out, b"f");
+        }
     }
 
     #[test]

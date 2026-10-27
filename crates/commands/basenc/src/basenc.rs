@@ -121,13 +121,27 @@ fn basenc_parse_cmd_args(args: impl ctcore::Args) -> CTResult<(BaseConfig, Forma
             return Err(e.with_exit_code(1).into());
         }
     };
+    let config_result = BaseConfig::from(&args_match);
     let format_mod = BASE64_ENCODINGS
         .iter()
         .find(|encoding| args_match.get_flag(encoding.0))
-        .ok_or_else(|| CTsageError::new(BASE_CMD_PARSE_ERROR, "missing encoding type"))?
-        .1;
-    let config_mod = BaseConfig::from(&args_match)?;
-    Ok((config_mod, format_mod))
+        .map(|encoding| encoding.1);
+    match config_result {
+        Ok(config_mod) => {
+            let format_mod = format_mod
+                .ok_or_else(|| CTsageError::new(BASE_CMD_PARSE_ERROR, "missing encoding type"))?;
+            Ok((config_mod, format_mod))
+        }
+        Err(error) => {
+            if format_mod.is_none() && !error.to_string().starts_with("invalid wrap size:") {
+                return Err(CTsageError::new(
+                    BASE_CMD_PARSE_ERROR,
+                    "missing encoding type",
+                ));
+            }
+            Err(error)
+        }
+    }
 }
 
 fn extract_unexpected_argument(err_text: &str) -> Option<String> {
@@ -389,6 +403,20 @@ mod test {
         assert!(result.is_err());
         let error = result.err().expect("-w=2 must be rejected").to_string();
         assert!(error.contains("=2"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn test_basenc_reports_invalid_wrap_before_missing_encoding() {
+        let args = [ctcore::ct_util_name(), "-w", "bad"];
+        let result = basenc_parse_cmd_args(args.iter().map(OsString::from));
+        let error = result
+            .err()
+            .expect("invalid wrap must be rejected")
+            .to_string();
+        assert!(
+            error.contains("invalid wrap size"),
+            "unexpected error: {error}"
+        );
     }
 
     // 创建文件并写入内容

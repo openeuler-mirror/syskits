@@ -3031,6 +3031,17 @@ fn pr_get_rendered_line_for_printing(
 
     let result_line = line_width
         .map(|i| {
+            if columns == 1 && !formatted_line_number.is_empty() {
+                let content_width = i.saturating_sub(numbering_width).max(1);
+                return Ok((
+                    format!(
+                        "{formatted_line_number}{}",
+                        pr_take_display_width(&content, content_width, 8)
+                    ),
+                    false,
+                ));
+            }
+
             // When is_pad_columns is true, the implicit separator (tab/space) between
             // columns takes 1 character of width, matching GNU pr's formula:
             // chars_per_column = (chars_per_line - (columns-1) * col_sep_length) / columns

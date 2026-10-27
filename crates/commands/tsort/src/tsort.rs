@@ -124,6 +124,21 @@ fn tsort_error_detail(error: &std::io::Error) -> String {
     strip_errno(error)
 }
 
+fn tsort_program_name(args: &[OsString]) -> &[u8] {
+    args.first()
+        .map(|name| name.as_os_str().as_encoded_bytes())
+        .unwrap_or(b"tsort")
+}
+
+fn tsort_diagnostic(program_name: &[u8], message: &[u8]) -> Vec<u8> {
+    let mut diagnostic = Vec::with_capacity(program_name.len() + message.len() + 3);
+    diagnostic.extend_from_slice(program_name);
+    diagnostic.extend_from_slice(b": ");
+    diagnostic.extend_from_slice(message);
+    diagnostic.push(b'\n');
+    diagnostic
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TsortRow {
     pub row_index: usize,
@@ -226,8 +241,9 @@ fn tsort_run(args: impl ctcore::Args) -> CTResult<TsortRunOutcome> {
     tsort_init_locale();
     let mut raw_args = args.collect::<Vec<_>>();
     tsort_apply_posix_option_order(&mut raw_args, std::env::var_os("POSIXLY_CORRECT").is_some());
+    let program_name = tsort_program_name(&raw_args).to_vec();
     let matches = ct_app().try_get_matches_from(raw_args)?;
-    Ok(tsort_run_from_matches(&matches))
+    Ok(tsort_run_from_matches(&matches, &program_name))
 }
 
 fn tsort_apply_posix_option_order(args: &mut Vec<OsString>, posixly_correct: bool) {
@@ -248,6 +264,7 @@ fn tsort_apply_posix_option_order(args: &mut Vec<OsString>, posixly_correct: boo
 }
 
 fn tsort_option_error_outcome(args: &[OsString]) -> Option<TsortRunOutcome> {
+    let program_name = tsort_program_name(args);
     for argument in args.iter().skip(1) {
         let bytes = argument.as_os_str().as_encoded_bytes();
         if bytes == b"--" {
@@ -264,14 +281,14 @@ fn tsort_option_error_outcome(args: &[OsString]) -> Option<TsortRunOutcome> {
             }
 
             let template = tsort_dgettext(c"libc", "%s: unrecognized option '%s%s'\n");
-            tsort_format_bytes(&template, &[b"tsort", b"--", option])
+            tsort_format_bytes(&template, &[program_name, b"--", option])
         } else if let Some(options) = bytes.strip_prefix(b"-") {
             if options.is_empty() {
                 continue;
             }
 
             let template = tsort_dgettext(c"libc", "%s: invalid option -- '%c'\n");
-            tsort_format_bytes(&template, &[b"tsort", &options[..1]])
+            tsort_format_bytes(&template, &[program_name, &options[..1]])
         } else {
             continue;
         };
@@ -279,7 +296,7 @@ fn tsort_option_error_outcome(args: &[OsString]) -> Option<TsortRunOutcome> {
         let mut diagnostic = diagnostic;
         diagnostic.extend_from_slice(&tsort_format_message(
             "Try '%s --help' for more information.\n",
-            &[b"tsort"],
+            &[program_name],
         ));
         return Some(tsort_error_bytes_outcome(diagnostic, false));
     }
@@ -287,7 +304,7 @@ fn tsort_option_error_outcome(args: &[OsString]) -> Option<TsortRunOutcome> {
     None
 }
 
-fn tsort_run_from_matches(matches: &clap::ArgMatches) -> TsortRunOutcome {
+fn tsort_run_from_matches(matches: &clap::ArgMatches, program_name: &[u8]) -> TsortRunOutcome {
     let input_files: Vec<&OsString> = matches
         .get_many::<OsString>(tsort_flags::TSORT_FILE)
         .map(|v| v.collect())
@@ -300,15 +317,11 @@ fn tsort_run_from_matches(matches: &clap::ArgMatches) -> TsortRunOutcome {
                 quotes: CtQuotes::Locale,
             },
         );
-        let mut diagnostic = b"tsort: ".to_vec();
-        diagnostic.extend_from_slice(&tsort_format_message(
-            "extra operand %s",
-            &[&quoted_operand],
-        ));
-        diagnostic.push(b'\n');
+        let message = tsort_format_message("extra operand %s", &[&quoted_operand]);
+        let mut diagnostic = tsort_diagnostic(program_name, &message);
         diagnostic.extend_from_slice(&tsort_format_message(
             "Try '%s --help' for more information.\n",
-            &[b"tsort"],
+            &[program_name],
         ));
         return tsort_error_bytes_outcome(diagnostic, false);
     }
@@ -318,9 +331,9 @@ fn tsort_run_from_matches(matches: &clap::ArgMatches) -> TsortRunOutcome {
         .map(|s| s.as_os_str())
         .unwrap_or_else(|| OsStr::new("-"));
 
-    let input_buffer = match tsort_read_input(input_file) {
+    let input_buffer = match tsort_read_input(input_file, program_name) {
         Ok(input_buffer) => input_buffer,
-        Err(stderr_text) => return tsort_error_outcome(stderr_text, false),
+        Err(stderr_bytes) => return tsort_error_bytes_outcome(stderr_bytes, false),
     };
     let mut graph = TSortGraph::new();
 
@@ -328,12 +341,11 @@ fn tsort_run_from_matches(matches: &clap::ArgMatches) -> TsortRunOutcome {
 
     if tokens.len() % 2 != 0 {
         let quoted_file = quote_tsort_filename(input_file);
-        let mut diagnostic = b"tsort: ".to_vec();
-        diagnostic.extend_from_slice(&tsort_format_message(
+        let message = tsort_format_message(
             "%s: input contains an odd number of tokens",
             &[quoted_file.as_bytes()],
-        ));
-        diagnostic.push(b'\n');
+        );
+        let diagnostic = tsort_diagnostic(program_name, &message);
         return tsort_error_bytes_outcome(diagnostic, false);
     }
 
@@ -341,7 +353,7 @@ fn tsort_run_from_matches(matches: &clap::ArgMatches) -> TsortRunOutcome {
         graph.add_edge(chunk[0].clone(), chunk[1].clone());
     }
 
-    graph.tsort_exe(input_file)
+    graph.tsort_exe_with_program(input_file, program_name)
 }
 
 pub fn ct_app() -> Command {
@@ -367,10 +379,6 @@ pub fn ct_app() -> Command {
         .arg(arg)
 }
 
-fn tsort_error_outcome(stderr_text: String, had_cycle: bool) -> TsortRunOutcome {
-    tsort_error_bytes_outcome(stderr_text.into_bytes(), had_cycle)
-}
-
 fn tsort_error_bytes_outcome(stderr_bytes: Vec<u8>, had_cycle: bool) -> TsortRunOutcome {
     let stderr_len = stderr_bytes.len();
     TsortRunOutcome {
@@ -383,38 +391,34 @@ fn tsort_error_bytes_outcome(stderr_bytes: Vec<u8>, had_cycle: bool) -> TsortRun
     }
 }
 
-fn tsort_read_input(input_file: &OsStr) -> Result<Vec<u8>, String> {
+fn tsort_read_input(input_file: &OsStr, program_name: &[u8]) -> Result<Vec<u8>, Vec<u8>> {
     let mut input: Box<dyn Read> = if input_file == OsStr::new("-") {
         ctcore::ct_io::stdin_reader_box()
     } else {
         let path = Path::new(input_file);
         if path.is_dir() {
             let quoted_file = quote_tsort_filename(input_file);
-            let mut diagnostic = b"tsort: ".to_vec();
-            diagnostic.extend_from_slice(&tsort_format_message(
-                "%s: read error",
-                &[quoted_file.as_bytes()],
-            ));
-            diagnostic.extend_from_slice(b": ");
-            diagnostic.extend_from_slice(
+            let mut message = tsort_format_message("%s: read error", &[quoted_file.as_bytes()]);
+            message.extend_from_slice(b": ");
+            message.extend_from_slice(
                 tsort_error_detail(&std::io::Error::from_raw_os_error(libc::EISDIR)).as_bytes(),
             );
-            diagnostic.push(b'\n');
-            return Err(String::from_utf8_lossy(&diagnostic).into_owned());
+            return Err(tsort_diagnostic(program_name, &message));
         }
         Box::new(File::open(path).map_err(|err| {
-            format!(
-                "tsort: {}: {}\n",
+            let message = format!(
+                "{}: {}",
                 quote_tsort_filename(input_file),
                 tsort_error_detail(&err)
-            )
+            );
+            tsort_diagnostic(program_name, message.as_bytes())
         })?) as Box<dyn Read>
     };
 
     let mut input_buffer = Vec::new();
     input
         .read_to_end(&mut input_buffer)
-        .map_err(|err| format!("tsort: {err}\n"))?;
+        .map_err(|err| tsort_diagnostic(program_name, err.to_string().as_bytes()))?;
     Ok(input_buffer)
 }
 
@@ -455,23 +459,26 @@ fn tsort_node_to_text(node: &[u8]) -> String {
 }
 
 fn push_tsort_stderr(
+    program_name: &[u8],
     stderr_bytes: &mut Vec<u8>,
     output_events: &mut Vec<TsortOutputEvent>,
     message: impl AsRef<[u8]>,
 ) {
     let start = stderr_bytes.len();
-    stderr_bytes.extend_from_slice(b"tsort: ");
+    stderr_bytes.extend_from_slice(program_name);
+    stderr_bytes.extend_from_slice(b": ");
     stderr_bytes.extend_from_slice(message.as_ref());
     stderr_bytes.push(b'\n');
     output_events.push(TsortOutputEvent::Stderr(start..stderr_bytes.len()));
 }
 
 fn push_tsort_stderr_node(
+    program_name: &[u8],
     stderr_bytes: &mut Vec<u8>,
     output_events: &mut Vec<TsortOutputEvent>,
     node: &[u8],
 ) {
-    push_tsort_stderr(stderr_bytes, output_events, node);
+    push_tsort_stderr(program_name, stderr_bytes, output_events, node);
 }
 
 use std::collections::VecDeque;
@@ -504,7 +511,16 @@ impl TSortGraph {
         }
     }
 
+    #[cfg(test)]
     fn tsort_exe(&mut self, filename: impl AsRef<OsStr>) -> TsortRunOutcome {
+        self.tsort_exe_with_program(filename, b"tsort")
+    }
+
+    fn tsort_exe_with_program(
+        &mut self,
+        filename: impl AsRef<OsStr>,
+        program_name: &[u8],
+    ) -> TsortRunOutcome {
         let filename = filename.as_ref();
         let mut found_cycle = false;
         let mut queue: VecDeque<TsortNode> = VecDeque::new();
@@ -524,9 +540,12 @@ impl TSortGraph {
         while !self.indegrees.is_empty() {
             if queue.is_empty() {
                 found_cycle = true;
-                if let Some(freed_node) =
-                    self.detect_and_break_cycle(filename, &mut stderr_bytes, &mut output_events)
-                {
+                if let Some(freed_node) = self.detect_and_break_cycle(
+                    filename,
+                    program_name,
+                    &mut stderr_bytes,
+                    &mut output_events,
+                ) {
                     if let Some(indegree) = self.indegrees.get(&freed_node) {
                         if *indegree == 0 {
                             queue.push_back(freed_node);
@@ -576,6 +595,7 @@ impl TSortGraph {
     fn detect_and_break_cycle(
         &mut self,
         filename: &OsStr,
+        program_name: &[u8],
         stderr_bytes: &mut Vec<u8>,
         output_events: &mut Vec<TsortOutputEvent>,
     ) -> Option<TsortNode> {
@@ -617,6 +637,7 @@ impl TSortGraph {
                     if qlink.contains_key(k) {
                         // *** 发现了环 ***
                         push_tsort_stderr(
+                            program_name,
                             stderr_bytes,
                             output_events,
                             tsort_format_message(
@@ -630,7 +651,12 @@ impl TSortGraph {
                         let mut loop_node = curr.clone();
 
                         // 1. 打印 loop_node
-                        push_tsort_stderr_node(stderr_bytes, output_events, &loop_node);
+                        push_tsort_stderr_node(
+                            program_name,
+                            stderr_bytes,
+                            output_events,
+                            &loop_node,
+                        );
 
                         // 开始回溯
                         loop {
@@ -658,7 +684,12 @@ impl TSortGraph {
                                 return Some(curr.clone());
                             }
 
-                            push_tsort_stderr_node(stderr_bytes, output_events, &next_node);
+                            push_tsort_stderr_node(
+                                program_name,
+                                stderr_bytes,
+                                output_events,
+                                &next_node,
+                            );
                             loop_node = next_node;
                         }
                     } else {

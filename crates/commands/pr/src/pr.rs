@@ -872,6 +872,7 @@ fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
 
     let mut recreated_args = Vec::with_capacity(args.len());
     let mut stop_rewrite = false;
+    let mut page_option_seen = false;
     for arg in args {
         let arg = arg.as_ref();
         if stop_rewrite {
@@ -887,6 +888,12 @@ fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
             recreated_args.push(arg.to_os_string());
             continue;
         };
+
+        if arg == "--pages" || arg.starts_with("--pages=") {
+            page_option_seen = true;
+            recreated_args.push(OsString::from(arg));
+            continue;
+        }
 
         // GNU pr accepts old-style column counts merged into -t (e.g. -t2 == -t -2).
         if let Some(old_column_count) = arg.strip_prefix("-t") {
@@ -908,7 +915,11 @@ fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
             }
         }
 
-        if column_option_regex.is_match(arg) || page_option_regex.is_match(arg) {
+        if column_option_regex.is_match(arg) {
+            continue;
+        }
+        if page_option_regex.is_match(arg) && !page_option_seen {
+            page_option_seen = true;
             continue;
         }
 
@@ -6356,6 +6367,20 @@ mod tests {
         #[test]
         fn test_pr_recreate_arguments_preserves_malformed_old_options() {
             let args = vec!["pr", "-2x", "+2x", "+0", "file.txt"];
+            let result = pr_recreate_arguments(&args);
+            assert_eq!(
+                result,
+                args.into_iter().map(OsString::from).collect::<Vec<_>>()
+            );
+        }
+
+        #[test]
+        fn test_pr_recreate_arguments_consumes_only_first_page_option() {
+            let args = vec!["pr", "+1", "+2", "file.txt"];
+            let result = pr_recreate_arguments(&args);
+            assert_eq!(result, vec!["pr", "+2", "file.txt"]);
+
+            let args = vec!["pr", "--pages=1", "+2", "file.txt"];
             let result = pr_recreate_arguments(&args);
             assert_eq!(
                 result,

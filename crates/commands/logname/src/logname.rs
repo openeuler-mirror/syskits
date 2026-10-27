@@ -16,10 +16,10 @@ use clap::{Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError};
+use ctcore::ct_error::{CTError, CTResult};
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
 use std::error::Error;
-use std::ffi::{CStr, OsStr, OsString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fmt::{Display, Formatter};
 use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
@@ -28,6 +28,134 @@ use sys_locale::get_locale;
 unsafe extern "C" {
     // POSIX 要求使用 getlogin（或同等代码）
     pub fn getlogin() -> *const libc::c_char;
+    fn bindtextdomain(
+        domainname: *const ctcore::libc::c_char,
+        dirname: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
+    fn dgettext(
+        domainname: *const ctcore::libc::c_char,
+        msgid: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
+}
+
+fn init_logname_locale() {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+        bindtextdomain(c"coreutils".as_ptr(), c"/usr/share/locale".as_ptr());
+    }
+}
+
+fn gettext_bytes(domain: &CStr, msgid: &CStr) -> Vec<u8> {
+    let translated = unsafe { dgettext(domain.as_ptr(), msgid.as_ptr()) };
+    if translated.is_null() {
+        msgid.to_bytes().to_vec()
+    } else {
+        unsafe { CStr::from_ptr(translated) }.to_bytes().to_vec()
+    }
+}
+
+fn format_gettext_one(domain: &CStr, msgid: &CStr, value: &[u8]) -> Option<Vec<u8>> {
+    let value = CString::new(value).ok()?;
+    let template = unsafe { dgettext(domain.as_ptr(), msgid.as_ptr()) };
+    if template.is_null() {
+        return None;
+    }
+    let len = unsafe { ctcore::libc::snprintf(std::ptr::null_mut(), 0, template, value.as_ptr()) };
+    if len < 0 {
+        return None;
+    }
+    let mut rendered = vec![0u8; len as usize + 1];
+    unsafe {
+        ctcore::libc::snprintf(
+            rendered.as_mut_ptr().cast(),
+            rendered.len(),
+            template,
+            value.as_ptr(),
+        );
+    }
+    rendered.truncate(len as usize);
+    Some(rendered)
+}
+
+fn format_gettext_three(
+    domain: &CStr,
+    msgid: &CStr,
+    first: &[u8],
+    second: &[u8],
+    third: &[u8],
+) -> Option<Vec<u8>> {
+    let first = CString::new(first).ok()?;
+    let second = CString::new(second).ok()?;
+    let third = CString::new(third).ok()?;
+    let template = unsafe { dgettext(domain.as_ptr(), msgid.as_ptr()) };
+    if template.is_null() {
+        return None;
+    }
+    let len = unsafe {
+        ctcore::libc::snprintf(
+            std::ptr::null_mut(),
+            0,
+            template,
+            first.as_ptr(),
+            second.as_ptr(),
+            third.as_ptr(),
+        )
+    };
+    if len < 0 {
+        return None;
+    }
+    let mut rendered = vec![0u8; len as usize + 1];
+    unsafe {
+        ctcore::libc::snprintf(
+            rendered.as_mut_ptr().cast(),
+            rendered.len(),
+            template,
+            first.as_ptr(),
+            second.as_ptr(),
+            third.as_ptr(),
+        );
+    }
+    rendered.truncate(len as usize);
+    Some(rendered)
+}
+
+fn format_gettext_char(
+    domain: &CStr,
+    msgid: &CStr,
+    program_name: &[u8],
+    value: u8,
+) -> Option<Vec<u8>> {
+    let program_name = CString::new(program_name).ok()?;
+    let template = unsafe { dgettext(domain.as_ptr(), msgid.as_ptr()) };
+    if template.is_null() {
+        return None;
+    }
+    let len = unsafe {
+        ctcore::libc::snprintf(
+            std::ptr::null_mut(),
+            0,
+            template,
+            program_name.as_ptr(),
+            value as ctcore::libc::c_int,
+        )
+    };
+    if len < 0 {
+        return None;
+    }
+    let mut rendered = vec![0u8; len as usize + 1];
+    unsafe {
+        ctcore::libc::snprintf(
+            rendered.as_mut_ptr().cast(),
+            rendered.len(),
+            template,
+            program_name.as_ptr(),
+            value as ctcore::libc::c_int,
+        );
+    }
+    rendered.truncate(len as usize);
+    Some(rendered)
 }
 
 fn get_user_login_bytes() -> Option<Vec<u8>> {
@@ -76,20 +204,26 @@ fn quote_logname_operand(operand: &OsStr) -> String {
 #[derive(Debug)]
 struct LognameRawDiagnostic {
     message: Vec<u8>,
+    complete: bool,
+    usage: bool,
 }
 
 impl Display for LognameRawDiagnostic {
     fn fmt(&self, _formatter: &mut Formatter<'_>) -> std::fmt::Result {
-        let program_name = ctcore::ct_os_args()
-            .next()
-            .unwrap_or_else(|| OsString::from("logname"));
         let mut stderr = std::io::stderr().lock();
-        let _ = stderr
-            .write_all(program_name.as_os_str().as_bytes())
-            .and_then(|_| stderr.write_all(b": "))
-            .and_then(|_| stderr.write_all(&self.message))
-            .and_then(|_| stderr.write_all(b"\n"))
-            .and_then(|_| stderr.flush());
+        let result = if self.complete {
+            stderr.write_all(&self.message)
+        } else {
+            let program_name = ctcore::ct_os_args()
+                .next()
+                .unwrap_or_else(|| OsString::from("logname"));
+            stderr
+                .write_all(program_name.as_os_str().as_bytes())
+                .and_then(|_| stderr.write_all(b": "))
+                .and_then(|_| stderr.write_all(&self.message))
+                .and_then(|_| stderr.write_all(b"\n"))
+        };
+        result.and_then(|_| stderr.flush()).unwrap();
         Ok(())
     }
 }
@@ -102,49 +236,13 @@ impl CTError for LognameRawDiagnostic {
     }
 
     fn usage(&self) -> bool {
-        true
+        self.usage
     }
-}
-
-fn gnu_logname_nonutf_option_error(args: &[OsString]) -> Option<LognameRawDiagnostic> {
-    const LONG_OPTIONS: [&[u8]; 2] = [b"help", b"version"];
-
-    for argument in args.iter().skip(1) {
-        let bytes = argument.as_os_str().as_bytes();
-        if bytes == b"--" || bytes == b"-" || !bytes.starts_with(b"-") {
-            break;
-        }
-
-        if let Some(long_argument) = bytes.strip_prefix(b"--") {
-            let name_end = long_argument
-                .iter()
-                .position(|byte| *byte == b'=')
-                .unwrap_or(long_argument.len());
-            let name = &long_argument[..name_end];
-            let known = LONG_OPTIONS
-                .iter()
-                .any(|option| !name.is_empty() && option.starts_with(name));
-            if !known && bytes.iter().any(|byte| !byte.is_ascii()) {
-                return Some(LognameRawDiagnostic {
-                    message: [b"unrecognized option '".as_slice(), bytes, b"'"].concat(),
-                });
-            }
-            return None;
-        }
-
-        let invalid = bytes[1];
-        if !invalid.is_ascii() {
-            return Some(LognameRawDiagnostic {
-                message: [b"invalid option -- '".as_slice(), &[invalid], b"'"].concat(),
-            });
-        }
-        return None;
-    }
-    None
 }
 
 fn gnu_logname_option_error(args: &[OsString]) -> Option<Box<dyn CTError>> {
     const LONG_OPTIONS: [&[u8]; 2] = [b"help", b"version"];
+    let program_name = args.first()?.as_os_str().as_bytes();
 
     for argument in args.iter().skip(1) {
         let bytes = argument.as_os_str().as_bytes();
@@ -161,18 +259,45 @@ fn gnu_logname_option_error(args: &[OsString]) -> Option<Box<dyn CTError>> {
                 .filter(|option| !name.is_empty() && option.starts_with(name))
                 .collect::<Vec<_>>();
             let Some(option) = matches.first() else {
-                let argument = std::str::from_utf8(bytes).ok()?;
-                return Some(CTsageError::new(
-                    1,
-                    format!("unrecognized option '{argument}'"),
-                ));
+                let message = format_gettext_three(
+                    c"libc",
+                    c"%s: unrecognized option '%s%s'\n",
+                    program_name,
+                    b"",
+                    bytes,
+                )
+                .unwrap_or_else(|| {
+                    [program_name, b": unrecognized option '", bytes, b"'\n"].concat()
+                });
+                return Some(Box::new(LognameRawDiagnostic {
+                    message,
+                    complete: true,
+                    usage: true,
+                }));
             };
             if value_index.is_some() {
-                let option = std::str::from_utf8(option).expect("GNU option names are ASCII");
-                return Some(CTsageError::new(
-                    1,
-                    format!("option '--{option}' doesn't allow an argument"),
-                ));
+                let option = [b"--".as_slice(), *option].concat();
+                let message = format_gettext_three(
+                    c"libc",
+                    c"%s: option '%s%s' doesn't allow an argument\n",
+                    program_name,
+                    b"",
+                    &option,
+                )
+                .unwrap_or_else(|| {
+                    [
+                        program_name,
+                        b": option '",
+                        &option,
+                        b"' doesn't allow an argument\n",
+                    ]
+                    .concat()
+                });
+                return Some(Box::new(LognameRawDiagnostic {
+                    message,
+                    complete: true,
+                    usage: true,
+                }));
             }
 
             // GNU exits as soon as --help or --version is recognized.
@@ -180,11 +305,21 @@ fn gnu_logname_option_error(args: &[OsString]) -> Option<Box<dyn CTError>> {
         }
 
         let invalid = bytes[1];
-        if invalid.is_ascii() && bytes != b"-h" && bytes != b"-V" {
-            return Some(CTsageError::new(
-                1,
-                format!("invalid option -- '{}'", invalid as char),
-            ));
+        if bytes != b"-h" && bytes != b"-V" {
+            let message = format_gettext_char(
+                c"libc",
+                c"%s: invalid option -- '%c'\n",
+                program_name,
+                invalid,
+            )
+            .unwrap_or_else(|| {
+                [program_name, b": invalid option -- '", &[invalid], b"'\n"].concat()
+            });
+            return Some(Box::new(LognameRawDiagnostic {
+                message,
+                complete: true,
+                usage: true,
+            }));
         }
         return None;
     }
@@ -224,9 +359,6 @@ fn parse_logname_args(args: impl ctcore::Args) -> CTResult<()> {
         args.collect(),
         std::env::var_os("POSIXLY_CORRECT").is_some(),
     );
-    if let Some(error) = gnu_logname_nonutf_option_error(&args) {
-        return Err(Box::new(error));
-    }
     if let Some(error) = gnu_logname_option_error(&args) {
         return Err(error);
     }
@@ -234,15 +366,38 @@ fn parse_logname_args(args: impl ctcore::Args) -> CTResult<()> {
         Ok(_) => Ok(()),
         Err(error) if error.kind() == clap::error::ErrorKind::UnknownArgument => {
             if let Some(operand) = first_extra_operand(&args) {
-                return Err(CTsageError::new(
-                    1,
-                    format!("extra operand {}", quote_logname_operand(operand)),
-                ));
+                let quoted = quote_logname_operand(operand);
+                let message =
+                    format_gettext_one(c"coreutils", c"extra operand %s", quoted.as_bytes())
+                        .unwrap_or_else(|| {
+                            [b"extra operand ".as_slice(), quoted.as_bytes()].concat()
+                        });
+                return Err(Box::new(LognameRawDiagnostic {
+                    message,
+                    complete: false,
+                    usage: true,
+                }));
             }
             Err(error.into())
         }
         Err(error) => Err(error.into()),
     }
+}
+
+pub fn logname_usage_message(program_name: &OsStr) -> Vec<u8> {
+    format_gettext_one(
+        c"coreutils",
+        c"Try '%s --help' for more information.\n",
+        program_name.as_bytes(),
+    )
+    .unwrap_or_else(|| {
+        [
+            b"Try '".as_slice(),
+            program_name.as_bytes(),
+            b" --help' for more information.\n",
+        ]
+        .concat()
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -336,8 +491,7 @@ impl Tool for Logname {
 }
 
 pub fn logname_main(args: impl ctcore::Args) -> CTResult<()> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    init_logname_locale();
     parse_logname_args(args)?;
 
     match get_user_login_bytes() {
@@ -347,7 +501,13 @@ pub fn logname_main(args: impl ctcore::Args) -> CTResult<()> {
             output.write_all(&userlogin).unwrap();
             output.write_all(b"\n").unwrap();
         }
-        None => return Err(CtSimpleError::new(1, "no login name".to_string())),
+        None => {
+            return Err(Box::new(LognameRawDiagnostic {
+                message: gettext_bytes(c"coreutils", c"no login name"),
+                complete: false,
+                usage: false,
+            }));
+        }
     }
 
     Ok(())

@@ -585,11 +585,23 @@ pub fn fold_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<
     // 设置语言
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let (matches, obs_width) = match fold_arg_matches(args) {
+    let raw_args = args.collect::<Vec<_>>();
+    let (matches, obs_width) = match fold_arg_matches(raw_args.iter().cloned()) {
         Ok(m) => m,
         Err(e) => {
             if e.kind() == ErrorKind::ArgumentConflict {
                 return Err(CtSimpleError::new(2, FOLD_MODE_CONFLICT_MESSAGE));
+            }
+            if !matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion)
+                && let Some(diagnostic) = fold_option_error_diagnostic(&raw_args)
+            {
+                return Err(CtSimpleError::new(
+                    1,
+                    format!(
+                        "{diagnostic}\nTry '{} --help' for more information.",
+                        ctcore::ct_help_utility_name()
+                    ),
+                ));
             }
             return Err(e.into());
         }
@@ -597,6 +609,62 @@ pub fn fold_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<
 
     let flags = fold_flags_from_matches(&matches, obs_width)?;
     fold(writer, &flags)
+}
+
+fn fold_long_option_name(argument: &[u8]) -> Option<&'static str> {
+    let mut matches = ["bytes", "characters", "spaces", "width", "help", "version"]
+        .into_iter()
+        .filter(|option| option.as_bytes().starts_with(argument));
+    let option = matches.next()?;
+    matches.next().is_none().then_some(option)
+}
+
+fn fold_option_error_diagnostic(args: &[OsString]) -> Option<String> {
+    for (index, argument) in args.iter().enumerate().skip(1) {
+        let bytes = argument.as_os_str().as_encoded_bytes();
+        if bytes == b"--" {
+            break;
+        }
+        if let Some(long_argument) = bytes.strip_prefix(b"--") {
+            let mut parts = long_argument.splitn(2, |byte| *byte == b'=');
+            let name = parts.next().unwrap_or_default();
+            let attached_value = parts.next().is_some();
+            let supplied_option = String::from_utf8_lossy(name);
+            let Some(option) = fold_long_option_name(name) else {
+                return Some(format!("unrecognized option '--{supplied_option}'"));
+            };
+            if attached_value && option != "width" {
+                return Some(format!("option '--{option}' doesn't allow an argument"));
+            }
+            if !attached_value && option == "width" && index + 1 == args.len() {
+                return Some("option '--width' requires an argument".to_string());
+            }
+            continue;
+        }
+
+        let Some(short_options) = bytes.strip_prefix(b"-") else {
+            continue;
+        };
+        if short_options.is_empty() {
+            continue;
+        }
+        for (position, option) in short_options.iter().enumerate() {
+            match *option {
+                b'b' | b'c' | b's' | b'h' | b'V' => {}
+                b'w' => {
+                    if position + 1 == short_options.len() && index + 1 == args.len() {
+                        return Some("option requires an argument -- 'w'".to_string());
+                    }
+                    break;
+                }
+                b'0'..=b'9' => break,
+                invalid => {
+                    return Some(format!("invalid option -- '{}'", char::from(invalid)));
+                }
+            }
+        }
+    }
+    None
 }
 
 fn fold_flags_from_matches(
@@ -1275,6 +1343,31 @@ mod tests {
             let error = result.expect_err("-c and -b should conflict");
             assert_eq!(error.code(), 2);
             assert_eq!(error.to_string(), FOLD_MODE_CONFLICT_MESSAGE);
+        }
+
+        #[test]
+        fn test_ct_main_uses_gnu_option_error_diagnostics() {
+            for (arguments, expected) in [
+                (&["fold", "-x"][..], "invalid option -- 'x'"),
+                (&["fold", "-w"][..], "option requires an argument -- 'w'"),
+                (
+                    &["fold", "--bytes=x"][..],
+                    "option '--bytes' doesn't allow an argument",
+                ),
+            ] {
+                let error = fold_main(&mut Vec::new(), arguments.iter().map(OsString::from))
+                    .expect_err("option should fail");
+
+                assert_eq!(error.code(), 1);
+                assert!(!error.usage());
+                assert_eq!(
+                    error.to_string(),
+                    format!(
+                        "{expected}\nTry '{} --help' for more information.",
+                        ctcore::ct_help_utility_name()
+                    )
+                );
+            }
         }
 
         #[test]

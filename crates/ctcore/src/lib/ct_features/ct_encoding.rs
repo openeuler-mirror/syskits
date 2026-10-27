@@ -374,12 +374,54 @@ impl<R: Read> Data<R> {
 
         let invalid_input = || io::Error::new(io::ErrorKind::InvalidData, "invalid input");
         let use_base32_compat = matches!(self.format, Base32 | Base32Hex);
+        let format = self.format;
         let mut read_buf = [0; 8192];
         let mut char_buf = Vec::with_capacity(8192);
+        let process_complete_blocks =
+            |char_buf: &mut Vec<u8>, writer: &mut W| -> Result<(), CtDecodeError> {
+                if let Some(block_size) = decode_block {
+                    while char_buf.len() >= block_size {
+                        if use_base32_compat {
+                            let ok = decode_base32_quantum(format, &char_buf[..8], &mut *writer)
+                                .map_err(CtDecodeError::WriteError)?;
+                            if !ok {
+                                return Err(invalid_input().into());
+                            }
+                            char_buf.drain(..8);
+                        } else {
+                            let mut block = char_buf[..block_size].to_vec();
+                            if matches!(format, Base16) {
+                                block.make_ascii_uppercase();
+                            }
+                            if matches!(format, Base64 | Base64Url) {
+                                if !decode_base64_quantum(format, &block, &mut *writer)
+                                    .map_err(CtDecodeError::WriteError)?
+                                {
+                                    return Err(invalid_input().into());
+                                }
+                            } else {
+                                let decoded = decode(format, &block)?;
+                                writer
+                                    .write_all(&decoded)
+                                    .map_err(CtDecodeError::WriteError)?;
+                            }
+                            char_buf.drain(..block_size);
+                        }
+                    }
+                }
+                Ok(())
+            };
+
         loop {
             let n = match self.input.read(&mut read_buf) {
-                Ok(0) => break,
-                Ok(n) => n,
+                Ok(0) => {
+                    process_complete_blocks(&mut char_buf, &mut writer)?;
+                    break;
+                }
+                Ok(n) => {
+                    process_complete_blocks(&mut char_buf, &mut writer)?;
+                    n
+                }
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
                 Err(e) => return Err(e.into()),
             };
@@ -391,37 +433,6 @@ impl<R: Read> Data<R> {
                     }
                 } else if c != b'\n' {
                     char_buf.push(c);
-                }
-            }
-
-            if let Some(block_size) = decode_block {
-                while char_buf.len() >= block_size {
-                    if use_base32_compat {
-                        let ok = decode_base32_quantum(self.format, &char_buf[..8], &mut writer)
-                            .map_err(CtDecodeError::WriteError)?;
-                        if !ok {
-                            return Err(invalid_input().into());
-                        }
-                        char_buf.drain(..8);
-                    } else {
-                        let mut block = char_buf[..block_size].to_vec();
-                        if matches!(self.format, Base16) {
-                            block.make_ascii_uppercase();
-                        }
-                        if matches!(self.format, Base64 | Base64Url) {
-                            if !decode_base64_quantum(self.format, &block, &mut writer)
-                                .map_err(CtDecodeError::WriteError)?
-                            {
-                                return Err(invalid_input().into());
-                            }
-                        } else {
-                            let decoded = decode(self.format, &block)?;
-                            writer
-                                .write_all(&decoded)
-                                .map_err(CtDecodeError::WriteError)?;
-                        }
-                        char_buf.drain(..block_size);
-                    }
                 }
             }
         }
@@ -648,6 +659,7 @@ mod test {
     }
 
     struct ReadThenFail {
+        input: &'static [u8],
         emitted: bool,
     }
 
@@ -657,8 +669,8 @@ mod test {
                 return Err(io::Error::from_raw_os_error(libc::EIO));
             }
             self.emitted = true;
-            buf[..5].copy_from_slice(b"abcde");
-            Ok(5)
+            buf[..self.input.len()].copy_from_slice(self.input);
+            Ok(self.input.len())
         }
     }
     #[test]
@@ -1011,10 +1023,30 @@ mod test {
 
     #[test]
     fn test_data_encode_writes_partial_input_before_read_error() {
-        let mut data = Data::new(ReadThenFail { emitted: false }, Format::Base64);
+        let input = ReadThenFail {
+            input: b"abcde",
+            emitted: false,
+        };
+        let mut data = Data::new(input, Format::Base64);
         let mut output = Vec::new();
         let result = data.encode(&mut output);
         assert!(matches!(result, Err(CtEncodeError::ReadError(_))));
         assert_eq!(output, b"YWJjZGU=\n");
+    }
+
+    #[test]
+    fn test_data_decode_discards_partial_input_before_read_error() {
+        let input = ReadThenFail {
+            input: b"YWJjZ",
+            emitted: false,
+        };
+        let mut data = Data::new(input, Format::Base64);
+        let mut output = Vec::new();
+        let result = data.decode(&mut output);
+        assert!(matches!(
+            result,
+            Err(CtDecodeError::Io(error)) if error.raw_os_error() == Some(libc::EIO)
+        ));
+        assert!(output.is_empty());
     }
 }

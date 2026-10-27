@@ -1260,6 +1260,17 @@ fn pr_build_options(
         is_join_lines,
         columns_to_print,
     );
+    if let Some(width) = line_width
+        && columns_to_print > 1
+    {
+        let separator_width = pr_rendered_width(&col_sep_for_printing, 8);
+        let separator_space = (columns_to_print - 1).saturating_mul(separator_width);
+        if width.saturating_sub(separator_space) / columns_to_print < 1 {
+            return Err(PrError::EncounteredErrorsNoHelp(
+                "page width too narrow".to_string(),
+            ));
+        }
+    }
 
     let is_double_space = arg_matches.get_flag(pr_flags::PR_DOUBLE_SPACE);
     let is_merge_mode = parse_merge_mode(arg_matches, column_mode_options.as_ref())?;

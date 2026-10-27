@@ -18,7 +18,9 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError};
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
+use std::error::Error;
 use std::ffi::{CStr, OsStr, OsString};
+use std::fmt::{Display, Formatter};
 use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
@@ -69,6 +71,73 @@ fn quote_logname_operand(operand: &OsStr) -> String {
             quotes: CtQuotes::Locale,
         },
     )
+}
+
+#[derive(Debug)]
+struct LognameRawDiagnostic {
+    message: Vec<u8>,
+}
+
+impl Display for LognameRawDiagnostic {
+    fn fmt(&self, _formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut stderr = std::io::stderr().lock();
+        let _ = stderr
+            .write_all(ctcore::ct_util_name().as_bytes())
+            .and_then(|_| stderr.write_all(b": "))
+            .and_then(|_| stderr.write_all(&self.message))
+            .and_then(|_| stderr.write_all(b"\n"))
+            .and_then(|_| stderr.flush());
+        Ok(())
+    }
+}
+
+impl Error for LognameRawDiagnostic {}
+
+impl CTError for LognameRawDiagnostic {
+    fn code(&self) -> i32 {
+        1
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
+fn gnu_logname_nonutf_option_error(args: &[OsString]) -> Option<LognameRawDiagnostic> {
+    const LONG_OPTIONS: [&[u8]; 2] = [b"help", b"version"];
+
+    for argument in args.iter().skip(1) {
+        let bytes = argument.as_os_str().as_bytes();
+        if bytes == b"--" || bytes == b"-" || !bytes.starts_with(b"-") {
+            break;
+        }
+
+        if let Some(long_argument) = bytes.strip_prefix(b"--") {
+            let name_end = long_argument
+                .iter()
+                .position(|byte| *byte == b'=')
+                .unwrap_or(long_argument.len());
+            let name = &long_argument[..name_end];
+            let known = LONG_OPTIONS
+                .iter()
+                .any(|option| !name.is_empty() && option.starts_with(name));
+            if !known && bytes.iter().any(|byte| !byte.is_ascii()) {
+                return Some(LognameRawDiagnostic {
+                    message: [b"unrecognized option '".as_slice(), bytes, b"'"].concat(),
+                });
+            }
+            return None;
+        }
+
+        let invalid = bytes[1];
+        if !invalid.is_ascii() {
+            return Some(LognameRawDiagnostic {
+                message: [b"invalid option -- '".as_slice(), &[invalid], b"'"].concat(),
+            });
+        }
+        return None;
+    }
+    None
 }
 
 fn gnu_logname_option_error(args: &[OsString]) -> Option<Box<dyn CTError>> {
@@ -152,6 +221,9 @@ fn parse_logname_args(args: impl ctcore::Args) -> CTResult<()> {
         args.collect(),
         std::env::var_os("POSIXLY_CORRECT").is_some(),
     );
+    if let Some(error) = gnu_logname_nonutf_option_error(&args) {
+        return Err(Box::new(error));
+    }
     if let Some(error) = gnu_logname_option_error(&args) {
         return Err(error);
     }

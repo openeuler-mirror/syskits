@@ -862,6 +862,28 @@ fn pr_is_numeric_option_cluster(arg: &str) -> bool {
             .all(|byte| byte.is_ascii_digit() || b"abcdfFJmrtTv".contains(&byte))
 }
 
+fn pr_split_optional_argument_cluster(arg: &str) -> Option<Vec<OsString>> {
+    let cluster = arg.strip_prefix('-')?;
+    for (index, option) in cluster.char_indices() {
+        if !matches!(option, 'n' | 'e' | 'i' | 's' | 'S') || index == 0 {
+            continue;
+        }
+        let prefix = &cluster[..index];
+        if !prefix.bytes().all(|byte| b"abcdfFJmrtTv".contains(&byte)) {
+            return None;
+        }
+        let value = &cluster[index + option.len_utf8()..];
+        if value.is_empty() {
+            return None;
+        }
+        return Some(vec![
+            OsString::from(format!("-{prefix}")),
+            OsString::from(format!("-{option}={value}")),
+        ]);
+    }
+    None
+}
+
 fn pr_semantic_from_clap_error(error: clap::Error) -> PrSemantic {
     let rendered = error.to_string();
     if error.use_stderr() {
@@ -935,6 +957,11 @@ fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
         if arg == "--pages" || arg.starts_with("--pages=") {
             page_option_seen = true;
             recreated_args.push(OsString::from(arg));
+            continue;
+        }
+
+        if let Some(split) = pr_split_optional_argument_cluster(arg) {
+            recreated_args.extend(split);
             continue;
         }
 
@@ -6487,6 +6514,15 @@ mod tests {
             ];
             let result = pr_recreate_arguments(&args);
             assert_eq!(result, vec!["pr", "-t", "-n=:2", "file.txt"]);
+
+            assert_eq!(
+                pr_recreate_arguments(&["pr", "-dn3", "file.txt"]),
+                vec!["pr", "-d", "-n=3", "file.txt"]
+            );
+            assert_eq!(
+                pr_recreate_arguments(&["pr", "-te:4", "file.txt"]),
+                vec!["pr", "-t", "-e=:4", "file.txt"]
+            );
         }
 
         #[test]

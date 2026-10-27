@@ -102,6 +102,10 @@ pub fn ct_app() -> Command {
 
 fn basenc_parse_cmd_args(args: impl ctcore::Args) -> CTResult<(BaseConfig, Format)> {
     let args = base_common::normalize_base_short_wrap_equals(args.collect());
+    let args = base_common::normalize_base_args_for_posix(
+        args.into_iter(),
+        std::env::var_os("POSIXLY_CORRECT").is_some(),
+    );
     let args_match = match ct_app().try_get_matches_from(args.clone()) {
         Ok(matches) => matches,
         Err(e) => {

@@ -11,6 +11,7 @@
 
 extern crate rust_i18n;
 use rust_i18n::t;
+use std::cell::Cell;
 use std::fs::{File, metadata};
 rust_i18n::i18n!("locales", fallback = "en-US");
 #[cfg(unix)]
@@ -20,6 +21,7 @@ use std::io::{BufRead, BufReader, Error, Read, Write, stderr, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
+use std::rc::Rc;
 
 use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
@@ -1981,7 +1983,13 @@ fn pr_collect_semantic_for_path(
     output: &mut Option<&mut dyn Write>,
 ) -> Result<(), PrError> {
     let lines = pr_input_lines(pr_open(path)?);
-    let pages = pr_read_stream_and_create_pages(output_opts, lines, 0);
+    let page_count = Rc::new(Cell::new(0));
+    let pages = pr_read_stream_and_create_pages_tracked(
+        output_opts,
+        lines,
+        0,
+        Some(Rc::clone(&page_count)),
+    );
     let collect_semantic = output.is_none();
 
     for (page_index, page_lines) in pages {
@@ -1998,6 +2006,14 @@ fn pr_collect_semantic_for_path(
         let mut page_output = Vec::new();
         pr_output_page(&page_lines, output_opts, &mut page_output, page_number)?;
         pr_consume_page_output(semantic, &page_output, output)?;
+    }
+
+    if output_opts.start_page > 1 && page_count.get() < output_opts.start_page {
+        semantic.stderr_text.push_str(&format!(
+            "pr: starting page number {} exceeds page count {}\n",
+            output_opts.start_page,
+            page_count.get()
+        ));
     }
 
     Ok(())
@@ -2051,6 +2067,15 @@ fn pr_read_stream_and_create_pages(
     output_opts: &PrOutputOptions,
     lines: PrInputLines,
     file_id: usize,
+) -> Box<dyn Iterator<Item = (usize, Vec<PrFileLine>)>> {
+    pr_read_stream_and_create_pages_tracked(output_opts, lines, file_id, None)
+}
+
+fn pr_read_stream_and_create_pages_tracked(
+    output_opts: &PrOutputOptions,
+    lines: PrInputLines,
+    file_id: usize,
+    page_count: Option<Rc<Cell<usize>>>,
 ) -> Box<dyn Iterator<Item = (usize, Vec<PrFileLine>)>> {
     let start_page = output_opts.start_page;
     let start_line_number = pr_get_start_line_number(output_opts);
@@ -2153,6 +2178,11 @@ fn pr_read_stream_and_create_pages(
             }) // 创建一组页面，因为表单输入可能导致页面为空
             .flatten() // 从页面集平铺到页面
             .enumerate() // 指定页码
+            .inspect(move |(page_index, _)| {
+                if let Some(page_count) = &page_count {
+                    page_count.set(page_index + 1);
+                }
+            })
             .skip_while(move |(x, _)| {
                 // 跳过不需要的页面
                 let current_page = x + 1;

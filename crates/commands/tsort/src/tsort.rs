@@ -19,7 +19,7 @@ use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name, escape_nam
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::collections::{BTreeMap, HashMap};
-use std::ffi::{OsStr, OsString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::ops::Range;
@@ -42,6 +42,86 @@ fn quote_tsort_filename(filename: &OsStr) -> String {
     } else {
         escape_name(filename, &TSORT_FILENAME_QUOTING_STYLE)
     }
+}
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn bindtextdomain(
+        domainname: *const libc::c_char,
+        dirname: *const libc::c_char,
+    ) -> *mut libc::c_char;
+    fn dgettext(domainname: *const libc::c_char, msgid: *const libc::c_char) -> *mut libc::c_char;
+}
+
+fn tsort_init_locale() {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    #[cfg(target_os = "linux")]
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+        bindtextdomain(c"coreutils".as_ptr(), c"/usr/share/locale".as_ptr());
+    }
+}
+
+fn tsort_dgettext(domain: &CStr, message: &str) -> String {
+    #[cfg(target_os = "linux")]
+    if let Ok(message_id) = CString::new(message) {
+        let translated = unsafe { dgettext(domain.as_ptr(), message_id.as_ptr()) };
+        if !translated.is_null() {
+            return unsafe { CStr::from_ptr(translated) }
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+
+    message.to_owned()
+}
+
+fn tsort_gettext(message: &str) -> String {
+    tsort_dgettext(c"coreutils", message)
+}
+
+fn tsort_format_bytes(template: &str, substitutions: &[&[u8]]) -> Vec<u8> {
+    let template = template.as_bytes();
+    let mut output = Vec::with_capacity(template.len());
+    let mut substitution = 0;
+    let mut index = 0;
+
+    while index < template.len() {
+        if template[index] == b'%'
+            && index + 1 < template.len()
+            && matches!(template[index + 1], b's' | b'c')
+            && substitution < substitutions.len()
+        {
+            output.extend_from_slice(substitutions[substitution]);
+            substitution += 1;
+            index += 2;
+        } else {
+            output.push(template[index]);
+            index += 1;
+        }
+    }
+
+    output
+}
+
+fn tsort_format_message(message: &str, substitutions: &[&[u8]]) -> Vec<u8> {
+    tsort_format_bytes(&tsort_gettext(message), substitutions)
+}
+
+fn tsort_error_detail(error: &std::io::Error) -> String {
+    #[cfg(target_os = "linux")]
+    if let Some(errno) = error.raw_os_error() {
+        let detail = unsafe { libc::strerror(errno) };
+        if !detail.is_null() {
+            return unsafe { CStr::from_ptr(detail) }
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+
+    strip_errno(error)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,6 +175,7 @@ fn write_tsort_output(writer: &mut impl Write, bytes: &[u8]) -> std::io::Result<
 }
 
 pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
+    tsort_init_locale();
     let mut raw_args = args.collect::<Vec<_>>();
     tsort_apply_posix_option_order(&mut raw_args, std::env::var_os("POSIXLY_CORRECT").is_some());
     if let Some(outcome) = tsort_option_error_outcome(&raw_args) {
@@ -142,8 +223,7 @@ pub fn tsort_native_semantic(args: impl ctcore::Args) -> CTResult<TsortSemantic>
 }
 
 fn tsort_run(args: impl ctcore::Args) -> CTResult<TsortRunOutcome> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    tsort_init_locale();
     let mut raw_args = args.collect::<Vec<_>>();
     tsort_apply_posix_option_order(&mut raw_args, std::env::var_os("POSIXLY_CORRECT").is_some());
     let matches = ct_app().try_get_matches_from(raw_args)?;
@@ -183,25 +263,24 @@ fn tsort_option_error_outcome(args: &[OsString]) -> Option<TsortRunOutcome> {
                 continue;
             }
 
-            let mut message = b"tsort: unrecognized option '--".to_vec();
-            message.extend_from_slice(option);
-            message.extend_from_slice(b"'\n");
-            message
+            let template = tsort_dgettext(c"libc", "%s: unrecognized option '%s%s'\n");
+            tsort_format_bytes(&template, &[b"tsort", b"--", option])
         } else if let Some(options) = bytes.strip_prefix(b"-") {
             if options.is_empty() {
                 continue;
             }
 
-            let mut message = b"tsort: invalid option -- '".to_vec();
-            message.push(options[0]);
-            message.extend_from_slice(b"'\n");
-            message
+            let template = tsort_dgettext(c"libc", "%s: invalid option -- '%c'\n");
+            tsort_format_bytes(&template, &[b"tsort", &options[..1]])
         } else {
             continue;
         };
 
         let mut diagnostic = diagnostic;
-        diagnostic.extend_from_slice(b"Try 'tsort --help' for more information.\n");
+        diagnostic.extend_from_slice(&tsort_format_message(
+            "Try '%s --help' for more information.\n",
+            &[b"tsort"],
+        ));
         return Some(tsort_error_bytes_outcome(diagnostic, false));
     }
 
@@ -218,12 +297,19 @@ fn tsort_run_from_matches(matches: &clap::ArgMatches) -> TsortRunOutcome {
         let quoted_operand = escape_name_bytes(
             input_files[1],
             &CtQuotingStyle::C {
-                quotes: CtQuotes::Single,
+                quotes: CtQuotes::Locale,
             },
         );
-        let mut diagnostic = b"tsort: extra operand ".to_vec();
-        diagnostic.extend_from_slice(&quoted_operand);
-        diagnostic.extend_from_slice(b"\nTry 'tsort --help' for more information.\n");
+        let mut diagnostic = b"tsort: ".to_vec();
+        diagnostic.extend_from_slice(&tsort_format_message(
+            "extra operand %s",
+            &[&quoted_operand],
+        ));
+        diagnostic.push(b'\n');
+        diagnostic.extend_from_slice(&tsort_format_message(
+            "Try '%s --help' for more information.\n",
+            &[b"tsort"],
+        ));
         return tsort_error_bytes_outcome(diagnostic, false);
     }
 
@@ -241,13 +327,14 @@ fn tsort_run_from_matches(matches: &clap::ArgMatches) -> TsortRunOutcome {
     let tokens = tsort_tokens(&input_buffer);
 
     if tokens.len() % 2 != 0 {
-        return tsort_error_outcome(
-            format!(
-                "tsort: {}: input contains an odd number of tokens\n",
-                quote_tsort_filename(input_file)
-            ),
-            false,
-        );
+        let quoted_file = quote_tsort_filename(input_file);
+        let mut diagnostic = b"tsort: ".to_vec();
+        diagnostic.extend_from_slice(&tsort_format_message(
+            "%s: input contains an odd number of tokens",
+            &[quoted_file.as_bytes()],
+        ));
+        diagnostic.push(b'\n');
+        return tsort_error_bytes_outcome(diagnostic, false);
     }
 
     for chunk in tokens.chunks(2) {
@@ -302,16 +389,24 @@ fn tsort_read_input(input_file: &OsStr) -> Result<Vec<u8>, String> {
     } else {
         let path = Path::new(input_file);
         if path.is_dir() {
-            return Err(format!(
-                "tsort: {}: read error: Is a directory\n",
-                quote_tsort_filename(input_file)
+            let quoted_file = quote_tsort_filename(input_file);
+            let mut diagnostic = b"tsort: ".to_vec();
+            diagnostic.extend_from_slice(&tsort_format_message(
+                "%s: read error",
+                &[quoted_file.as_bytes()],
             ));
+            diagnostic.extend_from_slice(b": ");
+            diagnostic.extend_from_slice(
+                tsort_error_detail(&std::io::Error::from_raw_os_error(libc::EISDIR)).as_bytes(),
+            );
+            diagnostic.push(b'\n');
+            return Err(String::from_utf8_lossy(&diagnostic).into_owned());
         }
         Box::new(File::open(path).map_err(|err| {
             format!(
                 "tsort: {}: {}\n",
                 quote_tsort_filename(input_file),
-                strip_errno(&err)
+                tsort_error_detail(&err)
             )
         })?) as Box<dyn Read>
     };
@@ -524,7 +619,10 @@ impl TSortGraph {
                         push_tsort_stderr(
                             stderr_bytes,
                             output_events,
-                            format!("{}: input contains a loop:", quote_tsort_filename(filename)),
+                            tsort_format_message(
+                                "%s: input contains a loop:",
+                                &[quote_tsort_filename(filename).as_bytes()],
+                            ),
                         );
 
                         // 回溯打印环 (GNU: while (loop) ... until loop == k)

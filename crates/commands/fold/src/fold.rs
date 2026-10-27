@@ -96,7 +96,7 @@ use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
 use rust_i18n::t;
 use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fs::File;
-use std::io::{BufReader, Read, Write};
+use std::io::{self, BufReader, Read, Write};
 use std::path::Path;
 use sys_locale::get_locale;
 
@@ -173,6 +173,21 @@ fn fold_error_detail(error: &std::io::Error) -> String {
     }
 
     strip_errno(error)
+}
+
+pub fn fold_write_error_message(error: &io::Error) -> String {
+    format!(
+        "{}: {}",
+        fold_gettext("write error"),
+        fold_error_detail(error)
+    )
+}
+
+pub fn is_fold_write_error_message(message: &str) -> bool {
+    let prefix = fold_gettext("write error");
+    message
+        .strip_prefix(&prefix)
+        .is_some_and(|suffix| suffix.starts_with(":"))
 }
 
 // 各种参数选项的常量定义
@@ -355,7 +370,7 @@ fn fold_file_generic<T: Read, W: Write>(
     is_spaces: bool,
     width: usize,
     mode: CountMode,
-) -> CTResult<FoldFileOutcome> {
+) -> io::Result<FoldFileOutcome> {
     fold_file_multibyte_unified(
         writer,
         file,
@@ -375,7 +390,7 @@ fn fold_file_multibyte_unified<T: Read, W: Write>(
     width: usize,
     mode: CountMode,
     single_byte_locale: bool,
-) -> CTResult<FoldFileOutcome> {
+) -> io::Result<FoldFileOutcome> {
     let mut buffer = Vec::with_capacity(FOLD_READ_BUFFER_SIZE + FOLD_MB_LEN_MAX);
     let mut buffer_pos = 0;
     let mut eof = false;
@@ -1011,7 +1026,8 @@ fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResul
             CountMode::Columns
         };
 
-        let outcome = fold_file_generic(writer, buffer, spaces, width, mode)?;
+        let outcome = fold_file_generic(writer, buffer, spaces, width, mode)
+            .map_err(|error| CtSimpleError::new(1, fold_write_error_message(&error)))?;
         if let Some(error) = outcome.read_error {
             stderr_bytes.extend_from_slice(b"fold: ");
             stderr_bytes.extend_from_slice(filename.as_os_str().as_encoded_bytes());

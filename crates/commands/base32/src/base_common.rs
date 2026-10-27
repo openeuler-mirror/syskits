@@ -329,7 +329,7 @@ fn gnu_base_option_error(args: &[OsString]) -> Option<Box<dyn CTError>> {
     None
 }
 
-fn normalize_base_short_wrap_equals(mut args: Vec<OsString>) -> Vec<OsString> {
+pub fn normalize_base_short_wrap_equals(mut args: Vec<OsString>) -> Vec<OsString> {
     let mut index = 1;
     while index < args.len() {
         let argument = args[index].as_os_str().as_bytes();

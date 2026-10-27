@@ -252,15 +252,19 @@ pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
     let mut stdout = stdout.lock();
     let mut stderr = stderr.lock();
     let mut stdout_error = None;
+    let stdout_was_closed = ctcore::ct_stdout_was_closed();
 
     for event in &outcome.output_events {
         match event {
             TsortOutputEvent::Stdout(range) => {
-                if stdout_error.is_none()
-                    && let Err(error) =
+                if stdout_error.is_none() {
+                    if stdout_was_closed {
+                        stdout_error = Some(std::io::Error::from_raw_os_error(libc::EBADF));
+                    } else if let Err(error) =
                         write_tsort_output(&mut stdout, &outcome.classic_bytes[range.clone()])
-                {
-                    stdout_error = Some(error);
+                    {
+                        stdout_error = Some(error);
+                    }
                 }
             }
             TsortOutputEvent::Stderr(range) => {

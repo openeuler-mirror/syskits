@@ -101,7 +101,8 @@ pub fn ct_app() -> Command {
 }
 
 fn basenc_parse_cmd_args(args: impl ctcore::Args) -> CTResult<(BaseConfig, Format)> {
-    let args_match = match ct_app().try_get_matches_from(args.collect_lossy()) {
+    let args = base_common::normalize_base_short_wrap_equals(args.collect());
+    let args_match = match ct_app().try_get_matches_from(args.clone()) {
         Ok(matches) => matches,
         Err(e) => {
             if e.kind() == clap::error::ErrorKind::UnknownArgument {
@@ -375,6 +376,15 @@ mod test {
         assert_eq!(err.code(), 1);
         assert_eq!(err.to_string(), "foobar");
         assert!(err.usage());
+    }
+
+    #[test]
+    fn test_basenc_short_wrap_equals_is_part_of_wrap_value() {
+        let args = [ctcore::ct_util_name(), "--base64", "-w=2"];
+        let result = basenc_parse_cmd_args(args.iter().map(OsString::from));
+        assert!(result.is_err());
+        let error = result.err().expect("-w=2 must be rejected").to_string();
+        assert!(error.contains("=2"), "unexpected error: {error}");
     }
 
     // 创建文件并写入内容

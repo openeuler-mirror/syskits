@@ -244,6 +244,7 @@ fn base_args_init() -> Vec<Arg> {
             .short('w')
             .long(opt_flags::BASE_WRAP)
             .value_name("COLS")
+            .allow_hyphen_values(true)
             .help("wrap encoded lines after COLS character (default 76, 0 to disable wrapping)")
             .overrides_with(opt_flags::BASE_WRAP),
         Arg::new(opt_flags::BASE_FILE)
@@ -676,6 +677,26 @@ mod test {
         assert_eq!(
             parse_wrap_cols("").unwrap_err().to_string(),
             format!("invalid wrap size: {}", locale_quote(""))
+        );
+    }
+
+    #[test]
+    fn test_base_args_accept_separated_negative_wrap_values() {
+        let matches = base_common_app(BASE32_ABOUT.into(), BASE32_USAGE.into())
+            .try_get_matches_from(["base32", "-w", "-0"])
+            .expect("-0 should be consumed as the wrap value");
+        let config = BaseConfig::from(&matches).expect("-0 is a valid wrap size");
+        assert_eq!(config.base_wrap_cols, Some(0));
+
+        let matches = base_common_app(BASE32_ABOUT.into(), BASE32_USAGE.into())
+            .try_get_matches_from(["base32", "--wrap", "-1"])
+            .expect("-1 should be consumed as the wrap value");
+        let error = BaseConfig::from(&matches)
+            .err()
+            .expect("-1 should be rejected as a wrap size");
+        assert_eq!(
+            error.to_string(),
+            format!("invalid wrap size: {}", locale_quote("-1"))
         );
     }
 

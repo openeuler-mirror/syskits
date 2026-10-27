@@ -624,6 +624,19 @@ mod test {
         assert_eq!(error.to_string(), "invalid wrap size: '\\377'");
     }
 
+    #[test]
+    fn test_basenc_non_utf8_extra_operand_preserves_raw_byte() {
+        let args = vec![
+            OsString::from(ctcore::ct_util_name()),
+            OsString::from("--base64"),
+            OsString::from("input"),
+            OsString::from_vec(b"extra-\xff".to_vec()),
+        ];
+        let result = basenc_parse_cmd_args(args.into_iter());
+        let error = result.err().expect("extra operand must be rejected");
+        assert_eq!(error.to_string(), "extra operand 'extra-\\377'");
+    }
+
     // 创建文件并写入内容
     fn base_create_file_with_content(filename: &str, content: &str) -> io::Result<()> {
         let mut file = File::create(filename)?;

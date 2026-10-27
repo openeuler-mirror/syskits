@@ -197,10 +197,15 @@ fn normalize_base_args_for_posix(
     // GNU getopt stops option processing at the first operand in POSIX mode.
     // Insert an explicit terminator so clap keeps following operands out of
     // option parsing as well.
-    for index in 1..args.len() {
+    let mut index = 1;
+    while index < args.len() {
         let argument = args[index].as_os_str().as_bytes();
         if argument == b"--" {
             break;
+        }
+        if base_option_consumes_next_argument(argument) {
+            index += 2;
+            continue;
         }
         if argument == b"-" || !argument.starts_with(b"-") {
             if index + 1 < args.len() {
@@ -208,9 +213,26 @@ fn normalize_base_args_for_posix(
             }
             break;
         }
+        index += 1;
     }
 
     args
+}
+
+fn base_option_consumes_next_argument(argument: &[u8]) -> bool {
+    if let Some(long_name) = argument.strip_prefix(b"--") {
+        return !long_name.is_empty()
+            && !long_name.contains(&b'=')
+            && b"wrap".starts_with(long_name);
+    }
+
+    let Some(short_options) = argument.strip_prefix(b"-") else {
+        return false;
+    };
+    short_options
+        .iter()
+        .position(|option| *option == b'w')
+        .is_some_and(|position| position + 1 == short_options.len())
 }
 
 pub fn base_common_app(about: String, usage: String) -> Command {
@@ -724,6 +746,27 @@ mod test {
                 OsString::from("-d"),
             ]
         );
+    }
+
+    #[test]
+    fn test_normalize_base_args_skips_separated_wrap_values() {
+        for args in [
+            vec!["base32", "-w", "0", "-d", "input"],
+            vec!["base32", "--wrap", "0", "-d", "input"],
+            vec!["base32", "--w", "0", "-d", "input"],
+        ] {
+            let normalized = normalize_base_args_for_posix(
+                args.into_iter().map(OsString::from),
+                true,
+            );
+            let matches = base_common_app(BASE32_ABOUT.into(), BASE32_USAGE.into())
+                .try_get_matches_from(normalized)
+                .expect("options after a separated wrap value should still be parsed");
+            let config = BaseConfig::from(&matches).expect("normalized arguments should be valid");
+            assert_eq!(config.base_wrap_cols, Some(0));
+            assert!(config.base_decode);
+            assert_eq!(config.base_to_read.as_deref(), Some("input"));
+        }
     }
 
     #[test]

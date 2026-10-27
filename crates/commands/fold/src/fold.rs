@@ -966,10 +966,21 @@ fn fold<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResult<()> {
 fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResult<FoldRunOutcome> {
     let mut stderr_bytes = Vec::new();
     let mut exit_code = 0;
+    let stdin_was_closed = ctcore::ct_stdin_was_closed() && !ctcore::ct_io::has_injected_stdin();
+    let mut used_stdin = false;
 
     for filename in &fold_flags.files {
         let input: Box<dyn Read> = if filename == OsStr::new("-") {
             // 如果文件名是`-`，则从标准输入读取内容
+            used_stdin = true;
+            if stdin_was_closed {
+                let error_msg = fold_error_detail(&std::io::Error::from_raw_os_error(libc::EBADF));
+                stderr_bytes.extend_from_slice(b"fold: -: ");
+                stderr_bytes.extend_from_slice(error_msg.as_bytes());
+                stderr_bytes.push(b'\n');
+                exit_code = 1;
+                continue;
+            }
             ctcore::ct_io::stdin_reader_box()
         } else {
             // 否则，从指定的文件中读取内容
@@ -1010,6 +1021,18 @@ fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResul
             exit_code = 1;
         }
     }
+
+    // GNU closes stdin after processing the input stream.  When the original
+    // descriptor was already closed, its replacement by ct_bin! hides that
+    // failure, so preserve the observable diagnostic explicitly.
+    if used_stdin && stdin_was_closed {
+        let error_msg = fold_error_detail(&std::io::Error::from_raw_os_error(libc::EBADF));
+        stderr_bytes.extend_from_slice(b"fold: -: ");
+        stderr_bytes.extend_from_slice(error_msg.as_bytes());
+        stderr_bytes.push(b'\n');
+        exit_code = 1;
+    }
+
     Ok(FoldRunOutcome {
         stderr_bytes,
         exit_code,

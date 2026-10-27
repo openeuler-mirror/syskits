@@ -177,6 +177,52 @@ fn quote_base_diagnostic_argument(argument: &OsStr) -> String {
     quoted
 }
 
+fn quote_base_file_name(file_name: &OsStr) -> String {
+    if file_name.to_str().is_some() {
+        return file_name.maybe_quote().to_string();
+    }
+
+    let bytes = file_name.as_bytes();
+    let mut quoted = String::new();
+    let mut start = 0;
+    while start < bytes.len() {
+        let plain = matches!(bytes[start], 0x20..=0x7e) && bytes[start] != b'\'';
+        let mut end = start + 1;
+        while end < bytes.len()
+            && (matches!(bytes[end], 0x20..=0x7e) && bytes[end] != b'\'') == plain
+        {
+            end += 1;
+        }
+
+        if plain {
+            quoted.push('\'');
+            quoted.push_str(std::str::from_utf8(&bytes[start..end]).expect("ASCII file name run"));
+            quoted.push('\'');
+        } else {
+            quoted.push_str("$'");
+            for &byte in &bytes[start..end] {
+                match byte {
+                    b'\n' => quoted.push_str("\\n"),
+                    b'\r' => quoted.push_str("\\r"),
+                    b'\t' => quoted.push_str("\\t"),
+                    b'\\' => quoted.push_str("\\\\"),
+                    b'\'' => quoted.push_str("\\'"),
+                    0x07 => quoted.push_str("\\a"),
+                    0x08 => quoted.push_str("\\b"),
+                    0x0b => quoted.push_str("\\v"),
+                    0x0c => quoted.push_str("\\f"),
+                    _ => {
+                        write!(&mut quoted, "\\{byte:03o}").expect("writing to String cannot fail")
+                    }
+                }
+            }
+            quoted.push('\'');
+        }
+        start = end;
+    }
+    quoted
+}
+
 pub fn base_parsing_command_args(
     base_args: impl ctcore::Args,
     base_about: String,
@@ -421,10 +467,10 @@ pub fn get_base_input<'a>(
     match base_name {
         Some(base_name) => {
             let file_buf = File::open(Path::new(base_name))
-                .map_err_context(|| base_name.maybe_quote().to_string())?;
+                .map_err_context(|| quote_base_file_name(base_name))?;
             if file_buf
                 .metadata()
-                .map_err_context(|| base_name.maybe_quote().to_string())?
+                .map_err_context(|| quote_base_file_name(base_name))?
                 .is_dir()
             {
                 return Err(read_error(std::io::Error::new(
@@ -980,6 +1026,12 @@ mod test {
                 .err()
                 .expect("the extra operand should be rejected");
         assert_eq!(error.to_string(), "extra operand '\\377'");
+    }
+
+    #[test]
+    fn test_file_name_uses_shell_quote_for_non_utf8_bytes() {
+        let file_name = OsString::from_vec(b"missing-\xff".to_vec());
+        assert_eq!(quote_base_file_name(&file_name), "'missing-'$'\\377'");
     }
 
     struct FailRead {

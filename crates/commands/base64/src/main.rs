@@ -15,6 +15,7 @@ pub fn main() {
 
     ctcore::ct_panic::ct_mute_set_panic_hook();
     ctcore::ct_ensure_standard_fds();
+    let _ = ctcore::ct_signals::enable_pipe_errors();
 
     let args = ctcore::ct_os_args().collect::<Vec<_>>();
     let tool = ct_base64::Base64::default();

@@ -15,7 +15,7 @@ extern crate rust_i18n;
 use clap::{Arg, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTResult, set_ct_exit_code, strip_errno};
+use ctcore::ct_error::{CTResult, CtSimpleError, set_ct_exit_code, strip_errno};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::collections::{BTreeMap, HashMap};
@@ -81,7 +81,14 @@ fn write_tsort_output(writer: &mut impl Write, bytes: &[u8]) -> std::io::Result<
 }
 
 pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
-    let outcome = tsort_run(args)?;
+    let raw_args = args.collect::<Vec<_>>();
+    if let Some(outcome) = tsort_option_error_outcome(&raw_args) {
+        let stderr = std::io::stderr();
+        write_tsort_output(&mut stderr.lock(), &outcome.stderr_bytes)?;
+        return Err(CtSimpleError::new(1, ""));
+    }
+
+    let outcome = tsort_run(raw_args.into_iter())?;
     let stdout = std::io::stdout();
     let stderr = std::io::stderr();
     let mut stdout = stdout.lock();
@@ -124,6 +131,47 @@ fn tsort_run(args: impl ctcore::Args) -> CTResult<TsortRunOutcome> {
     rust_i18n::set_locale(&lang_code);
     let matches = ct_app().try_get_matches_from(args)?;
     Ok(tsort_run_from_matches(&matches))
+}
+
+fn tsort_option_error_outcome(args: &[OsString]) -> Option<TsortRunOutcome> {
+    for argument in args.iter().skip(1) {
+        let bytes = argument.as_os_str().as_encoded_bytes();
+        if bytes == b"--" {
+            break;
+        }
+
+        let diagnostic = if let Some(option) = bytes.strip_prefix(b"--") {
+            if option.is_empty()
+                || [b"help".as_slice(), b"version".as_slice()]
+                    .iter()
+                    .any(|name| name.starts_with(option))
+            {
+                continue;
+            }
+
+            let mut message = b"tsort: unrecognized option '--".to_vec();
+            message.extend_from_slice(option);
+            message.extend_from_slice(b"'\n");
+            message
+        } else if let Some(options) = bytes.strip_prefix(b"-") {
+            if options.is_empty() {
+                continue;
+            }
+
+            let mut message = b"tsort: invalid option -- '".to_vec();
+            message.push(options[0]);
+            message.extend_from_slice(b"'\n");
+            message
+        } else {
+            continue;
+        };
+
+        let mut diagnostic = diagnostic;
+        diagnostic.extend_from_slice(b"Try 'tsort --help' for more information.\n");
+        return Some(tsort_error_bytes_outcome(diagnostic, false));
+    }
+
+    None
 }
 
 fn tsort_run_from_matches(matches: &clap::ArgMatches) -> TsortRunOutcome {
@@ -196,7 +244,10 @@ pub fn ct_app() -> Command {
 }
 
 fn tsort_error_outcome(stderr_text: String, had_cycle: bool) -> TsortRunOutcome {
-    let stderr_bytes = stderr_text.into_bytes();
+    tsort_error_bytes_outcome(stderr_text.into_bytes(), had_cycle)
+}
+
+fn tsort_error_bytes_outcome(stderr_bytes: Vec<u8>, had_cycle: bool) -> TsortRunOutcome {
     let stderr_len = stderr_bytes.len();
     TsortRunOutcome {
         had_cycle,

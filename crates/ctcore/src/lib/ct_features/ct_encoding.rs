@@ -29,6 +29,8 @@ pub enum CtDecodeError {
     DecodeBase58(#[from] bs58::decode::Error),
     #[error("{}", _0)]
     Io(#[from] io::Error),
+    #[error("{}", _0)]
+    WriteError(io::Error),
 }
 
 #[derive(Debug)]
@@ -36,6 +38,7 @@ pub enum CtEncodeError {
     Z85InputLenNotMultipleOf4,
     InvalidInput,
     ReadError(io::Error),
+    WriteError(io::Error),
 }
 
 pub type DecodeResult = Result<Vec<u8>, CtDecodeError>;
@@ -394,7 +397,8 @@ impl<R: Read> Data<R> {
             if let Some(block_size) = decode_block {
                 while char_buf.len() >= block_size {
                     if use_base32_compat {
-                        let ok = decode_base32_quantum(self.format, &char_buf[..8], &mut writer)?;
+                        let ok = decode_base32_quantum(self.format, &char_buf[..8], &mut writer)
+                            .map_err(CtDecodeError::WriteError)?;
                         if !ok {
                             return Err(invalid_input().into());
                         }
@@ -405,12 +409,16 @@ impl<R: Read> Data<R> {
                             block.make_ascii_uppercase();
                         }
                         if matches!(self.format, Base64 | Base64Url) {
-                            if !decode_base64_quantum(self.format, &block, &mut writer)? {
+                            if !decode_base64_quantum(self.format, &block, &mut writer)
+                                .map_err(CtDecodeError::WriteError)?
+                            {
                                 return Err(invalid_input().into());
                             }
                         } else {
                             let decoded = decode(self.format, &block)?;
-                            writer.write_all(&decoded)?;
+                            writer
+                                .write_all(&decoded)
+                                .map_err(CtDecodeError::WriteError)?;
                         }
                         char_buf.drain(..block_size);
                     }
@@ -448,7 +456,9 @@ impl<R: Read> Data<R> {
                     .ok()
                     .or_else(|| decode_base64_short_tail(self.format, &char_buf));
                 if let Some(decoded) = decoded {
-                    writer.write_all(&decoded)?;
+                    writer
+                        .write_all(&decoded)
+                        .map_err(CtDecodeError::WriteError)?;
                     return Err(invalid_input().into());
                 }
                 return Err(invalid_input().into());
@@ -456,7 +466,9 @@ impl<R: Read> Data<R> {
         }
 
         let decoded = decode(self.format, &char_buf)?;
-        writer.write_all(&decoded)?;
+        writer
+            .write_all(&decoded)
+            .map_err(CtDecodeError::WriteError)?;
         Ok(())
     }
 
@@ -472,9 +484,9 @@ impl<R: Read> Data<R> {
                 Ok(_) => {
                     let encoded = encode(self.format, buf.as_slice())?;
                     wrap_write_stream(&mut writer, self.line_wrap, &encoded, 0)
-                        .map_err(|_| CtEncodeError::InvalidInput)?;
+                        .map_err(CtEncodeError::WriteError)?;
                     if self.line_wrap > 0 && !encoded.is_empty() && (!encoded.ends_with('\n')) {
-                        writeln!(writer).map_err(|_| CtEncodeError::InvalidInput)?;
+                        writeln!(writer).map_err(CtEncodeError::WriteError)?;
                     } else if self.line_wrap == 0
                         && self.format as u8 != Format::Base64 as u8
                         && self.format as u8 != Format::Base32 as u8
@@ -512,7 +524,7 @@ impl<R: Read> Data<R> {
                         let encoded = encode(self.format, &buf[..process_len])?;
                         current_col =
                             wrap_write_stream(&mut writer, self.line_wrap, &encoded, current_col)
-                                .map_err(|_| CtEncodeError::InvalidInput)?;
+                                .map_err(CtEncodeError::WriteError)?;
                         buf.copy_within(process_len..buf_len, 0);
                         buf_len -= process_len;
                     } else {
@@ -523,10 +535,10 @@ impl<R: Read> Data<R> {
             if buf_len > 0 {
                 let encoded = encode(self.format, &buf[..buf_len])?;
                 current_col = wrap_write_stream(&mut writer, self.line_wrap, &encoded, current_col)
-                    .map_err(|_| CtEncodeError::InvalidInput)?;
+                    .map_err(CtEncodeError::WriteError)?;
             }
             if current_col > 0 && self.line_wrap > 0 {
-                let _ = writeln!(writer);
+                writeln!(writer).map_err(CtEncodeError::WriteError)?;
             }
             Ok(())
         }
@@ -939,7 +951,7 @@ mod test {
         let input = Cursor::new(vec![1u8; 1024]);
         let mut data = Data::new(input, Format::Base58).line_wrap(0);
         let result = data.encode(AlwaysFailWriter);
-        assert!(matches!(result, Err(CtEncodeError::InvalidInput)));
+        assert!(matches!(result, Err(CtEncodeError::WriteError(_))));
     }
 
     #[test]
@@ -947,7 +959,14 @@ mod test {
         let input = Cursor::new(b"hello".to_vec());
         let mut data = Data::new(input, Format::Base58).line_wrap(76);
         let result = data.encode(FailOnNewlineWriter);
-        assert!(matches!(result, Err(CtEncodeError::InvalidInput)));
+        assert!(matches!(result, Err(CtEncodeError::WriteError(_))));
+    }
+
+    #[test]
+    fn test_data_decode_base64_propagates_write_error() {
+        let mut data = Data::new(Cursor::new(b"Zm8="), Format::Base64);
+        let result = data.decode(AlwaysFailWriter);
+        assert!(matches!(result, Err(CtDecodeError::WriteError(_))));
     }
 
     #[test]

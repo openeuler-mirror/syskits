@@ -10,6 +10,7 @@
  */
 
 use std::ffi::{OsStr, OsString};
+use std::fmt::Write as FmtWrite;
 use std::io::Read;
 use std::io::Write;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
@@ -65,7 +66,7 @@ pub mod opt_flags {
 impl BaseConfig {
     pub fn from(options: &clap::ArgMatches) -> CTResult<Self> {
         let cols = options
-            .get_one::<String>(opt_flags::BASE_WRAP)
+            .get_one::<OsString>(opt_flags::BASE_WRAP)
             .map(|num| parse_wrap_cols(num))
             .transpose()?;
 
@@ -98,23 +99,27 @@ impl BaseConfig {
     }
 }
 
-fn parse_wrap_cols(num: &str) -> CTResult<usize> {
+fn parse_wrap_cols<S: AsRef<OsStr> + ?Sized>(num: &S) -> CTResult<usize> {
     // xstrtoimax, used by GNU base32, accepts leading ASCII whitespace and
     // an optional sign.  Its caller rejects negative values except -0.
-    let number = num.trim_start_matches(|c: char| {
-        c.is_ascii_whitespace() || c == '\u{0b}'
-    });
-    let (negative, digits) = match number.as_bytes().first() {
+    let num = num.as_ref();
+    let bytes = num.as_bytes();
+    let first_non_whitespace = bytes
+        .iter()
+        .position(|byte| !byte.is_ascii_whitespace() && *byte != 0x0b)
+        .unwrap_or(bytes.len());
+    let number = &bytes[first_non_whitespace..];
+    let (negative, digits) = match number.first() {
         Some(b'+') => (false, &number[1..]),
         Some(b'-') => (true, &number[1..]),
         _ => (false, number),
     };
-    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+    if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
         return Err(invalid_wrap_size(num));
     }
 
     let mut value = 0u128;
-    for digit in digits.bytes() {
+    for &digit in digits {
         value = match value
             .checked_mul(10)
             .and_then(|n| n.checked_add(u128::from(digit - b'0')))
@@ -134,11 +139,39 @@ fn parse_wrap_cols(num: &str) -> CTResult<usize> {
     }
 }
 
-fn invalid_wrap_size(num: &str) -> Box<dyn CTError> {
+fn invalid_wrap_size(num: &OsStr) -> Box<dyn CTError> {
     CtSimpleError::new(
         BASE_CMD_PARSE_ERROR,
-        format!("invalid wrap size: {}", locale_quote(num)),
+        format!("invalid wrap size: {}", quote_base_diagnostic_argument(num)),
     )
+}
+
+fn quote_base_diagnostic_argument(argument: &OsStr) -> String {
+    if let Some(text) = argument
+        .to_str()
+        .filter(|text| !text.chars().any(char::is_control))
+    {
+        return locale_quote(text);
+    }
+
+    let mut quoted = String::from("'");
+    for &byte in argument.as_bytes() {
+        match byte {
+            b'\n' => quoted.push_str("\\n"),
+            b'\r' => quoted.push_str("\\r"),
+            b'\t' => quoted.push_str("\\t"),
+            b'\\' => quoted.push_str("\\\\"),
+            b'\'' => quoted.push_str("\\'"),
+            0x07 => quoted.push_str("\\a"),
+            0x08 => quoted.push_str("\\b"),
+            0x0b => quoted.push_str("\\v"),
+            0x0c => quoted.push_str("\\f"),
+            0x20..=0x7e => quoted.push(byte as char),
+            _ => write!(&mut quoted, "\\{byte:03o}").expect("writing to String cannot fail"),
+        }
+    }
+    quoted.push('\'');
+    quoted
 }
 
 pub fn base_parsing_command_args(
@@ -362,6 +395,7 @@ fn base_args_init() -> Vec<Arg> {
             .long(opt_flags::BASE_WRAP)
             .value_name("COLS")
             .allow_hyphen_values(true)
+            .value_parser(clap::builder::OsStringValueParser::new())
             .help("wrap encoded lines after COLS character (default 76, 0 to disable wrapping)")
             .overrides_with(opt_flags::BASE_WRAP),
         Arg::new(opt_flags::BASE_FILE)
@@ -808,6 +842,21 @@ mod test {
                 .unwrap_err()
                 .to_string(),
             format!("invalid wrap size: {}", locale_quote(&negative_overflow))
+        );
+    }
+
+    #[test]
+    fn test_parse_wrap_cols_quotes_raw_and_control_bytes() {
+        let raw = OsString::from_vec(vec![0xff]);
+        assert_eq!(
+            parse_wrap_cols(&raw).unwrap_err().to_string(),
+            "invalid wrap size: '\\377'"
+        );
+
+        let control = OsString::from_vec(vec![0x01]);
+        assert_eq!(
+            parse_wrap_cols(&control).unwrap_err().to_string(),
+            "invalid wrap size: '\\001'"
         );
     }
 

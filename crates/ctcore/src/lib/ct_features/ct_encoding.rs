@@ -202,6 +202,7 @@ fn base32_value(f: Format, byte: u8) -> Option<u8> {
         Base32Hex => match byte {
             b'0'..=b'9' => Some(byte - b'0'),
             b'A'..=b'V' => Some(byte - b'A' + 10),
+            b'W'..=b'Z' => Some(byte - b'A'),
             _ => None,
         },
         _ => None,
@@ -1019,6 +1020,23 @@ mod test {
         let mut out = Vec::new();
         assert!(data.decode(&mut out).is_err());
         assert_eq!(out, b"HF@");
+    }
+
+    #[test]
+    fn test_data_decode_base32hex_accepts_base32_letters_without_ignore_garbage() {
+        let mut data = Data::new(Cursor::new(b"W000===="), Format::Base32Hex);
+        let mut out = Vec::new();
+        assert!(data.decode(&mut out).is_ok());
+        assert_eq!(out, [0xb0, 0x00]);
+    }
+
+    #[test]
+    fn test_data_decode_base32hex_filters_base32_letters_with_ignore_garbage() {
+        let mut data =
+            Data::new(Cursor::new(b"W000===="), Format::Base32Hex).ignore_garbage(true);
+        let mut out = Vec::new();
+        assert!(data.decode(&mut out).is_err());
+        assert!(out.is_empty());
     }
 
     #[test]

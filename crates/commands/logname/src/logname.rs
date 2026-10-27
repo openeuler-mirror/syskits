@@ -16,10 +16,11 @@ use clap::{Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, CtSimpleError};
-use std::ffi::CStr;
-use std::ffi::OsString;
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError};
+use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
+use std::ffi::{CStr, OsStr, OsString};
 use std::io::Write;
+use std::os::unix::ffi::OsStrExt;
 use sys_locale::get_locale;
 
 unsafe extern "C" {
@@ -39,6 +40,52 @@ fn get_user_login_bytes() -> Option<Vec<u8>> {
 
 fn get_user_login() -> Option<String> {
     get_user_login_bytes().map(|name| String::from_utf8_lossy(&name).into_owned())
+}
+
+fn first_extra_operand(args: &[OsString]) -> Option<&OsStr> {
+    let mut operands_only = false;
+    for argument in args.iter().skip(1) {
+        let bytes = argument.as_os_str().as_bytes();
+        if operands_only {
+            return Some(argument.as_os_str());
+        }
+        if bytes == b"--" {
+            operands_only = true;
+        } else if bytes == b"-" || !bytes.starts_with(b"-") {
+            return Some(argument.as_os_str());
+        } else {
+            // An option-like argument before the operand has diagnostic
+            // priority.  Leave it to clap for now.
+            return None;
+        }
+    }
+    None
+}
+
+fn quote_logname_operand(operand: &OsStr) -> String {
+    escape_name(
+        operand,
+        &CtQuotingStyle::C {
+            quotes: CtQuotes::Locale,
+        },
+    )
+}
+
+fn parse_logname_args(args: impl ctcore::Args) -> CTResult<()> {
+    let args: Vec<_> = args.collect();
+    match ct_app().try_get_matches_from(args.clone()) {
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == clap::error::ErrorKind::UnknownArgument => {
+            if let Some(operand) = first_extra_operand(&args) {
+                return Err(CTsageError::new(
+                    1,
+                    format!("extra operand {}", quote_logname_operand(operand)),
+                ));
+            }
+            Err(error.into())
+        }
+        Err(error) => Err(error.into()),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -134,7 +181,7 @@ impl Tool for Logname {
 pub fn logname_main(args: impl ctcore::Args) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let _ = ct_app().try_get_matches_from(args)?;
+    parse_logname_args(args)?;
 
     match get_user_login_bytes() {
         Some(userlogin) => {

@@ -58,6 +58,7 @@ pub enum Format {
 use self::Format::*;
 
 const BASE64_DECODE_INPUT_BLOCK_SIZE: usize = 5600;
+const Z85_ENCODE_INPUT_BLOCK_SIZE: usize = 30 * 1024;
 
 const BASE2LSBF: Encoding = new_encoding! {
     symbols: "01",
@@ -516,6 +517,7 @@ impl<R: Read> Data<R> {
     pub fn encode<W: Write>(&mut self, mut writer: W) -> Result<(), CtEncodeError> {
         let chunk_size = match self.format {
             Format::Base58 => 0, // Fallback
+            Format::Z85 => Z85_ENCODE_INPUT_BLOCK_SIZE,
             _ => 30000,
         };
 
@@ -570,7 +572,7 @@ impl<R: Read> Data<R> {
 
                 while buf_len >= chunk_size {
                     let process_len = match self.format {
-                        Format::Z85 => buf_len - (buf_len % 4),
+                        Format::Z85 => chunk_size,
                         Format::Base32 | Format::Base32Hex => buf_len - (buf_len % 5),
                         Format::Base64 | Format::Base64Url => buf_len - (buf_len % 3),
                         _ => buf_len,
@@ -1102,6 +1104,20 @@ mod test {
         let mut data = Data::new(input, Format::Base58).line_wrap(0);
         let result = data.encode(AlwaysFailWriter);
         assert!(matches!(result, Err(CtEncodeError::WriteError(_))));
+    }
+
+    #[test]
+    fn test_data_encode_z85_rejects_invalid_final_gnu_block_before_writing_it() {
+        for (input_len, expected_output_len) in [(30_001, 0), (30_721, 38_400)] {
+            let mut data =
+                Data::new(Cursor::new(vec![b'A'; input_len]), Format::Z85).line_wrap(0);
+            let mut out = Vec::new();
+            assert!(matches!(
+                data.encode(&mut out),
+                Err(CtEncodeError::Z85InputLenNotMultipleOf4)
+            ));
+            assert_eq!(out.len(), expected_output_len);
+        }
     }
 
     #[test]

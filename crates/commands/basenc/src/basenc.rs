@@ -20,7 +20,7 @@ use sys_locale::get_locale;
 
 use ctcore::{
     ct_encoding::Format,
-    ct_error::{CTError, CTResult, CTsageError, FromIo},
+    ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, strip_errno},
 };
 
 use ctcore::Tool;
@@ -532,6 +532,20 @@ impl Tool for Basenc {
 }
 
 pub fn basenc_main<W: std::io::Write>(args: impl ctcore::Args, mut writer: W) -> CTResult<()> {
+    basenc_main_impl(args, &mut writer, false)
+}
+
+pub fn basenc_cli_main(args: &[OsString]) -> CTResult<()> {
+    let stdout = std::io::stdout();
+    let mut writer = stdout.lock();
+    basenc_main_impl(args.iter().cloned(), &mut writer, true)
+}
+
+fn basenc_main_impl<W: std::io::Write>(
+    args: impl ctcore::Args,
+    mut writer: W,
+    close_stdin: bool,
+) -> CTResult<()> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let (config_mod, format_mod) = basenc_parse_cmd_args(args)?;
@@ -539,15 +553,48 @@ pub fn basenc_main<W: std::io::Write>(args: impl ctcore::Args, mut writer: W) ->
     // 创建对stdin的引用，以便我们能从parse_base_cmd_args返回锁定的stdin
     let ct_stdin = stdin();
     let mut ct_input: Box<dyn Read> = base_common::get_base_input(&config_mod, &ct_stdin)?;
+    let uses_stdin = config_mod.base_to_read_os.is_none();
 
-    base_common::handle_base_input(
+    let result = base_common::handle_base_input(
         &mut ct_input,
         &mut writer,
         format_mod,
         config_mod.base_wrap_cols,
         config_mod.base_ignore_garbage,
         config_mod.base_decode,
-    )
+    );
+    drop(ct_input);
+
+    result?;
+    if close_stdin && uses_stdin && !ctcore::ct_io::has_injected_stdin() {
+        close_standard_input().map_err(|error| {
+            CtSimpleError::new(
+                1,
+                format!("closing standard input: {}", strip_errno(&error)),
+            )
+        })?;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    #[link_name = "stdin"]
+    static mut C_STDIN: *mut ctcore::libc::FILE;
+}
+
+#[cfg(target_os = "linux")]
+fn close_standard_input() -> std::io::Result<()> {
+    if unsafe { ctcore::libc::fclose(C_STDIN) } == ctcore::libc::EOF {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn close_standard_input() -> std::io::Result<()> {
+    Ok(())
 }
 
 #[cfg(test)]

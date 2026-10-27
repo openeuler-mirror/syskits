@@ -118,6 +118,7 @@ fn parse_wrap_cols(num: &str) -> CTResult<usize> {
             .and_then(|n| n.checked_add(u128::from(digit - b'0')))
         {
             Some(n) => n,
+            None if negative => return Err(invalid_wrap_size(num)),
             None => return Ok(0),
         };
     }
@@ -677,6 +678,13 @@ mod test {
         assert_eq!(
             parse_wrap_cols("").unwrap_err().to_string(),
             format!("invalid wrap size: {}", locale_quote(""))
+        );
+        let negative_overflow = format!("-{}", "9".repeat(100));
+        assert_eq!(
+            parse_wrap_cols(&negative_overflow)
+                .unwrap_err()
+                .to_string(),
+            format!("invalid wrap size: {}", locale_quote(&negative_overflow))
         );
     }
 

@@ -1042,15 +1042,15 @@ fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
             continue;
         }
 
-        if arg.starts_with("-n") && arg.len() > 2 && !arg.starts_with("-n=") {
+        if arg.starts_with("-n") && arg.len() > 2 {
             recreated_args.push(OsString::from(format!("-n={}", &arg[2..])));
-        } else if arg.starts_with("-s") && arg.len() > 2 && !arg.starts_with("-s=") {
+        } else if arg.starts_with("-s") && arg.len() > 2 {
             recreated_args.push(OsString::from(format!("-s={}", &arg[2..])));
         } else if arg.starts_with("-S") && arg.len() > 2 {
             recreated_args.push(OsString::from(format!("-S={}", &arg[2..])));
-        } else if arg.starts_with("-e") && arg.len() > 2 && !arg.starts_with("-e=") {
+        } else if arg.starts_with("-e") && arg.len() > 2 {
             recreated_args.push(OsString::from(format!("-e={}", &arg[2..])));
-        } else if arg.starts_with("-i") && arg.len() > 2 && !arg.starts_with("-i=") {
+        } else if arg.starts_with("-i") && arg.len() > 2 {
             recreated_args.push(OsString::from(format!("-i={}", &arg[2..])));
         } else {
             recreated_args.push(OsString::from(arg));
@@ -6580,6 +6580,14 @@ mod tests {
             assert_eq!(
                 pr_recreate_arguments(&["pr", "-s:", "-s", "file.txt"]),
                 vec!["pr", "-s=:", "file.txt"]
+            );
+        }
+
+        #[test]
+        fn test_pr_recreate_arguments_preserves_equals_in_short_values() {
+            assert_eq!(
+                pr_recreate_arguments(&["pr", "-n=3", "-s=", "-e=4", "-i="]),
+                vec!["pr", "-n==3", "-s==", "-e==4", "-i=="]
             );
         }
 

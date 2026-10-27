@@ -1073,11 +1073,15 @@ fn pr_error_text(arg_matches: &ArgMatches, pr_err: &PrError) -> String {
     }
 }
 
+fn pr_numeric_value(value: &str) -> &str {
+    value.trim_start_matches(|c: char| c.is_ascii_whitespace())
+}
+
 fn pr_parse_usize(arg_matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>> {
     let from_parse_error_to_pr_error = |value_to_parse: (String, String)| {
         let i = value_to_parse.0;
         let option = value_to_parse.1;
-        i.parse().map_err(|_e| {
+        pr_numeric_value(&i).parse().map_err(|_e| {
             PrError::EncounteredErrors(format!("invalid {} argument {}", option, i.quote()))
         })
     };
@@ -1370,12 +1374,14 @@ fn parse_column_mode_options(
         .peekable();
     while let Some(token) = tokens.next() {
         let parse_old_style = |unparsed_num: &str| {
-            unparsed_num.parse::<usize>().map_err(|_e| {
-                PrError::EncounteredErrorsNoHelp(format!(
-                    "invalid number of columns: {}",
-                    unparsed_num.quote()
-                ))
-            })
+            pr_numeric_value(unparsed_num)
+                .parse::<usize>()
+                .map_err(|_e| {
+                    PrError::EncounteredErrorsNoHelp(format!(
+                        "invalid number of columns: {}",
+                        unparsed_num.quote()
+                    ))
+                })
         };
 
         if pr_is_numeric_option_cluster(token) {
@@ -1532,7 +1538,7 @@ fn parse_start_end_page(
     let (start_page_in_plus_option, end_page_in_plus_option) = match plus_capture {
         Some(captures) => {
             let start_raw = captures.get(1).unwrap().as_str();
-            let start_page = start_raw.parse::<usize>().map_err(|_e| {
+            let start_page = pr_numeric_value(start_raw).parse::<usize>().map_err(|_e| {
                 PrError::EncounteredErrors(format!(
                     "invalid {} argument {}",
                     "+",
@@ -1543,7 +1549,7 @@ fn parse_start_end_page(
             let end_page = match captures.get(2) {
                 Some(end) => {
                     let end_raw = end.as_str();
-                    Some(end_raw.parse::<usize>().map_err(|_e| {
+                    Some(pr_numeric_value(end_raw).parse::<usize>().map_err(|_e| {
                         PrError::EncounteredErrors(format!(
                             "invalid {} argument {}",
                             "+",
@@ -1594,7 +1600,7 @@ fn parse_pages_range(pages: &str) -> Result<(usize, Option<usize>), PrError> {
         None => (pages, None),
     };
 
-    let start_page = start_raw
+    let start_page = pr_numeric_value(start_raw)
         .parse::<usize>()
         .map_err(|_e| invalid_argument())?;
     if start_page == 0 {
@@ -1603,7 +1609,9 @@ fn parse_pages_range(pages: &str) -> Result<(usize, Option<usize>), PrError> {
 
     let end_page = match end_raw {
         Some(end_raw) => {
-            let end_page = end_raw.parse::<usize>().map_err(|_e| invalid_argument())?;
+            let end_page = pr_numeric_value(end_raw)
+                .parse::<usize>()
+                .map_err(|_e| invalid_argument())?;
             if end_page < start_page {
                 return Err(invalid_range());
             }
@@ -6755,6 +6763,12 @@ mod tests {
     #[cfg(test)]
     mod parse_tests {
         use super::super::*;
+
+        #[test]
+        fn test_pr_numeric_value_trims_only_leading_ascii_whitespace() {
+            assert_eq!(pr_numeric_value(" \t42"), "42");
+            assert_eq!(pr_numeric_value("42 "), "42 ");
+        }
         use clap::ArgMatches;
 
         // 辅助函数：构建命令行参数

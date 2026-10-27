@@ -1241,6 +1241,7 @@ fn pr_build_options(
     let column_mode_options = parse_column_mode_options(arg_matches, args)?;
     let is_join_lines = arg_matches.get_flag(pr_flags::PR_JOIN_LINES)
         || (arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR)
+            && !arg_matches.contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR)
             && !arg_matches.contains_id(pr_flags::PR_COLUMN_WIDTH)
             && !arg_matches.contains_id(pr_flags::PR_PAGE_WIDTH));
     let merge_files_print = parse_merge_files_print(arg_matches, paths);
@@ -1263,8 +1264,9 @@ fn pr_build_options(
     let is_double_space = arg_matches.get_flag(pr_flags::PR_DOUBLE_SPACE);
     let is_merge_mode = parse_merge_mode(arg_matches, column_mode_options.as_ref())?;
 
-    let is_pad_columns =
-        !arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR) && !is_join_lines;
+    let is_pad_columns = (arg_matches.contains_id(pr_flags::PR_COLUMN_STRING_SEPARATOR)
+        || !arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR))
+        && !is_join_lines;
     let expand_tabs = parse_tab_args(arg_matches, "expand-tabs")?;
     let expand_tabs =
         if columns_to_print > 1 && expand_tabs.is_none() && col_sep_for_printing != "\t" {

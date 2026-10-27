@@ -1230,6 +1230,7 @@ fn parse_column_mode_options(
     args: &[String],
 ) -> Result<Option<PrColumnModeOptions>, PrError> {
     let mut column_option_value = None;
+    let mut old_style_digits = String::new();
     let mut tokens = args
         .iter()
         .map(std::string::String::as_str)
@@ -1245,6 +1246,17 @@ fn parse_column_mode_options(
                 ))
             })
         };
+
+        if token.starts_with('-')
+            && token.len() > 1
+            && token[1..].chars().all(|c| c.is_ascii_digit())
+        {
+            old_style_digits.push_str(&token[1..]);
+            column_option_value = Some(parse_old_style(&old_style_digits)?);
+            continue;
+        }
+
+        old_style_digits.clear();
 
         if let Some(num) = token.strip_prefix("--column=") {
             column_option_value = Some(parse_old_style(num)?);
@@ -1265,12 +1277,6 @@ fn parse_column_mode_options(
                 column_option_value = Some(parse_old_style(num)?);
             }
             continue;
-        }
-        if token.starts_with('-')
-            && token.len() > 1
-            && token[1..].chars().all(|c| c.is_ascii_digit())
-        {
-            column_option_value = Some(parse_old_style(&token[1..])?);
         }
     }
 
@@ -7328,6 +7334,11 @@ mod tests {
             assert!(result.is_some());
             let options = result.unwrap();
             assert_eq!(options.columns, 3);
+
+            // GNU accumulates digits returned by consecutive old-style options.
+            let matches = create_matches_with_args("");
+            let result = parse_column_mode_options(&matches, &build_args("-1 -2")).unwrap();
+            assert_eq!(result.unwrap().columns, 12);
 
             // 测试旧式 -t2 语法（等价于 -t -2）
             let matches = create_matches_with_args("-t");

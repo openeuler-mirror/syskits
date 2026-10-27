@@ -25,7 +25,7 @@ use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::{Quotable, locale_quote};
-use ctcore::ct_error::CTResult;
+use ctcore::ct_error::{CTResult, strip_errno};
 use ctcore::ct_locale::hard_locale_time;
 use itertools::Itertools;
 use quick_error::ResultExt;
@@ -46,6 +46,7 @@ const PR_DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
 const PR_DEFAULT_COLUMN_SEPARATOR: &char = &' ';
 const PR_FF: u8 = 0x0C_u8;
 const PR_RAW_BYTE_CHAR_BASE: u32 = 0xF0000;
+const PR_INT_MAX: usize = i32::MAX as usize;
 // 根据locale选择时间格式
 fn get_pr_date_time_format() -> &'static str {
     if std::env::var_os("POSIXLY_CORRECT").is_some() && !hard_locale_time() {
@@ -1077,13 +1078,48 @@ fn pr_numeric_value(value: &str) -> &str {
     value.trim_start_matches(|c: char| c.is_ascii_whitespace())
 }
 
+fn pr_overflow_text() -> String {
+    strip_errno(&std::io::Error::from_raw_os_error(ctcore::libc::EOVERFLOW))
+}
+
+fn pr_bounded_usize_error(opt: &str, value: &str) -> PrError {
+    let quoted = locale_quote(value);
+    let overflow = pr_overflow_text();
+    let message = match opt {
+        pr_flags::PR_PAGE_LENGTH => {
+            format!("'-l PAGE_LENGTH' invalid number of lines: {quoted}: {overflow}")
+        }
+        pr_flags::PR_COLUMN_WIDTH => {
+            format!("'-w PAGE_WIDTH' invalid number of characters: {quoted}: {overflow}")
+        }
+        pr_flags::PR_PAGE_WIDTH => {
+            format!("'-W PAGE_WIDTH' invalid number of characters: {quoted}: {overflow}")
+        }
+        pr_flags::PR_INDENT => format!("'-o MARGIN' invalid line offset: {quoted}: {overflow}"),
+        pr_flags::PR_FIRST_LINE_NUMBER => {
+            format!("'-N NUMBER' invalid starting line number: {quoted}: {overflow}")
+        }
+        _ => format!("invalid -{opt} argument {quoted}: {overflow}"),
+    };
+    PrError::EncounteredErrorsNoHelp(message)
+}
+
 fn pr_parse_usize(arg_matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>> {
     let from_parse_error_to_pr_error = |value_to_parse: (String, String)| {
         let i = value_to_parse.0;
         let option = value_to_parse.1;
-        pr_numeric_value(&i).parse().map_err(|_e| {
-            PrError::EncounteredErrors(format!("invalid {} argument {}", option, i.quote()))
-        })
+        pr_numeric_value(&i)
+            .parse()
+            .map_err(|_e| {
+                PrError::EncounteredErrors(format!("invalid {} argument {}", option, i.quote()))
+            })
+            .and_then(|value| {
+                if value > PR_INT_MAX {
+                    Err(pr_bounded_usize_error(opt, &i))
+                } else {
+                    Ok(value)
+                }
+            })
     };
     arg_matches
         .get_one::<String>(opt)
@@ -1225,6 +1261,14 @@ fn parse_tab_args(arg_matches: &ArgMatches, name: &str) -> Result<Option<(char, 
             let width = width_str
                 .parse::<usize>()
                 .map_err(|_| invalid_tab_arg(opt_name, width_str))?;
+            if width > PR_INT_MAX {
+                return Err(PrError::EncounteredErrors(format!(
+                    "{} extra characters or invalid number in the argument: {}: {}",
+                    opt_name.quote(),
+                    width_str.quote(),
+                    pr_overflow_text()
+                )));
+            }
             if width == 0 {
                 return Err(invalid_tab_arg(opt_name, width_str));
             }
@@ -1374,14 +1418,22 @@ fn parse_column_mode_options(
         .peekable();
     while let Some(token) = tokens.next() {
         let parse_old_style = |unparsed_num: &str| {
-            pr_numeric_value(unparsed_num)
+            let value = pr_numeric_value(unparsed_num)
                 .parse::<usize>()
                 .map_err(|_e| {
                     PrError::EncounteredErrorsNoHelp(format!(
                         "invalid number of columns: {}",
                         unparsed_num.quote()
                     ))
-                })
+                })?;
+            if value > PR_INT_MAX {
+                return Err(PrError::EncounteredErrorsNoHelp(format!(
+                    "invalid number of columns: {}: {}",
+                    unparsed_num.quote(),
+                    pr_overflow_text()
+                )));
+            }
+            Ok(value)
         };
 
         if pr_is_numeric_option_cluster(token) {
@@ -1689,6 +1741,14 @@ fn parse_number_lines_value(value: &str, first_number: usize) -> Result<PrNumber
     } else {
         return Err(invalid_number_lines_arg(width_arg));
     };
+
+    if width > PR_INT_MAX {
+        return Err(PrError::EncounteredErrors(format!(
+            "'-n' extra characters or invalid number in the argument: {}: {}",
+            locale_quote(width_arg),
+            pr_overflow_text()
+        )));
+    }
 
     Ok(PrNumberingMode {
         width,
@@ -6768,6 +6828,15 @@ mod tests {
         fn test_pr_numeric_value_trims_only_leading_ascii_whitespace() {
             assert_eq!(pr_numeric_value(" \t42"), "42");
             assert_eq!(pr_numeric_value("42 "), "42 ");
+        }
+
+        #[test]
+        fn test_numeric_options_reject_values_above_int_max() {
+            let matches = create_matches_with_args("-w 2147483648");
+            assert!(parse_column_width(&matches).is_err());
+
+            let matches = create_matches_with_args("-e=:2147483648");
+            assert!(parse_tab_args(&matches, "expand-tabs").is_err());
         }
         use clap::ArgMatches;
 

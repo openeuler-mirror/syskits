@@ -140,6 +140,30 @@ fn decode_base64_short_tail(f: Format, input: &[u8]) -> Option<Vec<u8>> {
     Some(out)
 }
 
+fn decode_base64_quantum(f: Format, input: &[u8]) -> Option<Vec<u8>> {
+    if input.len() != 4 {
+        return None;
+    }
+
+    let a = base64_digit(f, input[0])?;
+    let b = base64_digit(f, input[1])?;
+    let mut out = vec![(a << 2) | (b >> 4)];
+
+    if input[2] == b'=' {
+        return (input[3] == b'=').then_some(out);
+    }
+
+    let c = base64_digit(f, input[2])?;
+    out.push(((b & 0x0f) << 4) | (c >> 2));
+    if input[3] == b'=' {
+        return Some(out);
+    }
+
+    let d = base64_digit(f, input[3])?;
+    out.push(((c & 0x03) << 6) | d);
+    Some(out)
+}
+
 fn base32_value(f: Format, byte: u8) -> Option<u8> {
     match f {
         Base32 => match byte {
@@ -358,7 +382,14 @@ impl<R: Read> Data<R> {
                         if matches!(self.format, Base16) {
                             block.make_ascii_uppercase();
                         }
-                        let decoded = decode(self.format, &block)?;
+                        let decoded = if matches!(self.format, Base64 | Base64Url) {
+                            match decode_base64_quantum(self.format, &block) {
+                                Some(decoded) => decoded,
+                                None => return Err(invalid_input().into()),
+                            }
+                        } else {
+                            decode(self.format, &block)?
+                        };
                         writer.write_all(&decoded)?;
                         char_buf.drain(..block_size);
                     }
@@ -797,6 +828,16 @@ mod test {
         let mut out = Vec::new();
         assert!(data.decode(&mut out).is_err());
         assert_eq!(out, b"g");
+    }
+
+    #[test]
+    fn test_data_decode_base64_accepts_noncanonical_padding_bits() {
+        for (input, expected) in [(b"Zh==".as_slice(), b"f".as_slice()), (b"Zm9=", b"fo")] {
+            let mut data = Data::new(Cursor::new(input), Format::Base64);
+            let mut out = Vec::new();
+            assert!(data.decode(&mut out).is_ok());
+            assert_eq!(out, expected);
+        }
     }
 
     #[test]

@@ -16,7 +16,7 @@ use clap::{Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTError, CTResult};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, strip_errno};
 use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
 use std::error::Error;
 use std::ffi::{CStr, CString, OsStr, OsString};
@@ -498,8 +498,12 @@ pub fn logname_main(args: impl ctcore::Args) -> CTResult<()> {
         Some(userlogin) => {
             let stdout = std::io::stdout();
             let mut output = stdout.lock();
-            output.write_all(&userlogin).unwrap();
-            output.write_all(b"\n").unwrap();
+            output
+                .write_all(&userlogin)
+                .and_then(|_| output.write_all(b"\n"))
+                .map_err(|error| {
+                    CtSimpleError::new(1, format!("write error: {}", strip_errno(&error)))
+                })?;
         }
         None => {
             return Err(Box::new(LognameRawDiagnostic {

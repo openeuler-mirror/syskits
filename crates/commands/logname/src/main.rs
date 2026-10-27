@@ -45,10 +45,12 @@ pub fn main() {
         .unwrap_or_else(|| std::ffi::OsStr::new("logname"));
     let tool = ct_logname::Logname;
     let result = tool.execute(&args);
-    let code = match result {
+    let mut write_error_reported = false;
+    let mut code = match result {
         Ok(()) => ctcore::ct_error::get_ct_exit_code(),
         Err(err) => {
             let message = err.to_string();
+            write_error_reported = message.starts_with("write error:");
             if !message.is_empty() {
                 write_error(program_name, &message);
             }
@@ -60,7 +62,13 @@ pub fn main() {
     };
 
     if let Err(error) = std::io::stdout().flush() {
-        eprintln!("Error flushing stdout: {error}");
+        if !write_error_reported {
+            write_error(
+                program_name,
+                &format!("write error: {}", ctcore::ct_error::strip_errno(&error)),
+            );
+        }
+        code = 1;
     }
 
     std::process::exit(code);

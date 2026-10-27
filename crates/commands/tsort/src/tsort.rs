@@ -393,6 +393,15 @@ fn tsort_error_bytes_outcome(stderr_bytes: Vec<u8>, had_cycle: bool) -> TsortRun
 
 fn tsort_read_input(input_file: &OsStr, program_name: &[u8]) -> Result<Vec<u8>, Vec<u8>> {
     let mut input: Box<dyn Read> = if input_file == OsStr::new("-") {
+        if ctcore::ct_stdin_was_closed() && !ctcore::ct_io::has_injected_stdin() {
+            let quoted_file = quote_tsort_filename(input_file);
+            let mut message = tsort_format_message("%s: read error", &[quoted_file.as_bytes()]);
+            message.extend_from_slice(b": ");
+            message.extend_from_slice(
+                tsort_error_detail(&std::io::Error::from_raw_os_error(libc::EBADF)).as_bytes(),
+            );
+            return Err(tsort_diagnostic(program_name, &message));
+        }
         ctcore::ct_io::stdin_reader_box()
     } else {
         let path = Path::new(input_file);

@@ -727,6 +727,15 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
+    if let Some(stderr_text) = pr_early_option_error(&args) {
+        return Ok(PrSemantic {
+            rows: Vec::new(),
+            classic_text: String::new(),
+            classic_bytes: Vec::new(),
+            stderr_text,
+            exit_code: 1,
+        });
+    }
     if pr_has_invalid_bare_plus(&args) {
         return Ok(PrSemantic {
             rows: Vec::new(),
@@ -832,6 +841,45 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
     }
 
     Ok(semantic)
+}
+
+fn pr_early_option_error<T: AsRef<OsStr>>(args: &[T]) -> Option<String> {
+    let mut args = args.iter().skip(1).peekable();
+    while let Some(arg) = args.next() {
+        let arg = arg.as_ref();
+        if arg == OsStr::new("--") {
+            break;
+        }
+        let Some(arg) = arg.to_str() else {
+            continue;
+        };
+        if !arg.starts_with('-') || arg == "-" || arg.starts_with("--") {
+            continue;
+        }
+
+        let cluster = &arg[1..];
+        let mut chars = cluster.char_indices().peekable();
+        while let Some((_, option)) = chars.next() {
+            if option.is_ascii_digit() || "abcdfFJmrtTvV".contains(option) {
+                continue;
+            }
+            if matches!(option, 'n' | 'e' | 'i' | 's' | 'S') {
+                break;
+            }
+            if matches!(option, 'D' | 'h' | 'l' | 'N' | 'o' | 'w' | 'W') {
+                if chars.peek().is_none() && args.next().is_none() {
+                    return Some(format!(
+                        "pr: option requires an argument -- '{option}'\nTry 'pr --help' for more information.\n"
+                    ));
+                }
+                break;
+            }
+            return Some(format!(
+                "pr: invalid option -- '{option}'\nTry 'pr --help' for more information.\n"
+            ));
+        }
+    }
+    None
 }
 
 fn pr_has_invalid_bare_plus<T: AsRef<OsStr>>(args: &[T]) -> bool {
@@ -1121,15 +1169,33 @@ fn pr_bounded_usize_error(opt: &str, value: &str) -> PrError {
     PrError::EncounteredErrorsNoHelp(message)
 }
 
+fn pr_invalid_usize_error(opt: &str, value: &str) -> PrError {
+    let quoted = locale_quote(value);
+    let message = match opt {
+        pr_flags::PR_PAGE_LENGTH => {
+            format!("'-l PAGE_LENGTH' invalid number of lines: {quoted}")
+        }
+        pr_flags::PR_COLUMN_WIDTH => {
+            format!("'-w PAGE_WIDTH' invalid number of characters: {quoted}")
+        }
+        pr_flags::PR_PAGE_WIDTH => {
+            format!("'-W PAGE_WIDTH' invalid number of characters: {quoted}")
+        }
+        pr_flags::PR_INDENT => format!("'-o MARGIN' invalid line offset: {quoted}"),
+        pr_flags::PR_FIRST_LINE_NUMBER => {
+            format!("'-N NUMBER' invalid starting line number: {quoted}")
+        }
+        _ => format!("invalid -{opt} argument {quoted}"),
+    };
+    PrError::EncounteredErrorsNoHelp(message)
+}
+
 fn pr_parse_usize(arg_matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>> {
     let from_parse_error_to_pr_error = |value_to_parse: (String, String)| {
         let i = value_to_parse.0;
-        let option = value_to_parse.1;
         pr_numeric_value(&i)
             .parse()
-            .map_err(|_e| {
-                PrError::EncounteredErrors(format!("invalid {} argument {}", option, i.quote()))
-            })
+            .map_err(|_e| pr_invalid_usize_error(opt, &i))
             .and_then(|value| {
                 if value > PR_INT_MAX {
                     Err(pr_bounded_usize_error(opt, &i))
@@ -1731,12 +1797,9 @@ fn pr_parse_first_line_number(arg_matches: &ArgMatches) -> Result<Option<i64>, P
     let Some(value) = arg_matches.get_one::<String>(pr_flags::PR_FIRST_LINE_NUMBER) else {
         return Ok(None);
     };
-    let number = pr_numeric_value(value).parse::<i64>().map_err(|_| {
-        PrError::EncounteredErrors(format!(
-            "invalid -first-line-number argument {}",
-            value.quote()
-        ))
-    })?;
+    let number = pr_numeric_value(value)
+        .parse::<i64>()
+        .map_err(|_| pr_invalid_usize_error(pr_flags::PR_FIRST_LINE_NUMBER, value))?;
     if number < i64::from(i32::MIN) || number > i64::from(i32::MAX) {
         return Err(pr_bounded_usize_error(
             pr_flags::PR_FIRST_LINE_NUMBER,
@@ -6674,6 +6737,24 @@ mod tests {
             assert!(!pr_has_invalid_bare_plus(&["pr", "+1", "+", "file"]));
             assert!(!pr_has_invalid_bare_plus(&["pr", "--pages=1", "+", "file"]));
             assert!(!pr_has_invalid_bare_plus(&["pr", "--", "+"]));
+        }
+
+        #[test]
+        fn test_pr_early_option_error_uses_gnu_short_diagnostics() {
+            assert_eq!(
+                pr_early_option_error(&["pr", "-2x"]),
+                Some(
+                    "pr: invalid option -- 'x'\nTry 'pr --help' for more information.\n"
+                        .to_string()
+                )
+            );
+            assert_eq!(
+                pr_early_option_error(&["pr", "-w"]),
+                Some(
+                    "pr: option requires an argument -- 'w'\nTry 'pr --help' for more information.\n"
+                        .to_string()
+                )
+            );
         }
 
         #[test]

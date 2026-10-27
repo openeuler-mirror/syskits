@@ -82,7 +82,8 @@ fn write_tsort_output(writer: &mut impl Write, bytes: &[u8]) -> std::io::Result<
 }
 
 pub fn tsort_main(args: impl ctcore::Args) -> CTResult<()> {
-    let raw_args = args.collect::<Vec<_>>();
+    let mut raw_args = args.collect::<Vec<_>>();
+    tsort_apply_posix_option_order(&mut raw_args, std::env::var_os("POSIXLY_CORRECT").is_some());
     if let Some(outcome) = tsort_option_error_outcome(&raw_args) {
         let stderr = std::io::stderr();
         write_tsort_output(&mut stderr.lock(), &outcome.stderr_bytes)?;
@@ -130,8 +131,27 @@ pub fn tsort_native_semantic(args: impl ctcore::Args) -> CTResult<TsortSemantic>
 fn tsort_run(args: impl ctcore::Args) -> CTResult<TsortRunOutcome> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let matches = ct_app().try_get_matches_from(args)?;
+    let mut raw_args = args.collect::<Vec<_>>();
+    tsort_apply_posix_option_order(&mut raw_args, std::env::var_os("POSIXLY_CORRECT").is_some());
+    let matches = ct_app().try_get_matches_from(raw_args)?;
     Ok(tsort_run_from_matches(&matches))
+}
+
+fn tsort_apply_posix_option_order(args: &mut Vec<OsString>, posixly_correct: bool) {
+    if !posixly_correct {
+        return;
+    }
+
+    for index in 1..args.len() {
+        let argument = args[index].as_os_str().as_encoded_bytes();
+        if argument == b"--" {
+            break;
+        }
+        if argument == b"-" || !argument.starts_with(b"-") {
+            args.insert(index, OsString::from("--"));
+            break;
+        }
+    }
 }
 
 fn tsort_option_error_outcome(args: &[OsString]) -> Option<TsortRunOutcome> {

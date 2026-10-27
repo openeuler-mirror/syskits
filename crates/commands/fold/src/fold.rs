@@ -623,7 +623,8 @@ fn fold_flags_from_matches(
 fn fold_arg_matches(
     args: impl ctcore::Args,
 ) -> Result<(clap::ArgMatches, Option<String>), clap::Error> {
-    let os_args: Vec<OsString> = args.collect();
+    let mut os_args: Vec<OsString> = args.collect();
+    fold_apply_posix_option_order(&mut os_args, std::env::var_os("POSIXLY_CORRECT").is_some());
     let (args, obs_width) = handle_obsolete(&os_args);
     let matches = ct_app().try_get_matches_from(args)?;
     Ok((matches, obs_width))
@@ -768,6 +769,45 @@ fn obsolete_width_arg(arg: &OsStr) -> Option<(&str, &str)> {
         .then_some((short_options, width))
 }
 
+fn fold_apply_posix_option_order(args: &mut Vec<OsString>, enabled: bool) {
+    if !enabled {
+        return;
+    }
+
+    let mut index = 1;
+    while index < args.len() {
+        let argument = args[index].as_os_str().as_encoded_bytes();
+        if argument == b"--" {
+            return;
+        }
+        if fold_option_consumes_next_argument(argument) {
+            index += 2;
+            continue;
+        }
+        if argument == b"-" || !argument.starts_with(b"-") {
+            args.insert(index, OsString::from("--"));
+            return;
+        }
+        index += 1;
+    }
+}
+
+fn fold_option_consumes_next_argument(argument: &[u8]) -> bool {
+    if let Some(long_name) = argument.strip_prefix(b"--") {
+        return !long_name.is_empty()
+            && !long_name.contains(&b'=')
+            && b"width".starts_with(long_name);
+    }
+
+    let Some(short_options) = argument.strip_prefix(b"-") else {
+        return false;
+    };
+    short_options
+        .iter()
+        .position(|option| *option == b'w')
+        .is_some_and(|position| position + 1 == short_options.len())
+}
+
 /// 对文件内容进行折叠处理
 ///
 /// 该函数根据提供的折叠标志（`FoldFlags`）对指定的文件进行处理。
@@ -846,7 +886,8 @@ fn fold_with_writer<W: Write>(writer: &mut W, fold_flags: &FoldFlags) -> CTResul
 pub fn fold_native_semantic(args: impl ctcore::Args) -> CTResult<FoldSemantic> {
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
-    let os_args: Vec<OsString> = args.collect();
+    let mut os_args: Vec<OsString> = args.collect();
+    fold_apply_posix_option_order(&mut os_args, std::env::var_os("POSIXLY_CORRECT").is_some());
     let (args, obs_width) = handle_obsolete(&os_args);
     let matches = match ct_app().try_get_matches_from(args) {
         Ok(m) => m,
@@ -1599,6 +1640,35 @@ mod tests {
         #[test]
         fn rejects_trailing_ascii_whitespace() {
             assert!(parse_fold_width(Some("8 ")).is_err());
+        }
+    }
+
+    #[cfg(test)]
+    mod fold_posix_option_order_tests {
+        use super::*;
+
+        fn os_args(args: &[&str]) -> Vec<OsString> {
+            args.iter().map(OsString::from).collect()
+        }
+
+        #[test]
+        fn stops_option_parsing_at_first_operand() {
+            let mut args = os_args(&["fold", "input", "-w2"]);
+            fold_apply_posix_option_order(&mut args, true);
+            assert_eq!(args, os_args(&["fold", "--", "input", "-w2"]));
+        }
+
+        #[test]
+        fn skips_separate_width_values_before_first_operand() {
+            for arguments in [
+                &["fold", "-w", "2", "input", "-s"][..],
+                &["fold", "-bw", "2", "input", "-s"][..],
+                &["fold", "--wid", "2", "input", "-s"][..],
+            ] {
+                let mut args = os_args(arguments);
+                fold_apply_posix_option_order(&mut args, true);
+                assert_eq!(args[3], OsStr::new("--"));
+            }
         }
     }
 

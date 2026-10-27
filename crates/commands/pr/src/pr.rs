@@ -994,7 +994,7 @@ fn pr_build_options(
     );
 
     let is_double_space = arg_matches.get_flag(pr_flags::PR_DOUBLE_SPACE);
-    let is_merge_mode = parse_merge_mode(arg_matches)?;
+    let is_merge_mode = parse_merge_mode(arg_matches, column_mode_options.as_ref())?;
 
     let is_pad_columns =
         !arg_matches.contains_id(pr_flags::PR_COLUMN_CHAR_SEPARATOR) && !is_join_lines;
@@ -1565,18 +1565,21 @@ fn parse_merge_files_print(arg_matches: &ArgMatches, paths: &[&str]) -> Option<u
     }
 }
 
-fn parse_merge_mode(arg_matches: &ArgMatches) -> Result<bool, PrError> {
+fn parse_merge_mode(
+    arg_matches: &ArgMatches,
+    column_mode_options: Option<&PrColumnModeOptions>,
+) -> Result<bool, PrError> {
     let is_merge_mode = arg_matches.get_flag(pr_flags::PR_MERGE);
     if is_merge_mode {
-        if arg_matches.contains_id(pr_flags::PR_COLUMN) {
+        if column_mode_options.is_some() {
             let err_msg =
                 String::from("cannot specify number of columns when printing in parallel");
-            return Err(PrError::EncounteredErrors(err_msg));
+            return Err(PrError::EncounteredErrorsNoHelp(err_msg));
         }
         if arg_matches.get_flag(pr_flags::PR_ACROSS) {
             let err_msg =
                 String::from("cannot specify both printing across and printing in parallel");
-            return Err(PrError::EncounteredErrors(err_msg));
+            return Err(PrError::EncounteredErrorsNoHelp(err_msg));
         }
     }
     Ok(is_merge_mode)
@@ -6648,37 +6651,44 @@ mod tests {
         fn test_parse_merge_mode_with_conflicts() {
             // 测试合并模式与列模式冲突的情况
             let args = create_matches_with_args("-m --column=2");
+            let argv = build_args("-m --column=2");
+            let column_options = parse_column_mode_options(&args, &argv).unwrap();
 
-            let result = parse_merge_mode(&args);
+            let result = parse_merge_mode(&args, column_options.as_ref());
 
             // 应该返回错误
             assert!(result.is_err());
             match result {
-                Err(PrError::EncounteredErrors(msg)) => {
+                Err(PrError::EncounteredErrorsNoHelp(msg)) => {
                     assert!(
                         msg.contains("cannot specify number of columns when printing in parallel")
                     );
                 }
-                _ => panic!("Expected PrError::EncounteredErrors, got a different error"),
+                _ => panic!("Expected PrError::EncounteredErrorsNoHelp, got a different error"),
             }
 
             // 测试合并模式与across模式冲突的情况
             let args = create_matches_with_args("-m -a");
 
-            let result = parse_merge_mode(&args);
+            let result = parse_merge_mode(&args, None);
 
             // 应该返回错误
             assert!(result.is_err());
             match result {
-                Err(PrError::EncounteredErrors(msg)) => {
+                Err(PrError::EncounteredErrorsNoHelp(msg)) => {
                     assert!(
                         msg.contains(
                             "cannot specify both printing across and printing in parallel"
                         )
                     );
                 }
-                _ => panic!("Expected PrError::EncounteredErrors, got a different error"),
+                _ => panic!("Expected PrError::EncounteredErrorsNoHelp, got a different error"),
             }
+
+            let args = create_matches_with_args("-m");
+            let argv = build_args("-m -2");
+            let column_options = parse_column_mode_options(&args, &argv).unwrap();
+            assert!(parse_merge_mode(&args, column_options.as_ref()).is_err());
         }
 
         #[test]

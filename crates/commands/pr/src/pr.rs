@@ -19,6 +19,8 @@ use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Error, Read, Write, stderr, stdout};
 #[cfg(unix)]
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
+#[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 use std::rc::Rc;
@@ -402,6 +404,28 @@ fn pr_decode_input_bytes(bytes: &[u8]) -> String {
     }
 
     text
+}
+
+fn pr_os_str_to_internal(value: &OsStr) -> String {
+    #[cfg(unix)]
+    {
+        pr_decode_input_bytes(value.as_bytes())
+    }
+    #[cfg(not(unix))]
+    {
+        value.to_string_lossy().into_owned()
+    }
+}
+
+fn pr_internal_to_os_string(value: &str) -> OsString {
+    #[cfg(unix)]
+    {
+        OsString::from_vec(pr_rendered_text_to_bytes(value))
+    }
+    #[cfg(not(unix))]
+    {
+        OsString::from(value)
+    }
 }
 
 fn pr_rendered_text_to_bytes(text: &str) -> Vec<u8> {
@@ -820,7 +844,7 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
     for file_group in file_groups {
         let display_paths = file_group
             .iter()
-            .map(|path| path.to_string_lossy().into_owned())
+            .map(|path| pr_os_str_to_internal(path))
             .collect::<Vec<_>>();
         let paths = display_paths.iter().map(String::as_str).collect::<Vec<_>>();
         let result_options = pr_build_options(&matches, &paths, &option_args);
@@ -3782,7 +3806,7 @@ fn pr_header_content(output_opts: &PrOutputOptions, page: usize) -> Vec<String> 
 }
 
 fn pr_file_last_modified_time(path: &str, fmt: &str) -> String {
-    metadata(path)
+    metadata(pr_internal_to_os_string(path))
         .map(|i| {
             i.modified()
                 .map(|x| {

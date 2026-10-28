@@ -102,18 +102,19 @@ pub fn chcon_main(args: impl ctcore::Args) -> CTResult<()> {
 
                 Ok(None) => {
                     let err = io::Error::from_raw_os_error(libc::ENODATA);
-                    Err(Error::from_io1("Getting security context", reference, err))
+                    Err(chcon_get_security_context_io_error(reference, &err))
                 }
 
-                Err(r) => Err(Error::from_selinux("Getting security context", r)),
+                Err(r) => Err(chcon_get_security_context_error(reference, r)),
             };
 
             match result {
                 Err(r) => {
-                    return Err(CtSimpleError::new(
-                        libc::EXIT_FAILURE,
-                        format!("{}.", report_full_error(&r)),
-                    ));
+                    let message = match &r {
+                        Error::Diagnostic(message) => message.clone(),
+                        _ => format!("{}.", report_full_error(&r)),
+                    };
+                    return Err(CtSimpleError::new(libc::EXIT_FAILURE, message));
                 }
 
                 Ok(file_context) => ChconSELinuxSecurityContext::File(file_context),
@@ -666,6 +667,32 @@ fn chcon_cannot_access_error(path: &Path, source: &io::Error) -> Error {
         strip_errno(source)
     ))
 }
+
+fn chcon_unlabeled_file_error(path: &Path) -> Error {
+    Error::Diagnostic(format!(
+        "can't apply partial context to unlabeled file {}",
+        path.quote()
+    ))
+}
+
+fn chcon_get_security_context_io_error(path: &Path, source: &io::Error) -> Error {
+    Error::Diagnostic(format!(
+        "failed to get security context of {}: {}",
+        path.quote(),
+        strip_errno(source)
+    ))
+}
+
+fn chcon_get_security_context_error(path: &Path, source: selinux::errors::Error) -> Error {
+    if let Some(source) =
+        std::error::Error::source(&source).and_then(|source| source.downcast_ref::<io::Error>())
+    {
+        return chcon_get_security_context_io_error(path, source);
+    }
+
+    Error::from_selinux("Getting security context", source)
+}
+
 /**
  * 更改文件的安全上下文。
  *
@@ -690,13 +717,6 @@ fn chcon_change_file_context(
             the_type,
             range,
         } => {
-            // 如果文件没有上下文，并且我们没有设置所有上下文组件，则没有明显的默认值，因此直接放弃。
-            let err0 = || -> Result<()> {
-                let op = "Applying partial security context to unlabeled file";
-                let err = io::ErrorKind::InvalidInput.into();
-                Err(Error::from_io1(op, chcon_path, err))
-            };
-
             // 尝试获取文件当前的安全上下文。
             let file_context = match SecurityContext::of_path(
                 chcon_path,
@@ -704,14 +724,14 @@ fn chcon_change_file_context(
                 false,
             ) {
                 Ok(Some(context)) => context,
-                Ok(None) => return err0(),
-                Err(r) => return Err(Error::from_selinux("Getting security context", r)),
+                Ok(None) => return Err(chcon_unlabeled_file_error(chcon_path)),
+                Err(r) => return Err(chcon_get_security_context_error(chcon_path, r)),
             };
 
             // 将文件上下文转换为C字符串，用于后续处理。
             let c_file_context = match file_context.to_c_string() {
                 Ok(Some(context)) => context,
-                Ok(None) => return err0(),
+                Ok(None) => return Err(chcon_unlabeled_file_error(chcon_path)),
                 Err(r) => return Err(Error::from_selinux("Getting security context", r)),
             };
 
@@ -914,6 +934,27 @@ mod tests {
         let err = chcon_parse_command_line(ct_app(), args.iter().map(OsString::from))
             .expect_err("expected parse error");
         report_full_error(&err)
+    }
+
+    #[test]
+    fn test_unlabeled_file_diagnostic_matches_gnu() {
+        let error = chcon_unlabeled_file_error(Path::new("unlabeled"));
+
+        assert_eq!(
+            error.to_string(),
+            "can't apply partial context to unlabeled file 'unlabeled'"
+        );
+    }
+
+    #[test]
+    fn test_get_security_context_diagnostic_matches_gnu() {
+        let source = io::Error::from_raw_os_error(libc::ENODATA);
+        let error = chcon_get_security_context_io_error(Path::new("reference"), &source);
+
+        assert_eq!(
+            error.to_string(),
+            "failed to get security context of 'reference': No data available"
+        );
     }
 
     #[test]

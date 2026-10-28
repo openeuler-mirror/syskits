@@ -19,6 +19,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo, set_ct_exit_code};
+use ctcore::ct_quoting_style::gnu_quote_locale;
 use line_break::fmt_break_lines;
 use para_split::FmtParagraphStream;
 use std::ffi::{OsStr, OsString};
@@ -236,9 +237,17 @@ impl FmtConfigs {
         };
 
         if width > FMT_MAX_WIDTH {
+            let error_text = if width > (i32::MAX as usize / 2) {
+                "Value too large for defined data type"
+            } else {
+                "Numerical result out of range"
+            };
             return Err(CtSimpleError::new(
                 1,
-                format!("invalid width: '{width}': Numerical result out of range"),
+                format!(
+                    "invalid width: {}: {error_text}",
+                    gnu_quote_locale(OsStr::new(&width.to_string()))
+                ),
             ));
         }
 
@@ -481,7 +490,10 @@ fn preprocess_legacy_width_syntax(args: Vec<OsString>) -> CTResult<Vec<OsString>
             if !width_raw.bytes().all(|b| b.is_ascii_digit()) {
                 return Err(CtSimpleError::new(
                     1,
-                    format!("invalid width: {}", width_raw.quote()),
+                    format!(
+                        "invalid width: {}",
+                        gnu_quote_locale(OsStr::new(&width_raw))
+                    ),
                 ));
             }
             let mut converted = Vec::with_capacity(args.len() + 1);
@@ -522,12 +534,15 @@ fn parse_width_value(value: &str) -> Result<usize, String> {
         .unwrap_or(value_without_space);
 
     if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
-        return Err(format!("invalid width: {}", value.quote()));
+        return Err(format!(
+            "invalid width: {}",
+            gnu_quote_locale(OsStr::new(value))
+        ));
     }
 
     digits
         .parse::<usize>()
-        .map_err(|_| format!("invalid width: {}", value.quote()))
+        .map_err(|_| format!("invalid width: {}", gnu_quote_locale(OsStr::new(value))))
 }
 
 fn io_error_message(err: &std::io::Error) -> String {

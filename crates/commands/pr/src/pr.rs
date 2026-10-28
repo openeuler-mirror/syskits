@@ -22,6 +22,8 @@ use std::io::{BufRead, BufReader, Error, Read, Write, stderr, stdout};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
+#[cfg(unix)]
+use std::os::unix::io::IntoRawFd;
 use std::path::Path;
 use std::rc::Rc;
 
@@ -320,10 +322,118 @@ struct PrInputLine {
 }
 
 struct PrInputLines {
-    reader: BufReader<Box<dyn Read>>,
+    reader: BufReader<Box<dyn PrRead>>,
     buffer: Vec<u8>,
     pending_error: Option<std::io::Error>,
     finished: bool,
+}
+
+trait PrRead: Read {
+    fn close(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+struct PrNamedReader {
+    file: Option<File>,
+}
+
+impl Read for PrNamedReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        self.file
+            .as_mut()
+            .expect("named input is open")
+            .read(buffer)
+    }
+}
+
+impl PrRead for PrNamedReader {
+    fn close(&mut self) -> std::io::Result<()> {
+        let Some(file) = self.file.take() else {
+            return Ok(());
+        };
+        #[cfg(unix)]
+        {
+            let fd = file.into_raw_fd();
+            let stream = unsafe { ctcore::libc::fdopen(fd, c"r".as_ptr()) };
+            if stream.is_null() {
+                let error = std::io::Error::last_os_error();
+                unsafe {
+                    ctcore::libc::close(fd);
+                }
+                return Err(error);
+            }
+            if unsafe { ctcore::libc::fclose(stream) } == ctcore::libc::EOF {
+                return Err(std::io::Error::last_os_error());
+            }
+        }
+        Ok(())
+    }
+}
+
+struct PrStdinReader {
+    reader: Box<dyn Read>,
+}
+
+impl Read for PrStdinReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        self.reader.read(buffer)
+    }
+}
+
+impl PrRead for PrStdinReader {}
+
+#[derive(Debug)]
+struct PrCloseFailure(std::io::Error);
+
+impl std::fmt::Display for PrCloseFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+impl std::error::Error for PrCloseFailure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.0)
+    }
+}
+
+fn pr_clone_io_error(error: &std::io::Error) -> std::io::Error {
+    if let Some(close_error) = error
+        .get_ref()
+        .and_then(|source| source.downcast_ref::<PrCloseFailure>())
+    {
+        std::io::Error::new(
+            error.kind(),
+            PrCloseFailure(std::io::Error::new(
+                close_error.0.kind(),
+                close_error.0.to_string(),
+            )),
+        )
+    } else {
+        std::io::Error::new(error.kind(), error.to_string())
+    }
+}
+
+fn pr_input_error_text(path: &str, error: &std::io::Error) -> String {
+    if let Some(close_error) = error
+        .get_ref()
+        .and_then(|source| source.downcast_ref::<PrCloseFailure>())
+    {
+        let input_name = if path == PR_FILE_STDIN {
+            "standard input".to_string()
+        } else {
+            path.to_string()
+        };
+        format!("{input_name}: {}", strip_errno(&close_error.0))
+    } else {
+        let input_name = if path == PR_FILE_STDIN {
+            "standard input"
+        } else {
+            path
+        };
+        format!("'{input_name}': {}", strip_errno(error))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -372,7 +482,16 @@ impl Iterator for PrInputLines {
         }
         self.buffer.clear();
         match self.reader.read_until(b'\n', &mut self.buffer) {
-            Ok(0) => None,
+            Ok(0) => {
+                self.finished = true;
+                match self.reader.get_mut().close() {
+                    Ok(()) => None,
+                    Err(error) => Some(Err(std::io::Error::new(
+                        error.kind(),
+                        PrCloseFailure(error),
+                    ))),
+                }
+            }
             Ok(_) => {
                 let has_line_terminator = self.buffer.last() == Some(&b'\n');
                 if has_line_terminator {
@@ -398,7 +517,7 @@ impl Iterator for PrInputLines {
     }
 }
 
-fn pr_input_lines(reader: Box<dyn Read>) -> PrInputLines {
+fn pr_input_lines(reader: Box<dyn PrRead>) -> PrInputLines {
     PrInputLines {
         reader: BufReader::with_capacity(PR_READ_BUFFER_SIZE, reader),
         buffer: Vec::new(),
@@ -735,7 +854,7 @@ quick_error! {
     enum PrError {
         Input(err: std::io::Error, path: String) {
             context(path: &'a str, err: std::io::Error) -> (err, path.to_owned())
-            display("pr: '{}': {}", if path == PR_FILE_STDIN { "standard input" } else { path }, strip_errno(err))
+            display("pr: {}", pr_input_error_text(path, err))
             source(err)
         }
 
@@ -2277,7 +2396,7 @@ fn parse_merge_mode(
     Ok(is_merge_mode)
 }
 
-fn pr_open(path: impl AsRef<Path>) -> Result<Box<dyn Read>, PrError> {
+fn pr_open(path: impl AsRef<Path>) -> Result<Box<dyn PrRead>, PrError> {
     let path = path.as_ref();
     if path == Path::new(PR_FILE_STDIN) {
         #[cfg(unix)]
@@ -2290,7 +2409,9 @@ fn pr_open(path: impl AsRef<Path>) -> Result<Box<dyn Read>, PrError> {
                 PR_FILE_STDIN.to_string(),
             ));
         }
-        return Ok(ctcore::ct_io::stdin_reader_box());
+        return Ok(Box::new(PrStdinReader {
+            reader: ctcore::ct_io::stdin_reader_box(),
+        }));
     }
 
     let path_os = path.as_os_str().to_os_string();
@@ -2313,7 +2434,7 @@ fn pr_open(path: impl AsRef<Path>) -> Result<Box<dyn Read>, PrError> {
     }
 
     let file = File::open(path).map_err(|error| PrError::Open(error, path_os))?;
-    Ok(Box::new(file) as Box<dyn Read>)
+    Ok(Box::new(PrNamedReader { file: Some(file) }))
 }
 
 fn pr_split_lines_if_form_feed(
@@ -2849,7 +2970,7 @@ fn pr_collect_semantic_for_merge(
                             line_number: row_line_number,
                             page_number,
                             group_key: row_index,
-                            line_content: Err(std::io::Error::new(e.kind(), e.to_string())),
+                            line_content: Err(pr_clone_io_error(e)),
                             has_line_terminator: false,
                             form_feeds_after: 0,
                             inline_form_feed_after: false,
@@ -3454,7 +3575,7 @@ fn pr_get_rendered_line_for_printing(
                 content.clone()
             }
         }
-        Err(e) => return Err(std::io::Error::new(e.kind(), e.to_string())),
+        Err(e) => return Err(pr_clone_io_error(e)),
     };
 
     if output_opts.show_control_chars || output_opts.show_nonprinting {
@@ -7795,8 +7916,15 @@ mod tests {
         use std::io::Cursor;
 
         // 创建带有特定内容的模拟读取流
-        fn create_test_reader(content: &str) -> Box<dyn Read> {
-            Box::new(Cursor::new(content.to_string()))
+        fn create_test_reader(content: &str) -> Box<dyn PrRead> {
+            struct TestReader(Cursor<String>);
+            impl Read for TestReader {
+                fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+                    self.0.read(buffer)
+                }
+            }
+            impl PrRead for TestReader {}
+            Box::new(TestReader(Cursor::new(content.to_string())))
         }
 
         #[test]

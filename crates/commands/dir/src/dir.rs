@@ -766,6 +766,7 @@ fn dir_config_from_matches(matches: &ArgMatches) -> CTResult<LsConfig> {
     if uses_default_format {
         config.format = LsFormat::Columns;
         config.apply_tab_size_environment(matches);
+        config.apply_width_environment(matches);
     }
 
     Ok(config)

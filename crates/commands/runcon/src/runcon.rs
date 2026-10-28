@@ -261,7 +261,25 @@ fn parser_diagnostic(args: &[OsString]) -> Option<DefaultError> {
             _ if value.len() > 2 && value[1] == b'l' => {
                 option_index = Some(3);
             }
-            _ if value.len() > 1 && value[1..].iter().all(|byte| *byte == b'c') => {}
+            _ if value.len() > 1 && value[1] == b'c' => {
+                let mut option_position = 2;
+                while option_position < value.len() && value[option_position] == b'c' {
+                    option_position += 1;
+                }
+                if option_position < value.len() {
+                    option_index = match value[option_position] {
+                        b'u' => Some(0),
+                        b'r' => Some(1),
+                        b't' => Some(2),
+                        b'l' => Some(3),
+                        _ => {
+                            recognized = false;
+                            None
+                        }
+                    };
+                    takes_value = option_index.is_some() && option_position + 1 == value.len();
+                }
+            }
             _ => recognized = false,
         }
 
@@ -928,6 +946,46 @@ mod tests {
                         ..
                     } if user == value
                 ));
+            }
+        }
+
+        #[test]
+        fn test_parse_compute_with_clustered_context_options() {
+            for (option, value) in [
+                ("-cu", "user_u"),
+                ("-cr", "role_r"),
+                ("-ct", "type_t"),
+                ("-cl", "s0"),
+                ("-cuuser_u", "user_u"),
+            ] {
+                let mut args = vec![OsString::from("runcon"), OsString::from(option)];
+                if option.len() == 3 {
+                    args.push(OsString::from(value));
+                }
+                args.push(OsString::from("/bin/true"));
+
+                let result = RunconSettings::new(ct_app(), args.into_iter()).unwrap();
+                match result.mode {
+                    RunconCommandLineMode::CustomContext {
+                        is_compute_transition_context,
+                        user,
+                        role,
+                        the_type,
+                        range,
+                        ..
+                    } => {
+                        assert!(is_compute_transition_context);
+                        let parsed_value = match option.as_bytes()[2] {
+                            b'u' => user,
+                            b'r' => role,
+                            b't' => the_type,
+                            b'l' => range,
+                            _ => unreachable!(),
+                        };
+                        assert_eq!(parsed_value.as_deref(), Some(OsStr::new(value)));
+                    }
+                    _ => panic!("Wrong mode"),
+                }
             }
         }
     }

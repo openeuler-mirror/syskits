@@ -404,7 +404,7 @@ fn get_plain_context(context: &OsStr) -> Result<OpaqueSecurityContext> {
 ///
 /// # 返回值
 /// 成功返回转换后的安全上下文，失败返回错误
-fn get_transition_context(command: &OsStr) -> Result<SecurityContext> {
+fn get_transition_context(command: &OsStr) -> Result<CString> {
     // 获取进程安全类
     let sec_class = SecurityClass::from_name("process")
         .map_err(|err| DefaultError::from_selinux("Getting process security class", err))?;
@@ -429,10 +429,32 @@ fn get_transition_context(command: &OsStr) -> Result<SecurityContext> {
         DefaultError::from_selinux("Getting security context of the current process", err)
     })?;
 
-    // 计算进程转换后的上下文
-    process_context
-        .of_labeling_decision(&file_context, sec_class, "")
-        .map_err(|err| DefaultError::from_selinux("Computing result of process transition", err))
+    // 计算进程转换后的上下文。GNU 使用不带对象名的 create API。
+    let mut new_context = ptr::null_mut();
+    let rc = unsafe {
+        selinux_sys::security_compute_create(
+            process_context.as_ptr(),
+            file_context.as_ptr(),
+            sec_class.value(),
+            &mut new_context,
+        )
+    };
+    if rc != 0 {
+        return Err(DefaultError::from_io(
+            "Computing result of process transition",
+            io::Error::last_os_error(),
+        ));
+    }
+    if new_context.is_null() {
+        return Err(DefaultError::from_io(
+            "Computing result of process transition",
+            io::ErrorKind::InvalidData.into(),
+        ));
+    }
+
+    let context = unsafe { CStr::from_ptr(new_context) }.to_owned();
+    unsafe { selinux_sys::freecon(new_context) };
+    Ok(context)
 }
 
 /// 获取初始的自定义不透明上下文
@@ -448,22 +470,21 @@ fn get_initial_custom_opaque_context(
     command: &OsStr,
 ) -> Result<OpaqueSecurityContext> {
     // 根据是否需要计算转换上下文选择初始上下文
-    let context = if compute_transition_context {
+    let c_context = if compute_transition_context {
         get_transition_context(command)?
     } else {
-        SecurityContext::current(false).map_err(|err| {
+        let context = SecurityContext::current(false).map_err(|err| {
             DefaultError::from_selinux("Getting security context of the current process", err)
-        })?
+        })?;
+        context
+            .to_c_string()
+            .map_err(|err| DefaultError::from_selinux("Getting security context", err))?
+            .map(Cow::into_owned)
+            .unwrap_or_default()
     };
 
-    // 将上下文转换为 C 字符串
-    let c_context = context
-        .to_c_string()
-        .map_err(|err| DefaultError::from_selinux("Getting security context", err))?
-        .unwrap_or_else(|| Cow::Owned(CString::default()));
-
     // 创建不透明上下文对象
-    OpaqueSecurityContext::from_c_str(c_context.as_ref())
+    OpaqueSecurityContext::from_c_str(&c_context)
         .map_err(|err| DefaultError::from_selinux("Creating new context", err))
 }
 

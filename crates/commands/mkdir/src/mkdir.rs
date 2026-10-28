@@ -25,6 +25,7 @@ use ctcore::ct_show_if_err;
 use ctcore::{
     ct_display::{Quotable, locale_quote},
     ct_fs::dir_strip_dot_for_creation,
+    ct_quoting_style::gnu_quote_shell_bytes,
 };
 use std::ffi::OsString;
 use std::io::{self, Write};
@@ -966,14 +967,43 @@ fn mkdir_create_dir(
 fn mkdir_announce_created(path: &Path) -> CTResult<()> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
-    writeln!(
-        stdout,
-        "{}: {} {}",
+    let mut message = format!(
+        "{}: {} ",
         ctcore::ct_util_name(),
-        t!("mkdir.verbose_created"),
-        mkdir_locale_quote_path(path)
+        t!("mkdir.verbose_created")
     )
-    .map_err(mkdir_write_error)
+    .into_bytes();
+    message.extend_from_slice(&mkdir_quote_created_path(path));
+    message.push(b'\n');
+    stdout.write_all(&message).map_err(mkdir_write_error)
+}
+
+#[cfg(target_os = "linux")]
+fn mkdir_quote_created_path(path: &Path) -> Vec<u8> {
+    let locale = unsafe { libc::newlocale(libc::LC_ALL_MASK, c"".as_ptr(), std::ptr::null_mut()) };
+    if locale.is_null() {
+        return gnu_quote_shell_bytes(path.as_os_str(), true);
+    }
+
+    let previous = unsafe { libc::uselocale(locale) };
+    if previous.is_null() {
+        unsafe {
+            libc::freelocale(locale);
+        }
+        return gnu_quote_shell_bytes(path.as_os_str(), true);
+    }
+
+    let quoted = gnu_quote_shell_bytes(path.as_os_str(), true);
+    unsafe {
+        libc::uselocale(previous);
+        libc::freelocale(locale);
+    }
+    quoted
+}
+
+#[cfg(not(target_os = "linux"))]
+fn mkdir_quote_created_path(path: &Path) -> Vec<u8> {
+    gnu_quote_shell_bytes(path.as_os_str(), true)
 }
 
 #[cfg(target_os = "linux")]

@@ -454,6 +454,9 @@ fn pr_raw_byte_display_width(byte: u8) -> usize {
 }
 
 fn pr_raw_byte_is_printable(byte: u8) -> bool {
+    if pr_uses_utf8_locale() {
+        return false;
+    }
     pr_raw_byte_wchar(byte)
         .is_some_and(|wide_char| unsafe { iswprint(wide_char as ctcore::libc::c_uint) != 0 })
 }
@@ -479,6 +482,15 @@ fn pr_effective_ctype_locale() -> String {
 fn pr_uses_utf8_locale() -> bool {
     let locale = pr_effective_ctype_locale().to_ascii_uppercase();
     locale.contains("UTF-8") || locale.contains("UTF8")
+}
+
+fn pr_utf8_expected_width(first: u8) -> usize {
+    match first {
+        0xC2..=0xDF => 2,
+        0xE0..=0xEF => 3,
+        0xF0..=0xF4 => 4,
+        _ => 1,
+    }
 }
 
 fn pr_decode_input_bytes(bytes: &[u8]) -> String {
@@ -534,7 +546,18 @@ fn pr_decode_input_bytes(bytes: &[u8]) -> String {
                 }
 
                 let invalid_len = err.error_len().unwrap_or(rest.len() - valid_up_to);
-                let invalid_end = valid_up_to + invalid_len;
+                let mut invalid_end = valid_up_to + invalid_len;
+                let expected_width = pr_utf8_expected_width(rest[valid_up_to]);
+                if expected_width > 1 {
+                    invalid_end = valid_up_to + 1;
+                    while invalid_end < rest.len() && invalid_end - valid_up_to < expected_width {
+                        let continuation = rest[invalid_end];
+                        invalid_end += 1;
+                        if continuation & 0xC0 != 0x80 {
+                            break;
+                        }
+                    }
+                }
                 for &byte in &rest[valid_up_to..invalid_end] {
                     text.push(pr_raw_byte_char(byte));
                 }

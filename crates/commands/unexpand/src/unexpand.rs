@@ -25,7 +25,9 @@ use sys_locale::get_locale;
 
 use ctcore::Tool;
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, CtSimpleError, set_ct_exit_code, strip_errno};
+use ctcore::ct_error::{
+    CTError, CTResult, CtSimpleError, set_ct_exit_code, strerror_bytes, strip_errno,
+};
 use ctcore::ct_posix::{GnuGetoptCommandExt, posixly_correct};
 use ctcore::ct_quoting_style::escape_shell_bytes_with_classifier;
 use std::ffi::{CStr, OsStr, OsString};
@@ -1088,7 +1090,11 @@ fn unexpand_open(
     } else {
         file_buf = File::open(filename).map_err(|error| {
             *last_input_errno = error.raw_os_error();
-            unexpand_path_error(path, strip_errno(&error).as_bytes())
+            let message = error
+                .raw_os_error()
+                .and_then(strerror_bytes)
+                .unwrap_or_else(|| strip_errno(&error).into_bytes());
+            unexpand_path_error(path, &message)
         })?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
@@ -3260,6 +3266,40 @@ mod tests {
                 stderr,
                 b"unexpand: missing-\xD6\xD0: No such file or directory\n"
             );
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn test_unexpand_open_preserves_legacy_locale_errno_bytes() {
+            use std::os::unix::ffi::OsStrExt;
+
+            let locale = unsafe {
+                ctcore::libc::newlocale(
+                    ctcore::libc::LC_ALL_MASK,
+                    c"zh_CN.gb18030".as_ptr(),
+                    std::ptr::null_mut(),
+                )
+            };
+            assert!(!locale.is_null());
+            let previous = unsafe { ctcore::libc::uselocale(locale) };
+            let _locale = TestThreadLocale { locale, previous };
+
+            let directory = tempdir().unwrap();
+            let path = directory
+                .path()
+                .join(OsStr::from_bytes(b"missing-\xD6\xD0"));
+            let mut last_input_errno = None;
+            let error = match unexpand_open(path.as_os_str(), &mut last_input_errno, false) {
+                Ok(_) => panic!("missing path must be rejected"),
+                Err(error) => error,
+            };
+
+            let mut expected = unexpand_quote_path_bytes(path.as_os_str());
+            expected.extend_from_slice(b": ");
+            expected.extend_from_slice(&strerror_bytes(ctcore::libc::ENOENT).unwrap());
+
+            assert_eq!(last_input_errno, Some(ctcore::libc::ENOENT));
+            assert_eq!(error.diagnostic_bytes().as_ref(), expected);
         }
     }
 

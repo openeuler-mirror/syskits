@@ -1774,5 +1774,260 @@
                 "rm -f file1 file2 checksum_mixed.txt"
             ]
         }
+        ,
+        {
+            "tstdin": "",
+            "command": "sha256sum",
+            "description": "Migrated: --zero conflicts with --check",
+            "args": [
+                "--zero",
+                "--check",
+                "sums"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                ": > sums"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sha256sum",
+            "description": "Migrated: binary/text flags follow the last option case 1",
+            "args": [
+                "-b",
+                "-t",
+                "text.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                "printf 'alpha\\nbeta\\ngamma\\n' > text.txt"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sha256sum",
+            "description": "Migrated: binary/text flags follow the last option case 2",
+            "args": [
+                "-t",
+                "-b",
+                "text.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                "printf 'alpha\\nbeta\\ngamma\\n' > text.txt"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sha256sum",
+            "description": "Migrated: binary/text flags follow the last option case 3",
+            "args": [
+                "-b",
+                "-b",
+                "text.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                "printf 'alpha\\nbeta\\ngamma\\n' > text.txt"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sha256sum",
+            "description": "Migrated: binary/text flags follow the last option case 4",
+            "args": [
+                "-t",
+                "-t",
+                "text.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                "printf 'alpha\\nbeta\\ngamma\\n' > text.txt"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sha256sum",
+            "description": "Migrated: binary/text flags follow the last option case 5",
+            "args": [
+                "-b",
+                "-t",
+                "-b",
+                "text.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                "printf 'alpha\\nbeta\\ngamma\\n' > text.txt"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "sha256sum",
+            "description": "Migrated: binary/text flags follow the last option case 6",
+            "args": [
+                "-t",
+                "-b",
+                "-t",
+                "text.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                "printf 'alpha\\nbeta\\ngamma\\n' > text.txt"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        }
     ]
   }

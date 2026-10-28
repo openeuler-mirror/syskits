@@ -1220,5 +1220,574 @@
                 "rm -f f1"
             ]
         }
+        ,
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "Migrated: --pages=0 is rejected without consuming input",
+            "args": [
+                "--pages=0"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "Migrated: zero page dimension is rejected case 1",
+            "args": [
+                "-t",
+                "-l0"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "Migrated: zero page dimension is rejected case 2",
+            "args": [
+                "-t",
+                "-w0"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "Migrated: zero page dimension is rejected case 3",
+            "args": [
+                "-t",
+                "-W0"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "Migrated: -v accepts non-UTF-8 input",
+            "args": [
+                "2d74",
+                "2d76",
+                "696e707574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                "printf 'a\\007\\200\\n' > input"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "65cc810a",
+            "command": "pr",
+            "description": "Migrated: zero-width wide character is escaped case 1",
+            "args": [
+                "2d74",
+                "2d63"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "65cc810a",
+            "command": "pr",
+            "description": "Migrated: zero-width wide character is escaped case 2",
+            "args": [
+                "2d74",
+                "2d76"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "1\n2\n",
+            "command": "pr",
+            "description": "Migrated: short -S preserves a leading equals sign",
+            "args": [
+                "-t",
+                "-2",
+                "-S=X"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "Migrated: default mode preserves non-UTF-8 input bytes",
+            "args": [
+                "2d74",
+                "696e707574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                "printf 'a\\007\\200\\n' > input"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "Migrated: readable special files are accepted",
+            "args": [
+                "-t",
+                "/dev/null"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "Migrated: processing continues after an open failure",
+            "args": [
+                "-r",
+                "-t",
+                "missing",
+                "good"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                "printf 'good\\n' > good"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "pr",
+            "description": "Migrated: a non-UTF-8 filename can be read",
+            "args": [
+                "2d74",
+                "696e7075742dff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                "printf 'raw\\n' > \"$(printf 'input-\\377')\""
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n17\n18\n19\n20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n30\n31\n32\n33\n34\n35\n36\n37\n38\n39\n40\n41\n42\n43\n44\n45\n46\n47\n48\n49\n50\n51\n52\n53\n54\n55\n56\n57\n",
+            "command": "pr",
+            "description": "Migrated: -F keeps the default body length",
+            "args": [
+                "-F",
+                "-h",
+                "H",
+                "-D",
+                ""
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "310a320a330a0c6e6578740a",
+            "command": "pr",
+            "description": "Migrated: form feed after a full page is consumed",
+            "args": [
+                "2d74",
+                "2d6c33"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "a.b\tc\n",
+            "command": "pr",
+            "description": "Migrated: custom expansion also expands ordinary tabs",
+            "args": [
+                "-t",
+                "-e.4"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "08580a",
+            "command": "pr",
+            "description": "Migrated: backspace at column zero is discarded",
+            "args": [
+                "2d74"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "x",
+            "command": "pr",
+            "description": "Migrated: double spacing does not double an unterminated last line",
+            "args": [
+                "-t",
+                "-d"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        }
     ]
 }

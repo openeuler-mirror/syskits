@@ -861,5 +861,541 @@
                 "mode-difference"
             ]
         }
+        ,
+        {
+            "tstdin": "610062ff630a",
+            "command": "fold",
+            "description": "Migrated: control and invalid bytes count in the C locale",
+            "args": [
+                "2d7733"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "x\n",
+            "command": "fold",
+            "description": "Migrated: zero width is rejected",
+            "args": [
+                "-w",
+                "0"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "Migrated: GNU width limit boundary 1",
+            "args": [
+                "-w",
+                "18446744073709551607"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "Migrated: GNU width limit boundary 2",
+            "args": [
+                "-w",
+                "18446744073709551608"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "Migrated: GNU width limit boundary 3",
+            "args": [
+                "-w",
+                "18446744073709551615"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "610a313233343536373839300a",
+            "command": "fold",
+            "description": "Migrated: byte width resets after newline",
+            "args": [
+                "2d62",
+                "2d77",
+                "38"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "61200de7958c",
+            "command": "fold",
+            "description": "Migrated: spaces mode handles carriage return after a blank",
+            "args": [
+                "2d73",
+                "2d77",
+                "31"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "0908",
+            "command": "fold",
+            "description": "Migrated: oversized tab wraps before following backspace",
+            "args": [
+                "2d77",
+                "34"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "0d09",
+            "command": "fold",
+            "description": "Migrated: oversized tab wraps after carriage return in C locale",
+            "args": [
+                "2d77",
+                "34"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "200d6109",
+            "command": "fold",
+            "description": "Migrated: byte spaces mode avoids multibyte carriage compensation",
+            "args": [
+                "2d62",
+                "2d73",
+                "2d77",
+                "33"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "61626364",
+            "command": "fold",
+            "description": "Migrated: repeated -s options are accepted",
+            "args": [
+                "2d73",
+                "2d73",
+                "2d77",
+                "32"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "Migrated: conflicting byte and character modes are rejected",
+            "args": [
+                "-b",
+                "-c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "e7958c780a",
+            "command": "fold",
+            "description": "Migrated: C locale byte-mode encoding",
+            "args": [
+                "2d62",
+                "2d77",
+                "32"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "c3a961ff620a",
+            "command": "fold",
+            "description": "Migrated: UTF-8 conversion failure handling",
+            "args": [
+                "2d77",
+                "32"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "a4a2a4a2",
+            "command": "fold",
+            "description": "Migrated: EUC-JP character mode",
+            "args": [
+                "2d63",
+                "2d77",
+                "31"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "ja_JP.eucjp",
+                    "LANG": "ja_JP.eucjp",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "fold",
+            "description": "Migrated: continue after a directory read error",
+            "args": [
+                "-w",
+                "100",
+                "bad-input",
+                "good.txt"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                "mkdir bad-input",
+                "printf 'content after read error\\n' > good.txt"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        }
     ]
 }

@@ -1502,5 +1502,146 @@
                 "rm -f input.bin output.bin output.bin.~1~"
             ]
         }
+        ,
+        {
+            "tstdin": "",
+            "command": "cp",
+            "description": "Migrated: default copy mode is filtered by umask",
+            "args": [
+                "input.bin",
+                "output.bin"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf '%s:' \"$(stat -c '%a' output.bin)\"; sha256sum output.bin",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ]
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                "printf 'source-data\\n' > input.bin",
+                "chmod 640 input.bin"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "umask": "022",
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "cp",
+            "description": "Migrated: numbered backup preserves destination timestamps",
+            "args": [
+                "--backup=numbered",
+                "input.bin",
+                "output.bin"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%a:%X:%Y' output.bin.~1~; stat -c '%a' output.bin; sha256sum output.bin.~1~ output.bin",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ]
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                "printf old > output.bin",
+                "chmod 644 output.bin",
+                "touch -a -d @946684800 output.bin",
+                "touch -m -d @1893456000 output.bin",
+                "printf new > input.bin",
+                "chmod 640 input.bin"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "cp",
+            "description": "Migrated: -p preserves source access and modification times",
+            "args": [
+                "-p",
+                "input.bin",
+                "output.bin"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%a:%X:%Y' output.bin; sha256sum output.bin",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ]
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                "printf 'source-data\\n' > input.bin",
+                "chmod 640 input.bin",
+                "touch -a -d @946684800 input.bin",
+                "touch -m -d @1577836800 input.bin"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        }
     ]
 }

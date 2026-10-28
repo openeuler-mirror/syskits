@@ -25,7 +25,7 @@ use std::ptr;
 use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 use ctcore::{
     Tool,
-    ct_error::{CTResult, UClapError, strip_errno},
+    ct_error::{CTResult, UClapError, strerror_bytes, strip_errno},
     ct_quoting_style::gnu_quote_locale,
 };
 
@@ -637,7 +637,12 @@ fn exec_error_diagnostic(command: &OsStr, error: &Error) -> Vec<u8> {
     let simplified_chinese = nice_uses_simplified_chinese();
     let mut diagnostic = nice_quote_operand_bytes(command, simplified_chinese, None);
     diagnostic.extend_from_slice(b": ");
-    diagnostic.extend_from_slice(strip_errno(error).as_bytes());
+    diagnostic.extend(
+        error
+            .raw_os_error()
+            .and_then(strerror_bytes)
+            .unwrap_or_else(|| strip_errno(error).into_bytes()),
+    );
     diagnostic
 }
 
@@ -894,10 +899,10 @@ fn validate_nice_long_option(argument: &[u8], has_next: bool) -> CTResult<NiceOp
 fn validate_nice_short_option(argument: &[u8], has_next: bool) -> CTResult<NiceOptionAction> {
     let option = argument[1];
     if option != b'n' {
-        let mut message = b"invalid option -- '".to_vec();
-        message.push(option);
-        message.push(b'\'');
-        return Err(nice_usage_error(message));
+        return Err(nice_usage_error(nice_invalid_short_option_diagnostic(
+            option,
+            nice_uses_simplified_chinese(),
+        )));
     }
 
     if argument.len() == 2 {
@@ -910,6 +915,22 @@ fn validate_nice_short_option(argument: &[u8], has_next: bool) -> CTResult<NiceO
     }
 
     Ok(NiceOptionAction::Continue)
+}
+
+fn nice_invalid_short_option_diagnostic(option: u8, simplified_chinese: bool) -> Vec<u8> {
+    if simplified_chinese {
+        let (mut message, was_truncated) =
+            nice_locale_diagnostic_bytes_with_c_string_status("不适用的选项 -- ".as_bytes(), true);
+        if !was_truncated {
+            message.push(option);
+        }
+        message
+    } else {
+        let mut message = b"invalid option -- '".to_vec();
+        message.push(option);
+        message.push(b'\'');
+        message
+    }
 }
 
 fn prepare_nice_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
@@ -1086,6 +1107,9 @@ fn nice_close_initial_standard_fds(
  */
 pub fn nice_main(args: impl ctcore::Args) -> CTResult<()> {
     nice_configure_sigpipe();
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+    }
     rust_i18n::set_locale(if nice_uses_simplified_chinese() {
         "zh-CN"
     } else {

@@ -42,6 +42,8 @@ use unicode_width::UnicodeWidthStr;
 
 #[cfg(unix)]
 unsafe extern "C" {
+    #[link_name = "stdin"]
+    static mut C_STDIN: *mut ctcore::libc::FILE;
     fn dgettext(
         domainname: *const ctcore::libc::c_char,
         msgid: *const ctcore::libc::c_char,
@@ -373,6 +375,7 @@ impl PrRead for PrNamedReader {
 
 struct PrStdinReader {
     reader: Box<dyn Read>,
+    closed: bool,
 }
 
 impl Read for PrStdinReader {
@@ -381,7 +384,23 @@ impl Read for PrStdinReader {
     }
 }
 
-impl PrRead for PrStdinReader {}
+impl PrRead for PrStdinReader {
+    fn close(&mut self) -> std::io::Result<()> {
+        if self.closed || ctcore::ct_io::has_injected_stdin() {
+            return Ok(());
+        }
+        self.closed = true;
+        drop(std::mem::replace(
+            &mut self.reader,
+            Box::new(std::io::empty()),
+        ));
+        if unsafe { ctcore::libc::fclose(C_STDIN) } == ctcore::libc::EOF {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+}
 
 #[derive(Debug)]
 struct PrCloseFailure(std::io::Error);
@@ -2411,6 +2430,7 @@ fn pr_open(path: impl AsRef<Path>) -> Result<Box<dyn PrRead>, PrError> {
         }
         return Ok(Box::new(PrStdinReader {
             reader: ctcore::ct_io::stdin_reader_box(),
+            closed: false,
         }));
     }
 

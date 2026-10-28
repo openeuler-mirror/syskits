@@ -419,9 +419,9 @@ fn get_plain_context(context: &OsStr) -> Result<OpaqueSecurityContext> {
 /// # 返回值
 /// 成功返回转换后的安全上下文，失败返回错误
 fn get_transition_context(command: &OsStr) -> Result<CString> {
-    // 获取进程安全类
-    let sec_class = SecurityClass::from_name("process")
-        .map_err(|err| DefaultError::from_selinux("Getting process security class", err))?;
+    // 获取当前进程的上下文。GNU 在访问命令文件前先执行此步骤。
+    let process_context = SecurityContext::current(false)
+        .map_err(|_| DefaultError::from_current_context(io::Error::last_os_error()))?;
 
     // 获取要执行文件的上下文
     let file_context = match SecurityContext::of_path(command, true, false) {
@@ -438,10 +438,9 @@ fn get_transition_context(command: &OsStr) -> Result<CString> {
         }
     };
 
-    // 获取当前进程的上下文
-    let process_context = SecurityContext::current(false).map_err(|err| {
-        DefaultError::from_selinux("Getting security context of the current process", err)
-    })?;
+    // 获取进程安全类
+    let sec_class = SecurityClass::from_name("process")
+        .map_err(|err| DefaultError::from_selinux("Getting process security class", err))?;
 
     // 计算进程转换后的上下文。GNU 使用不带对象名的 create API。
     let mut new_context = ptr::null_mut();

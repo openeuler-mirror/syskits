@@ -30,7 +30,7 @@ use std::io;
 use std::str::Utf8Error;
 
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::CTError;
+use ctcore::ct_error::{CTError, strip_errno};
 
 /// runcon 命令的结果类型
 pub(crate) type Result<T> = std::result::Result<T, DefaultError>;
@@ -54,6 +54,10 @@ pub(crate) enum DefaultError {
     /// 未指定要执行的命令
     #[error("No command is specified")]
     MissingCommand,
+
+    /// 获取当前上下文失败
+    #[error("failed to get current context: {}", strip_errno(error))]
+    CurrentContext { error: io::Error },
 
     /// SELinux 未启用
     #[error("runcon may be used only on a SELinux kernel")]
@@ -123,6 +127,11 @@ impl DefaultError {
             operand1: operand1.into(),
             source,
         }
+    }
+
+    /// 创建GNU风格的当前上下文错误
+    pub(crate) fn from_current_context(error: io::Error) -> Self {
+        Self::CurrentContext { error }
     }
 
     /// 创建 InvalidSecurityContext 错误

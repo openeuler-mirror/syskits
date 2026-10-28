@@ -57,6 +57,7 @@ use ctcore::ct_error::CTResult;
 use ctcore::ct_error::CTsageError;
 use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::ExitCode;
+use ctcore::ct_quoting_style::gnu_quote_locale;
 
 use ctcore::Tool;
 use ctcore::ct_line_ending::CtLineEnding;
@@ -465,10 +466,10 @@ fn env_split_string_argument(
         .collect::<Vec<_>>();
 
     if is_debug_printing && !arg_strings.is_empty() {
-        eprintln!("split -S:  {}", split_arg.quote());
-        eprintln!(" into:    {}", arg_strings[0].quote());
+        eprintln!("split -S:  {}", gnu_quote_locale(split_arg));
+        eprintln!(" into:    {}", gnu_quote_locale(&arg_strings[0]));
         for argument in arg_strings.iter().skip(1) {
-            eprintln!("     &    {}", argument.quote());
+            eprintln!("     &    {}", gnu_quote_locale(argument));
         }
     }
 
@@ -495,11 +496,22 @@ fn env_has_program_name(args: &[OsString]) -> bool {
 struct EnvAppData {
     do_debug_printing: bool,
     had_string_argument: bool,
+    quoted_program: Vec<String>,
 }
 
 impl EnvAppData {
+    fn quote_program<'a>(&'a self, index: usize, program: &OsStr) -> Cow<'a, str> {
+        self.quoted_program
+            .get(index)
+            .map(|quoted| Cow::Borrowed(quoted.as_str()))
+            .unwrap_or_else(|| Cow::Owned(gnu_quote_locale(program)))
+    }
+
     fn make_error_no_such_file_or_dir(&self, program: &OsStr) -> Box<dyn CTError> {
-        ctcore::ct_show_error!("{}: No such file or directory", program.quote());
+        ctcore::ct_show_error!(
+            "{}: No such file or directory",
+            self.quote_program(0, program)
+        );
         if env_contains_c_whitespace(program) {
             ctcore::ct_show_error!("use -[v]S to pass options in shebang lines");
         }
@@ -678,6 +690,11 @@ impl EnvAppData {
         let is_debug_printing = self.do_debug_printing || matches.get_count("debug") > 0;
 
         let mut options = env_make_options(&matches)?;
+        self.quoted_program = options
+            .program
+            .iter()
+            .map(|program| gnu_quote_locale(program))
+            .collect();
 
         apply_removal_of_all_env_vars(&options, is_debug_printing);
 
@@ -743,7 +760,7 @@ impl EnvAppData {
         if is_do_debug_printing {
             eprintln!("executing: {}", prog.to_string_lossy());
             for (i, arg) in options.program.iter().enumerate() {
-                eprintln!("   arg[{i}]= {}", arg.quote());
+                eprintln!("   arg[{i}]= {}", self.quote_program(i, arg));
             }
         }
 
@@ -769,7 +786,10 @@ impl EnvAppData {
         match command_execution_error_exit_code(&error) {
             127 => self.make_error_no_such_file_or_dir(program),
             126 => {
-                ctcore::ct_show_error!("{}", command_execution_error_message(program, &error));
+                ctcore::ct_show_error!(
+                    "{}",
+                    command_execution_error_message(&self.quote_program(0, program), &error)
+                );
                 126.into()
             }
             _ => unreachable!("command execution errors map only to 126 or 127"),
@@ -777,10 +797,10 @@ impl EnvAppData {
     }
 }
 
-fn command_execution_error_message(program: &OsStr, error: &io::Error) -> String {
+fn command_execution_error_message(quoted_program: &str, error: &io::Error) -> String {
     format!(
         "{}: {}",
-        program.quote(),
+        quoted_program,
         command_execution_error_text(error)
     )
 }
@@ -1940,7 +1960,7 @@ mod tests {
         let error = io::Error::from_raw_os_error(libc::ENOTDIR);
 
         assert_eq!(
-            command_execution_error_message(OsStr::new("/tmp/not-a-directory/command"), &error),
+            command_execution_error_message("'/tmp/not-a-directory/command'", &error),
             "'/tmp/not-a-directory/command': Not a directory"
         );
     }

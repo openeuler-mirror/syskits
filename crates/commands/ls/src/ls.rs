@@ -1688,7 +1688,10 @@ impl LsConfig {
     pub fn set_long_format(&mut self, options: &clap::ArgMatches) -> CTResult<()> {
         self.format = LsFormat::Long;
         self.time_style = ls_parse_time_style(options)?;
-        self.sort = extract_sort(options, &self.format, &self.time);
+        // `from` has already applied the position-sensitive sort semantics of `-f`.
+        if !options.get_flag(ls_flags::LS_F) {
+            self.sort = extract_sort(options, &self.format, &self.time);
+        }
         Ok(())
     }
 
@@ -6773,6 +6776,29 @@ mod tests {
             .set_long_format(&matches)
             .expect("long configuration");
         assert_eq!(config.sort, LsSort::Time);
+    }
+
+    #[test]
+    fn delayed_long_format_preserves_f_sort_precedence() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-f", "."])
+            .unwrap();
+        let mut config = LsConfig::from(&matches).expect("directory order configuration");
+        config
+            .set_long_format(&matches)
+            .expect("long configuration");
+        assert_eq!(config.sort, LsSort::None);
+
+        for (first, second, expected) in [("-f", "-t", LsSort::Time), ("-t", "-f", LsSort::None)] {
+            let matches = ct_app()
+                .try_get_matches_from([ctcore::ct_util_name(), first, second, "."])
+                .unwrap();
+            let mut config = LsConfig::from(&matches).expect("ordered sort configuration");
+            config
+                .set_long_format(&matches)
+                .expect("long configuration");
+            assert_eq!(config.sort, expected, "{first} {second}");
+        }
     }
 
     #[test]

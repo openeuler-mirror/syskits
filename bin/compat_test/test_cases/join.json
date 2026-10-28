@@ -251,9 +251,9 @@
             "args": ["file1.txt", "file2.txt"],
             "expectation": {
                 "execution": {
-                    "exit_code": 0,
-                    "stdout": "",
-                    "stderr": "join: file1.txt:2: is not sorted: 1 a\n"
+                    "exit_code": 1,
+                    "stdout": "2 b y\n3 c z\n",
+                    "stderr": "join: file1.txt:2: is not sorted: 1 a\njoin: input is not in sorted order\n"
                 }
             },
             "cleanup_commands": [

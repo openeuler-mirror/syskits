@@ -989,7 +989,7 @@ impl<'a> JoinState<'a> {
                 }
                 diagnostics
                     .stderr_text
-                    .push_str(&format!("{}: {err_msg}\n", ctcore::ct_execute_phrase()));
+                    .push_str(&format!("{}: {err_msg}\n", ctcore::ct_util_name()));
                 diagnostics.exit_code = diagnostics.exit_code.max(1);
                 self.has_failed = true;
             }
@@ -1845,7 +1845,7 @@ fn finalize_join(
     if state1.has_failed || state2.has_failed {
         runtime.diagnostics.stderr_text.push_str(&format!(
             "{}: input is not in sorted order\n",
-            ctcore::ct_execute_phrase()
+            ctcore::ct_util_name()
         ));
         runtime.diagnostics.exit_code = runtime.diagnostics.exit_code.max(1);
     }

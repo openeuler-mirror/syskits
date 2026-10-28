@@ -9,7 +9,9 @@
  * See the Mulan PSL v2 for more details.
  */
 use ctcore::ct_display::Quotable;
+use ctcore::ct_quoting_style::gnu_quote_locale;
 use ctcore::ct_error::{CTError, strip_errno};
+use std::ffi::OsStr;
 use std::fmt::Display;
 use std::io::Error;
 
@@ -91,7 +93,7 @@ impl Display for ChrootError {
                 write!(
                     f,
                     "failed to run command {}: {}",
-                    s.to_string().quote(),
+                    gnu_quote_locale(OsStr::new(s)),
                     strip_errno(e),
                 )
             }
@@ -155,7 +157,10 @@ mod tests {
 
         assert_eq!(
             format!("{error}"),
-            "failed to run command 'ls': command exited with status 1"
+            format!(
+                "failed to run command {}: command exited with status 1",
+                gnu_quote_locale(OsStr::new("ls"))
+            )
         );
         assert_eq!(error.code(), 126);
     }
@@ -168,7 +173,10 @@ mod tests {
 
         assert_eq!(
             format!("{error}"),
-            "failed to run command 'nonexistent_command': executable not found in $PATH"
+            format!(
+                "failed to run command {}: executable not found in $PATH",
+                gnu_quote_locale(OsStr::new("nonexistent_command"))
+            )
         );
         assert_eq!(error.code(), 127);
     }

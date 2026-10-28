@@ -21,7 +21,7 @@ use ctcore::ct_display::ct_println_verbatim;
 use ctcore::ct_error::CtSimpleError;
 #[cfg(not(unix))]
 use ctcore::ct_error::FromIo;
-use ctcore::ct_error::{CTError, CTResult, strip_errno};
+use ctcore::ct_error::{CTError, CTResult, strerror_bytes, strip_errno};
 #[cfg(target_os = "linux")]
 use std::ffi::{CStr, CString};
 use std::ffi::{OsStr, OsString};
@@ -65,14 +65,39 @@ fn whoami_write_error_message(error: &io::Error) -> Vec<u8> {
 }
 
 fn whoami_write_error_message_for_locale(error: &io::Error, simplified_chinese: bool) -> Vec<u8> {
-    let error = strip_errno(error);
+    let error = whoami_errno_bytes(error);
     let mut message = if simplified_chinese {
         whoami_encode_locale_text("写入错误: ")
     } else {
         b"write error: ".to_vec()
     };
-    message.extend_from_slice(error.as_bytes());
+    message.extend_from_slice(&error);
     message
+}
+
+fn whoami_errno_bytes(error: &io::Error) -> Vec<u8> {
+    #[cfg(unix)]
+    if let Some(errno) = error.raw_os_error() {
+        let locale =
+            unsafe { libc::newlocale(libc::LC_ALL_MASK, c"".as_ptr(), std::ptr::null_mut()) };
+        if !locale.is_null() {
+            let previous = unsafe { libc::uselocale(locale) };
+            if !previous.is_null() {
+                let detail = strerror_bytes(errno);
+                unsafe {
+                    libc::uselocale(previous);
+                    libc::freelocale(locale);
+                }
+                if let Some(detail) = detail {
+                    return detail;
+                }
+            } else {
+                unsafe { libc::freelocale(locale) };
+            }
+        }
+    }
+
+    strip_errno(error).into_bytes()
 }
 
 fn whoami_closed_stdout_error(stdout_was_closed: bool) -> Option<io::Error> {
@@ -1101,6 +1126,20 @@ mod tests {
             whoami_write_error_message(&io::Error::from_raw_os_error(libc::EPIPE)),
             b"write error: Broken pipe"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn whoami_write_error_uses_locale_errno_text() {
+        with_lc_all("zh_CN.UTF-8", || {
+            assert_eq!(
+                whoami_write_error_message_for_locale(
+                    &io::Error::from_raw_os_error(libc::ENOSPC),
+                    true,
+                ),
+                "写入错误: 设备上没有空间".as_bytes()
+            );
+        });
     }
 
     #[cfg(unix)]

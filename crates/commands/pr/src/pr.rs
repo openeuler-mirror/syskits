@@ -429,6 +429,83 @@ fn pr_internal_to_os_string(value: &str) -> OsString {
     }
 }
 
+fn pr_normalize_option_arguments(args: &[OsString]) -> Vec<OsString> {
+    const REQUIRED_VALUE_OPTIONS: &[&str] = &[
+        "-h",
+        "--header",
+        "-N",
+        "--first-line-number",
+        "-l",
+        "--length",
+        "-w",
+        "--width",
+        "-W",
+        "--page-width",
+        "-o",
+        "--indent",
+        "-D",
+        "--date-format",
+        "--pages",
+        "--column",
+        "--columns",
+    ];
+
+    let mut normalized = Vec::with_capacity(args.len());
+    let mut options_enabled = true;
+    let mut option_value_follows = false;
+    for arg in args {
+        if option_value_follows {
+            normalized.push(OsString::from(pr_os_str_to_internal(arg)));
+            option_value_follows = false;
+            continue;
+        }
+        if !options_enabled {
+            normalized.push(arg.clone());
+            continue;
+        }
+        if arg == "--" {
+            options_enabled = false;
+            normalized.push(arg.clone());
+            continue;
+        }
+
+        if let Some(text) = arg.to_str() {
+            option_value_follows = REQUIRED_VALUE_OPTIONS.contains(&text);
+            normalized.push(arg.clone());
+        } else {
+            #[cfg(unix)]
+            let is_option = arg.as_bytes().first() == Some(&b'-');
+            #[cfg(not(unix))]
+            let is_option = false;
+            if is_option {
+                normalized.push(OsString::from(pr_os_str_to_internal(arg)));
+            } else {
+                normalized.push(arg.clone());
+            }
+        }
+    }
+    normalized
+}
+
+fn pr_quote_option_value(value: &str) -> String {
+    if !pr_contains_raw_bytes(value) {
+        return locale_quote(value);
+    }
+
+    let mut escaped = String::new();
+    for c in value.chars() {
+        if let Some(byte) = pr_raw_byte_from_char(c) {
+            escaped.push_str(&format!("\\{byte:03o}"));
+        } else if matches!(c, '\\' | '\'') {
+            escaped.push('\\');
+            escaped.push(c);
+        } else {
+            escaped.push(c);
+        }
+    }
+    format!("'{escaped}'")
+}
+
 fn pr_rendered_text_to_bytes(text: &str) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(text.len());
     for c in text.chars() {
@@ -810,12 +887,13 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
             exit_code: 1,
         });
     }
-    let option_args = args
+    let normalized_args = pr_normalize_option_arguments(&args);
+    let option_args = normalized_args
         .iter()
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect::<Vec<_>>();
 
-    let opt_args = pr_recreate_arguments(&args);
+    let opt_args = pr_recreate_arguments(&normalized_args);
 
     let mut command = ct_app();
     let matches = match command.try_get_matches_from_mut(opt_args) {
@@ -1225,7 +1303,7 @@ fn pr_overflow_text() -> String {
 }
 
 fn pr_bounded_usize_error(opt: &str, value: &str) -> PrError {
-    let quoted = locale_quote(value);
+    let quoted = pr_quote_option_value(value);
     let overflow = pr_overflow_text();
     let message = match opt {
         pr_flags::PR_PAGE_LENGTH => {
@@ -1247,7 +1325,7 @@ fn pr_bounded_usize_error(opt: &str, value: &str) -> PrError {
 }
 
 fn pr_invalid_usize_error(opt: &str, value: &str) -> PrError {
-    let quoted = locale_quote(value);
+    let quoted = pr_quote_option_value(value);
     let message = match opt {
         pr_flags::PR_PAGE_LENGTH => {
             format!("'-l PAGE_LENGTH' invalid number of lines: {quoted}")
@@ -1504,7 +1582,7 @@ fn parse_page_length(arg_matches: &ArgMatches, _is_form_feed_used: bool) -> Resu
             .expect("zero page length came from an explicit option");
         return Err(PrError::EncounteredErrorsNoHelp(format!(
             "'-l PAGE_LENGTH' invalid number of lines: {}: Numerical result out of range",
-            locale_quote(value)
+            pr_quote_option_value(value)
         )));
     }
     Ok(page_length)
@@ -1718,7 +1796,7 @@ fn parse_page_width(
                 .expect("zero page width came from an explicit option");
             return Err(PrError::EncounteredErrorsNoHelp(format!(
                 "'-W PAGE_WIDTH' invalid number of characters: {}: Numerical result out of range",
-                locale_quote(value)
+                pr_quote_option_value(value)
             )));
         }
         Some(page_width)
@@ -1770,7 +1848,7 @@ fn parse_column_width(arg_matches: &ArgMatches) -> Result<usize, PrError> {
             .expect("zero page width came from an explicit option");
         return Err(PrError::EncounteredErrorsNoHelp(format!(
             "'-w PAGE_WIDTH' invalid number of characters: {}: Numerical result out of range",
-            locale_quote(value)
+            pr_quote_option_value(value)
         )));
     }
     Ok(column_width)
@@ -1929,7 +2007,7 @@ fn pr_parse_first_line_number(arg_matches: &ArgMatches) -> Result<Option<i64>, P
 fn invalid_number_lines_arg(value: &str) -> PrError {
     PrError::EncounteredErrors(format!(
         "'-n' extra characters or invalid number in the argument: {}",
-        locale_quote(value)
+        pr_quote_option_value(value)
     ))
 }
 
@@ -1937,7 +2015,7 @@ fn parse_number_lines_value(value: &str, first_number: i64) -> Result<PrNumberin
     if value.is_empty() {
         return Err(PrError::EncounteredErrors(format!(
             "'-n': Invalid argument: {}",
-            locale_quote(value)
+            pr_quote_option_value(value)
         )));
     }
 
@@ -1966,7 +2044,7 @@ fn parse_number_lines_value(value: &str, first_number: i64) -> Result<PrNumberin
     if width > PR_INT_MAX {
         return Err(PrError::EncounteredErrors(format!(
             "'-n' extra characters or invalid number in the argument: {}: {}",
-            locale_quote(width_arg),
+            pr_quote_option_value(width_arg),
             pr_overflow_text()
         )));
     }

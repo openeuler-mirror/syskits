@@ -423,7 +423,7 @@
         "execution": {
           "exit_code": 1,
           "stdout": "",
-          "stderr": "install: cannot create regular file 'dir': Is a directory\n"
+          "stderr": "install: cannot overwrite directory 'dir' with non-directory\n"
         }
       }
     },

@@ -31,6 +31,7 @@ use ctcore::Tool;
 use ctcore::ct_display::{Quotable, locale_quote};
 use ctcore::ct_error::{CTResult, strip_errno};
 use ctcore::ct_locale::hard_locale_time;
+use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use itertools::Itertools;
 use quick_error::quick_error;
 use regex::Regex;
@@ -457,6 +458,17 @@ fn pr_semantic_text(text: &str) -> String {
     }
 }
 
+fn pr_quote_file_name(path: &OsStr) -> String {
+    escape_name(
+        path,
+        &CtQuotingStyle::Shell {
+            escape: true,
+            always_quote: false,
+            show_control: true,
+        },
+    )
+}
+
 impl From<std::io::Error> for PrError {
     fn from(err: std::io::Error) -> Self {
         Self::EncounteredErrors(err.to_string())
@@ -489,20 +501,20 @@ quick_error! {
             source(err)
         }
 
-        IsDirectory(path: String) {
-            display("pr: {0}: Is a directory", path)
+        IsDirectory(path: OsString) {
+            display("pr: {}: Is a directory", pr_quote_file_name(path))
         }
 
-        IsSocket(path: String) {
-            display("pr: cannot open {}, Operation not supported on socket", path)
+        IsSocket(path: OsString) {
+            display("pr: cannot open {}, Operation not supported on socket", pr_quote_file_name(path))
         }
 
-        NotExists(path: String) {
-            display("pr: {}: No such file or directory", path)
+        NotExists(path: OsString) {
+            display("pr: {}: No such file or directory", pr_quote_file_name(path))
         }
 
-        Open(err: std::io::Error, path: String) {
-            display("pr: {}: {}", path, strip_errno(err))
+        Open(err: std::io::Error, path: OsString) {
+            display("pr: {}: {}", pr_quote_file_name(path), strip_errno(err))
             source(err)
         }
 
@@ -2011,26 +2023,26 @@ fn pr_open(path: impl AsRef<Path>) -> Result<Box<dyn Read>, PrError> {
         return Ok(ctcore::ct_io::stdin_reader_box());
     }
 
-    let path_string = path.as_os_str().to_string_lossy().into_owned();
+    let path_os = path.as_os_str().to_os_string();
     let file_type = metadata(path)
         .map_err(|error| {
             if error.raw_os_error() == Some(ctcore::libc::ENOENT) {
-                PrError::NotExists(path_string.clone())
+                PrError::NotExists(path_os.clone())
             } else {
-                PrError::Open(error, path_string.clone())
+                PrError::Open(error, path_os.clone())
             }
         })?
         .file_type();
 
     #[cfg(unix)]
     if file_type.is_socket() {
-        return Err(PrError::IsSocket(path_string));
+        return Err(PrError::IsSocket(path_os));
     }
     if file_type.is_dir() {
-        return Err(PrError::IsDirectory(path_string));
+        return Err(PrError::IsDirectory(path_os));
     }
 
-    let file = File::open(path).map_err(|error| PrError::Open(error, path_string))?;
+    let file = File::open(path).map_err(|error| PrError::Open(error, path_os))?;
     Ok(Box::new(file) as Box<dyn Read>)
 }
 
@@ -7258,7 +7270,7 @@ mod tests {
         #[test]
         fn test_pr_error_text_uses_actual_program_name() {
             let matches = create_matches_with_args("");
-            let error = PrError::NotExists("missing".to_string());
+            let error = PrError::NotExists(OsString::from("missing"));
             assert!(pr_error_text(&matches, &error, "custom-pr").starts_with("custom-pr: "));
         }
 

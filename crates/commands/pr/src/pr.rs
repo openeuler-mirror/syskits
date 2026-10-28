@@ -15,7 +15,7 @@ use std::cell::Cell;
 use std::fs::{File, metadata};
 rust_i18n::i18n!("locales", fallback = "en-US");
 #[cfg(unix)]
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Error, Read, Write, stderr, stdout};
 #[cfg(unix)]
@@ -38,6 +38,14 @@ use regex::Regex;
 use sys_locale::get_locale;
 use unicode_width::UnicodeWidthChar;
 use unicode_width::UnicodeWidthStr;
+
+#[cfg(unix)]
+unsafe extern "C" {
+    fn dgettext(
+        domainname: *const ctcore::libc::c_char,
+        msgid: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
+}
 
 const PR_TAB: char = '\t';
 const PR_LINES_PER_PAGE: usize = 66;
@@ -102,6 +110,19 @@ fn pr_format_local_datetime(fmt: &str, date_time: DateTime<Local>) -> String {
     {
         date_time.format(fmt).to_string()
     }
+}
+
+fn pr_page_text(page: usize) -> String {
+    #[cfg(unix)]
+    {
+        let translated = unsafe { dgettext(c"coreutils".as_ptr(), c"Page %lu".as_ptr()) };
+        if !translated.is_null() {
+            return unsafe { CStr::from_ptr(translated) }
+                .to_string_lossy()
+                .replace("%lu", &page.to_string());
+        }
+    }
+    format!("Page {page}")
 }
 
 mod pr_flags {
@@ -862,6 +883,10 @@ pub fn pr_native_semantic(args: impl ctcore::Args) -> CTResult<PrSemantic> {
 }
 
 fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResult<PrSemantic> {
+    #[cfg(unix)]
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let args = args.collect::<Vec<_>>();
@@ -3853,7 +3878,7 @@ fn pr_header_content(output_opts: &PrOutputOptions, page: usize) -> Vec<String> 
     if output_opts.is_display_header_and_trailer {
         let date_width = UnicodeWidthStr::width(output_opts.last_modified_time.as_str());
         let file_width = UnicodeWidthStr::width(output_opts.header.as_str());
-        let page_text = t!("pr.page", page = page);
+        let page_text = pr_page_text(page);
         let page_text_width = UnicodeWidthStr::width(page_text.as_str());
 
         let header_width_available = output_opts

@@ -243,6 +243,7 @@ struct PrInputLine {
 struct PrInputLines {
     reader: BufReader<Box<dyn Read>>,
     buffer: Vec<u8>,
+    pending_error: Option<std::io::Error>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -282,6 +283,9 @@ impl Iterator for PrInputLines {
     type Item = Result<PrInputLine, std::io::Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if let Some(error) = self.pending_error.take() {
+            return Some(Err(error));
+        }
         self.buffer.clear();
         match self.reader.read_until(b'\n', &mut self.buffer) {
             Ok(0) => None,
@@ -295,6 +299,13 @@ impl Iterator for PrInputLines {
                     has_line_terminator,
                 }))
             }
+            Err(err) if !self.buffer.is_empty() => {
+                self.pending_error = Some(err);
+                Some(Ok(PrInputLine {
+                    text: pr_decode_input_bytes(&self.buffer),
+                    has_line_terminator: false,
+                }))
+            }
             Err(err) => Some(Err(err)),
         }
     }
@@ -304,6 +315,7 @@ fn pr_input_lines(reader: Box<dyn Read>) -> PrInputLines {
     PrInputLines {
         reader: BufReader::with_capacity(PR_READ_BUFFER_SIZE, reader),
         buffer: Vec::new(),
+        pending_error: None,
     }
 }
 
@@ -424,7 +436,7 @@ quick_error! {
     enum PrError {
         Input(err: std::io::Error, path: String) {
             context(path: &'a str, err: std::io::Error) -> (err, path.to_owned())
-            display("pr: Reading from input {0} gave error", path)
+            display("pr: '{}': {}", if path == PR_FILE_STDIN { "standard input" } else { path }, strip_errno(err))
             source(err)
         }
 
@@ -2116,7 +2128,11 @@ fn pr_collect_semantic_for_path(
             )?;
         }
         let mut page_output = Vec::new();
-        pr_output_page(&page_lines, output_opts, &mut page_output, page_number)?;
+        if let Err(error) = pr_output_page(&page_lines, output_opts, &mut page_output, page_number)
+        {
+            pr_consume_page_output(semantic, &page_output, output)?;
+            return Err(PrError::Input(error, path.to_string_lossy().into_owned()));
+        }
         pr_consume_page_output(semantic, &page_output, output)?;
     }
 
@@ -2744,7 +2760,7 @@ fn pr_write_columns(
     }
 
     let blank_line = PrFileLine::default();
-    for row in table {
+    for (row_index, row) in table.iter().enumerate() {
         let cell = row.first().copied().flatten();
         if cell.is_none() {
             if feed_line_present || !output_opts.is_display_header_and_trailer {
@@ -2772,7 +2788,13 @@ fn pr_write_columns(
             format!("{}{}", output_opts.offset_spaces, segment)
         };
         pr_write_rendered_text(out, &rendered_row)?;
-        let row_separator = if output_opts.is_double_space
+        let read_error_follows = table
+            .get(row_index + 1)
+            .and_then(|row| row.first().copied().flatten())
+            .is_some_and(|line| line.line_content.is_err());
+        let row_separator = if !cell.has_line_terminator && read_error_follows {
+            b"".as_slice()
+        } else if output_opts.is_double_space
             && (!cell.has_line_terminator || cell.form_feeds_after > 0)
         {
             output_opts.line_separator.as_bytes()

@@ -4030,9 +4030,9 @@
             ],
             "expectation": {
                 "execution": {
-                    "exit_code": 0,
+                    "exit_code": 2,
                     "stdout": "",
-                    "stderr": ""
+                    "stderr": "vdir: invalid tab size: '18446744073709551615': Value too large for defined data type\n"
                 }
             },
             "setup_commands": [

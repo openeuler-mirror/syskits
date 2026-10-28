@@ -1001,12 +1001,6 @@ impl CpOptions {
         }
         let target_dir = target_dirs.into_iter().next();
 
-        if let Some(dir) = &target_dir {
-            if !dir.is_dir() {
-                return Err(CpError::NotADirectory(dir.clone()));
-            }
-        };
-
         let mut attributes = Self::cp_get_attributes(args_match)?;
 
         // 处理不保留选项并调整属性
@@ -1553,18 +1547,27 @@ impl CpTargetType {
 fn cp_parse_path_args(
     mut path_buf: Vec<PathBuf>,
     cp_opts: &CpOptions,
-) -> CopyResult<(Vec<PathBuf>, PathBuf)> {
+) -> CTResult<(Vec<PathBuf>, PathBuf)> {
     // 检查是否没有指定任何文件
     if path_buf.is_empty() {
-        return Err("missing file operand".into());
+        return Err(CTsageError::new(EXIT_ERR, "missing file operand"));
     } else if path_buf.len() == 1 && cp_opts.target_dir.is_none() {
         // 检查是否只指定了一个文件但未指定目标文件
-        return Err(format!("missing destination file operand after {:?}", path_buf[0]).into());
+        return Err(CTsageError::new(
+            EXIT_ERR,
+            format!(
+                "missing destination file operand after {}",
+                path_buf[0].quote()
+            ),
+        ));
     }
 
     // 检查是否尝试将多个文件复制到一个非目录的目标
     if cp_opts.no_target_dir && cp_opts.target_dir.is_none() && path_buf.len() > 2 {
-        return Err(format!("extra operand {:?}", path_buf[2]).into());
+        return Err(CTsageError::new(
+            EXIT_ERR,
+            format!("extra operand {}", path_buf[2].quote()),
+        ));
     }
 
     // 确定目标路径：如果已显式指定，则使用之；否则，使用最后一个路径参数
@@ -1671,6 +1674,10 @@ fn is_duplicate_directory_source(
  * @return CopyResult<()>，成功返回Ok(())，失败返回Err()，包含不致命的错误时返回非致命错误信息。
  */
 pub fn cp_copy(sour_path: &[PathBuf], target_path: &Path, cp_opts: &CpOptions) -> CopyResult<()> {
+    if cp_opts.target_dir.is_some() && !target_path.is_dir() {
+        return Err(cp_invalid_target(target_path, true));
+    }
+
     let cp_target_type = CpTargetType::cp_determine(sour_path, target_path);
     cp_verify_target_type(target_path, &cp_target_type)?;
 
@@ -3635,9 +3642,7 @@ pub(crate) fn copy_recursive_link(
 /// Generate an error message if `target` is not the correct `target_type`
 pub fn cp_verify_target_type(target_path: &Path, cp_target_type: &CpTargetType) -> CopyResult<()> {
     match (cp_target_type, target_path.is_dir()) {
-        (&CpTargetType::Directory, false) => {
-            Err(format!("target: {} is not a directory", target_path.quote()).into())
-        }
+        (&CpTargetType::Directory, false) => Err(cp_invalid_target(target_path, false)),
         (&CpTargetType::File, true) => Err(format!(
             "cannot overwrite directory {} with non-directory",
             target_path.quote()
@@ -3645,6 +3650,26 @@ pub fn cp_verify_target_type(target_path: &Path, cp_target_type: &CpTargetType) 
         .into()),
         _ => Ok(()),
     }
+}
+
+fn cp_invalid_target(target_path: &Path, explicit_target_directory: bool) -> CpError {
+    let error = match fs::metadata(target_path) {
+        Ok(_) => io::Error::from_raw_os_error(libc::ENOTDIR),
+        Err(error) => error,
+    };
+    let target_kind = if explicit_target_directory {
+        "target directory"
+    } else {
+        "target"
+    };
+
+    format!(
+        "{} {}: {}",
+        target_kind,
+        target_path.quote(),
+        strip_errno(&error)
+    )
+    .into()
 }
 
 /// Remove the `root` prefix from `source` and prefix it with `target`

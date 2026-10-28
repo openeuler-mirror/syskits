@@ -244,6 +244,7 @@ struct PrInputLines {
     reader: BufReader<Box<dyn Read>>,
     buffer: Vec<u8>,
     pending_error: Option<std::io::Error>,
+    finished: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -283,7 +284,11 @@ impl Iterator for PrInputLines {
     type Item = Result<PrInputLine, std::io::Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.finished {
+            return None;
+        }
         if let Some(error) = self.pending_error.take() {
+            self.finished = true;
             return Some(Err(error));
         }
         self.buffer.clear();
@@ -306,7 +311,10 @@ impl Iterator for PrInputLines {
                     has_line_terminator: false,
                 }))
             }
-            Err(err) => Some(Err(err)),
+            Err(err) => {
+                self.finished = true;
+                Some(Err(err))
+            }
         }
     }
 }
@@ -316,6 +324,7 @@ fn pr_input_lines(reader: Box<dyn Read>) -> PrInputLines {
         reader: BufReader::with_capacity(PR_READ_BUFFER_SIZE, reader),
         buffer: Vec::new(),
         pending_error: None,
+        finished: false,
     }
 }
 
@@ -2508,7 +2517,16 @@ fn pr_collect_semantic_for_merge(
                             form_feeds_after: file_line.form_feeds_after,
                             inline_form_feed_after: file_line.inline_form_feed_after,
                         }),
-                        Err(e) => return Err(std::io::Error::new(e.kind(), e.to_string()).into()),
+                        Err(e) => merged_columns[file_id].push(PrFileLine {
+                            file_id,
+                            line_number: row_line_number,
+                            page_number,
+                            group_key: row_index,
+                            line_content: Err(std::io::Error::new(e.kind(), e.to_string())),
+                            has_line_terminator: false,
+                            form_feeds_after: 0,
+                            inline_form_feed_after: false,
+                        }),
                     }
                 } else if file_id == 0 && output_opts.number.is_some() {
                     merged_columns[file_id].push(PrFileLine {
@@ -2539,12 +2557,21 @@ fn pr_collect_semantic_for_merge(
             )?;
         }
         let mut page_output = Vec::new();
-        pr_output_page(
+        if let Err(error) = pr_output_page(
             &merged_lines,
             &page_output_opts,
             &mut page_output,
             page_number,
-        )?;
+        ) {
+            pr_consume_page_output(semantic, &page_output, output)?;
+            let error_path = merged_lines
+                .iter()
+                .find(|line| line.line_content.is_err())
+                .and_then(|line| active_paths.get(line.file_id))
+                .copied()
+                .unwrap_or(PR_FILE_STDIN);
+            return Err(PrError::Input(error, error_path.to_string()));
+        }
         pr_consume_page_output(semantic, &page_output, output)?;
     }
 
@@ -2839,7 +2866,21 @@ fn pr_write_multicolumn_table(
         let last_actual_has_inline_ff = last_actual_index
             .and_then(|index| row.get(index).copied().flatten())
             .is_some_and(|line| line.inline_form_feed_after);
-        let layout_indexes = if output_opts.merge_files_print.is_some()
+        let read_error_column = table.get(row_index + 1).and_then(|next_row| {
+            next_row.iter().enumerate().find_map(|(index, cell)| {
+                cell.filter(|line| line.line_content.is_err())
+                    .and_then(|_| {
+                        row.get(index)
+                            .copied()
+                            .flatten()
+                            .filter(|line| !line.has_line_terminator)
+                            .map(|_| index)
+                    })
+            })
+        });
+        let layout_indexes = if let Some(index) = read_error_column {
+            index + 1
+        } else if output_opts.merge_files_print.is_some()
             && !output_opts.is_join_lines
             && last_actual_has_inline_ff
         {
@@ -3005,7 +3046,9 @@ fn pr_write_multicolumn_table(
                 .collect::<String>()
         };
         pr_write_rendered_text(out, &rendered_row)?;
-        let row_separator = if output_opts.is_double_space
+        let row_separator = if read_error_column.is_some() {
+            b"".as_slice()
+        } else if output_opts.is_double_space
             && !feed_line_present
             && last_actual_row == Some(row_index)
         {

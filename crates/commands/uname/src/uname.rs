@@ -16,7 +16,7 @@ extern crate rust_i18n;
 use clap::{Arg, ArgAction, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::ct_error::{CTError, CTResult, strip_errno};
+use ctcore::ct_error::{CTError, CTResult, strerror_bytes, strip_errno};
 use ctcore::libc::{SIG_DFL, SIG_ERR, SIG_IGN, SIGPIPE, getppid, sighandler_t, signal};
 use platform_info::*;
 
@@ -224,11 +224,42 @@ impl CTError for UnameRuntimeError {
 }
 
 fn io_error_diagnostic(context: &[u8], error: &std::io::Error) -> Vec<u8> {
-    let mut diagnostic = Vec::with_capacity(context.len() + 2 + error.to_string().len());
+    let detail = locale_errno_bytes(error);
+    let mut diagnostic = Vec::with_capacity(context.len() + 2 + detail.len());
     diagnostic.extend_from_slice(context);
     diagnostic.extend_from_slice(b": ");
-    diagnostic.extend_from_slice(strip_errno(error).as_bytes());
+    diagnostic.extend_from_slice(&detail);
     diagnostic
+}
+
+fn locale_errno_bytes(error: &std::io::Error) -> Vec<u8> {
+    #[cfg(unix)]
+    if let Some(errno) = error.raw_os_error() {
+        let locale = unsafe {
+            ctcore::libc::newlocale(
+                ctcore::libc::LC_ALL_MASK,
+                c"".as_ptr(),
+                std::ptr::null_mut(),
+            )
+        };
+        if !locale.is_null() {
+            let previous = unsafe { ctcore::libc::uselocale(locale) };
+            if !previous.is_null() {
+                let detail = strerror_bytes(errno);
+                unsafe {
+                    ctcore::libc::uselocale(previous);
+                    ctcore::libc::freelocale(locale);
+                }
+                if let Some(detail) = detail {
+                    return detail;
+                }
+            } else {
+                unsafe { ctcore::libc::freelocale(locale) };
+            }
+        }
+    }
+
+    strip_errno(error).into_bytes()
 }
 
 fn localized_io_error(context: &str, error: &std::io::Error) -> Box<dyn CTError> {
@@ -1572,12 +1603,14 @@ mod tests {
         }
 
         #[test]
-        fn io_error_diagnostic_preserves_localized_context_bytes() {
+        fn io_error_diagnostic_uses_locale_errno_bytes() {
             let error = std::io::Error::from_raw_os_error(ctcore::libc::ENOSPC);
 
             let diagnostic = io_error_diagnostic("写入错误".as_bytes(), &error);
+            let mut expected = "写入错误: ".as_bytes().to_vec();
+            expected.extend(locale_errno_bytes(&error));
 
-            assert_eq!(diagnostic, "写入错误: No space left on device".as_bytes());
+            assert_eq!(diagnostic, expected);
         }
     }
 

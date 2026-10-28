@@ -327,7 +327,7 @@
         {
             "tstdin": "",
             "command": "users",
-            "description": "LC_ALL=zh_CN.UTF-8、LANG=zh_CN.UTF-8下执行users --help=x；GNU保留option首行英文，但将标准usage hint翻译为简体中文。预期RC=1、stdout为空、stderr使用请尝试执行中文提示。",
+            "description": "LC_ALL=zh_CN.UTF-8、LANG=zh_CN.UTF-8下执行users --help=x；GNU将option首行和标准usage hint均翻译为简体中文。预期RC=1、stdout为空。",
             "args": [
                 "--help=x"
             ],
@@ -335,7 +335,7 @@
                 "execution": {
                     "exit_code": 1,
                     "stdout": "",
-                    "stderr": "users: option '--help' doesn't allow an argument\n请尝试执行 \"users --help\" 来获取更多信息。\n"
+                    "stderr": "users：选项 ‘--help’ 不允许有参数\n请尝试执行 \"users --help\" 来获取更多信息。\n"
                 }
             },
             "environment": {

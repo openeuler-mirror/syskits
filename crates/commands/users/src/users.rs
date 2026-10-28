@@ -47,6 +47,7 @@ enum UsersLongOptionMatch {
 struct UsersUsageError {
     message: Vec<u8>,
     usage_hint: Vec<u8>,
+    localized_getopt: bool,
 }
 
 impl UsersUsageError {
@@ -58,6 +59,15 @@ impl UsersUsageError {
         Box::new(Self {
             message,
             usage_hint: users_usage_hint(ctcore::ct_help_utility_name(), simplified_chinese),
+            localized_getopt: false,
+        })
+    }
+
+    fn boxed_localized_getopt(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self {
+            message,
+            usage_hint: users_usage_hint(ctcore::ct_help_utility_name(), true),
+            localized_getopt: true,
         })
     }
 }
@@ -72,7 +82,17 @@ impl Error for UsersUsageError {}
 
 impl CTError for UsersUsageError {
     fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
-        Cow::Borrowed(&self.message)
+        if self.localized_getopt {
+            let output = users_localized_getopt_output(
+                ctcore::ct_util_name(),
+                &self.message,
+                &self.usage_hint,
+            );
+            let _ = std::io::stderr().lock().write_all(&output);
+            Cow::Borrowed(b"")
+        } else {
+            Cow::Borrowed(&self.message)
+        }
     }
 
     fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
@@ -80,7 +100,7 @@ impl CTError for UsersUsageError {
     }
 
     fn usage(&self) -> bool {
-        true
+        !self.localized_getopt
     }
 }
 
@@ -272,9 +292,13 @@ fn validate_users_long_option(argument: &[u8]) -> CTResult<bool> {
             Err(UsersUsageError::boxed(message))
         }
         UsersLongOptionMatch::Recognized(canonical) if separator.is_some() => {
-            Err(UsersUsageError::boxed(
-                format!("option '--{canonical}' doesn't allow an argument").into_bytes(),
-            ))
+            let simplified_chinese = users_uses_simplified_chinese();
+            let message = users_option_argument_message(canonical, simplified_chinese);
+            if simplified_chinese {
+                Err(UsersUsageError::boxed_localized_getopt(message))
+            } else {
+                Err(UsersUsageError::boxed(message))
+            }
         }
         UsersLongOptionMatch::Recognized("help" | "version") => Ok(true),
         UsersLongOptionMatch::Recognized(_) => unreachable!("users only has standard options"),
@@ -314,6 +338,24 @@ fn users_extra_operand_message(operand: &std::ffi::OsStr, simplified_chinese: bo
     };
     message.extend(users_quote_operand(operand, simplified_chinese));
     message
+}
+
+fn users_option_argument_message(option: &str, simplified_chinese: bool) -> Vec<u8> {
+    if simplified_chinese {
+        users_encode_locale_text(&format!("选项 ‘--{option}’ 不允许有参数"))
+    } else {
+        format!("option '--{option}' doesn't allow an argument").into_bytes()
+    }
+}
+
+fn users_localized_getopt_output(utility_name: &str, message: &[u8], usage_hint: &[u8]) -> Vec<u8> {
+    let mut output = utility_name.as_bytes().to_vec();
+    output.extend(users_encode_locale_text("："));
+    output.extend_from_slice(message);
+    output.push(b'\n');
+    output.extend_from_slice(usage_hint);
+    output.push(b'\n');
+    output
 }
 
 fn users_usage_hint(utility_name: &str, simplified_chinese: bool) -> Vec<u8> {
@@ -972,6 +1014,19 @@ mod tests {
             let error = users_main(args.iter().map(OsString::from)).unwrap_err();
 
             assert_eq!(error.to_string(), "unrecognized option '--invalid-option'");
+        }
+
+        #[test]
+        fn users_localizes_option_argument_diagnostic_like_gnu() {
+            let message = users_option_argument_message("help", true);
+            let hint = "请尝试执行 \"users --help\" 来获取更多信息。".as_bytes();
+
+            assert_eq!(message, "选项 ‘--help’ 不允许有参数".as_bytes());
+            assert_eq!(
+                users_localized_getopt_output("users", &message, hint),
+                "users：选项 ‘--help’ 不允许有参数\n请尝试执行 \"users --help\" 来获取更多信息。\n"
+                    .as_bytes()
+            );
         }
 
         #[test]

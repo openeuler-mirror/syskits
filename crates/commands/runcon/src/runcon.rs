@@ -101,7 +101,7 @@ pub fn runcon_main(args: impl ctcore::Args) -> CTResult<()> {
                     DefaultError::InvalidSecurityContext { .. } => RunconError::with_code(125, e),
                     _ => RunconError::new(e),
                 })?;
-            runcon_exec(&resolved_cmd, &settings.arguments, false) // 2. 传递绝对路径
+            runcon_exec(&resolved_cmd, command, &settings.arguments, false) // 2. 传递绝对路径
         }
 
         // 使用自定义上下文运行命令
@@ -141,6 +141,7 @@ pub fn runcon_main(args: impl ctcore::Args) -> CTResult<()> {
                 };
                 runcon_exec(
                     execution_command,
+                    command,
                     &settings.arguments,
                     *compute_transition_context,
                 ) // 3. 执行计算模式的原始命令
@@ -574,9 +575,15 @@ fn get_custom_context(
 /// # 注意
 /// 理论上返回类型应该是 `UResult<!>`，但由于 never type 尚未稳定，
 /// 所以使用 `CTResult<()>` 表示该函数如果返回一定是错误。
-fn runcon_exec(command: &OsStr, arguments: &[OsString], use_execv: bool) -> CTResult<()> {
+fn runcon_exec(
+    command: &OsStr,
+    argv0: &OsStr,
+    arguments: &[OsString],
+    use_execv: bool,
+) -> CTResult<()> {
     // 将命令转换为 C 字符串
     let c_command = os_str_to_c_string(command).map_err(RunconError::new)?;
+    let c_argv0 = os_str_to_c_string(argv0).map_err(RunconError::new)?;
 
     // 将所有参数转换为 C 字符串
     let argv_storage: Vec<CString> = arguments
@@ -588,7 +595,7 @@ fn runcon_exec(command: &OsStr, arguments: &[OsString], use_execv: bool) -> CTRe
 
     // 构建 argv 数组
     let mut argv = Vec::with_capacity(arguments.len().saturating_add(2));
-    argv.push(c_command.as_ptr());
+    argv.push(c_argv0.as_ptr());
     argv.extend(argv_storage.iter().map(AsRef::as_ref).map(CStr::as_ptr));
     argv.push(ptr::null());
 
@@ -607,7 +614,7 @@ fn runcon_exec(command: &OsStr, arguments: &[OsString], use_execv: bool) -> CTRe
         error_exit_status::RUNCON_COULD_NOT_EXECUTE
     };
 
-    let err = DefaultError::from_io1("Executing command", command, err);
+    let err = DefaultError::from_io1("Executing command", argv0, err);
     Err(RunconError::with_code(exit_status, err).into())
 }
 
@@ -902,7 +909,12 @@ mod tests {
 
         #[test]
         fn test_execute_command_not_found() {
-            let result = runcon_exec(OsStr::new("nonexistent_command"), &[], false);
+            let result = runcon_exec(
+                OsStr::new("nonexistent_command"),
+                OsStr::new("nonexistent_command"),
+                &[],
+                false,
+            );
             assert!(result.is_err());
             if let Err(e) = result {
                 assert_eq!(e.as_ref().code(), error_exit_status::RUNCON_NOT_FOUND);

@@ -2174,5 +2174,2205 @@
                 "rm -rf test_vdir_color_always"
             ]
         }
+        ,
+        {
+            "command": "vdir",
+            "description": "Migrated: non-UTF-8 file name bytes are quoted",
+            "args": [
+                "-1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch \"$(printf 'bad\\377name')\""
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: hidden non-UTF-8 names remain hidden",
+            "args": [
+                "-1"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch \"$(printf '.hidden\\377')\" visible"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: non-UTF-8 symlink target bytes are quoted",
+            "args": [
+                "-ln",
+                "--time-style=+T",
+                "-d",
+                "link"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "ln -s \"$(printf 'target\\377')\" link"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: version sort uses original non-UTF-8 bytes",
+            "args": [
+                "2d3176",
+                "76ff",
+                "76fe"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch \"$(printf 'v\\376')\" \"$(printf 'v\\377')\""
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: invalid non-UTF-8 option byte is preserved",
+            "args": [
+                "2dff"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: invalid time style diagnostic matches GNU",
+            "args": [
+                "--time-style=bogus"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: unambiguous sort abbreviation is accepted",
+            "args": [
+                "--sort=ver",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: unambiguous time abbreviation is accepted",
+            "args": [
+                "--time=acc",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: unambiguous format abbreviation is accepted",
+            "args": [
+                "--format=vert",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: unambiguous indicator abbreviation is accepted",
+            "args": [
+                "--indicator-style=cla",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: unambiguous color abbreviation is accepted",
+            "args": [
+                "--color=nev",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: unambiguous hyperlink abbreviation is accepted",
+            "args": [
+                "--hyperlink=nev",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: unknown option diagnostic matches GNU",
+            "args": [
+                "--definitely-invalid"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: --help rejects an argument",
+            "args": [
+                "--help=x"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: --version rejects an argument",
+            "args": [
+                "--version=x"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: abbreviated help display",
+            "args": [
+                "--he"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: abbreviated version display",
+            "args": [
+                "--ver"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: POSIXLY_CORRECT stops option parsing after an operand",
+            "args": [
+                "a",
+                "-d"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch a"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0",
+                    "POSIXLY_CORRECT": "1"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: invalid QUOTING_STYLE warning matches GNU",
+            "args": [
+                "-1",
+                "-d",
+                "f"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch f"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0",
+                    "QUOTING_STYLE": "bogus"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: localized unknown option diagnostic",
+            "args": [
+                "--definitely-invalid"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "fr_FR.UTF-8",
+                    "LANG": "fr_FR.UTF-8",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: localized missing-file diagnostic",
+            "args": [
+                "missing"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "fr_FR.UTF-8",
+                    "LANG": "fr_FR.UTF-8",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: UTF-8 bytes invalid in the C locale are quoted",
+            "args": [
+                "-1",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch 'é'"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: shell style leaves an unescaped bell unquoted",
+            "args": [
+                "-1",
+                "--quoting-style=shell",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch \"$(printf 'q\\007')\""
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: long format aligns shell quotes",
+            "args": [
+                "-ln",
+                "--time-style=+T",
+                "--quoting-style=shell",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch plain 'a space' \"a'quote\"",
+                "touch -d @1000000000 plain 'a space' \"a'quote\""
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: locale quoting marks",
+            "args": [
+                "-1",
+                "--quoting-style=locale",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch 'a space'"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: clocale quoting marks",
+            "args": [
+                "-1",
+                "--quoting-style=clocale",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch 'a space'"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: QUOTING_STYLE controls output",
+            "args": [
+                "-1",
+                "-d",
+                "a space"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch 'a space'"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0",
+                    "QUOTING_STYLE": "shell"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: file-type quotes literal indicator characters",
+            "args": [
+                "-1",
+                "--file-type",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch 'plain*' 'plain@' 'plain|'"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: directory titles quote colons",
+            "args": [
+                "-1",
+                "a:b",
+                "other"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "mkdir 'a:b' other",
+                "touch 'a:b/f'"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: diagnostic filenames use shell-aware quoting",
+            "args": [
+                "a'b"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: hyperlink URI preserves and percent-encodes path bytes",
+            "args": [
+                "-1",
+                "--hyperlink=always",
+                "-d",
+                "é"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                },
+                "verifications": [
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | sed \"s|$PWD|<PWD>|g\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ]
+            },
+            "setup_commands": [
+                "touch 'é'"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: width sort uses rendered display width",
+            "args": [
+                "-1",
+                "--sort=width",
+                "-d",
+                "aa",
+                "é",
+                "中"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch aa 'é' '中'"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C.UTF-8",
+                    "LANG": "C.UTF-8",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: extension sort uses the last dot",
+            "args": [
+                "-X",
+                "-1",
+                "-d",
+                ".leading",
+                ".profile.txt",
+                "foo.",
+                "foo..a",
+                "b.txt",
+                "c.tar.gz"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch .leading .profile.txt foo. foo..a b.txt c.tar.gz"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: reverse is ignored with -U",
+            "args": [
+                "-1Ur",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch first second third"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: reverse is ignored with -f",
+            "args": [
+                "-1fr",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch first second third"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: ignore patterns use fnmatch semantics",
+            "args": [
+                "-1",
+                "--ignore=[",
+                "--ignore=a**c",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch '[' abc axc x"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: CLI time style applies to default long format",
+            "args": [
+                "--time-style=long-iso",
+                "-d",
+                "f"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch f",
+                "touch -d '2000-01-02 03:04:05 UTC' f"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: TIME_STYLE applies to default long format",
+            "args": [
+                "-d",
+                "f"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch f",
+                "touch -d '2000-01-02 03:04:05 UTC' f"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0",
+                    "TIME_STYLE": "full-iso"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: custom time format expands nanoseconds",
+            "args": [
+                "-ln",
+                "--time-style=+%s.%N",
+                "-d",
+                "f"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch f",
+                "touch -d '@1577934245.123456789' f"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: unavailable birth time uses an aligned placeholder",
+            "args": [
+                "-ln",
+                "--time=birth",
+                "--full-time",
+                "-d",
+                "/proc/self/status"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                },
+                "verifications": [
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | grep -Eq ' +\\? +/proc/self/status$'",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ]
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: locale time fields are localized",
+            "args": [
+                "-ln",
+                "--time-style=locale",
+                "-d",
+                "f"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch f",
+                "touch -d '2000-01-02 03:04:05 UTC' f"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "fr_FR.UTF-8",
+                    "LANG": "fr_FR.UTF-8",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: binary human-readable size promotes after rounding",
+            "args": [
+                "-ln",
+                "-h",
+                "--full-time",
+                "-d",
+                "binary"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "truncate -s 1048575 binary",
+                "touch -d @1000000000 binary"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: decimal human-readable size promotes after rounding",
+            "args": [
+                "-ln",
+                "--si",
+                "--full-time",
+                "-d",
+                "decimal"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "truncate -s 999999 decimal",
+                "touch -d @1000000000 decimal"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: zero BLOCK_SIZE does not panic",
+            "args": [
+                "-s",
+                "-1",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch f"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0",
+                    "BLOCK_SIZE": "0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: zero --block-size is rejected without panic",
+            "args": [
+                "-s",
+                "-1",
+                "--block-size=0",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch f"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: block size accepts leading whitespace",
+            "args": [
+                "-s",
+                "-1",
+                "--block-size= 3",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch f"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: block size accepts a leading plus",
+            "args": [
+                "-s",
+                "-1",
+                "--block-size=+3",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch f"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: KB block-size suffix is canonicalized",
+            "args": [
+                "-ln",
+                "--full-time",
+                "--block-size=KB",
+                "-d",
+                "f"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "truncate -s 1001 f",
+                "touch -d @1000000000 f"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: k block-size suffix is canonicalized",
+            "args": [
+                "-ln",
+                "--full-time",
+                "--block-size=k",
+                "-d",
+                "f"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "truncate -s 1001 f",
+                "touch -d @1000000000 f"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: KiB block-size suffix is canonicalized",
+            "args": [
+                "-ln",
+                "--full-time",
+                "--block-size=KiB",
+                "-d",
+                "f"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "truncate -s 1001 f",
+                "touch -d @1000000000 f"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: width accepts hexadecimal syntax",
+            "args": [
+                "-C",
+                "--width=0x10",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch a b"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: large COLUMNS value is accepted",
+            "args": [
+                "-C",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch a b"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0",
+                    "COLUMNS": "70000"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: tab size accepts leading whitespace",
+            "args": [
+                "-C",
+                "--tabsize= 3",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch a"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: tab size rejects ptrdiff overflow",
+            "args": [
+                "-C",
+                "--tabsize=18446744073709551615",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch a"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: long symlink indicator follows the target",
+            "args": [
+                "-lFn",
+                "--full-time",
+                "-d",
+                "link"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch target",
+                "chmod 755 target",
+                "ln -s target link",
+                "touch -h -d @1000000000 link",
+                "touch -d @1000000000 target"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: hyperlinks cover both symlink name and target",
+            "args": [
+                "-ln",
+                "--full-time",
+                "--hyperlink=always",
+                "-d",
+                "link"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                },
+                "verifications": [
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | sed \"s|$PWD|<PWD>|g\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ]
+            },
+            "setup_commands": [
+                "touch target",
+                "ln -s target link",
+                "touch -h -d @1000000000 link",
+                "touch -d @1000000000 target"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: hyperlinks disable dired metadata",
+            "args": [
+                "-ln",
+                "--full-time",
+                "--dired",
+                "--hyperlink=always",
+                "-d",
+                "f"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "ignore_fields": {
+                    "ignore_stdout": true
+                },
+                "verifications": [
+                    {
+                        "command": "printf '%s' \"$CMD_STDOUT\" | sed \"s|$PWD|<PWD>|g\"",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ]
+            },
+            "setup_commands": [
+                "touch f",
+                "touch -d @1000000000 f"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: LS_COLORS control sequences and SGR order are preserved",
+            "args": [
+                "-1",
+                "--color=always",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "mkdir d"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0",
+                    "LS_COLORS": "lc=LEFT:rc=RIGHT:ec=END:rs=9:di=34;01"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: ln=target colors a symlink using its target type",
+            "args": [
+                "-1",
+                "--color=always",
+                "-d",
+                "link"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "mkdir target",
+                "ln -s target link"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0",
+                    "LS_COLORS": "ln=target:di=31"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: dangling symlink colors do not diagnose the target",
+            "args": [
+                "-l",
+                "--time-style=+T",
+                "--color=always",
+                "-d",
+                "link"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "ln -s nowhere link"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0",
+                    "LS_COLORS": "ln=32:or=33:mi=34"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: invalid tab size is fatal",
+            "args": [
+                "--tabsize=bad",
+                "."
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "command": "vdir",
+            "description": "Migrated: shell quoting handles newline names",
+            "args": [
+                "--quoting-style=shell",
+                "line\nname",
+                "space name"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "touch 'line\nname' 'space name'"
+            ],
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        }
     ]
 }

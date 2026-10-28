@@ -183,5 +183,100 @@
                 "rm -f test_file5"
             ]
         }
+        ,
+        {
+            "tstdin": "",
+            "command": "shred",
+            "description": "Migrated: -f -n0 does not change metadata unnecessarily",
+            "args": [
+                "-f",
+                "-n",
+                "0",
+                "readonly"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%a:%Z:%s:%b' readonly > after; sha256sum readonly >> after; cmp before after",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ]
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                "printf readonly > readonly",
+                "chmod 400 readonly",
+                "stat -c '%a:%Z:%s:%b' readonly > before",
+                "sha256sum readonly >> before",
+                "sleep 1"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "shred",
+            "description": "Migrated: default length rounds to the filesystem block size",
+            "args": [
+                "-n",
+                "1",
+                "--random-source=/dev/zero",
+                "data"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "stat -c '%a:%s:%b' data; sha256sum data",
+                        "expected_exit": 0,
+                        "expected_stdout": "",
+                        "expected_stderr": null
+                    }
+                ]
+            },
+            "tags": [
+                "migration-52e9b3d-ea626301"
+            ],
+            "setup_commands": [
+                "printf 0123456789abcdef > data"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        }
     ]
-} 
+}

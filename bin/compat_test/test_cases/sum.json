@@ -134,5 +134,104 @@
           
         ]
     }
+    ,
+    {
+      "tstdin": "",
+      "command": "sum",
+      "description": "Migrated: POSIXLY_CORRECT=1 stops option parsing at the first operand",
+      "args": [
+        "/dev/null",
+        "-s"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "tags": [
+        "migration-52e9b3d-ea626301"
+      ],
+      "environment": {
+        "files": [],
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C",
+          "TZ": "UTC0",
+          "POSIXLY_CORRECT": "1"
+        },
+        "working_dir": null,
+        "run_as_user": null,
+        "run_as_group": null,
+        "umask": null,
+        "resource_limits": null
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "sum",
+      "description": "Migrated: empty POSIXLY_CORRECT stops option parsing at the first operand",
+      "args": [
+        "/dev/null",
+        "-s"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "tags": [
+        "migration-52e9b3d-ea626301"
+      ],
+      "environment": {
+        "files": [],
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C",
+          "TZ": "UTC0",
+          "POSIXLY_CORRECT": ""
+        },
+        "working_dir": null,
+        "run_as_user": null,
+        "run_as_group": null,
+        "umask": null,
+        "resource_limits": null
+      }
+    },
+    {
+      "tstdin": "",
+      "command": "sum",
+      "description": "Migrated: without POSIXLY_CORRECT options are still permuted",
+      "args": [
+        "/dev/null",
+        "-s"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "tags": [
+        "migration-52e9b3d-ea626301"
+      ],
+      "environment": {
+        "files": [],
+        "env_vars": {
+          "LC_ALL": "C",
+          "LANG": "C",
+          "TZ": "UTC0"
+        },
+        "working_dir": null,
+        "run_as_user": null,
+        "run_as_group": null,
+        "umask": null,
+        "resource_limits": null
+      }
+    }
   ]
 }

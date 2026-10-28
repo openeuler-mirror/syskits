@@ -12029,5 +12029,41 @@
       },
       "cleanup_commands": []
     }
+    ,
+    {
+      "tstdin": "",
+      "command": "ptx",
+      "description": "Migrated: invalid UTF-8 context bytes are accepted",
+      "args": [
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      },
+      "tags": [
+        "migration-52e9b3d-ea626301"
+      ],
+      "setup_commands": [
+        "printf 'abc \\377 def\\n' > input"
+      ],
+      "environment": {
+        "files": [],
+        "env_vars": {
+          "LC_ALL": "en_US.UTF-8",
+          "LANG": "en_US.UTF-8",
+          "TZ": "UTC0"
+        },
+        "working_dir": null,
+        "run_as_user": null,
+        "run_as_group": null,
+        "umask": null,
+        "resource_limits": null
+      },
+      "byteMode": true
+    }
   ]
 }

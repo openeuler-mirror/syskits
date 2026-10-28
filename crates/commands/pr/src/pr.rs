@@ -3706,8 +3706,19 @@ fn pr_get_rendered_line_for_printing(
                     "{number_text}{}",
                     pr_take_display_width(&content, content_width, 8)
                 );
-                if should_pad && !is_string_sep && !has_no_separator {
-                    numbered.push(' ');
+                if should_pad {
+                    let pad_target = if is_string_sep || has_no_separator {
+                        min_width
+                    } else {
+                        min_width + 1
+                    };
+                    let numbered_width = pr_rendered_width(&numbered, 8);
+                    let minimum_target =
+                        numbered_width + usize::from(!is_string_sep && !has_no_separator);
+                    let target = pad_target.max(minimum_target);
+                    if numbered_width < target {
+                        numbered.push_str(&" ".repeat(target - numbered_width));
+                    }
                 }
                 return Ok((numbered, false));
             }
@@ -6523,6 +6534,52 @@ mod tests {
             assert!(output.contains("line2"));
             assert!(output.contains("line3"));
             assert!(output.contains("line4"));
+        }
+
+        #[test]
+        fn test_pr_write_columns_pads_numbered_columns_before_tabifying() {
+            let lines = create_lines(&["a\tb", "c\td"]);
+            let options = PrOutputOptions {
+                number: Some(PrNumberingMode {
+                    width: 3,
+                    separator: ":".to_string(),
+                    first_number: 1,
+                }),
+                header: String::new(),
+                is_double_space: false,
+                line_separator: "\n".to_string(),
+                content_line_separator: "\n".to_string(),
+                last_modified_time: String::new(),
+                start_page: 1,
+                end_page: None,
+                is_display_header_and_trailer: false,
+                content_lines_per_page: 1,
+                page_separator_char: "\n".to_string(),
+                column_mode_options: Some(PrColumnModeOptions {
+                    width: PR_DEFAULT_COLUMN_WIDTH,
+                    columns: 2,
+                    column_separator: "\t".to_string(),
+                    is_across_mode: false,
+                }),
+                merge_files_print: None,
+                offset_spaces: String::new(),
+                is_form_feed_used: false,
+                is_join_lines: false,
+                col_sep_for_printing: " ".to_string(),
+                page_width: 72,
+                line_width: Some(72),
+                show_control_chars: false,
+                show_nonprinting: false,
+                is_omit_pagination: false,
+                is_pad_columns: true,
+                expand_tabs: Some(('\t', 8)),
+                output_tabs: Some(('\t', 8)),
+            };
+
+            let mut output = Vec::new();
+            pr_write_columns(&lines, &options, &mut output).unwrap();
+
+            assert_eq!(output, b"  1:a\tb\t\t\t      2:c   d\n");
         }
 
         #[test]

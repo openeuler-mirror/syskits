@@ -20,7 +20,9 @@ use std::fmt;
 use std::io::{BufRead, Write};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use clap::{
-    Arg, ArgAction, ArgMatches, Command, crate_version, error::ErrorKind, parser::ValueSource,
+    Arg, ArgAction, ArgMatches, Command, crate_version,
+    error::{ContextKind, ContextValue, ErrorKind},
+    parser::ValueSource,
 };
 use std::str::FromStr;
 use sys_locale::get_locale;
@@ -338,25 +340,31 @@ mod native_semantic_tests {
 
         assert_eq!(semantic.exit_code, 0);
         assert_eq!(semantic.classic_text, "1.0K\n");
+        let input = crate::format::numfmt_quote("1000");
+        let decimal_point = crate::format::numfmt_quote(".");
+        let output = crate::format::numfmt_quote("1.0K");
         assert_eq!(
             semantic.stderr_text,
-            concat!(
-                "setting Auto-Padding to 0 characters\n",
-                "simple_strtod_human:\n",
-                "  input string: '1000'\n",
-                "  locale decimal-point: '.'\n",
-                "  MAX_UNSCALED_DIGITS: 18\n",
-                "  parsed numeric value: 1000.000000\n",
-                "  input precision = 0\n",
-                "  suffix power=1000^0 = 1.000000\n",
-                "  returning value: 1000.000000 (1000)\n",
-                "double_to_human:\n",
-                "  scaled value to 1.000000 * 1000 ^ 1\n",
-                "  after rounding, value=1.000000 * 1000 ^ 1\n",
-                "  returning value: '1.0K'\n",
-                "formatting output:\n",
-                "  value: 1000.000000\n",
-                "  humanized: '1.0K'\n",
+            format!(
+                concat!(
+                    "setting Auto-Padding to 0 characters\n",
+                    "simple_strtod_human:\n",
+                    "  input string: {}\n",
+                    "  locale decimal-point: {}\n",
+                    "  MAX_UNSCALED_DIGITS: 18\n",
+                    "  parsed numeric value: 1000.000000\n",
+                    "  input precision = 0\n",
+                    "  suffix power=1000^0 = 1.000000\n",
+                    "  returning value: 1000.000000 (1000)\n",
+                    "double_to_human:\n",
+                    "  scaled value to 1.000000 * 1000 ^ 1\n",
+                    "  after rounding, value=1.000000 * 1000 ^ 1\n",
+                    "  returning value: {}\n",
+                    "formatting output:\n",
+                    "  value: 1000.000000\n",
+                    "  humanized: {}\n",
+                ),
+                input, decimal_point, output, output,
             )
         );
     }
@@ -424,7 +432,7 @@ mod native_semantic_tests {
 
     #[test]
     fn numfmt_native_semantic_rejects_bare_negative_operand_as_option() {
-        let args = ["numfmt", "-12.5"];
+        let args = ["numfmt", "--to=si", "-12.5"];
 
         let error = match numfmt_native_semantic(args.iter().map(OsString::from)) {
             Ok(_) => panic!("bare negative operand should be parsed as an invalid option"),
@@ -456,16 +464,14 @@ mod native_semantic_tests {
         let args = ["numfmt", "+1"];
 
         let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+        let message = format!("invalid number: {}", crate::format::numfmt_quote("+1"));
 
         assert_eq!(semantic.exit_code, 2);
         assert_eq!(semantic.classic_text, "");
-        assert_eq!(semantic.stderr_text, "numfmt: invalid number: '+1'\n");
+        assert_eq!(semantic.stderr_text, format!("numfmt: {message}\n"));
         assert_eq!(semantic.rows.len(), 1);
         assert_eq!(semantic.rows[0].status, "partial-error");
-        assert_eq!(
-            semantic.rows[0].error.as_deref(),
-            Some("invalid number: '+1'")
-        );
+        assert_eq!(semantic.rows[0].error.as_deref(), Some(message.as_str()));
     }
 
     #[test]
@@ -473,16 +479,14 @@ mod native_semantic_tests {
         let args = ["numfmt", "--invalid=warn", "hello"];
 
         let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+        let message = format!("invalid number: {}", crate::format::numfmt_quote("hello"));
 
         assert_eq!(semantic.exit_code, 0);
         assert_eq!(semantic.classic_text, "hello\n");
         assert_eq!(semantic.rows.len(), 1);
         assert_eq!(semantic.rows[0].status, "passthrough");
-        assert_eq!(
-            semantic.rows[0].error.as_deref(),
-            Some("invalid number: 'hello'")
-        );
-        assert_eq!(semantic.stderr_text, "numfmt: invalid number: 'hello'\n");
+        assert_eq!(semantic.rows[0].error.as_deref(), Some(message.as_str()));
+        assert_eq!(semantic.stderr_text, format!("numfmt: {message}\n"));
     }
 
     #[test]
@@ -495,7 +499,10 @@ mod native_semantic_tests {
         assert_eq!(semantic.classic_text, "123 ,x\n");
         assert_eq!(
             semantic.stderr_text,
-            "numfmt: rejecting suffix in input: '123 ' (consider using --from)\n"
+            format!(
+                "numfmt: rejecting suffix in input: {} (consider using --from)\n",
+                crate::format::numfmt_quote("123 ")
+            )
         );
         assert_eq!(semantic.rows.len(), 1);
         assert_eq!(semantic.rows[0].status, "passthrough");
@@ -1367,12 +1374,11 @@ fn parse_round(arg_matches: &ArgMatches) -> NumfmtRoundMethod {
     }
 }
 
-fn numfmt_unknown_argument_message(args: &[OsString]) -> String {
-    let unknown = args
-        .iter()
-        .skip(1)
-        .filter_map(|arg| arg.to_str())
-        .find(|arg| arg.starts_with('-') && *arg != "-");
+fn numfmt_unknown_argument_message(error: &clap::Error) -> String {
+    let unknown = match error.get(ContextKind::InvalidArg) {
+        Some(ContextValue::String(argument)) => Some(argument.as_str()),
+        _ => None,
+    };
 
     match unknown {
         Some(arg) if arg.starts_with("--") => {
@@ -1394,7 +1400,7 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
         Ok(matches) => matches,
         Err(err) if err.kind() == ErrorKind::UnknownArgument => {
             return Err(Box::new(NumfmtError::NumfmtIllegalArgument(
-                numfmt_unknown_argument_message(&normalized_args),
+                numfmt_unknown_argument_message(&err),
             )));
         }
         Err(err) => return Err(err.into()),
@@ -1457,7 +1463,7 @@ pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemanti
         Ok(matches) => matches,
         Err(err) if err.kind() == ErrorKind::UnknownArgument => {
             return Err(Box::new(NumfmtError::NumfmtIllegalArgument(
-                numfmt_unknown_argument_message(&normalized_args),
+                numfmt_unknown_argument_message(&err),
             )));
         }
         Err(err) => return Err(err.into()),
@@ -1769,7 +1775,8 @@ mod tests {
 
             let input_line = "abc";
             let result2 = numfmt_format_and_handle_validation(input_line, &numfmt_configs, false);
-            let expected_result2 = "invalid number: 'abc'".to_string();
+            let expected_result2 =
+                format!("invalid number: {}", crate::format::numfmt_quote("abc"));
             assert!(result2.is_err());
             assert_eq!(result2.unwrap_err().to_string(), expected_result2);
         }
@@ -9817,11 +9824,9 @@ mod tests {
             .expect_err("returned Ok after receiving improperly formatted input");
             let result_debug = format!("{result:?}");
             let result_display = format!("{result}");
-            assert_eq!(
-                result_debug,
-                "NumfmtFormattingError(\"invalid number: 'hello'\")"
-            );
-            assert_eq!(result_display, "invalid number: 'hello'");
+            let expected = format!("invalid number: {}", crate::format::numfmt_quote("hello"));
+            assert_eq!(result_debug, format!("NumfmtFormattingError({expected:?})"));
+            assert_eq!(result_display, expected);
             assert_eq!(result.code(), 2);
         }
 
@@ -9885,7 +9890,13 @@ mod tests {
             let error = numfmt_handle_buffer(BufReader::new(&input_value[..]), &options, false)
                 .expect_err("carriage return should remain part of the input field");
 
-            assert_eq!(error.to_string(), "invalid suffix in input: '123\\r'");
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "invalid suffix in input: {}",
+                    crate::format::numfmt_quote("123\r")
+                )
+            );
         }
 
         #[test]

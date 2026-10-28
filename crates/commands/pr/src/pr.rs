@@ -454,7 +454,7 @@ quick_error! {
         }
 
         NotExists(path: String) {
-            display("pr: cannot open {}, No such file or directory", path)
+            display("pr: {}: No such file or directory", path)
         }
 
     }
@@ -2345,18 +2345,28 @@ fn pr_collect_semantic_for_merge(
     output: &mut Option<&mut dyn Write>,
 ) -> Result<(), PrError> {
     let collect_semantic = output.is_none();
-    // 检查文件是否存在
-    for path in input_paths {
-        pr_open(*path)?;
+    let mut opened_inputs = Vec::new();
+    for (path, display_path) in input_paths.iter().zip(paths) {
+        match pr_open(*path) {
+            Ok(reader) => opened_inputs.push((*display_path, reader)),
+            Err(error) => {
+                semantic.stderr_text.push_str(&format!("{error}\n"));
+                semantic.exit_code = 1;
+            }
+        }
     }
 
-    let file_pages = input_paths
+    let active_paths = opened_inputs
         .iter()
+        .map(|(path, _)| *path)
+        .collect::<Vec<_>>();
+    let file_pages = opened_inputs
+        .into_iter()
         .enumerate()
-        .map(|(i, path)| {
+        .map(|(i, (_, reader))| {
             let mut page_input_opts = output_opts.clone();
             page_input_opts.start_page = 1;
-            let lines = pr_input_lines(pr_open(*path).unwrap());
+            let lines = pr_input_lines(reader);
 
             pr_read_stream_and_create_pages(&page_input_opts, lines, i).collect::<Vec<_>>()
         })
@@ -2400,7 +2410,9 @@ fn pr_collect_semantic_for_merge(
         } else {
             output_opts.content_lines_per_page
         };
-        let mut merged_columns = (0..paths.len()).map(|_| Vec::new()).collect::<Vec<_>>();
+        let mut merged_columns = (0..active_paths.len())
+            .map(|_| Vec::new())
+            .collect::<Vec<_>>();
 
         for row_index in 0..rows_in_page {
             let row_has_content = page_lines_by_file
@@ -2471,7 +2483,7 @@ fn pr_collect_semantic_for_merge(
         if collect_semantic {
             pr_push_page_rows(
                 &mut semantic.rows,
-                paths,
+                &active_paths,
                 &merged_lines,
                 &page_output_opts,
                 page_number,
@@ -2509,7 +2521,7 @@ fn mpr_handle(paths: &[&str], output_opts: &PrOutputOptions) -> Result<i32, PrEr
         out.write_all(semantic.classic_text.as_bytes())?;
     }
     out.flush()?;
-    Ok(0)
+    Ok(semantic.exit_code)
 }
 
 #[cfg(test)]
@@ -2788,7 +2800,7 @@ fn pr_write_multicolumn_table(
                 .map(|i| i + 1)
                 .unwrap_or(0)
         } else if output_opts.merge_files_print.is_some() {
-            columns
+            last_actual_index.map_or(0, |index| index + 1)
         } else {
             row.iter()
                 .rposition(|cell| cell.is_some())
@@ -4434,12 +4446,8 @@ mod tests {
             // 调用mpr_handle函数
             let result = mpr_handle(paths, &output_opts);
 
-            // 验证结果 - 应该返回错误，因为其中一个文件不存在
-            assert!(result.is_err());
-            match result {
-                Err(PrError::NotExists(_)) => {}
-                _ => panic!("Expected PrError::NotExists, got a different error"),
-            }
+            // 其他文件仍会被处理，但打开失败会设置非零退出状态。
+            assert_eq!(result.unwrap(), 1);
         }
 
         #[test]
@@ -4536,12 +4544,8 @@ mod tests {
             // 调用mpr_handle函数
             let result = mpr_handle(paths, &output_opts);
 
-            // 验证结果 - 应该返回错误，因为其中一个是目录
-            assert!(result.is_err());
-            match result {
-                Err(PrError::IsDirectory(_)) => {}
-                _ => panic!("Expected PrError::IsDirectory, got a different error"),
-            }
+            // 其他文件仍会被处理，但目录输入会设置非零退出状态。
+            assert_eq!(result.unwrap(), 1);
         }
 
         #[test]
@@ -7527,8 +7531,8 @@ mod tests {
             let paths = &["test_file.txt"];
             let result = mpr_handle(paths, &output_opts);
 
-            // 由于文件不存在，应该返回错误
-            assert!(result.is_err());
+            // 由于文件不存在，应该返回非零退出状态。
+            assert_eq!(result.unwrap(), 1);
         }
 
         #[test]

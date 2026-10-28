@@ -570,7 +570,7 @@ fn get_plain_context(context: &OsStr) -> Result<OpaqueSecurityContext> {
 
     // 创建安全上下文对象
     OpaqueSecurityContext::from_c_str(&c_context)
-        .map_err(|err| DefaultError::from_selinux("Creating new context", err))
+        .map_err(|_| DefaultError::from_context_creation(context, io::Error::last_os_error()))
 }
 
 /// 获取命令的转换后上下文
@@ -658,8 +658,10 @@ fn get_initial_custom_opaque_context(
     };
 
     // 创建不透明上下文对象
-    OpaqueSecurityContext::from_c_str(&c_context)
-        .map_err(|err| DefaultError::from_selinux("Creating new context", err))
+    OpaqueSecurityContext::from_c_str(&c_context).map_err(|_| {
+        let context = OsStr::from_bytes(c_context.as_bytes());
+        DefaultError::from_context_creation(context, io::Error::last_os_error())
+    })
 }
 
 /// 获取自定义安全上下文

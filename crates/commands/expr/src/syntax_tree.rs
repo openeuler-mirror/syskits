@@ -1153,6 +1153,7 @@ fn expr_regex_error(error: onig::Error) -> ExprError {
         onig_sys::ONIGERR_END_PATTERN_AT_LEFT_BRACKET
         | onig_sys::ONIGERR_EMPTY_CHAR_CLASS
         | onig_sys::ONIGERR_PREMATURE_END_OF_CHAR_CLASS => "Unmatched [, [^, [:, [., or [=",
+        onig_sys::ONIGERR_TOO_BIG_NUMBER_FOR_REPEAT_RANGE => "Regular expression too big",
         _ => "Invalid regular expression",
     };
     ExprError::RegexError(message.to_string())
@@ -1232,6 +1233,12 @@ fn is_valid_brace_content_bytes(content: &[u8]) -> bool {
 }
 
 fn normalize_brace_content_bytes(content: &[u8]) -> ExprResult<Vec<u8>> {
+    if brace_content_exceeds_gnu_limit(content) {
+        return Err(ExprError::RegexError(
+            "Regular expression too big".to_string(),
+        ));
+    }
+
     let mut parts = content.split(|b| *b == b',');
     let first = parts.next().unwrap_or(&[]);
     let second = parts.next();
@@ -1259,21 +1266,29 @@ fn normalize_brace_content_bytes(content: &[u8]) -> ExprResult<Vec<u8>> {
     }
 }
 
-fn parse_bound_bytes(s: &[u8]) -> Option<u32> {
+fn parse_bound_bytes(s: &[u8]) -> Option<BigInt> {
     if s.is_empty() {
-        return Some(0);
+        return Some(BigInt::from(0));
     }
-    let mut val: u32 = 0;
-    for &b in s {
-        if !b.is_ascii_digit() {
-            return None;
-        }
-        val = val.saturating_mul(10).saturating_add((b - b'0') as u32);
-        if val > 32767 {
-            return None;
-        }
+    if !s.iter().all(u8::is_ascii_digit) {
+        return None;
     }
-    Some(val)
+    BigInt::parse_bytes(s, 10)
+}
+
+fn brace_content_exceeds_gnu_limit(content: &[u8]) -> bool {
+    const GNU_RE_DUP_MAX: u32 = 0x7fff;
+    let mut parts = content.split(|b| *b == b',');
+    let first = parts.next().unwrap_or_default();
+    let second = parts.next();
+    let limit = BigInt::from(GNU_RE_DUP_MAX);
+
+    [Some(first), second]
+        .into_iter()
+        .flatten()
+        .filter(|part| !part.is_empty())
+        .filter_map(parse_bound_bytes)
+        .any(|bound| bound > limit)
 }
 
 #[cfg(test)]

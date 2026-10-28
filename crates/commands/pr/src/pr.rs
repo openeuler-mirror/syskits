@@ -31,7 +31,7 @@ use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::{Quotable, locale_quote};
-use ctcore::ct_error::{CTResult, strip_errno};
+use ctcore::ct_error::{CTResult, CtSimpleError, strip_errno};
 use ctcore::ct_locale::hard_locale_time;
 use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use itertools::Itertools;
@@ -1283,7 +1283,12 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
 
         match cmd_result {
             Ok(()) => {}
-            Err(PrError::Output(error)) => return Err(error.into()),
+            Err(PrError::Output(error)) => {
+                return Err(CtSimpleError::new(
+                    1,
+                    format!("write error: {}", strip_errno(&error)),
+                ));
+            }
             Err(
                 error @ (PrError::Input(_, _)
                 | PrError::UnknownFiletype(_)

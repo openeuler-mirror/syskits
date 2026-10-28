@@ -507,7 +507,7 @@ impl std::fmt::Display for ParseError {
                 )
             }
             Self::OutputFlagNoMatch(arg) => {
-                write!(f, "invalid output flag: '{}'", arg)
+                write!(f, "invalid output flag: '{arg}'")
             }
             Self::ConvFlagNoMatch(arg) => {
                 write!(f, "Unrecognized conv=CONV -> {arg}")

@@ -208,10 +208,7 @@ fn traditional_extra_operand_error(operand: &OsStr) -> String {
         .to_str()
         .map(locale_quote)
         .unwrap_or_else(|| operand.quote().to_string());
-    format!(
-        "extra operand {}\nod: compatibility mode supports at most one file",
-        quoted
-    )
+    format!("extra operand {quoted}\nod: compatibility mode supports at most one file")
 }
 
 fn parse_old_style_offset_operand(s: &OsStr) -> Result<u64, &'static str> {

@@ -65,11 +65,7 @@ static COMM_INHERITED_SIGPIPE_IGNORED: AtomicBool = AtomicBool::new(false);
 unsafe extern "C" fn comm_capture_inherited_sigpipe() {
     let mut action = std::mem::MaybeUninit::<ctcore::libc::sigaction>::uninit();
     if unsafe {
-        ctcore::libc::sigaction(
-            ctcore::libc::SIGPIPE,
-            std::ptr::null(),
-            action.as_mut_ptr(),
-        )
+        ctcore::libc::sigaction(ctcore::libc::SIGPIPE, std::ptr::null(), action.as_mut_ptr())
     } == 0
     {
         let action = unsafe { action.assume_init() };
@@ -494,7 +490,7 @@ fn comm_quote_operand(path: &OsStr) -> String {
         if let Some(escape) = escape {
             quoted.push_str(escape);
         } else {
-            quoted.push_str(&format!("\\{:03o}", byte));
+            quoted.push_str(&format!("\\{byte:03o}"));
         }
         quoted.push('\'');
         quoted.push('\'');
@@ -554,10 +550,7 @@ fn comm_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
     } else {
         error
     };
-    ctcore::ct_error::CtSimpleError::new(
-        1,
-        format!("write error: {}", comm_errno_text(&error)),
-    )
+    ctcore::ct_error::CtSimpleError::new(1, format!("write error: {}", comm_errno_text(&error)))
 }
 
 fn comm_stdout_file() -> CTResult<File> {
@@ -777,8 +770,7 @@ fn comm_with_writer<W: std::io::Write>(
         if ord == Ordering::Less {
             seen_unpairable = true;
             if !opts.get_flag(opt_flags::COLUMN_1) {
-                out.write_all(ra)
-                    .map_err(comm_write_error)?;
+                out.write_all(ra).map_err(comm_write_error)?;
                 if collect_rows {
                     rows.push(comm_row("left", ra, a.line_ending, true, false));
                 }
@@ -830,10 +822,8 @@ fn comm_with_writer<W: std::io::Write>(
         } else if ord == Ordering::Greater {
             seen_unpairable = true;
             if !opts.get_flag(opt_flags::COLUMN_2) {
-                out.write_all(&delim_col_2)
-                    .map_err(comm_write_error)?;
-                out.write_all(rb)
-                    .map_err(comm_write_error)?;
+                out.write_all(&delim_col_2).map_err(comm_write_error)?;
+                out.write_all(rb).map_err(comm_write_error)?;
                 if collect_rows {
                     rows.push(comm_row("right", rb, b.line_ending, false, true));
                 }
@@ -884,10 +874,8 @@ fn comm_with_writer<W: std::io::Write>(
             total_col_2 += 1;
         } else if ord == Ordering::Equal {
             if !opts.get_flag(opt_flags::COLUMN_3) {
-                out.write_all(&delim_col_3)
-                    .map_err(comm_write_error)?;
-                out.write_all(rb)
-                    .map_err(comm_write_error)?;
+                out.write_all(&delim_col_3).map_err(comm_write_error)?;
+                out.write_all(rb).map_err(comm_write_error)?;
                 if collect_rows {
                     rows.push(comm_row("both", rb, b.line_ending, true, true));
                 }
@@ -994,20 +982,13 @@ fn comm_with_writer<W: std::io::Write>(
         let line_ending = CtLineEnding::from_zero_flag(opts.get_flag(opt_flags::ZERO_TERMINATED));
         let total_str = comm_gettext("total");
         let col_sep = comm_get_del_im(opts)?;
-        write!(out, "{total_col_1}")
-            .map_err(comm_write_error)?;
-        out.write_all(&col_sep)
-            .map_err(comm_write_error)?;
-        write!(out, "{total_col_2}")
-            .map_err(comm_write_error)?;
-        out.write_all(&col_sep)
-            .map_err(comm_write_error)?;
-        write!(out, "{total_col_3}")
-            .map_err(comm_write_error)?;
-        out.write_all(&col_sep)
-            .map_err(comm_write_error)?;
-        write!(out, "{total_str}{line_ending}")
-            .map_err(comm_write_error)?;
+        write!(out, "{total_col_1}").map_err(comm_write_error)?;
+        out.write_all(&col_sep).map_err(comm_write_error)?;
+        write!(out, "{total_col_2}").map_err(comm_write_error)?;
+        out.write_all(&col_sep).map_err(comm_write_error)?;
+        write!(out, "{total_col_3}").map_err(comm_write_error)?;
+        out.write_all(&col_sep).map_err(comm_write_error)?;
+        write!(out, "{total_str}{line_ending}").map_err(comm_write_error)?;
         if collect_rows {
             rows.push(comm_total_row(total_col_1, total_col_2, total_col_3));
         }
@@ -1117,16 +1098,16 @@ fn open_inputs(
     }
 
     let first_name = comm_quote_operand(file1.as_os_str());
-    let mut first = open_file(file1, line_ending)
-        .map_err(|error| comm_io_error(first_name, error))?;
+    let mut first =
+        open_file(file1, line_ending).map_err(|error| comm_io_error(first_name, error))?;
     let mut line = Vec::new();
     let length = comm_read_line(&mut first, &mut line)?;
     let pending = (length > 0).then_some(line);
     first = first.pending(pending);
 
     let second_name = comm_quote_operand(file2.as_os_str());
-    let second = open_file(file2, line_ending)
-        .map_err(|error| comm_io_error(second_name, error))?;
+    let second =
+        open_file(file2, line_ending).map_err(|error| comm_io_error(second_name, error))?;
     Ok((first, second))
 }
 

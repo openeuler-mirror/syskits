@@ -665,18 +665,16 @@ impl Chmoder {
 
         let mut r = if !is_symlink || should_deref {
             self.chmod_meta(target, file_path, target_meta.st_mode)
-        } else {
-            if self.verbose && !self.changes {
-                match write_stdout_line(&format!(
-                    "neither symbolic link {} nor referent has been changed",
-                    file_path.quote()
-                )) {
-                    Ok(()) => Ok(()),
-                    Err(_) => Err(ExitCode::new(1)),
-                }
-            } else {
-                Ok(())
+        } else if self.verbose && !self.changes {
+            match write_stdout_line(&format!(
+                "neither symbolic link {} nor referent has been changed",
+                file_path.quote()
+            )) {
+                Ok(()) => Ok(()),
+                Err(_) => Err(ExitCode::new(1)),
             }
+        } else {
+            Ok(())
         };
 
         // GNU fts opens a directory for traversal after process_file has applied
@@ -852,7 +850,7 @@ impl Chmoder {
 
             let actual_mode = if mode & SPECIAL_MODE_BITS != 0 {
                 match target.metadata(true) {
-                    Ok(metadata) => Some(metadata.st_mode as u32),
+                    Ok(metadata) => Some(metadata.st_mode),
                     Err(err) => {
                         if !self.quiet {
                             ct_show_error!(

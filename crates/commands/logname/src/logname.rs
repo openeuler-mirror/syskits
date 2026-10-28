@@ -244,10 +244,10 @@ fn gnu_logname_option_error(args: &[OsString]) -> Option<Box<dyn CTError>> {
     const LONG_OPTIONS: [&[u8]; 2] = [b"help", b"version"];
     let program_name = args.first()?.as_os_str().as_bytes();
 
-    for argument in args.iter().skip(1) {
+    if let Some(argument) = args.get(1) {
         let bytes = argument.as_os_str().as_bytes();
         if bytes == b"--" || bytes == b"-" || !bytes.starts_with(b"-") {
-            break;
+            return None;
         }
 
         if let Some(long_argument) = bytes.strip_prefix(b"--") {

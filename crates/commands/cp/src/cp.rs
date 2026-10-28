@@ -944,6 +944,7 @@ impl CpAttributes {
 }
 
 impl CpOptions {
+    #[cfg(test)]
     #[allow(clippy::cognitive_complexity)]
     fn cp_from_matches(args_match: &ArgMatches) -> CopyResult<Self> {
         Self::cp_from_matches_impl(args_match, None)
@@ -3097,7 +3098,7 @@ fn is_skipped_by_update(
 ///
 /// The original permissions of `source` will be copied to `dest`
 /// after a successful copy.
-#[allow(clippy::cognitive_complexity)]
+#[allow(clippy::cognitive_complexity, clippy::too_many_arguments)]
 /**
  * 复制文件从源路径到目标路径，支持多种选项。此函数处理不同场景，如更新文件、处理符号链接、
  * 保留属性及管理硬链接。还支持交互式覆盖模式，并能跟踪已符号链接或已复制的文件。
@@ -3421,6 +3422,7 @@ fn handle_no_preserve_mode(cp_opts: &CpOptions, org_mode: u32) -> u32 {
  * @param symlinked_files 用于记录已复制的符号链接文件信息的哈希集的引用。
  * @return 返回一个`CopyResult<()>`，成功时为`Ok(())`，错误时为`Err(CpError)`。
  */
+#[allow(clippy::too_many_arguments)]
 fn copy_helper(
     sour_path: &Path,
     dest_path: &Path,

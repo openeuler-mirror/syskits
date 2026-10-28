@@ -1239,13 +1239,12 @@ fn od_open_input_reader(
         .collect::<Vec<_>>();
 
     let mf = OdMultifileReader::new(inputs);
-    let pr = PartialReader::with_fast_skip(
+    PartialReader::with_fast_skip(
         mf,
         skip_bytes,
         read_bytes,
         OdMultifileReader::skip_regular_files,
-    );
-    pr
+    )
 }
 
 fn od_string_classic_line(offset: u64, radix: OdRadix, buffer: &[u8]) -> String {

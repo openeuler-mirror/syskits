@@ -421,8 +421,8 @@ impl HashsumFlags {
 
         if !is_check {
             for (is_present, option_name) in [
-                (is_quiet, "--quiet"),
                 (is_status, "--status"),
+                (is_quiet, "--quiet"),
                 (is_strict, "--strict"),
                 (is_warn, "--warn"),
                 (is_ignore_missing, "--ignore-missing"),

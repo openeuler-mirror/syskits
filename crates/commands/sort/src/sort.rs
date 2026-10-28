@@ -136,7 +136,7 @@ unsafe extern "C" {
 pub(crate) fn sort_is_blank(character: char) -> bool {
     #[cfg(target_os = "linux")]
     unsafe {
-        return iswblank(u32::from(character)) != 0;
+        iswblank(u32::from(character)) != 0
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -146,7 +146,7 @@ pub(crate) fn sort_is_blank(character: char) -> bool {
 fn sort_is_alphanumeric(character: char) -> bool {
     #[cfg(target_os = "linux")]
     unsafe {
-        return iswalnum(u32::from(character)) != 0;
+        iswalnum(u32::from(character)) != 0
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -156,7 +156,7 @@ fn sort_is_alphanumeric(character: char) -> bool {
 fn sort_is_printable(character: char) -> bool {
     #[cfg(target_os = "linux")]
     unsafe {
-        return iswprint(u32::from(character)) != 0;
+        iswprint(u32::from(character)) != 0
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -166,7 +166,7 @@ fn sort_is_printable(character: char) -> bool {
 fn sort_to_upper(character: char) -> char {
     #[cfg(target_os = "linux")]
     unsafe {
-        return char::from_u32(towupper(u32::from(character))).unwrap_or(character);
+        char::from_u32(towupper(u32::from(character))).unwrap_or(character)
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -1457,6 +1457,7 @@ fn sort_validate_inputs(files: &[OsString], output: &SortOutput) -> CTResult<()>
         OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(false)
             .open(out_name)
             .map_err(|error| SortError::SortOpenFailed {
                 path: out_name.to_string_lossy().into_owned(),
@@ -1662,7 +1663,7 @@ fn preprocess_sort_args(args: Vec<OsString>) -> Vec<OsString> {
             }
         }
 
-        let traditional_pair = !env::var_os("POSIXLY_CORRECT").is_some()
+        let traditional_pair = env::var_os("POSIXLY_CORRECT").is_none()
             && args
                 .get(idx + 1)
                 .and_then(|next| next.to_str())
@@ -2055,7 +2056,7 @@ fn sort_get_settings_files(matches: &ArgMatches) -> Result<Vec<OsString>, Box<dy
 
         let files0_from: Vec<OsString> = matches
             .get_many::<OsString>(sort_flags::SORT_FILES0_FROM)
-            .map(|v| v.last().cloned().into_iter().collect())
+            .map(|mut v| v.next_back().cloned().into_iter().collect())
             .unwrap_or_default();
 
         let mut files = Vec::new();
@@ -2976,7 +2977,7 @@ fn sort_month_parse(line: &str) -> SortMonth {
 
     #[cfg(unix)]
     {
-        return get_locale_month_abbr(&line_upper);
+        get_locale_month_abbr(&line_upper)
     }
 
     #[cfg(not(unix))]

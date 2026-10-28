@@ -500,7 +500,7 @@ fn build_normal_target_path(src: &Path, target_dir: &Path) -> CTResult<PathBuf> 
     let basename = if src.as_os_str().as_encoded_bytes().ends_with(b"/.") {
         OsStr::new(".")
     } else {
-        src.file_name().unwrap_or_else(|| src.as_os_str())
+        src.file_name().unwrap_or(src.as_os_str())
     };
     Ok(target_dir.join(basename))
 }
@@ -527,8 +527,8 @@ fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
 }
 
 fn same_directory_entry(path1: &Path, path2: &Path) -> bool {
-    let basename1 = path1.file_name().unwrap_or_else(|| path1.as_os_str());
-    let basename2 = path2.file_name().unwrap_or_else(|| path2.as_os_str());
+    let basename1 = path1.file_name().unwrap_or(path1.as_os_str());
+    let basename2 = path2.file_name().unwrap_or(path2.as_os_str());
     if basename1 != basename2 {
         return false;
     }
@@ -914,7 +914,7 @@ fn ln_numbered_backup_path(path: &Path) -> PathBuf {
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    let basename = path.file_name().unwrap_or_else(|| path.as_os_str());
+    let basename = path.file_name().unwrap_or(path.as_os_str());
     let basename = basename.as_encoded_bytes();
     let mut max_version: Option<Vec<u8>> = None;
 

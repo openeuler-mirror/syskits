@@ -887,9 +887,7 @@ mod test {
         );
         let negative_overflow = format!("-{}", "9".repeat(100));
         assert_eq!(
-            parse_wrap_cols(&negative_overflow)
-                .unwrap_err()
-                .to_string(),
+            parse_wrap_cols(&negative_overflow).unwrap_err().to_string(),
             format!("invalid wrap size: {}", locale_quote(&negative_overflow))
         );
     }
@@ -951,10 +949,8 @@ mod test {
             vec!["base32", "--wrap", "0", "-d", "input"],
             vec!["base32", "--w", "0", "-d", "input"],
         ] {
-            let normalized = normalize_base_args_for_posix(
-                args.into_iter().map(OsString::from),
-                true,
-            );
+            let normalized =
+                normalize_base_args_for_posix(args.into_iter().map(OsString::from), true);
             let matches = base_common_app(BASE32_ABOUT.into(), BASE32_USAGE.into())
                 .try_get_matches_from(normalized)
                 .expect("options after a separated wrap value should still be parsed");

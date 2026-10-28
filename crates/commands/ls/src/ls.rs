@@ -4586,6 +4586,7 @@ fn render_grid(
     rendered
 }
 
+#[allow(clippy::too_many_arguments)]
 fn display_grid<W: Write>(
     names: impl Iterator<Item = Cell>,
     width: usize,

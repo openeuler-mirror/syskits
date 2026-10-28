@@ -116,21 +116,34 @@ pub fn runcon_main(args: impl ctcore::Args) -> CTResult<()> {
             // 有命令时，设置上下文并执行
             Some(command) => {
                 let resolved_cmd = resolve_command(command); // 1. 解析绝对路径
+                let context_command = if *compute_transition_context {
+                    command
+                } else {
+                    &resolved_cmd
+                };
                 get_custom_context(
                     *compute_transition_context,
                     user.as_deref(),
                     role.as_deref(),
                     the_type.as_deref(),
                     range.as_deref(),
-                    &resolved_cmd, // 2. 传递绝对路径计算上下文
+                    context_command, // 2. 计算上下文时保留GNU命令操作数
                 )
                 .and_then(|ctx| set_next_exec_context(&ctx))
                 .map_err(|e| match e {
                     DefaultError::InvalidSecurityContext { .. } => RunconError::with_code(125, e),
                     _ => RunconError::new(e),
                 })?;
-                let use_execv = *compute_transition_context && command.as_bytes().contains(&b'/');
-                runcon_exec(&resolved_cmd, &settings.arguments, use_execv) // 3. 传递绝对路径执行
+                let execution_command = if *compute_transition_context {
+                    command
+                } else {
+                    &resolved_cmd
+                };
+                runcon_exec(
+                    execution_command,
+                    &settings.arguments,
+                    *compute_transition_context,
+                ) // 3. 执行计算模式的原始命令
             }
             // 无命令时，仅打印当前上下文
             None => print_current_context().map_err(|e| RunconError::new(e).into()),

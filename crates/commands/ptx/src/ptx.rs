@@ -29,7 +29,9 @@ use clap::{
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, strip_errno};
+use ctcore::ct_error::{
+    CTError, CTResult, CTsageError, CtSimpleError, FromIo, strerror_bytes, strip_errno,
+};
 use ctcore::ct_gnu_regex::{GnuRegex, GnuRegexCompileOptions, GnuRegexError};
 use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 use std::cell::RefCell;
@@ -57,6 +59,18 @@ unsafe extern "C" {
     ) -> usize;
 }
 
+#[cfg(target_os = "linux")]
+unsafe extern "C" {
+    fn bindtextdomain(
+        domainname: *const ctcore::libc::c_char,
+        dirname: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
+    fn dgettext(
+        domainname: *const ctcore::libc::c_char,
+        msgid: *const ctcore::libc::c_char,
+    ) -> *mut ctcore::libc::c_char;
+}
+
 fn ptx_is_space_byte(byte: u8) -> bool {
     matches!(byte, b' ' | b'\t' | b'\n' | b'\r' | 0x0b | 0x0c)
 }
@@ -67,6 +81,73 @@ fn ptx_is_space_char(ch: char) -> bool {
 
 fn ptx_write_error_context() -> String {
     "write error".to_string()
+}
+
+fn ptx_init_locale() {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+
+    #[cfg(target_os = "linux")]
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+        bindtextdomain(c"coreutils".as_ptr(), c"/usr/share/locale".as_ptr());
+        bindtextdomain(c"libc".as_ptr(), c"/usr/share/locale".as_ptr());
+    }
+}
+
+fn ptx_gettext_bytes(domain: &CStr, message: &CStr) -> Vec<u8> {
+    #[cfg(target_os = "linux")]
+    {
+        let translated = unsafe { dgettext(domain.as_ptr(), message.as_ptr()) };
+        if !translated.is_null() {
+            return unsafe { CStr::from_ptr(translated) }.to_bytes().to_vec();
+        }
+    }
+
+    message.to_bytes().to_vec()
+}
+
+fn ptx_translate_regex_message(message: &[u8]) -> Vec<u8> {
+    CString::new(message)
+        .map(|message| ptx_gettext_bytes(c"libc", &message))
+        .unwrap_or_else(|_| message.to_vec())
+}
+
+fn ptx_format_gettext(template: &[u8], substitutions: &[&[u8]]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(template.len());
+    let mut substitution = 0usize;
+    let mut index = 0usize;
+    while index < template.len() {
+        if template[index..].starts_with(b"%s") && substitution < substitutions.len() {
+            output.extend_from_slice(substitutions[substitution]);
+            substitution += 1;
+            index += 2;
+        } else if template[index..].starts_with(b"%%") {
+            output.push(b'%');
+            index += 2;
+        } else {
+            output.push(template[index]);
+            index += 1;
+        }
+    }
+    output
+}
+
+fn ptx_locale_quote_marks() -> (Vec<u8>, Vec<u8>) {
+    let left = ptx_gettext_bytes(c"coreutils", c"`");
+    let right = ptx_gettext_bytes(c"coreutils", c"'");
+    if left != b"`" || right != b"'" {
+        return (left, right);
+    }
+
+    let codeset = ptx_locale_codeset();
+    if codeset.contains("UTF-8") || codeset.contains("UTF8") {
+        ("‘".as_bytes().to_vec(), "’".as_bytes().to_vec())
+    } else if codeset.contains("GB18030") {
+        (b"\"".to_vec(), b"\"".to_vec())
+    } else {
+        (b"'".to_vec(), b"'".to_vec())
+    }
 }
 
 fn ptx_locale_name() -> OsString {
@@ -3766,8 +3847,7 @@ fn ptx_render_version_text() -> String {
 }
 
 pub fn ptx_main_with_writer<W: Write>(args: impl ctcore::Args, out: &mut W) -> CTResult<()> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    ptx_init_locale();
     let args = ptx_args(args)?;
     let matches = match ct_app().try_get_matches_from(args) {
         Ok(matches) => matches,
@@ -3810,8 +3890,7 @@ pub fn ptx_native_semantic_with_stdin(
     args: impl ctcore::Args,
     stdin_bytes: Option<Vec<u8>>,
 ) -> CTResult<PtxSemantic> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    ptx_init_locale();
 
     let argv = ptx_args(args)?;
     let direct = run_ptx_direct_process(&argv, stdin_bytes.as_deref())?;
@@ -4112,23 +4191,15 @@ fn ptx_quote_pattern(
     byte_ctype: &LocaleByteCtype,
     single_byte_locale: bool,
 ) -> Vec<u8> {
-    const UTF8_LEFT_QUOTE: &[u8] = "‘".as_bytes();
-    const UTF8_RIGHT_QUOTE: &[u8] = "’".as_bytes();
-
-    let (left_quote, right_quote): (&[u8], &[u8]) =
-        if ptx_locale_codeset().eq_ignore_ascii_case("UTF-8") {
-            (UTF8_LEFT_QUOTE, UTF8_RIGHT_QUOTE)
-        } else {
-            (b"'", b"'")
-        };
+    let (left_quote, right_quote) = ptx_locale_quote_marks();
     let mut quoted = Vec::with_capacity(pattern.len() + left_quote.len() + right_quote.len());
-    quoted.extend_from_slice(left_quote);
+    quoted.extend_from_slice(&left_quote);
     let printable = ptx_printable_byte_mask(pattern, byte_ctype, single_byte_locale);
     let mut index = 0usize;
     while index < pattern.len() {
-        if pattern[index..].starts_with(right_quote) {
+        if pattern[index..].starts_with(&right_quote) {
             quoted.push(b'\\');
-            quoted.extend_from_slice(right_quote);
+            quoted.extend_from_slice(&right_quote);
             index += right_quote.len();
             continue;
         }
@@ -4156,7 +4227,7 @@ fn ptx_quote_pattern(
         }
         index += 1;
     }
-    quoted.extend_from_slice(right_quote);
+    quoted.extend_from_slice(&right_quote);
     quoted
 }
 
@@ -4302,7 +4373,11 @@ fn ptx_file_io_error(path: &OsStr, error: std::io::Error) -> Box<dyn CTError> {
     let _ = stderr.write_all(b": ");
     let _ = stderr.write_all(&quoted);
     let _ = stderr.write_all(b": ");
-    let _ = stderr.write_all(strip_errno(&error).as_bytes());
+    let detail = error
+        .raw_os_error()
+        .and_then(strerror_bytes)
+        .unwrap_or_else(|| strip_errno(&error).into_bytes());
+    let _ = stderr.write_all(&detail);
     let _ = stderr.write_all(b"\n");
     CtSimpleError::new(1, "")
 }
@@ -4318,13 +4393,14 @@ fn ptx_invalid_range_end_error(pattern: &[u8]) -> Box<dyn CTError> {
 fn ptx_regex_error(message: &[u8], pattern: &[u8]) -> Box<dyn CTError> {
     let byte_ctype = LocaleByteCtype::from_environment();
     let quoted = ptx_quote_pattern(pattern, &byte_ctype, ptx_is_single_byte_locale());
+    let message = ptx_translate_regex_message(message);
+    let template = ptx_gettext_bytes(c"coreutils", c"%s (for regexp %s)");
+    let diagnostic = ptx_format_gettext(&template, &[&message, &quoted]);
     let mut stderr = std::io::stderr().lock();
     let _ = stderr.write_all(ctcore::ct_util_name().as_bytes());
     let _ = stderr.write_all(b": ");
-    let _ = stderr.write_all(message);
-    let _ = stderr.write_all(b" (for regexp ");
-    let _ = stderr.write_all(&quoted);
-    let _ = stderr.write_all(b")\n");
+    let _ = stderr.write_all(&diagnostic);
+    let _ = stderr.write_all(b"\n");
     CtSimpleError::new(1, "")
 }
 
@@ -4371,8 +4447,7 @@ fn ptx_semantic_rows_for_settings(settings: &PtxSettings) -> Vec<PtxSemanticRow>
 }
 
 pub fn ptx_native_semantic_rows_only(args: impl ctcore::Args) -> CTResult<PtxSemantic> {
-    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
-    rust_i18n::set_locale(&lang_code);
+    ptx_init_locale();
 
     let argv: Vec<OsString> = args.collect();
     let matches = match ct_app().try_get_matches_from(argv) {

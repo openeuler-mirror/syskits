@@ -941,8 +941,7 @@ fn df_block_size_option(args: &[OsString]) -> DfBlockSizeOption {
             break;
         }
 
-        if argument.starts_with("--") {
-            let option = &argument[2..];
+        if let Some(option) = argument.strip_prefix("--") {
             if option.starts_with("block") {
                 block_size_option = DfBlockSizeOption::Long;
                 if !option.contains('=') {

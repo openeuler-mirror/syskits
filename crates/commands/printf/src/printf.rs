@@ -802,7 +802,11 @@ mod tests {
 
             let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
 
-            assert_eq!(semantic.classic_text, "0x1.8p+0|0x2p+0|0x2.0p+0|0x2.p+0");
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            let expected = "0xcp-3|0xcp-3|0xf.cp-3|0xc.p-3";
+            #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+            let expected = "0x1.8p+0|0x2p+0|0x2.0p+0|0x2.p+0";
+            assert_eq!(semantic.classic_text, expected);
             assert_eq!(semantic.stderr_text, "");
             assert_eq!(semantic.exit_code, 0);
         }
@@ -813,7 +817,11 @@ mod tests {
 
             let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
 
-            assert_eq!(semantic.classic_text, "-0x1.8p+0|-0X0P+0");
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            let expected = "-0xcp-3|-0X0P+0";
+            #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+            let expected = "-0x1.8p+0|-0X0P+0";
+            assert_eq!(semantic.classic_text, expected);
             assert_eq!(semantic.stderr_text, "");
             assert_eq!(semantic.exit_code, 0);
         }
@@ -824,7 +832,11 @@ mod tests {
 
             let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
 
-            assert_eq!(semantic.classic_text, "0x1p+16|0X1P-16");
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            let expected = "0x8p+13|0X8P-19";
+            #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+            let expected = "0x1p+16|0X1P-16";
+            assert_eq!(semantic.classic_text, expected);
             assert_eq!(semantic.stderr_text, "");
             assert_eq!(semantic.exit_code, 0);
         }
@@ -841,10 +853,11 @@ mod tests {
 
             let semantic = printf_native_semantic(args.iter().map(OsString::from)).unwrap();
 
-            assert_eq!(
-                semantic.classic_text,
-                "0x1p-1074|0x1.000p-1074|0x1.ffffffffffffep-1023"
-            );
+            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+            let expected = "0x8p-1077|0x8.000p-1077|0xf.ffffffffffffp-1026";
+            #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+            let expected = "0x1p-1074|0x1.000p-1074|0x1.ffffffffffffep-1023";
+            assert_eq!(semantic.classic_text, expected);
             assert_eq!(semantic.stderr_text, "");
             assert_eq!(semantic.exit_code, 0);
         }

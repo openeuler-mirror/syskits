@@ -1343,8 +1343,7 @@ fn reject_incompatible_options(
         if arg == "--" {
             break;
         }
-        if arg.starts_with("--") {
-            let long = &arg[2..];
+        if let Some(long) = arg.strip_prefix("--") {
             let (name, value) = long
                 .split_once('=')
                 .map_or((long, None), |(name, value)| (name, Some(value)));

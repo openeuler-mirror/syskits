@@ -314,10 +314,7 @@ fn echo_parse_args(args_vec: &[String], posix_mode: bool) -> (bool, bool, Vec<St
 }
 
 #[cfg(unix)]
-fn echo_parse_args_bytes<'a>(
-    args: &'a [OsString],
-    posix_mode: bool,
-) -> (bool, bool, Vec<&'a [u8]>) {
+fn echo_parse_args_bytes(args: &[OsString], posix_mode: bool) -> (bool, bool, Vec<&[u8]>) {
     let mut no_newline = false;
     let mut escaped = false;
     let mut values = Vec::new();
@@ -590,13 +587,8 @@ fn echo_uses_zh_cn_locale() -> bool {
 fn echo_environment_locale_is_supported() -> bool {
     #[cfg(target_os = "linux")]
     {
-        let locale = unsafe {
-            libc::newlocale(
-                libc::LC_ALL_MASK,
-                b"\0".as_ptr().cast::<libc::c_char>(),
-                std::ptr::null_mut(),
-            )
-        };
+        let locale =
+            unsafe { libc::newlocale(libc::LC_ALL_MASK, c"".as_ptr(), std::ptr::null_mut()) };
         if locale.is_null() {
             return false;
         }
@@ -610,7 +602,7 @@ fn echo_environment_locale_is_supported() -> bool {
 
 fn echo_environment_locale(names: &[&str]) -> Option<String> {
     names
-        .into_iter()
+        .iter()
         .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
 }
 
@@ -663,8 +655,7 @@ fn echo_localized_text_bytes(text: &str) -> Vec<u8> {
 #[cfg(target_os = "linux")]
 fn echo_transcode_utf8(input: &[u8], codeset: &str) -> Option<Vec<u8>> {
     let codeset = CString::new(codeset).ok()?;
-    let descriptor =
-        unsafe { libc::iconv_open(codeset.as_ptr(), b"UTF-8\0".as_ptr().cast::<libc::c_char>()) };
+    let descriptor = unsafe { libc::iconv_open(codeset.as_ptr(), c"UTF-8".as_ptr()) };
     if descriptor == (-1_isize) as libc::iconv_t {
         return None;
     }
@@ -748,6 +739,10 @@ fn echo_print_help_or_version(help: bool, usage_name: &OsStr) -> io::Result<()> 
 
 #[cfg(unix)]
 pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
+    // Keep libc diagnostics in sync with the environment-selected locale.
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+    }
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
 
@@ -773,7 +768,7 @@ pub fn echo_main(args: impl ctcore::Args) -> CTResult<()> {
         );
     }
 
-    let (no_newline, escaped, values) = echo_parse_args_bytes(&args_vec, posix_mode);
+    let (no_newline, escaped, values) = echo_parse_args_bytes(args_vec, posix_mode);
 
     echo_write_result(echo_execute_bytes(no_newline, escaped, &values), usage_name)
 }
@@ -934,7 +929,22 @@ fn echo_report_write_error(usage_name: &OsStr, error: &io::Error) {
     diagnostic.extend_from_slice(b": ");
     diagnostic.extend_from_slice(&echo_localized_text_bytes(write_error));
     diagnostic.extend_from_slice(b": ");
-    diagnostic.extend_from_slice(strip_errno(error).as_bytes());
+    let mut detail = error
+        .raw_os_error()
+        .and_then(ctcore::ct_error::strerror_bytes)
+        .unwrap_or_else(|| strip_errno(error).into_bytes());
+    if echo_ctype_codeset().as_deref().is_some_and(|codeset| {
+        codeset
+            .chars()
+            .filter(|character| *character != '-' && *character != '_')
+            .collect::<String>()
+            .eq_ignore_ascii_case("ASCII//TRANSLIT")
+    }) {
+        if let Some(transcoded) = echo_transcode_utf8(&detail, "ASCII//TRANSLIT") {
+            detail = transcoded;
+        }
+    }
+    diagnostic.extend_from_slice(&detail);
     diagnostic.push(b'\n');
 
     let stderr = io::stderr();

@@ -28,12 +28,7 @@ fn run_false(binary: &str, locale: &str, language: Option<&str>, argument: &str)
 
 fn assert_matches_gnu(locale: &str, language: Option<&str>, argument: &str) {
     let gnu = run_false("/usr/bin/false", locale, language, argument);
-    let syskits = run_false(
-        env!("CARGO_BIN_EXE_false"),
-        locale,
-        language,
-        argument,
-    );
+    let syskits = run_false(env!("CARGO_BIN_EXE_false"), locale, language, argument);
 
     assert_eq!(syskits.status.code(), gnu.status.code());
     assert_eq!(syskits.stdout, gnu.stdout);

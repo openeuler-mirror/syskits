@@ -866,6 +866,15 @@ fn stty_print_control_chars<W: Write>(
     opts: &SttyFlags,
     writer: &mut W,
 ) -> CTResult<()> {
+    stty_print_control_chars_at_width(termios, opts, writer, output_width(opts))
+}
+
+fn stty_print_control_chars_at_width<W: Write>(
+    termios: &Termios,
+    opts: &SttyFlags,
+    writer: &mut W,
+    width: usize,
+) -> CTResult<()> {
     let mut items = Vec::with_capacity(CONTROL_CHARS.len() + 2);
     for (text, cc_index) in CONTROL_CHARS {
         let value = termios.control_chars[*cc_index as usize];
@@ -880,7 +889,7 @@ fn stty_print_control_chars<W: Write>(
         items.push(format!("min = {min}; time = {time};"));
     }
 
-    write_wrapped_items(writer, items, " ", output_width(opts))
+    write_wrapped_items(writer, items, " ", width)
 }
 
 /// 将termios结构体的配置信息以特定格式打印出来
@@ -997,14 +1006,15 @@ fn stty_print_flags<T: TermiosFlag, W: Write>(
 }
 
 fn output_width(opts: &SttyFlags) -> usize {
+    let columns = std::env::var("COLUMNS").ok();
+    output_width_with_columns(opts, columns.as_deref())
+}
+
+fn output_width_with_columns(opts: &SttyFlags, columns: Option<&str>) -> usize {
     opts.stdout_is_terminal
         .then(terminal_width_stdout)
         .flatten()
-        .or_else(|| {
-            std::env::var("COLUMNS")
-                .ok()
-                .and_then(|value| parse_columns_width(&value))
-        })
+        .or_else(|| columns.and_then(parse_columns_width))
         .unwrap_or(80)
 }
 
@@ -2444,22 +2454,8 @@ mod tests {
                 file: Device::Stdin(stdin()),
                 settings: None,
             };
-            let old_columns = std::env::var_os("COLUMNS");
-            unsafe {
-                std::env::set_var("COLUMNS", "54");
-            }
-
             let mut out = Vec::new();
-            let result = stty_print_control_chars(&termios, &opts, &mut out);
-
-            unsafe {
-                match old_columns {
-                    Some(value) => std::env::set_var("COLUMNS", value),
-                    None => std::env::remove_var("COLUMNS"),
-                }
-            }
-
-            result.unwrap();
+            stty_print_control_chars_at_width(&termios, &opts, &mut out, 54).unwrap();
             let rendered = String::from_utf8(out).unwrap();
             assert!(
                 rendered.contains("werase = ^W; lnext = ^V; discard = ^O;\nmin = 1; time = 0;\n")
@@ -2478,24 +2474,12 @@ mod tests {
                 settings: None,
             };
 
-            let old_columns = std::env::var_os("COLUMNS");
-            unsafe {
-                std::env::set_var("COLUMNS", "200");
-            }
-
             let mut input_out = Vec::new();
             let mut output_out = Vec::new();
             let mut local_out = Vec::new();
             let input_result = stty_print_flags(&termios, &opts, INPUT_SETTINGS, &mut input_out);
             let output_result = stty_print_flags(&termios, &opts, OUTPUT_SETTINGS, &mut output_out);
             let local_result = stty_print_flags(&termios, &opts, LOCAL_SETTINGS, &mut local_out);
-
-            unsafe {
-                match old_columns {
-                    Some(value) => std::env::set_var("COLUMNS", value),
-                    None => std::env::remove_var("COLUMNS"),
-                }
-            }
 
             input_result.unwrap();
             output_result.unwrap();
@@ -2550,17 +2534,7 @@ mod tests {
                 settings: None,
             };
 
-            let old_columns = std::env::var_os("COLUMNS");
-            unsafe {
-                std::env::remove_var("COLUMNS");
-            }
-            let width = output_width(&opts);
-            unsafe {
-                match old_columns {
-                    Some(value) => std::env::set_var("COLUMNS", value),
-                    None => std::env::remove_var("COLUMNS"),
-                }
-            }
+            let width = output_width_with_columns(&opts, None);
 
             assert_eq!(width, 80);
         }
@@ -2576,17 +2550,7 @@ mod tests {
                 settings: None,
             };
 
-            let old_columns = std::env::var_os("COLUMNS");
-            unsafe {
-                std::env::set_var("COLUMNS", "120");
-            }
-            let width = output_width(&opts);
-            unsafe {
-                match old_columns {
-                    Some(value) => std::env::set_var("COLUMNS", value),
-                    None => std::env::remove_var("COLUMNS"),
-                }
-            }
+            let width = output_width_with_columns(&opts, Some("120"));
 
             assert_eq!(width, 120);
         }

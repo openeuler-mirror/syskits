@@ -25,9 +25,7 @@ fn run_with_closed_pipe(binary: &str, argument: &str, ignore_sigpipe: bool) -> O
             } else {
                 ctcore::libc::SIG_DFL
             };
-            if ctcore::libc::signal(ctcore::libc::SIGPIPE, disposition)
-                == ctcore::libc::SIG_ERR
-            {
+            if ctcore::libc::signal(ctcore::libc::SIGPIPE, disposition) == ctcore::libc::SIG_ERR {
                 return Err(std::io::Error::last_os_error());
             }
             Ok(())

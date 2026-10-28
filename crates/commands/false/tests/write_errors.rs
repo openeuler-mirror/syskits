@@ -33,14 +33,7 @@ printf '%s' "$?" >&3
 "#;
 
     Command::new("bash")
-        .args([
-            "-c",
-            SCRIPT,
-            "bash",
-            binary,
-            program_name,
-            argument,
-        ])
+        .args(["-c", SCRIPT, "bash", binary, program_name, argument])
         .stdin(Stdio::null())
         .env("LC_ALL", "C")
         .output()
@@ -58,8 +51,7 @@ fn full_stdout_write_errors_match_gnu() {
     for program_name in &program_names {
         for argument in ["--help", "--version"] {
             let gnu = run_with_full_stdout("/usr/bin/false", program_name, argument);
-            let syskits =
-                run_with_full_stdout(env!("CARGO_BIN_EXE_false"), program_name, argument);
+            let syskits = run_with_full_stdout(env!("CARGO_BIN_EXE_false"), program_name, argument);
 
             assert_eq!(syskits.status.code(), gnu.status.code());
             assert_eq!(syskits.stdout, gnu.stdout);

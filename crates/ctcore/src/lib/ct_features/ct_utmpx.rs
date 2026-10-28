@@ -163,7 +163,7 @@ impl CtUtmpx {
     }
     /// Return the login timestamp in epoch seconds.
     pub fn timestamp_seconds(&self) -> i64 {
-        self.inner.ut_tv.tv_sec
+        self.inner.ut_tv.tv_sec as i64
     }
     /// A.K.A. ut.ut_tv
     pub fn login_time(&self) -> time::OffsetDateTime {

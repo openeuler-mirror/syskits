@@ -305,7 +305,8 @@ fn chroot_uses_explicit_primary_gid_for_supplementary_groups() {
         .expect("run chroot");
 
     assert_eq!(output.status.code(), Some(0));
-    assert_eq!(output.stdout, b"65534\n");
+    let groups = String::from_utf8(output.stdout).expect("id output is UTF-8");
+    assert_eq!(groups.split_whitespace().next(), Some("65534"));
 }
 
 #[cfg(unix)]

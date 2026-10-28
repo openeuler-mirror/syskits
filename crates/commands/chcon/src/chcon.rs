@@ -88,6 +88,13 @@ pub fn chcon_main(args: impl ctcore::Args) -> CTResult<()> {
         }
     };
 
+    if opt_flags.reference_with_components {
+        return Err(CTsageError::new(
+            libc::EXIT_FAILURE,
+            "conflicting security context specifiers given",
+        ));
+    }
+
     let security_context = match &opt_flags.mode {
         ChconCommandLineMode::ReferenceBased { reference } => {
             let result = match SecurityContext::of_path(reference, true, false) {
@@ -137,13 +144,6 @@ pub fn chcon_main(args: impl ctcore::Args) -> CTResult<()> {
 
         ChconCommandLineMode::Custom { .. } => ChconSELinuxSecurityContext::String(None),
     };
-
-    if opt_flags.reference_with_components {
-        return Err(CTsageError::new(
-            libc::EXIT_FAILURE,
-            "conflicting security context specifiers given",
-        ));
-    }
 
     let root_device_info = if opt_flags.preserve_root && opt_flags.recursive_mode.is_recursive() {
         match chcon_get_root_dev_ino() {
@@ -801,7 +801,7 @@ fn chcon_quote_context(context: &CStr) -> String {
     {
         use std::os::unix::ffi::OsStrExt;
 
-        return chcon_quote_operand(OsStr::from_bytes(context.to_bytes()));
+        chcon_quote_operand(OsStr::from_bytes(context.to_bytes()))
     }
 
     #[cfg(not(unix))]

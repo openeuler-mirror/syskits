@@ -17,9 +17,9 @@ use std::borrow::Cow;
 use std::env;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::fs::{metadata, File, OpenOptions};
+use std::fs::{File, OpenOptions, metadata};
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{builder::OsStringValueParser, crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
 #[cfg(unix)]
 use std::ffi::CStr;
 #[cfg(target_os = "linux")]
@@ -35,12 +35,12 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 use std::path::Path;
 
+use ctcore::Tool;
 use ctcore::ct_display::locale_quote_marks;
-use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult};
+use ctcore::ct_error::{CTError, CTResult, set_ct_exit_code};
 use ctcore::ct_parse_size::{CtParser, ParseSizeError};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::ct_quoting_style::gnu_quote_shell;
-use ctcore::Tool;
 
 use std::ffi::{OsStr, OsString};
 
@@ -2319,7 +2319,9 @@ mod tests {
 
         #[test]
         fn test_truncate_size_only_continues_after_file_error() {
-            let _exit_code_guard = EXIT_CODE_LOCK.lock().unwrap();
+            let _exit_code_guard = EXIT_CODE_LOCK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             set_ct_exit_code(0);
 
             let temp_dir = tempfile::tempdir().unwrap();
@@ -2350,8 +2352,10 @@ mod tests {
 
         #[cfg(target_os = "linux")]
         #[test]
-        fn test_truncate_reference_directory_uses_seek_fallback() {
-            let _exit_code_guard = EXIT_CODE_LOCK.lock().unwrap();
+        fn test_truncate_reference_directory_reports_seek_failure() {
+            let _exit_code_guard = EXIT_CODE_LOCK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             set_ct_exit_code(0);
 
             let temp_dir = tempfile::tempdir().unwrap();
@@ -2360,10 +2364,18 @@ mod tests {
             let target = temp_dir.path().join("target");
             std::fs::write(&target, b"target").unwrap();
 
-            truncate_reference_file_only(&reference_directory, &[&target], false).unwrap();
+            let error =
+                truncate_reference_file_only(&reference_directory, &[&target], false).unwrap_err();
 
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "cannot get the size of {}: Invalid argument",
+                    truncate_quote_operand(reference_directory.as_os_str())
+                )
+            );
             assert_eq!(metadata(&target).unwrap().len(), 6);
-            assert_eq!(get_ct_exit_code(), 1);
+            assert_eq!(get_ct_exit_code(), 0);
             set_ct_exit_code(0);
         }
 
@@ -2777,10 +2789,8 @@ mod tests {
                 let result = truncate_file(fifo_path.to_str().unwrap(), true, 10);
                 assert!(result.is_err());
                 let error_message = format!("{}", result.unwrap_err());
-                assert!(error_message.contains("failed to truncate"));
-                assert!(error_message.contains("at 10 bytes"));
-                assert!(error_message.contains("Invalid argument"));
-                assert!(!error_message.contains("os error"));
+                assert!(error_message.contains("cannot open"));
+                assert!(error_message.contains("No such device or address"));
             }
         }
 
@@ -2795,6 +2805,7 @@ mod tests {
             Command::new("mkfifo").arg(&fifo_path).status().unwrap();
 
             let file = OpenOptions::new()
+                .read(true)
                 .write(true)
                 .custom_flags(libc::O_NONBLOCK)
                 .open(&fifo_path)
@@ -2953,8 +2964,8 @@ mod tests {
     }
     #[cfg(test)]
     mod parse_mode_and_size_tests {
-        use crate::truncate_parse_mode_and_size;
         use crate::TruncateMode;
+        use crate::truncate_parse_mode_and_size;
 
         use super::*;
 

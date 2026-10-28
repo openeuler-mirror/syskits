@@ -52,12 +52,13 @@ fn run_cut_os_in_locale_with_posixly_correct<S: AsRef<std::ffi::OsStr>>(
         .spawn()
         .expect("spawn cut");
 
-    child
-        .stdin
-        .take()
-        .expect("cut stdin")
-        .write_all(input)
-        .expect("write cut stdin");
+    if let Err(error) = child.stdin.take().expect("cut stdin").write_all(input) {
+        assert_eq!(
+            error.kind(),
+            std::io::ErrorKind::BrokenPipe,
+            "write cut stdin: {error}"
+        );
+    }
     child.wait_with_output().expect("wait for cut")
 }
 

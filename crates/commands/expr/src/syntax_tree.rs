@@ -200,7 +200,7 @@ impl SyntaxTreeStringOp {
                 let right = right.eval()?.eval_as_bytes();
                 let normalized = normalize_bre_bytes(&right)?;
                 let encoding = expr_regex_encoding();
-                let mut syntax = Syntax::posix_basic().clone();
+                let mut syntax = *Syntax::posix_basic();
                 // onig exposes these Oniguruma syntax and behavior bits but its bitflags 1.x
                 // wrapper does not declare them. The values come directly from that same library.
                 let gnu_bre_extensions = unsafe {
@@ -795,7 +795,7 @@ fn logical_substr_bytes(s: &[u8], pos: usize, len: usize) -> Vec<u8> {
 fn logical_char_ranges(bytes: &[u8]) -> Vec<(usize, usize)> {
     #[cfg(target_os = "linux")]
     {
-        return logical_char_ranges_in_locale(bytes).unwrap_or_else(|| byte_ranges(bytes));
+        logical_char_ranges_in_locale(bytes).unwrap_or_else(|| byte_ranges(bytes))
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -884,13 +884,7 @@ fn expr_regex_input_is_valid(bytes: &[u8]) -> bool {
 
 #[cfg(target_os = "linux")]
 fn expr_locale_environment_is_supported() -> bool {
-    let locale = unsafe {
-        libc::newlocale(
-            libc::LC_ALL_MASK,
-            b"\0".as_ptr().cast::<libc::c_char>(),
-            std::ptr::null_mut(),
-        )
-    };
+    let locale = unsafe { libc::newlocale(libc::LC_ALL_MASK, c"".as_ptr(), std::ptr::null_mut()) };
     if locale.is_null() {
         return false;
     }
@@ -903,13 +897,7 @@ fn expr_locale_environment_is_supported() -> bool {
 #[cfg(target_os = "linux")]
 fn logical_char_ranges_in_locale(bytes: &[u8]) -> Option<Vec<(usize, usize)>> {
     // Match GNU's setlocale(LC_ALL, "") without changing the process locale.
-    let locale = unsafe {
-        libc::newlocale(
-            libc::LC_ALL_MASK,
-            b"\0".as_ptr().cast::<libc::c_char>(),
-            std::ptr::null_mut(),
-        )
-    };
+    let locale = unsafe { libc::newlocale(libc::LC_ALL_MASK, c"".as_ptr(), std::ptr::null_mut()) };
     if locale.is_null() {
         return None;
     }
@@ -932,13 +920,7 @@ fn logical_char_ranges_in_locale(bytes: &[u8]) -> Option<Vec<(usize, usize)>> {
 
 #[cfg(target_os = "linux")]
 fn bytes_are_valid_in_locale(bytes: &[u8]) -> Option<bool> {
-    let locale = unsafe {
-        libc::newlocale(
-            libc::LC_ALL_MASK,
-            b"\0".as_ptr().cast::<libc::c_char>(),
-            std::ptr::null_mut(),
-        )
-    };
+    let locale = unsafe { libc::newlocale(libc::LC_ALL_MASK, c"".as_ptr(), std::ptr::null_mut()) };
     if locale.is_null() {
         return None;
     }

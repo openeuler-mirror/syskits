@@ -2505,10 +2505,16 @@ fn parse_gnu_numeric_timezone(
         parse_datetime_gnu_compat_impl(wall_time_input, reference_time, normalized_extended_year)
             .ok()?
     };
-    let utc_naive = wall_time
-        .naive_local()
-        .checked_sub_signed(Duration::minutes(offset_minutes))?;
-    Some(DateTime::<Utc>::from_naive_utc_and_offset(utc_naive, Utc).with_timezone(&Local))
+    let timestamp = if gnu_input_has_explicit_named_timezone(wall_time_input) {
+        wall_time.timestamp()
+    } else {
+        DateTime::<Utc>::from_naive_utc_and_offset(wall_time.naive_local(), Utc).timestamp()
+    };
+    DateTime::<Utc>::from_timestamp(
+        timestamp.checked_sub(offset_minutes * 60)?,
+        wall_time.timestamp_subsec_nanos(),
+    )
+    .map(|datetime| datetime.with_timezone(&Local))
 }
 
 /// GNU accepts a numeric UTC offset only as part of an explicit time item.
@@ -2697,10 +2703,28 @@ fn parse_gnu_military_timezone(
     let Some(offset_hours) = offset_hours else {
         return Some(wall_time);
     };
-    let utc_naive = wall_time
-        .naive_local()
-        .checked_sub_signed(Duration::hours(i64::from(offset_hours)))?;
-    Some(DateTime::<Utc>::from_naive_utc_and_offset(utc_naive, Utc).with_timezone(&Local))
+    let timestamp = if wall_time_input
+        .split_ascii_whitespace()
+        .any(|field| matches!(field, "day" | "days" | "ago" | "tomorrow" | "yesterday"))
+    {
+        wall_time.timestamp()
+    } else {
+        DateTime::<Utc>::from_naive_utc_and_offset(wall_time.naive_local(), Utc).timestamp()
+    };
+    DateTime::<Utc>::from_timestamp(
+        timestamp.checked_sub(i64::from(offset_hours) * 3600)?,
+        wall_time.timestamp_subsec_nanos(),
+    )
+    .map(|datetime| datetime.with_timezone(&Local))
+}
+
+fn gnu_input_has_explicit_named_timezone(input: &str) -> bool {
+    input.split_ascii_whitespace().any(|field| {
+        GNU_NAMED_TIMEZONES
+            .iter()
+            .any(|(name, _)| field.eq_ignore_ascii_case(name))
+            || field.ends_with(['Z', 'z'])
+    })
 }
 
 /// GNU accepts at most one timezone item in a date string.
@@ -5264,15 +5288,19 @@ mod tests {
     fn test_weekday_is_ignored_for_explicit_word_month_dates() {
         let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
 
+        for input in ["Friday, 29 February 2024", "Fri, 29 Feb 2024"] {
+            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            assert_eq!(
+                parsed.naive_local(),
+                NaiveDate::from_ymd_opt(2024, 2, 29)
+                    .unwrap()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap(),
+                "input {input}"
+            );
+        }
+
         for (input, expected) in [
-            (
-                "Friday, 29 February 2024",
-                Utc.with_ymd_and_hms(2024, 2, 29, 0, 0, 0).unwrap(),
-            ),
-            (
-                "Fri, 29 Feb 2024",
-                Utc.with_ymd_and_hms(2024, 2, 29, 0, 0, 0).unwrap(),
-            ),
             (
                 "Thu, 29 Feb 2024 12:34:56 UTC",
                 Utc.with_ymd_and_hms(2024, 2, 29, 12, 34, 56).unwrap(),
@@ -5502,7 +5530,7 @@ mod tests {
 
         let parsed = parse_datetime_gnu_compat("00001-01-01", ref_time).unwrap();
         assert_eq!(
-            parsed.with_timezone(&Utc).date_naive(),
+            parsed.date_naive(),
             NaiveDate::from_ymd_opt(1, 1, 1).unwrap()
         );
 
@@ -5539,7 +5567,9 @@ mod tests {
             "2024-01-01 12:34 UTC (comment)",
             "2024-01-01 ((nested) comment) 12:34 UTC",
         ] {
-            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            let parsed = parse_datetime_gnu_compat(input, ref_time)
+                .unwrap()
+                .with_timezone(&Utc);
             assert_eq!(parsed.timestamp(), 1_704_112_440, "input {input}");
         }
     }
@@ -5590,7 +5620,9 @@ mod tests {
             ("12pm 2024-02-29 UTC", 12, 0, 0, 0),
             ("2024-02-29 1:2 p.m. UTC", 13, 2, 0, 0),
         ] {
-            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            let parsed = parse_datetime_gnu_compat(input, ref_time)
+                .unwrap()
+                .with_timezone(&Utc);
             assert_eq!(
                 parsed.date_naive(),
                 NaiveDate::from_ymd_opt(2024, 2, 29).unwrap()
@@ -5615,7 +5647,9 @@ mod tests {
             ("2024-02-29T12:34Z", 12, 34),
             ("2024-02-29 12:34z", 12, 34),
         ] {
-            let parsed = parse_datetime_gnu_compat(input, ref_time).unwrap();
+            let parsed = parse_datetime_gnu_compat(input, ref_time)
+                .unwrap()
+                .with_timezone(&Utc);
             assert_eq!(
                 parsed.date_naive(),
                 NaiveDate::from_ymd_opt(2024, 2, 29).unwrap(),
@@ -5623,7 +5657,7 @@ mod tests {
             );
             assert_eq!(parsed.hour(), expected_hour, "input {input}");
             assert_eq!(parsed.minute(), expected_minute, "input {input}");
-            assert_eq!(parsed.offset().local_minus_utc(), 0, "input {input}");
+            assert_eq!(parsed.offset(), &Utc, "input {input}");
         }
     }
 
@@ -6050,11 +6084,11 @@ mod tests {
     fn test_parse_gnu_explicit_time_before_iso_date() {
         let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
 
+        let local_expected = Local.with_ymd_and_hms(2024, 2, 29, 12, 34, 0).unwrap();
+        let parsed = parse_datetime_gnu_compat("12:34 2024-02-29", ref_time).unwrap();
+        assert_eq!(parsed.timestamp(), local_expected.timestamp());
+
         for (input, expected) in [
-            (
-                "12:34 2024-02-29",
-                Utc.with_ymd_and_hms(2024, 2, 29, 12, 34, 0).unwrap(),
-            ),
             (
                 "UTC 7pm 2024-02-29",
                 Utc.with_ymd_and_hms(2024, 2, 29, 19, 0, 0).unwrap(),

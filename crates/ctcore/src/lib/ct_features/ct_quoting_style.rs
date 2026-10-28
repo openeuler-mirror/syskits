@@ -32,7 +32,7 @@ unsafe extern "C" {
 }
 
 use crate::ct_display::locale_quote_marks;
-use crate::ct_locale::{hard_locale, LcCategory};
+use crate::ct_locale::{LcCategory, hard_locale};
 
 // 这些是在shell（如bash）中有特殊含义的字符。
 // 第一个常量包含仅在名称开始处出现时才有特殊含义的字符
@@ -882,8 +882,11 @@ fn shell_without_escape_bytes(
 }
 
 #[cfg(unix)]
-fn shell_with_escape_bytes(name: &OsStr, quotes: CtQuotes) -> (Vec<u8>, bool) {
-    let mut in_dollar = false;
+fn shell_with_escape_bytes_pass(
+    name: &OsStr,
+    quotes: CtQuotes,
+    mut in_dollar: bool,
+) -> (Vec<u8>, bool, bool) {
     let mut must_quote = false;
     let mut escaped = Vec::with_capacity(name.as_bytes().len());
 
@@ -926,6 +929,21 @@ fn shell_with_escape_bytes(name: &OsStr, quotes: CtQuotes) -> (Vec<u8>, bool) {
             }
         }
     });
+
+    (escaped, must_quote, in_dollar)
+}
+
+#[cfg(unix)]
+fn shell_with_escape_bytes(name: &OsStr, quotes: CtQuotes) -> (Vec<u8>, bool) {
+    let (escaped, must_quote, in_dollar) = shell_with_escape_bytes_pass(name, quotes, false);
+    // GNU rescans names containing an apostrophe when the first pass leaves a
+    // trailing $'...' expression open.
+    let (escaped, mut must_quote) = if in_dollar && name.as_bytes().contains(&b'\'') {
+        let (escaped, must_quote, _) = shell_with_escape_bytes_pass(name, quotes, true);
+        (escaped, must_quote)
+    } else {
+        (escaped, must_quote)
+    };
 
     must_quote |= name
         .as_bytes()
@@ -1277,8 +1295,9 @@ impl fmt::Display for CtQuotes {
 #[cfg(test)]
 mod tests {
     use crate::ct_quoting_style::{
-        escape_name, escape_name_bytes, escape_shell_bytes_with_classifier, escape_unibyte_c_bytes,
-        escape_unibyte_shell_bytes, gnu_quote_shell, quote_locale_bytes, CtQuotes, CtQuotingStyle,
+        CtQuotes, CtQuotingStyle, escape_name, escape_name_bytes,
+        escape_shell_bytes_with_classifier, escape_unibyte_c_bytes, escape_unibyte_shell_bytes,
+        gnu_quote_shell, quote_locale_bytes,
     };
     use std::ffi::OsStr;
 
@@ -1843,7 +1862,9 @@ mod tests {
         });
         assert_eq!(
             mixed,
-            vec![b'\'', 0xe2, 0x80, b'\'', b'$', b'\'', b'\\', b'2', b'1', b'3', b'\'']
+            vec![
+                b'\'', 0xe2, 0x80, b'\'', b'$', b'\'', b'\\', b'2', b'1', b'3', b'\''
+            ]
         );
 
         // Printable ISO-8859-1 byte ff -> the same raw byte.

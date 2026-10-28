@@ -83,6 +83,13 @@ unsafe extern "C" {
     ) -> usize;
     #[cfg(unix)]
     unsafe fn iconv_close(descriptor: *mut libc::c_void) -> libc::c_int;
+    #[cfg(target_os = "linux")]
+    fn bindtextdomain(
+        domainname: *const libc::c_char,
+        dirname: *const libc::c_char,
+    ) -> *mut libc::c_char;
+    #[cfg(target_os = "linux")]
+    fn dgettext(domainname: *const libc::c_char, msgid: *const libc::c_char) -> *mut libc::c_char;
 }
 
 const OPERAND_NAME: &str = "OPERAND";
@@ -248,6 +255,13 @@ fn validate_standard_options(args: &[OsString]) -> CTResult<Option<TerminalActio
         }
         if let Some(short) = arg.strip_prefix('-').filter(|short| !short.is_empty()) {
             let invalid = short.chars().next().unwrap();
+            #[cfg(unix)]
+            if invalid.is_ascii() {
+                return Err(hostid_localized_option_error(
+                    args,
+                    HostidOptionError::Short(invalid as u8),
+                ));
+            }
             return Err(hostid_usage_error(
                 args,
                 format!("invalid option -- '{invalid}'"),
@@ -321,18 +335,117 @@ impl ctcore::ct_error::CTError for HostidRawOptionError {
 
 #[cfg(unix)]
 fn raw_short_option_error(args: &[OsString], invalid: u8) -> Box<dyn ctcore::ct_error::CTError> {
-    let mut message = b"invalid option -- '".to_vec();
-    message.push(invalid);
-    message.push(b'\'');
-    raw_usage_error(args, &message)
+    hostid_localized_option_error(args, HostidOptionError::Short(invalid))
 }
 
 #[cfg(unix)]
 fn raw_long_option_error(args: &[OsString], option: &[u8]) -> Box<dyn ctcore::ct_error::CTError> {
-    let mut message = b"unrecognized option '".to_vec();
-    message.extend_from_slice(option);
-    message.push(b'\'');
-    raw_usage_error(args, &message)
+    hostid_localized_option_error(args, HostidOptionError::Unrecognized(option))
+}
+
+#[cfg(unix)]
+enum HostidOptionError<'a> {
+    Short(u8),
+    Unrecognized(&'a [u8]),
+    NoArgument(&'a [u8]),
+    Ambiguous(&'a [u8]),
+}
+
+#[cfg(unix)]
+fn hostid_gettext_bytes(domain: &CStr, message: &CStr) -> Vec<u8> {
+    #[cfg(target_os = "linux")]
+    {
+        // SAFETY: both pointers are NUL-terminated and remain valid for the call.
+        let translated = unsafe { dgettext(domain.as_ptr(), message.as_ptr()) };
+        if !translated.is_null() {
+            return unsafe { CStr::from_ptr(translated) }.to_bytes().to_vec();
+        }
+    }
+    message.to_bytes().to_vec()
+}
+
+#[cfg(unix)]
+fn hostid_format_gettext(template: &[u8], substitutions: &[&[u8]]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(template.len());
+    let mut substitution = 0;
+    let mut index = 0;
+    while index < template.len() {
+        if template[index] == b'%' && index + 1 < template.len() {
+            match template[index + 1] {
+                b's' | b'c' if substitution < substitutions.len() => {
+                    output.extend_from_slice(substitutions[substitution]);
+                    substitution += 1;
+                    index += 2;
+                    continue;
+                }
+                b'%' => {
+                    output.push(b'%');
+                    index += 2;
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        output.push(template[index]);
+        index += 1;
+    }
+    output
+}
+
+#[cfg(unix)]
+fn hostid_localized_option_error(
+    args: &[OsString],
+    error: HostidOptionError<'_>,
+) -> Box<dyn ctcore::ct_error::CTError> {
+    use std::os::unix::ffi::OsStrExt;
+
+    let program_name = args
+        .first()
+        .map(|arg| arg.as_os_str().as_bytes())
+        .unwrap_or_else(|| ctcore::ct_util_name().as_bytes());
+    let diagnostic = match error {
+        HostidOptionError::Short(invalid) => hostid_format_gettext(
+            &hostid_gettext_bytes(c"libc", c"%s: invalid option -- '%c'\n"),
+            &[program_name, &[invalid]],
+        ),
+        HostidOptionError::Unrecognized(option) => {
+            let (prefix, rest) = option
+                .strip_prefix(b"--")
+                .map_or((b"".as_slice(), option), |rest| (b"--".as_slice(), rest));
+            hostid_format_gettext(
+                &hostid_gettext_bytes(c"libc", c"%s: unrecognized option '%s%s'\n"),
+                &[program_name, prefix, rest],
+            )
+        }
+        HostidOptionError::NoArgument(option) => hostid_format_gettext(
+            &hostid_gettext_bytes(c"libc", c"%s: option '%s%s' doesn't allow an argument\n"),
+            &[program_name, b"--", option],
+        ),
+        HostidOptionError::Ambiguous(option) => {
+            let (prefix, rest) = option
+                .strip_prefix(b"--")
+                .map_or((b"".as_slice(), option), |rest| (b"--".as_slice(), rest));
+            let mut diagnostic = hostid_format_gettext(
+                &hostid_gettext_bytes(c"libc", c"%s: option '%s%s' is ambiguous; possibilities:"),
+                &[program_name, prefix, rest],
+            );
+            for option in [b"--help".as_slice(), b"--version".as_slice()] {
+                diagnostic.extend_from_slice(b" '");
+                diagnostic.extend_from_slice(option);
+                diagnostic.push(b'\'');
+            }
+            diagnostic.push(b'\n');
+            diagnostic
+        }
+    };
+
+    let mut diagnostic = diagnostic;
+    let hint = hostid_format_gettext(
+        &hostid_gettext_bytes(c"coreutils", c"Try '%s --help' for more information.\n"),
+        &[program_name],
+    );
+    diagnostic.extend_from_slice(&hint);
+    Box::new(HostidRawOptionError { diagnostic })
 }
 
 #[cfg(unix)]
@@ -422,14 +535,38 @@ fn validate_long_option(arg: &str, args: &[OsString]) -> CTResult<Option<Termina
         .filter(|option| option.starts_with(name))
         .collect::<Vec<_>>();
 
+    #[cfg(unix)]
+    {
+        match matches.as_slice() {
+            [option] if has_value => Err(hostid_localized_option_error(
+                args,
+                HostidOptionError::NoArgument(option.as_bytes()),
+            )),
+            ["help"] => Ok(Some(TerminalAction::Help)),
+            ["version"] => Ok(Some(TerminalAction::Version)),
+            [] => Err(hostid_localized_option_error(
+                args,
+                HostidOptionError::Unrecognized(arg.as_bytes()),
+            )),
+            _ => Err(hostid_localized_option_error(
+                args,
+                HostidOptionError::Ambiguous(arg.as_bytes()),
+            )),
+        }
+    }
+
+    #[cfg(not(unix))]
     let message = match matches.as_slice() {
-        [option] if has_value => format!("option '--{option}' doesn't allow an argument"),
+        [option] if has_value => {
+            format!("option '--{option}' doesn't allow an argument")
+        }
         ["help"] => return Ok(Some(TerminalAction::Help)),
         ["version"] => return Ok(Some(TerminalAction::Version)),
         [] => format!("unrecognized option '{arg}'"),
         _ => format!("option '{arg}' is ambiguous; possibilities: '--help' '--version'"),
     };
 
+    #[cfg(not(unix))]
     Err(hostid_usage_error(args, message))
 }
 
@@ -707,6 +844,11 @@ fn initialize_hostid_locale() {
     #[cfg(unix)]
     unsafe {
         libc::setlocale(libc::LC_ALL, c"".as_ptr());
+        #[cfg(target_os = "linux")]
+        {
+            bindtextdomain(c"coreutils".as_ptr(), c"/usr/share/locale".as_ptr());
+            bindtextdomain(c"libc".as_ptr(), c"/usr/share/locale".as_ptr());
+        }
     }
 }
 
@@ -743,7 +885,10 @@ fn write_hostid_output(output: &str) -> CTResult<()> {
 }
 
 fn hostid_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
-    let detail = strip_errno(&error);
+    let detail = error
+        .raw_os_error()
+        .and_then(ctcore::ct_error::strerror_bytes)
+        .unwrap_or_else(|| strip_errno(&error).into_bytes());
 
     #[cfg(unix)]
     let program_name = ctcore::ct_os_args()
@@ -757,11 +902,14 @@ fn hostid_write_error(error: io::Error) -> Box<dyn ctcore::ct_error::CTError> {
             HostidMessageLanguage::TraditionalChinese => encode_hostid_message("寫入時發生錯誤: "),
             HostidMessageLanguage::Other => b"write error: ".to_vec(),
         };
-        message.extend_from_slice(detail.as_bytes());
+        message.extend_from_slice(&detail);
         return raw_diagnostic_error(&program_name, &message, false);
     }
 
-    CtSimpleError::new(1, format!("write error: {detail}"))
+    CtSimpleError::new(
+        1,
+        format!("write error: {}", String::from_utf8_lossy(&detail)),
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -178,7 +178,10 @@ impl LocaleMultibyteValidator {
             {
                 None
             } else {
-                char::from_u32(wide).map(|character| (length, character))
+                u32::try_from(wide)
+                    .ok()
+                    .and_then(char::from_u32)
+                    .map(|character| (length, character))
             }
         }
     }

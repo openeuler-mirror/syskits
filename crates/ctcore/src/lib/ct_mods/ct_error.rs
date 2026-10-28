@@ -512,6 +512,28 @@ pub fn strip_errno(err: &std::io::Error) -> String {
     }
 }
 
+/// Return the bytes produced by the C library's locale-aware `strerror`.
+///
+/// Rust's `io::Error::to_string` is UTF-8 text and therefore replaces bytes
+/// which are valid in legacy locales such as GBK. GNU diagnostics preserve
+/// those bytes, so callers that write locale-sensitive errors must use this
+/// helper instead of formatting the `io::Error` directly.
+#[cfg(unix)]
+pub fn strerror_bytes(errno: i32) -> Option<Vec<u8>> {
+    // SAFETY: strerror returns a NUL-terminated string owned by libc.
+    let message = unsafe { crate::libc::strerror(errno) };
+    (!message.is_null()).then(|| {
+        unsafe { std::ffi::CStr::from_ptr(message) }
+            .to_bytes()
+            .to_vec()
+    })
+}
+
+#[cfg(not(unix))]
+pub fn strerror_bytes(_errno: i32) -> Option<Vec<u8>> {
+    None
+}
+
 /// 启用从[std::io::Error]到[CTError]的转换，以及从[std::io::Result]到[CTResult]的转换。
 pub trait FromIo<T> {
     fn map_err_context(self, context: impl FnOnce() -> String) -> T;

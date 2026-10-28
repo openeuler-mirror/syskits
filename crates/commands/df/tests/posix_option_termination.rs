@@ -12,12 +12,21 @@ fn posix_mode_treats_options_after_a_path_as_paths() {
         .expect("run df");
 
     assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8(output.stdout).expect("df stdout is UTF-8");
     assert_eq!(
-        String::from_utf8(output.stdout)
-            .expect("df stdout is UTF-8")
+        stdout
             .lines()
-            .next(),
-        Some("Filesystem               512B-blocks     Used Available Use% Mounted on")
+            .next()
+            .map(|line| line.split_whitespace().collect::<Vec<_>>()),
+        Some(vec![
+            "Filesystem",
+            "512B-blocks",
+            "Used",
+            "Available",
+            "Use%",
+            "Mounted",
+            "on",
+        ])
     );
     assert_eq!(
         String::from_utf8(output.stderr).expect("df stderr is UTF-8"),

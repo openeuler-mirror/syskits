@@ -794,7 +794,7 @@ fn cat_quote_non_utf8_path(bytes: &[u8]) -> String {
             b'\x0d' => cat_push_escaped_byte(&mut result, &mut segment, "r"),
             b'\x20'..=b'\x7e' => cat_push_plain_byte(&mut result, &mut segment, byte),
             _ => {
-                let escaped = format!("{:03o}", byte);
+                let escaped = format!("{byte:03o}");
                 cat_push_escaped_byte(&mut result, &mut segment, &escaped);
             }
         }

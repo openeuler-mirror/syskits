@@ -84,7 +84,7 @@ fn parse_arch_args(args: &[OsString]) -> CTResult<ArchAction> {
     let usage_name = arch_usage_name(args);
     let mut iter = args.iter().skip(1);
 
-    while let Some(arg) = iter.next() {
+    if let Some(arg) = iter.next() {
         let arg = arg.to_string_lossy();
 
         if arg == "--" {

@@ -113,12 +113,13 @@ mod tests {
     #[test]
     fn semantic_to_value_renders_rows() {
         let value = semantic_to_value(&ct_users::UsersSemantic {
-            sessions: vec![ct_users::UsersSession {
-                user: "alpha".into(),
-                tty_device: "pts/1".into(),
-                host: "remote-a".into(),
-            }],
+            sessions: vec![ct_users::UsersSession::new(
+                "alpha".into(),
+                "pts/1".into(),
+                "remote-a".into(),
+            )],
             classic_text: "alpha".into(),
+            classic_bytes: b"alpha".to_vec(),
         });
 
         assert_eq!(

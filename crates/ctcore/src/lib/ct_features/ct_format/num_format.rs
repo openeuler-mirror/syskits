@@ -15,7 +15,7 @@ use std::io::Write;
 
 use super::{
     FormatError,
-    spec::{CanAsterisk, Spec},
+    spec::{CanAsterisk, Spec, group_number_thousands},
 };
 
 pub trait Formatter {
@@ -147,6 +147,7 @@ pub struct UnsignedInt {
     pub precision: Option<usize>,
     pub alignment: NumberAlignment,
     pub variant: UnsignedIntVariant,
+    pub thousand_separate: bool,
 }
 
 impl Formatter for UnsignedInt {
@@ -165,7 +166,12 @@ impl Formatter for UnsignedInt {
             }
         };
         let precision_zeros = self.precision.unwrap_or(0).saturating_sub(raw_digits.len());
-        let digits = format!("{}{raw_digits}", "0".repeat(precision_zeros));
+        let digits = if self.thousand_separate {
+            let grouped = group_number_thousands(&raw_digits);
+            format!("{}{grouped}", "0".repeat(precision_zeros))
+        } else {
+            format!("{}{raw_digits}", "0".repeat(precision_zeros))
+        };
         let prefix = match (x, self.variant) {
             (1.., UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::Yes)) => "0x",
             (1.., UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::Yes)) => "0X",
@@ -185,7 +191,7 @@ impl Formatter for UnsignedInt {
             precision,
             positive_sign: PositiveSign::None,
             alignment,
-            thousand_separate: _,
+            thousand_separate,
         } = s
         {
             Spec::UnsignedInt {
@@ -193,7 +199,7 @@ impl Formatter for UnsignedInt {
                 width,
                 precision,
                 alignment,
-                thousand_separate: false,
+                thousand_separate,
             }
         } else {
             s
@@ -204,7 +210,7 @@ impl Formatter for UnsignedInt {
             width,
             precision,
             alignment,
-            thousand_separate: _,
+            thousand_separate,
         } = s
         {
             let width = if let Some(CanAsterisk::Fixed(x)) = width {
@@ -226,6 +232,7 @@ impl Formatter for UnsignedInt {
                 precision,
                 variant,
                 alignment,
+                thousand_separate,
             })
         } else {
             Err(FormatError::WrongSpecType)
@@ -763,6 +770,7 @@ mod test {
             width: 10,
             precision: Some(2),
             alignment: NumberAlignment::Left,
+            thousand_separate: false,
         };
 
         let mut buffer = Cursor::new(Vec::new());
@@ -779,6 +787,7 @@ mod test {
             width: 8,
             precision: None,
             alignment: NumberAlignment::RightSpace,
+            thousand_separate: false,
         };
 
         let mut buffer = Cursor::new(Vec::new());
@@ -795,6 +804,7 @@ mod test {
             width: 16,
             precision: None,
             alignment: NumberAlignment::Left,
+            thousand_separate: false,
         };
 
         let mut buffer = Cursor::new(Vec::new());
@@ -811,6 +821,7 @@ mod test {
             width: 16,
             precision: None,
             alignment: NumberAlignment::RightZero,
+            thousand_separate: false,
         };
 
         let mut buffer = Cursor::new(Vec::new());
@@ -827,6 +838,7 @@ mod test {
             width: 1,
             precision: Some(0),
             alignment: NumberAlignment::RightSpace,
+            thousand_separate: false,
         };
 
         let mut buffer = Cursor::new(Vec::new());
@@ -841,6 +853,7 @@ mod test {
             width: 0,
             precision: Some(0),
             alignment: NumberAlignment::RightSpace,
+            thousand_separate: false,
         };
 
         let mut buffer = Cursor::new(Vec::new());
@@ -1732,6 +1745,7 @@ mod test {
                 width: 0,
                 precision: None,
                 alignment: NumberAlignment::Left,
+                thousand_separate: false,
             }
             .fmt(&mut s, x)
             .unwrap();

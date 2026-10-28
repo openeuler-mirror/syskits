@@ -29,7 +29,7 @@
 use std::env;
 use std::ffi::OsStr;
 #[cfg(target_os = "linux")]
-use std::ffi::{c_char, CStr};
+use std::ffi::{CStr, c_char};
 use std::io::{self, Write as IoWrite};
 
 #[cfg(unix)]

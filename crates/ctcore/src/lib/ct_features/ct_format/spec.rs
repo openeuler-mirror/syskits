@@ -450,6 +450,7 @@ impl IndexedSpec {
                         precision: p,
                         width,
                         alignment: align,
+                        thousand_separate: false,
                     }
                     .fmt(writer, i)
                     .map_err(FormatError::IoError)
@@ -466,6 +467,7 @@ impl IndexedSpec {
                         precision: suppress_zero.then_some(0),
                         width: 0,
                         alignment: NumberAlignment::Left,
+                        thousand_separate: false,
                     }
                     .fmt(&mut raw, i)
                     .map_err(FormatError::IoError)?;
@@ -580,7 +582,7 @@ fn remove_ascii_digits_for_empty_outdigits(value: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-fn group_number_thousands(number: &str) -> String {
+pub(super) fn group_number_thousands(number: &str) -> String {
     let Some((sep, grouping)) = locale_thousands_grouping() else {
         return number.to_string();
     };

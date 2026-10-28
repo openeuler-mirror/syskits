@@ -1351,12 +1351,9 @@ fn cut_ambiguous_long_option_message(args: &[OsString], command: &Command) -> Op
             }
 
             for option in short_options.chars() {
-                let Some(option) = command
+                let option = command
                     .get_arguments()
-                    .find(|argument| argument.get_short() == Some(option))
-                else {
-                    return None;
-                };
+                    .find(|argument| argument.get_short() == Some(option))?;
                 if option.get_action().takes_values() {
                     break;
                 }

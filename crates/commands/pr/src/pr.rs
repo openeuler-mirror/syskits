@@ -53,6 +53,11 @@ unsafe extern "C" {
     ) -> usize;
     fn wcwidth(wide_char: ctcore::libc::wchar_t) -> ctcore::libc::c_int;
     fn iswprint(wide_char: ctcore::libc::c_uint) -> ctcore::libc::c_int;
+    fn wcrtomb(
+        bytes: *mut ctcore::libc::c_char,
+        wide_char: ctcore::libc::wchar_t,
+        state: *mut ctcore::libc::mbstate_t,
+    ) -> usize;
 }
 
 const PR_TAB: char = '\t';
@@ -469,11 +474,33 @@ fn pr_uses_utf8_locale() -> bool {
 fn pr_decode_input_bytes(bytes: &[u8]) -> String {
     if !pr_uses_utf8_locale() {
         let mut text = String::with_capacity(bytes.len());
-        for &byte in bytes {
-            if byte.is_ascii() {
-                text.push(char::from(byte));
+        let mut state: ctcore::libc::mbstate_t = unsafe { std::mem::zeroed() };
+        let mut index = 0usize;
+        while index < bytes.len() {
+            let mut wide_char = 0;
+            let converted = unsafe {
+                mbrtowc(
+                    &mut wide_char,
+                    bytes[index..].as_ptr().cast::<ctcore::libc::c_char>(),
+                    bytes.len() - index,
+                    &mut state,
+                )
+            };
+            if converted == usize::MAX || converted == usize::MAX - 1 {
+                text.push(pr_raw_byte_char(bytes[index]));
+                state = unsafe { std::mem::zeroed() };
+                index += 1;
+            } else if converted == 0 {
+                text.push('\0');
+                index += 1;
+            } else if let Some(c) = char::from_u32(wide_char as u32) {
+                text.push(c);
+                index += converted;
             } else {
-                text.push(pr_raw_byte_char(byte));
+                for &byte in &bytes[index..index + converted] {
+                    text.push(pr_raw_byte_char(byte));
+                }
+                index += converted;
             }
         }
         return text;
@@ -610,9 +637,25 @@ fn pr_quote_option_value(value: &str) -> String {
 
 fn pr_rendered_text_to_bytes(text: &str) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(text.len());
+    let mut state: ctcore::libc::mbstate_t = unsafe { std::mem::zeroed() };
     for c in text.chars() {
         if let Some(byte) = pr_raw_byte_from_char(c) {
             bytes.push(byte);
+        } else if !pr_uses_utf8_locale() {
+            let mut encoded = [0u8; 16];
+            let count = unsafe {
+                wcrtomb(
+                    encoded.as_mut_ptr().cast::<ctcore::libc::c_char>(),
+                    c as ctcore::libc::wchar_t,
+                    &mut state,
+                )
+            };
+            if count == usize::MAX {
+                bytes.extend_from_slice(c.to_string().as_bytes());
+                state = unsafe { std::mem::zeroed() };
+            } else {
+                bytes.extend_from_slice(&encoded[..count]);
+            }
         } else {
             let mut buf = [0u8; 4];
             bytes.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
@@ -622,7 +665,7 @@ fn pr_rendered_text_to_bytes(text: &str) -> Vec<u8> {
 }
 
 fn pr_write_rendered_text(out: &mut impl Write, text: &str) -> Result<(), std::io::Error> {
-    if pr_contains_raw_bytes(text) {
+    if pr_contains_raw_bytes(text) || !pr_uses_utf8_locale() {
         out.write_all(&pr_rendered_text_to_bytes(text))
     } else {
         out.write_all(text.as_bytes())

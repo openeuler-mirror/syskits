@@ -3766,6 +3766,13 @@ fn name_needs_quoting(name: &OsStr, config: &LsConfig) -> bool {
     ) != name.as_bytes()
 }
 
+fn needs_outer_quote_alignment(config: &LsConfig) -> bool {
+    matches!(
+        config.quoting_style,
+        CtQuotingStyle::Shell { .. } | CtQuotingStyle::CMaybe
+    )
+}
+
 pub fn display_name_width(name: &OsStr, config: &LsConfig) -> usize {
     let escaped = escape_name_bytes_with_chars(
         name,
@@ -4266,7 +4273,7 @@ fn display_grid_by_format_other_type<W: Write>(
                 Direction::TopToBottom,
                 config.line_ending,
                 out,
-                quoted,
+                quoted && needs_outer_quote_alignment(config),
                 config.color.is_some(),
             )?;
         }
@@ -4278,7 +4285,7 @@ fn display_grid_by_format_other_type<W: Write>(
                 Direction::LeftToRight,
                 config.line_ending,
                 out,
-                quoted,
+                quoted && needs_outer_quote_alignment(config),
                 config.color.is_some(),
             )?;
         }
@@ -7292,6 +7299,25 @@ mod tests {
         .unwrap();
 
         assert_eq!(String::from_utf8(output).unwrap(), "'['\n long\n x\n y\n");
+    }
+
+    #[test]
+    fn escape_style_does_not_request_outer_quote_alignment() {
+        let escape_matches = ct_app()
+            .try_get_matches_from([
+                ctcore::ct_util_name(),
+                "-C",
+                "--quoting-style=escape",
+            ])
+            .unwrap();
+        let escape_config = LsConfig::from(&escape_matches).expect("escape configuration");
+        assert!(!needs_outer_quote_alignment(&escape_config));
+
+        let shell_matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-C", "--quoting-style=shell"])
+            .unwrap();
+        let shell_config = LsConfig::from(&shell_matches).expect("shell configuration");
+        assert!(needs_outer_quote_alignment(&shell_config));
     }
 
     #[test]

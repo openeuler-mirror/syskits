@@ -16,6 +16,7 @@ use std::path::Path;
 
 use quick_error::ResultExt;
 
+use ctcore::ct_display::Quotable;
 use ctcore::ct_mode::get_umask;
 
 use crate::{
@@ -588,7 +589,12 @@ pub(crate) fn copy_on_write(
             copy_debug.sparse_detection = CpSparseDebug::No;
             copy_debug.reflink = CpOffloadReflinkDebug::Yes;
 
-            clone(source, dest, CloneFallback::Error).map(|_| ())
+            clone(source, dest, CloneFallback::Error).context(format!(
+                "failed to clone {} from {}",
+                dest.quote(),
+                source.quote()
+            ))?;
+            return Ok(copy_debug);
         }
         (CpReflinkMode::Always, _) => {
             return Err("`--reflink=always` can be used only with --sparse=auto".into());

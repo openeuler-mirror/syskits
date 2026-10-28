@@ -6753,6 +6753,29 @@ mod tests {
     }
 
     #[test]
+    fn delayed_long_format_recomputes_ctime_sort() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-c", "."])
+            .unwrap();
+        let mut config = LsConfig::from(&matches).expect("initial configuration");
+        assert_eq!(config.sort, LsSort::Time);
+
+        config
+            .set_long_format(&matches)
+            .expect("long configuration");
+        assert_eq!(config.sort, LsSort::Name);
+
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-c", "-t", "."])
+            .unwrap();
+        let mut config = LsConfig::from(&matches).expect("explicit time sort configuration");
+        config
+            .set_long_format(&matches)
+            .expect("long configuration");
+        assert_eq!(config.sort, LsSort::Time);
+    }
+
+    #[test]
     fn invalid_time_style_fails_with_long_format() {
         let matches = ct_app()
             .try_get_matches_from([ctcore::ct_util_name(), "-l", "--time-style", "."])

@@ -4372,7 +4372,7 @@ fn display_grid_by_format_long_type<W: Write>(
             out,
             dired,
             style_manager,
-            quoted,
+            quoted && needs_outer_quote_alignment(config),
             any_has_acl_or_context,
         )?;
     }
@@ -7337,6 +7337,13 @@ mod tests {
             .unwrap();
         let escape_config = LsConfig::from(&escape_matches).expect("escape configuration");
         assert!(!needs_outer_quote_alignment(&escape_config));
+
+        let long_escape_matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "-l", "-b"])
+            .unwrap();
+        let long_escape_config =
+            LsConfig::from(&long_escape_matches).expect("long escape configuration");
+        assert!(!needs_outer_quote_alignment(&long_escape_config));
 
         let shell_matches = ct_app()
             .try_get_matches_from([ctcore::ct_util_name(), "-C", "--quoting-style=shell"])

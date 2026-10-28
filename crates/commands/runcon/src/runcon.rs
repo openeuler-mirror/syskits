@@ -33,7 +33,7 @@ extern crate rust_i18n;
 use clap::builder::ValueParser;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use ctcore::ct_error::{CTResult, CTsageError, UClapError};
+use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, UClapError};
 
 use clap::{Arg, ArgAction, Command, crate_version};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
@@ -79,7 +79,14 @@ pub fn runcon_main(args: impl ctcore::Args) -> CTResult<()> {
     // 解析命令行参数
     let settings = RunconSettings::new(config, args).map_err(|r| match r {
         DefaultError::CommandLine(r) => r.with_exit_code(125).into(),
-        DefaultError::MissingCommand => CTsageError::new(125, "No command is specified"),
+        DefaultError::MissingCommand => CTsageError::new(125, "no command specified"),
+        DefaultError::ParserDiagnostic { message, usage } => {
+            if usage {
+                CTsageError::new(125, message)
+            } else {
+                CtSimpleError::new(125, message)
+            }
+        }
         r => CTsageError::new(error_exit_status::RUNCON_CANCELED, format!("{r}")),
     })?;
 
@@ -193,6 +200,104 @@ pub fn ct_app() -> Command {
         .trailing_var_arg(true)
 }
 
+fn parser_diagnostic(args: &[OsString]) -> Option<DefaultError> {
+    let mut counts = [0usize; 4];
+    let mut index = 1;
+    while index < args.len() {
+        let value = args[index].as_bytes();
+        if value == b"--" || value == b"-" || !value.starts_with(b"-") {
+            break;
+        }
+
+        if value.starts_with(b"--compute=") {
+            return Some(DefaultError::parser_diagnostic(
+                "option '--compute' doesn't allow an argument",
+                true,
+            ));
+        }
+
+        let mut option_index = None;
+        let mut takes_value = false;
+        let mut recognized = true;
+        match value {
+            b"-u" | b"--user" => {
+                option_index = Some(0);
+                takes_value = true;
+            }
+            b"-r" | b"--role" => {
+                option_index = Some(1);
+                takes_value = true;
+            }
+            b"-t" | b"--type" => {
+                option_index = Some(2);
+                takes_value = true;
+            }
+            b"-l" | b"--range" => {
+                option_index = Some(3);
+                takes_value = true;
+            }
+            b"-c" | b"--compute" | b"-h" | b"--help" | b"-V" | b"--version" => {}
+            _ if value.starts_with(b"--user=") => {
+                option_index = Some(0);
+            }
+            _ if value.starts_with(b"--role=") => {
+                option_index = Some(1);
+            }
+            _ if value.starts_with(b"--type=") => {
+                option_index = Some(2);
+            }
+            _ if value.starts_with(b"--range=") => {
+                option_index = Some(3);
+            }
+            _ if value.len() > 2 && value[1] == b'u' => {
+                option_index = Some(0);
+            }
+            _ if value.len() > 2 && value[1] == b'r' => {
+                option_index = Some(1);
+            }
+            _ if value.len() > 2 && value[1] == b't' => {
+                option_index = Some(2);
+            }
+            _ if value.len() > 2 && value[1] == b'l' => {
+                option_index = Some(3);
+            }
+            _ if value.len() > 1 && value[1..].iter().all(|byte| *byte == b'c') => {}
+            _ => recognized = false,
+        }
+
+        if !recognized {
+            let option = String::from_utf8_lossy(value);
+            return Some(DefaultError::parser_diagnostic(
+                format!("unrecognized option '{option}'"),
+                true,
+            ));
+        }
+
+        if let Some(option_index) = option_index {
+            counts[option_index] += 1;
+            if counts[option_index] > 1 {
+                let name = ["users", "roles", "types", "levelranges"][option_index];
+                return Some(DefaultError::parser_diagnostic(
+                    format!("multiple {name}"),
+                    false,
+                ));
+            }
+            if takes_value {
+                if index + 1 >= args.len() {
+                    let short = [b'u', b'r', b't', b'l'][option_index] as char;
+                    return Some(DefaultError::parser_diagnostic(
+                        format!("option requires an argument -- '{short}'"),
+                        true,
+                    ));
+                }
+                index += 1;
+            }
+        }
+        index += 1;
+    }
+    None
+}
+
 /// 运行上下文的命令行模式
 #[derive(Debug)]
 enum RunconCommandLineMode {
@@ -260,6 +365,11 @@ impl RunconSettings {
     /// # 返回值
     /// 成功返回运行配置，失败返回错误
     fn new(config: Command, args: impl Iterator<Item = OsString>) -> Result<Self> {
+        let args: Vec<OsString> = args.collect();
+        if let Some(error) = parser_diagnostic(&args) {
+            return Err(error);
+        }
+
         // 解析命令行参数
         let matches = config.try_get_matches_from(args)?;
 

@@ -2671,6 +2671,12 @@ fn is_forbidden_to_copy_to_same_file(
     let sour_is_symlink = sour_path.is_symlink();
     let dest_is_symlink = dest_path.is_symlink();
 
+    // GNU cp permits replacing an existing destination link when creating a
+    // symbolic link, leaving the force/overwrite handling to that copy mode.
+    if cp_opts.copy_mode == CpCopyMode::SymLink && dest_is_symlink {
+        return false;
+    }
+
     // 情况1：源是符号链接，目标是它指向的实际文件（危险情况）
     // 例如：cp link.txt real.txt （link.txt -> real.txt）
     // 删除/覆盖目标会导致源链接悬空

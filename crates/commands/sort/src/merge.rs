@@ -328,11 +328,20 @@ pub struct MergeFileMerger<'a> {
 impl MergeFileMerger<'_> {
     /// 将合并后的内容写入输出文件。
     pub fn write_all(self, settings: &SortGlobalConfigs, output: SortOutput) -> CTResult<()> {
-        let mut out = output.into_write();
-        self.write_all_to(settings, &mut out)
+        let mut out = output.writer();
+        self.write_all_inner(settings, &mut out)?;
+        out.flush().map_err(|error| output.flush_error(error))?;
+        Ok(())
     }
 
-    pub fn write_all_to(
+    pub fn write_all_to(self, settings: &SortGlobalConfigs, out: &mut impl Write) -> CTResult<()> {
+        self.write_all_inner(settings, out)?;
+        out.flush()
+            .map_err(|error| SortError::SortWriteFailed { error })?;
+        Ok(())
+    }
+
+    fn write_all_inner(
         mut self,
         settings: &SortGlobalConfigs,
         out: &mut impl Write,
@@ -352,8 +361,6 @@ impl MergeFileMerger<'_> {
         })?;
         write_result?;
         reader_result?;
-        out.flush()
-            .map_err(|error| SortError::SortWriteFailed { error })?;
         Ok(())
     }
 

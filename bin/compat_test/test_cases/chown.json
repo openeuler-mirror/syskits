@@ -1472,21 +1472,29 @@
     },
     {
       "command": "chown",
-      "description": "LC_ALL=C；-v遇到chown(2)失败时，错误原因写stderr且failed状态行写stdout",
+      "description": "LC_ALL=C；非特权用户以-v遇到chown(2)的EPERM失败时，错误原因写stderr且failed状态行写stdout",
       "args": [
         "-v",
         "1",
-        "/proc/version"
+        "chown-verbose-failure"
       ],
       "setup_commands": [
-        "export LC_ALL=C"
+        "export LC_ALL=C",
+        "touch chown-verbose-failure",
+        "chown 0:0 chown-verbose-failure"
       ],
       "expectation": {
         "execution": {
           "exit_code": 1,
-          "stdout": "failed to change ownership of '/proc/version' from root to 1\n",
-          "stderr": "chown: changing ownership of '/proc/version': Permission denied\n"
+          "stdout": "failed to change ownership of 'chown-verbose-failure' from root to 1\n",
+          "stderr": "chown: changing ownership of 'chown-verbose-failure': Operation not permitted\n"
         }
+      },
+      "cleanup_commands": [
+        "rm -f -- chown-verbose-failure"
+      ],
+      "environment": {
+        "run_as_user": "nobody"
       },
       "requires_root": true
     },

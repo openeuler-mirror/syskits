@@ -10,7 +10,10 @@
  */
 
 extern crate rust_i18n; // spell-checker:ignore (ToDO) fname, algo
-use clap::{Arg, ArgAction, Command, crate_version};
+use clap::{
+    Arg, ArgAction, Command, crate_version,
+    error::{ContextKind, ContextValue, ErrorKind as ClapErrorKind},
+};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
@@ -2107,11 +2110,19 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
     let matches = match ct_app().try_get_matches_from(args_vec) {
         Ok(m) => m,
         Err(e) => {
-            let _ = e.print();
             if e.kind() == clap::error::ErrorKind::DisplayHelp
                 || e.kind() == clap::error::ErrorKind::DisplayVersion
             {
+                let _ = e.print();
                 return Ok(0);
+            }
+            if let Some(diagnostic) = cksum_unknown_option_diagnostic(&e) {
+                ctcore::ct_show_error!(
+                    "{diagnostic}\nTry '{} --help' for more information.",
+                    ctcore::ct_help_utility_name()
+                );
+            } else {
+                let _ = e.print();
             }
             return Ok(1);
         }
@@ -2278,6 +2289,25 @@ pub fn cksum_main(args: impl ctcore::Args) -> CTResult<i32> {
     };
 
     Ok(0)
+}
+
+fn cksum_unknown_option_diagnostic(error: &clap::Error) -> Option<String> {
+    if error.kind() != ClapErrorKind::UnknownArgument {
+        return None;
+    }
+
+    let argument = match error.get(ContextKind::InvalidArg)? {
+        ContextValue::String(argument) => argument,
+        _ => return None,
+    };
+    if argument.starts_with("--") {
+        Some(format!("unrecognized option '{argument}'"))
+    } else {
+        argument
+            .strip_prefix('-')
+            .and_then(|argument| argument.chars().next())
+            .map(|option| format!("invalid option -- '{option}'"))
+    }
 }
 
 fn cksum_check(
@@ -3291,6 +3321,22 @@ mod tests {
 
             assert!(result.is_err());
             assert_eq!(result.unwrap_err().kind(), ErrorKind::UnknownArgument);
+        }
+
+        #[test]
+        fn test_unknown_option_uses_gnu_diagnostic() {
+            for (option, expected) in [
+                ("--bad-option", "unrecognized option '--bad-option'"),
+                ("-r", "invalid option -- 'r'"),
+            ] {
+                let error = ct_app()
+                    .try_get_matches_from([ctcore::ct_util_name(), option])
+                    .expect_err("unknown option");
+                assert_eq!(
+                    crate::cksum_unknown_option_diagnostic(&error).as_deref(),
+                    Some(expected)
+                );
+            }
         }
 
         #[test]

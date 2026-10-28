@@ -86,6 +86,15 @@ pub(crate) enum DefaultError {
     #[error(transparent)]
     CommandLine(#[from] clap::Error),
 
+    /// GNU风格的命令行诊断
+    #[error("{message}")]
+    ParserDiagnostic {
+        /// 诊断文本
+        message: String,
+        /// 是否追加简短帮助提示
+        usage: bool,
+    },
+
     /// SELinux 无效上下文
     #[error("Invalid security context: {}", operand1.quote())]
     InvalidSecurityContext {
@@ -159,6 +168,14 @@ impl DefaultError {
             field,
             value: value.into(),
             error,
+        }
+    }
+
+    /// 创建命令行诊断
+    pub(crate) fn parser_diagnostic(message: impl Into<String>, usage: bool) -> Self {
+        Self::ParserDiagnostic {
+            message: message.into(),
+            usage,
         }
     }
 

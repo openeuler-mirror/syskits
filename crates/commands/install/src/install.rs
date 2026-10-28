@@ -1126,7 +1126,10 @@ fn install_standard(paths: Vec<PathBuf>, b: &Installer) -> CTResult<()> {
                 .map(|metadata| metadata.is_dir())
                 .unwrap_or(false)
             {
-                ct_show_error!("cannot create regular file {}: Is a directory", to.quote());
+                ct_show_error!(
+                    "cannot overwrite directory {} with non-directory",
+                    to.quote()
+                );
                 ctcore::ct_error::set_ct_exit_code(1);
                 return Err(1.into());
             }

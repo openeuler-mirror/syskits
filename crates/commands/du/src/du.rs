@@ -23,7 +23,7 @@ use ctcore::ct_line_ending::CtLineEnding;
 #[cfg(not(unix))]
 use ctcore::ct_parse_glob;
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
-use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
+use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name, gnu_quote_locale};
 use ctcore::{ct_show_error, ct_show_warning};
 #[cfg(not(unix))]
 use glob::Pattern;
@@ -872,9 +872,10 @@ fn du_process_entry(
     let this_stat = match this_stat {
         Ok(stat) => stat,
         Err(error) => {
-            du_print_tx.send(Err(
-                error.map_err_context(|| format!("cannot access {}", entry_path.quote()))
-            ))?;
+            du_print_tx.send(Err(CtSimpleError::new(
+                1,
+                du_access_error_message(entry_path, &error),
+            )))?;
             return Ok(());
         }
     };
@@ -952,7 +953,7 @@ impl Display for DuError {
             Self::SummarizeDepthConflict(s) => {
                 write!(
                     f,
-                    "summarizing conflicts with --max-depth={}",
+                    "warning: summarizing conflicts with --max-depth={}",
                     s.maybe_quote()
                 )
             }
@@ -991,7 +992,10 @@ impl CTError for DuError {
     }
 
     fn usage(&self) -> bool {
-        matches!(self, Self::SummarizeAllConflict)
+        matches!(
+            self,
+            Self::SummarizeAllConflict | Self::SummarizeDepthConflict(_)
+        )
     }
 }
 
@@ -1143,11 +1147,20 @@ fn du_validate_options(args: &[OsString]) -> CTResult<()> {
                 return Err(CtSimpleError::new(1, ""));
             }
 
-            if !arg.contains('=')
-                && du_recognized_long_option(long_arg)
-                    .is_some_and(|(_, argument)| argument == DuLongOptionArgument::Required)
-            {
-                index += 1;
+            if !arg.contains('=') {
+                if let Some((option, DuLongOptionArgument::Required)) =
+                    du_recognized_long_option(long_arg)
+                {
+                    if index + 1 == args.len() {
+                        ct_show_error!("option '--{option}' requires an argument");
+                        eprintln!(
+                            "Try '{} --help' for more information.",
+                            ctcore::ct_help_utility_name()
+                        );
+                        return Err(CtSimpleError::new(1, ""));
+                    }
+                    index += 1;
+                }
             }
         } else if arg.starts_with('-') && arg != "-" {
             if let Some(invalid) = du_invalid_short_option_byte(arg_os.as_os_str()) {
@@ -1946,36 +1959,70 @@ fn du_path_from_bytes(path: Vec<u8>) -> PathBuf {
 
 fn du_access_error_message(path: &Path, error: &io::Error) -> String {
     let quoted_path = escape_name(path.as_os_str(), &DU_DIAGNOSTIC_QUOTING_STYLE);
+    let include_detail = !du_is_dangling_symlink(path, error);
     #[cfg(target_os = "linux")]
-    if let Some(message) = du_localized_access_error(&quoted_path, error) {
+    if let Some(message) = du_localized_access_error(&quoted_path, error, include_detail) {
         return message;
     }
 
-    du_format_access_error("cannot access %s", &quoted_path, &strip_errno(error))
+    let detail = include_detail.then(|| strip_errno(error));
+    du_format_access_error("cannot access %s", &quoted_path, detail.as_deref())
 }
 
-fn du_format_access_error(template: &str, quoted_path: &str, detail: &str) -> String {
-    format!("{}: {detail}", template.replacen("%s", quoted_path, 1))
+fn du_is_dangling_symlink(path: &Path, error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::NotFound
+        && fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink())
+}
+
+fn du_format_access_error(template: &str, quoted_path: &str, detail: Option<&str>) -> String {
+    let message = template.replacen("%s", quoted_path, 1);
+    match detail {
+        Some(detail) => format!("{message}: {detail}"),
+        None => message,
+    }
 }
 
 #[cfg(target_os = "linux")]
-fn du_localized_access_error(quoted_path: &str, error: &io::Error) -> Option<String> {
+fn du_localized_access_error(
+    quoted_path: &str,
+    error: &io::Error,
+    include_detail: bool,
+) -> Option<String> {
     let quoted_path = CString::new(quoted_path).ok()?;
-    let errno = error.raw_os_error()?;
 
     unsafe {
         let template = dgettext(c"coreutils".as_ptr(), c"cannot access %s".as_ptr());
+        if template.is_null() {
+            return None;
+        }
+        let template = CStr::from_ptr(template).to_string_lossy();
+        let quoted_path = quoted_path.to_string_lossy();
+        if !include_detail {
+            return Some(du_format_access_error(&template, &quoted_path, None));
+        }
+
+        let errno = error.raw_os_error()?;
         let detail = ctcore::libc::strerror(errno);
-        if template.is_null() || detail.is_null() {
+        if detail.is_null() {
             return None;
         }
 
         Some(du_format_access_error(
-            &CStr::from_ptr(template).to_string_lossy(),
-            &quoted_path.to_string_lossy(),
-            &CStr::from_ptr(detail).to_string_lossy(),
+            &template,
+            &quoted_path,
+            Some(&CStr::from_ptr(detail).to_string_lossy()),
         ))
     }
+}
+
+fn du_files0_operand_error(path: &Path) -> Box<dyn CTError> {
+    CTsageError::new(
+        1,
+        format!(
+            "extra operand {}\nfile operands cannot be combined with --files0-from",
+            gnu_quote_locale(path.as_os_str())
+        ),
+    )
 }
 
 #[derive(Default)]
@@ -2019,15 +2066,8 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     // 处理输入文件列表。--files0-from保留为惰性来源，避免在遍历前读到EOF。
     let files_from = du_last_files0_from(&args_match).cloned();
     let files_path = if files_from.is_some() {
-        if args_match.get_one::<PathBuf>(opt_flags::FILE).is_some() {
-            return Err(std::io::Error::other(format!(
-                "extra operand {}\nfile operands cannot be combined with --files0-from",
-                args_match
-                    .get_one::<PathBuf>(opt_flags::FILE)
-                    .unwrap()
-                    .quote()
-            ))
-            .into());
+        if let Some(path) = args_match.get_one::<PathBuf>(opt_flags::FILE) {
+            return Err(du_files0_operand_error(path));
         }
         Vec::new()
     } else {
@@ -2226,15 +2266,8 @@ pub fn du_native_semantic(args: impl ctcore::Args) -> CTResult<DuSemantic> {
     let summarize_depth_warning = du_summarize_depth_warning(is_summarize, du_max_depth);
 
     let files_path = if let Some(file_from) = du_last_files0_from(&args_match) {
-        if args_match.get_one::<PathBuf>(opt_flags::FILE).is_some() {
-            return Err(std::io::Error::other(format!(
-                "extra operand {}\nfile operands cannot be combined with --files0-from",
-                args_match
-                    .get_one::<PathBuf>(opt_flags::FILE)
-                    .unwrap()
-                    .quote()
-            ))
-            .into());
+        if let Some(path) = args_match.get_one::<PathBuf>(opt_flags::FILE) {
+            return Err(du_files0_operand_error(path));
         }
         du_read_files_from(file_from)?
     } else {
@@ -2999,7 +3032,7 @@ mod tests {
     #[test]
     fn test_access_error_uses_localized_template_and_detail() {
         assert_eq!(
-            du_format_access_error("无法访问 %s", "'missing'", "没有那个文件或目录"),
+            du_format_access_error("无法访问 %s", "'missing'", Some("没有那个文件或目录")),
             "无法访问 'missing': 没有那个文件或目录"
         );
     }

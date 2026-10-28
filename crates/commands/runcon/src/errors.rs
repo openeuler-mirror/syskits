@@ -118,8 +118,8 @@ pub(crate) enum DefaultError {
     },
 
     /// SELinux 未启用
-    #[error("runcon may be used only on a SELinux kernel")]
-    SELinuxNotEnabled,
+    #[error("{program_name} may be used only on a SELinux kernel")]
+    SELinuxNotEnabled { program_name: String },
 
     /// UTF-8 转换错误
     #[error(transparent)]
@@ -176,6 +176,13 @@ pub(crate) enum DefaultError {
 }
 
 impl DefaultError {
+    /// 创建包含实际调用名的SELinux未启用错误
+    pub(crate) fn selinux_not_enabled() -> Self {
+        Self::SELinuxNotEnabled {
+            program_name: ctcore::ct_util_name().to_owned(),
+        }
+    }
+
     /// 创建 IO 错误
     pub(crate) fn from_io(operation: &'static str, source: io::Error) -> Self {
         Self::Io { operation, source }

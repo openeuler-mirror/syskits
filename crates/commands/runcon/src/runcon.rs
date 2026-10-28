@@ -502,8 +502,8 @@ impl RunconSettings {
 fn print_current_context() -> Result<()> {
     // 获取当前进程的安全上下文
     let op = "Getting security context of the current process";
-    let context =
-        SecurityContext::current(false).map_err(|err| DefaultError::from_selinux(op, err))?;
+    let context = SecurityContext::current(false)
+        .map_err(|_| DefaultError::from_current_context(io::Error::last_os_error()))?;
 
     // 将上下文转换为 C 字符串
     let context = context
@@ -647,9 +647,8 @@ fn get_initial_custom_opaque_context(
     let c_context = if compute_transition_context {
         get_transition_context(command)?
     } else {
-        let context = SecurityContext::current(false).map_err(|err| {
-            DefaultError::from_selinux("Getting security context of the current process", err)
-        })?;
+        let context = SecurityContext::current(false)
+            .map_err(|_| DefaultError::from_current_context(io::Error::last_os_error()))?;
         context
             .to_c_string()
             .map_err(|err| DefaultError::from_selinux("Getting security context", err))?

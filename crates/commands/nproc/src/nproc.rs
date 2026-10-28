@@ -97,10 +97,60 @@ pub fn nproc_semantic(args: impl ctcore::Args) -> CTResult<NprocSemantic> {
 fn nproc_args(args: impl ctcore::Args) -> CTResult<Vec<OsString>> {
     let mut args: Vec<OsString> = args.collect();
     validate_ignore_occurrences(&args)?;
-    if env::var_os("POSIXLY_CORRECT").is_none() {
+    let posixly_correct = env::var_os("POSIXLY_CORRECT").is_some();
+    validate_nproc_invocation(&args, posixly_correct)?;
+    if !posixly_correct {
         args = permute_nproc_args(args);
     }
     Ok(args)
+}
+
+fn validate_nproc_invocation(args: &[OsString], posixly_correct: bool) -> CTResult<()> {
+    let mut first_operand = None;
+    let mut index = 1;
+
+    while index < args.len() {
+        let argument = &args[index];
+        let bytes = argument.as_encoded_bytes();
+        if bytes == b"--" {
+            first_operand = args.get(index + 1);
+            break;
+        }
+
+        if let Some(option) = bytes.strip_prefix(b"--") {
+            let equals = option.iter().position(|byte| *byte == b'=');
+            let name = equals.map_or(option, |position| &option[..position]);
+            match canonical_long_option(name) {
+                Some("help" | "version") => return Ok(()),
+                Some("ignore") if equals.is_none() => index += 1,
+                Some("all" | "ignore") => {}
+                Some(_) => unreachable!(),
+                None => {
+                    return Err(CTsageError::new(
+                        1,
+                        format!("unrecognized option {}", argument.quote()),
+                    ));
+                }
+            }
+        } else if bytes.len() <= 1 || bytes[0] != b'-' {
+            if posixly_correct {
+                return Err(CTsageError::new(
+                    1,
+                    format!("extra operand {}", argument.quote()),
+                ));
+            }
+            first_operand.get_or_insert(argument);
+        }
+        index += 1;
+    }
+
+    if let Some(operand) = first_operand {
+        return Err(CTsageError::new(
+            1,
+            format!("extra operand {}", operand.quote()),
+        ));
+    }
+    Ok(())
 }
 
 fn permute_nproc_args(args: Vec<OsString>) -> Vec<OsString> {
@@ -572,7 +622,9 @@ mod tests {
     }
 
     mod tests_nproc_main {
-        use crate::{NprocQuery, nproc_main, nproc_semantic, permute_nproc_args};
+        use crate::{
+            NprocQuery, nproc_main, nproc_semantic, permute_nproc_args, validate_nproc_invocation,
+        };
 
         use std::ffi::OsString;
 
@@ -671,6 +723,21 @@ mod tests {
                     .map(OsString::from)
                     .collect::<Vec<_>>()
             );
+        }
+
+        #[test]
+        fn test_validate_nproc_invocation_reports_gnu_diagnostics() {
+            let unknown = ["nproc", "--invalid-option"].map(OsString::from);
+            let error = validate_nproc_invocation(&unknown, false).unwrap_err();
+            assert_eq!(error.to_string(), "unrecognized option '--invalid-option'");
+            assert!(error.usage());
+
+            let posix = ["nproc", "operand", "--help"].map(OsString::from);
+            let error = validate_nproc_invocation(&posix, true).unwrap_err();
+            assert_eq!(error.to_string(), "extra operand 'operand'");
+            assert!(error.usage());
+
+            assert!(validate_nproc_invocation(&posix, false).is_ok());
         }
     }
 

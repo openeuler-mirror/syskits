@@ -9,4 +9,34 @@
  * See the Mulan PSL v2 for more details.
  */
 
-ctcore::ct_bin!(ct_runcon, Runcon);
+use ctcore::Tool;
+use std::io::Write;
+
+fn main() {
+    ctcore::ct_panic::ct_mute_set_panic_hook();
+    ctcore::ct_ensure_standard_fds();
+
+    let args = ctcore::ct_os_args().collect::<Vec<_>>();
+    let tool = ct_runcon::Runcon::default();
+    let code = match tool.execute(&args) {
+        Ok(()) => ctcore::ct_error::get_ct_exit_code(),
+        Err(err) => {
+            let mut stderr = std::io::stderr().lock();
+            let message = format!("{err}");
+            if !message.is_empty() {
+                let _ = writeln!(stderr, "{}: {message}", ctcore::ct_util_name());
+            }
+            if err.usage() {
+                let _ = writeln!(
+                    stderr,
+                    "Try '{} --help' for more information.",
+                    ctcore::ct_help_utility_name()
+                );
+            }
+            err.code()
+        }
+    };
+
+    let _ = std::io::stdout().flush();
+    std::process::exit(code);
+}

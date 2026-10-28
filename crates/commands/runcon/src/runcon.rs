@@ -143,7 +143,7 @@ pub fn ct_app() -> Command {
             .short('c')
             .long(runcon_options::RUNCON_COMPUTE)
             .help(t!("runcon.clap.runcon_compute"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::Count),
         Arg::new(runcon_options::RUNCON_USER)
             .short('u')
             .long(runcon_options::RUNCON_USER)
@@ -270,10 +270,10 @@ impl RunconSettings {
             || matches.contains_id(runcon_options::RUNCON_ROLE)
             || matches.contains_id(runcon_options::RUNCON_TYPE)
             || matches.contains_id(runcon_options::RUNCON_RANGE)
-            || matches.get_flag(runcon_options::RUNCON_COMPUTE)
+            || matches.get_count(runcon_options::RUNCON_COMPUTE) != 0
         {
             // 自定义上下文模式
-            let compute_transition_context = matches.get_flag(runcon_options::RUNCON_COMPUTE);
+            let compute_transition_context = matches.get_count(runcon_options::RUNCON_COMPUTE) != 0;
             let command = args.next();
             let mode = RunconCommandLineMode::CustomContext {
                 is_compute_transition_context: compute_transition_context,
@@ -761,6 +761,27 @@ mod tests {
                 _ => panic!("Wrong mode"),
             }
             assert!(result.arguments.is_empty());
+        }
+
+        #[test]
+        fn test_parse_repeated_compute_options() {
+            for args in [
+                vec!["runcon", "-c", "-c"],
+                vec!["runcon", "-cc"],
+                vec!["runcon", "--compute", "--compute"],
+            ] {
+                let result =
+                    RunconSettings::new(ct_app(), args.into_iter().map(OsString::from)).unwrap();
+
+                assert!(matches!(
+                    result.mode,
+                    RunconCommandLineMode::CustomContext {
+                        is_compute_transition_context: true,
+                        command: None,
+                        ..
+                    }
+                ));
+            }
         }
     }
 

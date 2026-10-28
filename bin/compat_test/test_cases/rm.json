@@ -533,7 +533,7 @@
         },
         {
             "command": "rm",
-            "description": "执行 rm -r -i //；stdin 为 n\\n；GNU 将 // 识别为根目录并拒绝递归删除，预期 RC=1 且输出 preserve-root failsafe 诊断。",
+            "description": "执行 rm -r -i //；GNU 将 // 识别为根目录并拒绝递归删除，预期 RC=1 且输出 preserve-root failsafe 诊断。",
             "args": [
                 "-r",
                 "-i",
@@ -552,7 +552,7 @@
                 }
             },
             "cleanup_commands": [],
-            "tstdin": "n\n"
+            "tstdin": ""
         }
     ]
 }

@@ -209,78 +209,104 @@ fn parser_diagnostic(args: &[OsString]) -> Option<DefaultError> {
             break;
         }
 
-        if value.starts_with(b"--compute=") {
-            return Some(DefaultError::parser_diagnostic(
-                "option '--compute' doesn't allow an argument",
-                true,
-            ));
-        }
-
         let mut option_index = None;
         let mut takes_value = false;
         let mut recognized = true;
-        match value {
-            b"-u" | b"--user" => {
-                option_index = Some(0);
-                takes_value = true;
+        if let Some(long_option) = value.strip_prefix(b"--") {
+            let value_position = long_option.iter().position(|byte| *byte == b'=');
+            let option_name =
+                value_position.map_or(long_option, |position| &long_option[..position]);
+            let long_options: [(&[u8], Option<usize>); 7] = [
+                (b"role", Some(1)),
+                (b"type", Some(2)),
+                (b"user", Some(0)),
+                (b"range", Some(3)),
+                (b"compute", None),
+                (b"help", None),
+                (b"version", None),
+            ];
+            let matches: Vec<_> = long_options
+                .iter()
+                .filter(|(name, _)| name.starts_with(option_name))
+                .collect();
+
+            if matches.len() > 1 {
+                let option = String::from_utf8_lossy(value);
+                let possibilities = matches
+                    .iter()
+                    .map(|(name, _)| format!("'--{}'", String::from_utf8_lossy(name)))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                return Some(DefaultError::parser_diagnostic(
+                    format!("option '{option}' is ambiguous; possibilities: {possibilities}"),
+                    true,
+                ));
             }
-            b"-r" | b"--role" => {
-                option_index = Some(1);
-                takes_value = true;
-            }
-            b"-t" | b"--type" => {
-                option_index = Some(2);
-                takes_value = true;
-            }
-            b"-l" | b"--range" => {
-                option_index = Some(3);
-                takes_value = true;
-            }
-            b"-c" | b"--compute" | b"-h" | b"--help" | b"-V" | b"--version" => {}
-            _ if value.starts_with(b"--user=") => {
-                option_index = Some(0);
-            }
-            _ if value.starts_with(b"--role=") => {
-                option_index = Some(1);
-            }
-            _ if value.starts_with(b"--type=") => {
-                option_index = Some(2);
-            }
-            _ if value.starts_with(b"--range=") => {
-                option_index = Some(3);
-            }
-            _ if value.len() > 2 && value[1] == b'u' => {
-                option_index = Some(0);
-            }
-            _ if value.len() > 2 && value[1] == b'r' => {
-                option_index = Some(1);
-            }
-            _ if value.len() > 2 && value[1] == b't' => {
-                option_index = Some(2);
-            }
-            _ if value.len() > 2 && value[1] == b'l' => {
-                option_index = Some(3);
-            }
-            _ if value.len() > 1 && value[1] == b'c' => {
-                let mut option_position = 2;
-                while option_position < value.len() && value[option_position] == b'c' {
-                    option_position += 1;
+
+            if let Some((name, context_index)) = matches.first().copied() {
+                if *name == b"compute" && value_position.is_some() {
+                    return Some(DefaultError::parser_diagnostic(
+                        "option '--compute' doesn't allow an argument",
+                        true,
+                    ));
                 }
-                if option_position < value.len() {
-                    option_index = match value[option_position] {
-                        b'u' => Some(0),
-                        b'r' => Some(1),
-                        b't' => Some(2),
-                        b'l' => Some(3),
-                        _ => {
-                            recognized = false;
-                            None
-                        }
-                    };
-                    takes_value = option_index.is_some() && option_position + 1 == value.len();
-                }
+                option_index = *context_index;
+                takes_value = context_index.is_some() && value_position.is_none();
+            } else {
+                recognized = false;
             }
-            _ => recognized = false,
+        } else {
+            match value {
+                b"-u" => {
+                    option_index = Some(0);
+                    takes_value = true;
+                }
+                b"-r" => {
+                    option_index = Some(1);
+                    takes_value = true;
+                }
+                b"-t" => {
+                    option_index = Some(2);
+                    takes_value = true;
+                }
+                b"-l" => {
+                    option_index = Some(3);
+                    takes_value = true;
+                }
+                b"-c" | b"-h" | b"-V" => {}
+                _ if value.len() > 2 && value[1] == b'u' => {
+                    option_index = Some(0);
+                }
+                _ if value.len() > 2 && value[1] == b'r' => {
+                    option_index = Some(1);
+                }
+                _ if value.len() > 2 && value[1] == b't' => {
+                    option_index = Some(2);
+                }
+                _ if value.len() > 2 && value[1] == b'l' => {
+                    option_index = Some(3);
+                }
+                _ if value.len() > 1 && value[1] == b'c' => {
+                    let mut option_position = 2;
+                    while option_position < value.len() && value[option_position] == b'c' {
+                        option_position += 1;
+                    }
+                    if option_position < value.len() {
+                        option_index = match value[option_position] {
+                            b'u' => Some(0),
+                            b'r' => Some(1),
+                            b't' => Some(2),
+                            b'l' => Some(3),
+                            _ => {
+                                recognized = false;
+                                None
+                            }
+                        };
+                        takes_value = option_index.is_some() && option_position + 1 == value.len();
+                    }
+                }
+                _ => recognized = false,
+            }
         }
 
         if !recognized {

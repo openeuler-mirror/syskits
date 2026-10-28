@@ -14,7 +14,7 @@ use chrono::{DateTime, Local};
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::{Quotable, locale_quote};
 use ctcore::ct_error::{CTResult, CtSimpleError, FromIo};
 use ctcore::ct_fs::display_permissions;
 use ctcore::ct_fsext::{CtBirthTime, FsMeta, pretty_filetype, pretty_fstype, read_fs_list, statfs};
@@ -69,7 +69,15 @@ impl CachedMode {
         } else if !s.is_empty() && "always".starts_with(s) {
             Ok(CachedMode::Always)
         } else {
-            Err(format!("invalid cached mode: {s}"))
+            Err(format!(
+                "invalid argument {} for {}\nValid arguments are:\n  - {}\n  - {}\n  - {}\nTry '{} --help' for more information.",
+                locale_quote(s),
+                locale_quote("--cached"),
+                locale_quote("default"),
+                locale_quote("never"),
+                locale_quote("always"),
+                ctcore::ct_help_utility_name()
+            ))
         }
     }
 }
@@ -2831,6 +2839,22 @@ mod tests {
 
         assert!(CachedMode::from_str("").is_err());
         assert!(CachedMode::from_str("other").is_err());
+    }
+
+    #[test]
+    fn cached_mode_rejects_invalid_values_with_gnu_diagnostic() {
+        assert_eq!(
+            CachedMode::from_str("invalid").unwrap_err(),
+            format!(
+                "invalid argument {} for {}\nValid arguments are:\n  - {}\n  - {}\n  - {}\nTry '{} --help' for more information.",
+                locale_quote("invalid"),
+                locale_quote("--cached"),
+                locale_quote("default"),
+                locale_quote("never"),
+                locale_quote("always"),
+                ctcore::ct_help_utility_name()
+            )
+        );
     }
 
     #[test]

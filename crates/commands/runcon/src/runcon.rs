@@ -212,6 +212,7 @@ fn parser_diagnostic(args: &[OsString]) -> Option<DefaultError> {
         let mut option_index = None;
         let mut takes_value = false;
         let mut long_option_name = None;
+        let mut invalid_short_option = None;
         let mut recognized = true;
         if let Some(long_option) = value.strip_prefix(b"--") {
             let value_position = long_option.iter().position(|byte| *byte == b'=');
@@ -301,17 +302,27 @@ fn parser_diagnostic(args: &[OsString]) -> Option<DefaultError> {
                             b'l' => Some(3),
                             _ => {
                                 recognized = false;
+                                invalid_short_option = Some(value[option_position]);
                                 None
                             }
                         };
                         takes_value = option_index.is_some() && option_position + 1 == value.len();
                     }
                 }
-                _ => recognized = false,
+                _ => {
+                    recognized = false;
+                    invalid_short_option = value.get(1).copied();
+                }
             }
         }
 
         if !recognized {
+            if let Some(option) = invalid_short_option {
+                return Some(DefaultError::parser_diagnostic(
+                    format!("invalid option -- '{}'", char::from(option)),
+                    true,
+                ));
+            }
             let option = String::from_utf8_lossy(value);
             return Some(DefaultError::parser_diagnostic(
                 format!("unrecognized option '{option}'"),
@@ -1040,6 +1051,18 @@ mod tests {
                     error.to_string(),
                     format!("option '--{name}' requires an argument")
                 );
+            }
+        }
+
+        #[test]
+        fn test_invalid_short_option_names_offending_character() {
+            for (option, invalid) in [("-z", 'z'), ("-cfoo", 'f')] {
+                let error = RunconSettings::new(
+                    ct_app(),
+                    ["runcon", option].into_iter().map(OsString::from),
+                )
+                .unwrap_err();
+                assert_eq!(error.to_string(), format!("invalid option -- '{invalid}'"));
             }
         }
     }

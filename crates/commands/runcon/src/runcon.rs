@@ -564,7 +564,7 @@ fn set_next_exec_context(context: &OpaqueSecurityContext) -> Result<()> {
 fn get_plain_context(context: &OsStr) -> Result<OpaqueSecurityContext> {
     // 检查 SELinux 是否启用
     if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
-        return Err(DefaultError::SELinuxNotEnabled);
+        return Err(DefaultError::selinux_not_enabled());
     }
 
     // 将上下文转换为 C 字符串
@@ -694,7 +694,7 @@ fn get_custom_context(
 
     // 检查 SELinux 是否启用
     if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
-        return Err(DefaultError::SELinuxNotEnabled);
+        return Err(DefaultError::selinux_not_enabled());
     }
 
     // 获取初始上下文
@@ -1080,7 +1080,10 @@ mod tests {
             let result = get_plain_context(OsStr::new("system_u:system_r:httpd_t"));
 
             if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
-                assert!(matches!(result, Err(DefaultError::SELinuxNotEnabled)));
+                assert!(matches!(
+                    result,
+                    Err(DefaultError::SELinuxNotEnabled { .. })
+                ));
             } else {
                 assert!(result.is_ok());
             }
@@ -1102,7 +1105,10 @@ mod tests {
             );
 
             if selinux::kernel_support() == selinux::KernelSupport::Unsupported {
-                assert!(matches!(result, Err(DefaultError::SELinuxNotEnabled)));
+                assert!(matches!(
+                    result,
+                    Err(DefaultError::SELinuxNotEnabled { .. })
+                ));
             } else {
                 // 在启用 SELinux 的系统上进行更详细的检查
                 match result {
@@ -1153,7 +1159,7 @@ mod tests {
 
         #[test]
         fn test_selinux_not_enabled_maps_to_canceled_exit_code() {
-            let err = RunconError::new(DefaultError::SELinuxNotEnabled);
+            let err = RunconError::new(DefaultError::selinux_not_enabled());
             assert_eq!(err.code(), error_exit_status::RUNCON_CANCELED);
         }
     }

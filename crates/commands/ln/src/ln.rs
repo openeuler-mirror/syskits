@@ -38,7 +38,7 @@ rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_backup_control::{self, CtBackupMode};
 use ctcore::ct_display::Quotable;
-use ctcore::ct_error::{CTError, CTResult, FromIo};
+use ctcore::ct_error::{CTError, CTResult, FromIo, strip_errno};
 use ctcore::ct_fs::make_path_relative_to;
 use ctcore::ct_fs::{MissingHandling, ResolveMode, canonicalize};
 use ctcore::ct_show_error;
@@ -121,6 +121,12 @@ enum LnError {
     HardLinkToDirectory(PathBuf),
     /// 目标硬链接已存在
     HardLinkAlreadyExists(PathBuf),
+    /// 创建硬链接时系统调用失败
+    HardLinkFailed {
+        source: PathBuf,
+        destination: PathBuf,
+        error: std::io::Error,
+    },
     /// 不允许覆盖目录
     CannotOverwriteDirectory(PathBuf),
 }
@@ -138,6 +144,18 @@ impl Display for LnError {
             Self::HardLinkAlreadyExists(s) => {
                 write!(f, "failed to create hard link {}: File exists", s.quote())
             }
+
+            Self::HardLinkFailed {
+                source,
+                destination,
+                error,
+            } => write!(
+                f,
+                "failed to create hard link {} => {}: {}",
+                destination.quote(),
+                source.quote(),
+                strip_errno(error)
+            ),
 
             Self::CannotOverwriteDirectory(s) => {
                 write!(f, "{}: cannot overwrite directory", s.quote())
@@ -791,13 +809,12 @@ fn create_hard_link(source: &Path, dst: &Path, settings: &LnSettings) -> CTResul
         if err.kind() == std::io::ErrorKind::AlreadyExists {
             LnError::HardLinkAlreadyExists(dst.to_path_buf()).into()
         } else {
-            err.map_err_context(|| {
-                format!(
-                    "failed to create hard link {} => {}",
-                    source.quote(),
-                    dst.quote()
-                )
-            }) as Box<dyn CTError>
+            LnError::HardLinkFailed {
+                source: source.to_path_buf(),
+                destination: dst.to_path_buf(),
+                error: err,
+            }
+            .into()
         }
     })
 }
@@ -1133,6 +1150,20 @@ mod tests {
         assert_eq!(settings_for("-if").overwrite, OverwriteMode::Force);
         assert_eq!(settings_for("-fif").overwrite, OverwriteMode::Force);
         assert_eq!(settings_for("-ifi").overwrite, OverwriteMode::Interactive);
+    }
+
+    #[test]
+    fn test_hard_link_failure_matches_gnu_diagnostic_order_and_errno() {
+        let error = LnError::HardLinkFailed {
+            source: PathBuf::from("test_dir"),
+            destination: PathBuf::from("dir_link"),
+            error: std::io::Error::from_raw_os_error(libc::EPERM),
+        };
+
+        assert_eq!(
+            format!("{error}"),
+            "failed to create hard link 'dir_link' => 'test_dir': Operation not permitted"
+        );
     }
 
     #[test]

@@ -2742,8 +2742,11 @@ fn pr_write_multicolumn_table(
     let columns = table.first().map_or(0, Vec::len);
     let blank_line = PrFileLine::default();
     let mut lines_printed = 0usize;
+    let last_actual_row = table
+        .iter()
+        .rposition(|row| row.iter().any(|cell| cell.is_some()));
 
-    for row in table {
+    for (row_index, row) in table.iter().enumerate() {
         if row.iter().all(|cell| cell.is_none()) {
             if feed_line_present || !output_opts.is_display_header_and_trailer {
                 if feed_line_present && lines_printed == 0 {
@@ -2925,12 +2928,7 @@ fn pr_write_multicolumn_table(
                 .collect::<String>()
         };
         pr_write_rendered_text(out, &rendered_row)?;
-        let row_has_unterminated_input = if output_opts.merge_files_print.is_some() {
-            row.iter().flatten().all(|line| !line.has_line_terminator)
-        } else {
-            row.iter().flatten().any(|line| !line.has_line_terminator)
-        };
-        let row_separator = if output_opts.is_double_space && row_has_unterminated_input {
+        let row_separator = if output_opts.is_double_space && last_actual_row == Some(row_index) {
             output_opts.line_separator.as_bytes()
         } else {
             line_separator

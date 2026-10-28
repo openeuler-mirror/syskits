@@ -7202,6 +7202,11 @@ mod tests {
         });
 
         assert_eq!(grid_columns_that_fit(&cells, 40, Direction::TopToBottom), 4);
+        assert_eq!(
+            render_grid(&cells, 40, Direction::TopToBottom, CtLineEnding::Newline),
+            b"m*          iiiiiiiii  eeeee  a\nl'quote     hhhhhhhh   dddd\nk\\ space    ggggggg    ccc\njjjjjjjjjj  ffffff     bb\n"
+                .to_vec()
+        );
     }
 
     #[test]
@@ -7304,11 +7309,7 @@ mod tests {
     #[test]
     fn escape_style_does_not_request_outer_quote_alignment() {
         let escape_matches = ct_app()
-            .try_get_matches_from([
-                ctcore::ct_util_name(),
-                "-C",
-                "--quoting-style=escape",
-            ])
+            .try_get_matches_from([ctcore::ct_util_name(), "-C", "--quoting-style=escape"])
             .unwrap();
         let escape_config = LsConfig::from(&escape_matches).expect("escape configuration");
         assert!(!needs_outer_quote_alignment(&escape_config));

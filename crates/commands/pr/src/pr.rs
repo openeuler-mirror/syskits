@@ -31,7 +31,7 @@ use chrono::{DateTime, Local};
 use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use ctcore::Tool;
 use ctcore::ct_display::{Quotable, locale_quote};
-use ctcore::ct_error::{CTResult, CtSimpleError, strip_errno};
+use ctcore::ct_error::{CTResult, strip_errno};
 use ctcore::ct_locale::hard_locale_time;
 use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use itertools::Itertools;
@@ -1235,6 +1235,7 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
         stderr_text: String::new(),
         exit_code: 0,
     };
+    let mut output_error = None;
 
     let mut files = matches
         .get_many::<OsString>(pr_flags::PR_FILES)
@@ -1284,10 +1285,9 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
         match cmd_result {
             Ok(()) => {}
             Err(PrError::Output(error)) => {
-                return Err(CtSimpleError::new(
-                    1,
-                    format!("write error: {}", strip_errno(&error)),
-                ));
+                output_error.get_or_insert(error);
+                output = None;
+                semantic.exit_code = 1;
             }
             Err(
                 error @ (PrError::Input(_, _)
@@ -1308,6 +1308,20 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
                 return Ok(semantic);
             }
         }
+    }
+
+    if let Some(error) = output_error {
+        if semantic.stderr_text.is_empty() {
+            semantic.stderr_text.push_str(&format!(
+                "{program_name}: write error: {}\n",
+                strip_errno(&error)
+            ));
+        } else {
+            semantic
+                .stderr_text
+                .push_str(&format!("{program_name}: write error\n"));
+        }
+        semantic.exit_code = 1;
     }
 
     Ok(semantic)

@@ -37,7 +37,7 @@ use std::path::Path;
 
 use ctcore::Tool;
 use ctcore::ct_display::locale_quote_marks;
-use ctcore::ct_error::{CTError, CTResult, set_ct_exit_code};
+use ctcore::ct_error::{CTError, CTResult, set_ct_exit_code, strerror_bytes, strip_errno};
 use ctcore::ct_parse_size::{CtParser, ParseSizeError};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::ct_quoting_style::gnu_quote_shell;
@@ -252,7 +252,10 @@ fn truncate_diagnostic_error_with_os_error(
     message: impl Display,
     error: &std::io::Error,
 ) -> Box<dyn CTError> {
-    truncate_diagnostic_error(format!("{message}: {}", os_error_message(error)))
+    let mut diagnostic = truncate_locale_diagnostic_bytes(&message.to_string());
+    diagnostic.extend_from_slice(b": ");
+    diagnostic.extend(truncate_os_error_bytes(error));
+    TruncateDiagnosticError::boxed(diagnostic, None)
 }
 
 fn truncate_locale_diagnostic_bytes(text: &str) -> Vec<u8> {
@@ -1220,22 +1223,42 @@ fn relative_file_size(
     Ok(metadata.len())
 }
 
-fn os_error_message(error: &std::io::Error) -> String {
+fn truncate_os_error_bytes(error: &std::io::Error) -> Vec<u8> {
     #[cfg(unix)]
-    match error.raw_os_error() {
-        Some(errno) => {
-            // SAFETY: strerror returns a NUL-terminated message for a valid errno value.
-            unsafe { CStr::from_ptr(libc::strerror(errno)) }
-                .to_string_lossy()
-                .into_owned()
-        }
-        None => error.to_string(),
+    if let Some(errno) = error.raw_os_error()
+        && let Some(message) = truncate_strerror_bytes_for_locale(errno, c"")
+    {
+        return message;
     }
 
-    #[cfg(not(unix))]
-    {
-        error.to_string()
+    strip_errno(error).into_bytes()
+}
+
+#[cfg(unix)]
+fn truncate_strerror_bytes_for_locale(errno: i32, locale_name: &CStr) -> Option<Vec<u8>> {
+    let locale = unsafe {
+        ctcore::libc::newlocale(
+            ctcore::libc::LC_ALL_MASK,
+            locale_name.as_ptr(),
+            std::ptr::null_mut(),
+        )
+    };
+    if locale.is_null() {
+        return None;
     }
+
+    let previous = unsafe { ctcore::libc::uselocale(locale) };
+    if previous.is_null() {
+        unsafe { ctcore::libc::freelocale(locale) };
+        return None;
+    }
+
+    let message = strerror_bytes(errno);
+    unsafe {
+        ctcore::libc::uselocale(previous);
+        ctcore::libc::freelocale(locale);
+    }
+    message
 }
 
 fn truncate_files<P, F>(filenames: &[P], mut truncate_one: F) -> CTResult<()>
@@ -1856,18 +1879,31 @@ mod tests {
 
     #[test]
     fn truncate_runtime_error_preserves_simplified_chinese_template_and_errno() {
+        let io_error = std::io::Error::from_raw_os_error(libc::ENOENT);
         let error = truncate_diagnostic_error_with_os_error(
             t!(
                 "truncate.errors.cannot_open_for_writing",
                 locale = "zh-CN",
                 file = "'missing/target'"
             ),
-            &std::io::Error::from_raw_os_error(libc::ENOENT),
+            &io_error,
         );
+        let mut expected = "无法以写模式打开 'missing/target': ".as_bytes().to_vec();
+        expected.extend(truncate_os_error_bytes(&io_error));
+
+        assert_eq!(error.diagnostic_bytes().as_ref(), expected);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn truncate_errno_uses_requested_locale_bytes() {
+        let Some(message) = truncate_strerror_bytes_for_locale(libc::ENOENT, c"zh_CN.GBK") else {
+            return;
+        };
 
         assert_eq!(
-            error.diagnostic_bytes().as_ref(),
-            "无法以写模式打开 'missing/target': No such file or directory".as_bytes()
+            message,
+            b"\xc3\xbb\xd3\xd0\xc4\xc7\xb8\xf6\xce\xc4\xbc\xfe\xbb\xf2\xc4\xbf\xc2\xbc"
         );
     }
 

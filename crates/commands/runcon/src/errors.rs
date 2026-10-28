@@ -59,6 +59,19 @@ pub(crate) enum DefaultError {
     #[error("failed to get current context: {}", strip_errno(error))]
     CurrentContext { error: io::Error },
 
+    /// 获取命令文件上下文失败
+    #[error(
+        "failed to get security context of {}: {}",
+        command.quote(),
+        strip_errno(error)
+    )]
+    FileContext {
+        /// 命令操作数
+        command: OsString,
+        /// 系统错误
+        error: io::Error,
+    },
+
     /// 设置上下文组件失败
     #[error(
         "failed to set new {field}: {}: {}",
@@ -130,17 +143,6 @@ pub(crate) enum DefaultError {
         /// 错误来源
         source: io::Error,
     },
-
-    /// 带操作对象的 IO 错误
-    #[error("{operation} failed on {}", .operand1.quote())]
-    Io1 {
-        /// 操作描述
-        operation: &'static str,
-        /// 操作对象
-        operand1: OsString,
-        /// 错误来源
-        source: io::Error,
-    },
 }
 
 impl DefaultError {
@@ -149,22 +151,17 @@ impl DefaultError {
         Self::Io { operation, source }
     }
 
-    /// 创建带操作对象的 IO 错误
-    pub(crate) fn from_io1(
-        operation: &'static str,
-        operand1: impl Into<OsString>,
-        source: io::Error,
-    ) -> Self {
-        Self::Io1 {
-            operation,
-            operand1: operand1.into(),
-            source,
-        }
-    }
-
     /// 创建GNU风格的当前上下文错误
     pub(crate) fn from_current_context(error: io::Error) -> Self {
         Self::CurrentContext { error }
+    }
+
+    /// 创建GNU风格的命令文件上下文错误
+    pub(crate) fn from_file_context(command: impl Into<OsString>, error: io::Error) -> Self {
+        Self::FileContext {
+            command: command.into(),
+            error,
+        }
     }
 
     /// 创建GNU风格的上下文组件错误

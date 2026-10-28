@@ -590,12 +590,12 @@ fn get_transition_context(command: &OsStr) -> Result<CString> {
         Ok(Some(context)) => context,
         Ok(None) => {
             let err = io::Error::from_raw_os_error(libc::ENODATA);
-            return Err(DefaultError::from_io1("getfilecon", command, err));
+            return Err(DefaultError::from_file_context(command, err));
         }
-        Err(err) => {
-            return Err(DefaultError::from_selinux(
-                "Getting security context of command file",
-                err,
+        Err(_) => {
+            return Err(DefaultError::from_file_context(
+                command,
+                io::Error::last_os_error(),
             ));
         }
     };

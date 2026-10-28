@@ -959,7 +959,7 @@
     },
     {
       "command": "tail",
-      "description": "Linux下--follow=name运行中将tail-link-switch.txt原子替换为指向目标的符号链接；目标初始字节=7461726765740a，随后追加=61646465640a，预期stdout完整字节=7461726765740a61646465640a，stderr为替换诊断。",
+      "description": "Linux下--follow=name使用inotify时，将普通文件tail-link-switch.txt原子替换为符号链接后，GNU会将其标记为不可跟随；目标初始字节=7461726765740a，随后追加=61646465640a，预期stdout为空，stderr报告replaced with an untailable symbolic link。",
       "setup_commands": [
         "printf 'old\\n' > tail-link-switch.txt; printf 'target\\n' > tail-link-switch-target.txt; (sleep .3; ln -s tail-link-switch-target.txt tail-link-switch-new; mv -T tail-link-switch-new tail-link-switch.txt; sleep .2; printf 'added\\n' >> tail-link-switch-target.txt) >/dev/null 2>&1 &"
       ],
@@ -967,8 +967,8 @@
       "expectation": {
         "execution": {
           "exit_code": 0,
-          "stdout": "target\nadded\n",
-          "stderr": "tail: 'tail-link-switch.txt' has been replaced;  following new file\n"
+          "stdout": "",
+          "stderr": "tail: 'tail-link-switch.txt' has been replaced with an untailable symbolic link\n"
         },
         "ignore_fields": {
           "ignore_exit_code": true

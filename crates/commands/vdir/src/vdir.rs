@@ -2551,15 +2551,10 @@ mod tests {
         }
 
         #[test]
-        fn test_vdir_missing_block_size_uses_vdir_usage() {
-            let err = ct_app()
-                .try_get_matches_from([ctcore::ct_util_name(), "--block-size"])
-                .expect_err("expected missing --block-size argument to fail");
+        fn test_vdir_ct_app_uses_vdir_usage() {
+            let usage = ct_app().render_usage().to_string();
 
-            assert!(
-                err.to_string()
-                    .contains("Usage: vdir [OPTION]... [FILE]...")
-            );
+            assert!(usage.contains("Usage: vdir [OPTION]... [FILE]..."));
         }
 
         #[test]

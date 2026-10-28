@@ -455,8 +455,8 @@ impl<R: Read> Data<R> {
 
             for &c in &read_buf[..n] {
                 if self.ignore_garbage {
-                    let non_padding_format_padding = c == b'='
-                        && matches!(format, Base16 | Base2Lsbf | Base2Msbf);
+                    let non_padding_format_padding =
+                        c == b'=' && matches!(format, Base16 | Base2Lsbf | Base2Msbf);
                     let allowed_character = self.alphabet.contains(&c)
                         && !(matches!(format, Base16) && c.is_ascii_lowercase());
                     if allowed_character || non_padding_format_padding {
@@ -686,7 +686,10 @@ mod test {
 
     impl Read for AlwaysFailReader {
         fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
-            Err(io::Error::new(io::ErrorKind::PermissionDenied, "Permission denied"))
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Permission denied",
+            ))
         }
     }
 
@@ -1009,16 +1012,8 @@ mod test {
     fn test_data_decode_ignore_garbage_retains_padding_for_unpadded_formats() {
         for (format, input, expected) in [
             (Format::Base16, b"AB=CD".as_slice(), 0xab),
-            (
-                Format::Base2Msbf,
-                b"11000001=11000001".as_slice(),
-                0xc1,
-            ),
-            (
-                Format::Base2Lsbf,
-                b"11000001=11000001".as_slice(),
-                0x83,
-            ),
+            (Format::Base2Msbf, b"11000001=11000001".as_slice(), 0xc1),
+            (Format::Base2Lsbf, b"11000001=11000001".as_slice(), 0x83),
         ] {
             let mut data = Data::new(Cursor::new(input), format).ignore_garbage(true);
             let mut out = Vec::new();
@@ -1064,8 +1059,7 @@ mod test {
 
     #[test]
     fn test_data_decode_base32hex_filters_base32_letters_with_ignore_garbage() {
-        let mut data =
-            Data::new(Cursor::new(b"W000===="), Format::Base32Hex).ignore_garbage(true);
+        let mut data = Data::new(Cursor::new(b"W000===="), Format::Base32Hex).ignore_garbage(true);
         let mut out = Vec::new();
         assert!(data.decode(&mut out).is_err());
         assert!(out.is_empty());
@@ -1109,8 +1103,7 @@ mod test {
     #[test]
     fn test_data_encode_z85_rejects_invalid_final_gnu_block_before_writing_it() {
         for (input_len, expected_output_len) in [(30_001, 0), (30_721, 38_400)] {
-            let mut data =
-                Data::new(Cursor::new(vec![b'A'; input_len]), Format::Z85).line_wrap(0);
+            let mut data = Data::new(Cursor::new(vec![b'A'; input_len]), Format::Z85).line_wrap(0);
             let mut out = Vec::new();
             assert!(matches!(
                 data.encode(&mut out),

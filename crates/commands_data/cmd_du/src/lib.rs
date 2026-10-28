@@ -162,7 +162,7 @@ fn row_to_value(row: &ct_du::DuRow) -> CtValue {
         (
             "time_seconds".into(),
             match row.time_seconds {
-                Some(value) => CtValue::Int(i64::try_from(value).expect("time fits in i64")),
+                Some(value) => CtValue::Int(value),
                 None => CtValue::Nothing,
             },
         ),

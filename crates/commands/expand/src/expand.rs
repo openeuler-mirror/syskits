@@ -549,7 +549,7 @@ fn expand_validate_options(args: &[OsString]) -> CTResult<()> {
             let stderr = io::stderr();
             write_expand_invalid_option_diagnostic(
                 &mut stderr.lock(),
-                &ctcore::ct_util_name(),
+                ctcore::ct_util_name(),
                 invalid,
             )?;
             return Err(1.into());
@@ -895,7 +895,7 @@ fn expand_write_error(error: &io::Error) -> Box<dyn ctcore::ct_error::CTError> {
 fn expand_stdin_was_closed() -> bool {
     #[cfg(unix)]
     {
-        return ctcore::ct_stdin_was_closed() && !ctcore::ct_io::has_injected_stdin();
+        ctcore::ct_stdin_was_closed() && !ctcore::ct_io::has_injected_stdin()
     }
 
     #[cfg(not(unix))]

@@ -59,11 +59,7 @@ static ID_INHERITED_SIGPIPE_IGNORED: AtomicBool = AtomicBool::new(false);
 unsafe extern "C" fn id_capture_inherited_sigpipe() {
     let mut action = std::mem::MaybeUninit::<ctcore::libc::sigaction>::uninit();
     if unsafe {
-        ctcore::libc::sigaction(
-            ctcore::libc::SIGPIPE,
-            std::ptr::null(),
-            action.as_mut_ptr(),
-        )
+        ctcore::libc::sigaction(ctcore::libc::SIGPIPE, std::ptr::null(), action.as_mut_ptr())
     } == 0
     {
         let action = unsafe { action.assume_init() };
@@ -421,10 +417,7 @@ pub fn id_main<W: Write>(writer: &mut W, args: impl ctcore::Args) -> CTResult<()
     id_init_gettext();
 
     let mut raw_args = args.collect::<Vec<_>>();
-    id_apply_posix_option_order(
-        &mut raw_args,
-        std::env::var_os("POSIXLY_CORRECT").is_some(),
-    );
+    id_apply_posix_option_order(&mut raw_args, std::env::var_os("POSIXLY_CORRECT").is_some());
     id_reject_attached_long_option(&raw_args)?;
 
     let matches = ct_app()
@@ -540,12 +533,7 @@ fn id_default_classic_text(row: &IdRow) -> String {
         text.push_str(&format!("{}{}({})", id_gettext("uid="), uid.id, uid.label));
     }
     if let Some(gid) = &row.gid {
-        text.push_str(&format!(
-            "{}{}({})",
-            id_gettext(" gid="),
-            gid.id,
-            gid.label
-        ));
+        text.push_str(&format!("{}{}({})", id_gettext(" gid="), gid.id, gid.label));
     }
     if let Some(euid) = &row.euid {
         text.push_str(&format!(
@@ -811,10 +799,7 @@ pub fn id_native_semantic(args: impl ctcore::Args) -> CTResult<IdSemantic> {
     id_init_gettext();
 
     let mut raw_args = args.collect::<Vec<_>>();
-    id_apply_posix_option_order(
-        &mut raw_args,
-        std::env::var_os("POSIXLY_CORRECT").is_some(),
-    );
+    id_apply_posix_option_order(&mut raw_args, std::env::var_os("POSIXLY_CORRECT").is_some());
     id_reject_attached_long_option(&raw_args)?;
 
     let matches = ct_app()
@@ -920,7 +905,7 @@ fn id_quote_user_with_marks(user: &OsStr, left_quote: &str, right_quote: &str) -
         }
         index += 1;
     }
-    quoted.push_str(&right_quote);
+    quoted.push_str(right_quote);
     quoted
 }
 
@@ -1083,7 +1068,7 @@ where
                         }
                     }
                 } else {
-                write!(writer, "{id}")?;
+                    write!(writer, "{id}")?;
                 }
             }
 
@@ -1361,10 +1346,7 @@ mod tests {
     fn test_stdout_error_has_gnu_write_error_prefix() {
         let error = id_stdout_write_error(io::Error::from_raw_os_error(ctcore::libc::ENOSPC));
 
-        assert_eq!(
-            error.to_string(),
-            "write error: No space left on device"
-        );
+        assert_eq!(error.to_string(), "write error: No space left on device");
     }
 
     #[test]

@@ -1133,7 +1133,7 @@ fn du_validate_options(args: &[OsString]) -> CTResult<()> {
             break;
         }
 
-        if arg.starts_with("--") {
+        if let Some(long_arg) = arg.strip_prefix("--") {
             if let Some(option) = du_long_option_with_unexpected_argument(&arg) {
                 ct_show_error!("option '--{}' doesn't allow an argument", option);
                 eprintln!(
@@ -1144,7 +1144,7 @@ fn du_validate_options(args: &[OsString]) -> CTResult<()> {
             }
 
             if !arg.contains('=')
-                && du_recognized_long_option(&arg[2..])
+                && du_recognized_long_option(long_arg)
                     .is_some_and(|(_, argument)| argument == DuLongOptionArgument::Required)
             {
                 index += 1;
@@ -1154,7 +1154,7 @@ fn du_validate_options(args: &[OsString]) -> CTResult<()> {
                 let stderr = io::stderr();
                 write_du_invalid_option_diagnostic(
                     &mut stderr.lock(),
-                    &ctcore::ct_util_name(),
+                    ctcore::ct_util_name(),
                     invalid,
                 )
                 .expect("failed to write invalid option diagnostic");
@@ -1173,7 +1173,7 @@ fn du_validate_options(args: &[OsString]) -> CTResult<()> {
 fn du_last_files0_from(args_match: &ArgMatches) -> Option<&String> {
     args_match
         .get_many::<String>(opt_flags::FILES0_FROM)
-        .and_then(|values| values.last())
+        .and_then(|mut values| values.next_back())
 }
 
 fn du_get_dereference(args_match: &ArgMatches, files_path: &[PathBuf]) -> DuDeref {
@@ -1302,22 +1302,23 @@ fn du_exclude_pattern_matches_path(pattern: &DuExcludePattern, path: &Path) -> b
     #[cfg(unix)]
     {
         let path = path.as_os_str().as_bytes();
-        return du_exclude_pattern_matches_bytes(pattern, path)
+        du_exclude_pattern_matches_bytes(pattern, path)
             || path.iter().enumerate().any(|(index, byte)| {
                 *byte == b'/'
                     && path.get(index + 1) != Some(&b'/')
                     && du_exclude_pattern_matches_bytes(pattern, &path[index + 1..])
-            });
+            })
     }
 
     #[cfg(not(unix))]
-    let path = path.to_string_lossy();
-    #[cfg(not(unix))]
-    return pattern.pattern.matches(&path)
-        || path.match_indices('/').any(|(index, _)| {
-            let suffix = &path[index + 1..];
-            !suffix.starts_with('/') && pattern.pattern.matches(suffix)
-        });
+    {
+        let path = path.to_string_lossy();
+        pattern.pattern.matches(&path)
+            || path.match_indices('/').any(|(index, _)| {
+                let suffix = &path[index + 1..];
+                !suffix.starts_with('/') && pattern.pattern.matches(suffix)
+            })
+    }
 }
 
 fn du_path_is_excluded(excludes: &[DuExcludePattern], path: &Path) -> bool {

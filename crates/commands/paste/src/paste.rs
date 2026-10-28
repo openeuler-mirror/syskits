@@ -21,8 +21,8 @@ use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, strip_errno};
-use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use ctcore::ct_line_ending::CtLineEnding;
+use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
 use std::ffi::{CStr, OsString};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Write, stdout};
@@ -493,9 +493,7 @@ impl<W: Write> PasteContext<W> {
                 line: String::from_utf8_lossy(row).into_owned(),
             });
         }
-        self.writer
-            .write_all(row)
-            .map_err(paste_write_error)?;
+        self.writer.write_all(row).map_err(paste_write_error)?;
         self.writer
             .write_all(&[self.line_ending as u8])
             .map_err(paste_write_error)?;
@@ -512,9 +510,7 @@ impl<W: Write> PasteContext<W> {
         let mut has_content = false;
 
         loop {
-            let buf = reader
-                .fill_buf()
-                .map_err(ProcessStreamError::Read)?;
+            let buf = reader.fill_buf().map_err(ProcessStreamError::Read)?;
             if buf.is_empty() {
                 return Ok(has_content);
             }
@@ -572,11 +568,11 @@ impl<W: Write> PasteContext<W> {
                 self.used_stdin = true;
                 (
                     Self::process_stream(
-                    &mut self.stdin,
-                    &mut self.output,
-                    &mut self.delimiter_positions,
-                    &mut self.writer,
-                    line_ending,
+                        &mut self.stdin,
+                        &mut self.output,
+                        &mut self.delimiter_positions,
+                        &mut self.writer,
+                        line_ending,
                     ),
                     OsString::from("-"),
                 )

@@ -23,17 +23,14 @@ pub fn main() {
     ctcore::ct_ensure_standard_fds();
 
     let args = ctcore::ct_os_args().collect::<Vec<_>>();
-    let tool = ct_base32::Base32::default();
+    let tool = ct_base32::Base32;
     let result = tool.execute(&args);
     let mut code = match result {
         Ok(()) => ctcore::ct_error::get_ct_exit_code(),
         Err(err) => {
             let message = err.to_string();
             if !message.is_empty() {
-                write_stderr(format_args!(
-                    "{}: {message}\n",
-                    ctcore::ct_util_name()
-                ));
+                write_stderr(format_args!("{}: {message}\n", ctcore::ct_util_name()));
             }
             if err.usage() {
                 write_stderr(format_args!(

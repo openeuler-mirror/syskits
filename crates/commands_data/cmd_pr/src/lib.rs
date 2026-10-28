@@ -95,9 +95,9 @@ fn optional_string(value: &Option<String>) -> CtValue {
     }
 }
 
-fn optional_usize(value: Option<usize>) -> CtValue {
+fn optional_i64(value: Option<i64>) -> CtValue {
     match value {
-        Some(value) => CtValue::Int(i64::try_from(value).expect("value fits")),
+        Some(value) => CtValue::Int(value),
         None => CtValue::Nothing,
     }
 }
@@ -115,7 +115,7 @@ fn row_to_value(row: &ct_pr::PrSemanticRow) -> CtValue {
             "file_id".into(),
             CtValue::Int(i64::try_from(row.file_id).expect("file id fits")),
         ),
-        ("line_index".into(), optional_usize(row.line_index)),
+        ("line_index".into(), optional_i64(row.line_index)),
         (
             "group_key".into(),
             CtValue::Int(i64::try_from(row.group_key).expect("group key fits")),

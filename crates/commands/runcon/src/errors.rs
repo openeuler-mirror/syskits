@@ -72,6 +72,10 @@ pub(crate) enum DefaultError {
         error: io::Error,
     },
 
+    /// 计算新上下文失败
+    #[error("failed to compute a new context: {}", strip_errno(error))]
+    ComputeContext { error: io::Error },
+
     /// 设置上下文组件失败
     #[error(
         "failed to set new {field}: {}: {}",
@@ -162,6 +166,11 @@ impl DefaultError {
             command: command.into(),
             error,
         }
+    }
+
+    /// 创建GNU风格的计算上下文错误
+    pub(crate) fn from_compute_context(error: io::Error) -> Self {
+        Self::ComputeContext { error }
     }
 
     /// 创建GNU风格的上下文组件错误

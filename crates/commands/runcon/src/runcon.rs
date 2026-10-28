@@ -615,8 +615,7 @@ fn get_transition_context(command: &OsStr) -> Result<CString> {
         )
     };
     if rc != 0 {
-        return Err(DefaultError::from_io(
-            "Computing result of process transition",
+        return Err(DefaultError::from_compute_context(
             io::Error::last_os_error(),
         ));
     }

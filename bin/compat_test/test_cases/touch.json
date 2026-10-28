@@ -309,7 +309,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 946684740",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 946684740",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -350,7 +350,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c '%X:%Y' target)\" = 1893456000:946684800",
+                        "command": "test \"$(/usr/bin/stat -c '%X:%Y' target)\" = 1893456000:946684800",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -394,7 +394,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c '%X:%Y' target)\" = 1893456000:1893456000",
+                        "command": "test \"$(/usr/bin/stat -c '%X:%Y' target)\" = 1893456000:1893456000",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -435,7 +435,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 978307200",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 978307200",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -473,7 +473,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 978307200",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 978307200",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -511,7 +511,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 978307200",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 978307200",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -581,7 +581,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 915148800",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 915148800",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -617,7 +617,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 915148800",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 915148800",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -1166,7 +1166,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "expected=$(date -d \"$(date +%F) + 1 day\" +%F); test \"$(date -r target +%F)\" = \"$expected\" && test \"$(date -r target +%T)\" = 12:34:56",
+                        "command": "expected=$(/usr/bin/date -d \"$(/usr/bin/date +%F) + 1 day\" +%F); test \"$(/usr/bin/date -r target +%F)\" = \"$expected\" && test \"$(/usr/bin/date -r target +%T)\" = 12:34:56",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -1232,7 +1232,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(date -r target '+%Y-%m-%d %H:%M:%S')\" = '2020-01-02 03:04:05'",
+                        "command": "test \"$(/usr/bin/date -r target '+%Y-%m-%d %H:%M:%S')\" = '2020-01-02 03:04:05'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -1263,7 +1263,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 1704108840",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 1704108840",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -1417,7 +1417,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 1718526645",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 1718526645",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -1448,7 +1448,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 1704112440",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 1704112440",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -1479,7 +1479,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(date -r target '+%Y-%m-%dT%H:%M:%S.%NZ')\" = '2024-02-29T12:34:56.500000000Z'",
+                        "command": "test \"$(/usr/bin/date -r target '+%Y-%m-%dT%H:%M:%S.%NZ')\" = '2024-02-29T12:34:56.500000000Z'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -1510,7 +1510,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2024-02-29T12:34:00Z'",
+                        "command": "test \"$(/usr/bin/date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2024-02-29T12:34:00Z'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -1541,7 +1541,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '1992-06-17T00:00:00Z'",
+                        "command": "test \"$(/usr/bin/date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '1992-06-17T00:00:00Z'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -1572,7 +1572,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2024-01-02T00:00:00Z'",
+                        "command": "test \"$(/usr/bin/date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2024-01-02T00:00:00Z'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -1603,7 +1603,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2024-01-02T00:00:00Z'",
+                        "command": "test \"$(/usr/bin/date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2024-01-02T00:00:00Z'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -1637,7 +1637,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2025-01-02T00:00:00Z'",
+                        "command": "test \"$(/usr/bin/date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2025-01-02T00:00:00Z'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -1668,7 +1668,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2024-02-29T07:00:00Z'",
+                        "command": "test \"$(/usr/bin/date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2024-02-29T07:00:00Z'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -1699,7 +1699,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2024-02-29T12:34:00Z'",
+                        "command": "test \"$(/usr/bin/date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2024-02-29T12:34:00Z'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -1733,7 +1733,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2024-03-02T12:00:00Z'",
+                        "command": "test \"$(/usr/bin/date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2024-03-02T12:00:00Z'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -1767,7 +1767,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2025-07-28T00:00:01Z'",
+                        "command": "test \"$(/usr/bin/date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2025-07-28T00:00:01Z'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -1825,7 +1825,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2024-02-29T12:34:00Z'",
+                        "command": "test \"$(/usr/bin/date -r target '+%Y-%m-%dT%H:%M:%SZ')\" = '2024-02-29T12:34:00Z'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -2028,7 +2028,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "1753360496.123456789"
                     }
@@ -2093,7 +2093,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "1753360496.123000000"
                     }
@@ -2222,7 +2222,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "1709164800.000000000"
                     }
@@ -2256,7 +2256,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "1709164800.000000000"
                     }
@@ -2457,7 +2457,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "1730611800.000000000"
                     }
@@ -2488,7 +2488,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "1.000000000"
                     }
@@ -2519,7 +2519,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "0.000000000"
                     }
@@ -2584,7 +2584,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "1704326400.000000000"
                     }
@@ -2615,7 +2615,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "1704326400.000000000"
                     }
@@ -2685,7 +2685,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = \"$(( $(stat -c %Y reference) - 90000 ))\"",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = \"$(( $(/usr/bin/stat -c %Y reference) - 90000 ))\"",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -2724,7 +2724,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %.9Y target)\" = '1756125296.000000000'",
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '1756125296.000000000'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -2755,7 +2755,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "1.500000000"
                     }
@@ -2786,7 +2786,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "1709164800.000000000"
                     }
@@ -2848,7 +2848,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "941347800.000000000"
                     },
@@ -2894,7 +2894,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "1711756800.000000000"
                     }
@@ -2928,7 +2928,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "1709164800.000000000"
                     }
@@ -2962,7 +2962,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "-62135510400.000000000"
                     }
@@ -3030,7 +3030,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "1709210096.000000000"
                     }
@@ -3098,7 +3098,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "stat -c %.9Y target",
+                        "command": "/usr/bin/stat -c %.9Y target",
                         "expected_exit": 0,
                         "expected_stdout": "1709210096.000000000"
                     }
@@ -3171,7 +3171,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %.9Y target)\" = '1756038897.000000000'",
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '1756038897.000000000'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -3273,7 +3273,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %.9Y target)\" = '1703678400.000000000'",
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '1703678400.000000000'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -3307,7 +3307,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %.9Y target)\" = '1704110400.000000000'",
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '1704110400.000000000'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -3341,7 +3341,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %.9Y target)\" = '1704139200.000000000'",
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '1704139200.000000000'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -3375,7 +3375,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %.9Y target)\" = '1704128400.000000000'",
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '1704128400.000000000'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -3409,7 +3409,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %.9Y target)\" = '1663113600.000000000'",
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '1663113600.000000000'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -3511,7 +3511,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %.9Y target)\" = '1709201096.000000000'",
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '1709201096.000000000'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -3545,7 +3545,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %.9Y target)\" = '1709201096.000000000'",
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '1709201096.000000000'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -3613,7 +3613,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %.9Y target)\" = '1730611800.000000000'",
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '1730611800.000000000'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -3647,7 +3647,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %.9Y target)\" = '86140800.000000000'",
+                        "command": "test \"$(/usr/bin/stat -c %.9Y target)\" = '86140800.000000000'",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -4211,7 +4211,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 1709210096",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 1709210096",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -4245,7 +4245,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 1709233200",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 1709233200",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -4281,7 +4281,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 1735776000",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 1735776000",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -4575,7 +4575,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 1704112440",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 1704112440",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -4609,7 +4609,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 1304247318",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 1304247318",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -4647,7 +4647,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 1753315200",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 1753315200",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -4681,7 +4681,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 1704092696",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 1704092696",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -4715,7 +4715,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 1729992600",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 1729992600",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }
@@ -4749,7 +4749,7 @@
                 },
                 "verifications": [
                     {
-                        "command": "test \"$(stat -c %Y target)\" = 1704128400",
+                        "command": "test \"$(/usr/bin/stat -c %Y target)\" = 1704128400",
                         "expected_exit": 0,
                         "expected_stdout": ""
                     }

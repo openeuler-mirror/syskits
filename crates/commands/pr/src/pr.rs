@@ -45,6 +45,14 @@ unsafe extern "C" {
         domainname: *const ctcore::libc::c_char,
         msgid: *const ctcore::libc::c_char,
     ) -> *mut ctcore::libc::c_char;
+    fn mbrtowc(
+        wide_char: *mut ctcore::libc::wchar_t,
+        bytes: *const ctcore::libc::c_char,
+        byte_count: usize,
+        state: *mut ctcore::libc::mbstate_t,
+    ) -> usize;
+    fn wcwidth(wide_char: ctcore::libc::wchar_t) -> ctcore::libc::c_int;
+    fn iswprint(wide_char: ctcore::libc::c_uint) -> ctcore::libc::c_int;
 }
 
 const PR_TAB: char = '\t';
@@ -413,8 +421,37 @@ fn pr_contains_raw_bytes(s: &str) -> bool {
     s.chars().any(|c| pr_raw_byte_from_char(c).is_some())
 }
 
-fn pr_raw_byte_display_width(_byte: u8) -> usize {
-    if pr_uses_utf8_locale() { 1 } else { 0 }
+fn pr_raw_byte_wchar(byte: u8) -> Option<ctcore::libc::wchar_t> {
+    #[cfg(unix)]
+    {
+        let mut state: ctcore::libc::mbstate_t = unsafe { std::mem::zeroed() };
+        let mut wide_char = 0;
+        let converted = unsafe {
+            mbrtowc(
+                &mut wide_char,
+                (&byte as *const u8).cast::<ctcore::libc::c_char>(),
+                1,
+                &mut state,
+            )
+        };
+        (converted == 1).then_some(wide_char)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = byte;
+        None
+    }
+}
+
+fn pr_raw_byte_display_width(byte: u8) -> usize {
+    pr_raw_byte_wchar(byte)
+        .and_then(|wide_char| usize::try_from(unsafe { wcwidth(wide_char) }).ok())
+        .unwrap_or_else(|| usize::from(pr_uses_utf8_locale()))
+}
+
+fn pr_raw_byte_is_printable(byte: u8) -> bool {
+    pr_raw_byte_wchar(byte)
+        .is_some_and(|wide_char| unsafe { iswprint(wide_char as ctcore::libc::c_uint) != 0 })
 }
 
 fn pr_effective_ctype_locale() -> String {
@@ -3879,7 +3916,11 @@ fn escape_control_chars(input: &str, show_control_chars: bool, show_nonprinting:
     let mut result = String::with_capacity(input.len());
     for c in input.chars() {
         if let Some(byte) = pr_raw_byte_from_char(c) {
-            result.push_str(&format!("\\{byte:03o}"));
+            if pr_raw_byte_is_printable(byte) {
+                result.push(c);
+            } else {
+                result.push_str(&format!("\\{byte:03o}"));
+            }
             continue;
         }
         if c == '\t' || c == '\n' || c == '\x0C' || c == ' ' {

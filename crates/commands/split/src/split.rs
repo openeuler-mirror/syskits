@@ -24,7 +24,7 @@ use clap::{
     parser::ValueSource,
 };
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
+use ctcore::ct_display::{Quotable, locale_quote};
 use ctcore::ct_error::{CTError, CTIoError, CTResult, CTsageError, CtSimpleError, FromIo};
 use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 #[cfg(unix)]
@@ -158,7 +158,13 @@ fn split_parse_invocation(args: impl ctcore::Args) -> CTResult<SpliceSettings> {
 
     let settings = match SpliceSettings::from(&args_match, &obs_lines) {
         Ok(settings) => settings,
-        Err(e) if e.splice_requires_usage() => return Err(CTsageError::new(1, format!("{e}"))),
+        Err(e)
+            if e.splice_requires_usage()
+                || (obs_lines.is_some()
+                    && matches!(&e, SpliceSettingsError::Strategy(StrategyError::Lines(_)))) =>
+        {
+            return Err(CTsageError::new(1, format!("{e}")));
+        }
         Err(e) => return Err(CtSimpleError::new(1, format!("{e}"))),
     };
 
@@ -947,6 +953,9 @@ enum SpliceSettingsError {
     /// Multi-character (Invalid) separator
     MultiCharacterSeparator(String),
 
+    /// Empty record separator
+    EmptyRecordSeparator,
+
     /// Multiple different separator characters
     MultipleSeparatorCharacters,
 
@@ -975,6 +984,7 @@ impl SpliceSettingsError {
             Self::Strategy(StrategyError::MultipleWays)
                 | Self::Suffix(FilenameSuffixError::ContainsSeparator(_))
                 | Self::Suffix(FilenameSuffixError::InvalidStartValue { .. })
+                | Self::FilterWithKthChunkNumber
         )
     }
 }
@@ -985,8 +995,9 @@ impl fmt::Display for SpliceSettingsError {
             Self::Strategy(e) => e.fmt(f),
             Self::Suffix(e) => e.fmt(f),
             Self::MultiCharacterSeparator(s) => {
-                write!(f, "multi-character separator {}", s.quote())
+                write!(f, "multi-character separator {}", locale_quote(s))
             }
+            Self::EmptyRecordSeparator => write!(f, "empty record separator"),
             Self::MultipleSeparatorCharacters => {
                 write!(f, "multiple separator characters specified")
             }
@@ -1031,6 +1042,7 @@ impl SpliceSettings {
                 }
                 let first_bytes = first.as_encoded_bytes();
                 match first_bytes {
+                    [] => return Err(SpliceSettingsError::EmptyRecordSeparator),
                     b"\\0" => b'\0',
                     // GNU stores SEP in a signed char and later treats a
                     // negative value as an unset separator.  On Linux this
@@ -1595,8 +1607,7 @@ fn splice_line_bytes<R: BufRead>(
     let chunk_size = chunk_size as usize;
     let separator = splice_settings.separator;
     let mut file_iterator =
-        FilenameIterator::new(splice_settings.output_prefix(), &splice_settings.suffix)
-            .map_err(|e| CtSimpleError::new(1, format!("{e}")))?;
+        FilenameIterator::new(splice_settings.output_prefix(), &splice_settings.suffix)?;
 
     let mut carry_over = Vec::new();
 
@@ -1715,8 +1726,7 @@ fn initialize_output_files(
     writer_optional: bool,
 ) -> CTResult<(OutFiles, bool)> {
     let mut file_iterator: FilenameIterator =
-        FilenameIterator::new(split_settings.output_prefix(), &split_settings.suffix)
-            .map_err(|e| io::Error::other(format!("{e}")))?;
+        FilenameIterator::new(split_settings.output_prefix(), &split_settings.suffix)?;
     for _ in 0..number_files {
         let Some(file_name) = file_iterator.next() else {
             return Ok((output_files, true));
@@ -12065,10 +12075,10 @@ mod tests {
         }
 
         #[test]
-        fn test_filter_with_kth_chunk_number_does_not_require_usage() {
+        fn test_filter_with_kth_chunk_number_requires_usage() {
             let error = SpliceSettingsError::FilterWithKthChunkNumber;
 
-            assert!(!error.splice_requires_usage());
+            assert!(error.splice_requires_usage());
         }
 
         #[test]

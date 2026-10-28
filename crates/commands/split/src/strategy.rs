@@ -13,10 +13,21 @@
 use crate::{OPT_BYTES, OPT_LINE_BYTES, OPT_LINES, OPT_NUMBER};
 use clap::{ArgMatches, parser::ValueSource};
 use ctcore::{
-    ct_display::Quotable,
+    ct_display::locale_quote,
     ct_parse_size::{ParseSizeError, parse_size_u64_max},
 };
 use std::fmt;
+
+fn split_parse_size_error(error: ParseSizeError, operand: &str) -> ParseSizeError {
+    let quoted = locale_quote(operand);
+    match error {
+        ParseSizeError::InvalidSuffix(_) => ParseSizeError::InvalidSuffix(quoted),
+        ParseSizeError::ParseFailure(_) => ParseSizeError::ParseFailure(quoted),
+        ParseSizeError::SizeTooBig(_) => {
+            ParseSizeError::SizeTooBig(format!("{quoted}: Value too large for defined data type"))
+        }
+    }
+}
 
 struct ParsedIntmax {
     value: i64,
@@ -272,10 +283,10 @@ impl fmt::Display for StrategyError {
             Self::Lines(e) => write!(f, "invalid number of lines: {e}"),
             Self::Bytes(e) => write!(f, "invalid number of bytes: {e}"),
             Self::NumberType(StrategyNumberTypeError::NumberOfChunks(s)) => {
-                write!(f, "invalid number of chunks: {}", s.quote())
+                write!(f, "invalid number of chunks: {}", locale_quote(s))
             }
             Self::NumberType(StrategyNumberTypeError::ChunkNumber(s)) => {
-                write!(f, "invalid chunk number: {}", s.quote())
+                write!(f, "invalid chunk number: {}", locale_quote(s))
             }
             Self::MultipleWays => write!(f, "cannot split in more than one way"),
         }
@@ -296,14 +307,11 @@ impl Strategy {
         ) -> Result<Strategy, StrategyError> {
             let s = args_match.get_one::<String>(opt).unwrap();
             let n = parse_size_u64_max(s.trim_start_matches(|c: char| c.is_ascii_whitespace()))
-                .map_err(error)?;
+                .map_err(|parse_error| error(split_parse_size_error(parse_error, s)))?;
             if n > 0 {
                 Ok(strategy(n))
             } else {
-                Err(error(ParseSizeError::ParseFailure(format!(
-                    "{}",
-                    s.quote()
-                ))))
+                Err(error(ParseSizeError::ParseFailure(locale_quote(s))))
             }
         }
 
@@ -370,14 +378,14 @@ impl Strategy {
         ) {
             (Some(v), false, false, false, false) => {
                 let v = parse_size_u64_max(v.trim_start_matches(|c: char| c.is_ascii_whitespace()))
-                    .map_err(|_| {
-                        StrategyError::Lines(ParseSizeError::ParseFailure(v.to_string()))
+                    .map_err(|parse_error| {
+                        StrategyError::Lines(split_parse_size_error(parse_error, v))
                     })?;
                 if v > 0 {
                     Ok(Self::Lines(v))
                 } else {
                     Err(StrategyError::Lines(ParseSizeError::ParseFailure(
-                        v.to_string(),
+                        locale_quote(&v.to_string()),
                     )))
                 }
             }
@@ -422,7 +430,13 @@ mod tests {
             Ok(_) => panic!("zero line bytes must be rejected"),
         };
 
-        assert_eq!(error.to_string(), "invalid number of lines: '0'");
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "invalid number of lines: {}",
+                ctcore::ct_display::locale_quote("0")
+            )
+        );
     }
 
     #[test]
@@ -464,7 +478,13 @@ mod tests {
             Ok(_) => panic!("invalid first split strategy operand must be rejected"),
         };
 
-        assert_eq!(error.to_string(), "invalid number of lines: 'not-a-number'");
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "invalid number of lines: {}",
+                ctcore::ct_display::locale_quote("not-a-number")
+            )
+        );
     }
 
     #[test]

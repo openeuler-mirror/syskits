@@ -43,8 +43,8 @@ use crate::{
     OPT_NUMERIC_SUFFIXES_SHORT, OPT_SUFFIX_LENGTH,
 };
 use clap::ArgMatches;
-use ctcore::ct_display::{Quotable, locale_quote_marks};
-use ctcore::ct_error::{CTResult, CtSimpleError};
+use ctcore::ct_display::{locale_quote, locale_quote_marks};
+use ctcore::ct_error::{CTResult, CTsageError};
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 
@@ -103,11 +103,11 @@ pub enum FilenameSuffixError {
 impl fmt::Display for FilenameSuffixError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::NotParsable(s) => write!(f, "invalid suffix length: {}", s.quote()),
+            Self::NotParsable(s) => write!(f, "invalid suffix length: {}", locale_quote(s)),
             Self::InvalidStartValue { value, hexadecimal } => write!(
                 f,
                 "{}: invalid start value for {} suffix",
-                value.quote(),
+                locale_quote(value),
                 if *hexadecimal {
                     "hexadecimal"
                 } else {
@@ -491,7 +491,7 @@ impl FilenameIterator {
                 )
             };
             Number::FixedWidth(fixed_width_number.map_err(|_| {
-                CtSimpleError::new(
+                CTsageError::new(
                     1,
                     "numerical suffix start value is too large for the suffix length",
                 )
@@ -982,15 +982,9 @@ mod tests {
 
     #[test]
     fn test_suffix_start_rejects_non_gnu_digit_alphabet() {
-        for (option, expected) in [
-            (
-                "--numeric-suffixes=+1",
-                "'+1': invalid start value for numerical suffix",
-            ),
-            (
-                "--hex-suffixes=A",
-                "'A': invalid start value for hexadecimal suffix",
-            ),
+        for (option, value, suffix_kind) in [
+            ("--numeric-suffixes=+1", "+1", "numerical"),
+            ("--hex-suffixes=A", "A", "hexadecimal"),
         ] {
             let matches = ct_app()
                 .try_get_matches_from(["split", option, "-b", "1"])
@@ -1001,14 +995,26 @@ mod tests {
                 Ok(_) => panic!("non-GNU suffix start alphabet must be rejected"),
             };
 
-            assert_eq!(error.to_string(), expected);
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "{}: invalid start value for {suffix_kind} suffix",
+                    ctcore::ct_display::locale_quote(value)
+                )
+            );
         }
     }
 
     #[test]
     fn test_suffix_error_not_parsable_display() {
         let error = FilenameSuffixError::NotParsable("123".to_string());
-        assert_eq!("invalid suffix length: '123'", format!("{error}"));
+        assert_eq!(
+            format!(
+                "invalid suffix length: {}",
+                ctcore::ct_display::locale_quote("123")
+            ),
+            format!("{error}")
+        );
     }
 
     #[test]

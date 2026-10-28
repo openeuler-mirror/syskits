@@ -2280,6 +2280,16 @@ fn parse_merge_mode(
 fn pr_open(path: impl AsRef<Path>) -> Result<Box<dyn Read>, PrError> {
     let path = path.as_ref();
     if path == Path::new(PR_FILE_STDIN) {
+        #[cfg(unix)]
+        if ctcore::ct_stdin_was_closed()
+            || unsafe { ctcore::libc::fcntl(ctcore::libc::STDIN_FILENO, ctcore::libc::F_GETFD) }
+                == -1
+        {
+            return Err(PrError::Input(
+                std::io::Error::last_os_error(),
+                PR_FILE_STDIN.to_string(),
+            ));
+        }
         return Ok(ctcore::ct_io::stdin_reader_box());
     }
 

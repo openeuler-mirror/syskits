@@ -101,7 +101,7 @@ pub fn runcon_main(args: impl ctcore::Args) -> CTResult<()> {
                     DefaultError::InvalidSecurityContext { .. } => RunconError::with_code(125, e),
                     _ => RunconError::new(e),
                 })?;
-            runcon_exec(&resolved_cmd, &settings.arguments) // 2. 传递绝对路径
+            runcon_exec(&resolved_cmd, &settings.arguments, false) // 2. 传递绝对路径
         }
 
         // 使用自定义上下文运行命令
@@ -129,7 +129,8 @@ pub fn runcon_main(args: impl ctcore::Args) -> CTResult<()> {
                     DefaultError::InvalidSecurityContext { .. } => RunconError::with_code(125, e),
                     _ => RunconError::new(e),
                 })?;
-                runcon_exec(&resolved_cmd, &settings.arguments) // 3. 传递绝对路径执行
+                let use_execv = *compute_transition_context && command.as_bytes().contains(&b'/');
+                runcon_exec(&resolved_cmd, &settings.arguments, use_execv) // 3. 传递绝对路径执行
             }
             // 无命令时，仅打印当前上下文
             None => print_current_context().map_err(|e| RunconError::new(e).into()),
@@ -559,7 +560,7 @@ fn get_custom_context(
 /// # 注意
 /// 理论上返回类型应该是 `UResult<!>`，但由于 never type 尚未稳定，
 /// 所以使用 `CTResult<()>` 表示该函数如果返回一定是错误。
-fn runcon_exec(command: &OsStr, arguments: &[OsString]) -> CTResult<()> {
+fn runcon_exec(command: &OsStr, arguments: &[OsString], use_execv: bool) -> CTResult<()> {
     // 将命令转换为 C 字符串
     let c_command = os_str_to_c_string(command).map_err(RunconError::new)?;
 
@@ -578,7 +579,11 @@ fn runcon_exec(command: &OsStr, arguments: &[OsString]) -> CTResult<()> {
     argv.push(ptr::null());
 
     // 执行命令
-    unsafe { libc::execvp(c_command.as_ptr(), argv.as_ptr()) };
+    if use_execv {
+        unsafe { libc::execv(c_command.as_ptr(), argv.as_ptr()) };
+    } else {
+        unsafe { libc::execvp(c_command.as_ptr(), argv.as_ptr()) };
+    }
 
     // 如果执行到这里，说明 execvp 失败
     let err = io::Error::last_os_error();
@@ -883,7 +888,7 @@ mod tests {
 
         #[test]
         fn test_execute_command_not_found() {
-            let result = runcon_exec(OsStr::new("nonexistent_command"), &[]);
+            let result = runcon_exec(OsStr::new("nonexistent_command"), &[], false);
             assert!(result.is_err());
             if let Err(e) = result {
                 assert_eq!(e.as_ref().code(), error_exit_status::RUNCON_NOT_FOUND);

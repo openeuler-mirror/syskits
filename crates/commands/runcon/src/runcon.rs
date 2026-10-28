@@ -548,8 +548,10 @@ fn set_next_exec_context(context: &OpaqueSecurityContext) -> Result<()> {
     }
 
     // 设置下一次执行的上下文
-    sc.set_for_next_exec()
-        .map_err(|err| DefaultError::from_selinux("Setting new security context", err))
+    sc.set_for_next_exec().map_err(|_| {
+        let context = OsStr::from_bytes(c_context.as_bytes());
+        DefaultError::from_setexec_context(context, io::Error::last_os_error())
+    })
 }
 
 /// 从字符串创建安全上下文

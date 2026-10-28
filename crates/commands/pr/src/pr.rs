@@ -71,7 +71,7 @@ fn get_pr_date_time_format() -> &'static str {
 }
 
 #[cfg(unix)]
-fn pr_format_local_time_strftime(seconds: i64, fmt: &str) -> Option<String> {
+fn pr_format_local_time_strftime_raw(seconds: i64, fmt: &str) -> Option<String> {
     let time = ctcore::libc::time_t::try_from(seconds).ok()?;
     let mut tm: ctcore::libc::tm = unsafe { std::mem::zeroed() };
     let c_format = CString::new(fmt).ok()?;
@@ -100,11 +100,55 @@ fn pr_format_local_time_strftime(seconds: i64, fmt: &str) -> Option<String> {
     None
 }
 
+#[cfg(unix)]
+fn pr_format_local_time_strftime(seconds: i64, nanoseconds: u32, fmt: &str) -> Option<String> {
+    let timezone = pr_format_local_time_strftime_raw(seconds, "%z").unwrap_or_default();
+    let colon_timezone = if timezone.len() == 5 {
+        format!("{}:{}", &timezone[..3], &timezone[3..])
+    } else {
+        timezone
+    };
+    let nanos = format!("{nanoseconds:09}");
+    let mut expanded = String::with_capacity(fmt.len());
+    let mut chars = fmt.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '%' {
+            expanded.push(c);
+            continue;
+        }
+        match chars.peek().copied() {
+            Some('%') => {
+                expanded.push_str("%%");
+                chars.next();
+            }
+            Some('N') => {
+                expanded.push_str(&nanos);
+                chars.next();
+            }
+            Some(':') => {
+                chars.next();
+                if chars.peek() == Some(&'z') {
+                    expanded.push_str(&colon_timezone);
+                    chars.next();
+                } else {
+                    expanded.push_str("%:");
+                }
+            }
+            _ => expanded.push('%'),
+        }
+    }
+    pr_format_local_time_strftime_raw(seconds, &expanded)
+}
+
 fn pr_format_local_datetime(fmt: &str, date_time: DateTime<Local>) -> String {
     #[cfg(unix)]
     {
-        pr_format_local_time_strftime(date_time.timestamp(), fmt)
-            .unwrap_or_else(|| date_time.format(fmt).to_string())
+        pr_format_local_time_strftime(
+            date_time.timestamp(),
+            date_time.timestamp_subsec_nanos(),
+            fmt,
+        )
+        .unwrap_or_else(|| date_time.format(fmt).to_string())
     }
     #[cfg(not(unix))]
     {

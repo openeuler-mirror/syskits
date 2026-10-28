@@ -30,7 +30,6 @@ use ctcore::ct_display::{Quotable, locale_quote};
 use ctcore::ct_error::{CTResult, strip_errno};
 use ctcore::ct_locale::hard_locale_time;
 use itertools::Itertools;
-use quick_error::ResultExt;
 use quick_error::quick_error;
 use regex::Regex;
 use sys_locale::get_locale;
@@ -478,6 +477,11 @@ quick_error! {
             display("pr: {}: No such file or directory", path)
         }
 
+        Open(err: std::io::Error, path: String) {
+            display("pr: {}: {}", path, strip_errno(err))
+            source(err)
+        }
+
     }
 }
 
@@ -851,7 +855,8 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
                 | PrError::UnknownFiletype(_)
                 | PrError::IsDirectory(_)
                 | PrError::IsSocket(_)
-                | PrError::NotExists(_)),
+                | PrError::NotExists(_)
+                | PrError::Open(_, _)),
             ) => {
                 semantic
                     .stderr_text
@@ -1154,7 +1159,10 @@ fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
 
 fn pr_error_text(arg_matches: &ArgMatches, pr_err: &PrError, program_name: &str) -> String {
     if arg_matches.get_flag(pr_flags::PR_NO_FILE_WARNINGS)
-        && matches!(pr_err, PrError::NotExists(_) | PrError::IsSocket(_))
+        && matches!(
+            pr_err,
+            PrError::NotExists(_) | PrError::IsSocket(_) | PrError::Open(_, _)
+        )
     {
         String::new()
     } else {
@@ -1981,7 +1989,13 @@ fn pr_open(path: impl AsRef<Path>) -> Result<Box<dyn Read>, PrError> {
 
     let path_string = path.as_os_str().to_string_lossy().into_owned();
     let file_type = metadata(path)
-        .map_err(|_| PrError::NotExists(path_string.clone()))?
+        .map_err(|error| {
+            if error.raw_os_error() == Some(ctcore::libc::ENOENT) {
+                PrError::NotExists(path_string.clone())
+            } else {
+                PrError::Open(error, path_string.clone())
+            }
+        })?
         .file_type();
 
     #[cfg(unix)]
@@ -1992,7 +2006,8 @@ fn pr_open(path: impl AsRef<Path>) -> Result<Box<dyn Read>, PrError> {
         return Err(PrError::IsDirectory(path_string));
     }
 
-    Ok(Box::new(File::open(path).context(path_string.as_str())?) as Box<dyn Read>)
+    let file = File::open(path).map_err(|error| PrError::Open(error, path_string))?;
+    Ok(Box::new(file) as Box<dyn Read>)
 }
 
 fn pr_split_lines_if_form_feed(

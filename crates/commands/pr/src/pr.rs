@@ -2553,6 +2553,14 @@ fn pr_output_page(
 
     let lines_written = pr_write_columns(lines, output_opts, out)?;
 
+    if output_opts.is_form_feed_used
+        && output_opts.is_double_space
+        && !lines.is_empty()
+        && lines.len() < pr_lines_to_read_for_page(output_opts)
+    {
+        out.write_all(line_separator)?;
+    }
+
     for (index, x) in trailer_content.iter().enumerate() {
         pr_write_rendered_text(out, x)?;
         if index + 1 != trailer_content.len() {
@@ -2930,7 +2938,10 @@ fn pr_write_multicolumn_table(
                 .collect::<String>()
         };
         pr_write_rendered_text(out, &rendered_row)?;
-        let row_separator = if output_opts.is_double_space && last_actual_row == Some(row_index) {
+        let row_separator = if output_opts.is_double_space
+            && !feed_line_present
+            && last_actual_row == Some(row_index)
+        {
             output_opts.line_separator.as_bytes()
         } else {
             line_separator

@@ -162,7 +162,7 @@
         "execution": {
           "exit_code": 1,
           "stdout": "",
-          "stderr": ""
+          "stderr": "cksum: unrecognized option '--bad-option'\nTry 'cksum --help' for more information.\n"
         }
       },
       "cleanup_commands": []

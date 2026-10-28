@@ -96,12 +96,21 @@ pub(crate) enum DefaultError {
     },
 
     /// SELinux 无效上下文
-    #[error("Invalid security context: {}", operand1.quote())]
+    #[error("invalid context: {}: {}", operand1.quote(), strip_errno(error))]
     InvalidSecurityContext {
         /// 操作对象
         operand1: OsString,
         /// 错误来源
-        source: io::Error,
+        error: io::Error,
+    },
+
+    /// 命令执行失败
+    #[error("{}: {}", command.quote(), strip_errno(error))]
+    ExecFailure {
+        /// 命令操作数
+        command: OsString,
+        /// 系统错误
+        error: io::Error,
     },
 
     /// SELinux 操作错误
@@ -186,7 +195,15 @@ impl DefaultError {
     ) -> Self {
         Self::InvalidSecurityContext {
             operand1: operand1.into(),
-            source,
+            error: source,
+        }
+    }
+
+    /// 创建GNU风格的命令执行错误
+    pub(crate) fn from_exec_failure(command: impl Into<OsString>, error: io::Error) -> Self {
+        Self::ExecFailure {
+            command: command.into(),
+            error,
         }
     }
 

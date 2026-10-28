@@ -17,7 +17,7 @@ fn main() {
     ctcore::ct_ensure_standard_fds();
 
     let args = ctcore::ct_os_args().collect::<Vec<_>>();
-    let tool = ct_runcon::Runcon::default();
+    let tool = ct_runcon::Runcon;
     let code = match tool.execute(&args) {
         Ok(()) => ctcore::ct_error::get_ct_exit_code(),
         Err(err) => {

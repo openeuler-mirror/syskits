@@ -42,7 +42,7 @@ use sys_locale::get_locale;
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
-use std::{io, ptr};
+use std::{io, io::Write, ptr};
 
 mod errors;
 use ctcore::Tool;
@@ -342,9 +342,11 @@ fn print_current_context() -> Result<()> {
     match context {
         Some(context) => {
             let context = context.as_ref().to_str()?;
-            println!("{context}");
+            writeln!(io::stdout().lock(), "{context}")
+                .map_err(|err| DefaultError::from_io("write error", err))?;
         }
-        None => println!(),
+        None => writeln!(io::stdout().lock())
+            .map_err(|err| DefaultError::from_io("write error", err))?,
     }
     Ok(())
 }

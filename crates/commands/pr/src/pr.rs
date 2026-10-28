@@ -839,6 +839,7 @@ fn pr_run(args: impl ctcore::Args, mut output: Option<&mut dyn Write>) -> CTResu
                 &file_group,
                 &options,
                 &mut output,
+                matches.get_flag(pr_flags::PR_NO_FILE_WARNINGS),
             ),
         };
 
@@ -1152,7 +1153,9 @@ fn pr_recreate_arguments<T: AsRef<OsStr>>(args: &[T]) -> Vec<OsString> {
 }
 
 fn pr_error_text(arg_matches: &ArgMatches, pr_err: &PrError, program_name: &str) -> String {
-    if arg_matches.get_flag(pr_flags::PR_NO_FILE_WARNINGS) {
+    if arg_matches.get_flag(pr_flags::PR_NO_FILE_WARNINGS)
+        && matches!(pr_err, PrError::NotExists(_) | PrError::IsSocket(_))
+    {
         String::new()
     } else {
         let rendered = pr_err.to_string();
@@ -2374,6 +2377,7 @@ fn pr_collect_semantic_for_merge(
     input_paths: &[&OsStr],
     output_opts: &PrOutputOptions,
     output: &mut Option<&mut dyn Write>,
+    suppress_open_warnings: bool,
 ) -> Result<(), PrError> {
     let collect_semantic = output.is_none();
     let mut opened_inputs = Vec::new();
@@ -2381,7 +2385,9 @@ fn pr_collect_semantic_for_merge(
         match pr_open(*path) {
             Ok(reader) => opened_inputs.push((*display_path, Some(reader))),
             Err(error) => {
-                semantic.stderr_text.push_str(&format!("{error}\n"));
+                if !suppress_open_warnings {
+                    semantic.stderr_text.push_str(&format!("{error}\n"));
+                }
                 semantic.exit_code = 1;
             }
         }
@@ -2589,7 +2595,14 @@ fn mpr_handle(paths: &[&str], output_opts: &PrOutputOptions) -> Result<i32, PrEr
     };
     let mut output = None;
     let input_paths = paths.iter().map(OsStr::new).collect::<Vec<_>>();
-    pr_collect_semantic_for_merge(&mut semantic, paths, &input_paths, output_opts, &mut output)?;
+    pr_collect_semantic_for_merge(
+        &mut semantic,
+        paths,
+        &input_paths,
+        output_opts,
+        &mut output,
+        false,
+    )?;
     let mut out = stdout();
     if !semantic.classic_bytes.is_empty() {
         out.write_all(&semantic.classic_bytes)?;

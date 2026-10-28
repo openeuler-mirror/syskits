@@ -109,10 +109,15 @@ fn validate_gnu_mknod_options(args: &[OsString]) -> CTResult<()> {
             }
 
             match candidates[0] {
-                "mode" if !supplied_value => {
-                    index += 1;
-                    if index == args.len() {
-                        return Err(CTsageError::new(1, "option '--mode' requires an argument"));
+                "mode" => {
+                    if !supplied_value {
+                        index += 1;
+                        if index == args.len() {
+                            return Err(CTsageError::new(
+                                1,
+                                "option '--mode' requires an argument",
+                            ));
+                        }
                     }
                 }
                 "context" => {}
@@ -1182,6 +1187,16 @@ mod tests {
                 let error = validate_gnu_mknod_options(&args).unwrap_err();
                 assert_eq!(error.to_string(), expected);
             }
+        }
+
+        #[test]
+        fn test_gnu_options_accept_mode_with_equals() {
+            let args = ["mknod", "--mode=755", "file", "p"]
+                .into_iter()
+                .map(OsString::from)
+                .collect::<Vec<_>>();
+
+            assert!(validate_gnu_mknod_options(&args).is_ok());
         }
 
         #[test]

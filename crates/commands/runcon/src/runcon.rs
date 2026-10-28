@@ -211,6 +211,7 @@ fn parser_diagnostic(args: &[OsString]) -> Option<DefaultError> {
 
         let mut option_index = None;
         let mut takes_value = false;
+        let mut long_option_name = None;
         let mut recognized = true;
         if let Some(long_option) = value.strip_prefix(b"--") {
             let value_position = long_option.iter().position(|byte| *byte == b'=');
@@ -252,6 +253,7 @@ fn parser_diagnostic(args: &[OsString]) -> Option<DefaultError> {
                 }
                 option_index = *context_index;
                 takes_value = context_index.is_some() && value_position.is_none();
+                long_option_name = takes_value.then_some(*name);
             } else {
                 recognized = false;
             }
@@ -328,11 +330,16 @@ fn parser_diagnostic(args: &[OsString]) -> Option<DefaultError> {
             }
             if takes_value {
                 if index + 1 >= args.len() {
-                    let short = [b'u', b'r', b't', b'l'][option_index] as char;
-                    return Some(DefaultError::parser_diagnostic(
-                        format!("option requires an argument -- '{short}'"),
-                        true,
-                    ));
+                    let message = if let Some(name) = long_option_name {
+                        format!(
+                            "option '--{}' requires an argument",
+                            String::from_utf8_lossy(name)
+                        )
+                    } else {
+                        let short = [b'u', b'r', b't', b'l'][option_index] as char;
+                        format!("option requires an argument -- '{short}'")
+                    };
+                    return Some(DefaultError::parser_diagnostic(message, true));
                 }
                 index += 1;
             }
@@ -1012,6 +1019,27 @@ mod tests {
                     }
                     _ => panic!("Wrong mode"),
                 }
+            }
+        }
+
+        #[test]
+        fn test_missing_long_option_values_use_canonical_names() {
+            for (option, name) in [
+                ("--user", "user"),
+                ("--role", "role"),
+                ("--type", "type"),
+                ("--range", "range"),
+                ("--use", "user"),
+            ] {
+                let error = RunconSettings::new(
+                    ct_app(),
+                    ["runcon", option].into_iter().map(OsString::from),
+                )
+                .unwrap_err();
+                assert_eq!(
+                    error.to_string(),
+                    format!("option '--{name}' requires an argument")
+                );
             }
         }
     }

@@ -287,10 +287,7 @@ fn copy_direntry(
 
     // If the source is a directory and the destination does not
     // exist, ...
-    if source_absolute.is_dir()
-        && !ends_with_slash_dot(&source_absolute)
-        && !local_to_target.exists()
-    {
+    if source_absolute.is_dir() && !local_to_target.exists() {
         if target_is_file {
             return Err("cannot overwrite non-directory with directory".into());
         } else {
@@ -497,16 +494,17 @@ pub(crate) fn copy_directory(
                 } else {
                     fs::symlink_metadata(&entry.source_absolute).ok()
                 };
+                let destination_was_missing = !entry.local_to_target.exists();
                 if source_metadata
                     .as_ref()
                     .map(|metadata| metadata.is_dir())
                     .unwrap_or(false)
-                    && !ends_with_slash_dot(&entry.source_absolute)
+                    && (!ends_with_slash_dot(&entry.source_absolute) || destination_was_missing)
                 {
                     dirs_to_preserve.push((
                         entry.source_absolute.clone(),
                         entry.local_to_target.clone(),
-                        !entry.local_to_target.exists(),
+                        destination_was_missing,
                         source_metadata,
                         dereference,
                     ));

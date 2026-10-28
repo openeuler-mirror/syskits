@@ -538,17 +538,19 @@ fn get_custom_context(
 
     // 定义需要设置的属性列表
     let attributes: &[(Option<&OsStr>, SetNewValueProc, &'static str)] = &[
-        (user, OSC::set_user, "Setting security context user"),
-        (role, OSC::set_role, "Setting security context role"),
-        (the_type, OSC::set_type, "Setting security context type"),
-        (range, OSC::set_range, "Setting security context range"),
+        (user, OSC::set_user, "user"),
+        (the_type, OSC::set_type, "type"),
+        (range, OSC::set_range, "range"),
+        (role, OSC::set_role, "role"),
     ];
 
     // 设置每个指定的属性
     for &(new_value, set_method, operation) in attributes {
         if let Some(value) = new_value {
             let c_value = os_str_to_c_string(value)?;
-            set_method(&osc, &c_value).map_err(|err| DefaultError::from_selinux(operation, err))?;
+            set_method(&osc, &c_value).map_err(|_| {
+                DefaultError::from_context_setter(operation, value, io::Error::last_os_error())
+            })?;
         }
     }
 

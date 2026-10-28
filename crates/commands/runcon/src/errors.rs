@@ -59,6 +59,21 @@ pub(crate) enum DefaultError {
     #[error("failed to get current context: {}", strip_errno(error))]
     CurrentContext { error: io::Error },
 
+    /// 设置上下文组件失败
+    #[error(
+        "failed to set new {field}: {}: {}",
+        value.quote(),
+        strip_errno(error)
+    )]
+    ContextSetter {
+        /// 上下文组件名称
+        field: &'static str,
+        /// 新组件值
+        value: OsString,
+        /// 系统错误
+        error: io::Error,
+    },
+
     /// SELinux 未启用
     #[error("runcon may be used only on a SELinux kernel")]
     SELinuxNotEnabled,
@@ -132,6 +147,19 @@ impl DefaultError {
     /// 创建GNU风格的当前上下文错误
     pub(crate) fn from_current_context(error: io::Error) -> Self {
         Self::CurrentContext { error }
+    }
+
+    /// 创建GNU风格的上下文组件错误
+    pub(crate) fn from_context_setter(
+        field: &'static str,
+        value: impl Into<OsString>,
+        error: io::Error,
+    ) -> Self {
+        Self::ContextSetter {
+            field,
+            value: value.into(),
+            error,
+        }
     }
 
     /// 创建 InvalidSecurityContext 错误

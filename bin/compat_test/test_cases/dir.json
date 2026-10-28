@@ -3587,7 +3587,7 @@
                 "execution": {
                     "exit_code": 0,
                     "stdout": "",
-                    "stderr": ""
+                    "stderr": "dir: la largeur incorrecte de la variable d'environnement COLUMNS est ignorée : « bad »\n"
                 }
             },
             "tags": [

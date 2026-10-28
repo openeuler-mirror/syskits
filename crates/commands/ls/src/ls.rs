@@ -1737,6 +1737,33 @@ impl LsConfig {
         }
     }
 
+    pub fn apply_width_environment(&mut self, options: &clap::ArgMatches) {
+        if options.get_one::<String>(ls_flags::LS_WIDTH).is_some() {
+            return;
+        }
+
+        self.width = match stdout_terminal_width() {
+            Some(width) => width,
+            None => match std::env::var_os("COLUMNS") {
+                Some(columns) if columns.is_empty() => LS_DEFAULT_TERM_WIDTH,
+                Some(columns) => match columns.to_str().and_then(|s| parse_width(s).ok()) {
+                    Some(columns) => columns,
+                    None => {
+                        ct_show_error!(
+                            "{}",
+                            ls_localized_environment_diagnostic(
+                                "ignoring invalid width in environment variable COLUMNS: %s",
+                                Some(&columns),
+                            )
+                        );
+                        LS_DEFAULT_TERM_WIDTH
+                    }
+                },
+                None => LS_DEFAULT_TERM_WIDTH,
+            },
+        };
+    }
+
     pub fn from(options: &clap::ArgMatches) -> CTResult<Self> {
         let get_last = |flag: &str| -> usize {
             if options.value_source(flag) == Some(clap::parser::ValueSource::CommandLine) {
@@ -6921,6 +6948,24 @@ mod tests {
             .try_get_matches_from([ctcore::ct_util_name(), "-C"])
             .unwrap();
         let config = LsConfig::from(&matches).expect("ls config");
+
+        assert_eq!(config.width, 10);
+    }
+
+    #[test]
+    fn width_environment_can_be_applied_after_selecting_columns() {
+        if stdout().is_terminal() {
+            return;
+        }
+
+        let _env_lock = lock_env();
+        let _columns = EnvVarGuard::set("COLUMNS", "10");
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "."])
+            .unwrap();
+        let mut config = LsConfig::from(&matches).expect("ls config");
+        config.format = LsFormat::Columns;
+        config.apply_width_environment(&matches);
 
         assert_eq!(config.width, 10);
     }

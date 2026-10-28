@@ -452,11 +452,19 @@ impl Observer {
         };
         if self.follow_name() {
             self.files.reset_unchanged_stats(&tracked_path);
-            if is_symlink(&tracked_path) {
-                self.use_polling = true;
-            }
         }
         let display_name = self.files.get(&tracked_path).display_name.clone();
+
+        if self.follow_name() && !self.use_polling && is_symlink(&tracked_path) {
+            if !self.files.is_ignored(&tracked_path) {
+                ct_show_error!(
+                    "{} has been replaced with an untailable symbolic link",
+                    display_name.quote()
+                );
+                self.files.mark_ignored(&tracked_path);
+            }
+            return Ok(paths);
+        }
 
         if self.follow_descriptor()
             && matches!(
@@ -494,7 +502,14 @@ impl Observer {
                             // We resume tracking from the start of the file,
                             // assuming it has been truncated to 0. This mimics GNU's `tail`
                             // behavior and is the usual truncation operation for log self.files.
-                            if !old_md.is_tailable() {
+                            if self.files.is_ignored(&tracked_path) {
+                                if let Err(e) = self.files.update_reader(&tracked_path) {
+                                    ct_show_error!("cannot open '{}' for reading: {}", display_name, strip_errno(&e));
+                                } else {
+                                    self.files.clear_ignored(&tracked_path);
+                                    ct_show_error!( "{} has become accessible", display_name.quote());
+                                }
+                            } else if !old_md.is_tailable() {
                                 if let Err(e) = self.files.update_reader(&tracked_path) {
                                     ct_show_error!("cannot open '{}' for reading: {}", display_name, strip_errno(&e));
                                 } else {
@@ -1226,7 +1241,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn follow_name_switches_to_polling_when_path_becomes_symlink() {
+    fn follow_name_ignores_path_that_becomes_symlink_with_inotify() {
         let options = TailOptions {
             follow: Some(TailFollowMode::Name),
             ..TailOptions::default()
@@ -1249,11 +1264,51 @@ mod tests {
 
         fs::remove_file(&path).unwrap();
         symlink(&target, &path).unwrap();
-        let event = Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::To))).add_path(path);
+        let event =
+            Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::To))).add_path(path.clone());
 
         observer.handle_event(&event, &options).unwrap();
 
-        assert!(observer.use_polling);
+        assert!(!observer.use_polling);
+        assert!(observer.files.is_ignored(&path));
+        assert!(observer.files.get(&path).reader.is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn polling_follow_name_accepts_path_that_becomes_symlink() {
+        let options = TailOptions {
+            follow: Some(TailFollowMode::Name),
+            use_polling: true,
+            ..TailOptions::default()
+        };
+        let mut observer = Observer::from(&options);
+        let temp_dir = tempdir().unwrap();
+        let path = temp_dir.path().join("file");
+        let target = temp_dir.path().join("target");
+
+        fs::write(&path, b"old\n").unwrap();
+        fs::write(&target, b"new\n").unwrap();
+        observer
+            .add_path(
+                &path,
+                "file",
+                Some(Box::new(BufReader::new(File::open(&path).unwrap()))),
+                false,
+            )
+            .unwrap();
+
+        fs::remove_file(&path).unwrap();
+        symlink(&target, &path).unwrap();
+        let event =
+            Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::To))).add_path(path.clone());
+
+        assert_eq!(
+            observer.handle_event(&event, &options).unwrap(),
+            vec![path.clone()]
+        );
+        assert!(!observer.files.is_ignored(&path));
+        assert!(observer.files.get(&path).reader.is_some());
     }
 
     #[test]

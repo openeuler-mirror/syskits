@@ -98,7 +98,7 @@ impl FileHandling {
     /// Return true if there is at least one "tailable" path (or stdin) remaining
     pub fn files_remaining(&self) -> bool {
         for (path, data) in &self.map {
-            if data.reader.is_some() || path.is_stdin() {
+            if data.reader.is_some() || data.ignored || path.is_stdin() {
                 return true;
             }
         }
@@ -113,6 +113,20 @@ impl FileHandling {
     /// Set `reader` to None to indicate that `path` is not an existing file anymore.
     pub fn reset_reader(&mut self, path: &Path) {
         self.get_mut(path).reader = None;
+    }
+
+    pub fn mark_ignored(&mut self, path: &Path) {
+        let data = self.get_mut(path);
+        data.reader = None;
+        data.ignored = true;
+    }
+
+    pub fn clear_ignored(&mut self, path: &Path) {
+        self.get_mut(path).ignored = false;
+    }
+
+    pub fn is_ignored(&self, path: &Path) -> bool {
+        self.get(path).ignored
     }
 
     /// Reopen the file at the monitored `path`
@@ -219,6 +233,8 @@ pub struct PathData {
     pub display_name: String,
     pub header_name: OsString,
     unchanged_stats: u64,
+    /// GNU keeps an inotify entry alive after rejecting a replacement symlink.
+    ignored: bool,
 }
 
 impl PathData {
@@ -234,6 +250,7 @@ impl PathData {
             display_name: display_name.to_owned(),
             header_name: header_name.to_owned(),
             unchanged_stats: 0,
+            ignored: false,
         }
     }
     pub fn from_other_with_path(data: Self, path: &Path) -> Self {
@@ -288,6 +305,32 @@ mod tests {
 
         fs::rename(&old_path, &new_path).unwrap();
 
+        assert!(files.files_remaining());
+    }
+
+    #[test]
+    fn files_remaining_counts_ignored_inotify_entry() {
+        let mut files = FileHandling::from(&TailOptions::default());
+        let temp_dir = tempdir().unwrap();
+        let path = temp_dir.path().join("file");
+
+        fs::write(&path, b"x\n").unwrap();
+        let reader = Box::new(BufReader::new(File::open(&path).unwrap())) as Box<dyn BufRead>;
+        files.insert(
+            &path,
+            PathData::new(
+                Some(reader),
+                path.metadata().ok(),
+                "file",
+                std::ffi::OsStr::new("file"),
+            ),
+            false,
+        );
+
+        files.mark_ignored(&path);
+
+        assert!(files.is_ignored(&path));
+        assert!(files.get(&path).reader.is_none());
         assert!(files.files_remaining());
     }
 

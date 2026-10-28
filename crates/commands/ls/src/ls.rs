@@ -549,7 +549,12 @@ impl Display for LsError {
                 write!(formatter, "{message}: {}", ls_locale_quote(s))
             }
             LsError::LsInvalidTabSize(s) => {
-                write!(formatter, "invalid tab size: {}", s.quote())
+                write!(formatter, "invalid tab size: {}", s.quote())?;
+                if tab_size_overflows_ptrdiff(s) {
+                    let error = std::io::Error::from_raw_os_error(ctcore::libc::EOVERFLOW);
+                    write!(formatter, ": {}", strip_errno(&error))?;
+                }
+                Ok(())
             }
             LsError::LsIOError(e) => write!(formatter, "general io error: {e}"),
             LsError::LsIOErrorContext(e, p, _) => {
@@ -1629,6 +1634,30 @@ fn parse_base_zero_usize(s: &str) -> Option<usize> {
     }
 
     usize::from_str_radix(digits, radix).ok()
+}
+
+fn tab_size_overflows_ptrdiff(s: &str) -> bool {
+    let value = s.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
+    let digits = value.strip_prefix('+').unwrap_or(value);
+    let (radix, digits) = if let Some(hex) = digits
+        .strip_prefix("0x")
+        .or_else(|| digits.strip_prefix("0X"))
+    {
+        (16, hex)
+    } else if digits.len() > 1 && digits.starts_with('0') {
+        (8, &digits[1..])
+    } else {
+        (10, digits)
+    };
+
+    if digits.is_empty() {
+        return false;
+    }
+
+    match u128::from_str_radix(digits, radix) {
+        Ok(value) => value > isize::MAX as u128,
+        Err(error) => error.kind() == &IntErrorKind::PosOverflow,
+    }
 }
 
 fn parse_tab_size(s: &str) -> Result<usize, LsError> {
@@ -6954,6 +6983,25 @@ mod tests {
             Err(err) => err,
         };
         assert_eq!(err.code(), 2);
+        assert_eq!(
+            err.to_string(),
+            "invalid tab size: '18446744073709551615': Value too large for defined data type"
+        );
+
+        for invalid in ["bad", "08", "-1"] {
+            let matches = ct_app()
+                .try_get_matches_from([
+                    ctcore::ct_util_name(),
+                    &format!("--tabsize={invalid}"),
+                    ".",
+                ])
+                .unwrap();
+            let err = match LsConfig::from(&matches) {
+                Ok(_) => panic!("invalid tab size should fail: {invalid}"),
+                Err(err) => err,
+            };
+            assert!(!err.to_string().contains("Value too large"));
+        }
     }
 
     #[test]

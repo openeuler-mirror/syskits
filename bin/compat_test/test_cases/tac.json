@@ -235,7 +235,7 @@
     {
       "tstdin": "",
       "command": "tac",
-      "description": "LC_ALL=zh_CN.UTF-8下执行tac --bad_flag；GNU的未知选项正文保持英文，Try help提示使用简体中文，预期RC=1且stdout为空",
+      "description": "LC_ALL=zh_CN.UTF-8下执行tac --bad_flag；GNU本地化未知选项正文、程序名后的全角冒号和弯引号，Try help提示使用简体中文，预期RC=1且stdout为空",
       "setup_commands": [],
       "args": [
         "--bad_flag"
@@ -252,7 +252,7 @@
         "execution": {
           "exit_code": 1,
           "stdout": "",
-          "stderr": "tac: unrecognized option '--bad_flag'\n请尝试执行 \"tac --help\" 来获取更多信息。\n"
+          "stderr": "tac：未识别的选项 ‘--bad_flag’\n请尝试执行 \"tac --help\" 来获取更多信息。\n"
         }
       },
       "cleanup_commands": []
@@ -1638,7 +1638,7 @@
     {
       "tstdin": "",
       "command": "tac",
-      "description": "LC_ALL=C下无文件操作数执行tac，并将fd 0连接到目录stdin-directory；GNU对目录stdin的非seekable读取使用standard input上下文并规范为EINVAL，预期RC=1、stdout为空、stderr为Invalid argument",
+      "description": "LC_ALL=C下无文件操作数执行tac，并将fd 0连接到目录stdin-directory；GNU对目录stdin的非seekable读取使用standard input上下文并保留EISDIR，预期RC=1、stdout为空、stderr为Is a directory",
       "setup_commands": [
         "mkdir stdin-directory"
       ],
@@ -1655,7 +1655,7 @@
         "execution": {
           "exit_code": 1,
           "stdout": "",
-          "stderr": "tac: 'standard input': read error: Invalid argument\n"
+          "stderr": "tac: 'standard input': read error: Is a directory\n"
         }
       },
       "cleanup_commands": [
@@ -1763,7 +1763,7 @@
         "execution": {
           "exit_code": 1,
           "stdout": "",
-          "stderr": "tac: 标准输入: 读取错误: Bad file descriptor\ntac: -: Bad file descriptor\n"
+          "stderr": "tac: 标准输入: 读取错误: 错误的文件描述符\ntac: -: 错误的文件描述符\n"
         }
       },
       "cleanup_commands": []

@@ -89,6 +89,19 @@ pub(crate) enum DefaultError {
         error: io::Error,
     },
 
+    /// 设置执行上下文失败
+    #[error(
+        "unable to set security context {}: {}",
+        context.quote(),
+        strip_errno(error)
+    )]
+    SetExecContext {
+        /// 上下文字符串
+        context: OsString,
+        /// 系统错误
+        error: io::Error,
+    },
+
     /// 设置上下文组件失败
     #[error(
         "failed to set new {field}: {}: {}",
@@ -189,6 +202,14 @@ impl DefaultError {
     /// 创建GNU风格的安全上下文创建错误
     pub(crate) fn from_context_creation(context: impl Into<OsString>, error: io::Error) -> Self {
         Self::ContextCreation {
+            context: context.into(),
+            error,
+        }
+    }
+
+    /// 创建GNU风格的执行上下文设置错误
+    pub(crate) fn from_setexec_context(context: impl Into<OsString>, error: io::Error) -> Self {
+        Self::SetExecContext {
             context: context.into(),
             error,
         }

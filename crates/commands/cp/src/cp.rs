@@ -2989,7 +2989,13 @@ fn cp_handle_copy_mode(
         )?,
         CpCopyMode::AttrOnly => {
             if sour_is_symlink {
-                copy_link(sour_path, dest_path, symlinked_files)?;
+                let link = fs::read_link(sour_path)?;
+                cp_symlink_file(
+                    &link,
+                    dest_path,
+                    &cp_context_for(&link, dest_path),
+                    symlinked_files,
+                )?;
             } else if sour_is_fifo && cp_opts.recursive && !cp_opts.copy_contents {
                 copy_fifo(dest_path, cp_opts.overwrite)?;
             } else if !dest_path.exists() {

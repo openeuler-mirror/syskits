@@ -2719,7 +2719,9 @@ fn pr_write_columns(
             format!("{}{}", output_opts.offset_spaces, segment)
         };
         pr_write_rendered_text(out, &rendered_row)?;
-        let row_separator = if output_opts.is_double_space && !cell.has_line_terminator {
+        let row_separator = if output_opts.is_double_space
+            && (!cell.has_line_terminator || cell.form_feeds_after > 0)
+        {
             output_opts.line_separator.as_bytes()
         } else {
             line_separator

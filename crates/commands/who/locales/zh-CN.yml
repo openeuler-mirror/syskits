@@ -25,6 +25,7 @@ who:
     system: "系统错误"
     unknown: "未知错误"
     extra_operand: "多余的操作对象"
+    invalid_option: "不适用的选项 -- %{option}"
     try_help: '请尝试执行 "who --help" 来获取更多信息。'
   output:
     system_boot: "系统引导    "

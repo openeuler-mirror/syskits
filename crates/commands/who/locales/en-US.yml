@@ -25,6 +25,7 @@ who:
     system: "System error"
     unknown: "Unknown error"
     extra_operand: "extra operand"
+    invalid_option: "invalid option -- '%{option}'"
     try_help: "Try 'who --help' for more information."
   output:
     system_boot: "system boot"

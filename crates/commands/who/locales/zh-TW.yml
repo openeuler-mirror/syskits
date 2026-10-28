@@ -1,6 +1,7 @@
 who:
   errors:
     extra_operand: "額外的運算元"
+    invalid_option: "無效選項 -- '%{option}'"
     try_help: "請嘗試執行「who --help」取得更多訊息。"
   output:
     system_boot: "系統引導"

@@ -1206,7 +1206,7 @@
         {
             "tstdin": "",
             "command": "who",
-            "description": "export LC_ALL='zh_CN.UTF-8'；执行who -z；GNU getopt的invalid option首行保持英文，但emit_try_help使用中文翻译，预期RC=1、stdout为空，stderr为英文无效选项诊断及中文帮助提示",
+            "description": "export LC_ALL='zh_CN.UTF-8'；执行who -z；GNU gettext同时本地化getopt的invalid option首行和emit_try_help，预期RC=1、stdout为空，stderr为中文无效选项诊断及中文帮助提示",
             "setup_commands": [
                 "export LC_ALL='zh_CN.UTF-8'"
             ],
@@ -1217,7 +1217,7 @@
                 "execution": {
                     "exit_code": 1,
                     "stdout": "",
-                    "stderr": "who: invalid option -- 'z'\n请尝试执行 \"who --help\" 来获取更多信息。\n"
+                    "stderr": "who: 不适用的选项 -- z\n请尝试执行 \"who --help\" 来获取更多信息。\n"
                 },
                 "verifications": []
             },

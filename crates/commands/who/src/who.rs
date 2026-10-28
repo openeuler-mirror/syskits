@@ -578,13 +578,19 @@ fn validate_option(argument: &[u8]) -> CTResult<()> {
         .iter()
         .find(|option| !WHO_SHORT_OPTIONS.contains(option))
     {
-        let mut message = b"invalid option -- '".to_vec();
-        message.push(*unknown);
-        message.push(b'\'');
-        Err(WhoUsageError::boxed(message))
+        Err(WhoUsageError::boxed(render_invalid_option(*unknown)))
     } else {
         Ok(())
     }
+}
+
+fn render_invalid_option(option: u8) -> Vec<u8> {
+    let template = locale_text_bytes(&t!("who.errors.invalid_option", option = "\u{1}"));
+    let Some(marker) = template.iter().position(|byte| *byte == b'\x01') else {
+        return template;
+    };
+
+    [&template[..marker], &[option], &template[marker + 1..]].concat()
 }
 
 fn validate_long_option(argument: &[u8]) -> CTResult<()> {
@@ -858,7 +864,7 @@ mod tests {
 
                 let option_args = ["who", "-z"].map(OsString::from);
                 let option_error = prepare_who_args(option_args.into_iter()).unwrap_err();
-                assert_eq!(option_error.to_string(), "invalid option -- 'z'");
+                assert_eq!(option_error.to_string(), "不适用的选项 -- z");
                 assert_eq!(
                     option_error.usage_hint_bytes().as_deref(),
                     Some("请尝试执行 \"who --help\" 来获取更多信息。".as_bytes())

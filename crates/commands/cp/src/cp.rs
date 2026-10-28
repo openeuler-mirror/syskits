@@ -1952,6 +1952,7 @@ fn copy_source(
             progress_bar,
             source_path,
             target,
+            &dest,
             options,
             symlinked_files,
             copied_files,

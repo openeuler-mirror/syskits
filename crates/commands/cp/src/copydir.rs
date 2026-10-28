@@ -379,6 +379,7 @@ pub(crate) fn copy_directory(
     progress_bar: &Option<ProgressBar>,
     root: &Path,
     target: &Path,
+    destination: &Path,
     options: &CpOptions,
     symlinked_files: &mut HashSet<CtFileInformation>,
     copied_files: &mut HashMap<CtFileInformation, PathBuf>,
@@ -404,15 +405,16 @@ pub(crate) fn copy_directory(
         );
     }
 
-    // check if root is a prefix of target
-    if path_has_prefix(target, root)? {
-        if !target.exists() {
-            fs::create_dir_all(target)?;
+    // Check the effective destination rather than the directory operand. For
+    // `cp -R dir dir`, these are `dir/dir` and `dir`, respectively.
+    if path_has_prefix(destination, root)? {
+        if !destination.exists() {
+            fs::create_dir_all(destination)?;
         }
         return Err(format!(
             "cannot copy a directory, {}, into itself, {}",
             root.quote(),
-            target.quote()
+            destination.quote()
         )
         .into());
     }

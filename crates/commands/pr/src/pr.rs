@@ -1486,10 +1486,10 @@ fn pr_write_semantic_diagnostics(semantic: &PrSemantic) -> CTResult<()> {
     let mut err = stderr();
 
     if !semantic.stderr_text.is_empty() {
-        err.write_all(semantic.stderr_text.as_bytes())?;
+        let _ = err.write_all(semantic.stderr_text.as_bytes());
     }
 
-    err.flush()?;
+    let _ = err.flush();
     Ok(())
 }
 

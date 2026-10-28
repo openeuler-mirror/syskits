@@ -261,7 +261,7 @@ fn reject_abbreviated_no_preserve_root(args: &[OsString]) -> CTResult<()> {
             break;
         }
 
-        if argument != OPTION && OPTION.starts_with(argument) {
+        if argument.starts_with("--") && argument != OPTION && OPTION.starts_with(argument) {
             ct_show_error!("you may not abbreviate the --no-preserve-root option");
             return Err(1.into());
         }

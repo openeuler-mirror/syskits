@@ -1688,6 +1688,7 @@ impl LsConfig {
     pub fn set_long_format(&mut self, options: &clap::ArgMatches) -> CTResult<()> {
         self.format = LsFormat::Long;
         self.time_style = ls_parse_time_style(options)?;
+        self.sort = extract_sort(options, &self.format, &self.time);
         Ok(())
     }
 
@@ -6726,6 +6727,29 @@ mod tests {
             let config = LsConfig::from(&matches).expect("explicit sort configuration");
             assert_eq!(config.sort, LsSort::Name, "{time_option} with --sort=name");
         }
+    }
+
+    #[test]
+    fn delayed_long_format_recomputes_atime_sort() {
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--time=atime", "."])
+            .unwrap();
+        let mut config = LsConfig::from(&matches).expect("initial configuration");
+        assert_eq!(config.sort, LsSort::Time);
+
+        config
+            .set_long_format(&matches)
+            .expect("long configuration");
+        assert_eq!(config.sort, LsSort::Name);
+
+        let matches = ct_app()
+            .try_get_matches_from([ctcore::ct_util_name(), "--time=atime", "-t", "."])
+            .unwrap();
+        let mut config = LsConfig::from(&matches).expect("explicit time sort configuration");
+        config
+            .set_long_format(&matches)
+            .expect("long configuration");
+        assert_eq!(config.sort, LsSort::Time);
     }
 
     #[test]

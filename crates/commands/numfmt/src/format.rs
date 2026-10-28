@@ -26,10 +26,10 @@ use crate::units::Result;
 const NUMFMT_MAX_UNSCALED_DIGITS: usize = 18;
 const NUMFMT_MAX_ACCEPTABLE_DIGITS: usize = 33;
 const NUMFMT_DIAGNOSTIC_QUOTING_STYLE: &CtQuotingStyle = &CtQuotingStyle::C {
-    quotes: CtQuotes::Single,
+    quotes: CtQuotes::Locale,
 };
 
-fn numfmt_quote(text: &str) -> String {
+pub(crate) fn numfmt_quote(text: &str) -> String {
     escape_name(OsStr::new(text), NUMFMT_DIAGNOSTIC_QUOTING_STYLE)
 }
 
@@ -1727,7 +1727,10 @@ mod tests {
         config.delimiter = Some(",".to_string());
         config.fields = vec![ctcore::ct_ranges::CtRange { low: 1, high: 1 }];
 
-        let expected = "rejecting suffix in input: '123 ' (consider using --from)";
+        let expected = format!(
+            "rejecting suffix in input: {} (consider using --from)",
+            crate::format::numfmt_quote("123 ")
+        );
         assert_eq!(numfmt_format_line("123 ,x", &config).unwrap_err(), expected);
 
         let error = numfmt_format_line_abort("123 ,x", &config).unwrap_err();
@@ -1804,7 +1807,7 @@ mod tests {
             for input in ["+1", "+.5", "+1.2", "+1K"] {
                 assert_eq!(
                     numfmt_parse_suffix(input).unwrap_err(),
-                    format!("invalid number: '{input}'")
+                    format!("invalid number: {}", crate::format::numfmt_quote(input))
                 );
             }
 
@@ -2910,7 +2913,10 @@ mod tests {
             config.transform.from = NumfmtUnit::Iec(true);
             config.transform.to = NumfmtUnit::None;
             let s = "102420484096i";
-            let shell_expected_output = "invalid suffix in input: '102420484096i'".to_string();
+            let shell_expected_output = format!(
+                "invalid suffix in input: {}",
+                crate::format::numfmt_quote(s)
+            );
             let output = numfmt_format_string(s, &config, Some(1));
             assert!(output.is_err());
             assert_eq!(output.unwrap_err(), shell_expected_output);

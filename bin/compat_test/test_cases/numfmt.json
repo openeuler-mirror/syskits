@@ -721,7 +721,7 @@
         },
         {
             "command": "numfmt",
-            "description": "numfmt: 负数处理(GNU不支持，syskits支持，无需修改)",
+            "description": "numfmt: 未使用--分隔的负数操作数按未知短选项处理",
             "args": [
                 "--to=si",
                 "-1000"
@@ -729,14 +729,14 @@
             "setup_commands": [],
             "expectation": {
                 "execution": {
-                    "exit_code": 0,
-                    "stdout": "-1.0K\n",
-                    "stderr": ""
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "numfmt: invalid option -- '1'\nTry 'numfmt --help' for more information.\n"
                 },
                 "verifications": [],
                 "ignore_fields": {
-                    "ignore_exit_code": true,
-                    "ignore_stdout": true,
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
                     "ignore_stderr": false,
                     "ignore_function": false
                 }

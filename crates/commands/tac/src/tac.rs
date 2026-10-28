@@ -199,18 +199,46 @@ impl CTError for TacError {
 struct TacUsageError {
     message: Vec<u8>,
     usage_hint: Vec<u8>,
+    diagnostic_includes_prefix: bool,
 }
 
 impl TacUsageError {
-    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
-        let usage_hint = if rust_i18n::locale() == "zh-CN" {
+    fn localized_usage_hint() -> Vec<u8> {
+        if rust_i18n::locale() == "zh-CN" {
             r#"请尝试执行 "tac --help" 来获取更多信息。"#.as_bytes().to_vec()
         } else {
             b"Try 'tac --help' for more information.".to_vec()
-        };
+        }
+    }
+
+    fn boxed(message: Vec<u8>) -> Box<dyn CTError> {
+        Box::new(Self {
+            message,
+            usage_hint: Self::localized_usage_hint(),
+            diagnostic_includes_prefix: false,
+        })
+    }
+
+    fn boxed_unrecognized_option(argument: &[u8]) -> Box<dyn CTError> {
+        if rust_i18n::locale() != "zh-CN" {
+            let mut message = b"unrecognized option '".to_vec();
+            message.extend_from_slice(argument);
+            message.push(b'\'');
+            return Self::boxed(message);
+        }
+
+        let mut message = ctcore::ct_util_name().as_bytes().to_vec();
+        message.extend_from_slice("：未识别的选项 ‘".as_bytes());
+        message.extend_from_slice(argument);
+        message.extend_from_slice("’".as_bytes());
+
+        let mut usage_hint = message.clone();
+        usage_hint.push(b'\n');
+        usage_hint.extend_from_slice(&Self::localized_usage_hint());
         Box::new(Self {
             message,
             usage_hint,
+            diagnostic_includes_prefix: true,
         })
     }
 }
@@ -225,7 +253,11 @@ impl Error for TacUsageError {}
 
 impl CTError for TacUsageError {
     fn diagnostic_bytes(&self) -> Cow<'_, [u8]> {
-        Cow::Borrowed(&self.message)
+        if self.diagnostic_includes_prefix {
+            Cow::Borrowed(&[])
+        } else {
+            Cow::Borrowed(&self.message)
+        }
     }
 
     fn usage_hint_bytes(&self) -> Option<Cow<'_, [u8]>> {
@@ -571,11 +603,6 @@ fn read_from_stdin() -> CTResult<Vec<u8>> {
 }
 
 fn tac_stdin_read_error(error: std::io::Error) -> TacError {
-    let error = if error.raw_os_error() == Some(ctcore::libc::EISDIR) {
-        std::io::Error::from_raw_os_error(ctcore::libc::EINVAL)
-    } else {
-        error
-    };
     TacError::StdinReadError(error)
 }
 
@@ -922,12 +949,7 @@ fn tac_validate_long_option(argument: &[u8], has_next: bool) -> CTResult<bool> {
     let name = &long[..separator.unwrap_or(long.len())];
 
     match tac_match_long_option(name) {
-        TacLongOptionMatch::None => {
-            let mut message = b"unrecognized option '".to_vec();
-            message.extend_from_slice(argument);
-            message.push(b'\'');
-            Err(TacUsageError::boxed(message))
-        }
+        TacLongOptionMatch::None => Err(TacUsageError::boxed_unrecognized_option(argument)),
         TacLongOptionMatch::Ambiguous(matches) => {
             let possibilities = matches
                 .into_iter()
@@ -1589,7 +1611,8 @@ fn tac<W: Write>(writer: &mut W, settings: &TacFlags, stdout_was_closed: bool) -
     }
 
     if read_stdin && ctcore::ct_stdin_was_closed() {
-        ctcore::ct_show_error!("-: Bad file descriptor");
+        let error = std::io::Error::from_raw_os_error(ctcore::libc::EBADF);
+        ctcore::ct_show_error!("-: {}", strip_errno(&error));
     }
 
     if let Some(error) = write_error {
@@ -2152,13 +2175,13 @@ mod tests {
         }
 
         #[test]
-        fn test_stdin_directory_read_error_uses_invalid_argument() {
+        fn test_stdin_directory_read_error_preserves_errno() {
             let error =
                 tac_stdin_read_error(std::io::Error::from_raw_os_error(ctcore::libc::EISDIR));
 
             assert_eq!(
                 error.to_string(),
-                "'standard input': read error: Invalid argument"
+                "'standard input': read error: Is a directory"
             );
         }
 

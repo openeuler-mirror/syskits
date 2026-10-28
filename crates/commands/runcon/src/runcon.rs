@@ -149,24 +149,28 @@ pub fn ct_app() -> Command {
             .long(runcon_options::RUNCON_USER)
             .value_name("USER")
             .help(t!("runcon.clap.runcon_user"))
+            .allow_hyphen_values(true)
             .value_parser(ValueParser::os_string()),
         Arg::new(runcon_options::RUNCON_ROLE)
             .short('r')
             .long(runcon_options::RUNCON_ROLE)
             .value_name("ROLE")
             .help(t!("runcon.clap.runcon_role"))
+            .allow_hyphen_values(true)
             .value_parser(ValueParser::os_string()),
         Arg::new(runcon_options::RUNCON_TYPE)
             .short('t')
             .long(runcon_options::RUNCON_TYPE)
             .value_name("TYPE")
             .help(t!("runcon.clap.runcon_type"))
+            .allow_hyphen_values(true)
             .value_parser(ValueParser::os_string()),
         Arg::new(runcon_options::RUNCON_RANGE)
             .short('l')
             .long(runcon_options::RUNCON_RANGE)
             .value_name("RANGE")
             .help(t!("runcon.clap.runcon_range"))
+            .allow_hyphen_values(true)
             .value_parser(ValueParser::os_string()),
         Arg::new("ARG")
             .action(ArgAction::Append)
@@ -780,6 +784,27 @@ mod tests {
                         command: None,
                         ..
                     }
+                ));
+            }
+        }
+
+        #[test]
+        fn test_parse_hyphenated_context_values() {
+            for value in ["-odd", "-c", "--"] {
+                let result = RunconSettings::new(
+                    ct_app(),
+                    ["runcon", "-u", value, "/bin/true"]
+                        .into_iter()
+                        .map(OsString::from),
+                )
+                .unwrap();
+
+                assert!(matches!(
+                    result.mode,
+                    RunconCommandLineMode::CustomContext {
+                        user: Some(ref user),
+                        ..
+                    } if user == value
                 ));
             }
         }

@@ -26,3 +26,20 @@ fn character_class_diagnostics_match_gnu_coreutils() {
         assert_eq!(syskits.stderr, gnu.stderr, "{pattern:?}");
     }
 }
+
+#[test]
+fn oversized_bre_interval_diagnostics_match_gnu_coreutils() {
+    for pattern in [
+        "a\\{32768\\}",
+        "a\\{32767,32768\\}",
+        "a\\{,32768\\}",
+        "a\\{2147483648\\}",
+    ] {
+        let gnu = run_expr("/usr/bin/expr", pattern);
+        let syskits = run_expr(env!("CARGO_BIN_EXE_expr"), pattern);
+
+        assert_eq!(syskits.status.code(), gnu.status.code(), "{pattern:?}");
+        assert_eq!(syskits.stdout, gnu.stdout, "{pattern:?}");
+        assert_eq!(syskits.stderr, gnu.stderr, "{pattern:?}");
+    }
+}

@@ -2175,20 +2175,26 @@ fn pr_handle(path: &str, output_opts: &PrOutputOptions) -> Result<i32, PrError> 
     Ok(0)
 }
 
-fn pr_read_stream_and_create_pages(
+fn pr_read_stream_and_create_pages<I>(
     output_opts: &PrOutputOptions,
-    lines: PrInputLines,
+    lines: I,
     file_id: usize,
-) -> Box<dyn Iterator<Item = (usize, Vec<PrFileLine>)>> {
+) -> Box<dyn Iterator<Item = (usize, Vec<PrFileLine>)>>
+where
+    I: Iterator<Item = Result<PrInputLine, std::io::Error>> + 'static,
+{
     pr_read_stream_and_create_pages_tracked(output_opts, lines, file_id, None)
 }
 
-fn pr_read_stream_and_create_pages_tracked(
+fn pr_read_stream_and_create_pages_tracked<I>(
     output_opts: &PrOutputOptions,
-    lines: PrInputLines,
+    lines: I,
     file_id: usize,
     page_count: Option<Rc<Cell<usize>>>,
-) -> Box<dyn Iterator<Item = (usize, Vec<PrFileLine>)>> {
+) -> Box<dyn Iterator<Item = (usize, Vec<PrFileLine>)>>
+where
+    I: Iterator<Item = Result<PrInputLine, std::io::Error>> + 'static,
+{
     let start_page = output_opts.start_page;
     let start_line_number = pr_get_start_line_number(output_opts);
     let renumber_from_first_printed_page = output_opts
@@ -2348,7 +2354,7 @@ fn pr_collect_semantic_for_merge(
     let mut opened_inputs = Vec::new();
     for (path, display_path) in input_paths.iter().zip(paths) {
         match pr_open(*path) {
-            Ok(reader) => opened_inputs.push((*display_path, reader)),
+            Ok(reader) => opened_inputs.push((*display_path, Some(reader))),
             Err(error) => {
                 semantic.stderr_text.push_str(&format!("{error}\n"));
                 semantic.exit_code = 1;
@@ -2360,15 +2366,42 @@ fn pr_collect_semantic_for_merge(
         .iter()
         .map(|(path, _)| *path)
         .collect::<Vec<_>>();
+    let stdin_indexes = opened_inputs
+        .iter()
+        .enumerate()
+        .filter_map(|(index, (path, _))| (*path == PR_FILE_STDIN).then_some(index))
+        .collect::<Vec<_>>();
+    let mut distributed_stdin = (0..opened_inputs.len())
+        .map(|_| Vec::new())
+        .collect::<Vec<Vec<Result<PrInputLine, std::io::Error>>>>();
+    if stdin_indexes.len() > 1 {
+        let reader = opened_inputs[stdin_indexes[0]]
+            .1
+            .take()
+            .expect("the first standard input reader is available");
+        for (line_index, line) in pr_input_lines(reader).enumerate() {
+            let column = stdin_indexes[line_index % stdin_indexes.len()];
+            distributed_stdin[column].push(line);
+        }
+    }
+
     let file_pages = opened_inputs
         .into_iter()
         .enumerate()
-        .map(|(i, (_, reader))| {
+        .map(|(i, (path, reader))| {
             let mut page_input_opts = output_opts.clone();
             page_input_opts.start_page = 1;
-            let lines = pr_input_lines(reader);
-
-            pr_read_stream_and_create_pages(&page_input_opts, lines, i).collect::<Vec<_>>()
+            if path == PR_FILE_STDIN && stdin_indexes.len() > 1 {
+                pr_read_stream_and_create_pages(
+                    &page_input_opts,
+                    std::mem::take(&mut distributed_stdin[i]).into_iter(),
+                    i,
+                )
+                .collect::<Vec<_>>()
+            } else {
+                let lines = pr_input_lines(reader.expect("input reader is available"));
+                pr_read_stream_and_create_pages(&page_input_opts, lines, i).collect::<Vec<_>>()
+            }
         })
         .collect::<Vec<_>>();
 

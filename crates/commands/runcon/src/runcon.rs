@@ -477,10 +477,11 @@ fn set_next_exec_context(context: &OpaqueSecurityContext) -> Result<()> {
     // 创建安全上下文对象
     let sc = SecurityContext::from_c_str(&c_context, false);
 
-    // 验证上下文的有效性
-    if sc.check() != Some(true) {
+    // 验证上下文的有效性，并保留security_check_context设置的errno。
+    let check_result = unsafe { selinux_sys::security_check_context(c_context.as_ptr()) };
+    if check_result != 0 {
         let ctx = OsStr::from_bytes(c_context.as_bytes());
-        let err = io::ErrorKind::InvalidInput.into();
+        let err = io::Error::last_os_error();
         return Err(DefaultError::from_invalid_security_context(ctx, err));
     }
 
@@ -712,7 +713,7 @@ fn runcon_exec(
         error_exit_status::RUNCON_COULD_NOT_EXECUTE
     };
 
-    let err = DefaultError::from_io1("Executing command", argv0, err);
+    let err = DefaultError::from_exec_failure(argv0, err);
     Err(RunconError::with_code(exit_status, err).into())
 }
 

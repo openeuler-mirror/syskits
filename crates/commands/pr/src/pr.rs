@@ -64,7 +64,7 @@ const PR_NO_LINE_NUMBER: i64 = i64::MIN;
 // 根据locale选择时间格式
 fn get_pr_date_time_format() -> &'static str {
     if std::env::var_os("POSIXLY_CORRECT").is_some() && !hard_locale_time() {
-        "%b %d %H:%M %Y" // POSIXLY_CORRECT + C/POSIX locale
+        "%b %e %H:%M %Y" // POSIXLY_CORRECT + C/POSIX locale
     } else {
         "%Y-%m-%d %H:%M" // GNU 默认格式
     }
@@ -8487,7 +8487,7 @@ mod tests {
             set_or_remove_env("POSIXLY_CORRECT", Some("1"));
 
             // POSIXLY_CORRECT + C locale 应使用英文格式
-            assert_eq!(get_pr_date_time_format(), "%b %d %H:%M %Y");
+            assert_eq!(get_pr_date_time_format(), "%b %e %H:%M %Y");
 
             restore_locale_env(saved);
         }
@@ -8543,7 +8543,7 @@ mod tests {
             set_or_remove_env("POSIXLY_CORRECT", Some("1"));
 
             // POSIXLY_CORRECT + POSIX locale 应使用英文格式
-            assert_eq!(get_pr_date_time_format(), "%b %d %H:%M %Y");
+            assert_eq!(get_pr_date_time_format(), "%b %e %H:%M %Y");
 
             restore_locale_env(saved);
         }

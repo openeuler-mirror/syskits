@@ -44,6 +44,7 @@ use ctcore::ct_error::{
 use ctcore::ct_line_ending::CtLineEnding;
 use ctcore::ct_locale::{LcCategory, hard_locale, strcoll_compare};
 use ctcore::ct_parse_size::{CtParser, ParseSizeError};
+use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
 use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 use ctcore::ct_version_cmp::ct_version_cmp;
 use sys_locale::get_locale;
@@ -194,7 +195,15 @@ enum SortError {
         path: PathBuf,
         error: std::io::Error,
     },
+    SortReadIoFailed {
+        path: PathBuf,
+        error: std::io::Error,
+    },
     SortWriteFailed {
+        error: std::io::Error,
+    },
+    SortOutputFlushFailed {
+        path: OsString,
         error: std::io::Error,
     },
     SortParseKeyError {
@@ -268,8 +277,25 @@ impl Display for SortError {
                     strip_errno(error)
                 )
             }
+            Self::SortReadIoFailed { path, error } => {
+                write!(
+                    fmt,
+                    "read failed: {}: {}",
+                    path.maybe_quote(),
+                    strip_errno(error)
+                )
+            }
             Self::SortWriteFailed { error } => {
                 write!(fmt, "write error: {}", strip_errno(error))
+            }
+            Self::SortOutputFlushFailed { path, error } => {
+                write!(
+                    fmt,
+                    "fflush failed: {}: {}\n{}: write error",
+                    path.maybe_quote(),
+                    strip_errno(error),
+                    ctcore::ct_util_name()
+                )
             }
             Self::SortOpenTmpFileFailed { error } => {
                 write!(fmt, "failed to open temporary file: {}", strip_errno(error))
@@ -345,14 +371,14 @@ impl SortOutput {
         })
     }
 
-    fn into_write(self) -> BufWriter<Box<dyn Write>> {
+    fn writer(&self) -> BufWriter<Box<dyn Write>> {
         // 直到真正需要写入时（最后一步），才去打开并截断文件
-        let w: Box<dyn Write> = if let Some(name) = self.file {
+        let w: Box<dyn Write> = if let Some(name) = &self.file {
             let file = OpenOptions::new()
                 .write(true)
                 .create(true)
                 .truncate(true) // 此时可以安全截断，因为如果有冲突，输入文件早已被拷贝到临时文件中
-                .open(&name)
+                .open(name)
                 .unwrap_or_else(|e| {
                     eprintln!(
                         "sort: open failed: {}: {}",
@@ -372,6 +398,16 @@ impl SortOutput {
 
     fn as_output_name(&self) -> Option<&OsStr> {
         self.file.as_deref()
+    }
+
+    fn flush_error(&self, error: std::io::Error) -> SortError {
+        match &self.file {
+            Some(path) => SortError::SortOutputFlushFailed {
+                path: path.clone(),
+                error,
+            },
+            None => SortError::SortWriteFailed { error },
+        }
     }
 }
 
@@ -1417,9 +1453,14 @@ pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
             // 在这种情况下，我们不应该打印到 stderr，也不应该以非零的退出代码返回（我们应该打印到 stdout 并返回 0）。
             // GNU sort 通常以 2 报告参数解析错误，但 XARGMATCH 处理的无效
             // --sort 枚举值经 usage(EXIT_FAILURE) 退出，因此该特例返回 1。
-            e.print().unwrap();
-            if e.use_stderr() {
-                set_ct_exit_code(sort_clap_error_exit_code(&e));
+            if let Some(diagnostic) = sort_invalid_sort_diagnostic(&e) {
+                eprintln!("{}: {diagnostic}", ctcore::ct_util_name());
+                set_ct_exit_code(1);
+            } else {
+                e.print().unwrap();
+                if e.use_stderr() {
+                    set_ct_exit_code(sort_clap_error_exit_code(&e));
+                }
             }
             return Ok(());
         }
@@ -1438,16 +1479,38 @@ pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 fn sort_clap_error_exit_code(error: &clap::Error) -> i32 {
-    let invalid_enum_value = error.kind() == ClapErrorKind::InvalidValue
-        && error.get(ContextKind::InvalidArg).is_some_and(|arg| {
-            let arg = arg.to_string();
-            arg.starts_with("--sort") || arg.starts_with("--check")
-        })
-        && error
-            .get(ContextKind::InvalidValue)
-            .is_some_and(|value| !value.to_string().is_empty());
+    let invalid_enum_value = sort_invalid_sort_diagnostic(error).is_some()
+        || (error.kind() == ClapErrorKind::InvalidValue
+            && error
+                .get(ContextKind::InvalidArg)
+                .is_some_and(|arg| arg.to_string().starts_with("--check"))
+            && error
+                .get(ContextKind::InvalidValue)
+                .is_some_and(|value| !value.to_string().is_empty()));
 
     if invalid_enum_value { 1 } else { 2 }
+}
+
+fn sort_invalid_sort_diagnostic(error: &clap::Error) -> Option<String> {
+    if error.kind() != ClapErrorKind::InvalidValue
+        || !error
+            .get(ContextKind::InvalidArg)?
+            .to_string()
+            .starts_with("--sort")
+    {
+        return None;
+    }
+
+    let value = error.get(ContextKind::InvalidValue)?.to_string();
+    if value.is_empty() {
+        return None;
+    }
+
+    Some(format!(
+        "invalid argument {} for '--sort'\nValid arguments are:\n  - 'general-numeric'\n  - 'human-numeric'\n  - 'month'\n  - 'numeric'\n  - 'random'\n  - 'version'\nTry '{} --help' for more information.",
+        value.quote(),
+        ctcore::ct_help_utility_name()
+    ))
 }
 
 fn sort_validate_inputs(files: &[OsString], output: &SortOutput) -> CTResult<()> {
@@ -1469,6 +1532,13 @@ fn sort_validate_inputs(files: &[OsString], output: &SortOutput) -> CTResult<()>
     // 扫描所有输入文件是否可读，如果有不可读的直接报错，决不提前触碰 stdin
     for file in files {
         if file != "-" {
+            if std::fs::metadata(file).is_ok_and(|metadata| metadata.is_dir()) {
+                return Err(SortError::SortReadIoFailed {
+                    path: PathBuf::from(file),
+                    error: sort_is_directory_error(),
+                }
+                .into());
+            }
             if let Err(error) = sort_check_input_access(file) {
                 return Err(SortError::SortReadFailed {
                     path: PathBuf::from(file),
@@ -1480,6 +1550,18 @@ fn sort_validate_inputs(files: &[OsString], output: &SortOutput) -> CTResult<()>
     }
 
     Ok(())
+}
+
+fn sort_is_directory_error() -> std::io::Error {
+    #[cfg(target_family = "unix")]
+    {
+        std::io::Error::from_raw_os_error(ctcore::libc::EISDIR)
+    }
+
+    #[cfg(not(target_family = "unix"))]
+    {
+        std::io::Error::new(std::io::ErrorKind::IsADirectory, "Is a directory")
+    }
 }
 
 #[cfg(target_family = "unix")]
@@ -1922,9 +2004,17 @@ fn sort_get_settings_sparator(matches: &ArgMatches) -> CTResult<Option<char>> {
                 let bytes = separator_text.as_bytes();
 
                 if bytes.len() != 1 {
-                    return Err(CTsageError::new(
+                    return Err(CtSimpleError::new(
                         2,
-                        format!("separator must be exactly one byte long: {}", arg.quote()),
+                        format!(
+                            "multi-character tab {}",
+                            escape_name(
+                                arg.as_os_str(),
+                                &CtQuotingStyle::C {
+                                    quotes: CtQuotes::Single,
+                                },
+                            )
+                        ),
                     ));
                 }
                 if bytes[0].is_ascii() {
@@ -3003,14 +3093,14 @@ fn sort_print_sorted<'a, T: Iterator<Item = &'a SortLine<'a>>>(
     sort_settings: &SortGlobalConfigs,
     sort_output: SortOutput,
 ) -> CTResult<()> {
-    let mut writer = sort_output.into_write();
+    let mut writer = sort_output.writer();
     for line in iter {
         line.print(&mut writer, sort_settings)
             .map_err(|error| SortError::SortWriteFailed { error })?;
     }
     writer
         .flush()
-        .map_err(|error| SortError::SortWriteFailed { error })?;
+        .map_err(|error| sort_output.flush_error(error))?;
     Ok(())
 }
 
@@ -5383,7 +5473,7 @@ mod tests {
         #[test]
         fn test_into_write_stdout() {
             let output = SortOutput::new(None).unwrap();
-            let _writer = output.into_write();
+            let _writer = output.writer();
         }
 
         #[test]
@@ -5394,7 +5484,7 @@ mod tests {
             assert!(fs::metadata(test_file_name).unwrap().len() > 0);
 
             let output = SortOutput::new(Some(OsStr::new(test_file_name))).unwrap();
-            let _writer = output.into_write();
+            let _writer = output.writer();
             // Check if the file has been truncated
             assert_eq!(fs::metadata(test_file_name).unwrap().len(), 0);
             // delete the file
@@ -5431,7 +5521,7 @@ mod tests {
         fn test_output_into_write() {
             // Test with a file name
             let output = SortOutput::new(Some(OsStr::new("test_output_into_write.txt"))).unwrap();
-            let mut buf_writer = output.into_write();
+            let mut buf_writer = output.writer();
             buf_writer.write_all(b"Hello, world!").unwrap();
 
             let mut file = File::open("test_output_into_write.txt").unwrap();
@@ -5501,7 +5591,7 @@ mod tests {
             let is_root = unsafe { libc::geteuid() == 0 };
             if is_root {
                 let output = output.unwrap();
-                let _writer = output.into_write();
+                let _writer = output.writer();
                 assert_eq!(fs::metadata(&test_file_path).unwrap().len(), 0);
             } else {
                 assert!(output.is_err());
@@ -5607,6 +5697,34 @@ mod tests {
             assert_eq!(
                 format!("{err}"),
                 "cannot read: /restricted/file.txt: Permission denied"
+            );
+        }
+
+        #[test]
+        fn display_ct_read_io_failed() {
+            let io_error = io::Error::new(ErrorKind::IsADirectory, "Is a directory");
+            let err = SortError::SortReadIoFailed {
+                path: PathBuf::from("input-dir"),
+                error: io_error,
+            };
+
+            assert_eq!(format!("{err}"), "read failed: input-dir: Is a directory");
+        }
+
+        #[test]
+        fn display_ct_output_flush_failed() {
+            let io_error = io::Error::new(ErrorKind::WriteZero, "No space left on device");
+            let err = SortError::SortOutputFlushFailed {
+                path: OsString::from("/dev/full"),
+                error: io_error,
+            };
+
+            assert_eq!(
+                format!("{err}"),
+                format!(
+                    "fflush failed: /dev/full: No space left on device\n{}: write error",
+                    ctcore::ct_util_name()
+                )
             );
         }
 
@@ -9636,6 +9754,13 @@ mod tests {
 
             assert_eq!(error.kind(), ErrorKind::InvalidValue);
             assert_eq!(sort_clap_error_exit_code(&error), 1);
+            assert_eq!(
+                sort_invalid_sort_diagnostic(&error),
+                Some(format!(
+                    "invalid argument 'bad' for '--sort'\nValid arguments are:\n  - 'general-numeric'\n  - 'human-numeric'\n  - 'month'\n  - 'numeric'\n  - 'random'\n  - 'version'\nTry '{} --help' for more information.",
+                    ctcore::ct_help_utility_name()
+                ))
+            );
         }
 
         #[test]

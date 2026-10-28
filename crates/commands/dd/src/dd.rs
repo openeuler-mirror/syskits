@@ -39,6 +39,7 @@ use ctcore::ct_display::Quotable;
 #[cfg(unix)]
 use ctcore::ct_error::set_ct_exit_code;
 use ctcore::ct_error::{CTResult, FromIo};
+use ctcore::ct_quoting_style::gnu_quote_shell;
 use ctcore::ct_show_error;
 #[cfg(unix)]
 use nix::unistd::{Whence, lseek};
@@ -449,7 +450,7 @@ impl<'a> Input<'a> {
             match self.settings.infile.as_ref() {
                 Some(path) => ct_show_error!(
                     "{}: cannot skip to specified offset",
-                    Path::new(path).quote()
+                    gnu_quote_shell(path.as_os_str(), false)
                 ),
                 None => ct_show_error!("'standard input': cannot skip to specified offset"),
             }

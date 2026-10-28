@@ -5,7 +5,8 @@
             "command": "dd",
             "description": "dd: 基本拷贝",
             "args": [
-                "of=test_dd_output"
+                "of=test_dd_output",
+                "status=noxfer"
             ],
             "setup_commands": [
             ],
@@ -39,7 +40,8 @@
             "description": "dd: 文件拷贝",
             "args": [
                 "if=test_dd_input",
-                "of=test_dd_output"
+                "of=test_dd_output",
+                "status=noxfer"
             ],
             "setup_commands": [
                 "echo hello > test_dd_input"
@@ -75,7 +77,8 @@
             "args": [
                 "if=test_dd_input",
                 "of=test_dd_output",
-                "bs=1"
+                "bs=1",
+                "status=noxfer"
             ],
             "setup_commands": [
                 "echo hello > test_dd_input"
@@ -112,7 +115,8 @@
                 "if=test_dd_input",
                 "of=test_dd_output",
                 "bs=1",
-                "count=3"
+                "count=3",
+                "status=noxfer"
             ],
             "setup_commands": [
                 "echo hello > test_dd_input"
@@ -149,7 +153,8 @@
                 "if=test_dd_input",
                 "of=test_dd_output",
                 "bs=1",
-                "skip=2"
+                "skip=2",
+                "status=noxfer"
             ],
             "setup_commands": [
                 "echo hello > test_dd_input"
@@ -186,7 +191,8 @@
                 "if=test_dd_input",
                 "of=test_dd_output",
                 "bs=1",
-                "seek=2"
+                "seek=2",
+                "status=noxfer"
             ],
             "setup_commands": [
                 "echo hello > test_dd_input",
@@ -224,7 +230,8 @@
                 "if=test_dd_input",
                 "of=test_dd_output",
                 "bs=1",
-                "count=0"
+                "count=0",
+                "status=noxfer"
             ],
             "setup_commands": [
                 "echo hello > test_dd_input"
@@ -261,7 +268,8 @@
                 "if=test_dd_input",
                 "of=test_dd_output",
                 "bs=1",
-                "skip=1000"
+                "skip=1000",
+                "status=noxfer"
             ],
             "setup_commands": [
                 "echo hello > test_dd_input"
@@ -297,7 +305,8 @@
             "args": [
                 "if=test_dd_input",
                 "of=test_dd_output",
-                "bs=1024"
+                "bs=1024",
+                "status=noxfer"
             ],
             "setup_commands": [
                 "echo hello > test_dd_input"

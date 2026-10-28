@@ -3,7 +3,17 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
-use std::process::Command;
+use std::process::{Command, Output};
+
+fn run_cp(current_dir: &std::path::Path, arguments: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_cp"))
+        .arg0("cp")
+        .env("LC_ALL", "C")
+        .current_dir(current_dir)
+        .args(arguments)
+        .output()
+        .expect("run cp")
+}
 
 #[test]
 fn copies_slash_dot_contents_to_missing_destination() {
@@ -34,4 +44,28 @@ fn copies_slash_dot_contents_to_missing_destination() {
         fs::metadata(destination).unwrap().permissions().mode() & 0o777,
         0o750
     );
+}
+
+#[test]
+fn copying_directory_into_itself_reports_effective_destination() {
+    for arguments in [
+        &["-R", "dir", "dir"][..],
+        &["-rl", "dir", "dir"][..],
+        &["-rl", "a", "dir", "dir"][..],
+    ] {
+        let directory = tempfile::tempdir().unwrap();
+        fs::create_dir(directory.path().join("a")).unwrap();
+        fs::create_dir(directory.path().join("dir")).unwrap();
+
+        let output = run_cp(directory.path(), arguments);
+
+        assert_eq!(output.status.code(), Some(1), "{arguments:?}");
+        assert!(output.stdout.is_empty(), "{arguments:?}");
+        assert_eq!(
+            String::from_utf8(output.stderr).unwrap(),
+            "cp: cannot copy a directory, 'dir', into itself, 'dir/dir'\n",
+            "{arguments:?}"
+        );
+        assert!(directory.path().join("dir/dir").is_dir());
+    }
 }

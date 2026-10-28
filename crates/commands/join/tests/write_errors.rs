@@ -21,6 +21,8 @@ fn stdout_write_errors_use_gnu_diagnostic() {
 
     assert_eq!(output.status.code(), Some(1));
     assert!(output.stdout.is_empty());
-    assert!(String::from_utf8_lossy(&output.stderr)
-        .ends_with(": write error: No space left on device\n"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .ends_with(": write error: No space left on device\n")
+    );
 }

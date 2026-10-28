@@ -1038,6 +1038,13 @@ impl Who {
     }
 
     fn collect_semantic(&mut self) -> CTResult<WhoSemantic> {
+        self.collect_semantic_with_tty_lookup(cur_tty)
+    }
+
+    fn collect_semantic_with_tty_lookup<F>(&mut self, tty_lookup: F) -> CTResult<WhoSemantic>
+    where
+        F: FnOnce() -> Option<String>,
+    {
         let run_level_chk = |_record: i16| {
             #[cfg(target_os = "linux")]
             return _record == ct_utmpx::RUN_LVL;
@@ -1107,7 +1114,7 @@ impl Who {
         }
 
         let current_tty = if self.is_my_line_only {
-            match cur_tty() {
+            match tty_lookup() {
                 Some(tty) => tty,
                 None => return Ok(semantic),
             }
@@ -1274,8 +1281,6 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn my_line_only_does_not_match_an_empty_line_when_stdin_is_not_a_tty() {
-        assert!(unsafe { ttyname(STDIN_FILENO) }.is_null());
-
         let mut fixture = tempfile::NamedTempFile::new().unwrap();
         let mut record = [0_u8; 400];
         record[0..2].copy_from_slice(&ct_utmpx::USER_PROCESS.to_ne_bytes());
@@ -1303,7 +1308,7 @@ mod tests {
             who_args: vec![fixture.path().as_os_str().to_owned()],
         };
 
-        let semantic = who.collect_semantic().unwrap();
+        let semantic = who.collect_semantic_with_tty_lookup(|| None).unwrap();
         assert!(semantic.rows.is_empty());
         assert!(semantic.classic_text.is_empty());
     }

@@ -75,7 +75,7 @@ fn csplit_prints_match_error_before_kept_byte_count() {
         .current_dir(temp_dir.path())
         .arg("-c")
         .arg(format!(
-            "{syskits} csplit -k -f keep testfile /nomatch/ 2>&1"
+            "LC_ALL=C {syskits} csplit -k -f keep testfile /nomatch/ 2>&1"
         ))
         .output()
         .expect("run syskits csplit");

@@ -178,7 +178,7 @@ unsafe fn cstr2bytes(ptr: *const c_char) -> Option<Vec<u8>> {
 }
 
 unsafe fn cstr2osstring(ptr: *const c_char) -> Option<OsString> {
-    cstr2bytes(ptr).map(OsString::from_vec)
+    unsafe { cstr2bytes(ptr) }.map(OsString::from_vec)
 }
 
 impl CtPasswd {
@@ -210,25 +210,12 @@ impl CtPasswd {
     /// Unlike `Locate<&str>`, this follows `getpwnam` semantics and does not
     /// treat numeric strings as UIDs.
     pub fn locate_name(name: &str) -> IOResult<Self> {
-        Self::locate_name_os(OsStr::new(name))
+        Self::locate_name_bytes(name.as_bytes())
     }
 
     /// Locate a passwd entry by its raw platform name.
     pub fn locate_name_os(name: &OsStr) -> IOResult<Self> {
-        let _guard = PW_LOCK.lock();
-        // SAFETY: We hold PW_LOCK.
-        unsafe {
-            let cstring = CString::new(name.as_bytes()).unwrap();
-            let data = getpwnam(cstring.as_ptr());
-            if !data.is_null() {
-                Ok(Self::from_raw(ptr::read(data as *const _)))
-            } else {
-                Err(IOError::new(
-                    ErrorKind::NotFound,
-                    format!("Not found: {}", name.to_string_lossy()),
-                ))
-            }
-        }
+        Self::locate_name_bytes(name.as_bytes())
     }
 
     /// SAFETY: All the pointed-to strings must be valid and not change while
@@ -301,10 +288,7 @@ impl CtPasswd {
 
     /// Return the groups for this user using `primary_gid` as the login group.
     pub fn belongs_to_with_primary_gid(&self, primary_gid: gid_t) -> Vec<gid_t> {
-        self.belongs_to_name_os_with_primary_gid(
-            OsStr::from_bytes(self.name_bytes()),
-            primary_gid,
-        )
+        self.belongs_to_name_os_with_primary_gid(OsStr::from_bytes(self.name_bytes()), primary_gid)
     }
 
     /// Return the groups associated with `name`, using this entry's primary GID.
@@ -317,11 +301,7 @@ impl CtPasswd {
         self.belongs_to_name_os_with_primary_gid(name, self.gid)
     }
 
-    fn belongs_to_name_os_with_primary_gid(
-        &self,
-        name: &OsStr,
-        primary_gid: gid_t,
-    ) -> Vec<gid_t> {
+    fn belongs_to_name_os_with_primary_gid(&self, name: &OsStr, primary_gid: gid_t) -> Vec<gid_t> {
         let mut ngroups: c_int = 8;
         let mut ngroups_old: c_int;
         let mut groups = vec![0; ngroups.try_into().unwrap()];
@@ -385,11 +365,6 @@ pub trait Locate<K> {
 static PW_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 impl CtPasswd {
-    /// Look up an account strictly by name, even when the name is numeric.
-    pub fn locate_name(name: &str) -> IOResult<Self> {
-        Self::locate_name_bytes(name.as_bytes())
-    }
-
     /// Look up an account by its native byte name.
     pub fn locate_name_bytes(name: &[u8]) -> IOResult<Self> {
         let _guard = PW_LOCK.lock();

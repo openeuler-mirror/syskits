@@ -19,20 +19,20 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::{Display, Formatter};
 rust_i18n::i18n!("locales", fallback = "en-US");
 use std::fs::File;
-use std::io::{stdout, BufRead, BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
 use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 
 use clap::builder::ValueParser;
-use clap::{crate_version, error::ContextKind, error::Error, error::ErrorKind};
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use ctcore::ct_display::{locale_quote_marks, Quotable};
-use ctcore::ct_error::{strip_errno, CTError, CTResult, CTsageError, CtSimpleError, FromIo};
-use ctcore::ct_posix::{
-    ct_posix_version, posixly_correct, GnuGetoptCommandExt, MODERN, TRADITIONAL,
-};
+use clap::{crate_version, error::ContextKind, error::Error, error::ErrorKind};
 use ctcore::Tool;
+use ctcore::ct_display::{Quotable, locale_quote_marks};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, strip_errno};
+use ctcore::ct_posix::{
+    GnuGetoptCommandExt, MODERN, TRADITIONAL, ct_posix_version, posixly_correct,
+};
 use sys_locale::get_locale;
 
 unsafe extern "C" {
@@ -2612,12 +2612,16 @@ mod tests {
             .expect("the GNU long-option prefix must retain the argmatch diagnostic");
 
         let diagnostic = error.diagnostic_bytes();
-        assert!(diagnostic
-            .windows(b"\\377".len())
-            .any(|part| part == b"\\377"));
-        assert!(diagnostic
-            .windows(b"--all-repeated".len())
-            .any(|part| part == b"--all-repeated"));
+        assert!(
+            diagnostic
+                .windows(b"\\377".len())
+                .any(|part| part == b"\\377")
+        );
+        assert!(
+            diagnostic
+                .windows(b"--all-repeated".len())
+                .any(|part| part == b"--all-repeated")
+        );
     }
 
     #[cfg(unix)]
@@ -4317,8 +4321,8 @@ mod tests {
     #[cfg(test)]
     mod map_clap_errors_tests {
         use super::*;
-        use clap::error::ErrorKind as ClapErrorKind;
         use clap::Error as ClapError;
+        use clap::error::ErrorKind as ClapErrorKind;
         // Assuming you use ContextKind elsewhere
 
         fn delimiter_error_expectation(

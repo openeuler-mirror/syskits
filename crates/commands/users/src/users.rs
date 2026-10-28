@@ -92,6 +92,18 @@ pub struct UsersSession {
     user_bytes: Vec<u8>,
 }
 
+impl UsersSession {
+    pub fn new(user: String, tty_device: String, host: String) -> Self {
+        let user_bytes = user.as_bytes().to_vec();
+        Self {
+            user,
+            tty_device,
+            host,
+            user_bytes,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UsersSemantic {
     pub sessions: Vec<UsersSession>,

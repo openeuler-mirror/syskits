@@ -43,7 +43,7 @@ use crate::{
     OPT_NUMERIC_SUFFIXES_SHORT, OPT_SUFFIX_LENGTH,
 };
 use clap::ArgMatches;
-use ctcore::ct_display::{locale_quote_marks, Quotable};
+use ctcore::ct_display::{Quotable, locale_quote_marks};
 use ctcore::ct_error::{CTResult, CtSimpleError};
 use std::ffi::{OsStr, OsString};
 use std::fmt;

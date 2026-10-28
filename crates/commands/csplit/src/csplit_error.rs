@@ -96,8 +96,7 @@ impl fmt::Display for OutputFileName {
         {
             use std::os::unix::ffi::OsStrExt;
 
-            return formatter
-                .write_str(&super::shell_quote_non_utf8_file_operand(self.0.as_bytes()));
+            formatter.write_str(&super::shell_quote_non_utf8_file_operand(self.0.as_bytes()))
         }
 
         #[cfg(not(unix))]
@@ -169,16 +168,16 @@ pub enum CsplitError {
     RepeatCountMissingClosingBrace(PatternText),
     #[error("{}: integer required between '{{' and '}}'", _0)]
     RepeatCountIntegerRequired(String),
-    #[error("invalid number: {}", locale_quote(&._0))]
+    #[error("invalid number: {}", locale_quote(._0))]
     InvalidNumber(String),
     #[error(
         "invalid number: {}: Numerical result out of range",
-        locale_quote(&._0)
+        locale_quote(._0)
     )]
     InvalidNumberOutOfRange(String),
     #[error(
         "invalid number: {}: Value too large for defined data type",
-        locale_quote(&._0)
+        locale_quote(._0)
     )]
     InvalidNumberTooLarge(String),
     #[error("missing % conversion specification in suffix")]

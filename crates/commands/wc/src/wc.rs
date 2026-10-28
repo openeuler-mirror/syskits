@@ -1511,28 +1511,28 @@ fn process_locale_character(
     in_word: &mut bool,
 ) {
     let separator = match wide {
-        value if value == u32::from(b'\n') => {
+        value if value == b'\n' as libc::wchar_t => {
             total.lines = total.lines.saturating_add(1);
             total.max_line_length = max(total.max_line_length, *current_len);
             *current_len = 0;
             true
         }
-        value if value == u32::from(b'\r') || value == u32::from(b'\x0c') => {
+        value if value == b'\r' as libc::wchar_t || value == b'\x0c' as libc::wchar_t => {
             total.max_line_length = max(total.max_line_length, *current_len);
             *current_len = 0;
             true
         }
-        value if value == u32::from(b'\t') => {
+        value if value == b'\t' as libc::wchar_t => {
             *current_len = current_len.saturating_add(8 - *current_len % 8);
             true
         }
-        value if value == u32::from(b' ') => {
+        value if value == b' ' as libc::wchar_t => {
             *current_len = current_len.saturating_add(1);
             true
         }
-        value if value == u32::from(b'\x0b') => true,
+        value if value == b'\x0b' as libc::wchar_t => true,
         value => {
-            let printable = unsafe { iswprint_l(value, locale.raw) != 0 };
+            let printable = unsafe { iswprint_l(value as libc::c_uint, locale.raw) != 0 };
             if !printable {
                 false
             } else {
@@ -1540,7 +1540,7 @@ fn process_locale_character(
                 if width > 0 {
                     *current_len = current_len.saturating_add(width as usize);
                 }
-                if unsafe { iswspace_l(value, locale.raw) != 0 }
+                if unsafe { iswspace_l(value as libc::c_uint, locale.raw) != 0 }
                     || (separate_nonbreaking_spaces
                         && matches!(value, 0x00a0 | 0x2007 | 0x202f | 0x2060))
                 {

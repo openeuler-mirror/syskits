@@ -259,8 +259,7 @@ fn mv_map_clap_error(error: clap::Error, args: &[OsString]) -> Box<dyn CTError> 
         return CTsageError::new(
             1,
             format!(
-                "invalid argument '{}' for '--update'\nValid arguments are:\n  - 'all'\n  - 'none'\n  - 'older'",
-                value
+                "invalid argument '{value}' for '--update'\nValid arguments are:\n  - 'all'\n  - 'none'\n  - 'older'"
             ),
         );
     }

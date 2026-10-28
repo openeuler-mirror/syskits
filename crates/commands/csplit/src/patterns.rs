@@ -938,7 +938,7 @@ fn parse_repeat_count(argument: impl AsRef<[u8]>) -> Result<CsplitExecutePattern
     }
 
     let value = value.trim_ascii_start();
-    match std::str::from_utf8(&value)
+    match std::str::from_utf8(value)
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
     {

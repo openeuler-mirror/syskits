@@ -12,13 +12,13 @@
 // spell-checker:ignore (ToDO) dyld dylib dragonflybsd optgrps libstdbuf memfd
 
 extern crate rust_i18n;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, crate_version};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
+use ctcore::Tool;
 use ctcore::ct_display::locale_quote_marks;
 use ctcore::ct_error::{CTError, CTResult, CTsageError, CtSimpleError, FromIo, UClapError};
-use ctcore::ct_parse_size::{parse_size_u64, ParseSizeError};
-use ctcore::Tool;
+use ctcore::ct_parse_size::{ParseSizeError, parse_size_u64};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::Write;
@@ -572,7 +572,7 @@ impl Tool for Stdbuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clap::{builder::Command as ClapCommand, ArgAction};
+    use clap::{ArgAction, builder::Command as ClapCommand};
 
     #[test]
     fn test_tool_implementation() {

@@ -44,7 +44,7 @@ use ctcore::ct_fs::dir_strip_dot_for_creation;
 use ctcore::ct_perms::{
     CtOwnershipChangeOutputNames, CtVerbosityLevel, Verbosity, change_ownership,
 };
-use ctcore::ct_process::{getegid, geteuid, getgid, getuid};
+use ctcore::ct_process::{getgid, getuid};
 use ctcore::{ct_show, ct_show_error, uio_error};
 use file_diff::diff_files;
 use filetime::{FileTime, set_file_times};

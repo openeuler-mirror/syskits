@@ -27,21 +27,21 @@ use chrono::{
     TimeZone, Timelike,
 };
 use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, ArgGroup, ArgMatches, Command};
-use filetime::{set_file_times, set_symlink_file_times, FileTime};
+use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command, crate_version};
+use filetime::{FileTime, set_file_times, set_symlink_file_times};
 use std::fs::{self, File, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
 use sys_locale::get_locale;
 
-use ctcore::ct_display::{locale_quote_marks, Quotable};
-use ctcore::ct_error::{strip_errno, CTError, CTResult, CtSimpleError, FromIo};
+use ctcore::ct_display::{Quotable, locale_quote_marks};
+use ctcore::ct_error::{CTError, CTResult, CtSimpleError, FromIo, strip_errno};
 use ctcore::ct_parse_datetime;
 use ctcore::ct_posix::{
-    ct_posix_version, posixly_correct, GnuGetoptCommandExt, MODERN, TRADITIONAL,
+    GnuGetoptCommandExt, MODERN, TRADITIONAL, ct_posix_version, posixly_correct,
 };
 use ctcore::ct_quoting_style::gnu_quote_shell;
-use ctcore::{ct_show, Tool};
+use ctcore::{Tool, ct_show};
 
 pub mod touch_flags {
     // 需要SOURCES和sources，因为我们需要能够引用ArgGroup。
@@ -891,11 +891,7 @@ fn touch_time_to_filetime(
         TouchTime::Now => now,
         TouchTime::Omit => {
             let (access, modification) = existing.expect("omitted time requires existing metadata");
-            if is_access {
-                access
-            } else {
-                modification
-            }
+            if is_access { access } else { modification }
         }
         TouchTime::Timestamp(time) => time,
     }
@@ -1368,11 +1364,11 @@ fn touch_pathbuf_from_stdout() -> CTResult<PathBuf> {
     {
         use std::os::windows::prelude::AsRawHandle;
         use windows_sys::Win32::Foundation::{
-            GetLastError, ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
+            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND, GetLastError,
             HANDLE, MAX_PATH,
         };
         use windows_sys::Win32::Storage::FileSystem::{
-            GetFinalPathNameByHandleW, FILE_NAME_OPENED,
+            FILE_NAME_OPENED, GetFinalPathNameByHandleW,
         };
 
         let handle = std::io::stdout().lock().as_raw_handle() as HANDLE;
@@ -1446,7 +1442,7 @@ mod tests {
         use super::*;
         use chrono::Local;
         use clap::ArgMatches;
-        use filetime::{set_file_times, FileTime};
+        use filetime::{FileTime, set_file_times};
         use tempfile::tempdir;
 
         fn build_matches(args: &[&str]) -> ArgMatches {
@@ -1834,7 +1830,8 @@ mod tests {
             let timestamp =
                 touch_obsolescent_timestamp("0101000099", ctcore::ct_posix::OBSOLETE as i32)
                     .unwrap();
-            assert_eq!(timestamp.unix_seconds(), 915_148_800);
+            let expected = Local.with_ymd_and_hms(1999, 1, 1, 0, 0, 0).unwrap();
+            assert_eq!(timestamp.unix_seconds(), expected.timestamp());
 
             assert!(
                 touch_obsolescent_timestamp("02310000", ctcore::ct_posix::OBSOLETE as i32)
@@ -2051,7 +2048,7 @@ mod tests {
         #[test]
         fn parse_date_accepts_compact_time_with_relative_weekday() {
             let reference = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
-            let expected = Utc.with_ymd_and_hms(2025, 7, 25, 7, 0, 0).unwrap();
+            let expected = Local.with_ymd_and_hms(2025, 7, 25, 7, 0, 0).unwrap();
 
             for input in ["next Friday 7", "7 next Friday"] {
                 let parsed = touch_parse_date(reference, input).unwrap();
@@ -2154,7 +2151,7 @@ mod tests {
             let ref_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
             let date_str = "Wed Jun 15 08:30:00 2022";
             let filetime = touch_parse_date(ref_time, date_str).unwrap();
-            let expected_time = Utc.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
+            let expected_time = Local.with_ymd_and_hms(2022, 6, 15, 8, 30, 0).unwrap();
             assert_eq!(filetime.unix_seconds(), expected_time.timestamp());
 
             // 测试ISO 8601格式的日期
@@ -2375,7 +2372,7 @@ mod tests {
         fn test_parse_date_accepts_unsigned_extended_iso_year() {
             let ref_time = Local.with_ymd_and_hms(2025, 7, 24, 12, 0, 0).unwrap();
             let parsed = touch_parse_date(ref_time, "00001-01-01").unwrap();
-            let expected = Utc.with_ymd_and_hms(1, 1, 1, 0, 0, 0).unwrap();
+            let expected = Local.with_ymd_and_hms(1, 1, 1, 0, 0, 0).unwrap();
 
             assert_eq!(parsed.unix_seconds(), expected.timestamp());
             assert_eq!(parsed.nanoseconds(), 0);
@@ -2409,7 +2406,7 @@ mod tests {
 
     #[cfg(test)]
     mod stat_tests {
-        use std::fs::{create_dir, File};
+        use std::fs::{File, create_dir};
         use std::io::Write;
         use std::os::unix::fs::symlink;
 
@@ -3690,10 +3687,12 @@ mod tests {
     #[test]
     fn test_get_pathbuf_from_stdout_fails_if_stdout_is_not_a_file() {
         // 我们可以通过不设置stdout来触发错误（将失败，代码为1）
-        assert!(super::touch_pathbuf_from_stdout()
-            .expect_err("pathbuf_from_stdout should have failed")
-            .to_string()
-            .contains("GetFinalPathNameByHandleW failed with code 1"));
+        assert!(
+            super::touch_pathbuf_from_stdout()
+                .expect_err("pathbuf_from_stdout should have failed")
+                .to_string()
+                .contains("GetFinalPathNameByHandleW failed with code 1")
+        );
     }
 
     #[cfg(test)]

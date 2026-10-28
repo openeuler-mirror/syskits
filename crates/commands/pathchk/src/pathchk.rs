@@ -15,12 +15,12 @@ extern crate rust_i18n;
 use clap::ArgMatches;
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
-use clap::{builder::OsStringValueParser, crate_version, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, builder::OsStringValueParser, crate_version};
+use ctcore::Tool;
 use ctcore::ct_display::locale_quote_marks;
-use ctcore::ct_error::{set_ct_exit_code, CTError, CTResult, CTsageError};
+use ctcore::ct_error::{CTError, CTResult, CTsageError, set_ct_exit_code};
 use ctcore::ct_posix::GnuGetoptCommandExt;
 use ctcore::ct_quoting_style::gnu_quote_shell_bytes;
-use ctcore::Tool;
 use std::ffi::{CString, OsStr, OsString};
 use std::fs;
 use std::io::Write;
@@ -972,8 +972,10 @@ mod tests {
             let result = pathchk_main(&mut output, args.iter().map(OsString::from));
             assert!(result.is_ok());
             let output_str = String::from_utf8(output.into_inner()).unwrap();
-            assert!(output_str
-                .contains("pathchk: non-portable character ‘#’ in file name 'special#file'"));
+            assert!(
+                output_str
+                    .contains("pathchk: non-portable character ‘#’ in file name 'special#file'")
+            );
         }
 
         #[cfg(unix)]

@@ -456,7 +456,7 @@ fn chroot_enter(root_path: &Path, is_skip_chdir: bool) -> CTResult<()> {
     }
 
     if !is_skip_chdir {
-        std::env::set_current_dir("/").map_err(|e| ChrootError::CannotChdir(e))?;
+        std::env::set_current_dir("/").map_err(ChrootError::CannotChdir)?;
     }
     Ok(())
 }

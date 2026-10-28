@@ -1752,7 +1752,7 @@ mod tests {
             ..StandardStreams::default()
         };
         let result = sandbox.execute_command_with_streams(
-            "seq",
+            "/usr/bin/seq",
             &["1".to_string(), "100000".to_string()],
             None,
             true,
@@ -1775,7 +1775,7 @@ mod tests {
             ..StandardStreams::default()
         };
         let result = sandbox.execute_command_with_streams(
-            "seq",
+            "/usr/bin/seq",
             &["1".to_string(), "100000".to_string()],
             None,
             true,

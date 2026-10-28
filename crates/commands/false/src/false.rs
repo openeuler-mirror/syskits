@@ -13,16 +13,16 @@ use clap::{Arg, ArgAction, Command};
 use rust_i18n::t;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use ctcore::Tool;
-use ctcore::ct_error::{CTResult, set_ct_exit_code, strip_errno};
 #[cfg(all(target_os = "linux", not(test)))]
 use ctcore::ct_error::CtSimpleError;
+use ctcore::ct_error::{CTResult, set_ct_exit_code, strip_errno};
 #[cfg(all(target_os = "linux", not(test)))]
 use ctcore::ct_signals::enable_pipe_errors;
 #[cfg(unix)]
 use ctcore::libc;
-use std::ffi::{OsStr, OsString};
 #[cfg(unix)]
 use std::ffi::CStr;
+use std::ffi::{OsStr, OsString};
 use std::io::{self, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -37,8 +37,7 @@ const SYSKITS_FALSE_LONG_VERSION: &str = concat!(
     "There is NO WARRANTY, to the extent permitted by law."
 );
 
-const SYSKITS_FALSE_AFTER_HELP: &str =
-    "syskits online help: <https://www.ctyun.cn/developer>";
+const SYSKITS_FALSE_AFTER_HELP: &str = "syskits online help: <https://www.ctyun.cn/developer>";
 
 #[cfg(all(target_os = "linux", not(test)))]
 static INHERITED_SIGPIPE_IGNORED: std::sync::atomic::AtomicBool =
@@ -141,7 +140,10 @@ fn report_false_write_error(program_name: &OsStr, error: io::Error) {
         error
     };
 
-    let detail = strip_errno(&error);
+    let detail = error
+        .raw_os_error()
+        .and_then(ctcore::ct_error::strerror_bytes)
+        .unwrap_or_else(|| strip_errno(&error).into_bytes());
     let write_error = match false_message_language() {
         FalseMessageLanguage::SimplifiedChinese => encode_false_message("写入错误"),
         FalseMessageLanguage::TraditionalChinese => encode_false_message("寫入時發生錯誤"),
@@ -159,7 +161,7 @@ fn report_false_write_error(program_name: &OsStr, error: io::Error) {
         .and_then(|_| stderr.write_all(b": "))
         .and_then(|_| stderr.write_all(&write_error))
         .and_then(|_| stderr.write_all(b": "))
-        .and_then(|_| stderr.write_all(detail.as_bytes()))
+        .and_then(|_| stderr.write_all(&detail))
         .and_then(|_| stderr.write_all(b"\n"));
 }
 

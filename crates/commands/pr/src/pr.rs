@@ -36,7 +36,6 @@ use itertools::Itertools;
 use quick_error::quick_error;
 use regex::Regex;
 use sys_locale::get_locale;
-use unicode_width::UnicodeWidthChar;
 use unicode_width::UnicodeWidthStr;
 
 #[cfg(unix)]
@@ -457,6 +456,17 @@ fn pr_raw_byte_display_width(byte: u8) -> usize {
 fn pr_raw_byte_is_printable(byte: u8) -> bool {
     pr_raw_byte_wchar(byte)
         .is_some_and(|wide_char| unsafe { iswprint(wide_char as ctcore::libc::c_uint) != 0 })
+}
+
+fn pr_char_display_width(c: char) -> usize {
+    #[cfg(unix)]
+    {
+        usize::try_from(unsafe { wcwidth(c as ctcore::libc::wchar_t) }).unwrap_or(0)
+    }
+    #[cfg(not(unix))]
+    {
+        unicode_width::UnicodeWidthChar::width(c).unwrap_or(0)
+    }
 }
 
 fn pr_effective_ctype_locale() -> String {
@@ -3596,7 +3606,7 @@ fn pr_get_rendered_line_for_printing(
 
 fn pr_rendered_width(s: &str, tab_width: usize) -> usize {
     if tab_width == 0 {
-        return UnicodeWidthStr::width(s);
+        return s.chars().map(pr_char_display_width).sum();
     }
 
     let mut current_col = 0usize;
@@ -3608,7 +3618,7 @@ fn pr_rendered_width(s: &str, tab_width: usize) -> usize {
         } else if let Some(byte) = pr_raw_byte_from_char(c) {
             current_col += pr_raw_byte_display_width(byte);
         } else {
-            current_col += UnicodeWidthChar::width(c).unwrap_or(0);
+            current_col += pr_char_display_width(c);
         }
     }
     current_col
@@ -3626,7 +3636,7 @@ fn pr_take_display_width(s: &str, max_width: usize, tab_width: usize) -> String 
         } else if let Some(byte) = pr_raw_byte_from_char(c) {
             current_col + pr_raw_byte_display_width(byte)
         } else {
-            current_col + UnicodeWidthChar::width(c).unwrap_or(0)
+            current_col + pr_char_display_width(c)
         };
 
         if next_col > max_width {
@@ -3644,7 +3654,7 @@ fn pr_take_display_suffix(s: &str, max_width: usize) -> String {
     let mut width = 0usize;
     let mut chars = Vec::new();
     for c in s.chars().rev() {
-        let char_width = UnicodeWidthChar::width(c).unwrap_or(0);
+        let char_width = pr_char_display_width(c);
         if width + char_width > max_width {
             break;
         }
@@ -3673,7 +3683,7 @@ fn discard_backspace_underflow(s: &str, initial_col: usize) -> String {
         } else if let Some(byte) = pr_raw_byte_from_char(c) {
             current_col += pr_raw_byte_display_width(byte);
         } else {
-            current_col += UnicodeWidthChar::width(c).unwrap_or(0);
+            current_col += pr_char_display_width(c);
         }
     }
 
@@ -3712,7 +3722,7 @@ fn expand_tabs_to_spaces(
             current_col += pr_raw_byte_display_width(byte);
         } else {
             res.push(c);
-            current_col += UnicodeWidthChar::width(c).unwrap_or(0);
+            current_col += pr_char_display_width(c);
         }
     }
     res
@@ -3774,7 +3784,7 @@ fn replace_spaces_with_tabs_by_segments(
             } else if let Some(byte) = pr_raw_byte_from_char(c) {
                 current_col += pr_raw_byte_display_width(byte);
             } else {
-                current_col += UnicodeWidthChar::width(c).unwrap_or(0);
+                current_col += pr_char_display_width(c);
             }
         }
         let is_last_segment = index + 1 == segments.len();
@@ -3857,7 +3867,7 @@ fn render_join_lines_segments(
             } else if let Some(byte) = pr_raw_byte_from_char(c) {
                 *logical_col += pr_raw_byte_display_width(byte);
             } else if c != '\t' {
-                *logical_col += UnicodeWidthChar::width(c).unwrap_or(0);
+                *logical_col += pr_char_display_width(c);
             }
         };
 
@@ -3971,7 +3981,7 @@ fn escape_control_chars(input: &str, show_control_chars: bool, show_nonprinting:
             continue;
         }
         // GNU's multibyte path treats wcwidth() values below 1 as nonprinting.
-        if UnicodeWidthChar::width(c).unwrap_or(0) < 1 {
+        if pr_char_display_width(c) < 1 {
             let cp = c as u32;
             if show_nonprinting {
                 if cp < 0x80 {

@@ -48,6 +48,7 @@ impl CompOp {
 /// 字面量（叶节点）
 #[derive(Debug, Clone, PartialEq)]
 pub enum Lit {
+    Null,
     Int(i64),
     Float(f64),
     String(String),
@@ -65,6 +66,7 @@ pub enum Lit {
 impl std::fmt::Display for Lit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Lit::Null => write!(f, "null"),
             Lit::Int(n) => write!(f, "{n}"),
             Lit::Float(v) => write!(f, "{v}"),
             Lit::String(s) => write!(f, "{s}"),
@@ -156,6 +158,7 @@ mod tests {
 
     #[test]
     fn test_lit_display() {
+        assert_eq!(Lit::Null.to_string(), "null");
         assert_eq!(Lit::Int(42).to_string(), "42");
         assert_eq!(Lit::String("hello".into()).to_string(), "hello");
         assert_eq!(Lit::Bool(true).to_string(), "true");

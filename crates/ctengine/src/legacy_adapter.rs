@@ -131,6 +131,7 @@ fn build_legacy_args(call: &Call) -> Vec<OsString> {
 
 fn lit_to_os(lit: &Lit) -> OsString {
     match lit {
+        Lit::Null => OsString::from("null"),
         Lit::Int(n) => OsString::from(n.to_string()),
         Lit::Float(f) => OsString::from(f.to_string()),
         Lit::String(s) => OsString::from(s),

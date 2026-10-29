@@ -884,6 +884,7 @@ fn is_run_external_data_flag(name: &str) -> bool {
 /// 将 AST 字面量转为 CtValue
 pub fn lit_to_ct_value(lit: &Lit) -> CtValue {
     match lit {
+        Lit::Null => CtValue::Nothing,
         Lit::Int(n) => CtValue::Int(*n),
         Lit::Float(f) => CtValue::Float(*f),
         Lit::String(s) => CtValue::String(s.clone()),
@@ -1565,6 +1566,7 @@ mod tests {
 
     #[test]
     fn test_lit_to_ct_value() {
+        assert!(matches!(lit_to_ct_value(&Lit::Null), CtValue::Nothing));
         assert!(matches!(lit_to_ct_value(&Lit::Int(7)), CtValue::Int(7)));
         assert!(matches!(
             lit_to_ct_value(&Lit::Bool(true)),
@@ -1574,6 +1576,16 @@ mod tests {
             lit_to_ct_value(&Lit::Ident("x".into())),
             CtValue::String(_)
         ));
+    }
+
+    #[test]
+    fn test_where_null_matches_only_explicit_null() {
+        let where_call = parse_single_call("where n == null");
+        let cond = parse_where_condition_from_call(&where_call).unwrap();
+
+        assert!(record_matches(&[("n".into(), CtValue::Nothing)], &cond));
+        assert!(!record_matches(&[("n".into(), CtValue::Int(1))], &cond));
+        assert!(!record_matches(&[], &cond));
     }
 
     #[test]

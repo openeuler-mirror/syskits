@@ -3915,6 +3915,40 @@
                 "resource_limits": null
             },
             "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "od",
+            "description": "原始字节用例：64位Linux、LC_ALL=C；执行od --traditional -An -N1 -tc /dev/zero b；参数完整十六进制=2d2d747261646974696f6e616c 2d416e 2d4e31 2d7463 2f6465762f7a65726f 62；stdin为0字节、完整十六进制=空；传统纯b操作数表示一个512字节块偏移，/dev/zero偏移后读取一个NUL并按c格式输出；预期RC=0、stderr为0字节、完整十六进制=空；stdout为5字节/1条换行分隔，完整十六进制=20205c300a",
+            "args": [
+                "2d2d747261646974696f6e616c",
+                "2d416e",
+                "2d4e31",
+                "2d7463",
+                "2f6465762f7a65726f",
+                "62"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "20205c300a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
         }
     ]
 }

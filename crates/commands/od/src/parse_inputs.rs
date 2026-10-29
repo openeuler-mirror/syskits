@@ -89,6 +89,13 @@ fn try_parse_offset(
 
     // 获取最后一个参数并尝试解析为偏移量
     let last_arg = input_strings[input_strings.len() - 1];
+    let last_arg_text = last_arg.to_str()?;
+    if input_strings.len() == 2
+        && !last_arg_text.starts_with('+')
+        && !last_arg_text.starts_with(|c: char| c.is_ascii_digit())
+    {
+        return None;
+    }
     if let Ok(offset) = parse_old_style_offset_operand(last_arg) {
         return create_offset_input(input_strings, offset);
     }
@@ -226,6 +233,7 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, &'static str> {
     let mut len = s.len();
     let mut radix = 8; // 默认使用8进制
     let mut multiply = 1; // 乘数因子
+    let mut has_block_suffix = false;
 
     // 处理可选的 '+' 前缀
     if s.starts_with('+') {
@@ -243,6 +251,7 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, &'static str> {
         {
             len -= 1;
             multiply = if suffix == 'b' { 512 } else { 1024 };
+            has_block_suffix = true;
         }
         if s[start..len].ends_with('.') {
             len -= 1;
@@ -251,8 +260,12 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, &'static str> {
     }
 
     // 解析数值
-    u64::from_str_radix(&s[start..len], radix)
-        .ok()
+    let value = if start == len && has_block_suffix {
+        Some(1)
+    } else {
+        u64::from_str_radix(&s[start..len], radix).ok()
+    };
+    value
         .and_then(|value| value.checked_mul(multiply))
         .ok_or("解析失败")
 }
@@ -335,6 +348,19 @@ mod tests {
         );
 
         assert_eq!(
+            CommandLineInputs::FileAndOffset(("-".into(), 512, None)),
+            od_parse_inputs(&ct_app().get_matches_from(vec!["od", "+b"])).unwrap()
+        );
+        assert_eq!(
+            CommandLineInputs::FileAndOffset(("file1".into(), 1024, None)),
+            od_parse_inputs(&ct_app().get_matches_from(vec!["od", "file1", "+B"])).unwrap()
+        );
+        assert_eq!(
+            CommandLineInputs::FileNames(vec!["file1".into(), "b".into()]),
+            od_parse_inputs(&ct_app().get_matches_from(vec!["od", "file1", "b"])).unwrap()
+        );
+
+        assert_eq!(
             CommandLineInputs::FileNames(vec!["file1".into(), "+10a".into()]),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "file1", "+10a"])).unwrap()
         );
@@ -370,6 +396,16 @@ mod tests {
         assert_eq!(
             CommandLineInputs::FileAndOffset(("-".into(), 8, None)),
             od_parse_inputs(&ct_app().get_matches_from(vec!["od", "--traditional", "10"])).unwrap()
+        );
+
+        assert_eq!(
+            CommandLineInputs::FileAndOffset(("-".into(), 512, None)),
+            od_parse_inputs(&ct_app().get_matches_from(vec!["od", "--traditional", "b"])).unwrap()
+        );
+        assert_eq!(
+            CommandLineInputs::FileAndOffset(("file1".into(), 1024, None)),
+            od_parse_inputs(&ct_app().get_matches_from(vec!["od", "--traditional", "file1", "B"]))
+                .unwrap()
         );
 
         // valid offset and valid label
@@ -439,7 +475,6 @@ mod tests {
         parse_offset_operand_str("").unwrap_err();
         parse_offset_operand_str("a").unwrap_err();
         parse_offset_operand_str("+").unwrap_err();
-        parse_offset_operand_str("+b").unwrap_err();
         parse_offset_operand_str("0x1.").unwrap_err();
         parse_offset_operand_str("0x1.b").unwrap_err();
         parse_offset_operand_str("-").unwrap_err();
@@ -461,6 +496,10 @@ mod tests {
         assert_eq!(10, parse_offset_operand_str("+10.").unwrap()); // decimal
         assert_eq!(4096, parse_offset_operand_str("10b").unwrap()); // b suffix = *512
         assert_eq!(8192, parse_offset_operand_str("10B").unwrap()); // B suffix = *1024
+        assert_eq!(512, parse_offset_operand_str("b").unwrap());
+        assert_eq!(1024, parse_offset_operand_str("B").unwrap());
+        assert_eq!(512, parse_offset_operand_str("+b").unwrap());
+        assert_eq!(1024, parse_offset_operand_str("+B").unwrap());
         assert_eq!(4096, parse_offset_operand_str("+10b").unwrap()); // b suffix = *512
         assert_eq!(8192, parse_offset_operand_str("+10B").unwrap()); // B suffix = *1024
         assert_eq!(5120, parse_offset_operand_str("10.b").unwrap()); // b suffix = *512

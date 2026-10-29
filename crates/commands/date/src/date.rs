@@ -163,6 +163,77 @@ enum DateRfc3339Format {
     Ns,
 }
 
+struct EnvironmentTimezoneGuard {
+    original: Option<OsString>,
+    changed: bool,
+}
+
+impl EnvironmentTimezoneGuard {
+    fn original_label(&self) -> Option<&str> {
+        self.original.as_deref().and_then(OsStr::to_str)
+    }
+}
+
+impl Drop for EnvironmentTimezoneGuard {
+    fn drop(&mut self) {
+        #[cfg(target_os = "linux")]
+        if self.changed {
+            unsafe {
+                match &self.original {
+                    Some(timezone) => std::env::set_var("TZ", timezone),
+                    None => std::env::remove_var("TZ"),
+                }
+                unsafe extern "C" {
+                    fn tzset();
+                }
+                tzset();
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn environment_timezone_file(
+    timezone: &OsStr,
+    timezone_directory: Option<&OsStr>,
+) -> Option<PathBuf> {
+    let timezone = timezone.as_bytes();
+    let timezone = timezone.strip_prefix(b":").unwrap_or(timezone);
+    if timezone.is_empty() || timezone.starts_with(b"/") {
+        return None;
+    }
+
+    let timezone_directory = timezone_directory
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/usr/share/zoneinfo"));
+    let timezone = OsStr::from_bytes(timezone);
+    let path = std::fs::canonicalize(timezone_directory.join(timezone)).ok()?;
+    path.is_file().then_some(path)
+}
+
+fn normalize_environment_timezone() -> EnvironmentTimezoneGuard {
+    let original = std::env::var_os("TZ");
+    let mut changed = false;
+
+    #[cfg(target_os = "linux")]
+    if let Some(path) = original.as_deref().and_then(|timezone| {
+        environment_timezone_file(timezone, std::env::var_os("TZDIR").as_deref())
+    }) {
+        let mut timezone = OsString::from(":");
+        timezone.push(path);
+        unsafe {
+            std::env::set_var("TZ", timezone);
+            unsafe extern "C" {
+                fn tzset();
+            }
+            tzset();
+        }
+        changed = true;
+    }
+
+    EnvironmentTimezoneGuard { original, changed }
+}
+
 fn date_source_kind(source: &DateSource) -> &'static str {
     match source {
         DateSource::Now => "now",
@@ -951,11 +1022,15 @@ fn date_debug_text(
     output
 }
 
-fn emit_date_debug(input: &str, date: &DateTime<FixedOffset>, format_string: &str) {
-    let env_timezone = std::env::var("TZ").ok();
+fn emit_date_debug(
+    input: &str,
+    date: &DateTime<FixedOffset>,
+    format_string: &str,
+    env_timezone: Option<&str>,
+) {
     eprint!(
         "{}",
-        date_debug_text(input, date, format_string, env_timezone.as_deref())
+        date_debug_text(input, date, format_string, env_timezone)
     );
 }
 
@@ -983,6 +1058,8 @@ pub fn date_native_semantic(args: impl ctcore::Args) -> CTResult<DateSemantic> {
             tzset();
         }
     }
+
+    let timezone_guard = normalize_environment_timezone();
 
     let date_format = match get_date_format(&args_match) {
         Ok(value) => value,
@@ -1053,7 +1130,7 @@ pub fn date_native_semantic(args: impl ctcore::Args) -> CTResult<DateSemantic> {
             }
         }
         DateSource::File(path) => {
-            let env_timezone = std::env::var("TZ").ok();
+            let env_timezone = timezone_guard.original_label();
             for line in date_file_lines(date_file_reader(path)?, path) {
                 let line = match line {
                     Ok(line) => line,
@@ -1075,7 +1152,7 @@ pub fn date_native_semantic(args: impl ctcore::Args) -> CTResult<DateSemantic> {
                                 &line,
                                 &dt,
                                 &format_string,
-                                env_timezone.as_deref(),
+                                env_timezone,
                             ));
                         }
                         let row =
@@ -1161,6 +1238,9 @@ fn date_processing<W: Write>(
     set_to_params: Option<DateTime<FixedOffset>>,
     output: &mut W,
 ) -> CTResult<()> {
+    let timezone_guard = normalize_environment_timezone();
+    let env_timezone = timezone_guard.original_label();
+
     // 创建日期设置结构体
     let date_set = DateSettings {
         utc: args_match.get_flag(DATE_OPT_UNIVERSAL),
@@ -1214,7 +1294,12 @@ fn date_processing<W: Write>(
             match date {
                 Ok(date) => {
                     if date_set.debug {
-                        emit_date_debug(&input_str, &date, &format_string.to_string_lossy());
+                        emit_date_debug(
+                            &input_str,
+                            &date,
+                            &format_string.to_string_lossy(),
+                            env_timezone,
+                        );
                     }
                     write_formatted_date(output, &date, &format_string)?;
                 }
@@ -1246,7 +1331,12 @@ fn date_processing<W: Write>(
                                 date
                             };
                             if date_set.debug {
-                                emit_date_debug(&line, &date, &format_string.to_string_lossy());
+                                emit_date_debug(
+                                    &line,
+                                    &date,
+                                    &format_string.to_string_lossy(),
+                                    env_timezone,
+                                );
                             }
                             write_formatted_date(output, &date, &format_string)?;
                         }
@@ -1334,6 +1424,7 @@ fn date_processing<W: Write>(
 }
 
 fn set_date_params(args_match: &ArgMatches) -> Result<Option<DateTime<FixedOffset>>, CTResult<()>> {
+    let _timezone_guard = normalize_environment_timezone();
     let set_to_params = match args_match
         .get_many::<OsString>(DATE_OPT_SET)
         .and_then(|mut values| values.next_back())
@@ -3095,6 +3186,53 @@ mod tests {
 
         assert_eq!(parsed.timestamp(), 1_704_110_400);
         assert_eq!(parsed.timestamp_subsec_nanos(), 250_000_000);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_relative_tzdir_timezone_file_is_used_for_parsing_and_formatting() {
+        const CHILD_ENV: &str = "CT_DATE_RELATIVE_TZDIR_CHILD";
+
+        if std::env::var_os(CHILD_ENV).is_some() {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let zoneinfo = temp_dir.path().join("zoneinfo/Custom");
+            std::fs::create_dir_all(&zoneinfo).unwrap();
+            std::fs::copy(
+                "/usr/share/zoneinfo/America/New_York",
+                zoneinfo.join("Test"),
+            )
+            .unwrap();
+            std::env::set_current_dir(temp_dir.path()).unwrap();
+            unsafe {
+                std::env::set_var("TZ", "Custom/Test");
+                std::env::set_var("TZDIR", "zoneinfo");
+            }
+
+            let args = [
+                OsString::from(ctcore::ct_util_name()),
+                OsString::from("-d"),
+                OsString::from("2024-07-15 12:00:00"),
+                OsString::from("+%F %T %z %Z"),
+            ];
+            let result = date_native_semantic(args.into_iter()).unwrap();
+
+            assert_eq!(result.classic_text, "2024-07-15 12:00:00 -0400 EDT\n");
+            assert_eq!(std::env::var("TZ").unwrap(), "Custom/Test");
+            return;
+        }
+
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("test_relative_tzdir_timezone_file_is_used_for_parsing_and_formatting")
+            .env(CHILD_ENV, "1")
+            .output()
+            .expect("run isolated relative TZDIR date test");
+
+        assert!(
+            output.status.success(),
+            "isolated relative TZDIR date test failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[test]

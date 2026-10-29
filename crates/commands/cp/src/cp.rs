@@ -3305,6 +3305,7 @@ fn copy_file(
             cp_opts.cp_dereference(source_in_command_line) || !sour_path.is_symlink();
         if is_copy_contents
             && !dest_path.exists()
+            && cp_opts.backup == CtBackupMode::NoBackup
             && !matches!(
                 cp_opts.overwrite,
                 CpOverwriteMode::Clobber(CpClobberMode::RemoveDestination)

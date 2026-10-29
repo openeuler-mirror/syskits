@@ -55,7 +55,7 @@ impl TestSymbol {
                     "(" => Self::LParen,
                     "!" => Self::Bang,
                     "-a" | "-o" => Self::BoolOp(s),
-                    "=" | "==" | "!=" | "<" | ">" => Self::Op(TestOperator::String(s)),
+                    "=" | "==" | "!=" => Self::Op(TestOperator::String(s)),
                     "-eq" | "-ge" | "-gt" | "-le" | "-lt" | "-ne" => Self::Op(TestOperator::Int(s)),
                     "-ef" | "-nt" | "-ot" => Self::Op(TestOperator::File(s)),
                     "-n" | "-z" => Self::UnaryOp(TestUnaryOperator::StrlenOp(s)),
@@ -730,6 +730,17 @@ mod tests {
     fn unknown_three_argument_binary_operator_is_rejected() {
         let error = test_parse(args(&["x", "-q", "y"])).unwrap_err();
         assert_eq!(error.to_string(), "'-q': binary operator expected");
+    }
+
+    #[test]
+    fn string_order_operators_are_rejected() {
+        for operator in ["<", ">"] {
+            let error = test_parse(args(&["abc", operator, "abd"])).unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                format!("'{operator}': binary operator expected")
+            );
+        }
     }
 
     #[test]

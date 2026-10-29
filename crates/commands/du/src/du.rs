@@ -800,7 +800,11 @@ fn du(
                             }
                             continue;
                         }
-                        let this_stat = DuStat::new_at(dir_fd, &name, entry_path.clone(), du_opts);
+                        let this_stat = if du_opts.dereference == DuDeref::All {
+                            DuStat::new(&entry_path, du_opts, false)
+                        } else {
+                            DuStat::new_at(dir_fd, &name, entry_path.clone(), du_opts)
+                        };
                         du_process_entry(
                             &mut state,
                             this_stat,

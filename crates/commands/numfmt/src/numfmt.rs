@@ -1348,10 +1348,36 @@ fn numfmt_missing_long_option_argument(args: &[OsString]) -> Option<&'static str
         .and_then(|()| requires_argument.then_some(*canonical))
 }
 
+fn numfmt_missing_short_option_argument(args: &[OsString]) -> Option<char> {
+    if args
+        .iter()
+        .skip(1)
+        .take(args.len().saturating_sub(2))
+        .any(|arg| arg.as_encoded_bytes() == b"--")
+    {
+        return None;
+    }
+
+    let argument = args.last()?.as_encoded_bytes();
+    let options = argument.strip_prefix(b"-")?;
+    if options.is_empty() || options.starts_with(b"-") {
+        return None;
+    }
+    options
+        .strip_suffix(b"d")
+        .filter(|prefix| prefix.iter().all(|option| *option == b'z'))
+        .map(|_| 'd')
+}
+
 fn validate_numfmt_option_arguments(args: &[OsString]) -> Result<()> {
     if let Some(option) = numfmt_missing_long_option_argument(args) {
         return Err(format!(
             "option '--{option}' requires an argument\nTry 'numfmt --help' for more information."
+        ));
+    }
+    if let Some(option) = numfmt_missing_short_option_argument(args) {
+        return Err(format!(
+            "option requires an argument -- '{option}'\nTry 'numfmt --help' for more information."
         ));
     }
     Ok(())
@@ -2107,8 +2133,9 @@ mod tests {
         CtRange, Numfmt, NumfmtConfigs, NumfmtFormatOptions, NumfmtInvalidModes, NumfmtRoundMethod,
         NumfmtTransformOptions, NumfmtUnit, ct_app, normalize_numfmt_long_options, numfmt_flags,
         numfmt_handle_args, numfmt_handle_buffer, numfmt_handle_invalid_bytes,
-        numfmt_long_option_matches, numfmt_missing_long_option_argument, numfmt_parse_options,
-        numfmt_parse_unit_size, numfmt_parse_unit_size_suffix,
+        numfmt_long_option_matches, numfmt_missing_long_option_argument,
+        numfmt_missing_short_option_argument, numfmt_parse_options, numfmt_parse_unit_size,
+        numfmt_parse_unit_size_suffix,
     };
     use ctcore::Tool;
     use ctcore::ct_error::get_ct_exit_code;
@@ -2254,6 +2281,21 @@ mod tests {
             numfmt_missing_long_option_argument(&after_double_dash),
             None
         );
+    }
+
+    #[test]
+    fn test_missing_delimiter_short_option_argument() {
+        for (argument, expected) in [
+            ("-d", Some('d')),
+            ("-zd", Some('d')),
+            ("-zzd", Some('d')),
+            ("-dz", None),
+            ("-dd", None),
+            ("-xd", None),
+        ] {
+            let args = [OsString::from("numfmt"), OsString::from(argument)];
+            assert_eq!(numfmt_missing_short_option_argument(&args), expected);
+        }
     }
 
     #[test]

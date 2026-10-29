@@ -884,6 +884,29 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: -d 缺参必须使用 GNU 短选项诊断",
+            "args": [
+                "-d"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "numfmt: option requires an argument -- 'd'\nTry 'numfmt --help' for more information.\n"
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

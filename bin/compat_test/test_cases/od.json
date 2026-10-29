@@ -3671,6 +3671,37 @@
                 "resource_limits": null
             },
             "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "od",
+            "description": "原始字节用例：LC_ALL=C；执行od -t fH /dev/null；参数完整十六进制=2d74 6648 2f6465762f6e756c6c；stdin为0字节、完整十六进制=空；GNU不把H识别为浮点尺寸字母，而在默认f格式后将H报告为非法类型串字符；预期RC=1、stdout为0字节、完整十六进制=空；stderr为46字节/1条换行分隔，完整十六进制=6f643a20696e76616c6964206368617261637465722027482720696e207479706520737472696e6720276648270a",
+            "args": [
+                "2d74",
+                "6648",
+                "2f6465762f6e756c6c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "6f643a20696e76616c6964206368617261637465722027482720696e207479706520737472696e6720276648270a"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
         }
     ]
 }

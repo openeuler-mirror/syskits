@@ -344,10 +344,6 @@ fn is_format_size_char(
             *byte_size = 16;
             Ok(true)
         }
-        // 主动捕获不受支持的 16位半精度(H, B) 浮点数，并返回 GNU 格式的错误
-        (FormatTypeCategory::Float, Some(c @ ('H' | 'B'))) => Err(format!(
-            "this system doesn't provide a 'f{c}' floating point type"
-        )),
         _ => Ok(false),
     }
 }
@@ -830,6 +826,18 @@ mod tests {
         assert_eq!(
             od_parse_type_string("x9999999999999999999999").unwrap_err(),
             "invalid type string 'x9999999999999999999999'"
+        );
+    }
+
+    #[test]
+    fn test_unknown_float_size_letters_are_invalid_characters() {
+        assert_eq!(
+            od_parse_type_string("fH").unwrap_err(),
+            "invalid character 'H' in type string 'fH'"
+        );
+        assert_eq!(
+            od_parse_type_string("fB").unwrap_err(),
+            "invalid character 'B' in type string 'fB'"
         );
     }
 

@@ -98,6 +98,8 @@ impl CtFlag {
 pub struct DataSignature {
     /// 命令名称（必须唯一）
     pub name: &'static str,
+    /// 可使用同一 DataCommand 实现处理的别名
+    pub aliases: Vec<&'static str>,
     /// 命令简短说明（用于帮助文本）
     pub desc: &'static str,
     /// 必填位置参数
@@ -129,6 +131,7 @@ impl DataSignature {
     pub fn new(name: &'static str, desc: &'static str) -> Self {
         Self {
             name,
+            aliases: Vec::new(),
             desc,
             required_positional: Vec::new(),
             optional_positional: Vec::new(),
@@ -178,6 +181,12 @@ impl DataSignature {
     /// 设置可变参数描述
     pub fn rest(mut self, arg: CtPositionalArg) -> Self {
         self.rest_positional = Some(arg);
+        self
+    }
+
+    /// 添加同一命令实现支持的别名
+    pub fn aliases(mut self, aliases: &'static [&'static str]) -> Self {
+        self.aliases.extend_from_slice(aliases);
         self
     }
 

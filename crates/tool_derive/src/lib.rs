@@ -312,42 +312,6 @@ fn find_name_method(lines: &[&str], start_line: usize) -> Option<String> {
     None
 }
 
-/// 在 `impl DataCommand for ...` 块内查找 `DataSignature::new("cmd", ...)`
-fn find_data_signature_name(lines: &[&str], start_line: usize) -> Option<String> {
-    let mut brace_count = 0;
-    let mut in_impl_block = false;
-    for (i, line) in lines.iter().enumerate().skip(start_line) {
-        let trimmed = line.trim();
-
-        if i == start_line || !in_impl_block {
-            if trimmed.contains('{') {
-                in_impl_block = true;
-            }
-            if !in_impl_block {
-                continue;
-            }
-        }
-
-        brace_count += trimmed.chars().filter(|&c| c == '{').count();
-        brace_count -= trimmed.chars().filter(|&c| c == '}').count();
-
-        if let Some(pos) = trimmed.find("DataSignature::new(") {
-            let after = &trimmed[pos + "DataSignature::new(".len()..];
-            if let Some(start_q) = after.find('"') {
-                let rest = &after[start_q + 1..];
-                if let Some(end_q) = rest.find('"') {
-                    return Some(rest[..end_q].to_string());
-                }
-            }
-        }
-
-        if in_impl_block && brace_count == 0 {
-            break;
-        }
-    }
-    None
-}
-
 /// 扫描项目目录，收集所有工具模块
 ///
 /// 该函数会扫描 `crates/commands/` 目录下的所有子目录，查找实现了 `Tool` trait 的 Rust 文件，
@@ -677,7 +641,11 @@ fn scan_data_command_implementations(
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| module_name.to_string())
                     .replace('_', "-");
-                if let Some(cmd_name) = find_data_signature_name(&lines, i).or(Some(fallback)) {
+                let mut command_names = find_data_signature_names(&lines, i);
+                if command_names.is_empty() {
+                    command_names.push(fallback);
+                }
+                for cmd_name in command_names {
                     commands.push(DataCommandInfo {
                         module_name: module_name.to_string(),
                         type_name: type_name.to_string(),
@@ -688,6 +656,67 @@ fn scan_data_command_implementations(
         }
     }
     commands
+}
+
+/// 在 `impl DataCommand for ...` 块内查找 canonical 名称和 `.aliases(&[...])`。
+fn find_data_signature_names(lines: &[&str], start_line: usize) -> Vec<String> {
+    let mut block = String::new();
+    let mut brace_count = 0usize;
+    let mut in_impl_block = false;
+
+    for (i, line) in lines.iter().enumerate().skip(start_line) {
+        let trimmed = line.trim();
+        if i == start_line || !in_impl_block {
+            if trimmed.contains('{') {
+                in_impl_block = true;
+            }
+            if !in_impl_block {
+                continue;
+            }
+        }
+        block.push_str(line);
+        block.push('\n');
+        brace_count += trimmed.chars().filter(|&c| c == '{').count();
+        brace_count = brace_count.saturating_sub(trimmed.chars().filter(|&c| c == '}').count());
+        if in_impl_block && brace_count == 0 {
+            break;
+        }
+    }
+
+    let mut names = Vec::new();
+    if let Some(pos) = block.find("DataSignature::new(") {
+        let after = &block[pos + "DataSignature::new(".len()..];
+        if let Some(name) = first_string_literal(after) {
+            names.push(name);
+        }
+    }
+    if let Some(pos) = block.find(".aliases(&[") {
+        let after = &block[pos + ".aliases(&[".len()..];
+        if let Some(end) = after.find("])\n").or_else(|| after.find("])")) {
+            names.extend(string_literals(&after[..end]));
+        }
+    }
+    names
+}
+
+fn first_string_literal(input: &str) -> Option<String> {
+    let start = input.find('"')? + 1;
+    let end = input[start..].find('"')?;
+    Some(input[start..start + end].to_string())
+}
+
+fn string_literals(input: &str) -> Vec<String> {
+    let mut values = Vec::new();
+    let mut rest = input;
+    while let Some(start) = rest.find('"') {
+        let after_start = &rest[start + 1..];
+        let Some(end) = after_start.find('"') else {
+            break;
+        };
+        values.push(after_start[..end].to_string());
+        rest = &after_start[end + 1..];
+    }
+    values
 }
 
 /// 扫描 `crates/commands_data/` 目录
@@ -877,7 +906,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_data_signature_name() {
+    fn test_find_data_signature_names_without_aliases() {
         let lines = vec![
             "impl DataCommand for CmdFrom {",
             "  fn signature(&self) -> DataSignature {",
@@ -886,8 +915,24 @@ mod tests {
             "}",
         ];
         assert_eq!(
-            find_data_signature_name(&lines, 0),
-            Some("from".to_string())
+            find_data_signature_names(&lines, 0),
+            vec!["from".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_find_data_signature_names_includes_aliases() {
+        let lines = vec![
+            "impl DataCommand for CmdHashsum {",
+            "  fn signature(&self) -> DataSignature {",
+            "    DataSignature::new(\"hashsum\", \"desc\")",
+            "      .aliases(&[\"sha256sum\", \"md5sum\"])",
+            "  }",
+            "}",
+        ];
+        assert_eq!(
+            find_data_signature_names(&lines, 0),
+            vec!["hashsum", "sha256sum", "md5sum"]
         );
     }
 

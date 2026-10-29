@@ -16,7 +16,7 @@ struct HashsumCore;
 impl HashsumIntent {
     fn from_call(call: &DataCall) -> Result<Self, CtDiagnosticError> {
         let mut argv = Vec::with_capacity(call.positionals.len() + 1);
-        argv.push(OsString::from("hashsum"));
+        argv.push(OsString::from(&call.command_name));
 
         for arg in &call.positionals {
             argv.push(OsString::from(value_to_arg(&arg.value)));
@@ -67,7 +67,7 @@ impl HashsumCore {
         input: CtPipelineData,
     ) -> Result<(CtValue, String, String, i32), CtDiagnosticError> {
         let result = ctengine::run_with_optional_pipeline_stdin(
-            "hashsum",
+            &intent.argv[0].to_string_lossy(),
             input,
             ctengine::argv_uses_stdin(&intent.argv, &["-l", "--length", "--bits"]),
             || {
@@ -75,7 +75,7 @@ impl HashsumCore {
                     intent.argv.iter().cloned(),
                 ))
             },
-            |err| CtDiagnosticError::simple(format!("hashsum: {err}")),
+            |err| CtDiagnosticError::simple(format!("{}: {err}", intent.argv[0].to_string_lossy())),
         )?;
         Ok(match result {
             Ok(semantic) => (
@@ -87,17 +87,17 @@ impl HashsumCore {
             Err(err) => (
                 CtValue::List(Vec::new()),
                 String::new(),
-                render_error_text(err.as_ref()),
+                render_error_text(&intent.argv[0].to_string_lossy(), err.as_ref()),
                 err.code(),
             ),
         })
     }
 }
 
-fn render_error_text(err: &dyn CTError) -> String {
-    let mut stderr = format!("hashsum: {err}\n");
+fn render_error_text(program: &str, err: &dyn CTError) -> String {
+    let mut stderr = format!("{program}: {err}\n");
     if err.usage() {
-        stderr.push_str("Try 'hashsum --help' for more information.\n");
+        stderr.push_str(&format!("Try '{program} --help' for more information.\n"));
     }
     stderr
 }
@@ -184,6 +184,23 @@ fn display_columns(is_check_mode: bool) -> CtValue {
 impl DataCommand for CmdHashsum {
     fn signature(&self) -> DataSignature {
         DataSignature::new("hashsum", "structured digest output")
+            .aliases(&[
+                "md5sum",
+                "sha1sum",
+                "sha224sum",
+                "sha256sum",
+                "sha384sum",
+                "sha512sum",
+                "b2sum",
+                "b3sum",
+                "sha3sum",
+                "sha3-224sum",
+                "sha3-256sum",
+                "sha3-384sum",
+                "sha3-512sum",
+                "shake128sum",
+                "shake256sum",
+            ])
             .rest(CtPositionalArg::optional(
                 "arg",
                 "GNU-compatible hashsum arguments",
@@ -213,7 +230,7 @@ impl DataCommand for CmdHashsum {
                 Some(stderr_text)
             },
             exit_code,
-            source: Some("hashsum".into()),
+            source: Some(call.command_name.clone()),
             ..Default::default()
         };
         if let Ok(mut custom) = metadata.custom.lock() {
@@ -251,6 +268,18 @@ mod tests {
             ]
         );
         assert!(!intent.is_check_mode());
+    }
+
+    #[test]
+    fn from_call_preserves_hashsum_alias_for_algorithm_detection() {
+        let call = DataCall {
+            command_name: "sha256sum".into(),
+            ..DataCall::named("sha256sum")
+        };
+
+        let intent = HashsumIntent::from_call(&call).expect("intent");
+
+        assert_eq!(intent.argv, vec![OsString::from("sha256sum")]);
     }
 
     #[test]

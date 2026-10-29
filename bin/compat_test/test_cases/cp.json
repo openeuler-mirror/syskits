@@ -1732,6 +1732,52 @@
         {
             "tstdin": "",
             "command": "cp",
+            "description": "Repeated --update modes use the last specified value",
+            "args": [
+                "--update=none",
+                "--update=all",
+                "update-order-source-115160",
+                "update-order-destination-115160"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "printf 'source='; cat update-order-source-115160; printf 'destination='; cat update-order-destination-115160",
+                        "expected_exit": 0,
+                        "expected_stdout": "source=new\ndestination=new\n",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "setup_commands": [
+                "printf 'new\\n' > update-order-source-115160",
+                "printf 'old\\n' > update-order-destination-115160"
+            ],
+            "cleanup_commands": [
+                "rm -f update-order-source-115160 update-order-destination-115160"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "",
+            "command": "cp",
             "description": "Backup a dangling destination symlink before copying",
             "args": [
                 "-b",

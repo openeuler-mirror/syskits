@@ -1,8 +1,8 @@
 use std::os::unix::process::CommandExt;
 use std::process::Command;
 
-fn header(arguments: &[&str]) -> String {
-    let output = Command::new(env!("CARGO_BIN_EXE_df"))
+fn command_header(command: &str, arguments: &[&str]) -> String {
+    let output = Command::new(command)
         .arg0("df")
         .args(arguments)
         .env("LC_ALL", "C")
@@ -21,12 +21,19 @@ fn header(arguments: &[&str]) -> String {
         .to_string()
 }
 
+fn header(arguments: &[&str]) -> String {
+    command_header(env!("CARGO_BIN_EXE_df"), arguments)
+}
+
+fn gnu_header(arguments: &[&str]) -> String {
+    command_header("/usr/bin/df", arguments)
+}
+
 #[test]
 fn last_scaling_option_overrides_human_readable_mode() {
-    let expected = "Filesystem               1K-blocks     Used Available Use% Mounted on";
-
-    assert_eq!(header(&["-h", "-B1K", "/"]), expected);
-    assert_eq!(header(&["-H", "-k", "/"]), expected);
+    for arguments in [["-h", "-B1K", "/"], ["-H", "-k", "/"]] {
+        assert_eq!(header(&arguments), gnu_header(&arguments));
+    }
 }
 
 #[test]
@@ -40,11 +47,7 @@ fn human_readable_option_overrides_an_earlier_fixed_block_size() {
 #[test]
 fn output_size_header_follows_the_active_scaling_mode() {
     for option in ["-h", "-H"] {
-        assert_eq!(
-            header(&[option, "--output=size", "/"]),
-            " Size",
-            "{option}"
-        );
+        assert_eq!(header(&[option, "--output=size", "/"]), " Size", "{option}");
     }
     assert_eq!(header(&["-B1K", "--output=size", "/"]), "1K-blocks");
 }

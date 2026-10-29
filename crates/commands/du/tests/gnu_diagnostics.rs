@@ -97,11 +97,7 @@ fn long_dereferenced_symlink_chain_matches_gnu() {
     for index in 1..=chain_length {
         let directory = working_dir.path().join(index.to_string());
         create_dir_all(&directory).expect("create chain directory");
-        symlink(
-            format!("../{}", index + 1),
-            directory.join("s"),
-        )
-        .expect("create chain symlink");
+        symlink(format!("../{}", index + 1), directory.join("s")).expect("create chain symlink");
     }
     create_dir_all(working_dir.path().join((chain_length + 1).to_string()))
         .expect("create chain target");

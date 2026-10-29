@@ -1340,15 +1340,8 @@ fn expand_to_writer<W: Write, D: Write>(
                     }
 
                     let use_utf8 = options.uflag || first_input_has_bom == Some(true);
-                    expand_line_with_utf8(
-                        &buffer,
-                        output,
-                        tabstops,
-                        options,
-                        &mut state,
-                        use_utf8,
-                    )
-                    .map_err(|e| expand_write_error(&e))?;
+                    expand_line_with_utf8(&buffer, output, tabstops, options, &mut state, use_utf8)
+                        .map_err(|e| expand_write_error(&e))?;
                 }
             }
             Err(e) => {

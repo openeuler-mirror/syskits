@@ -25,6 +25,7 @@ fn run_with_full_stdout(binary: &str, locale: &str) -> Output {
     let mut command = Command::new(binary);
     command
         .arg0("hostid")
+        .arg("--help")
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .env("LC_ALL", locale)

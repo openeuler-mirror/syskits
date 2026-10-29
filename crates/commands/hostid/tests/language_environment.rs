@@ -30,6 +30,7 @@ fn run_with_full_stdout(binary: &str, locale: &str, language: &str) -> Output {
         .open("/dev/full")
         .expect("open /dev/full");
     hostid_command(binary, locale, language)
+        .arg("--help")
         .stdout(Stdio::from(stdout))
         .output()
         .expect("run hostid with /dev/full")

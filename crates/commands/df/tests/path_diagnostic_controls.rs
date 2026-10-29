@@ -39,7 +39,11 @@ fn missing_path_diagnostics_use_gnu_shell_escaping_for_control_characters() {
 #[test]
 fn non_utf8_path_is_accepted_as_an_operand() {
     let temporary_directory = tempfile::tempdir().expect("create temporary directory");
-    let mut path = temporary_directory.path().as_os_str().as_encoded_bytes().to_vec();
+    let mut path = temporary_directory
+        .path()
+        .as_os_str()
+        .as_encoded_bytes()
+        .to_vec();
     path.extend_from_slice(b"/non-utf8-\xf3");
     let path = OsString::from_vec(path);
 

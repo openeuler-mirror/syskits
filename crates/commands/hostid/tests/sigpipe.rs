@@ -8,7 +8,7 @@ set -o pipefail
 if test "$2" = ignored; then
     trap '' PIPE
 fi
-bash -c 'exec -a hostid "$0"' "$1" | true
+bash -c 'exec -a hostid "$0" --help' "$1" | true
 status=("${PIPESTATUS[@]}")
 printf '%s' "${status[0]}"
 "#;

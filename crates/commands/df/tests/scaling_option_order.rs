@@ -36,3 +36,15 @@ fn human_readable_option_overrides_an_earlier_fixed_block_size() {
         "Filesystem                Size  Used Avail Use% Mounted on"
     );
 }
+
+#[test]
+fn output_size_header_follows_the_active_scaling_mode() {
+    for option in ["-h", "-H"] {
+        assert_eq!(
+            header(&[option, "--output=size", "/"]),
+            " Size",
+            "{option}"
+        );
+    }
+    assert_eq!(header(&["-B1K", "--output=size", "/"]), "1K-blocks");
+}

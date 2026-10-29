@@ -397,6 +397,9 @@ impl TableHeader {
                 Column::Source => t!("df.header.filesystem").to_string(),
                 Column::Size => match options.header_mode {
                     TableHeaderMode::HumanReadable => t!("df.header.size").to_string(),
+                    TableHeaderMode::Output if options.human_readable.is_some() => {
+                        t!("df.header.size").to_string()
+                    }
                     TableHeaderMode::PosixPortability => {
                         // 为了POSIX兼容性，使用块大小格式化"Size"头部。
                         t!(
@@ -884,6 +887,19 @@ mod tests {
                 "Use%",
                 "Mounted on"
             )
+        );
+    }
+
+    #[test]
+    fn test_human_readable_output_header() {
+        let options = DfOptions {
+            human_readable: Some(BlocksHumanReadable::Binary),
+            header_mode: TableHeaderMode::Output,
+            ..Default::default()
+        };
+        assert_eq!(
+            TableHeader::get_headers(&options),
+            vec!("Filesystem", "Size", "Used", "Avail", "Use%", "Mounted on")
         );
     }
 

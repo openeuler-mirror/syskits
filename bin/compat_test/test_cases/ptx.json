@@ -12032,6 +12032,51 @@
     ,
     {
       "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节本地化诊断：LC_ALL=zh_CN.gbk且系统未提供libc.mo时，读取不存在的GBK文件名\\xd6\\xd0；GNU与syskits必须使用相同的主机strerror结果，当前JSON参考值为英文回退，预期RC=1、stdout为空，stderr逐字节保留GBK文件名并输出No such file or directory",
+      "setup_commands": [
+        "export LC_ALL='zh_CN.gbk'",
+        "unset LANGUAGE"
+      ],
+      "args": [
+        "d6d0"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "7074783a20d6d03a204e6f20737563682066696c65206f72206469726563746f72790a"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
+      "byteMode": true,
+      "command": "ptx",
+      "description": "原始字节本地化诊断：LC_ALL=zh_CN.gbk且系统未提供libc.mo时，执行ptx -W '\\xd6\\xd0[' input；input为alpha beta换行，GNU与syskits必须使用相同的主机正则错误翻译，当前JSON参考值保留英文Invalid regular expression、GBK外层标点及原始正则字节，预期RC=1且stdout为空",
+      "setup_commands": [
+        "export LC_ALL='zh_CN.gbk'",
+        "unset LANGUAGE",
+        "printf 'alpha beta\\n' > input"
+      ],
+      "args": [
+        "2d57",
+        "d6d05b",
+        "696e707574"
+      ],
+      "expectation": {
+        "execution": {
+          "exit_code": 1,
+          "stdout": "",
+          "stderr": "7074783a20496e76616c696420726567756c61722065787072657373696f6ea3a8d5fdd4f2b1edb4efcabd2022d6d05b22a3a90a"
+        }
+      },
+      "cleanup_commands": []
+    },
+    {
+      "tstdin": "",
       "command": "ptx",
       "description": "Migrated: invalid UTF-8 context bytes are accepted",
       "args": [

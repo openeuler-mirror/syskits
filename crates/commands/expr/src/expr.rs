@@ -161,6 +161,11 @@ struct ExprNativeOutput {
 }
 
 fn expr_native_output(args: impl ctcore::Args) -> CTResult<ExprNativeOutput> {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        libc::setlocale(libc::LC_ALL, c"".as_ptr());
+    }
+
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     let mut args: Vec<OsString> = args.into_iter().collect();
@@ -410,7 +415,7 @@ mod tests {
 
         #[test]
         fn test_expr_main_unmatched_character_class_matches_gnu() {
-            let args = [ctcore::ct_util_name(), "a", ":", "["];
+            let args = [ctcore::ct_util_name(), "a", ":", "[]"];
             let err = expr_main(args.iter().map(OsString::from)).unwrap_err();
             assert_eq!(err.to_string(), "Unmatched [, [^, [:, [., or [=");
         }

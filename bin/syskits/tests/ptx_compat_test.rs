@@ -4,6 +4,35 @@ use std::process::Command;
 use tempfile::TempDir;
 
 #[test]
+fn ptx_traditional_mode_writes_complete_index() {
+    let temp_dir = TempDir::new().expect("tempdir");
+    let input = temp_dir.path().join("input");
+    let index = temp_dir.path().join("index");
+    fs::write(&input, "alpha beta gamma\n").expect("write fixture");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .current_dir(temp_dir.path())
+        .args(["ptx", "-G", "input", "index"])
+        .output()
+        .expect("run syskits ptx -G");
+
+    assert!(
+        output.status.success(),
+        "status: {:?}, stderr: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"");
+    assert_eq!(
+        fs::read(index).expect("read index"),
+        b".xx \"\" \"\" \"alpha beta gamma\" \"\"\n\
+.xx \"\" \"alpha\" \"beta gamma\" \"\"\n\
+.xx \"\" \"alpha beta\" \"gamma\" \"\"\n"
+    );
+}
+
+#[test]
 fn ptx_auto_reference_keeps_physical_input_lines() {
     let temp_dir = TempDir::new().expect("tempdir");
     let input = temp_dir.path().join("testfile");

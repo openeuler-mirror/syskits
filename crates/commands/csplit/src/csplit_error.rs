@@ -160,6 +160,8 @@ pub enum CsplitError {
     InvalidPattern(PatternText),
     #[error("{}: invalid regular expression: {}", ._0.locale_quote(), _1)]
     InvalidRegularExpression(PatternText, String),
+    #[error("error in regular expression search")]
+    RegexSearch,
     #[error("{}: closing delimiter '{}' missing", ._0.to_lossy_string(), _1)]
     ClosingDelimiterMissing(PatternText, char),
     #[error("{}: integer expected after delimiter", ._0.locale_quote())]

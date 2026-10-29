@@ -25,6 +25,14 @@ pub struct GnuRegexMatch {
     pub end: usize,
 }
 
+/// A GNU regex match together with its parenthesized subexpressions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GnuRegexCaptures {
+    pub whole: GnuRegexMatch,
+    /// Captures are indexed from one, so `captures[0]` is `\\(...\\)`.
+    pub captures: Vec<Option<GnuRegexMatch>>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GnuRegexError {
     Compile(Vec<u8>),
@@ -58,6 +66,7 @@ pub struct GnuRegexCompileOptions<'a> {
     syntax: libc::c_ulong,
     translate: Option<&'a [u8; 256]>,
     fastmap: bool,
+    newline_anchor: bool,
 }
 
 impl GnuRegexCompileOptions<'_> {
@@ -66,6 +75,7 @@ impl GnuRegexCompileOptions<'_> {
             syntax: GNU_REGEX_SYNTAX_EMACS,
             translate: None,
             fastmap: true,
+            newline_anchor: true,
         }
     }
 
@@ -74,6 +84,7 @@ impl GnuRegexCompileOptions<'_> {
             syntax: GNU_REGEX_SYNTAX_POSIX_BASIC_PERMISSIVE,
             translate: None,
             fastmap: true,
+            newline_anchor: true,
         }
     }
 
@@ -82,11 +93,18 @@ impl GnuRegexCompileOptions<'_> {
             syntax: self.syntax,
             translate: Some(table),
             fastmap: self.fastmap,
+            newline_anchor: self.newline_anchor,
         }
     }
 
     pub const fn fastmap(mut self, enabled: bool) -> Self {
         self.fastmap = enabled;
+        self
+    }
+
+    /// Control whether `^` and `$` match immediately after and before a newline.
+    pub const fn newline_anchor(mut self, enabled: bool) -> Self {
+        self.newline_anchor = enabled;
         self
     }
 }
@@ -168,6 +186,10 @@ pub struct GnuRegex {
 }
 
 impl GnuRegex {
+    pub fn capture_count(&self) -> usize {
+        self.compiled.re_nsub
+    }
+
     pub fn compile(
         pattern: &[u8],
         options: GnuRegexCompileOptions<'_>,
@@ -208,6 +230,10 @@ impl GnuRegex {
                 libc::regfree((&raw mut compiled).cast());
             }
             return Err(GnuRegexError::Compile(message));
+        }
+        const NEWLINE_ANCHOR_BIT: u8 = 1 << 7;
+        if !options.newline_anchor {
+            compiled.bitfield &= !NEWLINE_ANCHOR_BIT;
         }
         if options.fastmap && unsafe { re_compile_fastmap(&mut compiled) } == -2 {
             compiled.translate = std::ptr::null_mut();
@@ -307,26 +333,42 @@ impl GnuRegex {
         data: &[u8],
         start: usize,
     ) -> Result<Option<GnuRegexMatch>, GnuRegexError> {
+        self.match_at_with_captures(data, start)
+            .map(|matched| matched.map(|captures| captures.whole))
+    }
+
+    pub fn match_at_with_captures(
+        &mut self,
+        data: &[u8],
+        start: usize,
+    ) -> Result<Option<GnuRegexCaptures>, GnuRegexError> {
         let length =
             libc::regoff_t::try_from(data.len()).map_err(|_| GnuRegexError::RecordTooLarge)?;
         let start_offset =
             libc::regoff_t::try_from(start).map_err(|_| GnuRegexError::RecordTooLarge)?;
+        let mut registers = GnuRegexRegisters::default();
         let matched = unsafe {
             re_match(
                 &mut self.compiled,
                 data.as_ptr().cast(),
                 length,
                 start_offset,
-                std::ptr::null_mut(),
+                &mut registers,
             )
         };
         match matched {
             -1 => Ok(None),
             -2 => Err(GnuRegexError::Search),
-            length if length >= 0 => Ok(Some(GnuRegexMatch {
-                start,
-                end: start + length as usize,
-            })),
+            length if length >= 0 => {
+                let whole = match_from_registers(&registers)?;
+                if whole.start != start || whole.end != start + length as usize {
+                    return Err(GnuRegexError::Search);
+                }
+                let captures = (1..=self.compiled.re_nsub)
+                    .map(|index| capture_from_registers(&registers, index))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(Some(GnuRegexCaptures { whole, captures }))
+            }
             _ => Err(GnuRegexError::Search),
         }
     }
@@ -345,6 +387,32 @@ fn match_from_registers(registers: &GnuRegexRegisters) -> Result<GnuRegexMatch, 
         start: match_start as usize,
         end: match_end as usize,
     })
+}
+
+fn capture_from_registers(
+    registers: &GnuRegexRegisters,
+    index: usize,
+) -> Result<Option<GnuRegexMatch>, GnuRegexError> {
+    if registers.start.is_null() || registers.end.is_null() {
+        return Err(GnuRegexError::Search);
+    }
+    let register_count = usize::try_from(registers.num_regs).map_err(|_| GnuRegexError::Search)?;
+    if index >= register_count {
+        return Ok(None);
+    }
+
+    let start = unsafe { *registers.start.add(index) };
+    let end = unsafe { *registers.end.add(index) };
+    if start == -1 && end == -1 {
+        return Ok(None);
+    }
+    if start < 0 || end < start {
+        return Err(GnuRegexError::Search);
+    }
+    Ok(Some(GnuRegexMatch {
+        start: start as usize,
+        end: end as usize,
+    }))
 }
 
 impl Drop for GnuRegex {
@@ -393,6 +461,23 @@ mod tests {
             Some(GnuRegexMatch { start: 1, end: 3 })
         );
         assert_eq!(regex.match_at(b"xaa", 0).unwrap(), None);
+    }
+
+    #[test]
+    fn match_at_with_captures_returns_the_first_subexpression() {
+        let mut regex = GnuRegex::compile(
+            b"\\(ab\\)c",
+            GnuRegexCompileOptions::posix_basic_permissive(),
+        )
+        .unwrap();
+
+        let matched = regex.match_at_with_captures(b"abc", 0).unwrap().unwrap();
+
+        assert_eq!(matched.whole, GnuRegexMatch { start: 0, end: 3 });
+        assert_eq!(
+            matched.captures,
+            vec![Some(GnuRegexMatch { start: 0, end: 2 })]
+        );
     }
 
     #[test]

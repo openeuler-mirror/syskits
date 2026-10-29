@@ -14,7 +14,7 @@ else
   "$binary" input '/^/' '{*}' >/dev/null 2>stderr &
 fi
 child=$!
-(exec 3>input; printf 'a\nb\n' >&3; sleep 1) &
+(exec 3<>input; printf 'a\nb\n' >&3; sleep 1) &
 writer=$!
 for _ in $(seq 1 100); do
   test -e xx01 && break

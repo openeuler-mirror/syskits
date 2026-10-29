@@ -163,7 +163,7 @@ impl CtUtmpx {
     }
     /// Return the login timestamp in epoch seconds.
     pub fn timestamp_seconds(&self) -> i64 {
-        self.inner.ut_tv.tv_sec as i64
+        widen_to_i64(self.inner.ut_tv.tv_sec)
     }
     /// A.K.A. ut.ut_tv
     pub fn login_time(&self) -> time::OffsetDateTime {
@@ -264,6 +264,10 @@ impl CtUtmpx {
         }
         iter
     }
+}
+
+fn widen_to_i64<T: Into<i64>>(value: T) -> i64 {
+    value.into()
 }
 
 fn format_canonical_host(host: &str, canonical: Option<&str>, display: &str) -> String {

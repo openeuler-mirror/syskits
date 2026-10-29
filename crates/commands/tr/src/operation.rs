@@ -386,6 +386,17 @@ impl<'a> SequenceCursor<'a> {
         self.index += 1;
         self.offset = 0;
     }
+
+    fn current_mapping(&mut self) -> Option<(u8, CaseClass)> {
+        self.current()?;
+        let sequence = &self.sequences[self.index];
+        let offset = if matches!(sequence, Sequence::CharStar(_)) {
+            0
+        } else {
+            self.offset
+        };
+        Some((sequence.byte_at(offset), sequence.case_class()))
+    }
 }
 
 impl Sequence {
@@ -548,21 +559,23 @@ impl Sequence {
             Self::byte_at_position(&set2, position, indefinite_repeat_len).map(|(byte, _)| byte)
         });
 
-        for (set1_byte, occurrence) in Self::last_occurrences(&set1).into_iter().enumerate() {
-            let Some((position, set1_case)) = occurrence else {
-                continue;
+        let mut set1_cursor = SequenceCursor::new(&set1, 0);
+        let mut set2_cursor = SequenceCursor::new(
+            &set2,
+            usize::try_from(indefinite_repeat_len).unwrap_or(usize::MAX),
+        );
+        while let Some((set1_byte, set1_case)) = set1_cursor.current_mapping() {
+            let set2_mapping = set2_cursor.current_mapping();
+            let (set2_byte, set2_case) = match set2_mapping {
+                Some(mapping) => mapping,
+                None if truncate_set1 => break,
+                None => {
+                    let Some(last_set2_byte) = last_set2_byte else {
+                        return Err(BadSequence::EmptySet2WhenNotTruncatingSet1);
+                    };
+                    (last_set2_byte, CaseClass::None)
+                }
             };
-            let (set2_byte, set2_case) =
-                match Self::byte_at_position(&set2, position, indefinite_repeat_len) {
-                    Some(target) => target,
-                    None if truncate_set1 => continue,
-                    None => {
-                        let Some(last_set2_byte) = last_set2_byte else {
-                            return Err(BadSequence::EmptySet2WhenNotTruncatingSet1);
-                        };
-                        (last_set2_byte, CaseClass::None)
-                    }
-                };
 
             match (set1_case, set2_case) {
                 (CaseClass::Lower, CaseClass::Upper) => {
@@ -577,39 +590,22 @@ impl Sequence {
                 }
                 (_, CaseClass::Lower | CaseClass::Upper) => {}
                 _ => {
-                    translation_map.insert(set1_byte as u8, set2_byte);
+                    translation_map.insert(set1_byte, set2_byte);
+                }
+            }
+
+            if set2_case != CaseClass::None {
+                set1_cursor.skip_construct();
+                set2_cursor.skip_construct();
+            } else {
+                set1_cursor.advance();
+                if set2_mapping.is_some() {
+                    set2_cursor.advance();
                 }
             }
         }
 
         Ok(translation_map)
-    }
-
-    fn last_occurrences(set: &[Self]) -> [Option<(u128, CaseClass)>; 256] {
-        let mut occurrences = [None; 256];
-        let mut position = 0u128;
-
-        for sequence in set {
-            match sequence {
-                Self::CharRepeat(byte, count) if *count > 0 => {
-                    occurrences[usize::from(*byte)] =
-                        Some((position.saturating_add(*count as u128 - 1), CaseClass::None));
-                }
-                Self::CharStar(_) => {}
-                _ => {
-                    for offset in 0..sequence.expansion_len() {
-                        let byte = sequence.byte_at(offset);
-                        occurrences[usize::from(byte)] = Some((
-                            position.saturating_add(offset as u128),
-                            sequence.case_class(),
-                        ));
-                    }
-                }
-            }
-            position = position.saturating_add(sequence.expansion_len() as u128);
-        }
-
-        occurrences
     }
 
     fn byte_at_position(
@@ -1645,6 +1641,42 @@ mod tests {
             );
             assert!(Sequence::case_classes_are_aligned(b"[:lower:]", b"[:upper:]", false).unwrap());
             assert!(Sequence::case_classes_are_aligned(b"abc", b"[:upper:]", true).unwrap());
+        }
+
+        #[test]
+        fn test_case_class_mapping_continues_after_paired_constructs() {
+            let map = Sequence::standard_translation_map(
+                b"[:upper:]A-B",
+                b"[:lower:]0",
+                false,
+            )
+            .unwrap();
+
+            assert_eq!(map.get(&b'A'), Some(&b'0'));
+            assert_eq!(map.get(&b'B'), Some(&b'0'));
+            assert_eq!(map.get(&b'C'), Some(&b'c'));
+        }
+
+        #[test]
+        fn test_case_class_mapping_allows_following_override_when_truncated() {
+            let map =
+                Sequence::standard_translation_map(b"[:lower:]a", b"[:upper:]0", true).unwrap();
+
+            assert_eq!(map.get(&b'a'), Some(&b'0'));
+            assert_eq!(map.get(&b'b'), Some(&b'B'));
+        }
+
+        #[test]
+        fn test_case_class_mapping_continues_after_multiple_pairs() {
+            let map = Sequence::standard_translation_map(
+                b"[:lower:][:lower:]a",
+                b"[:lower:][:upper:]0",
+                true,
+            )
+            .unwrap();
+
+            assert_eq!(map.get(&b'a'), Some(&b'0'));
+            assert_eq!(map.get(&b'b'), Some(&b'B'));
         }
 
         #[test]

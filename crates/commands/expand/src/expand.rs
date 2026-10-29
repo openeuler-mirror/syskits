@@ -1132,6 +1132,7 @@ fn expand_is_blank(is_u_flag: bool, bytes: &[u8]) -> bool {
 }
 
 #[allow(clippy::cognitive_complexity)]
+#[cfg(test)]
 fn expand_line(
     buffer: &[u8],
     output: &mut impl Write,
@@ -1139,13 +1140,24 @@ fn expand_line(
     opts: &ExpandOptions,
     state: &mut ExpandState,
 ) -> std::io::Result<()> {
+    expand_line_with_utf8(buffer, output, tabstops, opts, state, opts.uflag)
+}
+
+fn expand_line_with_utf8(
+    buffer: &[u8],
+    output: &mut impl Write,
+    tabstops: &[usize],
+    opts: &ExpandOptions,
+    state: &mut ExpandState,
+    use_utf8: bool,
+) -> std::io::Result<()> {
     use self::CharType::*;
 
     let mut byte = 0;
 
     // 遍历缓冲区中的每个字符。
     while byte < buffer.len() {
-        let (c_type, c_width, n_bytes) = match expand_next_char_info(opts.uflag, buffer, byte) {
+        let (c_type, c_width, n_bytes) = match expand_next_char_info(use_utf8, buffer, byte) {
             ExpandCharInfo::Parsed {
                 c_type,
                 c_width,
@@ -1191,7 +1203,7 @@ fn expand_line(
                 if byte_is_newline {
                     state.is_init = true;
                     finish_expand_line(state);
-                } else if !expand_is_blank(opts.uflag, &buffer[byte..byte + n_bytes]) {
+                } else if !expand_is_blank(use_utf8, &buffer[byte..byte + n_bytes]) {
                     state.is_init = false;
                     state.current_line_has_content = true;
                 } else {
@@ -1327,8 +1339,16 @@ fn expand_to_writer<W: Write, D: Write>(
                         continue;
                     }
 
-                    expand_line(&buffer, output, tabstops, options, &mut state)
-                        .map_err(|e| expand_write_error(&e))?;
+                    let use_utf8 = options.uflag || first_input_has_bom == Some(true);
+                    expand_line_with_utf8(
+                        &buffer,
+                        output,
+                        tabstops,
+                        options,
+                        &mut state,
+                        use_utf8,
+                    )
+                    .map_err(|e| expand_write_error(&e))?;
                 }
             }
             Err(e) => {
@@ -2358,6 +2378,26 @@ mod tests {
             expand_to_writer(&options, &mut output, &mut std::io::sink()).unwrap();
 
             assert_eq!(output, b"\xEF\xBB\xBFa       b\nc       d\n");
+        }
+
+        #[test]
+        fn test_expand_to_writer_uses_utf8_width_after_bom_in_c_locale() {
+            let mut input = tempfile::NamedTempFile::new().unwrap();
+            input.write_all(&UTF8_BOM).unwrap();
+            input.write_all("ä\tX\n".as_bytes()).unwrap();
+
+            let options = ExpandOptions {
+                files: vec![input.path().as_os_str().to_os_string()],
+                tabstops: vec![8],
+                iflag: false,
+                uflag: false,
+                remaining_mode: RemainingMode::None,
+            };
+            let mut output = Vec::new();
+
+            expand_to_writer(&options, &mut output, &mut std::io::sink()).unwrap();
+
+            assert_eq!(output, "\u{feff}ä       X\n".as_bytes());
         }
 
         #[test]

@@ -550,6 +550,28 @@ mod native_semantic_tests {
     }
 
     #[test]
+    fn numfmt_native_semantic_rejects_forbidden_suffix_before_further_processing() {
+        for args in [
+            ["numfmt", "--from=none", "1KiX"],
+            ["numfmt", "--from-unit=K", "1K"],
+        ] {
+            let semantic =
+                numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+            let message = format!(
+                "rejecting suffix in input: {} (consider using --from)",
+                crate::format::numfmt_quote(args[2])
+            );
+
+            assert_eq!(semantic.exit_code, 2);
+            assert_eq!(semantic.classic_text, "");
+            assert_eq!(semantic.stderr_text, format!("numfmt: {message}\n"));
+            assert_eq!(semantic.rows.len(), 1);
+            assert_eq!(semantic.rows[0].status, "partial-error");
+            assert_eq!(semantic.rows[0].error.as_deref(), Some(message.as_str()));
+        }
+    }
+
+    #[test]
     fn numfmt_native_semantic_warn_mode_keeps_passthrough_rows() {
         let args = ["numfmt", "--invalid=warn", "hello"];
 

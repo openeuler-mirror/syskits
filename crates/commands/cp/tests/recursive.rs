@@ -46,6 +46,60 @@ fn copies_slash_dot_contents_to_missing_destination() {
     );
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn copy_contents_updates_source_fifo_access_time() {
+    use filetime::{FileTime, set_file_times};
+    use std::ffi::CString;
+    use std::io::Write;
+    use std::os::unix::ffi::OsStrExt;
+    use std::process::Stdio;
+
+    let directory = tempfile::tempdir().unwrap();
+    let source_directory = directory.path().join("fifodir");
+    let source_fifo = source_directory.join("pipe");
+    fs::create_dir(&source_directory).unwrap();
+
+    let fifo_name = CString::new(source_fifo.as_os_str().as_bytes()).unwrap();
+    assert_eq!(unsafe { libc::mkfifo(fifo_name.as_ptr(), 0o600) }, 0);
+
+    let old_time = FileTime::from_unix_time(1_577_836_800, 0);
+    set_file_times(&source_fifo, old_time, old_time).unwrap();
+
+    let writer_fifo = source_fifo.clone();
+    let writer = std::thread::spawn(move || {
+        let mut fifo = fs::OpenOptions::new()
+            .write(true)
+            .open(writer_fifo)
+            .unwrap();
+        fifo.write_all(b"fifo payload\n").unwrap();
+    });
+
+    let output = Command::new(env!("CARGO_BIN_EXE_cp"))
+        .arg0("cp")
+        .env("LC_ALL", "C")
+        .current_dir(directory.path())
+        .args(["-R", "--copy-contents", "fifodir", "outdir"])
+        .stdin(Stdio::null())
+        .output()
+        .expect("run cp");
+    writer.join().unwrap();
+
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        fs::read(directory.path().join("outdir/pipe")).unwrap(),
+        b"fifo payload\n"
+    );
+
+    let source_atime = FileTime::from_last_access_time(&fs::metadata(source_fifo).unwrap());
+    assert!(
+        source_atime > old_time,
+        "source FIFO access time was not updated"
+    );
+}
+
 #[test]
 fn copying_directory_into_itself_reports_effective_destination() {
     for arguments in [

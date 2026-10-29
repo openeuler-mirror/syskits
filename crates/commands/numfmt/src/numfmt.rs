@@ -276,6 +276,19 @@ mod native_semantic_tests {
     }
 
     #[test]
+    fn numfmt_native_semantic_uses_last_repeated_from_option() {
+        let args = ["numfmt", "--from=si", "--from=iec", "1K"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.stderr_text, "");
+        assert_eq!(semantic.classic_text, "1024\n");
+        assert_eq!(semantic.rows.len(), 1);
+        assert_eq!(semantic.rows[0].transform_from, "iec");
+    }
+
+    #[test]
     fn numfmt_native_semantic_uses_last_repeated_to_option() {
         let args = ["numfmt", "--to=si", "--to=iec", "2048"];
 
@@ -1746,7 +1759,8 @@ pub fn ct_app() -> Command {
             .default_value(numfmt_flags::NUMFMT_FROM_DEFAULT)
             .value_parser(CtShortcutValueParser::new([
                 "none", "auto", "si", "iec", "iec-i",
-            ])),
+            ]))
+            .overrides_with(numfmt_flags::NUMFMT_FROM),
         Arg::new(numfmt_flags::NUMFMT_FROM_UNIT)
             .long(numfmt_flags::NUMFMT_FROM_UNIT)
             .help(t!("numfmt.clap.numfmt_from_unit"))

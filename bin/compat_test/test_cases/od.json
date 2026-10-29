@@ -108,6 +108,40 @@
             ]
         },
         {
+            "tstdin": "",
+            "command": "od",
+            "description": "原始字节用例：POSIXLY_CORRECT=1且LC_ALL=C；执行od input -x；参数完整十六进制=696e707574 2d78；stdin为0字节、完整十六进制=空；输入fixture input为3字节、完整十六进制=616263；GNU getopt在首个文件操作数后停止解析，因而将-x作为第二个文件读取；预期RC=1、stdout为30字节，完整十六进制=3030303030303020303631313431203030303134330a303030303030330a；stderr为34字节，完整十六进制=6f643a202d783a204e6f20737563682066696c65206f72206469726563746f72790a",
+            "args": [
+                "696e707574",
+                "2d78"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "3030303030303020303631313431203030303134330a303030303030330a",
+                    "stderr": "6f643a202d783a204e6f20737563682066696c65206f72206469726563746f72790a"
+                }
+            },
+            "setup_commands": [
+                "printf '%b' '\\141\\142\\143' > input"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0",
+                    "POSIXLY_CORRECT": "1"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
             "command": "od",
             "description": "Accept the unique --format long-option abbreviation",
             "args": [

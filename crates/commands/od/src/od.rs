@@ -70,7 +70,7 @@ use crate::inputdecoder::{OdInputDecoder, OdMemoryDecoder};
 use crate::inputoffset::{OdInputOffset, OdRadix};
 use crate::multifilereader::{HasError, OdInputSource, OdMultifileReader};
 use crate::output_info::{OutputInfo, SpacedFormatterItemInfo};
-use crate::parse_formats::{ParsedFormatterItemInfo, od_parse_format_flags};
+use crate::parse_formats::{ParsedFormatterItemInfo, od_option_scan_limit, od_parse_format_flags};
 use crate::parse_inputs::{CommandLineInputs, od_parse_inputs};
 use crate::parse_nrofbytes::od_parse_number_of_bytes;
 use crate::partialreader::PartialReader;
@@ -83,6 +83,7 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, strip_errno};
 use ctcore::ct_parse_size::ParseSizeError;
+use ctcore::ct_posix::{GnuGetoptCommandExt, posixly_correct};
 use ctcore::libc;
 use ctcore::{ct_show_error, ct_show_warning};
 use std::ffi::{OsStr, OsString};
@@ -583,10 +584,25 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
 }
 
 fn od_normalize_optional_arguments(args: Vec<OsString>) -> Vec<OsString> {
+    od_normalize_optional_arguments_with_mode(args, posixly_correct())
+}
+
+fn od_normalize_optional_arguments_with_mode(
+    args: Vec<OsString>,
+    posix_mode: bool,
+) -> Vec<OsString> {
+    let string_args = args
+        .iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    let option_limit = od_option_scan_limit(&string_args, posix_mode);
     let mut normalized = Vec::with_capacity(args.len());
     let mut parsing_options = true;
 
-    for arg in args {
+    for (index, arg) in args.into_iter().enumerate() {
+        if index >= option_limit {
+            parsing_options = false;
+        }
         if parsing_options {
             if arg == OsStr::new("--") {
                 parsing_options = false;
@@ -758,6 +774,10 @@ fn print_string_record<W: IoWrite>(
 }
 
 pub fn ct_app() -> Command {
+    ct_app_with_posix_mode(posixly_correct())
+}
+
+fn ct_app_with_posix_mode(posix_mode: bool) -> Command {
     let args = vec![
         Arg::new(od_options::OD_HELP)
             .long(od_options::OD_HELP)
@@ -855,6 +875,7 @@ pub fn ct_app() -> Command {
         .args_override_self(true)
         .disable_help_flag(true)
         .args(args)
+        .gnu_getopt_with_mode(posix_mode)
 }
 
 fn od_parse_matches(args: &[OsString]) -> CTResult<ArgMatches> {
@@ -1557,6 +1578,36 @@ mod tests {
 
     mod od_settings_tests {
         use super::*;
+
+        #[test]
+        fn test_posix_mode_stops_option_parsing_at_first_file() {
+            let matches = ct_app_with_posix_mode(true)
+                .try_get_matches_from(["od", "input", "-x"])
+                .unwrap();
+
+            assert!(!matches.get_flag("x"));
+            assert_eq!(
+                matches
+                    .get_many::<OsString>(od_options::OD_FILENAME)
+                    .unwrap()
+                    .map(OsString::as_os_str)
+                    .collect::<Vec<_>>(),
+                [OsStr::new("input"), OsStr::new("-x")]
+            );
+        }
+
+        #[test]
+        fn test_posix_mode_does_not_normalize_width_after_first_file() {
+            let args = ["od", "input", "-w"]
+                .map(OsString::from)
+                .into_iter()
+                .collect();
+
+            assert_eq!(
+                od_normalize_optional_arguments_with_mode(args, true),
+                ["od", "input", "-w"].map(OsString::from)
+            );
+        }
 
         #[test]
         fn test_parse_width_value_matches_gnu_decimal_rules() {

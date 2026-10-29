@@ -1051,11 +1051,30 @@ fn print_pipeline_data_text(
             write_stderr_if_present(metadata.stderr_text.as_deref())?;
         }
         CtPipelineData::ListStream(stream) => {
-            for v in stream {
-                if signal.is_some_and(|s| s.interrupted()) {
-                    return Err(interrupted_error());
+            if stream.metadata.content_type.as_deref() == Some("application/x-ndjson") {
+                let stderr_text = stream.metadata.stderr_text.clone();
+                let stdout = std::io::stdout();
+                let mut stdout = stdout.lock();
+                for v in stream {
+                    if signal.is_some_and(|s| s.interrupted()) {
+                        return Err(interrupted_error());
+                    }
+                    if let Err(e) = writeln!(stdout, "{}", format_ct_value(&v)) {
+                        if e.kind() == std::io::ErrorKind::BrokenPipe {
+                            return Ok(());
+                        }
+                        return Err(CtDiagnosticError::simple(format!("write error: {e}")));
+                    }
                 }
-                println!("{}", format_ct_value(&v));
+                drop(stdout);
+                write_stderr_if_present(stderr_text.as_deref())?;
+            } else {
+                for v in stream {
+                    if signal.is_some_and(|s| s.interrupted()) {
+                        return Err(interrupted_error());
+                    }
+                    println!("{}", format_ct_value(&v));
+                }
             }
         }
         CtPipelineData::ByteStream(bs) => {

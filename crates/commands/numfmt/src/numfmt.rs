@@ -1139,8 +1139,15 @@ fn numfmt_parse_unit(unit: &str) -> Result<NumfmtUnit> {
 // 解析单位大小。后缀被转换成整数表示。例如，"K
 // 将返回 `Ok(1000)`，'2K'将返回 `Ok(2000)`。
 fn numfmt_parse_unit_size(unit: &str) -> Result<usize> {
-    let number: String = unit.chars().take_while(char::is_ascii_digit).collect();
-    let suffix = &unit[number.len()..];
+    let parsed_unit = unit
+        .strip_prefix('+')
+        .filter(|value| value.as_bytes().first().is_some_and(u8::is_ascii_digit))
+        .unwrap_or(unit);
+    let number: String = parsed_unit
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    let suffix = &parsed_unit[number.len()..];
 
     if number.is_empty() || "0".repeat(number.len()) != number {
         if let Some(multiplier) = numfmt_parse_unit_size_suffix(suffix) {
@@ -10366,6 +10373,7 @@ mod tests {
         fn test_parse_unit_size() {
             assert_eq!(1, numfmt_parse_unit_size("1").unwrap());
             assert_eq!(1, numfmt_parse_unit_size("01").unwrap());
+            assert_eq!(1, numfmt_parse_unit_size("+1").unwrap());
             assert!(numfmt_parse_unit_size("1.1").is_err());
             assert!(numfmt_parse_unit_size("0").is_err());
             assert!(numfmt_parse_unit_size("-1").is_err());

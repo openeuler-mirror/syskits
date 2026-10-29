@@ -3085,7 +3085,11 @@ fn cp_handle_copy_mode(
             } else {
                 fs::hard_link(sour_path, dest_path)
             }
-            .context(cp_str)?;
+            .context(format!(
+                "cannot create hard link {} to {}",
+                dest_path.quote(),
+                sour_path.quote()
+            ))?;
             None
         }
         CpCopyMode::Copy => {
@@ -3125,7 +3129,12 @@ fn cp_handle_copy_mode(
             {
                 fs::remove_file(dest_path).ok();
             }
-            cp_symlink_file(sour_path, dest_path, cp_str, symlinked_files)?;
+            let context = format!(
+                "cannot create symbolic link {} to {}",
+                dest_path.quote(),
+                sour_path.quote()
+            );
+            cp_symlink_file(sour_path, dest_path, &context, symlinked_files)?;
             None
         }
         CpCopyMode::Update => copy_helper(

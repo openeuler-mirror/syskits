@@ -454,6 +454,18 @@ fn numfmt_number_may_lose_precision(number: &str) -> bool {
             || fraction_digits > NUMFMT_MAX_UNSCALED_DIGITS)
 }
 
+fn numfmt_input_exceeds_max_digits(source: &str) -> Result<bool> {
+    let parsed = numfmt_parse_number_parts(source)?;
+    let normalized = numfmt_normalize_decimal_point(parsed.number);
+    let unsigned = normalized.strip_prefix(['-', '+']).unwrap_or(&normalized);
+    let (integer, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+
+    Ok(
+        numfmt_significant_digits(integer) > NUMFMT_MAX_ACCEPTABLE_DIGITS
+            || numfmt_significant_digits(fraction) > NUMFMT_MAX_ACCEPTABLE_DIGITS,
+    )
+}
+
 fn numfmt_precision_loss_input(source: &str, options: &NumfmtConfigs) -> Option<String> {
     let source_without_suffix = match &options.suffix {
         Some(suffix) if source.len() > suffix.len() => {
@@ -774,6 +786,12 @@ fn numfmt_transform_to(
     precision: usize,
 ) -> Result<String> {
     let value = s / (opts.to_unit as f64);
+    if value.abs() >= NUMFMT_SI_BASES[10] * NUMFMT_SI_BASES[1] {
+        let value = numfmt_format_diagnostic_value(value);
+        return Err(format!(
+            "value too large to be printed: '{value}' (cannot handle values > 999Q)"
+        ));
+    }
     numfmt_validate_unscaled_output(value, &opts.to, precision)?;
     crate::numfmt_dev_trace(format_args!("double_to_human:\n"));
     let (i2, suffix) = numfmt_consider_suffix(value, &opts.to, round_method, precision)?;
@@ -1155,6 +1173,13 @@ fn numfmt_format_string(
         Some(suffix) => source.strip_suffix(suffix).unwrap_or(source),
         None => source,
     };
+
+    if numfmt_input_exceeds_max_digits(source_without_suffix)? {
+        return Err(format!(
+            "value too large to be converted: {}",
+            numfmt_quote(source_without_suffix)
+        ));
+    }
 
     let precision = if let Some(p) = numfmt_configs.format.precision {
         p
@@ -1675,6 +1700,44 @@ mod tests {
         assert_eq!(
             numfmt_group_number_thousands_with("1234567e+08", ",", &[3, 0]),
             "1,234,567e+08"
+        );
+    }
+
+    #[test]
+    fn excessive_input_digits_report_conversion_overflow() {
+        let mut config = setup_default_config();
+        let integer = "1234567890123456789012345678901234567890";
+        assert_eq!(
+            numfmt_format_string(integer, &config, None).unwrap_err(),
+            format!("value too large to be converted: {}", numfmt_quote(integer))
+        );
+
+        config.transform.from = NumfmtUnit::Si;
+        config.transform.to = NumfmtUnit::None;
+        let fraction = "12.1234567890123456789012345678901234567890123456789012345678901234567890";
+        assert_eq!(
+            numfmt_format_string(fraction, &config, None).unwrap_err(),
+            format!(
+                "value too large to be converted: {}",
+                numfmt_quote(fraction)
+            )
+        );
+    }
+
+    #[test]
+    fn values_above_largest_suffix_report_printing_limit() {
+        let mut config = setup_default_config();
+        config.transform.from = NumfmtUnit::Si;
+
+        assert_eq!(
+            numfmt_format_string("1000Q", &config, None).unwrap_err(),
+            "value too large to be printed: '1e+33' (cannot handle values > 999Q)"
+        );
+
+        config.transform.from_unit = 10_000;
+        assert_eq!(
+            numfmt_format_string("1Q", &config, None).unwrap_err(),
+            "value too large to be printed: '1e+34' (cannot handle values > 999Q)"
         );
     }
 

@@ -141,6 +141,27 @@ pub mod numfmt_flags {
     pub const NUMFMT_ZERO_TERMINATED: &str = "zero-terminated";
 }
 
+const NUMFMT_LONG_OPTIONS: &[(&str, bool)] = &[
+    ("from", true),
+    ("from-unit", true),
+    ("to", true),
+    ("to-unit", true),
+    ("round", true),
+    ("padding", true),
+    ("suffix", true),
+    ("grouping", false),
+    ("delimiter", true),
+    ("field", true),
+    ("debug", false),
+    ("-debug", false),
+    ("header", false),
+    ("format", true),
+    ("invalid", true),
+    ("zero-terminated", false),
+    ("help", false),
+    ("version", false),
+];
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NumfmtRow {
     pub index: usize,
@@ -1212,28 +1233,89 @@ fn normalize_numfmt_args(args: impl ctcore::Args) -> (Vec<OsString>, bool) {
     (args, dev_debug)
 }
 
-fn numfmt_missing_long_option_argument(args: &[OsString]) -> Option<&'static str> {
-    const LONG_OPTIONS: &[(&str, bool)] = &[
-        ("from", true),
-        ("from-unit", true),
-        ("to", true),
-        ("to-unit", true),
-        ("round", true),
-        ("padding", true),
-        ("suffix", true),
-        ("grouping", false),
-        ("delimiter", true),
-        ("field", true),
-        ("debug", false),
-        ("-debug", false),
-        ("header", false),
-        ("format", true),
-        ("invalid", true),
-        ("zero-terminated", false),
-        ("help", false),
-        ("version", false),
-    ];
+fn numfmt_long_option_matches(
+    option: &str,
+) -> std::result::Result<Option<&'static str>, Vec<&'static str>> {
+    if let Some((canonical, _)) = NUMFMT_LONG_OPTIONS
+        .iter()
+        .find(|(candidate, _)| *candidate == option)
+    {
+        return Ok(Some(*canonical));
+    }
 
+    let matches = NUMFMT_LONG_OPTIONS
+        .iter()
+        .filter(|(candidate, _)| candidate.starts_with(option))
+        .map(|(candidate, _)| *candidate)
+        .collect::<Vec<_>>();
+
+    match matches.len() {
+        0 => Ok(None),
+        1 => Ok(matches.first().copied()),
+        _ => Err(matches),
+    }
+}
+
+fn normalize_numfmt_long_options(args: &[OsString]) -> Result<Vec<OsString>> {
+    let mut normalized = Vec::with_capacity(args.len());
+    let mut options_enabled = true;
+
+    for argument in args {
+        let Some(argument_text) = argument.to_str() else {
+            normalized.push(argument.clone());
+            continue;
+        };
+
+        if !options_enabled || argument_text == "--" {
+            options_enabled = false;
+            normalized.push(argument.clone());
+            continue;
+        }
+
+        let Some(long_option) = argument_text.strip_prefix("--") else {
+            normalized.push(argument.clone());
+            continue;
+        };
+        let (option, value) = long_option
+            .split_once('=')
+            .map_or((long_option, None), |(option, value)| (option, Some(value)));
+        if option.is_empty() {
+            normalized.push(argument.clone());
+            continue;
+        }
+
+        let canonical = match numfmt_long_option_matches(option) {
+            Ok(Some(canonical)) => canonical,
+            Ok(None) => {
+                normalized.push(argument.clone());
+                continue;
+            }
+            Err(matches) => {
+                let possibilities = matches
+                    .iter()
+                    .map(|candidate| format!("'--{candidate}'"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                return Err(format!(
+                    "option '{argument_text}' is ambiguous; possibilities: {possibilities}\nTry 'numfmt --help' for more information."
+                ));
+            }
+        };
+        if option == canonical {
+            normalized.push(argument.clone());
+        } else {
+            let normalized_argument = match value {
+                Some(value) => format!("--{canonical}={value}"),
+                None => format!("--{canonical}"),
+            };
+            normalized.push(OsString::from(normalized_argument));
+        }
+    }
+
+    Ok(normalized)
+}
+
+fn numfmt_missing_long_option_argument(args: &[OsString]) -> Option<&'static str> {
     let argument = args.last()?.as_encoded_bytes();
     let option = argument.strip_prefix(b"--")?;
     if option.is_empty()
@@ -1248,14 +1330,14 @@ fn numfmt_missing_long_option_argument(args: &[OsString]) -> Option<&'static str
     }
     let option = std::str::from_utf8(option).ok()?;
 
-    if let Some((canonical, requires_argument)) = LONG_OPTIONS
+    if let Some((canonical, requires_argument)) = NUMFMT_LONG_OPTIONS
         .iter()
         .find(|(candidate, _)| *candidate == option)
     {
         return requires_argument.then_some(*canonical);
     }
 
-    let mut matching = LONG_OPTIONS
+    let mut matching = NUMFMT_LONG_OPTIONS
         .iter()
         .filter(|(candidate, _)| candidate.starts_with(option));
     let (canonical, requires_argument) = matching.next()?;
@@ -1674,6 +1756,11 @@ fn numfmt_invalid_xargmatch_value_message(error: &clap::Error) -> Option<String>
 pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
     let locale_ok = init_numfmt_locale();
     let (normalized_args, dev_debug) = normalize_numfmt_args(args);
+    let normalized_args = normalize_numfmt_long_options(&normalized_args)
+        .map_err(NumfmtError::NumfmtIllegalArgument)?;
+    let (normalized_args, abbreviated_dev_debug) =
+        normalize_numfmt_args(normalized_args.into_iter());
+    let dev_debug = dev_debug || abbreviated_dev_debug;
     let _dev_trace_guard = NumfmtDevTraceGuard::new(dev_debug, false);
     validate_numfmt_option_arguments(&normalized_args)
         .map_err(NumfmtError::NumfmtIllegalArgument)?;
@@ -1745,6 +1832,11 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
 pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemantic> {
     let locale_ok = init_numfmt_locale();
     let (normalized_args, dev_debug) = normalize_numfmt_args(args);
+    let normalized_args = normalize_numfmt_long_options(&normalized_args)
+        .map_err(NumfmtError::NumfmtIllegalArgument)?;
+    let (normalized_args, abbreviated_dev_debug) =
+        normalize_numfmt_args(normalized_args.into_iter());
+    let dev_debug = dev_debug || abbreviated_dev_debug;
     let dev_trace_guard = NumfmtDevTraceGuard::new(dev_debug, true);
     validate_numfmt_option_arguments(&normalized_args)
         .map_err(NumfmtError::NumfmtIllegalArgument)?;
@@ -2005,9 +2097,10 @@ mod tests {
     // use super::*;
     use super::{
         CtRange, Numfmt, NumfmtConfigs, NumfmtFormatOptions, NumfmtInvalidModes, NumfmtRoundMethod,
-        NumfmtTransformOptions, NumfmtUnit, ct_app, numfmt_flags, numfmt_handle_args,
-        numfmt_handle_buffer, numfmt_handle_invalid_bytes, numfmt_missing_long_option_argument,
-        numfmt_parse_options, numfmt_parse_unit_size, numfmt_parse_unit_size_suffix,
+        NumfmtTransformOptions, NumfmtUnit, ct_app, normalize_numfmt_long_options, numfmt_flags,
+        numfmt_handle_args, numfmt_handle_buffer, numfmt_handle_invalid_bytes,
+        numfmt_long_option_matches, numfmt_missing_long_option_argument, numfmt_parse_options,
+        numfmt_parse_unit_size, numfmt_parse_unit_size_suffix,
     };
     use ctcore::Tool;
     use ctcore::ct_error::get_ct_exit_code;
@@ -2152,6 +2245,32 @@ mod tests {
         assert_eq!(
             numfmt_missing_long_option_argument(&after_double_dash),
             None
+        );
+    }
+
+    #[test]
+    fn test_normalize_long_option_abbreviations() {
+        assert_eq!(numfmt_long_option_matches("fi"), Ok(Some("field")));
+        assert!(matches!(
+            numfmt_long_option_matches("f"),
+            Err(candidates) if candidates == vec!["from", "from-unit", "field", "format"]
+        ));
+
+        let args = vec![
+            OsString::from("numfmt"),
+            OsString::from("--fi=1"),
+            OsString::from("--"),
+            OsString::from("--fr"),
+        ];
+        let normalized = normalize_numfmt_long_options(&args).unwrap();
+        assert_eq!(
+            normalized,
+            vec![
+                OsString::from("numfmt"),
+                OsString::from("--field=1"),
+                OsString::from("--"),
+                OsString::from("--fr"),
+            ]
         );
     }
 

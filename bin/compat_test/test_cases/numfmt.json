@@ -838,6 +838,29 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: 歧义长选项缩写必须列出 GNU 候选项",
+            "args": [
+                "--f"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "numfmt: option '--f' is ambiguous; possibilities: '--from' '--from-unit' '--field' '--format'\nTry 'numfmt --help' for more information.\n"
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

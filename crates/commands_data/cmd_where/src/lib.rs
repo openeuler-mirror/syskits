@@ -90,17 +90,20 @@ impl DataCommand for CmdWhere {
             .req::<CtValue>(0)
             .map_err(|e| CtDiagnosticError::simple(format!("where: {e}")))?;
         let expr = extract_condition(cond)?;
-        let meta = CtPipelineMetadata::default();
 
         match input {
-            CtPipelineData::Value(CtValue::Record(fields), _) => {
+            CtPipelineData::Value(CtValue::Record(fields), metadata) => {
+                let preserve_empty_metadata = has_upstream_status(&metadata);
+                let metadata = metadata_for_where(metadata);
                 if record_matches_expr(&fields, &expr) {
-                    Ok(CtPipelineData::Value(CtValue::Record(fields), meta))
+                    Ok(CtPipelineData::Value(CtValue::Record(fields), metadata))
+                } else if preserve_empty_metadata {
+                    Ok(CtPipelineData::Value(CtValue::List(Vec::new()), metadata))
                 } else {
                     Ok(CtPipelineData::Empty)
                 }
             }
-            CtPipelineData::Value(CtValue::List(items), _) => {
+            CtPipelineData::Value(CtValue::List(items), metadata) => {
                 let filtered: Vec<CtValue> = items
                     .into_iter()
                     .filter(|item| {
@@ -111,7 +114,10 @@ impl DataCommand for CmdWhere {
                         }
                     })
                     .collect();
-                Ok(CtPipelineData::Value(CtValue::List(filtered), meta))
+                Ok(CtPipelineData::Value(
+                    CtValue::List(filtered),
+                    metadata_for_where(metadata),
+                ))
             }
             CtPipelineData::Empty => Ok(CtPipelineData::Empty),
             _ => Err(CtDiagnosticError::simple(
@@ -119,6 +125,24 @@ impl DataCommand for CmdWhere {
             )),
         }
     }
+}
+
+fn metadata_for_where(mut metadata: CtPipelineMetadata) -> CtPipelineMetadata {
+    metadata.classic_text = None;
+    metadata.classic_bytes = None;
+    metadata.classic_append_newline = true;
+    metadata.source = Some("where".into());
+    metadata
+}
+
+fn has_upstream_status(metadata: &CtPipelineMetadata) -> bool {
+    metadata.exit_code != 0
+        || metadata.stderr_text.is_some()
+        || metadata
+            .custom
+            .lock()
+            .map(|custom| custom.contains_key("external.exit_code"))
+            .unwrap_or(true)
 }
 
 fn meta_text_output(text: String) -> CtPipelineData {
@@ -316,6 +340,7 @@ pub fn where_logic_call(conditions: Vec<(&str, &str, CtValue)>, logic: Vec<&str>
 mod tests {
     use super::*;
     use ctengine::context::{CommandRegistry, DataEngineContext};
+    use std::sync::Arc;
 
     fn ctx() -> DataEngineContext {
         DataEngineContext::new(CommandRegistry::empty(), None, None)
@@ -390,6 +415,85 @@ mod tests {
         } else {
             panic!("expected List");
         }
+    }
+
+    #[test]
+    fn test_where_preserves_upstream_failure_metadata_for_empty_list() {
+        let mut metadata = CtPipelineMetadata::default();
+        metadata.classic_text = Some("stale output".into());
+        metadata.classic_bytes = Some(b"stale output".to_vec());
+        metadata.classic_append_newline = false;
+        metadata.stderr_text = Some("cat: missing: No such file or directory\n".into());
+        metadata.exit_code = 1;
+        metadata.data_source = ctpipeline::CtDataSource::BuiltinCommand("cat".into());
+        metadata.content_type = Some("application/json".into());
+        metadata.schema_hint = Some(ctpipeline::CtSchemaHint::none());
+        metadata.source = Some("cat".into());
+        let custom = metadata.custom.clone();
+
+        let output = CmdWhere
+            .run(
+                &where_call("missing", ">", CtValue::Int(1000)),
+                CtPipelineData::Value(CtValue::List(Vec::new()), metadata),
+                &ctx(),
+            )
+            .unwrap();
+        let CtPipelineData::Value(CtValue::List(items), metadata) = output else {
+            panic!("expected list output");
+        };
+
+        assert!(items.is_empty());
+        assert_eq!(metadata.exit_code, 1);
+        assert_eq!(
+            metadata.stderr_text.as_deref(),
+            Some("cat: missing: No such file or directory\n")
+        );
+        assert!(Arc::ptr_eq(&metadata.custom, &custom));
+        assert!(metadata.classic_text.is_none());
+        assert!(metadata.classic_bytes.is_none());
+        assert!(metadata.classic_append_newline);
+        assert!(matches!(
+            metadata.data_source,
+            ctpipeline::CtDataSource::BuiltinCommand(ref name) if name == "cat"
+        ));
+        assert_eq!(metadata.content_type.as_deref(), Some("application/json"));
+        assert!(metadata.schema_hint.is_some());
+        assert_eq!(metadata.source.as_deref(), Some("where"));
+    }
+
+    #[test]
+    fn test_where_preserves_delayed_status_when_record_does_not_match() {
+        let metadata = CtPipelineMetadata::default();
+        let custom = metadata.custom.clone();
+        custom
+            .lock()
+            .unwrap()
+            .insert("external.exit_code".into(), CtValue::Int(0));
+
+        let output = CmdWhere
+            .run(
+                &where_call("n", ">", CtValue::Int(1000)),
+                CtPipelineData::Value(
+                    CtValue::Record(vec![("n".into(), CtValue::Int(1))]),
+                    metadata,
+                ),
+                &ctx(),
+            )
+            .unwrap();
+        let CtPipelineData::Value(CtValue::List(items), metadata) = output else {
+            panic!("expected metadata-bearing empty list");
+        };
+
+        assert!(items.is_empty());
+        assert!(Arc::ptr_eq(&metadata.custom, &custom));
+        custom
+            .lock()
+            .unwrap()
+            .insert("external.exit_code".into(), CtValue::Int(7));
+        assert_eq!(
+            metadata.custom.lock().unwrap().get("external.exit_code"),
+            Some(&CtValue::Int(7))
+        );
     }
     #[test]
     fn test_where_ne() {

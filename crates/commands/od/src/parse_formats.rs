@@ -10,6 +10,7 @@
  */
 
 use ctcore::ct_display::Quotable;
+use ctcore::ct_posix::posixly_correct;
 
 use crate::formatteriteminfo::FormatterItemInfo;
 use crate::prn_format::*;
@@ -130,11 +131,19 @@ fn od_argument_with_option(ch: char) -> bool {
 /// 6. 如果遇到 -- 则停止解析
 #[allow(clippy::cognitive_complexity)]
 pub fn od_parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo>, String> {
+    od_parse_format_flags_with_mode(args, posixly_correct())
+}
+
+pub(crate) fn od_parse_format_flags_with_mode(
+    args: &[String],
+    posix_mode: bool,
+) -> Result<Vec<ParsedFormatterItemInfo>, String> {
     let mut formats = Vec::new();
     let mut expect_type_string = false;
+    let option_limit = od_option_scan_limit(args, posix_mode);
 
     // 跳过程序名称(args[0])，处理剩余参数
-    for arg in args.iter().skip(1) {
+    for arg in args.iter().take(option_limit).skip(1) {
         if arg == "--" {
             // 遇到 -- 停止解析
             break;
@@ -161,6 +170,59 @@ pub fn od_parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemI
     }
 
     Ok(formats)
+}
+
+pub(crate) fn od_option_scan_limit(args: &[String], posix_mode: bool) -> usize {
+    if !posix_mode {
+        return args.len();
+    }
+
+    let mut index = 1;
+    while index < args.len() {
+        let arg = &args[index];
+        if arg == "--" || arg == "-" || !arg.starts_with('-') {
+            return index;
+        }
+
+        if od_option_requires_separate_value(arg) {
+            index = index.saturating_add(2);
+        } else {
+            index += 1;
+        }
+    }
+
+    args.len()
+}
+
+fn od_option_requires_separate_value(arg: &str) -> bool {
+    if let Some(option) = arg.strip_prefix("--") {
+        if option.contains('=') || option.is_empty() {
+            return false;
+        }
+        return [
+            "address-radix",
+            "skip-bytes",
+            "read-bytes",
+            "format",
+            "endian",
+        ]
+        .iter()
+        .any(|candidate| candidate.starts_with(option));
+    }
+
+    let Some(options) = arg.strip_prefix('-') else {
+        return false;
+    };
+    let mut chars = options.char_indices().peekable();
+    while let Some((_, option)) = chars.next() {
+        if matches!(option, 'A' | 'j' | 'N' | 'S' | 't') {
+            return chars.peek().is_none();
+        }
+        if option == 'w' {
+            return false;
+        }
+    }
+    false
 }
 
 /// 处理单个命令行参数
@@ -514,6 +576,16 @@ fn test_ignore_trailing_vals() {
     assert_eq!(
         parse_format_flags_str(&["od", "-D", "--", "-x"]).unwrap(),
         vec![FORMAT_ITEM_DEC32U]
+    );
+}
+
+#[test]
+fn test_posix_mode_ignores_formats_after_first_operand() {
+    let args = ["od", "-A", "x", "-t", "x1", "input", "-d"].map(str::to_string);
+
+    assert_eq!(
+        od_parse_format_flags_with_mode(&args, true).unwrap(),
+        vec![ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX8, false)]
     );
 }
 

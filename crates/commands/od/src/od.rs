@@ -293,6 +293,12 @@ impl OdSettings {
 
         let output_duplicates = matches.get_flag(od_options::OD_OUTPUT_DUPLICATES);
         let read_bytes = Self::parse_read_bytes(matches, args)?;
+        if read_bytes.is_some_and(|bytes| skip_bytes.checked_add(bytes).is_none()) {
+            return Err(CtSimpleError::new(
+                1,
+                "skip-bytes + read-bytes is too large",
+            ));
+        }
         let radix = Self::parse_radix(matches)?;
 
         let strings_min_len = Self::parse_strings_min_len(args)?;
@@ -1717,6 +1723,22 @@ mod tests {
 
             assert_eq!(settings.byte_order, ByteOrder::Little);
             assert_eq!(settings.skip_bytes, 100);
+        }
+
+        #[test]
+        fn test_new_rejects_skip_plus_read_overflow() {
+            let args = [
+                "od".to_string(),
+                format!("--skip-bytes={}", u64::MAX),
+                "--read-bytes=1".to_string(),
+            ];
+            let matches = ct_app().try_get_matches_from(&args).unwrap();
+            let error = match OdSettings::new(&matches, &args) {
+                Ok(_) => panic!("skip plus read overflow should fail"),
+                Err(error) => error,
+            };
+
+            assert_eq!(error.to_string(), "skip-bytes + read-bytes is too large");
         }
 
         #[test]

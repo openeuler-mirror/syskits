@@ -3885,6 +3885,36 @@
                 "resource_limits": null
             },
             "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "od",
+            "description": "原始字节用例：64位Linux、LC_ALL=C；执行od --strings=18446744073709551615 /dev/null；参数完整十六进制=2d2d737472696e67733d3138343436373434303733373039353531363135 2f6465762f6e756c6c；stdin为0字节、完整十六进制=空；字符串最小长度可解析为usize最大值但其工作缓冲容量无法表示，GNU统一报告memory exhausted；预期RC=1、stdout为0字节、完整十六进制=空；stderr为21字节/1条换行分隔，完整十六进制=6f643a206d656d6f7279206578686175737465640a",
+            "args": [
+                "2d2d737472696e67733d3138343436373434303733373039353531363135",
+                "2f6465762f6e756c6c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "6f643a206d656d6f7279206578686175737465640a"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
         }
     ]
 }

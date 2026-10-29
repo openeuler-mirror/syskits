@@ -235,8 +235,8 @@ fn to_jsonl(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
 }
 
 fn to_csv(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
-    let rows = normalize_rows_for_csv(data)?;
-    validate_csv_record_field_names(&rows)?;
+    let rows = normalize_rows_for_delimited(data, "csv")?;
+    validate_delimited_record_field_names(&rows, "csv")?;
     let columns = collect_csv_columns(&rows);
     if columns.is_empty() {
         return Ok(String::new());
@@ -271,8 +271,8 @@ fn to_csv(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
 }
 
 fn to_csv_transposed(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
-    let rows = normalize_rows_for_csv(data)?;
-    validate_csv_record_field_names(&rows)?;
+    let rows = normalize_rows_for_delimited(data, "csv")?;
+    validate_delimited_record_field_names(&rows, "csv")?;
     let columns = collect_csv_columns(&rows);
     if columns.is_empty() {
         return Ok(String::new());
@@ -306,8 +306,8 @@ fn to_csv_transposed(data: CtPipelineData) -> Result<String, CtDiagnosticError> 
 }
 
 fn to_ssv(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
-    let rows = normalize_rows_for_csv(data)?;
-    validate_csv_record_field_names(&rows)?;
+    let rows = normalize_rows_for_delimited(data, "ssv")?;
+    validate_delimited_record_field_names(&rows, "ssv")?;
     let columns = collect_csv_columns(&rows);
     if columns.is_empty() {
         return Ok(String::new());
@@ -332,8 +332,8 @@ fn to_ssv(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
 }
 
 fn to_ssv_transposed(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
-    let rows = normalize_rows_for_csv(data)?;
-    validate_csv_record_field_names(&rows)?;
+    let rows = normalize_rows_for_delimited(data, "ssv")?;
+    validate_delimited_record_field_names(&rows, "ssv")?;
     let columns = collect_csv_columns(&rows);
     if columns.is_empty() {
         return Ok(String::new());
@@ -357,8 +357,9 @@ fn to_ssv_transposed(data: CtPipelineData) -> Result<String, CtDiagnosticError> 
     Ok(lines.join("\n"))
 }
 
-fn validate_csv_record_field_names(
+fn validate_delimited_record_field_names(
     rows: &[Vec<(String, CtValue)>],
+    format: &str,
 ) -> Result<(), CtDiagnosticError> {
     for (row_idx, row) in rows.iter().enumerate() {
         let mut fields_seen = std::collections::HashSet::new();
@@ -366,13 +367,13 @@ fn validate_csv_record_field_names(
             let field = field.trim();
             if field.is_empty() {
                 return Err(CtDiagnosticError::simple(format!(
-                    "to csv: field name is empty at input row {}",
+                    "to {format}: field name is empty at input row {}",
                     row_idx + 1
                 )));
             }
             if !fields_seen.insert(field.to_string()) {
                 return Err(CtDiagnosticError::simple(format!(
-                    "to csv: duplicate field `{field}`"
+                    "to {format}: duplicate field `{field}`"
                 )));
             }
         }
@@ -387,8 +388,9 @@ fn ct_to_ssv_cell(v: &CtValue) -> String {
         .join("_")
 }
 
-fn normalize_rows_for_csv(
+fn normalize_rows_for_delimited(
     data: CtPipelineData,
+    format: &str,
 ) -> Result<Vec<Vec<(String, CtValue)>>, CtDiagnosticError> {
     match data {
         CtPipelineData::Empty => Ok(Vec::new()),
@@ -397,9 +399,9 @@ fn normalize_rows_for_csv(
             let mut out = Vec::new();
             for item in items {
                 let CtValue::Record(fields) = item else {
-                    return Err(CtDiagnosticError::simple(
-                        "to csv: expected Record or List<Record> input",
-                    ));
+                    return Err(CtDiagnosticError::simple(format!(
+                        "to {format}: expected Record or List<Record> input"
+                    )));
                 };
                 out.push(fields);
             }
@@ -409,20 +411,20 @@ fn normalize_rows_for_csv(
             let mut out = Vec::new();
             for item in stream {
                 let CtValue::Record(fields) = item else {
-                    return Err(CtDiagnosticError::simple(
-                        "to csv: expected Record or List<Record> input",
-                    ));
+                    return Err(CtDiagnosticError::simple(format!(
+                        "to {format}: expected Record or List<Record> input"
+                    )));
                 };
                 out.push(fields);
             }
             Ok(out)
         }
-        CtPipelineData::ByteStream(_) => Err(CtDiagnosticError::simple(
-            "to csv: cannot serialize ByteStream to csv",
-        )),
-        CtPipelineData::Value(_, _) => Err(CtDiagnosticError::simple(
-            "to csv: expected Record or List<Record> input",
-        )),
+        CtPipelineData::ByteStream(_) => Err(CtDiagnosticError::simple(format!(
+            "to {format}: cannot serialize ByteStream to {format}"
+        ))),
+        CtPipelineData::Value(_, _) => Err(CtDiagnosticError::simple(format!(
+            "to {format}: expected Record or List<Record> input"
+        ))),
     }
 }
 
@@ -963,6 +965,37 @@ mod tests {
         );
         let err = CmdTo.run(&fmt_call("ssv"), input, &ctx()).unwrap_err();
         assert!(err.to_string().contains("duplicate field"));
+    }
+
+    #[test]
+    fn test_to_ssv_errors_name_ssv_format() {
+        let scalar = CtPipelineData::Value(CtValue::Int(42), CtPipelineMetadata::default());
+        let err = CmdTo.run(&fmt_call("ssv"), scalar, &ctx()).unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "to ssv: expected Record or List<Record> input"
+        );
+
+        let bytes = CtPipelineData::ByteStream(ctpipeline::CtByteStream::new(
+            std::io::Cursor::new(b"value".to_vec()),
+            CtPipelineMetadata::default(),
+        ));
+        let err = CmdTo
+            .run(&fmt_call_transpose("ssv"), bytes, &ctx())
+            .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "to ssv: cannot serialize ByteStream to ssv"
+        );
+
+        let empty_field = CtPipelineData::Value(
+            CtValue::Record(vec![("".into(), CtValue::Int(1))]),
+            CtPipelineMetadata::default(),
+        );
+        let err = CmdTo
+            .run(&fmt_call("ssv"), empty_field, &ctx())
+            .unwrap_err();
+        assert!(err.to_string().starts_with("to ssv:"));
     }
 
     #[test]

@@ -176,7 +176,9 @@ fn numfmt_unit_name(unit: &NumfmtUnit) -> &'static str {
 
 #[cfg(test)]
 mod native_semantic_tests {
-    use super::{numfmt_native_semantic, numfmt_to_argument_error_message};
+    use super::{
+        numfmt_native_semantic, numfmt_to_argument_error_message, numfmt_xargmatch_error_message,
+    };
     use std::ffi::OsString;
 
     #[test]
@@ -188,6 +190,48 @@ mod native_semantic_tests {
 
         assert_eq!(error.code(), 1);
         assert_eq!(error.to_string(), numfmt_to_argument_error_message("xxxx"));
+    }
+
+    #[test]
+    fn numfmt_native_semantic_rejects_xargmatch_values_with_gnu_error() {
+        let cases: [(&str, &str, &str, &[&str]); 4] = [
+            (
+                "--from=xxxx",
+                "--from",
+                "xxxx",
+                &["none", "auto", "si", "iec", "iec-i"],
+            ),
+            (
+                "--from=i",
+                "--from",
+                "i",
+                &["none", "auto", "si", "iec", "iec-i"],
+            ),
+            (
+                "--round=xxxx",
+                "--round",
+                "xxxx",
+                &["up", "down", "from-zero", "towards-zero", "nearest"],
+            ),
+            (
+                "--invalid=xxxx",
+                "--invalid",
+                "xxxx",
+                &["abort", "fail", "warn", "ignore"],
+            ),
+        ];
+
+        for (argument, option, value, valid_arguments) in cases {
+            let args = ["numfmt", argument, "1"];
+            let error = numfmt_native_semantic(args.iter().map(OsString::from))
+                .expect_err("an invalid XARGMATCH value should be rejected");
+
+            assert_eq!(error.code(), 1);
+            assert_eq!(
+                error.to_string(),
+                numfmt_xargmatch_error_message(option, value, valid_arguments)
+            );
+        }
     }
 
     #[test]
@@ -1418,47 +1462,59 @@ fn numfmt_unknown_argument_message(error: &clap::Error) -> String {
     }
 }
 
-fn numfmt_to_argument_error_message(value: &str) -> String {
-    const VALID_ARGUMENTS: [&str; 4] = ["none", "si", "iec", "iec-i"];
-    let is_ambiguous = !VALID_ARGUMENTS.contains(&value)
-        && VALID_ARGUMENTS
+fn numfmt_xargmatch_error_message(option: &str, value: &str, valid_arguments: &[&str]) -> String {
+    let is_ambiguous = !valid_arguments.contains(&value)
+        && valid_arguments
             .iter()
             .filter(|candidate| candidate.starts_with(value))
             .count()
             > 1;
 
-    format!(
-        concat!(
-            "{} argument {} for {}\n",
-            "Valid arguments are:\n",
-            "  - {}\n",
-            "  - {}\n",
-            "  - {}\n",
-            "  - {}\n",
-            "Try 'numfmt --help' for more information."
-        ),
+    let mut message = format!(
+        "{} argument {} for {}\nValid arguments are:\n",
         if is_ambiguous { "ambiguous" } else { "invalid" },
         numfmt_quote(value),
-        numfmt_quote("--to"),
-        numfmt_quote("none"),
-        numfmt_quote("si"),
-        numfmt_quote("iec"),
-        numfmt_quote("iec-i"),
-    )
+        numfmt_quote(option),
+    );
+    for argument in valid_arguments {
+        message.push_str(&format!("  - {}\n", numfmt_quote(argument)));
+    }
+    message.push_str("Try 'numfmt --help' for more information.");
+    message
 }
 
-fn numfmt_invalid_to_value_message(error: &clap::Error) -> Option<String> {
-    match error.get(ContextKind::InvalidArg) {
-        Some(ContextValue::String(argument)) if argument == "--to <UNIT>" => {}
+fn numfmt_to_argument_error_message(value: &str) -> String {
+    numfmt_xargmatch_error_message("--to", value, &["none", "si", "iec", "iec-i"])
+}
+
+fn numfmt_invalid_xargmatch_value_message(error: &clap::Error) -> Option<String> {
+    let (option, valid_arguments): (&str, &[&str]) = match error.get(ContextKind::InvalidArg) {
+        Some(ContextValue::String(argument)) if argument == "--from <UNIT>" => {
+            ("--from", &["none", "auto", "si", "iec", "iec-i"])
+        }
+        Some(ContextValue::String(argument)) if argument == "--to <UNIT>" => {
+            ("--to", &["none", "si", "iec", "iec-i"])
+        }
+        Some(ContextValue::String(argument)) if argument == "--round <METHOD>" => (
+            "--round",
+            &["up", "down", "from-zero", "towards-zero", "nearest"],
+        ),
+        Some(ContextValue::String(argument)) if argument == "--invalid <INVALID>" => {
+            ("--invalid", &["abort", "fail", "warn", "ignore"])
+        }
         _ => return None,
-    }
+    };
 
     let value = match error.get(ContextKind::InvalidValue) {
         Some(ContextValue::String(value)) => value,
         _ => return None,
     };
 
-    Some(numfmt_to_argument_error_message(value))
+    Some(numfmt_xargmatch_error_message(
+        option,
+        value,
+        valid_arguments,
+    ))
 }
 
 pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
@@ -1473,7 +1529,7 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
             )));
         }
         Err(err) if err.kind() == ErrorKind::InvalidValue => {
-            if let Some(message) = numfmt_invalid_to_value_message(&err) {
+            if let Some(message) = numfmt_invalid_xargmatch_value_message(&err) {
                 return Err(Box::new(NumfmtError::NumfmtIllegalArgument(message)));
             }
             return Err(err.into());
@@ -1542,7 +1598,7 @@ pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemanti
             )));
         }
         Err(err) if err.kind() == ErrorKind::InvalidValue => {
-            if let Some(message) = numfmt_invalid_to_value_message(&err) {
+            if let Some(message) = numfmt_invalid_xargmatch_value_message(&err) {
                 return Err(Box::new(NumfmtError::NumfmtIllegalArgument(message)));
             }
             return Err(err.into());

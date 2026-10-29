@@ -3274,6 +3274,33 @@ fn embedded_timezone_name(timezone_name: &str) -> &str {
     timezone_name.strip_prefix(':').unwrap_or(timezone_name)
 }
 
+/// Return the UTC offset used by a GNU embedded `TZ="..."` item at `timestamp`.
+///
+/// Keep this in the parser so diagnostics use the same IANA, TZif, POSIX, and
+/// fixed-offset handling as the date parser itself.  On glibc, an unknown
+/// embedded timezone falls back to UTC.
+pub fn embedded_timezone_offset_at(timezone_name: &str, timestamp: i64) -> Option<FixedOffset> {
+    let timezone_name = embedded_timezone_name(timezone_name);
+    if timezone_name.is_empty() {
+        return FixedOffset::east_opt(0);
+    }
+
+    if let Ok(timezone) = timezone_name.parse::<Tz>() {
+        let utc = DateTime::<Utc>::from_timestamp(timestamp, 0)?;
+        return Some(utc.with_timezone(&timezone).offset().fix());
+    }
+
+    if let Some(timezone) = parse_tzif_timezone(timezone_name) {
+        return FixedOffset::east_opt(tzif_timezone_offset_at(&timezone, timestamp));
+    }
+
+    if let Some(timezone) = parse_posix_timezone_rule(timezone_name) {
+        return FixedOffset::east_opt(posix_timezone_offset_at(timezone, timestamp));
+    }
+
+    embedded_timezone_fixed_offset(timezone_name).or_else(|| FixedOffset::east_opt(0))
+}
+
 fn embedded_iana_timezone_local_datetime(
     timezone: Tz,
     naive: NaiveDateTime,

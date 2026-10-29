@@ -79,6 +79,30 @@ impl DataCommand for CmdTo {
         })?;
 
         let transpose = call.has_flag("transpose");
+        let mut output_meta = match &input {
+            CtPipelineData::Empty => CtPipelineMetadata::default(),
+            CtPipelineData::Value(_, metadata) => metadata.clone(),
+            CtPipelineData::ListStream(stream) => stream.metadata.clone(),
+            CtPipelineData::ByteStream(stream) => stream.metadata.clone(),
+        };
+
+        output_meta.classic_text = None;
+        output_meta.classic_bytes = None;
+        output_meta.schema_hint = None;
+        output_meta.source = Some("to".into());
+        output_meta.content_type = Some(
+            match format {
+                "json" => "application/json",
+                "jsonl" => "application/x-ndjson",
+                "csv" => "text/csv",
+                "ssv" => "text/x-ssv",
+                "yaml" => "application/yaml",
+                "toml" => "application/toml",
+                "text" => "text/plain",
+                _ => unreachable!("format normalized"),
+            }
+            .into(),
+        );
 
         let out = match format {
             "json" => {
@@ -94,24 +118,20 @@ impl DataCommand for CmdTo {
             "yaml" => {
                 let value = consume_to_value(input)?;
                 if is_empty_record_value(&value) {
-                    return Ok(CtPipelineData::Value(
-                        CtValue::String(String::new()),
-                        CtPipelineMetadata::default(),
-                    ));
+                    String::new()
+                } else {
+                    serde_yaml::to_string(&ct_to_json(&value))
+                        .map_err(|e| CtDiagnosticError::simple(format!("to yaml: {e}")))?
                 }
-                serde_yaml::to_string(&ct_to_json(&value))
-                    .map_err(|e| CtDiagnosticError::simple(format!("to yaml: {e}")))?
             }
             "toml" => {
                 let value = consume_to_value(input)?;
                 if is_empty_record_or_list_value(&value) {
-                    return Ok(CtPipelineData::Value(
-                        CtValue::String(String::new()),
-                        CtPipelineMetadata::default(),
-                    ));
+                    String::new()
+                } else {
+                    let tv = ct_to_toml(&value);
+                    tv.to_string()
                 }
-                let tv = ct_to_toml(&value);
-                tv.to_string()
             }
             "text" => {
                 let lines = consume_to_lines(input)?;
@@ -120,10 +140,7 @@ impl DataCommand for CmdTo {
             _ => unreachable!("format normalized"),
         };
 
-        Ok(CtPipelineData::Value(
-            CtValue::String(out),
-            CtPipelineMetadata::default(),
-        ))
+        Ok(CtPipelineData::Value(CtValue::String(out), output_meta))
     }
 }
 
@@ -579,6 +596,55 @@ mod tests {
     }
 
     #[test]
+    fn test_to_json_preserves_sticky_metadata_and_rebuilds_format_metadata() {
+        let mut metadata = CtPipelineMetadata::default();
+        metadata.content_type = Some("text/plain".into());
+        metadata.schema_hint = Some(ctpipeline::CtSchemaHint::none());
+        metadata.classic_text = Some("stale classic text".into());
+        metadata.classic_bytes = Some(b"stale classic bytes".to_vec());
+        metadata.stderr_text = Some("cat: /not_exist: No such file or directory\n".into());
+        metadata.exit_code = 1;
+        metadata.source = Some("cat".into());
+        let custom = metadata.custom.clone();
+
+        let output = CmdTo
+            .run(
+                &fmt_call("json"),
+                CtPipelineData::Value(CtValue::List(vec![]), metadata),
+                &ctx(),
+            )
+            .unwrap();
+        let CtPipelineData::Value(CtValue::String(json), output_meta) = output else {
+            panic!("expected json string");
+        };
+
+        assert_eq!(json, "[]");
+        assert_eq!(output_meta.exit_code, 1);
+        assert_eq!(
+            output_meta.stderr_text.as_deref(),
+            Some("cat: /not_exist: No such file or directory\n")
+        );
+        assert!(std::sync::Arc::ptr_eq(&output_meta.custom, &custom));
+        assert!(output_meta.classic_text.is_none());
+        assert!(output_meta.classic_bytes.is_none());
+        assert!(output_meta.schema_hint.is_none());
+        assert_eq!(output_meta.source.as_deref(), Some("to"));
+        assert_eq!(
+            output_meta.content_type.as_deref(),
+            Some("application/json")
+        );
+
+        custom
+            .lock()
+            .unwrap()
+            .insert("external.exit_code".into(), CtValue::Int(7));
+        assert_eq!(
+            output_meta.custom.lock().unwrap().get("external.exit_code"),
+            Some(&CtValue::Int(7))
+        );
+    }
+
+    #[test]
     fn test_to_jsonl_list() {
         let input = CtPipelineData::Value(
             CtValue::List(vec![
@@ -913,13 +979,24 @@ mod tests {
 
     #[test]
     fn test_to_yaml_empty_record_outputs_empty_text() {
+        let mut metadata = CtPipelineMetadata::default();
+        metadata.stderr_text = Some("upstream error\n".into());
+        metadata.exit_code = 1;
         let r = CmdTo
-            .run(&fmt_call("yaml"), empty_record_input(), &ctx())
+            .run(
+                &fmt_call("yaml"),
+                CtPipelineData::Value(CtValue::Record(vec![]), metadata),
+                &ctx(),
+            )
             .unwrap();
-        let CtPipelineData::Value(CtValue::String(y), _) = r else {
+        let CtPipelineData::Value(CtValue::String(y), metadata) = r else {
             panic!("string");
         };
         assert_eq!(y, "");
+        assert_eq!(metadata.exit_code, 1);
+        assert_eq!(metadata.stderr_text.as_deref(), Some("upstream error\n"));
+        assert_eq!(metadata.content_type.as_deref(), Some("application/yaml"));
+        assert_eq!(metadata.source.as_deref(), Some("to"));
     }
 
     #[test]
@@ -937,13 +1014,24 @@ mod tests {
 
     #[test]
     fn test_to_toml_empty_record_outputs_empty_text() {
+        let mut metadata = CtPipelineMetadata::default();
+        metadata.stderr_text = Some("upstream error\n".into());
+        metadata.exit_code = 1;
         let r = CmdTo
-            .run(&fmt_call("toml"), empty_record_input(), &ctx())
+            .run(
+                &fmt_call("toml"),
+                CtPipelineData::Value(CtValue::Record(vec![]), metadata),
+                &ctx(),
+            )
             .unwrap();
-        let CtPipelineData::Value(CtValue::String(t), _) = r else {
+        let CtPipelineData::Value(CtValue::String(t), metadata) = r else {
             panic!("string");
         };
         assert_eq!(t, "");
+        assert_eq!(metadata.exit_code, 1);
+        assert_eq!(metadata.stderr_text.as_deref(), Some("upstream error\n"));
+        assert_eq!(metadata.content_type.as_deref(), Some("application/toml"));
+        assert_eq!(metadata.source.as_deref(), Some("to"));
     }
 
     #[test]

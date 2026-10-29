@@ -200,11 +200,17 @@ impl Observer {
         reader: Option<Box<dyn BufRead>>,
         update_last: bool,
     ) -> CTResult<()> {
+        let metadata = if self.follow.is_some() {
+            path.metadata().ok()
+        } else {
+            None
+        };
         self.add_path_with_header(
             path,
             display_name,
             OsStr::new(display_name),
             reader,
+            metadata,
             update_last,
         )
     }
@@ -215,6 +221,7 @@ impl Observer {
         display_name: &str,
         header_name: &OsStr,
         reader: Option<Box<dyn BufRead>>,
+        metadata: Option<Metadata>,
         update_last: bool,
     ) -> CTResult<()> {
         if self.follow.is_some() {
@@ -223,7 +230,6 @@ impl Observer {
             } else {
                 path.to_owned()
             };
-            let metadata = path.metadata().ok();
             self.files.insert(
                 &path,
                 PathData::new(reader, metadata, display_name, header_name),
@@ -260,7 +266,15 @@ impl Observer {
         update_last: bool,
     ) -> CTResult<()> {
         if self.retry && self.follow.is_some() {
-            return self.add_path_with_header(path, display_name, header_name, None, update_last);
+            let metadata = path.metadata().ok();
+            return self.add_path_with_header(
+                path,
+                display_name,
+                header_name,
+                None,
+                metadata,
+                update_last,
+            );
         }
 
         Ok(())

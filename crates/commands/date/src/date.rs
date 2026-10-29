@@ -936,11 +936,16 @@ fn date_debug_text(
         utc.minute(),
         utc.second()
     );
+    let embedded_date = parts.embedded_timezone.as_deref().and_then(|timezone| {
+        ctcore::ct_parse_datetime::embedded_timezone_offset_at(timezone, date.timestamp())
+            .map(|offset| date.with_timezone(&offset))
+    });
+    let debug_date = embedded_date.as_ref().unwrap_or(date);
     let _ = writeln!(
         output,
         "date: final: {} ({})",
-        date_ymd_hms_label(date),
-        date_offset_label(date)
+        date_ymd_hms_label(debug_date),
+        date_offset_label(debug_date)
     );
     output.push_str(&date_output_format_debug_text(format_string));
     output
@@ -3141,6 +3146,33 @@ mod tests {
                 locale_quote("%s.%N"),
             )
         );
+    }
+
+    #[test]
+    fn test_date_debug_embedded_timezone_uses_its_epoch_offset() {
+        for (date, input, expected_debug_time, expected_output) in [
+            (
+                "2024-03-10T14:30:00+08:00",
+                "TZ=\"America/New_York\" 2024-03-10 01:30:00",
+                "date: final: (Y-M-D) 2024-03-10 01:30:00 (UTC-05)\n",
+                "2024-03-10 14:30:00 +0800",
+            ),
+            (
+                "2024-07-01T21:00:00+08:00",
+                "TZ=\"America/New_York\" 2024-07-01 09:00:00",
+                "date: final: (Y-M-D) 2024-07-01 09:00:00 (UTC-04)\n",
+                "2024-07-01 21:00:00 +0800",
+            ),
+        ] {
+            let date = DateTime::parse_from_rfc3339(date).unwrap();
+            let debug = date_debug_text(input, &date, "%F %T %z", Some("Asia/Shanghai"));
+
+            assert!(debug.contains(expected_debug_time), "{debug}");
+            assert_eq!(
+                format_date_output(&date, "%F %T %z").unwrap(),
+                expected_output
+            );
+        }
     }
 
     #[test]

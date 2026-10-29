@@ -3609,6 +3609,68 @@
                 "resource_limits": null
             },
             "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "od",
+            "description": "原始字节用例：LC_ALL=C；执行od -t x16 /dev/null；参数完整十六进制=2d74 783136 2f6465762f6e756c6c；stdin为0字节、完整十六进制=空；Linux平台不提供16字节整数类型，GNU区分平台类型缺失与类型串语法错误；预期RC=1、stdout为0字节、完整十六进制=空；stderr为83字节/2条换行分隔，完整十六进制=6f643a20696e76616c6964207479706520737472696e672027783136273b0a746869732073797374656d20646f65736e27742070726f7669646520612031362d6279746520696e74656772616c20747970650a",
+            "args": [
+                "2d74",
+                "783136",
+                "2f6465762f6e756c6c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "6f643a20696e76616c6964207479706520737472696e672027783136273b0a746869732073797374656d20646f65736e27742070726f7669646520612031362d6279746520696e74656772616c20747970650a"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "od",
+            "description": "原始字节用例：LC_ALL=C；执行od -t f1 /dev/null；参数完整十六进制=2d74 6631 2f6465762f6e756c6c；stdin为0字节、完整十六进制=空；Linux平台不提供1字节浮点类型，GNU区分平台类型缺失与类型串语法错误；预期RC=1、stdout为0字节、完整十六进制=空；stderr为87字节/2条换行分隔，完整十六进制=6f643a20696e76616c6964207479706520737472696e6720276631273b0a746869732073797374656d20646f65736e27742070726f76696465206120312d6279746520666c6f6174696e6720706f696e7420747970650a",
+            "args": [
+                "2d74",
+                "6631",
+                "2f6465762f6e756c6c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "6f643a20696e76616c6964207479706520737472696e6720276631273b0a746869732073797374656d20646f65736e27742070726f76696465206120312d6279746520666c6f6174696e6720706f696e7420747970650a"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
         }
     ]
 }

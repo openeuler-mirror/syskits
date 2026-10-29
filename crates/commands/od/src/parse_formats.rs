@@ -412,6 +412,7 @@ fn od_parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, St
 
         // 解析大小规格和 ASCII 转储标志
         let mut byte_size = 0u8;
+        let mut numeric_size = None;
         let mut show_ascii_dump = false;
 
         // 检查是否有大小字符（如 'C'、'S'、'I'、'L'）
@@ -425,14 +426,13 @@ fn od_parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, St
             }
             // 如果有数字大小，将其转换为字节数
             if !decimal_size.is_empty() {
-                byte_size = decimal_size.parse().map_err(|_| {
-                    format!(
-                        "invalid number {} in format specification {}",
-                        decimal_size.quote(),
-                        params.quote()
-                    )
-                })?;
-                if byte_size == 0 {
+                let parsed_size = decimal_size
+                    .parse::<u32>()
+                    .ok()
+                    .filter(|size| *size <= i32::MAX as u32)
+                    .ok_or_else(|| format!("invalid type string {}", params.quote()))?;
+                numeric_size = Some(parsed_size);
+                if parsed_size == 0 {
                     let type_name = if type_cat == FormatTypeCategory::Float {
                         "floating point"
                     } else {
@@ -443,6 +443,7 @@ fn od_parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, St
                         params.quote()
                     ));
                 }
+                byte_size = u8::try_from(parsed_size).unwrap_or(u8::MAX);
             }
         }
 
@@ -453,11 +454,23 @@ fn od_parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, St
 
         // 根据类型和大小获取对应的格式化器
         let ft = od_format_type(type_char, byte_size).ok_or_else(|| {
-            format!(
-                "invalid size '{}' in format specification {}",
-                byte_size,
-                params.quote()
-            )
+            if let Some(size) = numeric_size {
+                let type_name = if type_cat == FormatTypeCategory::Float {
+                    "floating point"
+                } else {
+                    "integral"
+                };
+                format!(
+                    "invalid type string {};\nthis system doesn't provide a {size}-byte {type_name} type",
+                    params.quote()
+                )
+            } else {
+                format!(
+                    "invalid size '{}' in format specification {}",
+                    byte_size,
+                    params.quote()
+                )
+            }
         })?;
 
         // 将解析好的格式化器添加到结果列表
@@ -802,6 +815,22 @@ mod tests {
         for type_string in ["x0", "d00", "f000"] {
             assert!(od_parse_type_string(type_string).is_err(), "{type_string}");
         }
+    }
+
+    #[test]
+    fn test_unsupported_numeric_sizes_use_gnu_diagnostics() {
+        assert_eq!(
+            od_parse_type_string("x16").unwrap_err(),
+            "invalid type string 'x16';\nthis system doesn't provide a 16-byte integral type"
+        );
+        assert_eq!(
+            od_parse_type_string("f1").unwrap_err(),
+            "invalid type string 'f1';\nthis system doesn't provide a 1-byte floating point type"
+        );
+        assert_eq!(
+            od_parse_type_string("x9999999999999999999999").unwrap_err(),
+            "invalid type string 'x9999999999999999999999'"
+        );
     }
 
     #[test]

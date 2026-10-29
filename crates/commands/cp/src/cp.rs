@@ -1515,6 +1515,7 @@ impl CpOptions {
         matches!(
             self.overwrite,
             CpOverwriteMode::Clobber(CpClobberMode::Force)
+                | CpOverwriteMode::Interactive(CpClobberMode::Force)
         )
     }
 }
@@ -2747,7 +2748,14 @@ fn cp_handle_existing_dest(
         .into());
     }
 
-    cp_opts.overwrite.verify(dest_path)?;
+    // GNU handles `cp -f --backup FILE FILE` by changing the destination to
+    // the new backup name before the normal copy path sees it.  Keep -i from
+    // prompting for the original FILE when it accompanies that special case.
+    let is_force_self_backup =
+        sour_path == dest_path && cp_opts.cp_force() && cp_opts.backup != CtBackupMode::NoBackup;
+    if !is_force_self_backup {
+        cp_opts.overwrite.verify(dest_path)?;
+    }
 
     let backup_pathbuf =
         ct_backup_control::get_backup_path(cp_opts.backup, dest_path, &cp_opts.backup_suffix);

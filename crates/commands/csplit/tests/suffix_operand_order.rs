@@ -37,9 +37,11 @@ fn suffix_validation_runs_after_operand_checks() {
 
         assert_eq!(output.status.code(), Some(1), "{message}");
         assert!(output.stdout.is_empty(), "{message}");
-        let usage = usage_error
-            .then_some("Try 'csplit --help' for more information.\n")
-            .unwrap_or_default();
+        let usage = if usage_error {
+            "Try 'csplit --help' for more information.\n"
+        } else {
+            ""
+        };
         assert_eq!(
             output.stderr,
             format!("csplit: {message}\n{usage}").as_bytes()

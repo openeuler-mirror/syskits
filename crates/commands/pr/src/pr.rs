@@ -653,7 +653,10 @@ fn pr_decode_input_bytes(bytes: &[u8]) -> String {
             } else if converted == 0 {
                 text.push('\0');
                 index += 1;
-            } else if let Some(c) = char::from_u32(wide_char as u32) {
+            } else if let Some(c) = u32::try_from(i64::from(wide_char))
+                .ok()
+                .and_then(char::from_u32)
+            {
                 text.push(c);
                 index += converted;
             } else {

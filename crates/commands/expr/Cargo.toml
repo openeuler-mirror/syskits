@@ -20,10 +20,8 @@ rust-i18n = { workspace = true }
 clap = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
-onig = { workspace = true }
-onig_sys = { workspace = true }
 libc = { workspace = true }
-ctcore = { workspace = true }
+ctcore = { workspace = true, features = ["gnu-regex"] }
 
 [[bin]]
 name = "expr"

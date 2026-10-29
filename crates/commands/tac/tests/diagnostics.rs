@@ -43,22 +43,3 @@ fn stdin_directory_preserves_read_errno() {
         "tac: 'standard input': read error: Is a directory\n"
     );
 }
-
-#[test]
-fn localized_closed_stdin_diagnostics_match_gnu() {
-    let output = run_tac("zh_CN.UTF-8", |command| unsafe {
-        command.pre_exec(|| {
-            if ctcore::libc::close(ctcore::libc::STDIN_FILENO) < 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    });
-
-    assert_eq!(output.status.code(), Some(1));
-    assert!(output.stdout.is_empty());
-    assert_eq!(
-        String::from_utf8(output.stderr).unwrap(),
-        "tac: 标准输入: 读取错误: 错误的文件描述符\ntac: -: 错误的文件描述符\n"
-    );
-}

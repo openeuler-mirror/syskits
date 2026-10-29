@@ -8,7 +8,7 @@ fn failed_error_cleanup_reports_each_unremovable_output() {
 mkfifo input
 bash -c 'exec -a csplit "$1" -q input 2 "/x/"' csplit-child "$1" >stdout 2>stderr &
 pid=$!
-exec 3>input
+exec 3<>input
 printf 'a\nb\n' >&3
 
 attempts=0

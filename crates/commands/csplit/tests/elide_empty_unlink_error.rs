@@ -8,7 +8,7 @@ fn a_non_enoent_elide_error_is_diagnosed_without_failing() {
 mkfifo input
 bash -c 'exec -a csplit "$1" -q -z input "/x/" "{*}"' csplit-child "$1" >stdout 2>stderr &
 pid=$!
-exec 3>input
+exec 3<>input
 
 attempts=0
 while test ! -e xx00 && test "$attempts" -lt 500; do

@@ -12,689 +12,57 @@
 use crate::csplit_error::{CsplitError, PatternText};
 #[cfg(test)]
 use ctcore::ct_display::locale_quote;
+use ctcore::ct_gnu_regex::{GnuRegex, GnuRegexCompileOptions, GnuRegexError};
 use ctcore::ct_show_warning;
-use onig::{EncodedBytes, Error as OnigError, Regex as OnigRegex, RegexOptions, Syntax};
+use std::cell::RefCell;
 use std::fmt;
 
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-use std::cell::RefCell;
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-use std::ffi::CStr;
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-use std::sync::{Mutex, OnceLock};
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-// RE_SYNTAX_POSIX_BASIC without RE_CONTEXT_INVALID_DUP and RE_NO_EMPTY_RANGES.
-const GNU_CSPLIT_REGEX_SYNTAX: libc::c_ulong = (1 << 1) | (1 << 2) | (1 << 6) | (1 << 7) | (1 << 9);
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-static GNU_REGEX_CONFIGURATION_LOCK: Mutex<()> = Mutex::new(());
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-type ReSetSyntax = unsafe extern "C" fn(libc::c_ulong) -> libc::c_ulong;
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-type ReCompilePattern = unsafe extern "C" fn(
-    *const libc::c_char,
-    libc::size_t,
-    *mut libc::regex_t,
-) -> *const libc::c_char;
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-type ReSearch = unsafe extern "C" fn(
-    *mut libc::regex_t,
-    *const libc::c_char,
-    libc::regoff_t,
-    libc::regoff_t,
-    libc::regoff_t,
-    *mut libc::c_void,
-) -> libc::regoff_t;
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-struct GnuRegexApi {
-    _library_handle: usize,
-    set_syntax: ReSetSyntax,
-    compile_pattern: ReCompilePattern,
-    search: ReSearch,
-}
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-fn gnu_regex_api() -> Result<&'static GnuRegexApi, String> {
-    static API: OnceLock<Result<GnuRegexApi, String>> = OnceLock::new();
-    API.get_or_init(load_gnu_regex_api)
-        .as_ref()
-        .map_err(Clone::clone)
-}
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-fn load_gnu_regex_api() -> Result<GnuRegexApi, String> {
-    unsafe {
-        // onig_sys exports these names with a different ABI, so resolve them from libc itself.
-        let handle = libc::dlopen(c"libc.so.6".as_ptr(), libc::RTLD_LAZY | libc::RTLD_LOCAL);
-        if handle.is_null() {
-            return Err(dynamic_loader_error());
-        }
-
-        let set_syntax = libc::dlsym(handle, c"re_set_syntax".as_ptr());
-        if set_syntax.is_null() {
-            return Err(dynamic_loader_error());
-        }
-        let compile_pattern = libc::dlsym(handle, c"re_compile_pattern".as_ptr());
-        if compile_pattern.is_null() {
-            return Err(dynamic_loader_error());
-        }
-        let search = libc::dlsym(handle, c"re_search".as_ptr());
-        if search.is_null() {
-            return Err(dynamic_loader_error());
-        }
-
-        Ok(GnuRegexApi {
-            _library_handle: handle as usize,
-            set_syntax: std::mem::transmute::<*mut libc::c_void, ReSetSyntax>(set_syntax),
-            compile_pattern: std::mem::transmute::<*mut libc::c_void, ReCompilePattern>(
-                compile_pattern,
-            ),
-            search: std::mem::transmute::<*mut libc::c_void, ReSearch>(search),
-        })
-    }
-}
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-fn dynamic_loader_error() -> String {
-    let error = unsafe { libc::dlerror() };
-    if error.is_null() {
-        "unable to load GNU regular expression API".to_string()
-    } else {
-        unsafe { CStr::from_ptr(error) }
-            .to_string_lossy()
-            .into_owned()
-    }
-}
-
-#[derive(Debug)]
-enum RegexEngine {
-    Oniguruma(OnigRegex),
-    #[cfg(all(target_os = "linux", target_env = "gnu"))]
-    Libc(LibcRegex),
-}
-
-impl RegexEngine {
-    fn is_match(&self, text: &[u8]) -> bool {
-        match self {
-            Self::Oniguruma(regex) => regex
-                .find_with_encoding(EncodedBytes::ascii(text))
-                .is_some(),
-            #[cfg(all(target_os = "linux", target_env = "gnu"))]
-            Self::Libc(regex) => regex.is_match(text),
-        }
-    }
-}
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-struct LibcRegex {
-    compiled: RefCell<libc::regex_t>,
-    search: ReSearch,
-}
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-impl fmt::Debug for LibcRegex {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.debug_struct("LibcRegex").finish_non_exhaustive()
-    }
-}
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-impl LibcRegex {
-    fn new(expression: &[u8]) -> Result<Self, String> {
-        let api = gnu_regex_api()?;
-        let _configuration_guard = GNU_REGEX_CONFIGURATION_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let mut compiled = unsafe { std::mem::zeroed::<libc::regex_t>() };
-
-        unsafe {
-            libc::setlocale(libc::LC_ALL, c"".as_ptr());
-        }
-
-        let previous_syntax = unsafe { (api.set_syntax)(GNU_CSPLIT_REGEX_SYNTAX) };
-        let error = unsafe {
-            (api.compile_pattern)(expression.as_ptr().cast(), expression.len(), &mut compiled)
-        };
-        unsafe {
-            (api.set_syntax)(previous_syntax);
-        }
-
-        if !error.is_null() {
-            let message = unsafe { CStr::from_ptr(error) }
-                .to_string_lossy()
-                .into_owned();
-            unsafe {
-                libc::regfree(&mut compiled);
-            }
-            return Err(message);
-        }
-
-        Ok(Self {
-            compiled: RefCell::new(compiled),
-            search: api.search,
-        })
-    }
-
-    fn is_match(&self, text: &[u8]) -> bool {
-        let length = text
-            .len()
-            .try_into()
-            .expect("input line length fits in regoff_t");
-        let mut compiled = self.compiled.borrow_mut();
-        unsafe {
-            (self.search)(
-                &mut *compiled,
-                text.as_ptr().cast(),
-                length,
-                0,
-                length,
-                std::ptr::null_mut(),
-            ) >= 0
-        }
-    }
-}
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-impl Drop for LibcRegex {
-    fn drop(&mut self) {
-        unsafe {
-            libc::regfree(self.compiled.get_mut());
-        }
-    }
-}
-
-#[derive(Debug)]
 pub struct CsplitRegex {
-    compiled: RegexEngine,
+    compiled: RefCell<GnuRegex>,
     expression: Vec<u8>,
     source: PatternText,
 }
 
+impl fmt::Debug for CsplitRegex {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CsplitRegex")
+            .field("expression", &String::from_utf8_lossy(&self.expression))
+            .finish_non_exhaustive()
+    }
+}
+
 impl CsplitRegex {
     fn new(expression: &[u8], source: PatternText) -> Result<Self, CsplitError> {
-        #[cfg(all(target_os = "linux", target_env = "gnu"))]
-        if should_use_libc_regex(expression) {
-            let compiled = LibcRegex::new(expression)
-                .map(RegexEngine::Libc)
-                .map_err(|error| CsplitError::InvalidRegularExpression(source.clone(), error))?;
-            return Ok(Self {
-                compiled,
-                expression: expression.to_owned(),
-                source,
-            });
-        }
-
-        let expression_for_compilation = normalize_empty_bre_intervals(expression);
-        validate_bre_interval_ranges(&expression_for_compilation, &source)?;
-        let compiled = compile_regex(&expression_for_compilation, &source)?;
-        validate_bre_backreferences(expression, &source)?;
+        let compiled =
+            GnuRegex::compile(expression, GnuRegexCompileOptions::posix_basic_permissive())
+                .map_err(|error| {
+                    CsplitError::InvalidRegularExpression(source.clone(), gnu_regex_error(error))
+                })?;
         Ok(Self {
-            compiled,
+            compiled: RefCell::new(compiled),
             expression: expression.to_owned(),
             source,
         })
     }
 
-    pub fn is_match(&self, text: &[u8]) -> bool {
-        self.compiled.is_match(text)
+    pub fn is_match(&self, text: &[u8]) -> Result<bool, CsplitError> {
+        let range = isize::try_from(text.len()).map_err(|_| CsplitError::RegexSearch)?;
+        self.compiled
+            .borrow_mut()
+            .search(text, 0, range)
+            .map(|matched| matched.is_some())
+            .map_err(|_| CsplitError::RegexSearch)
     }
 }
 
-fn compile_regex(expression: &[u8], source: &PatternText) -> Result<RegexEngine, CsplitError> {
-    OnigRegex::with_options_and_encoding(
-        EncodedBytes::ascii(expression),
-        RegexOptions::REGEX_OPTION_NONE,
-        Syntax::grep(),
-    )
-    .map_err(|error| {
-        CsplitError::InvalidRegularExpression(
-            source.clone(),
-            gnu_regular_expression_error(&error, expression).to_string(),
-        )
-    })
-    .map(RegexEngine::Oniguruma)
-}
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-fn should_use_libc_regex(expression: &[u8]) -> bool {
-    requires_libc_regex(expression) || locale_has_non_c_character_rules()
-}
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-fn locale_has_non_c_character_rules() -> bool {
-    let _configuration_guard = GNU_REGEX_CONFIGURATION_LOCK
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    unsafe {
-        if libc::setlocale(libc::LC_ALL, c"".as_ptr()).is_null() {
-            return false;
-        }
-
-        [libc::LC_CTYPE, libc::LC_COLLATE]
-            .into_iter()
-            .any(|category| {
-                let locale = libc::setlocale(category, std::ptr::null());
-                if locale.is_null() {
-                    return false;
-                }
-                !matches!(CStr::from_ptr(locale).to_bytes(), b"C" | b"POSIX")
-            })
-    }
-}
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
-fn requires_libc_regex(expression: &[u8]) -> bool {
-    let mut index = 0;
-    let mut in_bracket_expression = false;
-
-    while index < expression.len() {
-        if expression[index] == b'\\' {
-            index += 2;
-            continue;
-        }
-
-        if !in_bracket_expression {
-            if expression[index] == b'[' {
-                in_bracket_expression = true;
-            }
-            index += 1;
-            continue;
-        }
-
-        if expression[index] == b'['
-            && matches!(expression.get(index + 1), Some(b'.' | b'=' | b':'))
-        {
-            return true;
-        }
-
-        if expression[index] == b']' {
-            in_bracket_expression = false;
-        }
-        index += 1;
-    }
-
-    false
-}
-
-fn unterminated_bre_bracket_has_content(expression: &[u8]) -> bool {
-    let mut index = 0;
-    let mut in_bracket_expression = false;
-    let mut has_content = false;
-
-    while index < expression.len() {
-        if !in_bracket_expression {
-            if expression[index] == b'\\' {
-                index += 2;
-            } else if expression[index] == b'[' {
-                in_bracket_expression = true;
-                has_content = false;
-                index += 1;
-                if expression.get(index) == Some(&b'^') {
-                    index += 1;
-                }
-            } else {
-                index += 1;
-            }
-            continue;
-        }
-
-        if expression[index] == b']' && has_content {
-            in_bracket_expression = false;
-            index += 1;
-            continue;
-        }
-
-        has_content = true;
-        if expression[index] == b'\\' {
-            index += 2;
-        } else {
-            index += 1;
+fn gnu_regex_error(error: GnuRegexError) -> String {
+    match error {
+        GnuRegexError::Compile(message) => String::from_utf8_lossy(&message).into_owned(),
+        GnuRegexError::Search | GnuRegexError::RecordTooLarge => {
+            "error in regular expression search".to_string()
         }
     }
-
-    in_bracket_expression && has_content
-}
-
-fn gnu_regular_expression_error(error: &OnigError, expression: &[u8]) -> &'static str {
-    match error.code() {
-        onig_sys::ONIGERR_END_PATTERN_AT_LEFT_BRACE => "Unmatched \\{",
-        onig_sys::ONIGERR_EMPTY_CHAR_CLASS => "Unmatched [, [^, [:, [., or [=",
-        onig_sys::ONIGERR_PREMATURE_END_OF_CHAR_CLASS
-            if unterminated_bre_bracket_has_content(expression) =>
-        {
-            "Unmatched [, [^, [:, [., or [="
-        }
-        onig_sys::ONIGERR_UNMATCHED_CLOSE_PARENTHESIS => "Unmatched ) or \\)",
-        onig_sys::ONIGERR_END_PATTERN_WITH_UNMATCHED_PARENTHESIS
-        | onig_sys::ONIGERR_END_PATTERN_IN_GROUP => "Unmatched ( or \\(",
-        onig_sys::ONIGERR_UNMATCHED_RANGE_SPECIFIER_IN_CHAR_CLASS => "Invalid range end",
-        onig_sys::ONIGERR_INVALID_BACKREF => "Invalid back reference",
-        onig_sys::ONIGERR_INVALID_POSIX_BRACKET_TYPE => "Invalid character class name",
-        onig_sys::ONIGERR_TOO_BIG_NUMBER_FOR_REPEAT_RANGE => "Regular expression too big",
-        onig_sys::ONIGERR_INVALID_REPEAT_RANGE_PATTERN
-        | onig_sys::ONIGERR_UPPER_SMALLER_THAN_LOWER_IN_REPEAT_RANGE => "Invalid content of \\{\\}",
-        _ => "Invalid regular expression",
-    }
-}
-
-fn validate_bre_backreferences(expression: &[u8], source: &PatternText) -> Result<(), CsplitError> {
-    let mut index = 0;
-    let mut in_bracket_expression = false;
-    let mut bracket_has_content = false;
-    let mut group_stack = Vec::new();
-    let mut closed_groups = Vec::new();
-
-    while index < expression.len() {
-        if in_bracket_expression {
-            if expression[index] == b'['
-                && let Some(marker @ (b':' | b'.' | b'=')) = expression.get(index + 1)
-            {
-                bracket_has_content = true;
-                index += 2;
-                while index + 1 < expression.len()
-                    && (expression[index] != *marker || expression[index + 1] != b']')
-                {
-                    index += 1;
-                }
-                index = (index + 2).min(expression.len());
-                continue;
-            }
-            if expression[index] == b']' && bracket_has_content {
-                in_bracket_expression = false;
-                index += 1;
-                continue;
-            }
-            bracket_has_content = true;
-            if expression[index] == b'\\' {
-                index += 1;
-                if index < expression.len() {
-                    index += 1;
-                }
-            } else {
-                index += 1;
-            }
-            continue;
-        }
-
-        if expression[index] == b'[' {
-            in_bracket_expression = true;
-            bracket_has_content = false;
-            index += 1;
-            if expression.get(index) == Some(&b'^') {
-                index += 1;
-            }
-            continue;
-        }
-
-        if expression[index] != b'\\' {
-            index += 1;
-            continue;
-        }
-
-        let slash_start = index;
-        while expression.get(index) == Some(&b'\\') {
-            index += 1;
-        }
-        if (index - slash_start) % 2 == 0 {
-            continue;
-        }
-
-        match expression.get(index) {
-            Some(b'(') => {
-                let group = closed_groups.len();
-                closed_groups.push(false);
-                group_stack.push(group);
-            }
-            Some(b')') => {
-                if let Some(group) = group_stack.pop() {
-                    closed_groups[group] = true;
-                }
-            }
-            Some(digit @ b'1'..=b'9') => {
-                let group = usize::from(*digit - b'1');
-                if !closed_groups.get(group).copied().unwrap_or(false) {
-                    return Err(CsplitError::InvalidRegularExpression(
-                        source.clone(),
-                        "Invalid back reference".to_string(),
-                    ));
-                }
-            }
-            _ => {}
-        }
-        if index < expression.len() {
-            index += 1;
-        }
-    }
-
-    Ok(())
-}
-
-fn normalize_empty_bre_intervals(expression: &[u8]) -> Vec<u8> {
-    let mut index = 0;
-    let mut copied = 0;
-    let mut normalized = Vec::with_capacity(expression.len() + 1);
-    let mut in_bracket_expression = false;
-
-    while index < expression.len() {
-        if in_bracket_expression
-            && expression[index] == b'['
-            && let Some(marker @ (b':' | b'.' | b'=')) = expression.get(index + 1)
-        {
-            index += 2;
-            while index + 1 < expression.len()
-                && (expression[index] != *marker || expression[index + 1] != b']')
-            {
-                index += 1;
-            }
-            index += 2;
-            continue;
-        }
-
-        if expression[index] == b'\\' {
-            let slash_start = index;
-            while expression.get(index) == Some(&b'\\') {
-                index += 1;
-            }
-            let slash_count = index - slash_start;
-
-            if !in_bracket_expression
-                && slash_count % 2 == 1
-                && expression.get(index) == Some(&b'{')
-            {
-                let content_start = index + 1;
-                if let Some((content_end, after_interval)) =
-                    find_bre_interval_closing(expression, content_start)
-                {
-                    if slash_start == 1 && expression[0] == b'^' {
-                        // GNU treats \{...\} immediately after an anchor as literal text.
-                        normalized.extend_from_slice(&expression[copied..slash_start]);
-                        normalized.extend_from_slice(&expression[index..content_end]);
-                        normalized.push(b'}');
-                        copied = after_interval;
-                    } else if expression[content_start] == b','
-                        && expression[content_start + 1..content_end]
-                            .iter()
-                            .all(u8::is_ascii_digit)
-                    {
-                        if slash_start == 0 && slash_count == 1 {
-                            // GNU treats a leading \{...\} as literal text.
-                            normalized.extend_from_slice(&expression[copied..slash_start]);
-                            normalized.extend_from_slice(&expression[index..content_end]);
-                            normalized.push(b'}');
-                            copied = after_interval;
-                        } else if slash_start > 0 {
-                            // Oniguruma requires the GNU empty lower bound to be written as zero.
-                            normalized.extend_from_slice(&expression[copied..content_start]);
-                            normalized.push(b'0');
-                            copied = content_start;
-                        }
-                    }
-                    index = after_interval;
-                } else {
-                    index = expression.len();
-                }
-                continue;
-            }
-
-            if slash_count % 2 == 1 && index < expression.len() {
-                index += 1;
-            }
-            continue;
-        }
-
-        match expression[index] {
-            b'[' if !in_bracket_expression => in_bracket_expression = true,
-            b']' if in_bracket_expression => in_bracket_expression = false,
-            _ => {}
-        }
-        index += 1;
-    }
-
-    normalized.extend_from_slice(&expression[copied..]);
-    normalized
-}
-
-fn find_bre_interval_closing(bytes: &[u8], mut index: usize) -> Option<(usize, usize)> {
-    while index < bytes.len() {
-        if bytes[index] != b'\\' {
-            index += 1;
-            continue;
-        }
-
-        let slash_start = index;
-        while bytes.get(index) == Some(&b'\\') {
-            index += 1;
-        }
-        if (index - slash_start) % 2 == 1 && bytes.get(index) == Some(&b'}') {
-            return Some((index - 1, index + 1));
-        }
-        if (index - slash_start) % 2 == 1 {
-            index += 1;
-        }
-    }
-
-    None
-}
-
-fn parse_bre_repeat_count(value: &[u8]) -> Option<u64> {
-    if value.is_empty() || !value.iter().all(u8::is_ascii_digit) {
-        return None;
-    }
-    let mut count = 0_u64;
-    for digit in value {
-        count = count
-            .saturating_mul(10)
-            .saturating_add(u64::from(*digit - b'0'));
-    }
-    Some(count)
-}
-
-fn bre_repeat_count_exceeds_gnu_limit(value: &[u8]) -> bool {
-    const GNU_RE_DUP_MAX: u64 = 0x7fff;
-
-    parse_bre_repeat_count(value).is_some_and(|count| count > GNU_RE_DUP_MAX)
-}
-
-fn validate_bre_interval_ranges(
-    expression: &[u8],
-    source: &PatternText,
-) -> Result<(), CsplitError> {
-    let bytes = expression;
-    let mut index = 0;
-    let mut in_bracket_expression = false;
-
-    while index < bytes.len() {
-        if in_bracket_expression
-            && bytes[index] == b'['
-            && let Some(marker @ (b':' | b'.' | b'=')) = bytes.get(index + 1)
-        {
-            index += 2;
-            while index + 1 < bytes.len() && (bytes[index] != *marker || bytes[index + 1] != b']') {
-                index += 1;
-            }
-            index += 2;
-            continue;
-        }
-
-        if bytes[index] == b'\\' {
-            let slash_start = index;
-            while bytes.get(index) == Some(&b'\\') {
-                index += 1;
-            }
-            let slash_count = index - slash_start;
-
-            // The last slash in an odd-length run begins a BRE interval delimiter.
-            if !in_bracket_expression
-                && slash_start > 0
-                && slash_count % 2 == 1
-                && bytes.get(index) == Some(&b'{')
-            {
-                let content_start = index + 1;
-                let Some((closing_backslash, after_interval)) =
-                    find_bre_interval_closing(bytes, content_start)
-                else {
-                    return Err(CsplitError::InvalidRegularExpression(
-                        source.clone(),
-                        "Unmatched \\{".to_string(),
-                    ));
-                };
-
-                let interval = &bytes[content_start..closing_backslash];
-                if let Some(comma) = interval.iter().position(|byte| *byte == b',') {
-                    let (lower, upper) = interval.split_at(comma);
-                    let upper = &upper[1..];
-                    if let (Some(lower), Some(upper)) =
-                        (parse_bre_repeat_count(lower), parse_bre_repeat_count(upper))
-                        && lower > upper
-                    {
-                        return Err(CsplitError::InvalidRegularExpression(
-                            source.clone(),
-                            "Invalid content of \\{\\}".to_string(),
-                        ));
-                    }
-                    if bre_repeat_count_exceeds_gnu_limit(lower)
-                        || bre_repeat_count_exceeds_gnu_limit(upper)
-                    {
-                        return Err(CsplitError::InvalidRegularExpression(
-                            source.clone(),
-                            "Regular expression too big".to_string(),
-                        ));
-                    }
-                } else if bre_repeat_count_exceeds_gnu_limit(interval) {
-                    return Err(CsplitError::InvalidRegularExpression(
-                        source.clone(),
-                        "Regular expression too big".to_string(),
-                    ));
-                }
-                index = after_interval;
-                continue;
-            }
-
-            if slash_count % 2 == 1 && index < bytes.len() {
-                index += 1;
-            }
-            continue;
-        }
-
-        match bytes[index] {
-            b'[' if !in_bracket_expression => {
-                in_bracket_expression = true;
-                index += 1;
-            }
-            b']' if in_bracket_expression => {
-                in_bracket_expression = false;
-                index += 1;
-            }
-            _ => index += 1,
-        }
-    }
-
-    Ok(())
 }
 
 impl fmt::Display for CsplitRegex {
@@ -1152,8 +520,8 @@ mod tests {
         let patterns = get_patterns(input.as_slice()).unwrap();
         match patterns.first() {
             Some(CsplitPattern::UpToMatch(reg, 0, CsplitExecutePattern::Times(1))) => {
-                assert!(!reg.is_match(b"aaab"));
-                assert!(reg.is_match(b"a+b"));
+                assert!(!reg.is_match(b"aaab").expect("search"));
+                assert!(reg.is_match(b"a+b").expect("search"));
                 assert_eq!(format!("{reg}"), "a+b");
             }
             _ => panic!("expected UpToMatch pattern"),
@@ -1166,8 +534,8 @@ mod tests {
         let patterns = get_patterns(input.as_slice()).unwrap();
         match patterns.first() {
             Some(CsplitPattern::UpToMatch(reg, 0, CsplitExecutePattern::Times(1))) => {
-                assert!(reg.is_match(b"aaab"));
-                assert!(!reg.is_match(b"a+b"));
+                assert!(reg.is_match(b"aaab").expect("search"));
+                assert!(!reg.is_match(b"a+b").expect("search"));
                 assert_eq!(format!("{reg}"), r"a\+b");
             }
             _ => panic!("expected UpToMatch pattern"),

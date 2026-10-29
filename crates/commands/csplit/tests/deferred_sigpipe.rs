@@ -15,7 +15,7 @@ else
   bash -c 'exec -a csplit "$0" input "/z/" "{*}"' "$binary" >output 2>stderr &
 fi
 child=$!
-exec 3>input
+exec 3<>input
 printf 'a\n' >&3
 wait "$reader"
 exec 3>&-

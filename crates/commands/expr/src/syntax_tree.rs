@@ -11,12 +11,9 @@
 
 // expr 是一个经典的 Linux 或 Unix 命令行工具，用于执行基本的算术和逻辑表达式计算
 
+use ctcore::ct_gnu_regex::{GnuRegex, GnuRegexCompileOptions, GnuRegexError};
 use num_bigint::BigInt;
 use num_traits::{Signed, ToPrimitive};
-use onig::{
-    EncodedBytes, Regex, RegexOptions, Region, SearchOptions, Syntax, SyntaxBehavior,
-    SyntaxOperator,
-};
 
 use crate::ExprError;
 use crate::ExprResult;
@@ -198,67 +195,26 @@ impl SyntaxTreeStringOp {
             Self::Match => {
                 let left = left.eval()?.eval_as_bytes();
                 let right = right.eval()?.eval_as_bytes();
-                let normalized = normalize_bre_bytes(&right)?;
-                let encoding = expr_regex_encoding();
-                let mut syntax = *Syntax::posix_basic();
-                // onig exposes these Oniguruma syntax and behavior bits but its bitflags 1.x
-                // wrapper does not declare them. The values come directly from that same library.
-                let gnu_bre_extensions = unsafe {
-                    SyntaxOperator::from_bits_unchecked(
-                        u64::from(
-                            onig_sys::ONIG_SYN_OP_ESC_PLUS_ONE_INF
-                                | onig_sys::ONIG_SYN_OP_ESC_QMARK_ZERO_ONE
-                                | onig_sys::ONIG_SYN_OP_ESC_VBAR_ALT
-                                | onig_sys::ONIG_SYN_OP_ESC_W_WORD
-                                | onig_sys::ONIG_SYN_OP_ESC_S_WHITE_SPACE
-                                | onig_sys::ONIG_SYN_OP_ESC_LTGT_WORD_BEGIN_END
-                                | onig_sys::ONIG_SYN_OP_ESC_B_WORD_BOUND,
-                        ) | (u64::from(onig_sys::ONIG_SYN_OP2_ESC_GNU_BUF_ANCHOR) << 32),
-                    )
-                };
-                syntax.enable_operators(gnu_bre_extensions);
-                let empty_ranges = unsafe {
-                    SyntaxBehavior::from_bits_unchecked(onig_sys::ONIG_SYN_ALLOW_EMPTY_RANGE_IN_CC)
-                };
-                syntax.enable_behavior(empty_ranges);
+                let options =
+                    GnuRegexCompileOptions::posix_basic_permissive().newline_anchor(false);
+                let mut regex = GnuRegex::compile(&right, options).map_err(expr_regex_error)?;
+                let has_capture = regex.capture_count() > 0;
+                let matched = regex
+                    .match_at_with_captures(&left, 0)
+                    .map_err(expr_regex_error)?;
 
-                let re = Regex::with_options_and_encoding(
-                    EncodedBytes::from_parts(&normalized, encoding),
-                    RegexOptions::REGEX_OPTION_FIND_LONGEST,
-                    &syntax,
-                )
-                .map_err(expr_regex_error)?;
-
-                let has_capture = re.captures_len() > 0;
-                if !expr_regex_input_is_valid(&left) {
-                    return Ok(if has_capture {
-                        SyntaxTreeNumOrStr::Str(Vec::new())
-                    } else {
-                        SyntaxTreeNumOrStr::Num(BigInt::from(0))
-                    });
-                }
-
-                let mut region = Region::new();
-                let text = EncodedBytes::from_parts(&left, encoding);
-                let matched = re.search_with_encoding(
-                    text,
-                    0,
-                    left.len(),
-                    SearchOptions::SEARCH_OPTION_NONE,
-                    Some(&mut region),
-                );
-                let match_pos = matched.and_then(|_| region.pos(0));
-                let match_pos = match_pos.filter(|(start, _)| *start == 0);
-
-                if let Some((start, end)) = match_pos {
+                if let Some(matched) = matched {
                     if has_capture {
-                        let capture = region
-                            .pos(1)
-                            .map(|(s, e)| left[s..e].to_vec())
+                        let capture = matched
+                            .captures
+                            .first()
+                            .and_then(|capture| capture.as_ref())
+                            .map(|capture| left[capture.start..capture.end].to_vec())
                             .unwrap_or_default();
                         Ok(SyntaxTreeNumOrStr::Str(capture))
                     } else {
-                        let match_len = logical_len_bytes(&left[start..end]);
+                        let match_len =
+                            logical_len_bytes(&left[matched.whole.start..matched.whole.end]);
                         Ok(SyntaxTreeNumOrStr::Num(BigInt::from(match_len)))
                     }
                 } else if has_capture {
@@ -820,81 +776,6 @@ fn byte_ranges(bytes: &[u8]) -> Vec<(usize, usize)> {
 }
 
 #[cfg(target_os = "linux")]
-fn expr_regex_encoding() -> *mut onig_sys::OnigEncodingType {
-    if !expr_locale_environment_is_supported() {
-        return &raw mut onig_sys::OnigEncodingASCII;
-    }
-
-    let locale = expr_ctype_locale_name();
-    let locale_name = locale.split('@').next().unwrap_or_default();
-    if matches!(locale_name, "C" | "POSIX") {
-        return &raw mut onig_sys::OnigEncodingASCII;
-    }
-
-    let codeset = locale_name
-        .split_once('.')
-        .map_or(locale_name, |(_, codeset)| codeset);
-    let normalized = codeset
-        .chars()
-        .filter(|character| *character != '-' && *character != '_')
-        .collect::<String>()
-        .to_ascii_uppercase();
-    match normalized.as_str() {
-        "GBK" | "GB18030" => &raw mut onig_sys::OnigEncodingGB18030,
-        "GB2312" | "EUCCN" => &raw mut onig_sys::OnigEncodingEUC_CN,
-        _ if locale_name.eq_ignore_ascii_case("zh_CN") => &raw mut onig_sys::OnigEncodingEUC_CN,
-        _ => &raw mut onig_sys::OnigEncodingUTF8,
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
-fn expr_regex_encoding() -> *mut onig_sys::OnigEncodingType {
-    if is_single_byte_locale() {
-        &raw mut onig_sys::OnigEncodingASCII
-    } else {
-        &raw mut onig_sys::OnigEncodingUTF8
-    }
-}
-
-fn expr_ctype_locale_name() -> String {
-    ["LC_ALL", "LC_CTYPE", "LANG"]
-        .into_iter()
-        .find_map(|name| std::env::var(name).ok().filter(|value| !value.is_empty()))
-        .unwrap_or_else(|| "C".to_string())
-}
-
-#[cfg(target_os = "linux")]
-fn expr_regex_input_is_valid(bytes: &[u8]) -> bool {
-    let locale = expr_ctype_locale_name();
-    let locale_name = locale.split('@').next().unwrap_or_default();
-    if matches!(locale_name, "C" | "POSIX") {
-        return true;
-    }
-
-    let Some(valid) = bytes_are_valid_in_locale(bytes) else {
-        return true;
-    };
-    valid
-}
-
-#[cfg(not(target_os = "linux"))]
-fn expr_regex_input_is_valid(bytes: &[u8]) -> bool {
-    is_single_byte_locale() || std::str::from_utf8(bytes).is_ok()
-}
-
-#[cfg(target_os = "linux")]
-fn expr_locale_environment_is_supported() -> bool {
-    let locale = unsafe { libc::newlocale(libc::LC_ALL_MASK, c"".as_ptr(), std::ptr::null_mut()) };
-    if locale.is_null() {
-        return false;
-    }
-    unsafe {
-        libc::freelocale(locale);
-    }
-    true
-}
-
-#[cfg(target_os = "linux")]
 fn logical_char_ranges_in_locale(bytes: &[u8]) -> Option<Vec<(usize, usize)>> {
     // Match GNU's setlocale(LC_ALL, "") without changing the process locale.
     let locale = unsafe { libc::newlocale(libc::LC_ALL_MASK, c"".as_ptr(), std::ptr::null_mut()) };
@@ -916,46 +797,6 @@ fn logical_char_ranges_in_locale(bytes: &[u8]) -> Option<Vec<(usize, usize)>> {
         libc::freelocale(locale);
     }
     Some(ranges)
-}
-
-#[cfg(target_os = "linux")]
-fn bytes_are_valid_in_locale(bytes: &[u8]) -> Option<bool> {
-    let locale = unsafe { libc::newlocale(libc::LC_ALL_MASK, c"".as_ptr(), std::ptr::null_mut()) };
-    if locale.is_null() {
-        return None;
-    }
-
-    let previous = unsafe { libc::uselocale(locale) };
-    if previous.is_null() {
-        unsafe {
-            libc::freelocale(locale);
-        }
-        return None;
-    }
-
-    let mut state: libc::mbstate_t = unsafe { std::mem::zeroed() };
-    let mut start = 0;
-    let mut valid = true;
-    while start < bytes.len() {
-        let length = unsafe {
-            mbrlen(
-                bytes[start..].as_ptr().cast::<libc::c_char>(),
-                bytes.len() - start,
-                &mut state,
-            )
-        };
-        if matches!(length, usize::MAX) || length == usize::MAX - 1 {
-            valid = false;
-            break;
-        }
-        start += if length == 0 { 1 } else { length };
-    }
-
-    unsafe {
-        libc::uselocale(previous);
-        libc::freelocale(locale);
-    }
-    Some(valid)
 }
 
 #[cfg(target_os = "linux")]
@@ -1023,272 +864,13 @@ fn parse_integer_strict_bytes(bytes: &[u8]) -> Option<BigInt> {
     Some(if negative { -num } else { num })
 }
 
-fn normalize_bre_bytes(pattern: &[u8]) -> ExprResult<Vec<u8>> {
-    let mut i = 0;
-    let mut depth = 0usize;
-    let mut out = Vec::with_capacity(pattern.len());
-    let mut last_can_repeat = false;
-    let mut at_bre_branch_start = true;
-
-    while i < pattern.len() {
-        if pattern[i] == b'\\' {
-            if i + 1 >= pattern.len() {
-                out.push(b'\\');
-                break;
-            }
-            let next = pattern[i + 1];
-            match next {
-                b'(' => {
-                    depth += 1;
-                    out.extend_from_slice(b"\\(");
-                    last_can_repeat = false;
-                    at_bre_branch_start = true;
-                    i += 2;
-                    continue;
-                }
-                b')' => {
-                    if depth == 0 {
-                        return Err(ExprError::RegexError("Unmatched ) or \\)".to_string()));
-                    }
-                    depth -= 1;
-                    out.extend_from_slice(b"\\)");
-                    last_can_repeat = true;
-                    at_bre_branch_start = false;
-                    i += 2;
-                    continue;
-                }
-                b'{' => {
-                    let (content, next_index) = read_bre_brace_bytes(pattern, i + 2)?;
-                    if !last_can_repeat {
-                        out.push(b'{');
-                        out.extend_from_slice(&content);
-                        out.push(b'}');
-                        last_can_repeat = true;
-                    } else {
-                        let normalized = normalize_brace_content_bytes(&content)?;
-                        out.extend_from_slice(b"\\{");
-                        out.extend_from_slice(&normalized);
-                        out.extend_from_slice(b"\\}");
-                        last_can_repeat = true;
-                    }
-                    at_bre_branch_start = false;
-                    i = next_index;
-                    continue;
-                }
-                b'|' => {
-                    out.extend_from_slice(b"\\|");
-                    last_can_repeat = false;
-                    at_bre_branch_start = true;
-                    i += 2;
-                    continue;
-                }
-                _ => {
-                    out.push(b'\\');
-                    out.push(next);
-                    last_can_repeat = true;
-                    at_bre_branch_start = false;
-                    i += 2;
-                    continue;
-                }
-            }
-        }
-
-        match pattern[i] {
-            b'^' if at_bre_branch_start => {
-                out.push(pattern[i]);
-                last_can_repeat = false;
-            }
-            b'$' if is_bre_anchor_end(pattern, i) => {
-                out.push(pattern[i]);
-                last_can_repeat = false;
-            }
-            b'^' | b'$' => {
-                out.push(b'\\');
-                out.push(pattern[i]);
-                last_can_repeat = true;
-            }
-            b'*' => {
-                if last_can_repeat {
-                    out.push(b'*');
-                } else {
-                    out.extend_from_slice(b"\\*");
-                    last_can_repeat = true;
-                }
-            }
-            b'[' => {
-                let (class, next_index) = read_char_class_bytes(pattern, i);
-                out.extend_from_slice(&class);
-                last_can_repeat = true;
-                i = next_index;
-                continue;
-            }
-            _ => {
-                out.push(pattern[i]);
-                last_can_repeat = true;
-            }
-        }
-        at_bre_branch_start = false;
-        i += 1;
-    }
-
-    if depth > 0 {
-        return Err(ExprError::RegexError("Unmatched ( or \\(".to_string()));
-    }
-    Ok(out)
-}
-
-fn is_bre_anchor_end(pattern: &[u8], index: usize) -> bool {
-    index + 1 == pattern.len()
-        || matches!(
-            pattern.get(index + 1..index + 3),
-            Some([b'\\', b')' | b'|'])
-        )
-}
-
-fn expr_regex_error(error: onig::Error) -> ExprError {
-    let message = match error.code() {
-        onig_sys::ONIGERR_CHAR_CLASS_VALUE_AT_END_OF_RANGE
-        | onig_sys::ONIGERR_CHAR_CLASS_VALUE_AT_START_OF_RANGE
-        | onig_sys::ONIGERR_UNMATCHED_RANGE_SPECIFIER_IN_CHAR_CLASS => "Invalid range end",
-        onig_sys::ONIGERR_END_PATTERN_AT_LEFT_BRACKET
-        | onig_sys::ONIGERR_EMPTY_CHAR_CLASS
-        | onig_sys::ONIGERR_PREMATURE_END_OF_CHAR_CLASS => "Unmatched [, [^, [:, [., or [=",
-        onig_sys::ONIGERR_TOO_BIG_NUMBER_FOR_REPEAT_RANGE => "Regular expression too big",
-        _ => "Invalid regular expression",
+fn expr_regex_error(error: GnuRegexError) -> ExprError {
+    let message = match error {
+        GnuRegexError::Compile(message) => String::from_utf8_lossy(&message).into_owned(),
+        GnuRegexError::Search => "error in regular expression matcher".to_string(),
+        GnuRegexError::RecordTooLarge => "regular expression too large".to_string(),
     };
-    ExprError::RegexError(message.to_string())
-}
-
-fn read_bre_brace_bytes(pattern: &[u8], start: usize) -> ExprResult<(Vec<u8>, usize)> {
-    let mut i = start;
-    while i + 1 < pattern.len() {
-        if pattern[i] == b'\\' && pattern[i + 1] == b'}' {
-            let content = pattern[start..i].to_vec();
-            if !is_valid_brace_content_bytes(&content) {
-                return Err(ExprError::RegexError(
-                    "Invalid content of \\{\\}".to_string(),
-                ));
-            }
-            return Ok((content, i + 2));
-        }
-        i += 1;
-    }
-    Err(ExprError::RegexError("Unmatched \\{".to_string()))
-}
-
-fn read_char_class_bytes(pattern: &[u8], start: usize) -> (Vec<u8>, usize) {
-    let mut i = start + 1;
-    let mut escaped = false;
-    while i < pattern.len() {
-        let ch = pattern[i];
-        if escaped {
-            escaped = false;
-        } else if ch == b'\\' {
-            escaped = true;
-        } else if ch == b']' {
-            return (pattern[start..i + 1].to_vec(), i + 1);
-        }
-        i += 1;
-    }
-    (pattern[start..].to_vec(), pattern.len())
-}
-
-fn is_valid_brace_content_bytes(content: &[u8]) -> bool {
-    let mut parts = content.split(|b| *b == b',');
-    let first = parts.next();
-    let second = parts.next();
-    if parts.next().is_some() {
-        return false;
-    }
-    match (first, second) {
-        (Some(a), Some(b)) => {
-            if !a.is_empty() && !a.iter().all(|c| c.is_ascii_digit()) {
-                return false;
-            }
-            if !b.is_empty() && !b.iter().all(|c| c.is_ascii_digit()) {
-                return false;
-            }
-            let low = parse_bound_bytes(a);
-            let high = parse_bound_bytes(b);
-            if low.is_none() || high.is_none() {
-                return false;
-            }
-            if !a.is_empty() && !b.is_empty() && high.unwrap() < low.unwrap() {
-                return false;
-            }
-            true
-        }
-        (Some(a), None) => {
-            if a.is_empty() {
-                return false;
-            }
-            if !a.iter().all(|c| c.is_ascii_digit()) {
-                return false;
-            }
-            parse_bound_bytes(a).is_some()
-        }
-        (None, None) => false,
-        (None, Some(_)) => false,
-    }
-}
-
-fn normalize_brace_content_bytes(content: &[u8]) -> ExprResult<Vec<u8>> {
-    if brace_content_exceeds_gnu_limit(content) {
-        return Err(ExprError::RegexError(
-            "Regular expression too big".to_string(),
-        ));
-    }
-
-    let mut parts = content.split(|b| *b == b',');
-    let first = parts.next().unwrap_or(&[]);
-    let second = parts.next();
-    if parts.next().is_some() {
-        return Err(ExprError::RegexError(
-            "Invalid content of \\{\\}".to_string(),
-        ));
-    }
-    match second {
-        None => Ok(first.to_vec()),
-        Some(b) => {
-            if first.is_empty() {
-                let mut out = Vec::with_capacity(2 + b.len());
-                out.extend_from_slice(b"0,");
-                out.extend_from_slice(b);
-                Ok(out)
-            } else {
-                let mut out = Vec::with_capacity(first.len() + 1 + b.len());
-                out.extend_from_slice(first);
-                out.push(b',');
-                out.extend_from_slice(b);
-                Ok(out)
-            }
-        }
-    }
-}
-
-fn parse_bound_bytes(s: &[u8]) -> Option<BigInt> {
-    if s.is_empty() {
-        return Some(BigInt::from(0));
-    }
-    if !s.iter().all(u8::is_ascii_digit) {
-        return None;
-    }
-    BigInt::parse_bytes(s, 10)
-}
-
-fn brace_content_exceeds_gnu_limit(content: &[u8]) -> bool {
-    const GNU_RE_DUP_MAX: u32 = 0x7fff;
-    let mut parts = content.split(|b| *b == b',');
-    let first = parts.next().unwrap_or_default();
-    let second = parts.next();
-    let limit = BigInt::from(GNU_RE_DUP_MAX);
-
-    [Some(first), second]
-        .into_iter()
-        .flatten()
-        .filter(|part| !part.is_empty())
-        .filter_map(parse_bound_bytes)
-        .any(|bound| bound > limit)
+    ExprError::RegexError(message)
 }
 
 #[cfg(test)]
@@ -1413,5 +995,18 @@ mod test {
                 "3"
             )),
         );
+    }
+
+    #[test]
+    fn match_does_not_treat_an_internal_newline_as_end_of_input() {
+        let result = op(
+            SyntaxTreeBinOp::String(SyntaxTreeStringOp::Match),
+            "a\nb",
+            "a$",
+        )
+        .eval()
+        .unwrap();
+
+        assert_eq!(result.eval_as_bytes(), b"0");
     }
 }

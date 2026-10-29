@@ -8,7 +8,7 @@ fn eliding_an_externally_removed_empty_split_ignores_enoent() {
 mkfifo input
 "$1" -q -z input 1 >stdout 2>stderr &
 pid=$!
-exec 3>input
+exec 3<>input
 
 attempts=0
 while test ! -e xx00 && test "$attempts" -lt 500; do

@@ -220,7 +220,7 @@ fn handle_parse_error(progname: &str, argv: &[OsString], err: clap::Error) -> CT
     match err.kind() {
         clap::error::ErrorKind::DisplayHelp => {
             print!("{err}");
-            return Err(ExitCode(255).into());
+            return Ok(());
         }
         clap::error::ErrorKind::DisplayVersion => {
             print!("{err}");
@@ -1135,6 +1135,18 @@ mod tests {
                 OsString::from("-s"),
             ]
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_help_parse_error_exits_successfully() {
+        let argv = [OsString::from("hostname"), OsString::from("--help")];
+        let err = super::hostname_app("hostname")
+            .try_get_matches_from(argv.iter().cloned())
+            .expect_err("--help should stop argument parsing");
+
+        assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
+        assert!(super::handle_parse_error("hostname", &argv, err).is_ok());
     }
 
     #[test]

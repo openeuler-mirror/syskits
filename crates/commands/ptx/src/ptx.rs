@@ -35,7 +35,7 @@ use ctcore::ct_error::{
 use ctcore::ct_gnu_regex::{GnuRegex, GnuRegexCompileOptions, GnuRegexError};
 use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ffi::{CStr, CString, OsStr, OsString};
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
@@ -1162,7 +1162,9 @@ impl Default for WordFilter {
 struct WordRef {
     /// GNU ptx按原始无符号字节排序，不能使用非UTF-8内部映射代替。
     raw_word: Vec<u8>,
-    /// 单词在完整文件文本中的起始位置；GNU在关键字相同时按key.start排序。
+    /// GNU在关键字相同时按各文件缓冲区中的key.start地址排序。
+    source_position: usize,
+    /// 单词在完整文件文本中的起始位置。
     global_position: usize,
     /// 单词本身
     word: String,
@@ -1933,6 +1935,105 @@ fn ptx_read_input(input_files: &[OsString], config: &PtxConfig) -> CTResult<File
     Ok(file_map)
 }
 
+#[repr(C)]
+struct GnuOccursAllocationLayout {
+    key_start: *mut ctcore::libc::c_char,
+    key_size: isize,
+    left: isize,
+    right: isize,
+    reference: i64,
+    file_index: ctcore::libc::c_int,
+}
+
+#[derive(Default)]
+struct GnuAllocationModel {
+    next_address: usize,
+    free_blocks: BTreeMap<usize, Vec<usize>>,
+}
+
+impl GnuAllocationModel {
+    fn new() -> Self {
+        let mut model = Self::default();
+        // Before GNU ptx enters its input loop, glibc has one reusable block
+        // in the smallest allocation class. Model that startup state without
+        // making the result depend on this process's real allocator history.
+        let startup_size = Self::allocation_size(1);
+        model.next_address = startup_size;
+        model.free_blocks.insert(startup_size, vec![0]);
+        model
+    }
+
+    fn allocation_size(request: usize) -> usize {
+        let alignment = 2 * std::mem::size_of::<usize>();
+        let minimum = 4 * std::mem::size_of::<usize>();
+        request
+            .saturating_add(std::mem::size_of::<usize>())
+            .saturating_add(alignment - 1)
+            .checked_div(alignment)
+            .unwrap_or(usize::MAX)
+            .saturating_mul(alignment)
+            .max(minimum)
+    }
+
+    fn allocate(&mut self, request: usize) -> (usize, usize) {
+        let size = Self::allocation_size(request);
+        if let Some(address) = self.free_blocks.get_mut(&size).and_then(Vec::pop) {
+            return (address, size);
+        }
+        let address = self.next_address;
+        self.next_address = self.next_address.saturating_add(size);
+        (address, size)
+    }
+
+    fn grow(&mut self, block: (usize, usize), request: usize) -> (usize, usize) {
+        let new_size = Self::allocation_size(request);
+        if block.0.saturating_add(block.1) == self.next_address {
+            self.next_address = block.0.saturating_add(new_size);
+            return (block.0, new_size);
+        }
+
+        let grown = self.allocate(request);
+        self.free_blocks.entry(block.1).or_default().push(block.0);
+        grown
+    }
+}
+
+/// Reproduce the allocation addresses which GNU `compare_occurs` uses to
+/// break ties between identical keywords. GNU reads every input into a
+/// separate `malloc` buffer and grows its shared `OCCURS` table between file
+/// reads, so neither the file index nor an offset local to a file is a valid
+/// substitute for `key.start`.
+fn ptx_gnu_source_bases(files: Vec<(usize, usize)>) -> Vec<usize> {
+    let mut model = GnuAllocationModel::new();
+    let mut bases = Vec::with_capacity(files.len());
+    let mut occurs = None;
+    let mut occurs_capacity = 0usize;
+    let mut occurs_used = 0usize;
+
+    for (file_size, word_count) in files {
+        bases.push(model.allocate(file_size.saturating_add(1)).0);
+        for _ in 0..word_count {
+            if occurs_used == occurs_capacity {
+                occurs_capacity = if occurs_capacity == 0 {
+                    (128 / std::mem::size_of::<GnuOccursAllocationLayout>()).max(1)
+                } else {
+                    occurs_capacity
+                        .saturating_add(occurs_capacity / 2)
+                        .saturating_add(1)
+                };
+                let request = occurs_capacity
+                    .saturating_mul(std::mem::size_of::<GnuOccursAllocationLayout>());
+                occurs = Some(match occurs {
+                    Some(block) => model.grow(block, request),
+                    None => model.allocate(request),
+                });
+            }
+            occurs_used += 1;
+        }
+    }
+    bases
+}
+
 /// 从文件内容中提取单词并创建单词引用集合
 ///
 /// # 参数
@@ -1949,9 +2050,10 @@ fn ptx_create_word_set(
 ) -> BTreeSet<WordRef> {
     let reg = compile_regex_case_lossy(&filter.word_regex, config.is_ignore_case);
     let ref_reg = compile_regex_case_lossy(&config.context_regex, config.is_ignore_case);
-    let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
+    let mut words_by_file = Vec::with_capacity(file_map.len());
 
     for (file_idx, content) in file_map.iter().enumerate() {
+        let mut file_words = Vec::new();
         let mut reference_line_start = 0usize;
         let mut reference_scan = 0usize;
         let mut reference_length = 0usize;
@@ -2097,8 +2199,9 @@ fn ptx_create_word_set(
                 let global_char_position_end = content.byte_to_char[global_end];
                 let context_char_start = content.byte_to_char[output_context_start];
                 let context_char_end = content.byte_to_char[context_end];
-                word_set.insert(WordRef {
+                file_words.push(WordRef {
                     raw_word,
+                    source_position: 0,
                     word,
                     file_index: file_idx,
                     global_line_nr: content.offset + local_line_nr,
@@ -2132,6 +2235,22 @@ fn ptx_create_word_set(
                 break;
             }
             context_start = context_end_raw;
+        }
+        words_by_file.push(file_words);
+    }
+
+    let source_bases = ptx_gnu_source_bases(
+        file_map
+            .iter()
+            .zip(&words_by_file)
+            .map(|(content, words)| (content.raw_text.len(), words.len()))
+            .collect(),
+    );
+    let mut word_set = BTreeSet::new();
+    for (file_index, file_words) in words_by_file.into_iter().enumerate() {
+        for mut word in file_words {
+            word.source_position = source_bases[file_index] + word.global_position;
+            word_set.insert(word);
         }
     }
     word_set
@@ -4818,6 +4937,7 @@ mod tests {
     ) -> WordRef {
         WordRef {
             raw_word: word.as_bytes().to_vec(),
+            source_position: position,
             word: word.to_string(),
             global_line_nr: local_line_nr,
             local_line_nr,
@@ -5126,12 +5246,12 @@ mod tests {
         #[test]
         fn test_equal_words_are_ordered_by_source_position() {
             let later_source = WordRef {
-                global_position: 2,
+                source_position: 2,
                 global_line_nr: 1,
                 ..test_word_ref("delta", 1, 0, 5)
             };
             let earlier_source = WordRef {
-                global_position: 1,
+                source_position: 1,
                 global_line_nr: 2,
                 ..test_word_ref("delta", 2, 0, 5)
             };
@@ -5286,17 +5406,21 @@ mod tests {
         fn test_equal_keywords_across_files_follow_source_position() {
             let mut input1 = NamedTempFile::new().unwrap();
             let mut input2 = NamedTempFile::new().unwrap();
+            let mut input3 = NamedTempFile::new().unwrap();
             input1
                 .write_all(b"alpha beta gamma\nbeta delta alpha\nref1 epsilon alpha\n")
                 .unwrap();
             input2.write_all(b"delta extra omega\n").unwrap();
+            input3.write_all(b"ref2 omega delta\n").unwrap();
             input1.flush().unwrap();
             input2.flush().unwrap();
+            input3.flush().unwrap();
 
             let args = vec![
                 OsString::from("ptx"),
                 input1.path().as_os_str().to_os_string(),
                 input2.path().as_os_str().to_os_string(),
+                input3.path().as_os_str().to_os_string(),
             ];
             let mut output = Vec::new();
             ptx_main_with_writer(args.into_iter(), &mut output).unwrap();
@@ -5309,11 +5433,14 @@ mod tests {
                 "   alpha            alpha beta gamma   beta delta alpha ref1 epsilon\n",
                 "                                       delta extra omega\n",
                 "               alpha beta gamma beta   delta alpha ref1 epsilon alpha\n",
+                "                          ref2 omega   delta\n",
                 "         gamma beta delta alpha ref1   epsilon alpha             alpha beta\n",
                 "                               delta   extra omega\n",
                 "   epsilon alpha          alpha beta   gamma beta delta alpha ref1\n",
                 "                         delta extra   omega\n",
+                "                                ref2   omega delta\n",
                 "         beta gamma beta delta alpha   ref1 epsilon alpha             alpha\n",
+                "                                       ref2 omega delta\n",
             );
             assert_eq!(String::from_utf8(output).unwrap(), expected);
         }

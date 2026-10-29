@@ -3710,10 +3710,12 @@ pub fn list(locs: Vec<&Path>, config: &LsConfig) -> CTResult<(Vec<PathData>, Vec
         }
         printed_directory = true;
         let mut listed_ancestors = HashSet::new();
-        listed_ancestors.insert(CtFileInformation::from_path(
-            &path_data.p_buf,
-            path_data.is_must_dereference,
-        )?);
+        if config.is_recursive {
+            listed_ancestors.insert(CtFileInformation::from_path(
+                &path_data.p_buf,
+                path_data.is_must_dereference,
+            )?);
+        }
         enter_directory(
             path_data,
             read_dir,
@@ -5875,7 +5877,18 @@ struct ColorSignalGuard {
 #[cfg(target_os = "linux")]
 impl ColorSignalGuard {
     fn install(restore_sequence: Vec<u8>) -> Option<Self> {
-        if unsafe { ctcore::libc::tcgetpgrp(ctcore::libc::STDOUT_FILENO) } < 0 {
+        let foreground_process_group =
+            unsafe { ctcore::libc::tcgetpgrp(ctcore::libc::STDOUT_FILENO) };
+
+        // GNU stdio initializes stdout metadata before its first colored
+        // write.  Do the same before deciding whether signal restoration is
+        // needed, so redirected output has the same syscall behavior.
+        let mut stdout_stat = std::mem::MaybeUninit::<ctcore::libc::stat>::uninit();
+        unsafe {
+            ctcore::libc::fstat(ctcore::libc::STDOUT_FILENO, stdout_stat.as_mut_ptr());
+        }
+
+        if foreground_process_group < 0 {
             return None;
         }
 

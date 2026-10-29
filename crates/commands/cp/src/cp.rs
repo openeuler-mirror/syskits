@@ -2595,15 +2595,28 @@ fn cp_context_for(src_path: &Path, dest_path: &Path) -> String {
 
 /// Implements a simple backup copy for the destination file.
 /// TODO: for the backup, should this function be replaced by `copy_file(...)`?
-fn cp_backup_dest(dest_path: &Path, backup_path: &Path, move_dest: bool) -> CopyResult<PathBuf> {
+fn cp_backup_dest(
+    dest_path: &Path,
+    backup_path: &Path,
+    move_dest: bool,
+    preserve_timestamps: bool,
+) -> CopyResult<PathBuf> {
     if move_dest || dest_path.is_symlink() {
         fs::rename(dest_path, backup_path)?;
     } else {
-        let metadata = fs::metadata(dest_path)?;
-        let atime = FileTime::from_last_access_time(&metadata);
-        let mtime = FileTime::from_last_modification_time(&metadata);
+        let timestamps = if preserve_timestamps {
+            let metadata = fs::metadata(dest_path)?;
+            Some((
+                FileTime::from_last_access_time(&metadata),
+                FileTime::from_last_modification_time(&metadata),
+            ))
+        } else {
+            None
+        };
         fs::copy(dest_path, backup_path)?;
-        filetime::set_file_times(backup_path, atime, mtime)?;
+        if let Some((atime, mtime)) = timestamps {
+            filetime::set_file_times(backup_path, atime, mtime)?;
+        }
     }
     Ok(backup_path.into())
 }
@@ -2748,7 +2761,12 @@ fn cp_handle_existing_dest(
             .into());
         } else {
             let move_dest = sour_path != dest_path || dest_path.is_symlink();
-            cp_backup_dest(dest_path, &backup_path, sour_path != dest_path)?;
+            cp_backup_dest(
+                dest_path,
+                &backup_path,
+                sour_path != dest_path,
+                matches!(cp_opts.attributes.timestamps, CpPreserve::Yes { .. }),
+            )?;
             if move_dest {
                 return Ok(Some(backup_path));
             }
@@ -2923,7 +2941,7 @@ fn cp_handle_copy_mode(
                     &cp_opts.backup_suffix,
                 );
                 if let Some(backup_path) = backup_path {
-                    cp_backup_dest(dest_path, &backup_path, true)?;
+                    cp_backup_dest(dest_path, &backup_path, true, false)?;
                 } else if matches!(
                     cp_opts.overwrite,
                     CpOverwriteMode::Clobber(CpClobberMode::Force)

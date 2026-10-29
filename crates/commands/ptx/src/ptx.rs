@@ -1162,6 +1162,8 @@ impl Default for WordFilter {
 struct WordRef {
     /// GNU ptx按原始无符号字节排序，不能使用非UTF-8内部映射代替。
     raw_word: Vec<u8>,
+    /// 单词在完整文件文本中的起始位置；GNU在关键字相同时按key.start排序。
+    global_position: usize,
     /// 单词本身
     word: String,
     /// 在所有文件中的行号
@@ -1172,8 +1174,6 @@ struct WordRef {
     position: usize,
     /// 单词在行中的结束位置
     position_end: usize,
-    /// 单词在完整文件文本中的起始位置
-    global_position: usize,
     /// 单词在完整文件文本中的结束位置
     global_position_end: usize,
     /// 当前上下文在完整文件文本中的起始位置
@@ -5122,6 +5122,22 @@ mod tests {
 
             assert!(word1 < word2);
         }
+
+        #[test]
+        fn test_equal_words_are_ordered_by_source_position() {
+            let later_source = WordRef {
+                global_position: 2,
+                global_line_nr: 1,
+                ..test_word_ref("delta", 1, 0, 5)
+            };
+            let earlier_source = WordRef {
+                global_position: 1,
+                global_line_nr: 2,
+                ..test_word_ref("delta", 2, 0, 5)
+            };
+
+            assert!(earlier_source < later_source);
+        }
     }
 
     mod formatting_tests {
@@ -5264,6 +5280,42 @@ mod tests {
 
             let result = ptx_exec(&mut settings);
             assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_equal_keywords_across_files_follow_source_position() {
+            let mut input1 = NamedTempFile::new().unwrap();
+            let mut input2 = NamedTempFile::new().unwrap();
+            input1
+                .write_all(b"alpha beta gamma\nbeta delta alpha\nref1 epsilon alpha\n")
+                .unwrap();
+            input2.write_all(b"delta extra omega\n").unwrap();
+            input1.flush().unwrap();
+            input2.flush().unwrap();
+
+            let args = vec![
+                OsString::from("ptx"),
+                input1.path().as_os_str().to_os_string(),
+                input2.path().as_os_str().to_os_string(),
+            ];
+            let mut output = Vec::new();
+            ptx_main_with_writer(args.into_iter(), &mut output).unwrap();
+
+            let expected = concat!(
+                "   ref1 epsilon alpha                  alpha beta gamma beta delta alpha\n",
+                "         alpha beta gamma beta delta   alpha ref1 epsilon alpha\n",
+                "       beta delta alpha ref1 epsilon   alpha                    /beta gamma\n",
+                "   epsilon alpha               alpha   beta gamma beta delta alpha ref1\n",
+                "   alpha            alpha beta gamma   beta delta alpha ref1 epsilon\n",
+                "                                       delta extra omega\n",
+                "               alpha beta gamma beta   delta alpha ref1 epsilon alpha\n",
+                "         gamma beta delta alpha ref1   epsilon alpha             alpha beta\n",
+                "                               delta   extra omega\n",
+                "   epsilon alpha          alpha beta   gamma beta delta alpha ref1\n",
+                "                         delta extra   omega\n",
+                "         beta gamma beta delta alpha   ref1 epsilon alpha             alpha\n",
+            );
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
         }
     }
 

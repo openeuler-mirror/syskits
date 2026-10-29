@@ -21,7 +21,7 @@ use selinux::{OpaqueSecurityContext, SecurityContext};
 use rust_i18n::t;
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
-use std::os::raw::c_int;
+use std::os::raw::{c_int, c_short};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 use sys_locale::get_locale;
@@ -557,10 +557,16 @@ fn chcon_process_file(
         Error::from_io("File name validation", io::ErrorKind::InvalidInput.into())
     })?;
 
-    let fts_path_info = entry_ref.access_path().ok_or_else(|| {
+    let operation_path = entry_ref.access_path().ok_or_else(|| {
         let err = io::ErrorKind::InvalidInput.into();
         Error::from_io1("File name validation", &file_path_name, err)
     })?;
+    let diagnostic_path = chcon_diagnostic_access_path(
+        chcon_options.recursive_mode,
+        entry_ref.level(),
+        &file_path_name,
+        operation_path,
+    );
 
     // 准备错误处理。
     let err = |s, k: io::ErrorKind| Error::from_io1(s, &file_path_name, k.into());
@@ -652,7 +658,12 @@ fn chcon_process_file(
             );
         }
 
-        result = chcon_change_file_context(chcon_options, security_context, fts_path_info);
+        result = chcon_change_file_context(
+            chcon_options,
+            security_context,
+            operation_path,
+            diagnostic_path,
+        );
     }
 
     // 如果是非递归模式，设置 FTS_SKIP 以跳过剩余的文件。
@@ -660,6 +671,31 @@ fn chcon_process_file(
         let _ignored = fts_info.set(fts_sys::FTS_SKIP);
     }
     result
+}
+
+fn chcon_diagnostic_access_path<'a>(
+    recursive_mode: ChconRecursiveMode,
+    level: c_short,
+    full_path: &'a Path,
+    operation_path: &'a Path,
+) -> &'a Path {
+    // GNU xfts uses its FTS_CWDFD extension, so physical traversal accesses
+    // descendants by fts_name without changing the process working directory.
+    // libc fts lacks FTS_CWDFD; retain FTS_NOCHDIR for operation safety while
+    // reproducing the fts_accpath spelling GNU uses in diagnostics.
+    if level != fts_sys::FTS_ROOTLEVEL as c_short
+        && !matches!(
+            recursive_mode,
+            ChconRecursiveMode::RecursiveAndFollowAllDirSymLinks
+        )
+    {
+        full_path
+            .file_name()
+            .map(Path::new)
+            .unwrap_or(operation_path)
+    } else {
+        operation_path
+    }
 }
 
 fn chcon_cannot_access_error(path: &Path, source: &io::Error) -> Error {
@@ -703,13 +739,15 @@ fn chcon_get_security_context_error(path: &Path, source: selinux::errors::Error)
  *
  * @param chcon_options 提供有关如何更改安全上下文的选项，例如是否影响符号链接的目标。
  * @param security_context 指定要应用于文件的新安全上下文。
- * @param chcon_path 指定要更改其安全上下文的文件路径。
+ * @param operation_path 指定实际要更改其安全上下文的文件路径。
+ * @param diagnostic_path 指定诊断信息中显示的文件路径。
  * @return `Result<()>`，成功时返回 `Ok(())`，失败时返回包含错误信息的 `Err`。
  */
 fn chcon_change_file_context(
     chcon_options: &ChconOptions,
     security_context: &ChconSELinuxSecurityContext,
-    chcon_path: &Path,
+    operation_path: &Path,
+    diagnostic_path: &Path,
 ) -> Result<()> {
     // 根据 chcon_options.mode 的值来决定如何处理安全上下文的更改。
     match &chcon_options.mode {
@@ -721,19 +759,19 @@ fn chcon_change_file_context(
         } => {
             // 尝试获取文件当前的安全上下文。
             let file_context = match SecurityContext::of_path(
-                chcon_path,
+                operation_path,
                 chcon_options.affect_symlink_referent,
                 false,
             ) {
                 Ok(Some(context)) => context,
-                Ok(None) => return Err(chcon_unlabeled_file_error(chcon_path)),
-                Err(r) => return Err(chcon_get_security_context_error(chcon_path, r)),
+                Ok(None) => return Err(chcon_unlabeled_file_error(diagnostic_path)),
+                Err(r) => return Err(chcon_get_security_context_error(diagnostic_path, r)),
             };
 
             // 将文件上下文转换为C字符串，用于后续处理。
             let c_file_context = match file_context.to_c_string() {
                 Ok(Some(context)) => context,
-                Ok(None) => return Err(chcon_unlabeled_file_error(chcon_path)),
+                Ok(None) => return Err(chcon_unlabeled_file_error(diagnostic_path)),
                 Err(r) => return Err(Error::from_selinux("Getting security context", r)),
             };
 
@@ -741,7 +779,7 @@ fn chcon_change_file_context(
             let se_context =
                 OpaqueSecurityContext::from_c_str(c_file_context.as_ref()).map_err(|_r| {
                     let err = io::ErrorKind::InvalidInput.into();
-                    Error::from_io1("Creating security context", chcon_path, err)
+                    Error::from_io1("Creating security context", diagnostic_path, err)
                 })?;
 
             // 定义一个类型为函数指针的枚举，用于设置安全上下文的不同组件。
@@ -760,7 +798,7 @@ fn chcon_change_file_context(
                 if let Some(new_value) = new_value {
                     let c_new_value = chcon_os_str_to_c_string(new_value).map_err(|_r| {
                         let err = io::ErrorKind::InvalidInput.into();
-                        Error::from_io1("Creating security context", chcon_path, err)
+                        Error::from_io1("Creating security context", diagnostic_path, err)
                     })?;
 
                     set_value_proc(&se_context, &c_new_value)
@@ -779,8 +817,8 @@ fn chcon_change_file_context(
             } else {
                 // 应用新的安全上下文到文件。
                 SecurityContext::from_c_str(&context_string, false)
-                    .set_for_path(chcon_path, chcon_options.affect_symlink_referent, false)
-                    .map_err(|r| chcon_change_context_error(chcon_path, &context_string, r))
+                    .set_for_path(operation_path, chcon_options.affect_symlink_referent, false)
+                    .map_err(|r| chcon_change_context_error(diagnostic_path, &context_string, r))
             }
         }
 
@@ -788,12 +826,16 @@ fn chcon_change_file_context(
             // 在这两种模式下，直接使用 `security_context` 设置文件的安全上下文。
             if let Some(c_context) = security_context.to_c_string()? {
                 SecurityContext::from_c_str(c_context.as_ref(), false)
-                    .set_for_path(chcon_path, chcon_options.affect_symlink_referent, false)
-                    .map_err(|r| chcon_change_context_error(chcon_path, c_context.as_ref(), r))
+                    .set_for_path(operation_path, chcon_options.affect_symlink_referent, false)
+                    .map_err(|r| chcon_change_context_error(diagnostic_path, c_context.as_ref(), r))
             } else {
                 // 如果无法将安全上下文转换为C字符串，则报错。
                 let err = io::ErrorKind::InvalidInput.into();
-                Err(Error::from_io1("Setting security context", chcon_path, err))
+                Err(Error::from_io1(
+                    "Setting security context",
+                    diagnostic_path,
+                    err,
+                ))
             }
         }
     }

@@ -70,6 +70,7 @@ use crate::inputdecoder::{OdInputDecoder, OdMemoryDecoder};
 use crate::inputoffset::{OdInputOffset, OdRadix};
 use crate::multifilereader::{HasError, OdInputSource, OdMultifileReader};
 use crate::output_info::{OutputInfo, SpacedFormatterItemInfo};
+use crate::parse_formats::od_option_requires_separate_value;
 use crate::parse_formats::{ParsedFormatterItemInfo, od_option_scan_limit, od_parse_format_flags};
 use crate::parse_inputs::{CommandLineInputs, od_parse_inputs};
 use crate::parse_nrofbytes::od_parse_number_of_bytes;
@@ -294,7 +295,7 @@ impl OdSettings {
         let read_bytes = Self::parse_read_bytes(matches, args)?;
         let radix = Self::parse_radix(matches)?;
 
-        let strings_min_len = Self::parse_strings_min_len(matches)?;
+        let strings_min_len = Self::parse_strings_min_len(args)?;
         if strings_min_len.is_some() && Self::has_explicit_format(matches) {
             return Err(CtSimpleError::new(
                 1,
@@ -316,23 +317,20 @@ impl OdSettings {
         })
     }
 
-    fn parse_strings_min_len(matches: &ArgMatches) -> CTResult<Option<usize>> {
-        for option in [od_options::OD_STRINGS_SHORT, od_options::OD_STRINGS] {
-            if let Some(s) = matches.get_one::<String>(option) {
-                let value = od_parse_number_of_bytes(s).map_err(|_| {
-                    CtSimpleError::new(1, format!("invalid -S argument {}", s.quote()))
-                })?;
-                let min_len = usize::try_from(value).map_err(|_| {
-                    CtSimpleError::new(1, format!("invalid -S argument {}", s.quote()))
-                })?;
-                min_len.checked_add(1).ok_or_else(|| {
-                    CtSimpleError::new(1, format!("invalid -S argument {}", s.quote()))
-                })?;
-                return Ok(Some(min_len));
-            }
-        }
-
-        Ok(None)
+    fn parse_strings_min_len(args: &[String]) -> CTResult<Option<usize>> {
+        let Some((value_text, option_name)) = od_last_strings_option(args) else {
+            return Ok(None);
+        };
+        let invalid_argument = || {
+            CtSimpleError::new(
+                1,
+                format!("invalid {option_name} argument {}", value_text.quote()),
+            )
+        };
+        let value = od_parse_number_of_bytes(&value_text).map_err(|_| invalid_argument())?;
+        let min_len = usize::try_from(value).map_err(|_| invalid_argument())?;
+        min_len.checked_add(1).ok_or_else(invalid_argument)?;
+        Ok(Some(min_len))
     }
 
     fn has_explicit_format(matches: &ArgMatches) -> bool {
@@ -436,6 +434,52 @@ impl OdSettings {
             },
         }
     }
+}
+
+fn od_last_strings_option(args: &[String]) -> Option<(String, &'static str)> {
+    let option_limit = od_option_scan_limit(args, posixly_correct());
+    let mut selected = None;
+    let mut index = 1;
+
+    while index < option_limit {
+        let arg = &args[index];
+        if arg == "--" {
+            break;
+        }
+
+        if let Some(option) = arg.strip_prefix("--") {
+            let (name, value) = option
+                .split_once('=')
+                .map_or((option, None), |(name, value)| (name, Some(value)));
+            if !name.is_empty() && od_options::OD_STRINGS.starts_with(name) {
+                selected = Some((value.unwrap_or("3").to_string(), "--strings"));
+            }
+        } else if let Some(options) = arg.strip_prefix('-') {
+            for (byte_index, option) in options.char_indices() {
+                if option == 'S' {
+                    let attached = &options[byte_index + option.len_utf8()..];
+                    let value = if attached.is_empty() {
+                        args.get(index + 1)?.clone()
+                    } else {
+                        attached.to_string()
+                    };
+                    selected = Some((value, "-S"));
+                    break;
+                }
+                if matches!(option, 'A' | 'j' | 'N' | 't' | 'w') {
+                    break;
+                }
+            }
+        }
+
+        if od_option_requires_separate_value(arg) {
+            index += 2;
+        } else {
+            index += 1;
+        }
+    }
+
+    selected
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -1715,17 +1759,35 @@ mod tests {
                 ("1KiB", 1024),
             ] {
                 let arg = format!("-S{value}");
-                let matches = ct_app().try_get_matches_from(["od", &arg]).unwrap();
+                let args = ["od".to_string(), arg];
                 assert_eq!(
-                    OdSettings::parse_strings_min_len(&matches).unwrap(),
+                    OdSettings::parse_strings_min_len(&args).unwrap(),
                     Some(expected),
                     "{value}"
                 );
             }
 
             let value = format!("-S{}", usize::MAX);
-            let matches = ct_app().try_get_matches_from(["od", &value]).unwrap();
-            assert!(OdSettings::parse_strings_min_len(&matches).is_err());
+            let args = ["od".to_string(), value];
+            assert!(OdSettings::parse_strings_min_len(&args).is_err());
+        }
+
+        #[test]
+        fn test_strings_aliases_use_last_value_and_matching_diagnostic() {
+            for (raw_args, expected) in [
+                (["od", "-S1", "--strings=3"], 3),
+                (["od", "--strings=3", "-S1"], 1),
+            ] {
+                let args = raw_args.map(str::to_string);
+                assert_eq!(
+                    OdSettings::parse_strings_min_len(&args).unwrap(),
+                    Some(expected)
+                );
+            }
+
+            let args = ["od".to_string(), "--strings=".to_string()];
+            let error = OdSettings::parse_strings_min_len(&args).unwrap_err();
+            assert_eq!(error.to_string(), "invalid --strings argument ''");
         }
     }
 

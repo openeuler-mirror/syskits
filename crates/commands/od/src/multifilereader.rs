@@ -49,6 +49,8 @@ pub struct OdMultifileReader<'a> {
 
 enum OdCurrentInput {
     RegularFile(BufReader<File>),
+    #[cfg(unix)]
+    Stdin(UnbufferedStdin),
     Stream(Box<dyn Read>),
 }
 
@@ -56,6 +58,8 @@ impl Read for OdCurrentInput {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::RegularFile(file) => file.read(buf),
+            #[cfg(unix)]
+            Self::Stdin(stdin) => stdin.read(buf),
             Self::Stream(stream) => stream.read(buf),
         }
     }
@@ -131,7 +135,8 @@ impl OdMultifileReader<'_> {
                                 #[cfg(unix)]
                                 {
                                     // 使用无缓冲的标准输入，避免 over-read
-                                    Box::new(UnbufferedStdin) as Box<dyn io::Read>
+                                    self.curr_file = Some(OdCurrentInput::Stdin(UnbufferedStdin));
+                                    return;
                                 }
                                 #[cfg(not(unix))]
                                 {
@@ -169,34 +174,63 @@ impl OdMultifileReader<'_> {
 
     pub fn skip_regular_files(&mut self, mut bytes: u64) -> u64 {
         while bytes > 0 {
-            let Some(OdCurrentInput::RegularFile(file)) = self.curr_file.as_mut() else {
-                break;
-            };
-            let Ok(metadata) = file.get_ref().metadata() else {
-                break;
-            };
-            if !has_usable_regular_file_size(&metadata) {
-                break;
-            }
-            let Ok(position) = file.stream_position() else {
-                break;
-            };
-            let available = metadata.len().saturating_sub(position);
+            match self.curr_file.as_mut() {
+                Some(OdCurrentInput::RegularFile(file)) => {
+                    let Ok(metadata) = file.get_ref().metadata() else {
+                        break;
+                    };
+                    if has_usable_regular_file_size(&metadata) {
+                        let Ok(position) = file.stream_position() else {
+                            break;
+                        };
+                        let available = metadata.len().saturating_sub(position);
 
-            if available < bytes {
-                bytes -= available;
-                self.next_file();
-                continue;
-            }
+                        if available < bytes {
+                            bytes -= available;
+                            self.next_file();
+                            continue;
+                        }
 
-            if file.seek(SeekFrom::Start(position + bytes)).is_ok() {
-                bytes = 0;
+                        if file.seek(SeekFrom::Start(position + bytes)).is_ok() {
+                            bytes = 0;
+                        }
+                    } else if !metadata.is_file()
+                        && let Ok(offset) = i64::try_from(bytes)
+                        && file.seek(SeekFrom::Current(offset)).is_ok()
+                    {
+                        bytes = 0;
+                    }
+                }
+                #[cfg(unix)]
+                Some(OdCurrentInput::Stdin(_)) => {
+                    if od_seek_nonregular_stdin(bytes) {
+                        bytes = 0;
+                    }
+                }
+                _ => {}
             }
             break;
         }
 
         bytes
     }
+}
+
+#[cfg(unix)]
+fn od_seek_nonregular_stdin(bytes: u64) -> bool {
+    let mut metadata = std::mem::MaybeUninit::<libc::stat>::uninit();
+    if unsafe { libc::fstat(libc::STDIN_FILENO, metadata.as_mut_ptr()) } != 0 {
+        return false;
+    }
+    let metadata = unsafe { metadata.assume_init() };
+    if metadata.st_mode & libc::S_IFMT == libc::S_IFREG {
+        return false;
+    }
+    let Ok(offset) = libc::off_t::try_from(bytes) else {
+        return false;
+    };
+
+    unsafe { libc::lseek(libc::STDIN_FILENO, offset, libc::SEEK_CUR) >= 0 }
 }
 
 impl io::Read for OdMultifileReader<'_> {
@@ -263,6 +297,16 @@ mod tests {
 
         drop(reader);
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_skip_seekable_nonregular_file() {
+        let mut reader =
+            OdMultifileReader::new(vec![OdInputSource::FileName(OsStr::new("/dev/null"))]);
+
+        assert_eq!(reader.skip_regular_files(1), 0);
+        assert_eq!(reader.read(&mut [0]).unwrap(), 0);
     }
 
     #[test]

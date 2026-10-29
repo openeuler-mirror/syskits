@@ -2068,7 +2068,15 @@ pub fn ct_app() -> Command {
         .override_usage(usage_description)
         .about(application_info)
         .infer_long_args(true)
+        .disable_help_flag(true)
+        .disable_version_flag(true)
         .args(args)
+        .arg(Arg::new("help").long("help").action(ArgAction::Help))
+        .arg(
+            Arg::new("version")
+                .long("version")
+                .action(ArgAction::Version),
+        )
         .after_help(t!("numfmt.after_help"))
 }
 
@@ -10680,18 +10688,15 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_main_execution_other_version() {
-            // 测试用例1：有效输入
+        fn test_ct_main_rejects_version_short_option() {
             let args = [ctcore::ct_util_name(), "-V", "10000"];
-            let result = numfmt_main(args.iter().map(OsString::from));
+            let output = numfmt_main(args.iter().map(OsString::from)).unwrap_err();
 
-            if let Err(output) = result {
-                let code = output.code();
-                let message = output.usage();
-                println!("Error code: {code}");
-                println!("Error message: {message}");
-                assert_eq!(code, 0);
-            }
+            assert_eq!(output.code(), 1);
+            assert_eq!(
+                output.to_string(),
+                "invalid option -- 'V'\nTry 'numfmt --help' for more information."
+            );
         }
 
         #[test]
@@ -14483,8 +14488,8 @@ mod tests {
         //       --round <METHOD>     use METHOD for rounding when scaling [default: from-zero] [possible values: up, down, from-zero, towards-zero, nearest]
         //       --suffix <SUFFIX>    print SUFFIX after each formatted number, and accept inputs optionally ending with SUFFIX
         //       --invalid <INVALID>  set the failure mode for invalid input [default: abort] [possible values: abort, fail, warn, ignore]
-        //   -h, --help               Print help
-        //   -V, --version            Print version
+        //       --help               Print help
+        //       --version            Print version
 
         #[test]
         fn test_ct_app_execution_version() {
@@ -14499,15 +14504,14 @@ mod tests {
         }
 
         #[test]
-        fn test_ct_app_execution_other_version() {
+        fn test_ct_app_rejects_version_short_option() {
             let command = ct_app();
 
-            // 测试用例1：有效输入
             let args = vec![ctcore::ct_util_name(), "-V"];
             let executable = command.try_get_matches_from(args);
 
             assert!(executable.is_err());
-            assert_eq!(executable.unwrap_err().kind(), ErrorKind::DisplayVersion);
+            assert_eq!(executable.unwrap_err().kind(), ErrorKind::UnknownArgument);
         }
 
         #[test]

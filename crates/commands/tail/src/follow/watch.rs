@@ -521,8 +521,7 @@ impl Observer {
                                 } else {
                                     ct_show_error!( "{} has appeared;  following new file", display_name.quote());
                                 }
-                            } else if event.kind == EventKind::Modify(ModifyKind::Name(RenameMode::To))
-                                || (self.use_polling && !old_md.file_id_eq(&new_md)) {
+                            } else if !old_md.file_id_eq(&new_md) {
                                 if let Err(e) = self.files.update_reader(&tracked_path) {
                                     ct_show_error!( "{} has been replaced;  following new file", display_name.quote());
                                     ct_show_error!("cannot open '{}' for reading: {}", display_name, strip_errno(&e));
@@ -1385,6 +1384,73 @@ mod tests {
         assert!(observer.recheck_unchanged_follow_name(1, false).unwrap());
         let tracked_metadata = observer.files.get(&path).metadata.as_ref().unwrap();
         assert!(tracked_metadata.file_id_eq(&path.metadata().unwrap()));
+    }
+
+    #[test]
+    fn late_rename_event_does_not_reread_an_already_reconciled_file() {
+        let options = TailOptions {
+            follow: Some(TailFollowMode::Name),
+            retry: true,
+            ..TailOptions::default()
+        };
+        let mut observer = Observer::from(&options);
+        let temp_dir = tempdir().unwrap();
+        let path = temp_dir.path().join("file");
+        let old_path = temp_dir.path().join("file.old");
+
+        fs::write(&path, b"start\n").unwrap();
+        let mut reader_file = File::open(&path).unwrap();
+        reader_file.seek(SeekFrom::End(0)).unwrap();
+        observer
+            .add_path(
+                &path,
+                "file",
+                Some(Box::new(BufReader::new(reader_file))),
+                false,
+            )
+            .unwrap();
+
+        fs::rename(&path, &old_path).unwrap();
+        assert!(!observer.reconcile_follow_name_retry(false).unwrap());
+
+        fs::write(&path, b"rotated\n").unwrap();
+        assert!(observer.reconcile_follow_name_retry(false).unwrap());
+
+        let late_event =
+            Event::new(EventKind::Modify(ModifyKind::Name(RenameMode::To))).add_path(path.clone());
+        assert_eq!(
+            observer.handle_event(&late_event, &options).unwrap(),
+            vec![path.clone()]
+        );
+        assert!(
+            observer
+                .files
+                .get_mut(&path)
+                .reader
+                .as_mut()
+                .unwrap()
+                .fill_buf()
+                .unwrap()
+                .is_empty()
+        );
+
+        OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap()
+            .write_all(b"next\n")
+            .unwrap();
+        assert_eq!(
+            observer
+                .files
+                .get_mut(&path)
+                .reader
+                .as_mut()
+                .unwrap()
+                .fill_buf()
+                .unwrap(),
+            b"next\n"
+        );
     }
 
     #[test]

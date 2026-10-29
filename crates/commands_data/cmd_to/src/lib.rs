@@ -17,7 +17,7 @@
 use ctengine::command::DataCommand;
 use ctengine::context::DataEngineContext;
 use ctengine::error::CtDiagnosticError;
-use ctpipeline::{CtPipelineData, CtPipelineMetadata, CtType, CtValue};
+use ctpipeline::{CtListStream, CtPipelineData, CtPipelineMetadata, CtType, CtValue};
 use ctsig::{CtFlag, CtPositionalArg, DataCall, DataSignature};
 
 #[derive(Default)]
@@ -47,7 +47,7 @@ impl DataCommand for CmdTo {
                 "for csv/ssv: serialize records as field-oriented data",
             ))
             .input(CtType::Any)
-            .output(CtType::String)
+            .output(CtType::Any)
     }
 
     fn run(
@@ -104,13 +104,16 @@ impl DataCommand for CmdTo {
             .into(),
         );
 
+        if format == "jsonl" {
+            return to_jsonl_stream(input, output_meta);
+        }
+
         let out = match format {
             "json" => {
                 let value = consume_to_value(input)?;
                 serde_json::to_string_pretty(&ct_to_json(&value))
                     .map_err(|e| CtDiagnosticError::simple(format!("to json: {e}")))?
             }
-            "jsonl" => to_jsonl(input)?,
             "csv" if transpose => to_csv_transposed(input)?,
             "csv" => to_csv(input)?,
             "ssv" if transpose => to_ssv_transposed(input)?,
@@ -204,34 +207,26 @@ fn meta_text_output(source: &str, text: String) -> CtPipelineData {
     )
 }
 
-fn to_jsonl(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
-    match data {
-        CtPipelineData::Empty => Ok(String::new()),
-        CtPipelineData::Value(CtValue::List(items), _) => {
-            let mut lines = Vec::with_capacity(items.len());
-            for item in items {
-                let line = serde_json::to_string(&ct_to_json(&item))
-                    .map_err(|e| CtDiagnosticError::simple(format!("to jsonl: {e}")))?;
-                lines.push(line);
-            }
-            Ok(lines.join("\n"))
+fn to_jsonl_stream(
+    data: CtPipelineData,
+    metadata: CtPipelineMetadata,
+) -> Result<CtPipelineData, CtDiagnosticError> {
+    let iter: Box<dyn Iterator<Item = CtValue> + Send> = match data {
+        CtPipelineData::Empty => Box::new(std::iter::empty()),
+        CtPipelineData::Value(CtValue::List(items), _) => Box::new(items.into_iter()),
+        CtPipelineData::Value(value, _) => Box::new(std::iter::once(value)),
+        CtPipelineData::ListStream(stream) => Box::new(stream),
+        CtPipelineData::ByteStream(_) => {
+            return Err(CtDiagnosticError::simple(
+                "to jsonl: cannot serialize ByteStream to jsonl",
+            ));
         }
-        CtPipelineData::ListStream(stream) => {
-            let mut lines = Vec::new();
-            for item in stream {
-                let line = serde_json::to_string(&ct_to_json(&item))
-                    .map_err(|e| CtDiagnosticError::simple(format!("to jsonl: {e}")))?;
-                lines.push(line);
-            }
-            Ok(lines.join("\n"))
-        }
-        other => {
-            let v = consume_to_value(other)?;
-            let line = serde_json::to_string(&ct_to_json(&v))
-                .map_err(|e| CtDiagnosticError::simple(format!("to jsonl: {e}")))?;
-            Ok(line)
-        }
-    }
+    };
+
+    let lines = iter.map(|value| CtValue::String(ct_to_json(&value).to_string()));
+    Ok(CtPipelineData::ListStream(CtListStream::new(
+        lines, metadata,
+    )))
 }
 
 fn to_csv(data: CtPipelineData) -> Result<String, CtDiagnosticError> {
@@ -562,6 +557,8 @@ mod tests {
     use super::*;
     use ctengine::context::{CommandRegistry, DataEngineContext};
     use ctpipeline::CtListStream;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn ctx() -> DataEngineContext {
         DataEngineContext::new(CommandRegistry::empty(), None, None)
@@ -582,6 +579,22 @@ mod tests {
 
     fn empty_record_input() -> CtPipelineData {
         CtPipelineData::Value(CtValue::Record(vec![]), CtPipelineMetadata::default())
+    }
+
+    fn collect_text_stream(data: CtPipelineData) -> (Vec<String>, CtPipelineMetadata) {
+        let CtPipelineData::ListStream(stream) = data else {
+            panic!("expected list stream");
+        };
+        let metadata = stream.metadata.clone();
+        let lines = stream
+            .map(|value| {
+                let CtValue::String(line) = value else {
+                    panic!("expected string line");
+                };
+                line
+            })
+            .collect();
+        (lines, metadata)
     }
 
     #[test]
@@ -657,29 +670,60 @@ mod tests {
             CtPipelineMetadata::default(),
         );
         let r = CmdTo.run(&fmt_call("jsonl"), input, &ctx()).unwrap();
-        let CtPipelineData::Value(CtValue::String(s), _) = r else {
-            panic!("string");
-        };
-        assert!(s.contains("{\"a\":1}"));
-        assert!(s.contains("{\"a\":2}"));
+        let (lines, metadata) = collect_text_stream(r);
+        assert_eq!(lines, vec!["{\"a\":1}", "{\"a\":2}"]);
+        assert_eq!(
+            metadata.content_type.as_deref(),
+            Some("application/x-ndjson")
+        );
     }
 
     #[test]
     fn test_to_jsonl_list_stream() {
+        let consumed = Arc::new(AtomicUsize::new(0));
+        let consumed_by_stream = consumed.clone();
         let stream = CtListStream::new(
             vec![
                 CtValue::Record(vec![("a".into(), CtValue::Int(1))]),
                 CtValue::Record(vec![("a".into(), CtValue::Int(2))]),
             ]
-            .into_iter(),
+            .into_iter()
+            .inspect(move |_| {
+                consumed_by_stream.fetch_add(1, Ordering::SeqCst);
+            }),
             CtPipelineMetadata::default(),
         );
         let input = CtPipelineData::ListStream(stream);
         let r = CmdTo.run(&fmt_call("jsonl"), input, &ctx()).unwrap();
-        let CtPipelineData::Value(CtValue::String(s), _) = r else {
-            panic!("string");
+        assert_eq!(consumed.load(Ordering::SeqCst), 0);
+
+        let CtPipelineData::ListStream(mut stream) = r else {
+            panic!("expected list stream");
         };
-        assert_eq!(s, "{\"a\":1}\n{\"a\":2}");
+        assert_eq!(stream.next(), Some(CtValue::String("{\"a\":1}".into())));
+        assert_eq!(consumed.load(Ordering::SeqCst), 1);
+        assert_eq!(stream.next(), Some(CtValue::String("{\"a\":2}".into())));
+        assert_eq!(consumed.load(Ordering::SeqCst), 2);
+        assert_eq!(stream.next(), None);
+    }
+
+    #[test]
+    fn test_to_jsonl_empty_and_single_value() {
+        let empty = CmdTo
+            .run(&fmt_call("jsonl"), CtPipelineData::Empty, &ctx())
+            .unwrap();
+        let (empty_lines, _) = collect_text_stream(empty);
+        assert!(empty_lines.is_empty());
+
+        let single = CmdTo
+            .run(
+                &fmt_call("jsonl"),
+                CtPipelineData::Value(CtValue::Int(42), CtPipelineMetadata::default()),
+                &ctx(),
+            )
+            .unwrap();
+        let (single_lines, _) = collect_text_stream(single);
+        assert_eq!(single_lines, vec!["42"]);
     }
 
     #[test]

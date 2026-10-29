@@ -1,7 +1,7 @@
 #![cfg(feature = "feat_data_pipeline")]
 
 use std::fs;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
@@ -109,6 +109,46 @@ fn head_stops_infinite_upstream_after_requested_line() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(String::from_utf8_lossy(&output.stdout), "y\n");
+}
+
+#[test]
+fn jsonl_output_stops_cleanly_when_downstream_closes() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "seq 100000 | to jsonl"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn syskits");
+
+    let mut stdout = BufReader::new(child.stdout.take().expect("stdout handle"));
+    let mut first_line = String::new();
+    stdout.read_line(&mut first_line).expect("read first line");
+    drop(stdout);
+
+    let output = child.wait_with_output().expect("wait for syskits");
+    assert_eq!(first_line, "{\"index\":0,\"value\":\"1\"}\n");
+    assert!(
+        output.status.success(),
+        "exit={:?}, stderr={}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn jsonl_stream_remains_composable() {
+    let output = run_data("seq 3 | to jsonl | from jsonl | to json", "");
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "[\n  {\n    \"index\": 0,\n    \"value\": \"1\"\n  },\n  {\n    \"index\": 1,\n    \"value\": \"2\"\n  },\n  {\n    \"index\": 2,\n    \"value\": \"3\"\n  }\n]\n"
+    );
 }
 
 #[test]

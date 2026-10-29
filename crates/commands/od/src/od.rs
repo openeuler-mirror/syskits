@@ -143,6 +143,7 @@ fn od_prepare_closed_stdin(_inputs: &[OsString]) -> bool {
 }
 
 fn od_exit_after_stdout_error(error: std::io::Error) -> ! {
+    let error = od_normalize_stdout_error(error, ctcore::ct_stdout_was_closed());
     ct_show_error!("write error: {}", strip_errno(&error));
     let _ = std::io::Write::flush(&mut std::io::stderr());
 
@@ -155,6 +156,18 @@ fn od_exit_after_stdout_error(error: std::io::Error) -> ! {
     std::process::exit(1);
 }
 
+fn od_normalize_stdout_error(error: std::io::Error, stdout_was_closed: bool) -> std::io::Error {
+    #[cfg(unix)]
+    if stdout_was_closed {
+        return std::io::Error::from_raw_os_error(libc::EBADF);
+    }
+
+    #[cfg(not(unix))]
+    let _ = stdout_was_closed;
+
+    error
+}
+
 fn od_handle_stdout_result(result: std::io::Result<()>) {
     if let Err(error) = result {
         od_exit_after_stdout_error(error);
@@ -165,18 +178,6 @@ fn od_finish_input_result(result: CTResult<()>, input_failed: bool) -> CTResult<
     result?;
     if input_failed { Err(1.into()) } else { Ok(()) }
 }
-
-#[cfg(unix)]
-fn od_exit_for_closed_stdout() {
-    if !ctcore::ct_stdout_was_closed() {
-        return;
-    }
-
-    od_exit_after_stdout_error(std::io::Error::from_raw_os_error(libc::EBADF));
-}
-
-#[cfg(not(unix))]
-fn od_exit_for_closed_stdout() {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OdView {
@@ -584,7 +585,6 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
 
     let od_settings = OdSettings::new(&clap_matches, &format_args)?;
     let stdin_was_closed = od_prepare_closed_stdin(&od_settings.input_strings);
-    od_exit_for_closed_stdout();
     let _locale = OdCtypeLocale::activate();
 
     let mut input_offset =
@@ -1662,6 +1662,18 @@ mod tests {
                 .to_string(),
             "sentinel input failure"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_stdout_error_is_only_normalized_after_a_failed_write() {
+        let original =
+            od_normalize_stdout_error(std::io::Error::from_raw_os_error(libc::ENOSPC), false);
+        assert_eq!(original.raw_os_error(), Some(libc::ENOSPC));
+
+        let normalized =
+            od_normalize_stdout_error(std::io::Error::from_raw_os_error(libc::ENOSPC), true);
+        assert_eq!(normalized.raw_os_error(), Some(libc::EBADF));
     }
 
     mod od_settings_tests {

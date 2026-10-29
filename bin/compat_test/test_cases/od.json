@@ -3855,6 +3855,36 @@
                 "resource_limits": null
             },
             "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "od",
+            "description": "原始字节用例：LC_ALL=C；执行od --strings=bad /dev/null；参数完整十六进制=2d2d737472696e67733d626164 2f6465762f6e756c6c；stdin为0字节、完整十六进制=空；GNU将非数值字符串长度分类为非法后缀，诊断必须保留--strings选项名称；预期RC=1、stdout为0字节、完整十六进制=空；stderr为47字节/1条换行分隔，完整十六进制=6f643a20696e76616c69642073756666697820696e202d2d737472696e677320617267756d656e742027626164270a",
+            "args": [
+                "2d2d737472696e67733d626164",
+                "2f6465762f6e756c6c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "6f643a20696e76616c69642073756666697820696e202d2d737472696e677320617267756d656e742027626164270a"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
         }
     ]
 }

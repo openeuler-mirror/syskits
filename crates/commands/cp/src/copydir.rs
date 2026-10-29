@@ -420,6 +420,15 @@ pub(crate) fn copy_directory(
         .into());
     }
 
+    if destination.exists() && !destination.is_dir() {
+        return Err(format!(
+            "cannot overwrite non-directory {} with directory {}",
+            destination.quote(),
+            root.quote()
+        )
+        .into());
+    }
+
     // If in `--parents` mode, create all the necessary ancestor directories.
     //
     // For example, if the command is `cp --parents a/b/c d`, that

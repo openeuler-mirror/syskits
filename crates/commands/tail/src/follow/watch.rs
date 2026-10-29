@@ -986,14 +986,18 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
 
         let mut _read_some = false;
 
+        // Reconcile name-followed files before checking `--pid`. GNU tail
+        // performs one final file scan after the watched process dies, so a
+        // replacement that completed during the previous interval is still
+        // reopened and read before tail exits.
+        _read_some = observer.reconcile_follow_name_retry(options.verbose)? || _read_some;
+
         // If `--pid=p`, tail checks whether process p
         // is alive at least every `--sleep-interval=N` seconds
         if options.follow.is_some() && observer.pid != 0 && process.is_dead() {
             // p is dead, tail will also terminate
             break;
         }
-
-        _read_some = observer.reconcile_follow_name_retry(options.verbose)? || _read_some;
 
         // With  -f, sleep for approximately N seconds (default 1.0) between iterations;
         // We wake up if Notify sends an Event or if we wait more than `sleep_sec`.

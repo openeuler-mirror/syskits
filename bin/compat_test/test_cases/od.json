@@ -3979,6 +3979,39 @@
                 "resource_limits": null
             },
             "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "od",
+            "description": "原始字节用例：64位Linux、LC_ALL=C；关闭stdin后执行od -N0 -；参数完整十六进制=2d4e30 2d；stdin描述符关闭、输入字节不存在；GNU即使读取上限为0仍在cleanup关闭所选stdin并保留EBADF失败状态；预期RC=1、stdout为8字节/1条换行分隔，完整十六进制=303030303030300a；stderr为40字节/1条换行分隔，完整十六进制=6f643a207374616e6461726420696e7075743a204261642066696c652064657363726970746f720a",
+            "args": [
+                "2d4e30",
+                "2d"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "303030303030300a",
+                    "stderr": "6f643a207374616e6461726420696e7075743a204261642066696c652064657363726970746f720a"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null,
+                "standardStreams": {
+                    "stdin": "closed"
+                }
+            },
+            "byteMode": true
         }
     ]
 }

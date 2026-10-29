@@ -17,6 +17,10 @@ const CT_LINUX_MTAB: &str = "/etc/mtab";
 const CT_LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
 #[cfg(target_os = "linux")]
 static MOUNT_OPT_BIND: &str = "bind";
+#[cfg(target_os = "linux")]
+const CT_MOUNT_RAW_BYTE_MARKER: char = '\u{F0000}';
+#[cfg(target_os = "linux")]
+const CT_MOUNT_RAW_BYTE_CHAR_BASE: u32 = 0xF0100;
 #[cfg(windows)]
 const MAX_PATH: usize = 266;
 #[cfg(windows)]
@@ -63,9 +67,13 @@ use std::borrow::Cow;
 use std::ffi::CStr;
 #[cfg(unix)]
 use std::ffi::CString;
+#[cfg(target_os = "linux")]
+use std::ffi::OsString;
 use std::io::Error as IOError;
 #[cfg(unix)]
 use std::mem;
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStringExt;
 #[cfg(windows)]
 use std::path::Path;
 use std::time::UNIX_EPOCH;
@@ -103,35 +111,39 @@ pub struct CtMountInfo {
 }
 
 impl CtMountInfo {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", test))]
     fn new(filename: &str, raw: &[&str]) -> Option<Self> {
-        let dev_name;
-        let fs_type;
-        let mount_root;
-        let mount_dir;
-        let mount_option;
+        let raw = raw.iter().map(|field| field.as_bytes()).collect::<Vec<_>>();
+        Self::new_bytes(filename, &raw)
+    }
 
-        match filename {
-            //拼写检查器忽略（单词）noatime
-            // 格式：36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
-            // “man proc”获取更多细节
+    #[cfg(target_os = "linux")]
+    fn new_bytes(filename: &str, raw: &[&[u8]]) -> Option<Self> {
+        let (dev_name, fs_type, mount_root, mount_dir, mount_option) = match filename {
             CT_LINUX_MOUNTINFO => {
-                const FIELDS_OFFSET: usize = 6;
-                let after_fields = raw[FIELDS_OFFSET..].iter().position(|c| *c == "-").unwrap()
-                    + FIELDS_OFFSET
-                    + 1;
-                dev_name = raw[after_fields + 1].to_string();
-                fs_type = raw[after_fields].to_string();
-                mount_root = raw[3].to_string();
-                mount_dir = raw[4].to_string();
-                mount_option = raw[5].to_string();
+                let separator = raw.iter().position(|field| *field == b"-")?;
+                if raw.len() <= separator + 2 || separator < 6 {
+                    return None;
+                }
+                (
+                    mount_field_from_bytes(raw[separator + 2]),
+                    mount_field_from_bytes(raw[separator + 1]),
+                    mount_field_from_bytes(raw[3]),
+                    mount_field_from_bytes(raw[4]),
+                    mount_field_from_bytes(raw[5]),
+                )
             }
             CT_LINUX_MTAB => {
-                dev_name = raw[0].to_string();
-                fs_type = raw[2].to_string();
-                mount_root = String::new();
-                mount_dir = raw[1].to_string();
-                mount_option = raw[3].to_string();
+                if raw.len() < 4 {
+                    return None;
+                }
+                (
+                    mount_field_from_bytes(raw[0]),
+                    mount_field_from_bytes(raw[2]),
+                    String::new(),
+                    mount_field_from_bytes(raw[1]),
+                    mount_field_from_bytes(raw[3]),
+                )
             }
             _ => return None,
         };
@@ -225,6 +237,114 @@ impl CtMountInfo {
 }
 
 #[cfg(target_os = "linux")]
+fn mount_raw_byte_char(byte: u8) -> char {
+    char::from_u32(CT_MOUNT_RAW_BYTE_CHAR_BASE + u32::from(byte))
+        .expect("mount raw byte placeholder is a valid private-use scalar")
+}
+
+#[cfg(target_os = "linux")]
+fn mount_field_from_bytes(field: &[u8]) -> String {
+    let mut unescaped = Vec::with_capacity(field.len());
+    let mut index = 0;
+    while index < field.len() {
+        if field[index] == b'\\'
+            && index + 3 < field.len()
+            && (b'0'..=b'3').contains(&field[index + 1])
+            && field[index + 1..index + 4]
+                .iter()
+                .all(|byte| (b'0'..=b'7').contains(byte))
+        {
+            let value = (field[index + 1] - b'0') * 64
+                + (field[index + 2] - b'0') * 8
+                + (field[index + 3] - b'0');
+            unescaped.push(value);
+            index += 4;
+        } else {
+            unescaped.push(field[index]);
+            index += 1;
+        }
+    }
+
+    let mut decoded = String::with_capacity(unescaped.len());
+    let mut rest = unescaped.as_slice();
+    while !rest.is_empty() {
+        match std::str::from_utf8(rest) {
+            Ok(valid) => {
+                push_mount_valid_text(&mut decoded, valid);
+                break;
+            }
+            Err(error) => {
+                let valid_up_to = error.valid_up_to();
+                push_mount_valid_text(
+                    &mut decoded,
+                    std::str::from_utf8(&rest[..valid_up_to])
+                        .expect("valid prefix reported by Utf8Error"),
+                );
+                let invalid_len = error.error_len().unwrap_or(rest.len() - valid_up_to);
+                for &byte in &rest[valid_up_to..valid_up_to + invalid_len] {
+                    decoded.push(CT_MOUNT_RAW_BYTE_MARKER);
+                    decoded.push(mount_raw_byte_char(byte));
+                }
+                rest = &rest[valid_up_to + invalid_len..];
+            }
+        }
+    }
+    decoded
+}
+
+#[cfg(target_os = "linux")]
+fn push_mount_valid_text(output: &mut String, text: &str) {
+    for character in text.chars() {
+        if character == CT_MOUNT_RAW_BYTE_MARKER {
+            output.push(CT_MOUNT_RAW_BYTE_MARKER);
+        }
+        output.push(character);
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn mount_field_to_bytes(field: &str) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(field.len());
+    let characters = field.chars().collect::<Vec<_>>();
+    let mut index = 0;
+    while index < characters.len() {
+        let character = characters[index];
+        if character == CT_MOUNT_RAW_BYTE_MARKER && index + 1 < characters.len() {
+            let next = characters[index + 1];
+            if next == CT_MOUNT_RAW_BYTE_MARKER {
+                push_mount_character_bytes(&mut bytes, CT_MOUNT_RAW_BYTE_MARKER);
+                index += 2;
+                continue;
+            }
+
+            let value = next as u32;
+            if (CT_MOUNT_RAW_BYTE_CHAR_BASE..=CT_MOUNT_RAW_BYTE_CHAR_BASE + u32::from(u8::MAX))
+                .contains(&value)
+            {
+                bytes.push((value - CT_MOUNT_RAW_BYTE_CHAR_BASE) as u8);
+                index += 2;
+                continue;
+            }
+        }
+
+        push_mount_character_bytes(&mut bytes, character);
+        index += 1;
+    }
+    bytes
+}
+
+#[cfg(target_os = "linux")]
+fn push_mount_character_bytes(output: &mut Vec<u8>, character: char) {
+    let mut encoded = [0; 4];
+    output.extend_from_slice(character.encode_utf8(&mut encoded).as_bytes());
+}
+
+#[cfg(target_os = "linux")]
+pub fn mount_field_to_os_string(field: &str) -> OsString {
+    OsString::from_vec(mount_field_to_bytes(field))
+}
+
+#[cfg(target_os = "linux")]
 fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:disable
     match fs_type {
@@ -253,7 +373,7 @@ fn is_remote_filesystem(dev_name: &str, fs_type: &str) -> bool {
 fn mount_dev_id(mount_dir: &str) -> String {
     use std::os::unix::fs::MetadataExt;
 
-    if let Ok(stat) = std::fs::metadata(mount_dir) {
+    if let Ok(stat) = std::fs::metadata(mount_field_to_os_string(mount_dir)) {
         (stat.dev() as i32).to_string()
     } else {
         String::new()
@@ -274,11 +394,14 @@ pub fn read_fs_list() -> Result<Vec<CtMountInfo>, std::io::Error> {
             .or_else(|_| File::open(CT_LINUX_MTAB).map(|f| (CT_LINUX_MTAB, f)))?;
         let reader = BufReader::new(f);
         Ok(reader
-            .lines()
+            .split(b'\n')
             .map_while(Result::ok)
             .filter_map(|line| {
-                let raw_data = line.split_whitespace().collect::<Vec<&str>>();
-                CtMountInfo::new(file_name, &raw_data)
+                let raw_data = line
+                    .split(|byte| byte.is_ascii_whitespace())
+                    .filter(|field| !field.is_empty())
+                    .collect::<Vec<_>>();
+                CtMountInfo::new_bytes(file_name, &raw_data)
             })
             .collect::<Vec<_>>())
     }
@@ -819,6 +942,59 @@ mod tests {
 
         assert_eq!(info.fs_type, "xfs");
         assert_eq!(info.dev_name, "/dev/fs0");
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_mountinfo_preserves_non_utf8_fields() {
+        let raw = [
+            b"106".as_slice(),
+            b"109",
+            b"253:6",
+            b"/",
+            b"/mnt/m\xf3unt",
+            b"rw,relatime",
+            b"-",
+            b"xfs",
+            b"/dev/fs\xf3",
+            b"rw",
+        ];
+        let info = CtMountInfo::new_bytes(CT_LINUX_MOUNTINFO, &raw).unwrap();
+
+        assert_eq!(mount_field_to_bytes(&info.mount_dir), b"/mnt/m\xf3unt");
+        assert_eq!(mount_field_to_bytes(&info.dev_name), b"/dev/fs\xf3");
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_mountinfo_unescapes_octal_fields() {
+        let raw = [
+            b"106".as_slice(),
+            b"109",
+            b"253:6",
+            b"/",
+            br"/mnt/m\040nt\011tab\012line\134slash",
+            b"rw,relatime",
+            b"-",
+            b"xfs",
+            b"/dev/fs0",
+            b"rw",
+        ];
+        let info = CtMountInfo::new_bytes(CT_LINUX_MOUNTINFO, &raw).unwrap();
+
+        assert_eq!(
+            mount_field_to_bytes(&info.mount_dir),
+            b"/mnt/m nt\ttab\nline\\slash"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_mount_field_encoding_preserves_private_use_marker() {
+        let input = format!("/mnt/{CT_MOUNT_RAW_BYTE_MARKER}/name");
+        let encoded = mount_field_from_bytes(input.as_bytes());
+
+        assert_eq!(mount_field_to_bytes(&encoded), input.as_bytes());
     }
 
     #[test]

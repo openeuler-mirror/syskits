@@ -3071,7 +3071,8 @@ fn cp_handle_copy_mode(
                     cp_opts.overwrite,
                     CpOverwriteMode::Clobber(CpClobberMode::Force)
                         | CpOverwriteMode::Interactive(_)
-                ) {
+                ) || (sour_is_symlink && !cp_opts.cp_dereference(source_in_command_line))
+                {
                     fs::remove_file(dest_path)?;
                 }
             }

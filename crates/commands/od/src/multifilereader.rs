@@ -195,8 +195,8 @@ impl OdMultifileReader<'_> {
                             bytes = 0;
                         }
                     } else if !metadata.is_file()
-                        && let Ok(offset) = i64::try_from(bytes)
-                        && file.seek(SeekFrom::Current(offset)).is_ok()
+                        // GNU stores the parsed uintmax_t value in intmax_t before fseeko.
+                        && file.seek(SeekFrom::Current(bytes as i64)).is_ok()
                     {
                         bytes = 0;
                     }
@@ -226,9 +226,7 @@ fn od_seek_nonregular_stdin(bytes: u64) -> bool {
     if metadata.st_mode & libc::S_IFMT == libc::S_IFREG {
         return false;
     }
-    let Ok(offset) = libc::off_t::try_from(bytes) else {
-        return false;
-    };
+    let offset = bytes as libc::off_t;
 
     unsafe { libc::lseek(libc::STDIN_FILENO, offset, libc::SEEK_CUR) >= 0 }
 }
@@ -306,6 +304,16 @@ mod tests {
             OdMultifileReader::new(vec![OdInputSource::FileName(OsStr::new("/dev/null"))]);
 
         assert_eq!(reader.skip_regular_files(1), 0);
+        assert_eq!(reader.read(&mut [0]).unwrap(), 0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_skip_seekable_nonregular_file_wraps_large_offset_like_gnu() {
+        let mut reader =
+            OdMultifileReader::new(vec![OdInputSource::FileName(OsStr::new("/dev/null"))]);
+
+        assert_eq!(reader.skip_regular_files(i64::MAX as u64 + 1), 0);
         assert_eq!(reader.read(&mut [0]).unwrap(), 0);
     }
 

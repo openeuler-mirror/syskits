@@ -6177,9 +6177,9 @@ impl StyleManager {
                 lscolors::Indicator::Directory
             }
         } else if file_type.is_symlink() {
-            if !path.exists()
-                && (self.symlink_as_target
-                    || self.indicator_is_colored(lscolors::Indicator::OrphanedSymbolicLink))
+            if (self.symlink_as_target
+                || self.indicator_is_colored(lscolors::Indicator::OrphanedSymbolicLink))
+                && !path.exists()
             {
                 lscolors::Indicator::OrphanedSymbolicLink
             } else {
@@ -6448,10 +6448,14 @@ fn color_name<W: Write>(
         )
     } else {
         let mdata_option = path.get_metadata(out);
-        let symlink_metadata = path.p_buf.symlink_metadata().ok();
-        let mdata = mdata_option.or(symlink_metadata.as_ref());
-
-        apply_style_based_on_metadata(path, mdata, ls_colors, style_manager, &name, None)
+        apply_style_based_on_metadata(
+            path,
+            mdata_option,
+            ls_colors,
+            style_manager,
+            &name,
+            None,
+        )
     }
 }
 
@@ -7164,6 +7168,17 @@ mod tests {
 
         assert!(!is_color_compatible_term());
         assert!(load_ls_colors().is_some());
+    }
+
+    #[test]
+    fn uncolored_orphan_rules_do_not_require_symlink_target_metadata() {
+        let _env_lock = lock_env();
+        let _ls_colors = EnvVarGuard::set("LS_COLORS", "or=0:mi=0:ln=01;35");
+        let ls_colors = LsColors::from_string("or=0:mi=0:ln=01;35");
+        let manager = StyleManager::new(Some(&ls_colors));
+
+        assert!(!manager.symlink_as_target);
+        assert!(!manager.check_symlink_target);
     }
 
     #[test]

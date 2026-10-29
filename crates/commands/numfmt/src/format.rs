@@ -195,6 +195,13 @@ struct NumfmtParsedNumber<'a> {
 }
 
 fn numfmt_parse_number_parts(s: &str) -> Result<NumfmtParsedNumber<'_>> {
+    numfmt_parse_number_parts_with_suffix_policy(s, false)
+}
+
+fn numfmt_parse_number_parts_with_suffix_policy(
+    s: &str,
+    reject_valid_suffix: bool,
+) -> Result<NumfmtParsedNumber<'_>> {
     if s.is_empty() {
         return Err(format!("invalid number: {}", numfmt_quote("")));
     }
@@ -241,6 +248,13 @@ fn numfmt_parse_number_parts(s: &str) -> Result<NumfmtParsedNumber<'_>> {
         Some('Q') => NumfmtRawSuffix::Q,
         _ => return Err(format!("invalid suffix in input: {}", numfmt_quote(s))),
     };
+
+    if reject_valid_suffix {
+        return Err(format!(
+            "rejecting suffix in input: {} (consider using --from)",
+            numfmt_quote(s)
+        ));
+    }
 
     let mut suffix_len = 1usize;
     let mut with_i = false;
@@ -395,7 +409,8 @@ fn numfmt_transform_from(s: &str, numfmt_opts: &NumfmtTransformOptions) -> Resul
         NUMFMT_MAX_UNSCALED_DIGITS,
     ));
 
-    let parsed = numfmt_parse_number_parts(s)?;
+    let parsed =
+        numfmt_parse_number_parts_with_suffix_policy(s, numfmt_opts.from == NumfmtUnit::None)?;
     let i = numfmt_normalize_decimal_point(parsed.number)
         .parse::<f64>()
         .map_err(|_| format!("invalid number: {}", numfmt_quote(s)))?;
@@ -1175,6 +1190,10 @@ fn numfmt_format_string(
         Some(suffix) => source.strip_suffix(suffix).unwrap_or(source),
         None => source,
     };
+
+    if numfmt_configs.transform.from == NumfmtUnit::None {
+        numfmt_parse_number_parts_with_suffix_policy(source_without_suffix, true)?;
+    }
 
     if numfmt_input_exceeds_max_digits(source_without_suffix)? {
         return Err(format!(

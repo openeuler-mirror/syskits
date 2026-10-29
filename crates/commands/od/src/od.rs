@@ -342,6 +342,7 @@ impl OdSettings {
     fn has_explicit_format(matches: &ArgMatches) -> bool {
         const FORMAT_OPTIONS: &[&str] = &[
             "a",
+            "B",
             "b",
             "c",
             "d",
@@ -868,6 +869,7 @@ fn ct_app_with_posix_mode(posix_mode: bool) -> Command {
             .allow_negative_numbers(true)
             .value_name("BYTES"),
         Arg::new("a").short('a').help(t!("od.clap.a")).action(ArgAction::SetTrue),
+        Arg::new("B").short('B').hide(true).action(ArgAction::SetTrue),
         Arg::new("b").short('b').help(t!("od.clap.b")).action(ArgAction::SetTrue),
         Arg::new("c").short('c').help(t!("od.clap.c")).action(ArgAction::SetTrue),
         Arg::new("d").short('d').help(t!("od.clap.d")).action(ArgAction::SetTrue),
@@ -1723,6 +1725,21 @@ mod tests {
 
             assert_eq!(settings.byte_order, ByteOrder::Little);
             assert_eq!(settings.skip_bytes, 100);
+        }
+
+        #[test]
+        fn test_new_accepts_undocumented_b_format_alias() {
+            let args = ["od".to_string(), "-B".to_string()];
+            let matches = ct_app().try_get_matches_from(&args).unwrap();
+            let settings = OdSettings::new(&matches, &args).unwrap();
+
+            assert_eq!(
+                settings.formats,
+                vec![ParsedFormatterItemInfo::new(
+                    crate::prn_format::FORMAT_ITEM_OCT16,
+                    false
+                )]
+            );
         }
 
         #[test]

@@ -3766,6 +3766,36 @@
                 "resource_limits": null
             },
             "byteMode": true
+        },
+        {
+            "tstdin": "3031323334353637",
+            "command": "od",
+            "description": "原始字节用例：LC_ALL=C；执行od -An -B；参数完整十六进制=2d416e 2d42；stdin为8字节ASCII 01234567、完整十六进制=3031323334353637；GNU将未文档化传统-B别名解释为-t o2并按本机字节序输出4个二字节八进制值；预期RC=0、stderr为0字节、完整十六进制=空；stdout为29字节/1条换行分隔，完整十六进制=203033303436302030333134363220303332343634203033333436360a",
+            "args": [
+                "2d416e",
+                "2d42"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "203033303436302030333134363220303332343634203033333436360a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
         }
     ]
 }

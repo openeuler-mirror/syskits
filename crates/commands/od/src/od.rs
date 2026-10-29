@@ -590,6 +590,7 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
         od_settings.skip_bytes,
         od_settings.read_bytes,
     );
+    od_require_open_input(&input)?;
     let stdout = std::io::stdout();
     let mut output = BufWriter::new(stdout.lock());
 
@@ -1324,6 +1325,14 @@ fn od_open_input_reader(
     )
 }
 
+fn od_require_open_input<I: HasError>(input: &I) -> CTResult<()> {
+    if input.has_input() {
+        Ok(())
+    } else {
+        Err(1.into())
+    }
+}
+
 fn od_string_classic_line(offset: u64, radix: OdRadix, buffer: &[u8]) -> String {
     let address = match radix {
         OdRadix::Octal => format!("{offset:07o}"),
@@ -1444,6 +1453,7 @@ pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
         od_settings.skip_bytes,
         od_settings.read_bytes,
     );
+    od_require_open_input(&input)?;
 
     if let Some(min_len) = od_settings.strings_min_len {
         let mut semantic = od_collect_strings_semantic(
@@ -1920,6 +1930,18 @@ mod tests {
 
     mod odexec_tests {
         use super::*;
+
+        #[test]
+        fn test_require_open_input_distinguishes_missing_from_empty_input() {
+            let missing = OdMultifileReader::new(Vec::new());
+            assert!(od_require_open_input(&missing).is_err());
+
+            let empty = OdMultifileReader::new(vec![OdInputSource::Stream(Box::new(
+                std::io::Cursor::new(Vec::<u8>::new()),
+            ))]);
+            assert!(od_require_open_input(&empty).is_ok());
+        }
+
         #[test]
         fn test_odexec_empty_input() {
             let mut input_offset = OdInputOffset::new(OdRadix::Octal, 0, None);

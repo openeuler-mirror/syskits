@@ -683,6 +683,68 @@
             ]
         },
         {
+            "tstdin": "",
+            "command": "od",
+            "description": "原始字节用例：Linux、LC_ALL=C；执行od -j1 /dev/null；参数完整十六进制=2d6a31 2f6465762f6e756c6c；stdin为0字节、完整十六进制=空；输入/dev/null为0字节可定位非普通设备；GNU对该设备fseeko成功后视为已跳过1字节，预期RC=0、stdout为8字节/1条换行分隔，完整十六进制=303030303030310a；stderr为0字节、完整十六进制=空",
+            "args": [
+                "2d6a31",
+                "2f6465762f6e756c6c"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "303030303030310a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "od",
+            "description": "原始字节用例：Linux、LC_ALL=C；以/dev/null作为标准输入执行od -j1；参数完整十六进制=2d6a31；stdinFile=/dev/null，为0字节可定位非普通设备，tstdin未注入且完整十六进制=空；GNU对标准输入fseeko成功后视为已跳过1字节，预期RC=0、stdout为8字节/1条换行分隔，完整十六进制=303030303030310a；stderr为0字节、完整十六进制=空",
+            "args": [
+                "2d6a31"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "303030303030310a",
+                    "stderr": ""
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null,
+                "standardStreams": {
+                    "stdinFile": "/dev/null"
+                }
+            },
+            "byteMode": true
+        },
+        {
             "command": "od",
             "description": "j-bug4: Skip across multiple files",
             "args": [

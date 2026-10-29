@@ -723,6 +723,7 @@ pub fn pretty_filetype<'a>(mode: mode_t, size: u64) -> &'a str {
 pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
     //关闭拼写检查
     match fstype {
+        0x5A3C_69F0 => "aafs".into(),
         0x6163_6673 => "acfs".into(),
         0xADF5 => "adfs".into(),
         0xADFF => "affs".into(),
@@ -730,27 +731,36 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x0904_1934 => "anon-inode FS".into(),
         0x6175_6673 => "aufs".into(),
         0x0187 => "autofs".into(),
+        0x1366_1366 => "balloon-kvm-fs".into(),
         0x4246_5331 => "befs".into(),
         0x6264_6576 => "bdevfs".into(),
         0x1BAD_FACE => "bfs".into(),
+        0x6C6F_6F70 => "binderfs".into(),
         0xCAFE_4A11 => "bpf_fs".into(),
         0x4249_4E4D => "binfmt_misc".into(),
         0x9123_683E => "btrfs".into(),
         0x7372_7279 => "btrfs_test".into(),
         0x00C3_6400 => "ceph".into(),
         0x0027_E0EB => "cgroupfs".into(),
+        0x6367_7270 => "cgroup2fs".into(),
         0xFF53_4D42 => "cifs".into(),
         0x7375_7245 => "coda".into(),
         0x012F_F7B7 => "coh".into(),
         0x6265_6570 => "configfs".into(),
         0x28CD_3D45 => "cramfs".into(),
         0x453D_CD28 => "cramfs-wend".into(),
+        0x6464_6178 => "daxfs".into(),
         0x6462_6720 => "debugfs".into(),
         0x1373 => "devfs".into(),
+        0x454D_444D => "devmem".into(),
         0x1CD1 => "devpts".into(),
+        0x444D_4142 => "dma-buf-fs".into(),
         0xF15F => "ecryptfs".into(),
         0xDE5E_81E4 => "efivarfs".into(),
         0x0041_4A53 => "efs".into(),
+        0xE0F5_E1E2 => "erofs".into(),
+        0x2011_BAB0 => "exfat".into(),
+        0x4558_4653 => "exfs".into(),
         0x5DF5 => "exofs".into(),
         0x137D => "ext".into(),
         0xEF53 => "ext2/ext3".into(),
@@ -800,15 +810,19 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x794C_7630 => "overlayfs".into(),
         0xAAD7_AAEA => "panfs".into(),
         0x5049_5045 => "pipefs".into(),
+        0xC757_1590 => "ppc-cmm-fs".into(),
         0x7C7C_6673 => "prl_fs".into(),
         0x9FA0 => "proc".into(),
         0x6165_676C => "pstorefs".into(),
         0x002F => "qnx4".into(),
         0x6819_1122 => "qnx6".into(),
         0x8584_58F6 => "ramfs".into(),
+        0x0765_5821 => "rdt".into(),
         0x5265_4973 => "reiserfs".into(),
         0x7275 => "romfs".into(),
         0x6759_6969 => "rpc_pipefs".into(),
+        0x5DCA_2DF5 => "sdcardfs".into(),
+        0x5345_434D => "secretmem".into(),
         0x7363_6673 => "securityfs".into(),
         0xF97C_FF8C => "selinux".into(),
         0x4341_5D53 => "smackfs".into(),
@@ -828,6 +842,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x5419_0100 => "ufs".into(),
         0x9FA2 => "usbdevfs".into(),
         0x0102_1997 => "v9fs".into(),
+        0x786F_4256 => "vboxsf".into(),
         0xBACB_ACBC => "vmhgfs".into(),
         0xA501_FCF5 => "vxfs".into(),
         0x565A_4653 => "vzfs".into(),
@@ -836,8 +851,10 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x012F_F7B4 => "xenix".into(),
         0x5846_5342 => "xfs".into(),
         0x012F_D16D => "xia".into(),
+        0x0033 => "z3fold".into(),
         0x2FC1_2FC1 => "zfs".into(),
-        0xDE => "zfs".into(),
+        0x5A4F_4653 => "zonefs".into(),
+        0x5829_5829 => "zsmallocfs".into(),
         other => format!("UNKNOWN ({other:#x})").into(),
     }
     // 启用拼写检查
@@ -898,6 +915,26 @@ mod tests {
         assert_eq!("zfs", pretty_fstype(0x2FC12FC1));
         assert_eq!("ntfs", pretty_fstype(0x5346544e));
         assert_eq!("fat", pretty_fstype(0x4006));
+        assert_eq!("aafs", pretty_fstype(0x5A3C_69F0));
+        assert_eq!("balloon-kvm-fs", pretty_fstype(0x1366_1366));
+        assert_eq!("binderfs", pretty_fstype(0x6C6F_6F70));
+        assert_eq!("cgroupfs", pretty_fstype(0x0027_E0EB));
+        assert_eq!("cgroup2fs", pretty_fstype(0x6367_7270));
+        assert_eq!("daxfs", pretty_fstype(0x6464_6178));
+        assert_eq!("devmem", pretty_fstype(0x454D_444D));
+        assert_eq!("dma-buf-fs", pretty_fstype(0x444D_4142));
+        assert_eq!("erofs", pretty_fstype(0xE0F5_E1E2));
+        assert_eq!("exfat", pretty_fstype(0x2011_BAB0));
+        assert_eq!("exfs", pretty_fstype(0x4558_4653));
+        assert_eq!("ppc-cmm-fs", pretty_fstype(0xC757_1590));
+        assert_eq!("rdt", pretty_fstype(0x0765_5821));
+        assert_eq!("sdcardfs", pretty_fstype(0x5DCA_2DF5));
+        assert_eq!("secretmem", pretty_fstype(0x5345_434D));
+        assert_eq!("vboxsf", pretty_fstype(0x786F_4256));
+        assert_eq!("z3fold", pretty_fstype(0x0033));
+        assert_eq!("zonefs", pretty_fstype(0x5A4F_4653));
+        assert_eq!("zsmallocfs", pretty_fstype(0x5829_5829));
+        assert_eq!("UNKNOWN (0xde)", pretty_fstype(0xDE));
         assert_eq!("UNKNOWN (0x1234)", pretty_fstype(0x1234));
         // spell-checker:enable
     }

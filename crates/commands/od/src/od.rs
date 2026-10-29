@@ -705,10 +705,10 @@ fn odexec_strings<R: Read, W: IoWrite>(
 
         for &b in &chunk[..n] {
             bytes_read_total += 1;
+            if buffer.is_empty() {
+                string_start = current_offset;
+            }
             if od_is_printable(b) {
-                if buffer.is_empty() {
-                    string_start = current_offset;
-                }
                 buffer.push(b);
             } else {
                 // GNU 规范：字符串必须以 NUL (\0) 字节结尾才算合法！
@@ -1294,10 +1294,10 @@ fn od_collect_strings_semantic<R: Read>(
 
         for &b in &chunk[..n] {
             bytes_read_total += 1;
+            if buffer.is_empty() {
+                string_start = current_offset;
+            }
             if od_is_printable(b) {
-                if buffer.is_empty() {
-                    string_start = current_offset;
-                }
                 buffer.push(b);
             } else {
                 if buffer.len() >= min_len && b == 0 {
@@ -1711,6 +1711,40 @@ mod tests {
                 od_collect_strings_semantic(&mut longer, OdRadix::Octal, 0, Some(10), 9).unwrap();
             assert_eq!(semantic.rows.len(), 1);
             assert_eq!(semantic.rows[0].offset, u64::MAX);
+        }
+
+        #[test]
+        fn test_zero_length_strings_use_each_candidate_offset() {
+            let input = b"\0\0\0\0abc\0hello-world\0\0final-string\0";
+            let expected = concat!(
+                "0000000 \n",
+                "0000001 \n",
+                "0000002 \n",
+                "0000003 \n",
+                "0000004 abc\n",
+                "0000010 hello-world\n",
+                "0000024 \n",
+                "0000025 final-string\n",
+            );
+
+            let mut direct_input = std::io::Cursor::new(input);
+            let mut output = Vec::new();
+            odexec_strings(&mut direct_input, OdRadix::Octal, 0, None, 0, &mut output).unwrap();
+            assert_eq!(String::from_utf8(output).unwrap(), expected);
+
+            let mut semantic_input = std::io::Cursor::new(input);
+            let semantic =
+                od_collect_strings_semantic(&mut semantic_input, OdRadix::Octal, 0, None, 0)
+                    .unwrap();
+            assert_eq!(semantic.classic_text, expected);
+            assert_eq!(
+                semantic
+                    .rows
+                    .iter()
+                    .map(|row| row.offset)
+                    .collect::<Vec<_>>(),
+                vec![0, 1, 2, 3, 4, 8, 20, 21],
+            );
         }
 
         #[test]

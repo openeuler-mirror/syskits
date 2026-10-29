@@ -80,6 +80,38 @@ fn head_reads_pipeline_input() {
 }
 
 #[test]
+fn head_stops_infinite_upstream_after_requested_line() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=classic", "yes | head -1"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn syskits data pipeline");
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        if child.try_wait().expect("poll syskits").is_some() {
+            break;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("head did not stop its infinite upstream command");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+
+    let output = child.wait_with_output().expect("collect syskits output");
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "y\n");
+}
+
+#[test]
 fn sort_reads_pipeline_input() {
     let output = run_data_classic("from text | sort", "b\na\n");
     assert!(

@@ -38,13 +38,23 @@ impl HeadCore {
         intent: &HeadIntent,
         input: CtPipelineData,
     ) -> Result<(CtValue, String, String, i32), CtDiagnosticError> {
-        let result = ctengine::run_with_optional_pipeline_stdin(
-            "head",
-            input,
-            argv_uses_stdin(&intent.argv, &["-n", "-c", "--lines", "--bytes"]),
-            || Ok(ct_head::head_native_semantic(intent.argv.iter().cloned())),
-            |err| CtDiagnosticError::simple(format!("head: {err}")),
-        )?;
+        let use_stdin = argv_uses_stdin(&intent.argv, &["-n", "-c", "--lines", "--bytes"]);
+        let result = if use_stdin {
+            match input {
+                CtPipelineData::ByteStream(stream) => {
+                    ct_head::head_native_semantic_with_reader(intent.argv.iter().cloned(), stream)
+                }
+                other => ctengine::run_with_optional_pipeline_stdin(
+                    "head",
+                    other,
+                    true,
+                    || Ok(ct_head::head_native_semantic(intent.argv.iter().cloned())),
+                    |err| CtDiagnosticError::simple(format!("head: {err}")),
+                )?,
+            }
+        } else {
+            ct_head::head_native_semantic(intent.argv.iter().cloned())
+        };
         Ok(match result {
             Ok(semantic) => (
                 semantic_to_value(&semantic),

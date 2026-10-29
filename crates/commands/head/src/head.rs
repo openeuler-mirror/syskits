@@ -981,19 +981,28 @@ fn should_print_header(options: &HeadOptions) -> bool {
 }
 
 fn handle_stdin_to_writer<W: Write>(options: &HeadOptions, writer: &mut W) -> std::io::Result<()> {
-    let mut stdin = BufReader::new(ctcore::ct_io::stdin_reader_box());
+    let mut stdin = ctcore::ct_io::stdin_reader_box();
+    handle_reader_to_writer(options, &mut stdin, writer)
+}
+
+fn handle_reader_to_writer<R: Read + ?Sized, W: Write>(
+    options: &HeadOptions,
+    input: &mut R,
+    writer: &mut W,
+) -> std::io::Result<()> {
+    let mut input = BufReader::new(input);
 
     match options.mode {
         Mode::FirstBytes(n) => {
-            let _ = read_n_bytes_to_writer(&mut stdin, n, writer, None)?;
+            let _ = read_n_bytes_to_writer(&mut input, n, writer, None)?;
         }
-        Mode::AllButLastBytes(n) => read_but_last_n_bytes_to_writer(&mut stdin, n, writer, None)?,
+        Mode::AllButLastBytes(n) => read_but_last_n_bytes_to_writer(&mut input, n, writer, None)?,
         Mode::FirstLines(n) => {
             let _ =
-                read_n_lines_to_writer(&mut stdin, n, options.line_ending.into(), writer, None)?;
+                read_n_lines_to_writer(&mut input, n, options.line_ending.into(), writer, None)?;
         }
         Mode::AllButLastLines(n) => read_but_last_n_lines_to_writer(
-            &mut stdin,
+            &mut input,
             n,
             options.line_ending.into(),
             writer,
@@ -1051,6 +1060,13 @@ fn head_rows_from_bytes(bytes: &[u8], source_name: &str, separator: u8) -> Vec<H
 }
 
 fn head_semantic_from_options(options: &HeadOptions) -> HeadSemantic {
+    head_semantic_from_options_with_reader(options, None)
+}
+
+fn head_semantic_from_options_with_reader(
+    options: &HeadOptions,
+    mut stdin_reader: Option<&mut dyn Read>,
+) -> HeadSemantic {
     let mut first = true;
     let mut classic_bytes = Vec::new();
     let mut stderr_text = String::new();
@@ -1067,23 +1083,27 @@ fn head_semantic_from_options(options: &HeadOptions) -> HeadSemantic {
         let mut file_output = Vec::new();
         let result = if file == "-" {
             let _ = print_file_header_to_writer(options, first, display_name, &mut classic_bytes);
-            #[cfg(unix)]
-            {
-                use std::os::unix::io::FromRawFd;
-                let mut stdin_file =
-                    std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(0) });
-                if ctcore::ct_io::injected_stdin_bytes().is_none()
-                    && !options.presume_input_pipe
-                    && is_seekable(&mut stdin_file)
+            if let Some(reader) = stdin_reader.as_deref_mut() {
+                handle_reader_to_writer(options, reader, &mut file_output)
+            } else {
+                #[cfg(unix)]
                 {
-                    head_file_to_writer(&mut stdin_file, options, &mut file_output)
-                } else {
+                    use std::os::unix::io::FromRawFd;
+                    let mut stdin_file =
+                        std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(0) });
+                    if ctcore::ct_io::injected_stdin_bytes().is_none()
+                        && !options.presume_input_pipe
+                        && is_seekable(&mut stdin_file)
+                    {
+                        head_file_to_writer(&mut stdin_file, options, &mut file_output)
+                    } else {
+                        handle_stdin_to_writer(options, &mut file_output)
+                    }
+                }
+                #[cfg(not(unix))]
+                {
                     handle_stdin_to_writer(options, &mut file_output)
                 }
-            }
-            #[cfg(not(unix))]
-            {
-                handle_stdin_to_writer(options, &mut file_output)
             }
         } else {
             match std::fs::File::open(file) {
@@ -1176,6 +1196,25 @@ pub fn head_native_semantic(args: impl ctcore::Args) -> CTResult<HeadSemantic> {
         }
     };
     Ok(head_semantic_from_options(&options))
+}
+
+pub fn head_native_semantic_with_reader(
+    args: impl ctcore::Args,
+    mut reader: impl Read,
+) -> CTResult<HeadSemantic> {
+    let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
+    rust_i18n::set_locale(&lang_code);
+    let matches = ct_app().try_get_matches_from(arg_iterate(args)?)?;
+    let options = match HeadOptions::get_from(&matches) {
+        Ok(o) => o,
+        Err(s) => {
+            return Err(CtSimpleError::new(1, s));
+        }
+    };
+    Ok(head_semantic_from_options_with_reader(
+        &options,
+        Some(&mut reader),
+    ))
 }
 
 #[cfg(test)]
@@ -1675,10 +1714,30 @@ mod tests {
     }
 
     mod native_semantic_tests {
-        use super::{HeadRow, head_native_semantic};
+        use super::{HeadRow, head_native_semantic, head_native_semantic_with_reader};
         use std::ffi::OsString;
-        use std::io::Write;
+        use std::io::{Read, Write};
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
         use tempfile::NamedTempFile;
+
+        struct RepeatingLineReader {
+            bytes_read: Arc<AtomicUsize>,
+        }
+
+        impl Read for RepeatingLineReader {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                let line = b"y\n";
+                let count = line.len().min(buf.len());
+                if count > 0 {
+                    buf[..count].copy_from_slice(&line[..count]);
+                }
+                self.bytes_read.fetch_add(count, Ordering::Relaxed);
+                Ok(count)
+            }
+        }
 
         #[test]
         fn test_head_native_semantic_collects_rows_and_metadata() {
@@ -1743,6 +1802,30 @@ mod tests {
             assert_eq!(semantic.classic_text, "");
             assert!(semantic.stderr_text.contains("cannot open"));
             assert_eq!(semantic.exit_code, 1);
+        }
+
+        #[test]
+        fn test_head_native_semantic_reader_stops_after_requested_line() {
+            let bytes_read = Arc::new(AtomicUsize::new(0));
+            let semantic = head_native_semantic_with_reader(
+                [
+                    OsString::from("head"),
+                    OsString::from("-n"),
+                    OsString::from("1"),
+                ]
+                .into_iter(),
+                RepeatingLineReader {
+                    bytes_read: bytes_read.clone(),
+                },
+            )
+            .expect("semantic");
+
+            assert_eq!(semantic.rows.len(), 1);
+            assert_eq!(semantic.classic_text, "y\n");
+            assert!(
+                bytes_read.load(Ordering::Relaxed) <= super::BUF_SIZE,
+                "head should not consume the rest of a streaming reader"
+            );
         }
     }
 }

@@ -25,7 +25,6 @@ use std::io::BufRead;
 use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, channel};
-use std::time::Duration;
 
 fn is_symlink(path: &Path) -> bool {
     path.symlink_metadata()
@@ -141,23 +140,6 @@ pub struct Observer {
 }
 
 impl Observer {
-    /// Directory removal may race with file removal notifications (e.g. `rm -r`).
-    /// Give the parent path a brief window to disappear before deciding.
-    fn orphan_after_brief_wait(path: &Path) -> bool {
-        if path.is_orphan() {
-            return true;
-        }
-
-        for _ in 0..5 {
-            std::thread::sleep(Duration::from_millis(20));
-            if path.is_orphan() {
-                return true;
-            }
-        }
-
-        false
-    }
-
     pub fn new(
         retry: bool,
         follow: Option<TailFollowMode>,
@@ -615,7 +597,7 @@ impl Observer {
                                         );
                                 }
                             }
-                            if Self::orphan_after_brief_wait(&tracked_path)
+                            if tracked_path.is_orphan()
                                 && !self.orphans.contains(&tracked_path)
                             {
                                 ct_show_error!("directory containing watched file was removed");
@@ -1126,6 +1108,7 @@ mod tests {
     use std::io::{BufRead, BufReader, Seek, SeekFrom, Write};
     #[cfg(unix)]
     use std::os::unix::fs::symlink;
+    use std::time::Duration;
     use tempfile::tempdir;
 
     fn descriptor_options() -> TailOptions {
@@ -1674,7 +1657,7 @@ mod tests {
     }
 
     #[test]
-    fn remove_file_event_catches_following_parent_removal() {
+    fn remove_file_event_does_not_wait_for_following_parent_removal() {
         let options = TailOptions {
             follow: Some(TailFollowMode::Name),
             retry: true,
@@ -1705,7 +1688,13 @@ mod tests {
 
         let event = Event::new(EventKind::Remove(RemoveKind::File)).add_path(watched_file.clone());
         let _ = observer.handle_event(&event, &options).unwrap();
+
+        assert!(!observer.use_polling);
+        assert!(!observer.orphans.contains(&watched_file));
+
         remover.join().unwrap();
+
+        assert!(!observer.reconcile_follow_name_retry(false).unwrap());
 
         assert!(observer.use_polling);
         assert!(observer.orphans.contains(&watched_file));

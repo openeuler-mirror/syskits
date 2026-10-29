@@ -53,6 +53,8 @@ fn run_self_backup(binary: &str, arguments: &[&str]) -> CopyResult {
 fn self_backup_timestamps_match_gnu() {
     for (arguments, preserves_timestamps) in [
         (&["-f", "--backup=numbered"][..], false),
+        (&["-i", "-f", "--backup=numbered"][..], false),
+        (&["-f", "-i", "--backup=numbered"][..], false),
         (
             &["-f", "--preserve=timestamps", "--backup=numbered"][..],
             true,

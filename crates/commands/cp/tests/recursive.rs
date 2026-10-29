@@ -69,3 +69,39 @@ fn copying_directory_into_itself_reports_effective_destination() {
         assert!(directory.path().join("dir/dir").is_dir());
     }
 }
+
+#[test]
+fn copies_directory_with_parents_to_missing_destination_path() {
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("a/b/c");
+    fs::create_dir_all(&source).unwrap();
+    fs::create_dir(directory.path().join("d")).unwrap();
+    fs::set_permissions(
+        directory.path().join("a"),
+        fs::Permissions::from_mode(0o721),
+    )
+    .unwrap();
+    fs::set_permissions(
+        directory.path().join("a/b"),
+        fs::Permissions::from_mode(0o732),
+    )
+    .unwrap();
+    fs::set_permissions(&source, fs::Permissions::from_mode(0o743)).unwrap();
+
+    let output = run_cp(directory.path(), &["-a", "--parents", "a/b/c", "d"]);
+
+    assert_eq!(output.status.code(), Some(0));
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+    for (path, mode) in [("d/a", 0o721), ("d/a/b", 0o732), ("d/a/b/c", 0o743)] {
+        assert_eq!(
+            fs::metadata(directory.path().join(path))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            mode,
+            "{path}"
+        );
+    }
+}

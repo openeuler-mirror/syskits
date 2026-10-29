@@ -593,7 +593,10 @@ pub(crate) fn copy_directory(
 /// assert!(!path_has_prefix(Path::new("/usr/bin"), Path::new("/var/log")))
 /// ```
 pub fn path_has_prefix(p1: &Path, p2: &Path) -> io::Result<bool> {
-    let pathbuf1 = canonicalize(p1, MissingHandling::Normal, ResolveMode::Logical)?;
+    // The effective destination can have multiple missing components, notably
+    // with `cp --parents`.  It still needs lexical and symlink normalization
+    // before the source-prefix check.
+    let pathbuf1 = canonicalize(p1, MissingHandling::Missing, ResolveMode::Logical)?;
     let pathbuf2 = canonicalize(p2, MissingHandling::Normal, ResolveMode::Logical)?;
 
     Ok(pathbuf1.starts_with(pathbuf2))

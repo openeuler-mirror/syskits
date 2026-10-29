@@ -488,6 +488,9 @@ fn infer_scalar(raw: &str) -> CtValue {
     if s.eq_ignore_ascii_case("false") {
         return CtValue::Bool(false);
     }
+    if has_leading_zero_numeric_literal(s) {
+        return CtValue::String(raw.to_string());
+    }
     if let Ok(n) = s.parse::<i64>() {
         return CtValue::Int(n);
     }
@@ -495,6 +498,16 @@ fn infer_scalar(raw: &str) -> CtValue {
         return CtValue::Float(n);
     }
     CtValue::String(raw.to_string())
+}
+
+fn has_leading_zero_numeric_literal(s: &str) -> bool {
+    let digits = s.strip_prefix(['+', '-']).unwrap_or(s);
+    let integer_part = digits
+        .split_once(['.', 'e', 'E'])
+        .map_or(digits, |(integer, _)| integer);
+    integer_part.len() > 1
+        && integer_part.starts_with('0')
+        && integer_part.chars().all(|c| c.is_ascii_digit())
 }
 
 fn json_value_to_ct(v: serde_json::Value) -> CtValue {
@@ -806,6 +819,61 @@ mod tests {
             first.iter().find(|(k, _)| k == "gender").map(|(_, v)| v),
             Some(CtValue::String(s)) if s == "male"
         ));
+    }
+
+    #[test]
+    fn test_from_csv_preserves_leading_zero_numeric_text() {
+        let value = parse_csv("id,number\n001,00123\n").expect("CSV should parse");
+        let CtValue::List(items) = value else {
+            panic!("expected list");
+        };
+        let CtValue::Record(fields) = &items[0] else {
+            panic!("expected record");
+        };
+        assert!(matches!(
+            fields.iter().find(|(key, _)| key == "id").map(|(_, value)| value),
+            Some(CtValue::String(value)) if value == "001"
+        ));
+        assert!(matches!(
+            fields
+                .iter()
+                .find(|(key, _)| key == "number")
+                .map(|(_, value)| value),
+            Some(CtValue::String(value)) if value == "00123"
+        ));
+    }
+
+    #[test]
+    fn test_infer_scalar_preserves_leading_zero_literals_only() {
+        assert!(matches!(infer_scalar("001"), CtValue::String(value) if value == "001"));
+        assert!(matches!(infer_scalar("-00123"), CtValue::String(value) if value == "-00123"));
+        assert!(matches!(infer_scalar("00.5"), CtValue::String(value) if value == "00.5"));
+        assert!(matches!(infer_scalar("0"), CtValue::Int(0)));
+        assert!(
+            matches!(infer_scalar("0.5"), CtValue::Float(value) if (value - 0.5).abs() < f64::EPSILON)
+        );
+        assert!(matches!(infer_scalar("123"), CtValue::Int(123)));
+    }
+
+    #[test]
+    fn test_delimited_transpose_and_ssv_preserve_leading_zero_numeric_text() {
+        for value in [
+            parse_csv_transposed("id,001\nnumber,00123\n"),
+            parse_ssv("id number\n001 00123\n"),
+            parse_ssv_transposed("id 001\nnumber 00123\n"),
+        ] {
+            let CtValue::List(items) = value.expect("delimited text should parse") else {
+                panic!("expected list");
+            };
+            let CtValue::Record(fields) = &items[0] else {
+                panic!("expected record");
+            };
+            assert!(
+                fields
+                    .iter()
+                    .all(|(_, value)| matches!(value, CtValue::String(_)))
+            );
+        }
     }
 
     #[test]

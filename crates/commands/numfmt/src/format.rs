@@ -196,12 +196,12 @@ struct NumfmtParsedNumber<'a> {
 
 fn numfmt_parse_number_parts(s: &str) -> Result<NumfmtParsedNumber<'_>> {
     if s.is_empty() {
-        return Err("invalid number: ''".to_string());
+        return Err(format!("invalid number: {}", numfmt_quote("")));
     }
 
     let s = s.trim_matches(numfmt_is_blank);
     if s.is_empty() {
-        return Err("invalid number: ''".to_string());
+        return Err(format!("invalid number: {}", numfmt_quote("")));
     }
 
     let (num_end, invalid_fraction) = match parse_numeric_prefix(s) {
@@ -371,13 +371,15 @@ fn numfmt_remove_suffix(i: f64, s: Option<NumfmtSuffix>, u: &NumfmtUnit) -> Resu
         },
         (None, &NumfmtUnit::Iec(true)) => Ok(i),
         (Some((raw_suffix, false)), &NumfmtUnit::Iec(true)) => Err(format!(
-            "missing 'i' suffix in input: '{i}{raw_suffix:?}' (e.g Ki/Mi/Gi)"
+            "missing 'i' suffix in input: {} (e.g Ki/Mi/Gi)",
+            numfmt_quote(&format!("{i}{raw_suffix:?}"))
         )),
         (Some((raw_suffix, with_i)), &NumfmtUnit::None) => Err(format!(
-            "rejecting suffix in input: '{}{:?}{}' (consider using --from)",
-            i,
-            raw_suffix,
-            if with_i { "i" } else { "" }
+            "rejecting suffix in input: {} (consider using --from)",
+            numfmt_quote(&format!(
+                "{i}{raw_suffix:?}{}",
+                if with_i { "i" } else { "" }
+            ))
         )),
         (None, _) => Ok(i),
         (_, _) => Err("This suffix is unsupported for specified unit".to_owned()),
@@ -2309,7 +2311,10 @@ mod tests {
             };
             assert_eq!(
                 numfmt_transform_from("1K", &opts).unwrap_err(),
-                "missing 'i' suffix in input: '1024K' (e.g Ki/Mi/Gi)".to_string()
+                format!(
+                    "missing 'i' suffix in input: {} (e.g Ki/Mi/Gi)",
+                    crate::format::numfmt_quote("1024K")
+                )
             );
         }
 
@@ -3470,7 +3475,8 @@ mod tests {
         fn test_format_string_null_handling() {
             let config = setup_default_config();
             let s = ""; // 非法输入
-            let shell_expected_output = "invalid number: ''".to_string();
+            let shell_expected_output =
+                format!("invalid number: {}", crate::format::numfmt_quote(""));
             let output = numfmt_format_string(s, &config, Some(1));
             println!("{output:?}");
             assert!(output.is_err());

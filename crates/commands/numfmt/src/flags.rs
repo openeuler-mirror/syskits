@@ -10,6 +10,7 @@
  */
 use std::str::FromStr;
 
+use crate::format::numfmt_quote;
 use crate::units::NumfmtUnit;
 use ctcore::ct_ranges::CtRange;
 #[derive(Debug, PartialEq)]
@@ -129,9 +130,9 @@ impl FromStr for NumfmtFormatOptions {
 
         if chars_iter.peek().is_none() {
             return if numfmt_options.prefix == s {
-                Err(format!("format '{s}' has no % directive"))
+                Err(format!("format {} has no % directive", numfmt_quote(s)))
             } else {
-                Err(format!("format '{s}' ends in %"))
+                Err(format!("format {} ends in %", numfmt_quote(s)))
             };
         }
 
@@ -152,7 +153,8 @@ impl FromStr for NumfmtFormatOptions {
                 Some(c) if c.is_ascii_digit() => padding.push('-'),
                 _ => {
                     return Err(format!(
-                        "invalid format '{s}', directive must be %[0]['][-][N][.][N]f"
+                        "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                        numfmt_quote(s)
                     ));
                 }
             }
@@ -171,7 +173,10 @@ impl FromStr for NumfmtFormatOptions {
             if let Ok(p) = padding.parse() {
                 numfmt_options.padding = Some(p);
             } else {
-                return Err(format!("invalid format '{s}' (width overflow)"));
+                return Err(format!(
+                    "invalid format {} (width overflow)",
+                    numfmt_quote(s)
+                ));
             }
         }
 
@@ -179,7 +184,7 @@ impl FromStr for NumfmtFormatOptions {
             chars_iter.next();
 
             if matches!(chars_iter.peek(), Some(' ' | '+' | '-')) {
-                return Err(format!("invalid precision in format '{s}'"));
+                return Err(format!("invalid precision in format {}", numfmt_quote(s)));
             }
 
             while let Some(c) = chars_iter.peek() {
@@ -196,7 +201,7 @@ impl FromStr for NumfmtFormatOptions {
             } else if let Ok(p) = precision.parse() {
                 numfmt_options.precision = Some(p);
             } else {
-                return Err(format!("invalid precision in format '{s}'"));
+                return Err(format!("invalid precision in format {}", numfmt_quote(s)));
             }
         }
 
@@ -204,7 +209,8 @@ impl FromStr for NumfmtFormatOptions {
             chars_iter.next();
         } else {
             return Err(format!(
-                "invalid format '{s}', directive must be %[0]['][-][N][.][N]f"
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                numfmt_quote(s)
             ));
         }
 
@@ -218,7 +224,10 @@ impl FromStr for NumfmtFormatOptions {
                 }
                 chars_iter.next();
             } else {
-                return Err(format!("format '{s}' has too many % directives"));
+                return Err(format!(
+                    "format {} has too many % directives",
+                    numfmt_quote(s)
+                ));
             }
         }
 

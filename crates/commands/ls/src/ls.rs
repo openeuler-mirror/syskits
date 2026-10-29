@@ -5357,11 +5357,9 @@ fn display_date_bytes(metadata: &Metadata, config: &LsConfig) -> Vec<u8> {
                     let fmt = locale_time_format(is_recent);
                     #[cfg(unix)]
                     {
-                        let aligned_fmt = align_locale_month_format(
-                            time.timestamp(),
-                            OsStr::new(&fmt),
-                        )
-                            .unwrap_or_else(|| fmt.as_bytes().to_vec());
+                        let aligned_fmt =
+                            align_locale_month_format(time.timestamp(), OsStr::new(&fmt))
+                                .unwrap_or_else(|| fmt.as_bytes().to_vec());
                         ls_format_local_time_strftime_bytes(
                             time.timestamp(),
                             time.timestamp_subsec_nanos(),
@@ -6466,14 +6464,7 @@ fn color_name<W: Write>(
         )
     } else {
         let mdata_option = path.get_metadata(out);
-        apply_style_based_on_metadata(
-            path,
-            mdata_option,
-            ls_colors,
-            style_manager,
-            &name,
-            None,
-        )
+        apply_style_based_on_metadata(path, mdata_option, ls_colors, style_manager, &name, None)
     }
 }
 

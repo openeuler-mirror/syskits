@@ -9,8 +9,8 @@
  * See the Mulan PSL v2 for more details.
  */
 use ctcore::ct_display::Quotable;
-use ctcore::ct_quoting_style::gnu_quote_locale;
 use ctcore::ct_error::{CTError, strip_errno};
+use ctcore::ct_quoting_style::gnu_quote_locale;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::io::Error;

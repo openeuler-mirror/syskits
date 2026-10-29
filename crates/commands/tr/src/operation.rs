@@ -1571,13 +1571,16 @@ mod tests {
         fn test_escaped_repeat_count_is_parsed_as_literal_characters() {
             let sequence = Sequence::from_str(br"[b*\9]").unwrap();
 
-            assert!(matches!(sequence.as_slice(), [
-                Sequence::Char(b'['),
-                Sequence::Char(b'b'),
-                Sequence::Char(b'*'),
-                Sequence::Char(b'9'),
-                Sequence::Char(b']')
-            ]));
+            assert!(matches!(
+                sequence.as_slice(),
+                [
+                    Sequence::Char(b'['),
+                    Sequence::Char(b'b'),
+                    Sequence::Char(b'*'),
+                    Sequence::Char(b'9'),
+                    Sequence::Char(b']')
+                ]
+            ));
 
             let (set1, set2) = Sequence::solve_set_characters(b"abc", br"[b*\9]", false).unwrap();
             let mut translator = TranslateOperation::new(set1, set2, false).unwrap();
@@ -1672,12 +1675,8 @@ mod tests {
 
         #[test]
         fn test_case_class_mapping_continues_after_paired_constructs() {
-            let map = Sequence::standard_translation_map(
-                b"[:upper:]A-B",
-                b"[:lower:]0",
-                false,
-            )
-            .unwrap();
+            let map =
+                Sequence::standard_translation_map(b"[:upper:]A-B", b"[:lower:]0", false).unwrap();
 
             assert_eq!(map.get(&b'A'), Some(&b'0'));
             assert_eq!(map.get(&b'B'), Some(&b'0'));

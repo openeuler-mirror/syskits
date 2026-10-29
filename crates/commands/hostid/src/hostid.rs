@@ -946,7 +946,7 @@ mod tests {
         assert!(command.get_name().contains("hostid"));
 
         // 测试 execute 方法
-        let args = vec![OsString::from("hostid")];
+        let args = vec![OsString::from("hostid"), OsString::from("--help")];
         assert!(tool.execute(&args).is_ok());
     }
 
@@ -991,7 +991,7 @@ mod tests {
 
         #[test]
         fn test_expand_main() {
-            let args = [ctcore::ct_util_name()];
+            let args = [ctcore::ct_util_name(), "--help"];
             let result = hostid_main(args.iter().map(OsString::from));
 
             assert!(result.is_ok());

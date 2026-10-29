@@ -123,7 +123,7 @@ impl DataCommand for CmdTo {
                 if is_empty_record_value(&value) {
                     String::new()
                 } else {
-                    serde_yaml::to_string(&ct_to_json(&value))
+                    serde_yaml::to_string(&ct_to_yaml(&value))
                         .map_err(|e| CtDiagnosticError::simple(format!("to yaml: {e}")))?
                 }
             }
@@ -472,6 +472,30 @@ fn ct_to_json(v: &CtValue) -> serde_json::Value {
         ),
         CtValue::List(items) => serde_json::Value::Array(items.iter().map(ct_to_json).collect()),
         CtValue::Error(e) => serde_json::Value::String(format!("<error: {e}>")),
+    }
+}
+
+fn ct_to_yaml(v: &CtValue) -> serde_yaml::Value {
+    match v {
+        CtValue::Nothing => serde_yaml::Value::Null,
+        CtValue::Bool(b) => serde_yaml::Value::Bool(*b),
+        CtValue::Int(n) => serde_yaml::Value::Number((*n).into()),
+        CtValue::Float(f) if f.is_finite() => serde_yaml::Value::Number((*f).into()),
+        CtValue::Float(_) => serde_yaml::Value::Null,
+        CtValue::String(s) => serde_yaml::Value::String(s.clone()),
+        CtValue::Binary(_) => serde_yaml::Value::String("<binary>".into()),
+        CtValue::DateTime(_) | CtValue::Duration(_) | CtValue::Size(_) => {
+            serde_yaml::Value::String(v.to_text())
+        }
+        CtValue::Record(fields) => {
+            let mut mapping = serde_yaml::Mapping::new();
+            for (key, value) in fields {
+                mapping.insert(serde_yaml::Value::String(key.clone()), ct_to_yaml(value));
+            }
+            serde_yaml::Value::Mapping(mapping)
+        }
+        CtValue::List(items) => serde_yaml::Value::Sequence(items.iter().map(ct_to_yaml).collect()),
+        CtValue::Error(e) => serde_yaml::Value::String(format!("<error: {e}>")),
     }
 }
 
@@ -1052,7 +1076,7 @@ mod tests {
         let CtPipelineData::Value(CtValue::String(y), _) = r else {
             panic!("string");
         };
-        assert!(y.contains("a: 1"));
+        assert_eq!(y, "a: 1\n");
     }
 
     #[test]

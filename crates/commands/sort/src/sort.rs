@@ -866,20 +866,16 @@ impl<'a> SortLine<'a> {
                 token_buffer,
             );
         }
-        for (selector, selection) in sort_settings
-            .selectors
-            .iter()
-            .map(|selector| {
-                (
-                    selector,
-                    selector.get_selection(
-                        line,
-                        token_buffer,
-                        sort_settings.line_ending == CtLineEnding::Nul,
-                    ),
-                )
-            })
-        {
+        for (selector, selection) in sort_settings.selectors.iter().map(|selector| {
+            (
+                selector,
+                selector.get_selection(
+                    line,
+                    token_buffer,
+                    sort_settings.line_ending == CtLineEnding::Nul,
+                ),
+            )
+        }) {
             match selection {
                 SortSelection::AsF64(parsed_float) => {
                     chunk_line_data.parsed_floats.push(parsed_float)
@@ -4407,8 +4403,7 @@ mod tests {
             };
             let line = "12345 abc";
             let token = 0..5; // Simplified token representation
-            let selection =
-                selector.get_selection(line, std::slice::from_ref(&token), false);
+            let selection = selector.get_selection(line, std::slice::from_ref(&token), false);
             match selection {
                 SortSelection::WithNumInfo(s, _) => assert_eq!(s, "12345"),
                 _ => panic!("Expected numeric selection"),

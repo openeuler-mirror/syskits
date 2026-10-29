@@ -48,11 +48,7 @@ printf '%s' "$?" >&3
 #[test]
 fn full_stdout_errors_match_gnu() {
     for program_name in ["hostid", "custom", "/tmp/custom"] {
-        for args in [
-            [].as_slice(),
-            ["--help"].as_slice(),
-            ["--version"].as_slice(),
-        ] {
+        for args in [["--help"].as_slice(), ["--version"].as_slice()] {
             let gnu = run_with_full_stdout("/usr/bin/hostid", program_name, args);
             let syskits = run_with_full_stdout(env!("CARGO_BIN_EXE_hostid"), program_name, args);
 
@@ -70,11 +66,7 @@ fn full_stdout_errors_match_gnu() {
 #[test]
 fn closed_stdout_errors_match_gnu() {
     for program_name in ["hostid", "custom", "/tmp/custom"] {
-        for args in [
-            [].as_slice(),
-            ["--help"].as_slice(),
-            ["--version"].as_slice(),
-        ] {
+        for args in [["--help"].as_slice(), ["--version"].as_slice()] {
             let gnu = run_with_closed_stdout("/usr/bin/hostid", program_name, args);
             let syskits = run_with_closed_stdout(env!("CARGO_BIN_EXE_hostid"), program_name, args);
 

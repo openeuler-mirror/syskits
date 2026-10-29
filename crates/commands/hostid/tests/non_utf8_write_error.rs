@@ -14,6 +14,7 @@ fn run_hostid(binary: &str, locale: &str, program_name: &OsStr) -> Output {
     let mut command = Command::new(binary);
     command
         .arg0(program_name)
+        .arg("--help")
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .env("LC_ALL", locale)

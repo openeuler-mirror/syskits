@@ -859,12 +859,26 @@ impl<'a> SortLine<'a> {
     ) -> Self {
         token_buffer.clear();
         if sort_settings.precomputed.is_needs_tokens {
-            tokenize(line, sort_settings.separator, token_buffer);
+            tokenize_with_record_mode(
+                line,
+                sort_settings.separator,
+                sort_settings.line_ending == CtLineEnding::Nul,
+                token_buffer,
+            );
         }
         for (selector, selection) in sort_settings
             .selectors
             .iter()
-            .map(|selector| (selector, selector.get_selection(line, token_buffer)))
+            .map(|selector| {
+                (
+                    selector,
+                    selector.get_selection(
+                        line,
+                        token_buffer,
+                        sort_settings.line_ending == CtLineEnding::Nul,
+                    ),
+                )
+            })
         {
             match selection {
                 SortSelection::AsF64(parsed_float) => {
@@ -913,9 +927,18 @@ impl<'a> SortLine<'a> {
         writeln!(w, "{line}")?;
 
         let mut fields = vec![];
-        tokenize(self.line, sort_settings.separator, &mut fields);
+        tokenize_with_record_mode(
+            self.line,
+            sort_settings.separator,
+            sort_settings.line_ending == CtLineEnding::Nul,
+            &mut fields,
+        );
         for selector in &sort_settings.selectors {
-            let mut selection = selector.get_range(self.line, Some(&fields));
+            let mut selection = selector.get_range(
+                self.line,
+                Some(&fields),
+                sort_settings.line_ending == CtLineEnding::Nul,
+            );
             match selector.settings.mode {
                 SortMode::SortNumeric | SortMode::SortHumanNumeric => {
                     // 找出用于数字比较的范围
@@ -1034,14 +1057,24 @@ impl<'a> SortLine<'a> {
 }
 
 /// 将一行标记为字段。结果存储在 `token_buffer` 中。
+#[cfg(test)]
 fn tokenize(line: &str, separator: Option<char>, token_buffer: &mut Vec<Field>) {
+    tokenize_with_record_mode(line, separator, false, token_buffer);
+}
+
+fn tokenize_with_record_mode(
+    line: &str,
+    separator: Option<char>,
+    zero_terminated: bool,
+    token_buffer: &mut Vec<Field>,
+) {
     assert!(token_buffer.is_empty());
     match separator {
         Some(separator) => {
             tokenize_with_separator(line, separator, token_buffer);
         }
         None => {
-            tokenize_default(line, token_buffer);
+            tokenize_default_with_record_mode(line, zero_terminated, token_buffer);
         }
     }
 }
@@ -1049,12 +1082,21 @@ fn tokenize(line: &str, separator: Option<char>, token_buffer: &mut Vec<Field>) 
 /// 默认情况下，字段由非空格后的第一个空格分隔。
 /// 字段开头包含空格。
 /// 结果存储到 `token_buffer` 中。
+#[cfg(test)]
 fn tokenize_default(line: &str, token_buf: &mut Vec<Field>) {
+    tokenize_default_with_record_mode(line, false, token_buf);
+}
+
+fn tokenize_default_with_record_mode(
+    line: &str,
+    zero_terminated: bool,
+    token_buf: &mut Vec<Field>,
+) {
     token_buf.push(0..0);
     // 假装行前有空格
     let mut previous_was_whitespace = true;
     for (idx, char) in line.char_indices() {
-        if sort_is_blank(char) {
+        if sort_is_field_blank(char, zero_terminated) {
             if !previous_was_whitespace {
                 token_buf.last_mut().unwrap().end = idx;
                 token_buf.push(idx..0);
@@ -1065,6 +1107,10 @@ fn tokenize_default(line: &str, token_buf: &mut Vec<Field>) {
         }
     }
     token_buf.last_mut().unwrap().end = line.len();
+}
+
+fn sort_is_field_blank(character: char, zero_terminated: bool) -> bool {
+    sort_is_blank(character) || (zero_terminated && character == '\n')
 }
 
 /// 在分隔符之间分割。这些分隔符不包含在字段中。
@@ -1286,13 +1332,18 @@ impl SortFieldSelector {
 
     /// 获取与该行的选择器相对应的选择。
     /// 如果 needs_fields 返回 false，则标记可能为空。
-    fn get_selection<'a>(&self, line: &'a str, tokens: &[Field]) -> SortSelection<'a> {
+    fn get_selection<'a>(
+        &self,
+        line: &'a str,
+        tokens: &[Field],
+        zero_terminated: bool,
+    ) -> SortSelection<'a> {
         // `get_range`期望`None`，当我们不需要标记时，空向量会让我们感到困惑。
         let tokens = match self.is_needs_tokens {
             true => Some(tokens),
             false => None,
         };
-        let mut range = &line[self.get_range(line, tokens)];
+        let mut range = &line[self.get_range(line, tokens, zero_terminated)];
         match self.settings.mode {
             SortMode::SortNumeric | SortMode::SortHumanNumeric => {
                 let (info, num_range) = NumInfo::parse(
@@ -1315,7 +1366,12 @@ impl SortFieldSelector {
 
     /// 在该行中查找与该选择器相对应的范围。
     /// 如果 needs_fields 返回 false，则 tokens 必须为 None。
-    fn get_range(&self, line: &str, tokens: Option<&[Field]>) -> Range<usize> {
+    fn get_range(
+        &self,
+        line: &str,
+        tokens: Option<&[Field]>,
+        zero_terminated: bool,
+    ) -> Range<usize> {
         enum Resolution {
             // 已解析字符的起始索引，包括在内
             StartOfChar(usize),
@@ -1333,6 +1389,7 @@ impl SortFieldSelector {
             line: &str,
             tokens: Option<&[Field]>,
             position: &SortKeyPosition,
+            zero_terminated: bool,
         ) -> Resolution {
             if matches!(tokens, Some(tokens) if tokens.len() < position.field) {
                 Resolution::TooHigh
@@ -1355,7 +1412,7 @@ impl SortFieldSelector {
                 if position.is_ignore_blanks {
                     idx += line[idx..]
                         .char_indices()
-                        .find(|(_, c)| !sort_is_blank(*c))
+                        .find(|(_, c)| !sort_is_field_blank(*c, zero_terminated))
                         .map_or(line[idx..].len(), |(idx, _)| idx);
                 }
                 // 应用字符索引
@@ -1371,9 +1428,12 @@ impl SortFieldSelector {
             }
         }
 
-        match resolve_index(line, tokens, &self.from) {
+        match resolve_index(line, tokens, &self.from, zero_terminated) {
             Resolution::StartOfChar(from) => {
-                let resolution_to = self.to.as_ref().map(|to| resolve_index(line, tokens, to));
+                let resolution_to = self
+                    .to
+                    .as_ref()
+                    .map(|to| resolve_index(line, tokens, to, zero_terminated));
 
                 let mut range = match resolution_to {
                     Some(Resolution::StartOfChar(mut to)) => {
@@ -4339,7 +4399,8 @@ mod tests {
             };
             let line = "12345 abc";
             let token = 0..5; // Simplified token representation
-            let selection = selector.get_selection(line, std::slice::from_ref(&token));
+            let selection =
+                selector.get_selection(line, std::slice::from_ref(&token), false);
             match selection {
                 SortSelection::WithNumInfo(s, _) => assert_eq!(s, "12345"),
                 _ => panic!("Expected numeric selection"),
@@ -4430,7 +4491,7 @@ mod tests {
             };
             let line = "";
             let tokens = vec![]; // No tokens due to empty line
-            let selection = selector.get_selection(line, &tokens);
+            let selection = selector.get_selection(line, &tokens, false);
             match selection {
                 SortSelection::Str(s) => {
                     assert!(s.is_empty(), "Expected empty selection for an empty line")
@@ -4901,6 +4962,36 @@ mod tests {
                 Field::from(31..1055), // 非常长的字符串
             ];
             assert_eq!(token_buffer, expected);
+        }
+
+        #[test]
+        fn test_tokenize_newline_as_field_blank_for_nul_records() {
+            let mut token_buffer = Vec::new();
+
+            tokenize_with_record_mode("1\n2", None, true, &mut token_buffer);
+
+            assert_eq!(token_buffer, vec![0..1, 1..3]);
+        }
+
+        #[test]
+        fn test_ignore_blanks_skips_newlines_for_nul_records() {
+            let selector = SortFieldSelector::parse(
+                "2,2",
+                &SortGlobalConfigs {
+                    is_ignore_leading_blanks: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let mut token_buffer = Vec::new();
+            tokenize_with_record_mode("1\n\n2", None, true, &mut token_buffer);
+
+            let selection = selector.get_selection("1\n\n2", &token_buffer, true);
+
+            match selection {
+                SortSelection::Str(value) => assert_eq!(value, "2"),
+                _ => panic!("expected string selection"),
+            }
         }
     }
 

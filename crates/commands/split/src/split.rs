@@ -3227,7 +3227,9 @@ mod tests {
                 OsString::from(ctcore::ct_util_name()),
                 OsString::from("-b"),
                 OsString::from("1"),
-                OsString::from("--filter=kill -HUP $$"),
+                // SIGHUP is commonly inherited as ignored by CI launchers, so
+                // use SIGKILL to make the filter failure deterministic.
+                OsString::from("--filter=kill -KILL $$"),
                 input.into_os_string(),
                 prefix.clone().into_os_string(),
             ]
@@ -3235,11 +3237,11 @@ mod tests {
         )
         .expect_err("a signaled filter must fail split");
 
-        assert_eq!(error.code(), 129);
+        assert_eq!(error.code(), 137);
         assert_eq!(
             error.to_string(),
             format!(
-                "with FILE={}aa, signal HUP from command: kill -HUP $$",
+                "with FILE={}aa, signal KILL from command: kill -KILL $$",
                 prefix.display()
             )
         );

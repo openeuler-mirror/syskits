@@ -2135,7 +2135,10 @@ mod tests {
                     )),
                     "zh-CN"
                 ),
-                "标准输入: 读取错误: Bad file descriptor"
+                format!(
+                    "{}: 读取错误: Bad file descriptor",
+                    tac_quote_path(OsStr::new("标准输入"), false)
+                )
             );
         }
 
@@ -2266,7 +2269,16 @@ mod tests {
         fn test_get_file_data_seekable_directory_preserves_read_error() {
             let error = get_file_data(OsStr::new(".")).unwrap_err();
 
-            assert_eq!(error.to_string(), ".: read error: Invalid argument");
+            // Directory reads report EINVAL or EISDIR depending on the
+            // filesystem/kernel combination; both are valid preserved read
+            // errors here.
+            assert!(
+                matches!(
+                    error.to_string().as_str(),
+                    ".: read error: Invalid argument" | ".: read error: Is a directory"
+                ),
+                "unexpected directory read diagnostic: {error}"
+            );
         }
 
         #[test]

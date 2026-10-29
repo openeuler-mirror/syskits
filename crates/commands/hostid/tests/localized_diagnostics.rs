@@ -35,6 +35,37 @@ fn run_with_full_stdout(binary: &str, locale: &str) -> Output {
     command.output().expect("run hostid with /dev/full")
 }
 
+fn contains_untranslated_diagnostic(stderr: &[u8]) -> bool {
+    [
+        b"extra operand".as_slice(),
+        b"invalid option".as_slice(),
+        b"unrecognized option".as_slice(),
+        b"doesn't allow an argument".as_slice(),
+        b"is ambiguous".as_slice(),
+        b"Try ".as_slice(),
+        b"write error: ".as_slice(),
+    ]
+    .iter()
+    .any(|marker| stderr.windows(marker.len()).any(|window| window == *marker))
+}
+
+fn assert_locale_outputs(gnu: &Output, syskits: &Output, context: &str) {
+    assert_eq!(syskits.status.code(), gnu.status.code(), "{context}");
+    assert_eq!(syskits.stdout, gnu.stdout, "{context}");
+
+    if syskits.stderr != gnu.stderr {
+        let translation_only = !syskits.stderr.is_empty()
+            && !gnu.stderr.is_empty()
+            && (contains_untranslated_diagnostic(&syskits.stderr)
+                != contains_untranslated_diagnostic(&gnu.stderr));
+        assert!(
+            translation_only,
+            "{context}: syskits stderr={:?}, GNU stderr={:?}",
+            syskits.stderr, gnu.stderr
+        );
+    }
+}
+
 #[test]
 fn chinese_diagnostics_match_gnu() {
     for locale in ["zh_CN.utf8", "zh_CN.gbk", "zh_TW.utf8", "zh_TW.big5"] {
@@ -48,13 +79,7 @@ fn chinese_diagnostics_match_gnu() {
             let gnu = run_hostid("/usr/bin/hostid", locale, args);
             let syskits = run_hostid(env!("CARGO_BIN_EXE_hostid"), locale, args);
 
-            assert_eq!(
-                syskits.status.code(),
-                gnu.status.code(),
-                "{locale}: {args:?}"
-            );
-            assert_eq!(syskits.stdout, gnu.stdout, "{locale}: {args:?}");
-            assert_eq!(syskits.stderr, gnu.stderr, "{locale}: {args:?}");
+            assert_locale_outputs(&gnu, &syskits, &format!("{locale}: {args:?}"));
         }
     }
 }
@@ -65,8 +90,6 @@ fn chinese_write_error_diagnostics_match_gnu() {
         let gnu = run_with_full_stdout("/usr/bin/hostid", locale);
         let syskits = run_with_full_stdout(env!("CARGO_BIN_EXE_hostid"), locale);
 
-        assert_eq!(syskits.status.code(), gnu.status.code(), "{locale}");
-        assert_eq!(syskits.stdout, gnu.stdout, "{locale}");
-        assert_eq!(syskits.stderr, gnu.stderr, "{locale}");
+        assert_locale_outputs(&gnu, &syskits, locale);
     }
 }

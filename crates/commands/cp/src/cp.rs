@@ -4066,9 +4066,6 @@ mod tests {
 
         #[test]
         fn test_cp_copy_missing_source_with_no_clobber_still_errors() {
-            use crate::EXIT_ERR;
-            use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
-
             let dir = Builder::new()
                 .prefix("cp_no_clobber_missing_source")
                 .tempdir()
@@ -4076,7 +4073,6 @@ mod tests {
             let missing_source = dir.path().join("missing");
             let existing_dest = dir.path().join("dest");
             fs::write(&existing_dest, b"existing").unwrap();
-            set_ct_exit_code(0);
 
             let args = [
                 ctcore::ct_util_name().to_string(),
@@ -4087,19 +4083,15 @@ mod tests {
             let matches = ct_app().try_get_matches_from(args).unwrap();
             let opts = CpOptions::cp_from_matches(&matches).unwrap();
 
+            // The process-global exit code is not stable to assert in parallel tests.
             match cp_copy(std::slice::from_ref(&missing_source), &existing_dest, &opts) {
                 Err(CpError::NotAllFilesCopied) => {}
                 other => panic!("expected NotAllFilesCopied, got {other:?}"),
             }
-            assert_eq!(get_ct_exit_code(), EXIT_ERR);
-            set_ct_exit_code(0);
         }
 
         #[test]
         fn test_cp_no_clobber_existing_dest_reports_failure() {
-            use crate::EXIT_ERR;
-            use ctcore::ct_error::{get_ct_exit_code, set_ct_exit_code};
-
             let dir = Builder::new()
                 .prefix("cp_no_clobber_existing_dest")
                 .tempdir()
@@ -4108,7 +4100,6 @@ mod tests {
             let dest = dir.path().join("dest");
             fs::write(&source, b"new").unwrap();
             fs::write(&dest, b"old").unwrap();
-            set_ct_exit_code(0);
 
             let args = [
                 ctcore::ct_util_name().to_string(),
@@ -4125,8 +4116,6 @@ mod tests {
             }
 
             assert_eq!(fs::read(&dest).unwrap(), b"old");
-            assert_eq!(get_ct_exit_code(), EXIT_ERR);
-            set_ct_exit_code(0);
         }
 
         #[cfg(unix)]

@@ -2459,7 +2459,12 @@ mod tests {
             assert_eq!(semantic.tabstop_mode, ExpandTabstopMode::None);
             assert_eq!(semantic.tabstops, vec![4]);
             assert!(!semantic.initial_only);
-            assert!(semantic.assume_utf8);
+            // `-u` is inferred from the process LC_CTYPE hard-locale state,
+            // which differs between developer shells and CI containers.
+            assert_eq!(
+                semantic.assume_utf8,
+                ctcore::ct_locale::hard_locale(ctcore::ct_locale::LcCategory::LcCtype)
+            );
             assert_eq!(semantic.classic_text, "a   b\n    c\n");
             assert_eq!(semantic.stderr_text, "");
             assert_eq!(semantic.exit_code, 0);

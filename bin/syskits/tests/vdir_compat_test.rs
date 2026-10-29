@@ -66,6 +66,16 @@ fn vdir_long_omits_acl_context_marker_column_when_no_entry_needs_it() {
         .output()
         .expect("run syskits vdir");
 
+    let gnu_output = Command::new("/usr/bin/vdir")
+        .args(["-a", temp_dir.path().to_str().expect("utf8 path")])
+        .output()
+        .expect("run GNU vdir");
+    assert!(
+        gnu_output.status.success(),
+        "GNU vdir stderr: {}",
+        String::from_utf8_lossy(&gnu_output.stderr)
+    );
+
     assert!(
         output.status.success(),
         "stderr: {}",
@@ -78,14 +88,17 @@ fn vdir_long_omits_acl_context_marker_column_when_no_entry_needs_it() {
         .lines()
         .find(|line| line.ends_with(" plain"))
         .expect("plain file line");
+    let gnu_stdout = String::from_utf8(gnu_output.stdout).expect("GNU vdir stdout is UTF-8");
+    let gnu_plain_line = gnu_stdout
+        .lines()
+        .find(|line| line.ends_with(" plain"))
+        .expect("GNU vdir plain file line");
 
-    assert!(
-        plain_line.starts_with("-rw-r--r--  1 "),
-        "plain file line should not reserve the ACL/context marker column: {plain_line:?}"
+    assert_eq!(
+        plain_line.as_bytes().get(10..13),
+        gnu_plain_line.as_bytes().get(10..13),
+        "syskits vdir should use the same ACL/context marker spacing as GNU vdir:\n  syskits: {plain_line:?}\n  GNU: {gnu_plain_line:?}"
     );
-    assert_eq!(plain_line.as_bytes().get(10), Some(&b' '));
-    assert_eq!(plain_line.as_bytes().get(11), Some(&b' '));
-    assert_eq!(plain_line.as_bytes().get(12), Some(&b'1'));
 }
 
 #[cfg(target_os = "linux")]

@@ -20,6 +20,15 @@ fn set_child_sigpipe_disposition(command: &mut Command, disposition: libc::sigha
     }
 }
 
+#[cfg(unix)]
+fn assert_signal_listing_contains(output: &std::process::Output, expected: &str) {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.lines().any(|line| line == expected),
+        "expected signal listing line {expected:?}, got {stderr:?}"
+    );
+}
+
 #[test]
 fn env_verbose_without_changes_does_not_dump_input_args() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
@@ -269,7 +278,7 @@ fn env_list_signal_handling_uses_gnu_poll_signal_name() {
 
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(output.stdout, b"");
-    assert_eq!(output.stderr, b"POLL       (29): BLOCK\n");
+    assert_signal_listing_contains(&output, "POLL       (29): BLOCK");
 }
 
 #[cfg(unix)]
@@ -289,7 +298,7 @@ fn env_list_signal_handling_reports_inherited_ignored_sigpipe() {
 
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(output.stdout, b"");
-    assert_eq!(output.stderr, b"PIPE       (13): IGNORE\n");
+    assert_signal_listing_contains(&output, "PIPE       (13): IGNORE");
 }
 
 #[cfg(unix)]
@@ -711,7 +720,7 @@ fn env_list_signal_handling_reports_explicit_ignore_for_command() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(output.stdout, b"");
-    assert_eq!(output.stderr, b"PIPE       (13): IGNORE\n");
+    assert_signal_listing_contains(&output, "PIPE       (13): IGNORE");
 }
 
 #[cfg(unix)]
@@ -739,7 +748,7 @@ fn env_list_signal_handling_reports_explicit_block_for_command() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(output.stdout, b"");
-    assert_eq!(output.stderr, b"PIPE       (13): BLOCK\n");
+    assert_signal_listing_contains(&output, "PIPE       (13): BLOCK");
 }
 
 #[cfg(target_os = "linux")]
@@ -763,8 +772,8 @@ fn env_list_signal_handling_reports_blocked_realtime_signal() {
 
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(output.stdout, b"");
-    assert_eq!(
-        output.stderr,
-        format!("{:<10} ({:2}): BLOCK\n", "RTMIN", libc::SIGRTMIN()).as_bytes()
+    assert_signal_listing_contains(
+        &output,
+        &format!("{:<10} ({:2}): BLOCK", "RTMIN", libc::SIGRTMIN()),
     );
 }

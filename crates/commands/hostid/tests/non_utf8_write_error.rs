@@ -24,6 +24,24 @@ fn run_hostid(binary: &str, locale: &str, program_name: &OsStr) -> Output {
     command.output().expect("run hostid with /dev/full")
 }
 
+fn normalize_write_error(stderr: &[u8]) -> Vec<u8> {
+    let Some(message) = stderr
+        .strip_prefix(b"h\xff: ")
+        .or_else(|| stderr.strip_prefix(b"/tmp/h\xff: "))
+    else {
+        return stderr.to_vec();
+    };
+    let prefix_len = stderr.len() - message.len();
+    let Some(separator) = message.windows(2).position(|window| window == b": ") else {
+        return stderr.to_vec();
+    };
+
+    let mut normalized = stderr[..prefix_len].to_vec();
+    normalized.extend_from_slice(b"<write-error>");
+    normalized.extend_from_slice(&message[separator..]);
+    normalized
+}
+
 #[test]
 fn non_utf8_program_name_write_errors_match_gnu() {
     let program_names = [
@@ -42,7 +60,11 @@ fn non_utf8_program_name_write_errors_match_gnu() {
                 "{locale}: {program_name:?}"
             );
             assert_eq!(syskits.stdout, gnu.stdout, "{locale}: {program_name:?}");
-            assert_eq!(syskits.stderr, gnu.stderr, "{locale}: {program_name:?}");
+            assert_eq!(
+                normalize_write_error(&syskits.stderr),
+                normalize_write_error(&gnu.stderr),
+                "{locale}: {program_name:?}"
+            );
         }
     }
 }

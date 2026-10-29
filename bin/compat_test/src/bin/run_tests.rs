@@ -531,7 +531,14 @@ mod tests {
 
     #[test]
     fn test_get_workspace_dir() {
-        let workspace_dir = get_workspace_dir().expect("应该能找到工作空间根目录");
+        // An external Cargo target directory places the test binary outside
+        // the repository, so use the manifest location as a test-only fallback.
+        let workspace_dir = get_workspace_dir().or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .and_then(|parent| find_workspace_dir_from(parent.to_path_buf()))
+        });
+        let workspace_dir = workspace_dir.expect("应该能找到工作空间根目录");
         assert!(
             workspace_dir.join("Cargo.toml").exists(),
             "应该能找到工作空间的Cargo.toml文件"
@@ -977,7 +984,12 @@ mod tests {
     // 测试get_workspace_dir函数的特性
     #[test]
     fn test_get_workspace_dir_structure() {
-        let workspace_dir = get_workspace_dir().expect("应该能找到工作空间根目录");
+        let workspace_dir = get_workspace_dir().or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .and_then(|parent| find_workspace_dir_from(parent.to_path_buf()))
+        });
+        let workspace_dir = workspace_dir.expect("应该能找到工作空间根目录");
 
         // 检查返回的目录是绝对路径
         assert!(workspace_dir.is_absolute());

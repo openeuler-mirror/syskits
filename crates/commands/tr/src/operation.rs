@@ -907,38 +907,43 @@ impl Sequence {
     }
 
     fn parse_char_repeat(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
-        delimited(
+        let (remaining, (c, cnt_str)) = delimited(
             tag("["),
             separated_pair(Self::parse_backslash_or_char, tag("*"), take_until("]")),
             tag("]"),
-        )(input)
-        .map(|(l, (c, cnt_str))| {
-            let s = String::from_utf8_lossy(cnt_str);
-            let result = if cnt_str.is_empty() {
-                Ok(Self::CharStar(c))
-            } else if !cnt_str.iter().all(u8::is_ascii_digit) {
-                Err(BadSequence::InvalidRepeatCount(s.into_owned()))
-            } else if cnt_str.starts_with(b"0") {
-                match usize::from_str_radix(&s, 8) {
-                    Ok(0) => Ok(Self::CharStar(c)),
-                    Ok(count) if count <= usize::MAX.saturating_sub(1) => {
-                        Ok(Self::CharRepeat(c, count))
-                    }
-                    Ok(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
-                    Err(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
+        )(input)?;
+        if cnt_str.contains(&b'\\') {
+            return Err(nom::Err::Error(nom::error::Error::new(
+                input,
+                nom::error::ErrorKind::Tag,
+            )));
+        }
+
+        let s = String::from_utf8_lossy(cnt_str);
+        let result = if cnt_str.is_empty() {
+            Ok(Self::CharStar(c))
+        } else if !cnt_str.iter().all(u8::is_ascii_digit) {
+            Err(BadSequence::InvalidRepeatCount(s.into_owned()))
+        } else if cnt_str.starts_with(b"0") {
+            match usize::from_str_radix(&s, 8) {
+                Ok(0) => Ok(Self::CharStar(c)),
+                Ok(count) if count <= usize::MAX.saturating_sub(1) => {
+                    Ok(Self::CharRepeat(c, count))
                 }
-            } else {
-                match s.parse::<usize>() {
-                    Ok(0) => Ok(Self::CharStar(c)),
-                    Ok(count) if count <= usize::MAX.saturating_sub(1) => {
-                        Ok(Self::CharRepeat(c, count))
-                    }
-                    Ok(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
-                    Err(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
+                Ok(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
+                Err(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
+            }
+        } else {
+            match s.parse::<usize>() {
+                Ok(0) => Ok(Self::CharStar(c)),
+                Ok(count) if count <= usize::MAX.saturating_sub(1) => {
+                    Ok(Self::CharRepeat(c, count))
                 }
-            };
-            (l, result)
-        })
+                Ok(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
+                Err(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
+            }
+        };
+        Ok((remaining, result))
     }
 
     fn parse_class(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
@@ -1560,6 +1565,28 @@ mod tests {
             let ambiguous_octal = Sequence::from_str(b"\\400").unwrap();
             assert!(matches!(ambiguous_octal[0], Sequence::Char(b' ')));
             assert!(matches!(ambiguous_octal[1], Sequence::Char(b'0')));
+        }
+
+        #[test]
+        fn test_escaped_repeat_count_is_parsed_as_literal_characters() {
+            let sequence = Sequence::from_str(br"[b*\9]").unwrap();
+
+            assert!(matches!(sequence.as_slice(), [
+                Sequence::Char(b'['),
+                Sequence::Char(b'b'),
+                Sequence::Char(b'*'),
+                Sequence::Char(b'9'),
+                Sequence::Char(b']')
+            ]));
+
+            let (set1, set2) = Sequence::solve_set_characters(b"abc", br"[b*\9]", false).unwrap();
+            let mut translator = TranslateOperation::new(set1, set2, false).unwrap();
+            let output: Vec<u8> = b"abcd"
+                .iter()
+                .filter_map(|byte| translator.translate(*byte))
+                .collect();
+
+            assert_eq!(output, b"[b*d");
         }
 
         #[test]

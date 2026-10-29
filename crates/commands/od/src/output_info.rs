@@ -138,27 +138,22 @@ impl OutputInfo {
         let mut spacing = [0; MAX_BYTES_PER_UNIT];
 
         // 获取当前类型的基本信息
-        let mut byte_size = sf.byte_size();
-        let mut items_in_block = byte_size_block / byte_size;
+        let byte_size = sf.byte_size();
+        let items_in_block = byte_size_block / byte_size;
 
         // 计算当前块的总宽度和需要填充的空格数
         let thisblock_width = sf.print_width() * items_in_block;
-        let mut remaining_spaces = print_width_block - thisblock_width;
+        let total_spaces = print_width_block - thisblock_width;
+        let spaces_per_item = total_spaces / items_in_block;
+        let remainder = total_spaces % items_in_block;
+        let mut remaining_spaces = total_spaces;
 
-        // 逐步分配空格
-        while items_in_block > 0 {
-            // 计算每个位置应该分配的空格数
-            let spaces_per_item = remaining_spaces / items_in_block;
-
-            // 为每个位置分配空格
-            for i in 0..items_in_block {
-                spacing[i * byte_size] += spaces_per_item;
-                remaining_spaces -= spaces_per_item;
-            }
-
-            // 准备下一轮分配
-            items_in_block /= 2;
-            byte_size *= 2;
+        for item in 0..items_in_block {
+            let fields_remaining = items_in_block - item - 1;
+            let next_spaces =
+                spaces_per_item * fields_remaining + remainder * fields_remaining / items_in_block;
+            spacing[item * byte_size] = remaining_spaces - next_spaces;
+            remaining_spaces = next_spaces;
         }
 
         spacing
@@ -230,9 +225,9 @@ fn test_calculate_alignment() {
             23
         )
     );
-    // the third line two spaces at pos 0, and 1 space at pos 4:
+    // the third line has one space before each of the first three fields:
     assert_eq!(
-        [2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         OutputInfo::calculate_alignment(
             &TypeInfo {
                 byte_size: 2,
@@ -329,7 +324,7 @@ fn test_calculate_alignment() {
         )
     );
     assert_eq!(
-        [3, 1, 1, 1, 2, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+        [2, 1, 2, 1, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
         OutputInfo::calculate_alignment(
             &TypeInfo {
                 byte_size: 1,
@@ -351,7 +346,7 @@ fn test_calculate_alignment() {
         )
     );
     assert_eq!(
-        [3, 1, 2, 1, 2, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+        [2, 2, 1, 2, 2, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0],
         OutputInfo::calculate_alignment(
             &TypeInfo {
                 byte_size: 1,
@@ -362,7 +357,7 @@ fn test_calculate_alignment() {
         )
     );
     assert_eq!(
-        [3, 1, 2, 1, 3, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+        [2, 2, 2, 1, 2, 2, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0],
         OutputInfo::calculate_alignment(
             &TypeInfo {
                 byte_size: 1,
@@ -373,7 +368,7 @@ fn test_calculate_alignment() {
         )
     );
     assert_eq!(
-        [4, 1, 2, 1, 3, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+        [2, 2, 2, 2, 2, 2, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0],
         OutputInfo::calculate_alignment(
             &TypeInfo {
                 byte_size: 1,
@@ -397,7 +392,7 @@ fn test_calculate_alignment() {
 
     // 4 tests where 15 spaces are spread across 8, 4, 2 or 1 position(s)
     assert_eq!(
-        [4, 1, 2, 1, 3, 1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+        [2, 2, 2, 2, 2, 2, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0],
         OutputInfo::calculate_alignment(
             &TypeInfo {
                 byte_size: 1,
@@ -408,7 +403,7 @@ fn test_calculate_alignment() {
         )
     );
     assert_eq!(
-        [5, 0, 3, 0, 4, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [4, 0, 4, 0, 4, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         OutputInfo::calculate_alignment(
             &TypeInfo {
                 byte_size: 2,
@@ -494,6 +489,19 @@ mod tests {
         // 验证其他位置都是0
         assert_eq!(result[1..4], [0, 1, 0]);
         assert_eq!(result[5..8], [0, 1, 0]);
+    }
+
+    #[test]
+    fn test_calculate_alignment_matches_gnu_proportional_padding() {
+        // With an 8-byte block, xS has four 4-column fields and shares the
+        // 23-column block width selected by oL. GNU od spreads the resulting
+        // seven padding columns proportionally across all four fields.
+        let type_info = TypeInfo {
+            byte_size: 2,
+            print_width: 4,
+        };
+        let result = OutputInfo::calculate_alignment(&type_info, 8, 23);
+        assert_eq!(result, [2, 0, 2, 0, 2, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     }
 
     #[test]

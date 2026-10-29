@@ -36,6 +36,25 @@ fn missing_threshold_argument_matches_gnu() {
 }
 
 #[test]
+fn invalid_threshold_option_name_matches_gnu() {
+    let working_dir = tempfile::tempdir().expect("create working directory");
+    for args in [
+        vec![OsString::from("-t"), OsString::from("SIZE")],
+        vec![OsString::from("-tSIZE")],
+        vec![OsString::from("-htSIZE")],
+        vec![OsString::from("--threshold=SIZE")],
+        vec![OsString::from("--thres"), OsString::from("SIZE")],
+        vec![
+            OsString::from("--time"),
+            OsString::from("-t"),
+            OsString::from("SIZE"),
+        ],
+    ] {
+        assert_matches_gnu(working_dir.path(), &args);
+    }
+}
+
+#[test]
 fn files0_from_rejects_file_operands_like_gnu() {
     let working_dir = tempfile::tempdir().expect("create working directory");
     let input = working_dir.path().join("input");

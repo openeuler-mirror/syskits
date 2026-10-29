@@ -646,7 +646,7 @@ fn get_file_info(file_path: &Path) -> Option<DuFileInfo> {
 fn du_read_block_size(option: Option<&str>) -> CTResult<u64> {
     if let Some(s) = option {
         du_parse_block_size_value(s)
-            .map_err(|e| CtSimpleError::new(1, format_error_message(&e, s, opt_flags::BLOCK_SIZE)))
+            .map_err(|e| CtSimpleError::new(1, format_error_message(&e, s, "--block-size")))
     } else {
         for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
             if let Ok(env_size) = env::var(env_var) {
@@ -680,7 +680,7 @@ fn du_parse_block_size_value(s: &str) -> Result<u64, ParseSizeError> {
 fn du_read_block_size_format(option: Option<&str>) -> CTResult<DuSizeFormat> {
     if let Some(s) = option {
         du_parse_block_size_format(s)
-            .map_err(|e| CtSimpleError::new(1, format_error_message(&e, s, opt_flags::BLOCK_SIZE)))
+            .map_err(|e| CtSimpleError::new(1, format_error_message(&e, s, "--block-size")))
     } else {
         for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
             if let Ok(env_size) = env::var(env_var) {
@@ -1077,6 +1077,9 @@ fn du_recognized_long_option(candidate: &str) -> Option<(&'static str, DuLongOpt
     .into_iter()
     .filter(|(option, _)| option.starts_with(candidate));
     let option = matches.next()?;
+    if option.0 == candidate {
+        return Some(option);
+    }
     matches.next().is_none().then_some(option)
 }
 
@@ -1180,6 +1183,87 @@ fn du_validate_options(args: &[OsString]) -> CTResult<()> {
             if du_short_option_consumes_next(&arg) {
                 index += 1;
             }
+        }
+
+        index += 1;
+    }
+    Ok(())
+}
+
+fn du_validate_threshold_arguments(args: &[OsString]) -> CTResult<()> {
+    let mut index = 1;
+    while index < args.len() {
+        let arg = args[index].to_string_lossy();
+        if arg == "--" {
+            break;
+        }
+
+        let threshold = if let Some(long_arg) = arg.strip_prefix("--") {
+            let (candidate, attached) = long_arg
+                .split_once('=')
+                .map_or((long_arg, None), |(option, value)| (option, Some(value)));
+            let Some((option, argument)) = du_recognized_long_option(candidate) else {
+                return Ok(());
+            };
+            if attached.is_some() && argument == DuLongOptionArgument::None {
+                return Ok(());
+            }
+            if option != opt_flags::THRESHOLD {
+                if argument == DuLongOptionArgument::Required && attached.is_none() {
+                    index += 1;
+                }
+                index += 1;
+                continue;
+            }
+
+            let value = match attached {
+                Some(value) => value.to_string(),
+                None if index + 1 < args.len() => {
+                    index += 1;
+                    args[index].to_string_lossy().into_owned()
+                }
+                None => return Ok(()),
+            };
+            (option == opt_flags::THRESHOLD).then_some((value, "--threshold"))
+        } else if let Some(short_options) = arg.strip_prefix('-').filter(|arg| !arg.is_empty()) {
+            if du_invalid_short_option_byte(args[index].as_os_str()).is_some() {
+                return Ok(());
+            }
+            let mut threshold = None;
+            for (option_index, option) in short_options.char_indices() {
+                if matches!(option, 'B' | 'X' | 'd' | 't') {
+                    let value_start = option_index + option.len_utf8();
+                    let value = if value_start < short_options.len() {
+                        short_options[value_start..].to_string()
+                    } else if index + 1 < args.len() {
+                        index += 1;
+                        args[index].to_string_lossy().into_owned()
+                    } else {
+                        return Ok(());
+                    };
+                    if option == 't' {
+                        threshold = Some((value, "-t"));
+                    }
+                    break;
+                }
+            }
+            threshold
+        } else {
+            None
+        };
+
+        if let Some((value, option)) = threshold
+            && let Err(error) = DuThreshold::from_str(&value)
+        {
+            let option = if value.trim_start() == "-0" {
+                "--threshold"
+            } else {
+                option
+            };
+            return Err(CtSimpleError::new(
+                1,
+                format_error_message(&error, &value, option),
+            ));
         }
 
         index += 1;
@@ -2051,6 +2135,7 @@ pub fn du_main(args: impl ctcore::Args) -> CTResult<()> {
     rust_i18n::set_locale(&lang_code);
     let mut args = args.collect::<Vec<_>>();
     du_apply_posix_option_order(&mut args, env::var_os("POSIXLY_CORRECT").is_some());
+    du_validate_threshold_arguments(&args)?;
     du_validate_options(&args)?;
     // 从命令行参数中解析匹配项
     let args_match = ct_app()
@@ -2262,6 +2347,7 @@ pub fn du_native_semantic(args: impl ctcore::Args) -> CTResult<DuSemantic> {
     rust_i18n::set_locale(&lang_code);
     let mut args = args.collect::<Vec<_>>();
     du_apply_posix_option_order(&mut args, env::var_os("POSIXLY_CORRECT").is_some());
+    du_validate_threshold_arguments(&args)?;
     let args_match = ct_app().try_get_matches_from(args)?;
 
     let is_summarize = args_match.get_flag(opt_flags::SUMMARIZE);
@@ -2388,9 +2474,8 @@ fn du_get_stat_printer(
         threshold: args_match
             .get_one::<String>(opt_flags::THRESHOLD)
             .map(|s| {
-                DuThreshold::from_str(s).map_err(|e| {
-                    CtSimpleError::new(1, format_error_message(&e, s, opt_flags::THRESHOLD))
-                })
+                DuThreshold::from_str(s)
+                    .map_err(|e| CtSimpleError::new(1, format_error_message(&e, s, "--threshold")))
             })
             .transpose()?,
         apparent_size: args_match.get_flag(opt_flags::APPARENT_SIZE)
@@ -2905,15 +2990,15 @@ fn format_error_message(pase_error: &ParseSizeError, s: &str, opt: &str) -> Stri
     match pase_error {
         ParseSizeError::InvalidSuffix(_) => {
             // 当错误为无效的后缀时，生成包含无效后缀信息的错误消息
-            format!("invalid suffix in --{} argument {}", opt, s.quote())
+            format!("invalid suffix in {} argument {}", opt, s.quote())
         }
         ParseSizeError::ParseFailure(_) => {
             // 当错误为解析失败时，生成通用的解析错误消息
-            format!("invalid --{} argument {}", opt, s.quote())
+            format!("invalid {} argument {}", opt, s.quote())
         }
         ParseSizeError::SizeTooBig(_) => {
             // 当错误为参数值过大时，生成表示参数值过大的错误消息
-            format!("--{} argument {} too large", opt, s.quote())
+            format!("{} argument {} too large", opt, s.quote())
         }
     }
 }

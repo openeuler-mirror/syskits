@@ -40,12 +40,12 @@ impl DataCommand for CmdRunExternal {
         .positional(CtPositionalArg::required(
             "cmd",
             "The external command to run",
-            CtType::String,
+            CtType::Any,
         ))
         .rest(CtPositionalArg::optional(
             "args",
             "Additional arguments for the command",
-            CtType::String,
+            CtType::Any,
         ))
         .flag(CtFlag::with_value(
             "stderr-mode",
@@ -122,7 +122,8 @@ fn meta_text_output(text: String) -> CtPipelineData {
 
 fn build_spec(call: &DataCall) -> Result<ExternalCallSpec, CtDiagnosticError> {
     let cmd_name = call
-        .req::<String>(0)
+        .req::<CtValue>(0)
+        .map(|value| value.to_text())
         .map_err(|e| CtDiagnosticError::simple(e.to_string()))?;
 
     let mut ext_args = Vec::new();
@@ -276,6 +277,20 @@ mod tests {
         let spec = build_spec(&call).unwrap();
         assert_eq!(spec.cmd, "echo");
         assert_eq!(spec.args, vec!["-n".to_string(), "hi".to_string()]);
+    }
+
+    #[test]
+    fn converts_literal_command_and_arguments_to_argv_text() {
+        let mut call = DataCall::named("run-external");
+        call.positionals
+            .push(BoundArg::new(CtValue::Bool(true), None));
+        call.positionals
+            .push(BoundArg::new(CtValue::Bool(false), None));
+        call.positionals.push(BoundArg::new(CtValue::Int(42), None));
+
+        let spec = build_spec(&call).expect("build external command spec");
+        assert_eq!(spec.cmd, "true");
+        assert_eq!(spec.args, vec!["false".to_string(), "42".to_string()]);
     }
 
     #[test]

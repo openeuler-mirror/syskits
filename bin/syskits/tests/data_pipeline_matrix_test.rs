@@ -759,6 +759,22 @@ fn external_path_policy_skips_priority_syskits_for_tilde_and_run_external() {
 }
 
 #[test]
+fn run_external_accepts_boolean_literal_command_name() {
+    let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "run-external true"])
+        .output()
+        .expect("run syskits data run-external true");
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"");
+    assert_eq!(output.stderr, b"");
+}
+
+#[test]
 fn external_csv_is_decoded_with_from_csv() {
     let output = Command::new(env!("CARGO_BIN_EXE_syskits"))
         .args([

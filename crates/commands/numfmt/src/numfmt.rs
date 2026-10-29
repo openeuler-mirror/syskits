@@ -36,7 +36,6 @@ use crate::format::{
 };
 use crate::units::{NumfmtUnit, Result};
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, get_ct_exit_code};
 use ctcore::ct_ranges::CtRange;
 use ctcore::ct_shortcut_value_parser::CtShortcutValueParser;
@@ -343,7 +342,10 @@ mod native_semantic_tests {
         assert_eq!(error.code(), 1);
         assert_eq!(
             error.to_string(),
-            "invalid unit size: '18446744073709551615K'"
+            format!(
+                "invalid unit size: {}",
+                crate::format::numfmt_quote("18446744073709551615K")
+            )
         );
     }
 
@@ -357,8 +359,11 @@ mod native_semantic_tests {
         assert_eq!(semantic.classic_text, "1234567890123456789\n");
         assert_eq!(
             semantic.stderr_text,
-            "numfmt: no conversion option specified\n\
-             numfmt: large input value '1234567890123456789': possible precision loss\n"
+            format!(
+                "numfmt: no conversion option specified\n\
+                 numfmt: large input value {}: possible precision loss\n",
+                crate::format::numfmt_quote("1234567890123456789")
+            )
         );
     }
 
@@ -596,7 +601,7 @@ fn numfmt_prefixed_stderr(message: &str) -> String {
 fn numfmt_precision_loss_message(input: &str) -> String {
     format!(
         "large input value {}: possible precision loss",
-        input.quote()
+        numfmt_quote(input)
     )
 }
 
@@ -1105,7 +1110,7 @@ fn numfmt_parse_unit_size(unit: &str) -> Result<usize> {
         }
     }
 
-    Err(format!("invalid unit size: {}", unit.quote()))
+    Err(format!("invalid unit size: {}", numfmt_quote(unit)))
 }
 
 // 解析单位大小的后缀并返回相应的乘数。例如
@@ -1166,16 +1171,22 @@ fn map_field_parse_error(err: String) -> String {
         }
         "high end of range less than low end" => format!("invalid decreasing range{TRY_HELP}"),
         "byte/character offset is too large" => {
-            format!("field number '{token}' is too large{TRY_HELP}")
+            format!(
+                "field number {} is too large{TRY_HELP}",
+                numfmt_quote(token)
+            )
         }
         "failed to parse range" => {
             if token.chars().all(char::is_alphabetic) {
-                format!("invalid field value {}{TRY_HELP}", token.quote())
+                format!("invalid field value {}{TRY_HELP}", numfmt_quote(token))
             } else if token.starts_with('-')
                 && token.len() > 1
                 && token[1..].chars().all(char::is_alphabetic)
             {
-                format!("invalid field value {}{TRY_HELP}", token[1..].quote())
+                format!(
+                    "invalid field value {}{TRY_HELP}",
+                    numfmt_quote(&token[1..])
+                )
             } else {
                 format!("invalid field range{TRY_HELP}")
             }
@@ -1220,7 +1231,7 @@ fn numfmt_trace_format_options(matches: &ArgMatches, options: &NumfmtConfigs) {
     };
     numfmt_dev_trace(format_args!(
         "format String:\n  input: {}\n  grouping: {}\n  padding width: {}\n  alignment: {}\n  prefix: {}\n  suffix: {}\n",
-        format.quote(),
+        numfmt_quote(format),
         if options.format.is_grouping {
             "yes"
         } else {
@@ -1232,8 +1243,8 @@ fn numfmt_trace_format_options(matches: &ArgMatches, options: &NumfmtConfigs) {
         } else {
             "Right"
         },
-        options.format.prefix.quote(),
-        options.format.suffix.quote(),
+        numfmt_quote(&options.format.prefix),
+        numfmt_quote(&options.format.suffix),
     ));
 }
 
@@ -1345,7 +1356,7 @@ fn parse_padding(arg_matches: &ArgMatches) -> Result<isize> {
                 0 | isize::MIN => Err(s),
                 _ => Ok(n),
             })
-            .map_err(|s| format!("invalid padding value {}", s.quote())),
+            .map_err(|s| format!("invalid padding value {}", numfmt_quote(s))),
         None => Ok(0),
     }?;
     Ok(padding)
@@ -1366,7 +1377,7 @@ fn parse_header(arg_matches: &ArgMatches) -> Result<usize> {
                 0 => Err(value),
                 _ => Ok(n),
             })
-            .map_err(|value| format!("invalid header value {}", value.quote()))
+            .map_err(|value| format!("invalid header value {}", numfmt_quote(value)))
     } else {
         Ok(0)
     }?;
@@ -3224,8 +3235,10 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value =
-                "invalid field value 'aa'\nTry 'numfmt --help' for more information.";
+            let expected_value = format!(
+                "invalid field value {}\nTry 'numfmt --help' for more information.",
+                crate::format::numfmt_quote("aa")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3309,7 +3322,10 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid format ''%d'', directive must be %[0]['][-][N][.][N]f";
+            let expected_value = format!(
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                crate::format::numfmt_quote("'%d'")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3321,7 +3337,10 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid format ''%i'', directive must be %[0]['][-][N][.][N]f";
+            let expected_value = format!(
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                crate::format::numfmt_quote("'%i'")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3333,7 +3352,10 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid format ''%u'', directive must be %[0]['][-][N][.][N]f";
+            let expected_value = format!(
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                crate::format::numfmt_quote("'%u'")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3344,7 +3366,10 @@ mod tests {
             let cmd_args = vec![ctcore::ct_util_name(), "--format", "'%c'"];
             let result = command.try_get_matches_from(cmd_args).unwrap();
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid format ''%c'', directive must be %[0]['][-][N][.][N]f";
+            let expected_value = format!(
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                crate::format::numfmt_quote("'%c'")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3355,7 +3380,10 @@ mod tests {
             let cmd_args = vec![ctcore::ct_util_name(), "--format", "'%s'"];
             let result = command.try_get_matches_from(cmd_args).unwrap();
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid format ''%s'', directive must be %[0]['][-][N][.][N]f";
+            let expected_value = format!(
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                crate::format::numfmt_quote("'%s'")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3367,7 +3395,10 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid format ''%o'', directive must be %[0]['][-][N][.][N]f";
+            let expected_value = format!(
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                crate::format::numfmt_quote("'%o'")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3379,7 +3410,10 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid format ''%x'', directive must be %[0]['][-][N][.][N]f";
+            let expected_value = format!(
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                crate::format::numfmt_quote("'%x'")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3391,7 +3425,10 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid format ''%X'', directive must be %[0]['][-][N][.][N]f";
+            let expected_value = format!(
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                crate::format::numfmt_quote("'%X'")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3438,7 +3475,10 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid format ''%E'', directive must be %[0]['][-][N][.][N]f";
+            let expected_value = format!(
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                crate::format::numfmt_quote("'%E'")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3450,7 +3490,10 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid format ''%e'', directive must be %[0]['][-][N][.][N]f";
+            let expected_value = format!(
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                crate::format::numfmt_quote("'%e'")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3462,7 +3505,10 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid format ''%g'', directive must be %[0]['][-][N][.][N]f";
+            let expected_value = format!(
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                crate::format::numfmt_quote("'%g'")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3474,7 +3520,10 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid format ''%G'', directive must be %[0]['][-][N][.][N]f";
+            let expected_value = format!(
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                crate::format::numfmt_quote("'%G'")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3486,7 +3535,10 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid format ''%p'', directive must be %[0]['][-][N][.][N]f";
+            let expected_value = format!(
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                crate::format::numfmt_quote("'%p'")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3498,7 +3550,8 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "format ''%%'' ends in %";
+            let expected_value =
+                format!("format {} ends in %", crate::format::numfmt_quote("'%%'"));
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3510,7 +3563,10 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid format ''%10d'', directive must be %[0]['][-][N][.][N]f";
+            let expected_value = format!(
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                crate::format::numfmt_quote("'%10d'")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3521,7 +3577,10 @@ mod tests {
             let cmd_args = vec![ctcore::ct_util_name(), "--format", "'%-10d'"];
             let result = command.try_get_matches_from(cmd_args).unwrap();
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid format ''%-10d'', directive must be %[0]['][-][N][.][N]f";
+            let expected_value = format!(
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                crate::format::numfmt_quote("'%-10d'")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3568,7 +3627,10 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "format 'sssss' has no % directive";
+            let expected_value = format!(
+                "format {} has no % directive",
+                crate::format::numfmt_quote("sssss")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -3580,7 +3642,10 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid format '%%% %', directive must be %[0]['][-][N][.][N]f";
+            let expected_value = format!(
+                "invalid format {}, directive must be %[0]['][-][N][.][N]f",
+                crate::format::numfmt_quote("%%% %")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -4572,7 +4637,7 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid unit size: '0'";
+            let expected_value = format!("invalid unit size: {}", crate::format::numfmt_quote("0"));
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -4658,7 +4723,10 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid unit size: '100000000000000000000000000000000'";
+            let expected_value = format!(
+                "invalid unit size: {}",
+                crate::format::numfmt_quote("100000000000000000000000000000000")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -4670,7 +4738,8 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid unit size: 'aa'";
+            let expected_value =
+                format!("invalid unit size: {}", crate::format::numfmt_quote("aa"));
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -8532,7 +8601,7 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid unit size: '0'";
+            let expected_value = format!("invalid unit size: {}", crate::format::numfmt_quote("0"));
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -8617,7 +8686,10 @@ mod tests {
             ];
             let result = command.try_get_matches_from(cmd_args).unwrap();
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid unit size: '100000000000000000000000000000000'";
+            let expected_value = format!(
+                "invalid unit size: {}",
+                crate::format::numfmt_quote("100000000000000000000000000000000")
+            );
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -8629,7 +8701,8 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid unit size: 'aa'";
+            let expected_value =
+                format!("invalid unit size: {}", crate::format::numfmt_quote("aa"));
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -8641,7 +8714,8 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid padding value '0'";
+            let expected_value =
+                format!("invalid padding value {}", crate::format::numfmt_quote("0"));
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -8723,7 +8797,8 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid padding value 'a'";
+            let expected_value =
+                format!("invalid padding value {}", crate::format::numfmt_quote("a"));
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -8840,7 +8915,8 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid header value '0'";
+            let expected_value =
+                format!("invalid header value {}", crate::format::numfmt_quote("0"));
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -8957,7 +9033,8 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid header value '-1'";
+            let expected_value =
+                format!("invalid header value {}", crate::format::numfmt_quote("-1"));
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }
@@ -8969,7 +9046,8 @@ mod tests {
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
-            let expected_value = "invalid header value 'a'";
+            let expected_value =
+                format!("invalid header value {}", crate::format::numfmt_quote("a"));
             assert!(options.is_err());
             assert_eq!(options.unwrap_err(), expected_value);
         }

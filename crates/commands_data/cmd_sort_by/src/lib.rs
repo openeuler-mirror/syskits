@@ -195,7 +195,7 @@ fn compare_nullable_values(
             let Some(rv) = right else {
                 return Ordering::Equal;
             };
-            let ord = compare_values(lv, rv).unwrap_or(Ordering::Equal);
+            let ord = compare_values(lv, rv);
             if desc { ord.reverse() } else { ord }
         }
     }
@@ -205,10 +205,101 @@ fn is_null_like(v: &CtValue) -> bool {
     matches!(v, CtValue::Nothing)
 }
 
-fn compare_values(left: &CtValue, right: &CtValue) -> Option<Ordering> {
+fn compare_values(left: &CtValue, right: &CtValue) -> Ordering {
+    let rank_ordering = value_sort_rank(left).cmp(&value_sort_rank(right));
+    if rank_ordering != Ordering::Equal {
+        return rank_ordering;
+    }
+
     match (left, right) {
-        (CtValue::Bool(a), CtValue::Bool(b)) => Some(a.cmp(b)),
-        _ => ct_cmp(left, right),
+        (CtValue::Bool(a), CtValue::Bool(b)) => a.cmp(b),
+        (
+            CtValue::Int(_) | CtValue::Float(_) | CtValue::Size(_),
+            CtValue::Int(_) | CtValue::Float(_) | CtValue::Size(_),
+        ) => compare_numeric_values(left, right),
+        _ => ct_cmp(left, right).unwrap_or_else(|| left.to_text().cmp(&right.to_text())),
+    }
+}
+
+fn compare_numeric_values(left: &CtValue, right: &CtValue) -> Ordering {
+    match (left, right) {
+        (CtValue::Int(a), CtValue::Int(b)) => a.cmp(b),
+        (CtValue::Float(a), CtValue::Float(b)) => compare_floats(*a, *b),
+        (CtValue::Size(a), CtValue::Size(b)) => a.cmp(b),
+        (CtValue::Int(a), CtValue::Float(b)) => compare_i64_to_f64(*a, *b),
+        (CtValue::Float(a), CtValue::Int(b)) => compare_i64_to_f64(*b, *a).reverse(),
+        (CtValue::Int(a), CtValue::Size(b)) => {
+            if *a < 0 {
+                Ordering::Less
+            } else {
+                (*a as u64).cmp(b)
+            }
+        }
+        (CtValue::Size(a), CtValue::Int(b)) => {
+            compare_numeric_values(&CtValue::Int(*b), &CtValue::Size(*a)).reverse()
+        }
+        (CtValue::Float(a), CtValue::Size(b)) => compare_u64_to_f64(*b, *a).reverse(),
+        (CtValue::Size(a), CtValue::Float(b)) => compare_u64_to_f64(*a, *b),
+        _ => Ordering::Equal,
+    }
+}
+
+fn compare_floats(left: f64, right: f64) -> Ordering {
+    match (left.is_nan(), right.is_nan()) {
+        (true, true) => Ordering::Equal,
+        (true, false) => Ordering::Greater,
+        (false, true) => Ordering::Less,
+        (false, false) => left.partial_cmp(&right).unwrap_or(Ordering::Equal),
+    }
+}
+
+fn compare_i64_to_f64(integer: i64, float: f64) -> Ordering {
+    if float.is_nan() || float >= i64::MAX as f64 {
+        return Ordering::Less;
+    }
+    if float < i64::MIN as f64 {
+        return Ordering::Greater;
+    }
+
+    compare_integer_to_finite_float(integer.cmp(&(float.trunc() as i64)), float.fract())
+}
+
+fn compare_u64_to_f64(integer: u64, float: f64) -> Ordering {
+    if float.is_nan() || float >= u64::MAX as f64 {
+        return Ordering::Less;
+    }
+    if float < 0.0 {
+        return Ordering::Greater;
+    }
+
+    compare_integer_to_finite_float(integer.cmp(&(float.trunc() as u64)), float.fract())
+}
+
+fn compare_integer_to_finite_float(integer_ordering: Ordering, fraction: f64) -> Ordering {
+    if integer_ordering != Ordering::Equal {
+        return integer_ordering;
+    }
+    if fraction > 0.0 {
+        Ordering::Less
+    } else if fraction < 0.0 {
+        Ordering::Greater
+    } else {
+        Ordering::Equal
+    }
+}
+
+fn value_sort_rank(value: &CtValue) -> u8 {
+    match value {
+        CtValue::Nothing => 0,
+        CtValue::Bool(_) => 1,
+        CtValue::Int(_) | CtValue::Float(_) | CtValue::Size(_) => 2,
+        CtValue::String(_) => 3,
+        CtValue::Binary(_) => 4,
+        CtValue::DateTime(_) => 5,
+        CtValue::Duration(_) => 6,
+        CtValue::Record(_) => 7,
+        CtValue::List(_) => 8,
+        CtValue::Error(_) => 9,
     }
 }
 
@@ -264,6 +355,17 @@ mod tests {
         *n
     }
 
+    fn field_value<'a>(rec: &'a CtValue, key: &str) -> &'a CtValue {
+        let CtValue::Record(fields) = rec else {
+            panic!("expected record");
+        };
+        &fields
+            .iter()
+            .find(|(field, _)| field == key)
+            .expect("key exists")
+            .1
+    }
+
     #[test]
     fn test_sort_by_signature_allows_multiple_keys() {
         let sig = CmdSortBy.signature();
@@ -312,6 +414,135 @@ mod tests {
         };
         assert_eq!(field_int(&items[0], "age"), 3);
         assert_eq!(field_int(&items[2], "age"), 1);
+    }
+
+    #[test]
+    fn test_sort_by_mixed_numbers_and_strings() {
+        let data = input(vec![
+            vec![("n", CtValue::Int(3))],
+            vec![("n", CtValue::String("z".into()))],
+            vec![("n", CtValue::Int(1))],
+            vec![("n", CtValue::Int(4))],
+            vec![("n", CtValue::String("abc".into()))],
+            vec![("n", CtValue::String("xyz".into()))],
+            vec![("n", CtValue::String("ssssss".into()))],
+        ]);
+        let out = CmdSortBy
+            .run(&call(&["n"], false, false), data, &ctx())
+            .unwrap();
+        let CtPipelineData::Value(CtValue::List(items), _) = out else {
+            panic!("expected list");
+        };
+        let values = items
+            .iter()
+            .map(|item| field_value(item, "n").clone())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            values,
+            vec![
+                CtValue::Int(1),
+                CtValue::Int(3),
+                CtValue::Int(4),
+                CtValue::String("abc".into()),
+                CtValue::String("ssssss".into()),
+                CtValue::String("xyz".into()),
+                CtValue::String("z".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_sort_by_mixed_numbers_and_strings_desc() {
+        let data = input(vec![
+            vec![("n", CtValue::Int(3))],
+            vec![("n", CtValue::String("z".into()))],
+            vec![("n", CtValue::Int(1))],
+            vec![("n", CtValue::String("abc".into()))],
+        ]);
+        let out = CmdSortBy
+            .run(&call(&["n"], true, false), data, &ctx())
+            .unwrap();
+        let CtPipelineData::Value(CtValue::List(items), _) = out else {
+            panic!("expected list");
+        };
+        let values = items
+            .iter()
+            .map(|item| field_value(item, "n").clone())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            values,
+            vec![
+                CtValue::String("z".into()),
+                CtValue::String("abc".into()),
+                CtValue::Int(3),
+                CtValue::Int(1),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_sort_by_mixed_types_keeps_numeric_order() {
+        let data = input(vec![
+            vec![("n", CtValue::Int(10))],
+            vec![("n", CtValue::String("15".into()))],
+            vec![("n", CtValue::Int(2))],
+        ]);
+        let out = CmdSortBy
+            .run(&call(&["n"], false, false), data, &ctx())
+            .unwrap();
+        let CtPipelineData::Value(CtValue::List(items), _) = out else {
+            panic!("expected list");
+        };
+        let values = items
+            .iter()
+            .map(|item| field_value(item, "n").clone())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            values,
+            vec![
+                CtValue::Int(2),
+                CtValue::Int(10),
+                CtValue::String("15".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_compare_values_preserves_exact_cross_numeric_order() {
+        let exactly_representable = CtValue::Float(9_007_199_254_740_992.0);
+        let next_integer = CtValue::Int(9_007_199_254_740_993);
+        let next_size = CtValue::Size(9_007_199_254_740_994);
+
+        assert_eq!(
+            compare_values(&exactly_representable, &next_integer),
+            Ordering::Less
+        );
+        assert_eq!(compare_values(&next_integer, &next_size), Ordering::Less);
+        assert_eq!(
+            compare_values(&exactly_representable, &next_size),
+            Ordering::Less
+        );
+    }
+
+    #[test]
+    fn test_sort_by_strings_remains_lexicographic() {
+        let data = input(vec![
+            vec![("n", CtValue::String("z".into()))],
+            vec![("n", CtValue::String("abc".into()))],
+            vec![("n", CtValue::String("xyz".into()))],
+            vec![("n", CtValue::String("ssssss".into()))],
+        ]);
+        let out = CmdSortBy
+            .run(&call(&["n"], false, false), data, &ctx())
+            .unwrap();
+        let CtPipelineData::Value(CtValue::List(items), _) = out else {
+            panic!("expected list");
+        };
+        let values = items
+            .iter()
+            .map(|item| field_value(item, "n").to_text())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["abc", "ssssss", "xyz", "z"]);
     }
 
     #[test]

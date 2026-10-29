@@ -220,8 +220,12 @@ fn json_to_ct(v: serde_json::Value) -> CtValue {
         serde_json::Value::Number(n) => {
             if let Some(i) = n.as_i64() {
                 CtValue::Int(i)
-            } else if let Some(f) = n.as_f64() {
-                CtValue::Float(f)
+            } else if n.to_string().contains(['.', 'e', 'E']) {
+                let raw = n.to_string();
+                n.as_f64()
+                    .filter(|value| value.is_finite())
+                    .map(CtValue::Float)
+                    .unwrap_or(CtValue::String(raw))
             } else {
                 CtValue::String(n.to_string())
             }
@@ -347,5 +351,25 @@ mod tests {
     fn decode_body_json_like_text_falls_back_to_string() {
         let out = decode_body("text/plain", "{not-json}").expect("should fallback to text");
         assert!(matches!(out, CtValue::String(v) if v == "{not-json}"));
+    }
+
+    #[test]
+    fn decode_body_preserves_json_numbers_outside_ctvalue_ranges() {
+        let out = decode_body(
+            "application/json",
+            r#"{"integer":9223372036854775808,"float":1e400}"#,
+        )
+        .unwrap();
+        let CtValue::Record(fields) = out else {
+            panic!("expected record");
+        };
+        assert!(matches!(
+            fields.iter().find(|(key, _)| key == "integer").map(|(_, value)| value),
+            Some(CtValue::String(value)) if value == "9223372036854775808"
+        ));
+        assert!(matches!(
+            fields.iter().find(|(key, _)| key == "float").map(|(_, value)| value),
+            Some(CtValue::String(value)) if value == "1e400"
+        ));
     }
 }

@@ -364,8 +364,14 @@ fn json_to_ctvalue(v: serde_json::Value) -> ctpipeline::value::CtValue {
         serde_json::Value::Number(n) => {
             if let Some(i) = n.as_i64() {
                 ctpipeline::value::CtValue::Int(i)
+            } else if n.to_string().contains(['.', 'e', 'E']) {
+                let raw = n.to_string();
+                n.as_f64()
+                    .filter(|value| value.is_finite())
+                    .map(ctpipeline::value::CtValue::Float)
+                    .unwrap_or(ctpipeline::value::CtValue::String(raw))
             } else {
-                ctpipeline::value::CtValue::Float(n.as_f64().unwrap_or(0.0))
+                ctpipeline::value::CtValue::String(n.to_string())
             }
         }
         serde_json::Value::String(s) => ctpipeline::value::CtValue::String(s),
@@ -1076,6 +1082,24 @@ mod decoder_tests {
         } else {
             panic!("Expected Value(Record)");
         }
+    }
+
+    #[test]
+    fn test_decode_json_preserves_numbers_outside_ctvalue_ranges() {
+        let meta = CtPipelineMetadata::default();
+        let cursor = Cursor::new(b"{\"integer\":9223372036854775808,\"float\":1e400}".to_vec());
+        let data = ExternalOutputDecoder::decode(cursor, ExternalStdoutMode::Json, meta).unwrap();
+        let CtPipelineData::Value(CtValue::Record(fields), _) = data else {
+            panic!("expected record");
+        };
+        assert!(matches!(
+            fields.iter().find(|(key, _)| key == "integer").map(|(_, value)| value),
+            Some(CtValue::String(value)) if value == "9223372036854775808"
+        ));
+        assert!(matches!(
+            fields.iter().find(|(key, _)| key == "float").map(|(_, value)| value),
+            Some(CtValue::String(value)) if value == "1e400"
+        ));
     }
 
     #[test]

@@ -234,8 +234,9 @@ fn parse_one_json_value(
     strict: bool,
     line_no: Option<usize>,
 ) -> Result<serde_json::Value, CtDiagnosticError> {
-    if strict {
-        return serde_json::from_str::<serde_json::Value>(s).map_err(|e| {
+    let standard_json = serde_json::from_str::<serde_json::Value>(s);
+    if strict || standard_json.is_ok() {
+        return standard_json.map_err(|e| {
             if let Some(n) = line_no {
                 CtDiagnosticError::simple(format!("from json: parse error at line {n}: {e}"))
             } else {
@@ -503,8 +504,14 @@ fn json_value_to_ct(v: serde_json::Value) -> CtValue {
         serde_json::Value::Number(n) => {
             if let Some(i) = n.as_i64() {
                 CtValue::Int(i)
+            } else if n.to_string().contains(['.', 'e', 'E']) {
+                let raw = n.to_string();
+                n.as_f64()
+                    .filter(|value| value.is_finite())
+                    .map(CtValue::Float)
+                    .unwrap_or(CtValue::String(raw))
             } else {
-                CtValue::Float(n.as_f64().unwrap_or(0.0))
+                CtValue::String(n.to_string())
             }
         }
         serde_json::Value::String(s) => CtValue::String(s),
@@ -660,6 +667,77 @@ mod tests {
             panic!("expected list");
         };
         assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn test_from_json_preserves_numbers_outside_ctvalue_ranges() {
+        for strict in [false, true] {
+            let value = parse_json(
+                r#"{"max":9223372036854775807,"above":9223372036854775808,"min":-9223372036854775808,"below":-9223372036854775809,"decimal":1.25,"exponent":1e3,"huge_exponent":1e400}"#,
+                strict,
+                false,
+            )
+            .unwrap();
+            let CtValue::Record(fields) = value else {
+                panic!("expected record");
+            };
+
+            assert!(matches!(
+                fields
+                    .iter()
+                    .find(|(key, _)| key == "max")
+                    .map(|(_, value)| value),
+                Some(CtValue::Int(i64::MAX))
+            ));
+            assert!(matches!(
+                fields.iter().find(|(key, _)| key == "above").map(|(_, value)| value),
+                Some(CtValue::String(value)) if value == "9223372036854775808"
+            ));
+            assert!(matches!(
+                fields
+                    .iter()
+                    .find(|(key, _)| key == "min")
+                    .map(|(_, value)| value),
+                Some(CtValue::Int(i64::MIN))
+            ));
+            assert!(matches!(
+                fields.iter().find(|(key, _)| key == "below").map(|(_, value)| value),
+                Some(CtValue::String(value)) if value == "-9223372036854775809"
+            ));
+            assert!(matches!(
+                fields.iter().find(|(key, _)| key == "decimal").map(|(_, value)| value),
+                Some(CtValue::Float(value)) if (*value - 1.25).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                fields.iter().find(|(key, _)| key == "exponent").map(|(_, value)| value),
+                Some(CtValue::Float(value)) if (*value - 1000.0).abs() < f64::EPSILON
+            ));
+            assert!(matches!(
+                fields.iter().find(|(key, _)| key == "huge_exponent").map(|(_, value)| value),
+                Some(CtValue::String(value)) if value == "1e400"
+            ));
+        }
+    }
+
+    #[test]
+    fn test_from_json_objects_and_jsonl_preserve_large_integers() {
+        let objects = parse_json(r#"{"n":9223372036854775808}"#, false, true).unwrap();
+        assert!(matches!(
+            objects,
+            CtValue::List(items)
+                if matches!(items.as_slice(), [CtValue::Record(fields)]
+                    if matches!(fields.as_slice(), [(key, CtValue::String(value))]
+                        if key == "n" && value == "9223372036854775808"))
+        ));
+
+        let jsonl = parse_jsonl(r#"{"n":-9223372036854775809}"#).unwrap();
+        assert!(matches!(
+            jsonl,
+            CtValue::List(items)
+                if matches!(items.as_slice(), [CtValue::Record(fields)]
+                    if matches!(fields.as_slice(), [(key, CtValue::String(value))]
+                        if key == "n" && value == "-9223372036854775809"))
+        ));
     }
 
     #[test]

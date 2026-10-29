@@ -319,6 +319,21 @@ mod native_semantic_tests {
     }
 
     #[test]
+    fn numfmt_native_semantic_orders_header_warning_after_option_warnings() {
+        let args = ["numfmt", "--debug", "--header", "4096"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.classic_text, "4096\n");
+        assert_eq!(
+            semantic.stderr_text,
+            "numfmt: no conversion option specified\n\
+             numfmt: --header ignored with command-line input\n"
+        );
+    }
+
+    #[test]
     fn numfmt_native_semantic_warns_when_format_padding_overrides_padding() {
         let args = ["numfmt", "--debug", "--padding=10", "--format=%5f", "1"];
 
@@ -1473,10 +1488,6 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
         .get_many::<String>(numfmt_flags::NUMFMT_NUMBER)
         .is_some();
 
-    if debug && has_command_line_numbers && options.header > 0 {
-        ct_show_error!("--header ignored with command-line input");
-    }
-
     if debug && !locale_ok {
         ct_show_error!("failed to set locale");
     }
@@ -1493,6 +1504,10 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
 
     if debug && grouping && is_c_locale() {
         ct_show_error!("grouping has no effect in this locale");
+    }
+
+    if debug && has_command_line_numbers && options.header > 0 {
+        ct_show_error!("--header ignored with command-line input");
     }
 
     let result = match matches.get_many::<String>(numfmt_flags::NUMFMT_NUMBER) {
@@ -1549,12 +1564,6 @@ pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemanti
         exit_code: 0,
     };
 
-    if debug && has_command_line_numbers && options.header > 0 {
-        semantic.stderr_text.push_str(&numfmt_prefixed_stderr(
-            "--header ignored with command-line input",
-        ));
-    }
-
     if debug && !locale_ok {
         semantic
             .stderr_text
@@ -1578,6 +1587,12 @@ pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemanti
     if debug && grouping && is_c_locale() {
         semantic.stderr_text.push_str(&numfmt_prefixed_stderr(
             "grouping has no effect in this locale",
+        ));
+    }
+
+    if debug && has_command_line_numbers && options.header > 0 {
+        semantic.stderr_text.push_str(&numfmt_prefixed_stderr(
+            "--header ignored with command-line input",
         ));
     }
 

@@ -289,6 +289,17 @@ mod native_semantic_tests {
     }
 
     #[test]
+    fn numfmt_native_semantic_preserves_earlier_left_padding_alignment() {
+        let args = ["numfmt", "--padding=-2", "--padding=4", "1"];
+
+        let semantic = numfmt_native_semantic(args.iter().map(OsString::from)).expect("semantic");
+
+        assert_eq!(semantic.exit_code, 0);
+        assert_eq!(semantic.stderr_text, "");
+        assert_eq!(semantic.classic_text, "1   \n");
+    }
+
+    #[test]
     fn numfmt_native_semantic_uses_last_repeated_to_option() {
         let args = ["numfmt", "--to=si", "--to=iec", "2048"];
 
@@ -1355,16 +1366,20 @@ fn parse_transform(arg_matches: &ArgMatches) -> Result<NumfmtTransformOptions> {
             .get_one::<String>(numfmt_flags::NUMFMT_TO)
             .unwrap(),
     )?;
-    let from_unit = numfmt_parse_unit_size(
-        arg_matches
-            .get_one::<String>(numfmt_flags::NUMFMT_FROM_UNIT)
-            .unwrap(),
-    )?;
-    let to_unit = numfmt_parse_unit_size(
-        arg_matches
-            .get_one::<String>(numfmt_flags::NUMFMT_TO_UNIT)
-            .unwrap(),
-    )?;
+    let mut from_unit = 1;
+    for value in arg_matches
+        .get_many::<String>(numfmt_flags::NUMFMT_FROM_UNIT)
+        .unwrap()
+    {
+        from_unit = numfmt_parse_unit_size(value)?;
+    }
+    let mut to_unit = 1;
+    for value in arg_matches
+        .get_many::<String>(numfmt_flags::NUMFMT_TO_UNIT)
+        .unwrap()
+    {
+        to_unit = numfmt_parse_unit_size(value)?;
+    }
 
     let transform = NumfmtTransformOptions {
         from,
@@ -1383,39 +1398,54 @@ fn validate_command_options(options: &NumfmtConfigs) -> Result<()> {
 }
 
 fn parse_padding(arg_matches: &ArgMatches) -> Result<isize> {
-    let padding = match arg_matches.get_one::<String>(numfmt_flags::NUMFMT_PADDING) {
-        Some(s) => s
+    let mut padding = 0;
+    let mut left_aligned = false;
+
+    for value in arg_matches
+        .get_many::<String>(numfmt_flags::NUMFMT_PADDING)
+        .into_iter()
+        .flatten()
+    {
+        let parsed = value
             .parse::<isize>()
-            .map_err(|_| s)
+            .map_err(|_| value)
             .and_then(|n| match n {
-                0 | isize::MIN => Err(s),
+                0 | isize::MIN => Err(value),
                 _ => Ok(n),
             })
-            .map_err(|s| format!("invalid padding value {}", numfmt_quote(s))),
-        None => Ok(0),
-    }?;
-    Ok(padding)
+            .map_err(|value| format!("invalid padding value {}", numfmt_quote(value)))?;
+
+        if parsed.is_negative() {
+            left_aligned = true;
+            padding = -parsed;
+        } else {
+            padding = parsed;
+        }
+    }
+
+    Ok(if left_aligned { -padding } else { padding })
 }
 
 fn parse_header(arg_matches: &ArgMatches) -> Result<usize> {
-    let header = if arg_matches.value_source(numfmt_flags::NUMFMT_HEADER)
-        == Some(ValueSource::CommandLine)
-    {
-        let value = arg_matches
-            .get_one::<String>(numfmt_flags::NUMFMT_HEADER)
-            .unwrap();
+    if arg_matches.value_source(numfmt_flags::NUMFMT_HEADER) != Some(ValueSource::CommandLine) {
+        return Ok(0);
+    }
 
-        value
+    let mut header = 0;
+    for value in arg_matches
+        .get_many::<String>(numfmt_flags::NUMFMT_HEADER)
+        .unwrap()
+    {
+        header = value
             .parse::<usize>()
             .map_err(|_| value)
             .and_then(|n| match n {
                 0 => Err(value),
                 _ => Ok(n),
             })
-            .map_err(|value| format!("invalid header value {}", numfmt_quote(value)))
-    } else {
-        Ok(0)
-    }?;
+            .map_err(|value| format!("invalid header value {}", numfmt_quote(value)))?;
+    }
+
     Ok(header)
 }
 
@@ -1424,10 +1454,6 @@ fn parse_fields(arg_matches: &ArgMatches) -> Result<Vec<CtRange>> {
         .get_many::<String>(numfmt_flags::NUMFMT_FIELD)
         .map(|v| v.map(String::as_str).collect::<Vec<_>>())
         .unwrap_or_default();
-
-    if field_args.len() > 1 {
-        return Err("multiple field specifications".to_string());
-    }
 
     let fields = field_args
         .first()
@@ -1443,19 +1469,27 @@ fn parse_fields(arg_matches: &ArgMatches) -> Result<Vec<CtRange>> {
     } else {
         CtRange::from_list(fields).map_err(map_field_parse_error)?
     };
+
+    if field_args.len() > 1 {
+        return Err("multiple field specifications".to_string());
+    }
+
     Ok(fields)
 }
 
 fn parse_delimiter(arg_matches: &ArgMatches) -> Result<Option<String>> {
-    let delimiter = arg_matches
-        .get_one::<String>(numfmt_flags::NUMFMT_DELIMITER)
-        .map_or(Ok(None), |arg| {
-            if arg.len() <= 1 {
-                Ok(Some(arg.to_string()))
-            } else {
-                Err("the delimiter must be a single character".to_string())
-            }
-        })?;
+    let mut delimiter = None;
+    for value in arg_matches
+        .get_many::<String>(numfmt_flags::NUMFMT_DELIMITER)
+        .into_iter()
+        .flatten()
+    {
+        if value.len() > 1 {
+            return Err("the delimiter must be a single character".to_string());
+        }
+        delimiter = Some(value.to_string());
+    }
+
     Ok(delimiter)
 }
 
@@ -1735,7 +1769,8 @@ pub fn ct_app() -> Command {
             .long(numfmt_flags::NUMFMT_DELIMITER)
             .value_name("X")
             .allow_hyphen_values(true)
-            .help(t!("numfmt.clap.numfmt_delimiter")),
+            .help(t!("numfmt.clap.numfmt_delimiter"))
+            .action(ArgAction::Append),
         Arg::new(numfmt_flags::NUMFMT_FIELD)
             .long(numfmt_flags::NUMFMT_FIELD)
             .help(t!("numfmt.clap.numfmt_field"))
@@ -1746,11 +1781,13 @@ pub fn ct_app() -> Command {
             .long(numfmt_flags::NUMFMT_FORMAT)
             .help(t!("numfmt.clap.numfmt_format"))
             .value_name("FORMAT")
-            .allow_hyphen_values(true),
+            .allow_hyphen_values(true)
+            .overrides_with(numfmt_flags::NUMFMT_FORMAT),
         Arg::new(numfmt_flags::NUMFMT_GROUPING)
             .long(numfmt_flags::NUMFMT_GROUPING)
             .help("use locale-defined digit grouping")
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(numfmt_flags::NUMFMT_GROUPING),
         Arg::new(numfmt_flags::NUMFMT_FROM)
             .long(numfmt_flags::NUMFMT_FROM)
             .help(t!("numfmt.clap.numfmt_from"))
@@ -1766,7 +1803,8 @@ pub fn ct_app() -> Command {
             .help(t!("numfmt.clap.numfmt_from_unit"))
             .value_name("N")
             .allow_hyphen_values(true)
-            .default_value(numfmt_flags::NUMFMT_FROM_UNIT_DEFAULT),
+            .default_value(numfmt_flags::NUMFMT_FROM_UNIT_DEFAULT)
+            .action(ArgAction::Append),
         Arg::new(numfmt_flags::NUMFMT_TO)
             .long(numfmt_flags::NUMFMT_TO)
             .help(t!("numfmt.clap.numfmt_to"))
@@ -1782,7 +1820,8 @@ pub fn ct_app() -> Command {
             .help(t!("numfmt.clap.numfmt_to_unit"))
             .value_name("N")
             .allow_hyphen_values(true)
-            .default_value(numfmt_flags::NUMFMT_TO_UNIT_DEFAULT),
+            .default_value(numfmt_flags::NUMFMT_TO_UNIT_DEFAULT)
+            .action(ArgAction::Append),
         Arg::new(numfmt_flags::NUMFMT_PADDING)
             .long(numfmt_flags::NUMFMT_PADDING)
             .help(
@@ -1792,7 +1831,8 @@ pub fn ct_app() -> Command {
                      to automatically pad if a whitespace is found",
             )
             .allow_hyphen_values(true)
-            .value_name("N"),
+            .value_name("N")
+            .action(ArgAction::Append),
         Arg::new(numfmt_flags::NUMFMT_HEADER)
             .long(numfmt_flags::NUMFMT_HEADER)
             .help(
@@ -1803,11 +1843,13 @@ pub fn ct_app() -> Command {
             .require_equals(true)
             .value_name("N")
             .default_missing_value(numfmt_flags::NUMFMT_HEADER_DEFAULT)
-            .hide_default_value(true),
+            .hide_default_value(true)
+            .action(ArgAction::Append),
         Arg::new(numfmt_flags::NUMFMT_DEBUG)
             .long(numfmt_flags::NUMFMT_DEBUG)
             .help("print warnings about invalid or ineffective options")
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(numfmt_flags::NUMFMT_DEBUG),
         Arg::new(numfmt_flags::NUMFMT_ROUND)
             .long(numfmt_flags::NUMFMT_ROUND)
             .help(t!("numfmt.clap.numfmt_round"))
@@ -1829,7 +1871,8 @@ pub fn ct_app() -> Command {
                     inputs optionally ending with SUFFIX",
             )
             .allow_hyphen_values(true)
-            .value_name("SUFFIX"),
+            .value_name("SUFFIX")
+            .overrides_with(numfmt_flags::NUMFMT_SUFFIX),
         Arg::new(numfmt_flags::NUMFMT_INVALID)
             .long(numfmt_flags::NUMFMT_INVALID)
             .help(t!("numfmt.clap.numfmt_invalid"))
@@ -1838,12 +1881,14 @@ pub fn ct_app() -> Command {
             .value_parser(CtShortcutValueParser::new([
                 "abort", "fail", "warn", "ignore",
             ]))
-            .value_name("INVALID"),
+            .value_name("INVALID")
+            .overrides_with(numfmt_flags::NUMFMT_INVALID),
         Arg::new(numfmt_flags::NUMFMT_ZERO_TERMINATED)
             .short('z')
             .long(numfmt_flags::NUMFMT_ZERO_TERMINATED)
             .help(t!("numfmt.clap.numfmt_zero_terminated"))
-            .action(ArgAction::SetTrue),
+            .action(ArgAction::SetTrue)
+            .overrides_with(numfmt_flags::NUMFMT_ZERO_TERMINATED),
         Arg::new(numfmt_flags::NUMFMT_NUMBER)
             .hide(true)
             .action(ArgAction::Append),
@@ -1882,9 +1927,9 @@ mod tests {
     // use super::*;
     use super::{
         CtRange, Numfmt, NumfmtConfigs, NumfmtFormatOptions, NumfmtInvalidModes, NumfmtRoundMethod,
-        NumfmtTransformOptions, NumfmtUnit, ct_app, numfmt_handle_args, numfmt_handle_buffer,
-        numfmt_handle_invalid_bytes, numfmt_parse_options, numfmt_parse_unit_size,
-        numfmt_parse_unit_size_suffix,
+        NumfmtTransformOptions, NumfmtUnit, ct_app, numfmt_flags, numfmt_handle_args,
+        numfmt_handle_buffer, numfmt_handle_invalid_bytes, numfmt_parse_options,
+        numfmt_parse_unit_size, numfmt_parse_unit_size_suffix,
     };
     use ctcore::Tool;
     use ctcore::ct_error::get_ct_exit_code;
@@ -1944,6 +1989,114 @@ mod tests {
         let options = numfmt_parse_options(&result).unwrap();
 
         assert!(options.format.is_grouping);
+    }
+
+    #[test]
+    fn test_parse_options_accepts_last_repeated_scalar_values() {
+        let command = ct_app();
+        let cmd_args = vec![
+            ctcore::ct_util_name(),
+            "--delimiter=:",
+            "--delimiter=,",
+            "--format=%d",
+            "--format=%05f",
+            "--from=si",
+            "--from=iec",
+            "--from-unit=2",
+            "--from-unit=3",
+            "--to=si",
+            "--to=iec",
+            "--to-unit=2",
+            "--to-unit=3",
+            "--padding=2",
+            "--padding=4",
+            "--header",
+            "--header=2",
+            "--suffix=X",
+            "--suffix=Y",
+            "--invalid=warn",
+            "--invalid=ignore",
+        ];
+        let result = command.try_get_matches_from(cmd_args).unwrap();
+        let options = numfmt_parse_options(&result).unwrap();
+
+        assert_eq!(options.delimiter, Some(",".to_string()));
+        assert_eq!(options.format.padding, Some(5));
+        assert!(options.format.is_zero_padding);
+        assert_eq!(options.transform.from, NumfmtUnit::Iec(false));
+        assert_eq!(options.transform.from_unit, 3);
+        assert_eq!(options.transform.to, NumfmtUnit::Iec(false));
+        assert_eq!(options.transform.to_unit, 3);
+        assert_eq!(options.padding, 4);
+        assert_eq!(options.header, 2);
+        assert_eq!(options.suffix, Some("Y".to_string()));
+        assert_eq!(options.invalid, NumfmtInvalidModes::Ignore);
+    }
+
+    #[test]
+    fn test_parse_options_accepts_repeated_boolean_options() {
+        let command = ct_app();
+        let cmd_args = vec![
+            ctcore::ct_util_name(),
+            "--debug",
+            "--debug",
+            "--grouping",
+            "--grouping",
+            "-z",
+            "--zero-terminated",
+        ];
+        let result = command.try_get_matches_from(cmd_args).unwrap();
+
+        assert!(result.get_flag(numfmt_flags::NUMFMT_DEBUG));
+        assert!(result.get_flag(numfmt_flags::NUMFMT_GROUPING));
+        assert!(result.get_flag(numfmt_flags::NUMFMT_ZERO_TERMINATED));
+    }
+
+    #[test]
+    fn test_parse_options_validates_repeated_values_in_gnu_order() {
+        let cases = [
+            (
+                vec!["--delimiter=xx", "--delimiter=,"],
+                "the delimiter must be a single character".to_string(),
+            ),
+            (
+                vec!["--from-unit=bad", "--from-unit=3"],
+                format!("invalid unit size: {}", crate::format::numfmt_quote("bad")),
+            ),
+            (
+                vec!["--to-unit=bad", "--to-unit=3"],
+                format!("invalid unit size: {}", crate::format::numfmt_quote("bad")),
+            ),
+            (
+                vec!["--padding=0", "--padding=4"],
+                format!("invalid padding value {}", crate::format::numfmt_quote("0")),
+            ),
+            (
+                vec!["--header=0", "--header=2"],
+                format!("invalid header value {}", crate::format::numfmt_quote("0")),
+            ),
+            (
+                vec!["--field=bad", "--field=2"],
+                format!(
+                    "invalid field value {}\nTry 'numfmt --help' for more information.",
+                    crate::format::numfmt_quote("bad")
+                ),
+            ),
+            (
+                vec!["--field=1", "--field=bad"],
+                "multiple field specifications".to_string(),
+            ),
+        ];
+
+        for (arguments, expected) in cases {
+            let command = ct_app();
+            let mut cmd_args = vec![ctcore::ct_util_name()];
+            cmd_args.extend(arguments);
+            let result = command.try_get_matches_from(cmd_args).unwrap();
+            let error = numfmt_parse_options(&result).unwrap_err();
+
+            assert_eq!(error, expected);
+        }
     }
 
     mod format_and_handle_validation_tests {

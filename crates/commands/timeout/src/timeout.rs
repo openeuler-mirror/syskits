@@ -28,7 +28,7 @@ use ctcore::Tool;
 use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CTsageError, CtSimpleError, UClapError};
 use ctcore::ct_process::CtChildExt;
-use std::ffi::{CString, OsStr, OsString};
+use std::ffi::{CStr, CString, OsStr, OsString};
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
@@ -252,6 +252,10 @@ fn parse_timeout_duration(duration: &str) -> Result<Duration, String> {
 }
 
 fn parse_c_timeout_duration(duration: &str) -> Option<Duration> {
+    parse_c_timeout_duration_in_locale(duration, c"")
+}
+
+fn parse_c_timeout_duration_in_locale(duration: &str, locale_name: &CStr) -> Option<Duration> {
     let (number, multiplier) = if let Some(number) = duration.strip_suffix('s') {
         (number, 1.0)
     } else if let Some(number) = duration.strip_suffix('m') {
@@ -263,26 +267,43 @@ fn parse_c_timeout_duration(duration: &str) -> Option<Duration> {
     } else {
         (duration, 1.0)
     };
-    let unsigned = number.strip_prefix(['+', '-']).unwrap_or(number);
-    let is_hex = unsigned.starts_with("0x") || unsigned.starts_with("0X");
-    let is_infinity =
-        unsigned.eq_ignore_ascii_case("inf") || unsigned.eq_ignore_ascii_case("infinity");
-    if !(is_hex || is_infinity) {
-        return None;
-    }
 
     let number = CString::new(number).ok()?;
-    let locale =
+    let current_locale = unsafe {
+        libc::newlocale(
+            libc::LC_NUMERIC_MASK,
+            locale_name.as_ptr(),
+            std::ptr::null_mut(),
+        )
+    };
+    let c_locale =
         unsafe { libc::newlocale(libc::LC_NUMERIC_MASK, c"C".as_ptr(), std::ptr::null_mut()) };
-    if locale.is_null() {
+    if c_locale.is_null() {
+        if !current_locale.is_null() {
+            unsafe { libc::freelocale(current_locale) };
+        }
         return None;
     }
 
-    let mut end = std::ptr::null_mut();
-    let parsed = unsafe {
-        let parsed = strtod_l(number.as_ptr(), &mut end, locale);
-        libc::freelocale(locale);
-        parsed
+    let mut current_end = number.as_ptr().cast_mut();
+    let current_parsed = if current_locale.is_null() {
+        None
+    } else {
+        Some(unsafe { strtod_l(number.as_ptr(), &mut current_end, current_locale) })
+    };
+    let mut c_end = number.as_ptr().cast_mut();
+    let c_parsed = unsafe { strtod_l(number.as_ptr(), &mut c_end, c_locale) };
+
+    if !current_locale.is_null() {
+        unsafe { libc::freelocale(current_locale) };
+    }
+    unsafe { libc::freelocale(c_locale) };
+
+    let current_len = unsafe { current_end.offset_from(number.as_ptr()) };
+    let c_len = unsafe { c_end.offset_from(number.as_ptr()) };
+    let (parsed, end) = match current_parsed {
+        Some(parsed) if current_len >= c_len => (parsed, current_end),
+        _ => (c_parsed, c_end),
     };
     if end == number.as_ptr().cast_mut() || unsafe { *end } != 0 || parsed.is_nan() || parsed < 0.0
     {
@@ -1049,6 +1070,36 @@ mod tests {
             let flags = TimeoutFlags::new(&matches).unwrap();
             assert_eq!(flags.kill_after, Some(Duration::from_secs(2)));
             assert_eq!(flags.duration, Duration::from_secs(4));
+        }
+
+        #[test]
+        fn test_duration_uses_locale_decimal_point_with_c_fallback() {
+            let locale = c"fr_FR.utf8";
+            let available = unsafe {
+                let locale =
+                    libc::newlocale(libc::LC_NUMERIC_MASK, locale.as_ptr(), std::ptr::null_mut());
+                if !locale.is_null() {
+                    libc::freelocale(locale);
+                }
+                !locale.is_null()
+            };
+            if !available {
+                return;
+            }
+
+            assert_eq!(
+                parse_c_timeout_duration_in_locale("1,001", locale).unwrap(),
+                Duration::new(1, 999_999)
+            );
+            assert_eq!(
+                parse_c_timeout_duration_in_locale("1.001", locale).unwrap(),
+                Duration::new(1, 999_999)
+            );
+            assert_eq!(
+                parse_c_timeout_duration_in_locale("0x1,8p1s", locale).unwrap(),
+                Duration::from_secs(3)
+            );
+            assert!(parse_c_timeout_duration_in_locale("1,2junk", locale).is_none());
         }
 
         #[test]

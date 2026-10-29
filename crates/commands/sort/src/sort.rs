@@ -1499,6 +1499,11 @@ impl Tool for Sort {
 
 // 中间测试
 pub fn sort_main(args: impl ctcore::Args) -> CTResult<()> {
+    #[cfg(unix)]
+    unsafe {
+        ctcore::libc::signal(ctcore::libc::SIGCHLD, ctcore::libc::SIG_DFL);
+    }
+
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     unsafe {

@@ -767,6 +767,30 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: --from-unit 接受 GNU 风格的前导加号",
+            "args": [
+                "--from-unit=+1",
+                "1"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "1\n",
+                    "stderr": ""
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

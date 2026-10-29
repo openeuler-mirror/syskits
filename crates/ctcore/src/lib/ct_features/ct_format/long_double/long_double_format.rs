@@ -20,6 +20,7 @@ use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::{One, Zero};
 
 use super::extendedbigdecimal::ExtendedBigDecimal;
+use super::number::PreciseNumber;
 use crate::ct_format::num_format::{
     Case, Float, FloatVariant, ForceDecimal, NumberAlignment, PositiveSign,
 };
@@ -52,6 +53,18 @@ const LONG_DOUBLE_PRECISION: usize = 106;
     target_arch = "sparc64"
 )))]
 const LONG_DOUBLE_PRECISION: usize = 53;
+const LONG_DOUBLE_DIGITS: usize = match LONG_DOUBLE_PRECISION {
+    64 => 18,
+    106 => 31,
+    113 => 33,
+    _ => 15,
+};
+const LONG_DOUBLE_DECIMAL_DIGITS: usize = match LONG_DOUBLE_PRECISION {
+    64 => 21,
+    106 => 33,
+    113 => 36,
+    _ => 17,
+};
 
 #[cfg(any(
     target_arch = "x86",
@@ -201,6 +214,17 @@ fn quote_format_bytes(bytes: &[u8]) -> Vec<u8> {
 }
 
 impl GnuFloatFormat {
+    fn general(precision: usize) -> Self {
+        Self {
+            prefix: Vec::new(),
+            suffix: Vec::new(),
+            flags: Flags::default(),
+            width: 0,
+            precision: Some(precision),
+            conversion: b'g',
+        }
+    }
+
     pub(crate) fn from_float_format(format: &Float, grouping: bool) -> Self {
         let conversion = match (format.variant, format.case) {
             (FloatVariant::Decimal, Case::Lowercase) => b'f',
@@ -527,6 +551,174 @@ struct BinaryFinite {
     negative: bool,
     significand: BigUint,
     exponent: i32,
+}
+
+struct DecodedLongDouble {
+    value: ExtendedBigDecimal,
+    subnormal: bool,
+}
+
+/// Formats bytes containing the target's native `long double` representation
+/// with the same minimal round-tripping precision used by GNU `ldtoastr`.
+///
+/// The caller must first convert any requested input byte order to native byte
+/// order. Unsupported native `long double` layouts return `None`.
+pub fn format_native_long_double(bytes: &[u8]) -> Option<String> {
+    let decoded = decode_native_long_double(bytes)?;
+    let mut precision = if decoded.subnormal {
+        1
+    } else {
+        LONG_DOUBLE_DIGITS
+    };
+
+    loop {
+        let format = GnuFloatFormat::general(precision);
+        let text = format.format_unlocalized_numeric(&decoded.value);
+        if precision >= LONG_DOUBLE_DECIMAL_DIGITS
+            || long_double_text_roundtrips(&text, &decoded.value)
+        {
+            return String::from_utf8(format.format(&decoded.value)).ok();
+        }
+        precision += 1;
+    }
+}
+
+fn long_double_text_roundtrips(text: &str, expected: &ExtendedBigDecimal) -> bool {
+    text.parse::<PreciseNumber>()
+        .is_ok_and(|parsed| quantize_long_double(&parsed.number) == *expected)
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+fn decode_native_long_double(bytes: &[u8]) -> Option<DecodedLongDouble> {
+    if bytes.len() != 16 {
+        return None;
+    }
+
+    let significand = u64::from_ne_bytes(bytes[..8].try_into().ok()?);
+    let sign_exponent = u16::from_ne_bytes(bytes[8..10].try_into().ok()?);
+    let negative = sign_exponent & 0x8000 != 0;
+    let exponent = sign_exponent & 0x7fff;
+    let integer_bit = significand & (1_u64 << 63) != 0;
+
+    let value = match (exponent, significand) {
+        (0, 0) => signed_zero(negative),
+        (0x7fff, 0x8000_0000_0000_0000) => signed_infinity(negative),
+        (0x7fff, _) => signed_nan(negative),
+        (_, _) if exponent != 0 && !integer_bit => signed_nan(negative),
+        _ => {
+            let binary_exponent = if exponent == 0 {
+                1 - 16383 - 63
+            } else {
+                i32::from(exponent) - 16383 - 63
+            };
+            exact_binary_value(negative, BigUint::from(significand), binary_exponent)
+        }
+    };
+
+    Some(DecodedLongDouble {
+        value,
+        subnormal: exponent == 0 && significand != 0 && !integer_bit,
+    })
+}
+
+#[cfg(any(
+    target_arch = "aarch64",
+    target_arch = "loongarch64",
+    target_arch = "mips",
+    target_arch = "mips64",
+    target_arch = "riscv64",
+    target_arch = "s390x",
+    target_arch = "sparc64"
+))]
+fn decode_native_long_double(bytes: &[u8]) -> Option<DecodedLongDouble> {
+    if bytes.len() != 16 {
+        return None;
+    }
+
+    let bits = u128::from_ne_bytes(bytes.try_into().ok()?);
+    let negative = bits & (1_u128 << 127) != 0;
+    let exponent = ((bits >> 112) & 0x7fff) as u16;
+    let fraction = bits & ((1_u128 << 112) - 1);
+
+    let value = match (exponent, fraction) {
+        (0, 0) => signed_zero(negative),
+        (0x7fff, 0) => signed_infinity(negative),
+        (0x7fff, _) => signed_nan(negative),
+        _ => {
+            let significand = if exponent == 0 {
+                fraction
+            } else {
+                (1_u128 << 112) | fraction
+            };
+            let binary_exponent = if exponent == 0 {
+                1 - 16383 - 112
+            } else {
+                i32::from(exponent) - 16383 - 112
+            };
+            exact_binary_value(negative, BigUint::from(significand), binary_exponent)
+        }
+    };
+
+    Some(DecodedLongDouble {
+        value,
+        subnormal: exponent == 0 && fraction != 0,
+    })
+}
+
+#[cfg(not(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    target_arch = "loongarch64",
+    target_arch = "mips",
+    target_arch = "mips64",
+    target_arch = "riscv64",
+    target_arch = "s390x",
+    target_arch = "sparc64"
+)))]
+fn decode_native_long_double(_bytes: &[u8]) -> Option<DecodedLongDouble> {
+    None
+}
+
+fn signed_zero(negative: bool) -> ExtendedBigDecimal {
+    if negative {
+        ExtendedBigDecimal::MinusZero
+    } else {
+        ExtendedBigDecimal::default()
+    }
+}
+
+fn signed_infinity(negative: bool) -> ExtendedBigDecimal {
+    if negative {
+        ExtendedBigDecimal::MinusInfinity
+    } else {
+        ExtendedBigDecimal::Infinity
+    }
+}
+
+fn signed_nan(negative: bool) -> ExtendedBigDecimal {
+    if negative {
+        ExtendedBigDecimal::MinusNan
+    } else {
+        ExtendedBigDecimal::Nan
+    }
+}
+
+fn exact_binary_value(
+    negative: bool,
+    significand: BigUint,
+    binary_exponent: i32,
+) -> ExtendedBigDecimal {
+    let sign = if negative { Sign::Minus } else { Sign::Plus };
+    let mut integer = BigInt::from_biguint(sign, significand);
+    if binary_exponent >= 0 {
+        integer <<= binary_exponent as usize;
+        ExtendedBigDecimal::BigDecimal(BigDecimal::from(integer))
+    } else {
+        let scale = binary_exponent.unsigned_abs();
+        integer *= BigInt::from(5_u8).pow(scale);
+        ExtendedBigDecimal::BigDecimal(BigDecimal::new(integer, i64::from(scale)))
+    }
 }
 
 impl From<&ExtendedBigDecimal> for BinaryLongDouble {

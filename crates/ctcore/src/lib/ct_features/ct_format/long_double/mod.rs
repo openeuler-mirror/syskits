@@ -16,8 +16,8 @@ mod numberparse;
 
 pub use extendedbigdecimal::ExtendedBigDecimal;
 pub use long_double_format::{
-    GnuFloatFormat, GnuFormatError, long_double_linear_value, overflows_long_double,
-    quantize_long_double,
+    GnuFloatFormat, GnuFormatError, format_native_long_double, long_double_linear_value,
+    overflows_long_double, quantize_long_double,
 };
 pub use number::PreciseNumber;
 pub use numberparse::ParseNumberError;

@@ -176,6 +176,10 @@ fn format_flo64(f: f64) -> String {
 }
 
 fn format_long_double(bytes: &[u8]) -> String {
+    if let Some(text) = ctcore::ct_format::long_double::format_native_long_double(bytes) {
+        return text;
+    }
+
     if bytes.len() < 10 {
         return "nan".to_string();
     }
@@ -626,6 +630,50 @@ fn test_format_flo16() {
     assert_eq!(format_flo16(f16::NEG_INFINITY), "     -inf");
     assert_eq!(format_flo16(f16::NEG_ZERO), "       -0");
     assert_eq!(format_flo16(f16::ZERO), "        0");
+}
+
+#[test]
+#[cfg(all(unix, target_endian = "little", target_arch = "x86_64"))]
+fn test_format_long_double_decodes_x86_extended_values() {
+    let cases = [
+        ([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "4e-4951"),
+        (
+            [
+                0xcd, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xfb, 0x3f, 0, 0, 0, 0, 0, 0,
+            ],
+            "0.1",
+        ),
+        (
+            [0, 0, 0, 0, 0, 0, 0, 0x80, 1, 0, 0, 0, 0, 0, 0, 0],
+            "3.3621031431120935063e-4932",
+        ),
+        (
+            [
+                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0x7f, 0, 0, 0, 0, 0, 0,
+            ],
+            "1.189731495357231765e+4932",
+        ),
+    ];
+
+    for (bytes, expected) in cases {
+        assert_eq!(format_long_double(&bytes), expected);
+    }
+}
+
+#[test]
+#[cfg(all(unix, target_endian = "little", target_arch = "aarch64"))]
+fn test_format_long_double_decodes_aarch64_binary128() {
+    let bytes: Vec<u8> = (0..64).collect();
+    let expected = [
+        "2.610793871763096751958758746575379e-3772",
+        "1.8936454075606857747420082138069493e-2534",
+        "1.369128036139078895201874353437426e-1296",
+        "9.870799931345011305706278629121449e-59",
+    ];
+
+    for (chunk, expected) in bytes.chunks_exact(16).zip(expected) {
+        assert_eq!(format_long_double(chunk), expected);
+    }
 }
 
 #[test]

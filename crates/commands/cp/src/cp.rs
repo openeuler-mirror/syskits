@@ -695,7 +695,7 @@ pub fn cp_main(args: impl ctcore::Args) -> CTResult<i32> {
         let cp_options = CpOptions::cp_from_matches_with_args(&args_matches, &parse_args)?;
 
         #[cfg(not(feature = "feat_selinux"))]
-        if cp_options.attributes.selinux_context.is_some() {
+        for _ in 0..cp_count_explicit_context_args(&parse_args) {
             ct_show_warning!("ignoring --context; it requires an SELinux-enabled kernel");
         }
 
@@ -791,6 +791,65 @@ fn cp_prepare_posix_args(args: &[OsString]) -> Vec<OsString> {
     }
 
     prepared
+}
+
+#[cfg(not(feature = "feat_selinux"))]
+fn cp_count_explicit_context_args(args: &[OsString]) -> usize {
+    let mut count = 0;
+    let mut skip_next = false;
+
+    for arg in args.iter().skip(1) {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
+
+        let value = arg.to_string_lossy();
+        if value == "--" {
+            break;
+        }
+        if value == "-" || !value.starts_with('-') {
+            continue;
+        }
+
+        if let Some(long) = value.strip_prefix("--") {
+            let (name, attached_value) = long
+                .split_once('=')
+                .map_or((long, None), |(name, value)| (name, Some(value)));
+            let is_long = |full: &str| !name.is_empty() && full.starts_with(name);
+
+            if attached_value.is_some() && is_long(opt_flags::CONTEXT) {
+                count += 1;
+            } else if attached_value.is_none()
+                && [
+                    opt_flags::NO_PRESERVE,
+                    opt_flags::SPARSE,
+                    opt_flags::TARGET_DIRECTORY,
+                    "suffix",
+                ]
+                .iter()
+                .any(|full| is_long(full))
+            {
+                skip_next = true;
+            }
+            continue;
+        }
+
+        let Some(short) = value.strip_prefix('-') else {
+            continue;
+        };
+        let mut chars = short.chars();
+        while let Some(option) = chars.next() {
+            if matches!(option, 'S' | 't') {
+                if chars.next().is_none() {
+                    skip_next = true;
+                }
+                break;
+            }
+        }
+    }
+
+    count
 }
 
 impl CpClobberMode {

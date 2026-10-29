@@ -92,6 +92,9 @@ struct Context<'a> {
     /// The path to the parent of the source directory, if any.
     root_parent: Option<PathBuf>,
 
+    /// Whether the target existed before recursive traversal started.
+    target_existed: bool,
+
     /// The target path to which the directory will be copied.
     target: &'a Path,
 
@@ -104,7 +107,8 @@ impl<'a> Context<'a> {
         let current_dir = env::current_dir()?;
         let root_path = current_dir.join(root);
         let root_is_dot = root == Path::new(".") || root == Path::new("./");
-        let root_parent = if target.exists() && !ends_with_slash_dot(root) && !root_is_dot {
+        let target_existed = target.exists();
+        let root_parent = if target_existed && !ends_with_slash_dot(root) && !root_is_dot {
             root_path.parent().map(|p| p.to_path_buf())
         } else {
             Some(root_path)
@@ -112,6 +116,7 @@ impl<'a> Context<'a> {
         Ok(Self {
             current_dir,
             root_parent,
+            target_existed,
             target,
             root,
         })
@@ -193,6 +198,8 @@ impl Entry {
 
         let local_to_target = if descendant.as_os_str().is_empty() {
             context.target.to_path_buf()
+        } else if context.target_existed && ends_with_slash_dot(context.root) {
+            context.target.join(".").join(descendant)
         } else {
             context.target.join(descendant)
         };

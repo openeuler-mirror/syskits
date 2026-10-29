@@ -288,7 +288,7 @@ impl OdSettings {
 
         let formats = od_parse_format_flags(args).map_err(|e| CtSimpleError::new(1, e))?;
 
-        let mut line_bytes = Self::parse_line_width(matches)?;
+        let mut line_bytes = Self::parse_line_width(matches, args)?;
         let min_bytes = formats.iter().fold(1, |max, next| {
             cmp::max(max, next.formatter_item_info.byte_size)
         });
@@ -376,33 +376,26 @@ impl OdSettings {
             .any(|option| matches.value_source(option) == Some(ValueSource::CommandLine))
     }
 
-    fn parse_line_width(matches: &ArgMatches) -> CTResult<usize> {
+    fn parse_line_width(matches: &ArgMatches, args: &[String]) -> CTResult<usize> {
         match matches.get_one::<String>(od_options::OD_WIDTH) {
             None => Ok(16),
             Some(s) => {
                 if matches.value_source(od_options::OD_WIDTH) == Some(ValueSource::CommandLine) {
+                    let option_name = od_numeric_option_name(args, 'w', od_options::OD_WIDTH);
                     match od_parse_width_value(s) {
                         Ok(OdWidthValue::Positive(width)) => Ok(width),
                         Ok(OdWidthValue::NonPositive) => std::process::abort(),
                         Err(OdWidthParseError::Invalid) => Err(CtSimpleError::new(
                             1,
-                            format!("invalid --{} argument {}", od_options::OD_WIDTH, s.quote()),
+                            format!("invalid {option_name} argument {}", s.quote()),
                         )),
                         Err(OdWidthParseError::InvalidSuffix) => Err(CtSimpleError::new(
                             1,
-                            format!(
-                                "invalid suffix in --{} argument {}",
-                                od_options::OD_WIDTH,
-                                s.quote()
-                            ),
+                            format!("invalid suffix in {option_name} argument {}", s.quote()),
                         )),
                         Err(OdWidthParseError::TooLarge) => Err(CtSimpleError::new(
                             1,
-                            format!(
-                                "--{} argument {} too large",
-                                od_options::OD_WIDTH,
-                                s.quote()
-                            ),
+                            format!("{option_name} argument {} too large", s.quote()),
                         )),
                     }
                 } else {
@@ -1583,12 +1576,14 @@ fn od_numeric_option_name_with_mode(
         match short {
             'j' => "-j",
             'N' => "-N",
+            'w' => "-w",
             _ => unreachable!(),
         }
     } else {
         match long {
             od_options::OD_SKIP_BYTES => "--skip-bytes",
             od_options::OD_READ_BYTES => "--read-bytes",
+            od_options::OD_WIDTH => "--width",
             _ => unreachable!(),
         }
     }
@@ -1708,6 +1703,23 @@ mod tests {
                 od_parse_width_value("-9223372036854775809"),
                 Err(OdWidthParseError::TooLarge)
             );
+        }
+
+        #[test]
+        fn test_width_errors_name_the_effective_option_spelling() {
+            for (arg, expected) in [
+                ("-wbad", "invalid -w argument 'bad'"),
+                ("--width=bad", "invalid --width argument 'bad'"),
+            ] {
+                let args = ["od".to_string(), arg.to_string()];
+                let matches = ct_app().try_get_matches_from(&args).unwrap();
+                let error = match OdSettings::new(&matches, &args) {
+                    Ok(_) => panic!("invalid width should fail"),
+                    Err(error) => error,
+                };
+
+                assert_eq!(error.to_string(), expected);
+            }
         }
 
         #[test]

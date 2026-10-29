@@ -413,7 +413,24 @@ where
         .write(true)
         .mode(mode)
         .open(&dest)?;
-    let num_bytes_copied = std::io::copy(&mut src_file, &mut dst_file)?;
+
+    // `std::io::copy` uses `splice(2)` for file descriptors on Linux.  Unlike
+    // `read(2)`, `splice(2)` does not update a FIFO's access time, while GNU
+    // cp treats --copy-contents as a regular read/write copy.
+    let mut buffer = [0; 64 * 1024];
+    let mut num_bytes_copied = 0;
+    loop {
+        let bytes_read = match src_file.read(&mut buffer) {
+            Ok(bytes_read) => bytes_read,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        };
+        if bytes_read == 0 {
+            break;
+        }
+        dst_file.write_all(&buffer[..bytes_read])?;
+        num_bytes_copied += bytes_read as u64;
+    }
     dst_file.set_permissions(src_file.metadata()?.permissions())?;
     Ok(num_bytes_copied)
 }

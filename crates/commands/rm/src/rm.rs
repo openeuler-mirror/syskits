@@ -468,7 +468,7 @@ fn handle_dir(path: &Path, options: &RMOptions, top_dev: u64) -> bool {
     let is_root = is_root_directory(path);
     if options.recursive && (!is_root || !options.preserve_root) {
         // 使用跨平台的、防御 ENAMETOOLONG 长路径异常的单轨递归引擎
-        had_err = remove_dir_tree(path, path, options, top_dev, true);
+        had_err = remove_dir_tree(path, recursive_display_root(path), options, top_dev, true);
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, path, options).bitor(had_err);
     } else if options.recursive {
@@ -488,6 +488,25 @@ fn handle_dir(path: &Path, options: &RMOptions, top_dev: u64) -> bool {
     }
 
     had_err
+}
+
+#[cfg(unix)]
+fn recursive_display_root(path: &Path) -> &Path {
+    use std::os::unix::ffi::OsStrExt;
+
+    let bytes = path.as_os_str().as_bytes();
+    let mut len = bytes.len();
+    if len > 2 && bytes[len - 1] == b'/' {
+        while len > 1 && bytes[len - 2] == b'/' {
+            len -= 1;
+        }
+    }
+    Path::new(OsStr::from_bytes(&bytes[..len]))
+}
+
+#[cfg(not(unix))]
+fn recursive_display_root(path: &Path) -> &Path {
+    path
 }
 
 #[cfg(unix)]

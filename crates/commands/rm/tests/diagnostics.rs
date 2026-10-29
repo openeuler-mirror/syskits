@@ -45,3 +45,23 @@ fn empty_name_is_treated_as_an_operand() {
         b"rm: cannot remove '': No such file or directory\n"
     );
 }
+
+#[test]
+fn recursive_verbose_collapses_redundant_trailing_slashes() {
+    let directory = tempfile::tempdir().unwrap();
+    fs::create_dir(directory.path().join("a")).unwrap();
+    fs::write(directory.path().join("a/x"), b"data").unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_rm"))
+        .arg0("rm")
+        .env("LC_ALL", "C")
+        .current_dir(directory.path())
+        .args(["-rv", "a///"])
+        .output()
+        .expect("run rm");
+
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"removed 'a/x'\nremoved directory 'a/'\n");
+    assert!(output.stderr.is_empty());
+    assert!(!directory.path().join("a").exists());
+}

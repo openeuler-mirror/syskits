@@ -191,7 +191,11 @@ impl Entry {
             }
         }
 
-        let local_to_target = context.target.join(descendant);
+        let local_to_target = if descendant.as_os_str().is_empty() {
+            context.target.to_path_buf()
+        } else {
+            context.target.join(descendant)
+        };
         let target_is_file = context.target.is_file();
         let depth = direntry.depth();
         Ok(Self {

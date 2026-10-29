@@ -15,11 +15,10 @@ mod parser;
 use clap::Command;
 use clap::crate_version;
 use ctcore::Tool;
-use ctcore::ct_display::Quotable;
 use ctcore::ct_error::{CTResult, CtSimpleError};
 #[cfg(not(windows))]
 use ctcore::ct_process::{getegid, geteuid};
-use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name};
+use ctcore::ct_quoting_style::{CtQuotes, CtQuotingStyle, escape_name, gnu_quote_locale};
 use error::{ParseError, ParseResult};
 use parser::{TestOperator, TestSymbol, TestUnaryOperator, test_parse};
 use rust_i18n::t;
@@ -30,6 +29,16 @@ use std::fs;
 use std::os::unix::fs::MetadataExt;
 rust_i18n::i18n!("locales", fallback = "en-US");
 use sys_locale::get_locale;
+
+trait TestQuotable {
+    fn quote(&self) -> String;
+}
+
+impl<T: AsRef<OsStr> + ?Sized> TestQuotable for T {
+    fn quote(&self) -> String {
+        gnu_quote_locale(self.as_ref())
+    }
+}
 
 #[derive(Default)]
 pub struct Test;
@@ -111,6 +120,11 @@ fn handle_closing_bracket(binary_name: &str, args: &mut Vec<OsString>) -> CTResu
 
 /// test 命令的主要入口函数
 pub fn test_main(mut args: impl ctcore::Args) -> CTResult<()> {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+    }
+
     let lang_code = get_locale().unwrap_or_else(|| String::from("en-US"));
     rust_i18n::set_locale(&lang_code);
     // Get program name and collect arguments

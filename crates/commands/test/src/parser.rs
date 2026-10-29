@@ -12,9 +12,8 @@
 use std::ffi::{OsStr, OsString};
 use std::iter::Peekable;
 
+use super::TestQuotable;
 use super::error::{ParseError, ParseResult};
-
-use ctcore::ct_display::Quotable;
 
 /// Represents one of the binary comparison operators for strings, integers, or files
 #[derive(Debug, PartialEq, Eq)]
@@ -729,7 +728,10 @@ mod tests {
     #[test]
     fn unknown_three_argument_binary_operator_is_rejected() {
         let error = test_parse(args(&["x", "-q", "y"])).unwrap_err();
-        assert_eq!(error.to_string(), "'-q': binary operator expected");
+        assert_eq!(
+            error.to_string(),
+            format!("{}: binary operator expected", "-q".quote())
+        );
     }
 
     #[test]
@@ -738,7 +740,7 @@ mod tests {
             let error = test_parse(args(&["abc", operator, "abd"])).unwrap_err();
             assert_eq!(
                 error.to_string(),
-                format!("'{operator}': binary operator expected")
+                format!("{}: binary operator expected", operator.quote())
             );
         }
     }
@@ -746,6 +748,9 @@ mod tests {
     #[test]
     fn unmatched_three_argument_parenthesis_uses_arity_dispatch() {
         let error = test_parse(args(&["(", "x", "y"])).unwrap_err();
-        assert_eq!(error.to_string(), "'x': binary operator expected");
+        assert_eq!(
+            error.to_string(),
+            format!("{}: binary operator expected", "x".quote())
+        );
     }
 }

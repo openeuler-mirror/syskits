@@ -190,6 +190,10 @@ impl Parser {
         let field_span = field_st.span.clone();
         let op = self.parse_comp_op()?;
         let (rhs, rhs_span) = self.parse_lit()?;
+        let rhs = match rhs {
+            Lit::Ident(value) if value == "null" => Lit::Null,
+            rhs => rhs,
+        };
         Ok((field, op, rhs, field_span, rhs_span))
     }
 
@@ -607,6 +611,24 @@ mod tests {
             &args[0],
             Arg::Comparison { field, op: CompOp::Gt, rhs: Lit::Int(100), .. }
             if field == "size"
+        ));
+    }
+
+    #[test]
+    fn test_parse_null_only_as_comparison_rhs() {
+        let expr = parse(r#"where n == null and text == "null""#);
+        let args = &expr.stages()[0].args;
+        assert!(matches!(
+            &args[0],
+            Arg::WhereExpr { conditions, .. }
+            if matches!(&conditions[0].2, Lit::Null)
+                && matches!(&conditions[1].2, Lit::String(value) if value == "null")
+        ));
+
+        let expr = parse("echo null");
+        assert!(matches!(
+            &expr.stages()[0].args[0],
+            Arg::Positional { value: Lit::Ident(value), .. } if value == "null"
         ));
     }
 

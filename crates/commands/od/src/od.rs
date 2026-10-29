@@ -232,6 +232,13 @@ impl OdSettings {
             match s.as_str() {
                 value if !value.is_empty() && "little".starts_with(value) => ByteOrder::Little,
                 value if !value.is_empty() && "big".starts_with(value) => ByteOrder::Big,
+                "" => {
+                    return Err(CTsageError::new(
+                        1,
+                        "ambiguous argument '' for '--endian'\n\
+                         Valid arguments are:\n  - 'little'\n  - 'big'",
+                    ));
+                }
                 _ => {
                     return Err(CTsageError::new(
                         1,
@@ -1775,6 +1782,22 @@ mod tests {
                 let settings = OdSettings::new(&matches, &args).unwrap();
                 assert_eq!(settings.byte_order, ByteOrder::Little);
             }
+        }
+
+        #[test]
+        fn test_new_reports_empty_endian_as_ambiguous() {
+            let args = ["od".to_string(), "--endian=".to_string()];
+            let matches = ct_app().try_get_matches_from(&args).unwrap();
+            let error = match OdSettings::new(&matches, &args) {
+                Ok(_) => panic!("empty endian should fail"),
+                Err(error) => error,
+            };
+
+            assert!(
+                error
+                    .to_string()
+                    .starts_with("ambiguous argument '' for '--endian'\nValid arguments are:")
+            );
         }
 
         #[test]

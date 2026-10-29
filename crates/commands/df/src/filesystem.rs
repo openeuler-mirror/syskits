@@ -13,7 +13,7 @@
 //! filesystem mounted at a particular directory. It also includes
 //! information on amount of space available and amount of space used.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use ctcore::ct_fsext::CtMountInfo;
 use ctcore::ct_fsext::FsUsage;
@@ -21,6 +21,8 @@ use ctcore::ct_fsext::FsUsage;
 use ctcore::ct_fsext::StatFs;
 #[cfg(unix)]
 use ctcore::ct_fsext::statfs;
+#[cfg(target_os = "linux")]
+use ctcore::ct_fsext::{mount_field_to_bytes, mount_field_to_os_string};
 
 /// 文件系统的基本表示。
 ///
@@ -85,7 +87,7 @@ where
         .iter()
         // 构造挂载信息及其规范化的设备名称对
         // （注意：这一步骤直接访问了实际文件系统，影响测试性）
-        .map(|m| (m, std::fs::canonicalize(&m.dev_name)))
+        .map(|m| (m, std::fs::canonicalize(mount_field_path(&m.dev_name))))
         // 过滤掉不存在的路径
         .filter(|m| m.1.is_ok())
         .map(|m| (m.0, m.1.unwrap()))
@@ -97,9 +99,43 @@ where
     current_mount_point.or_else(|| {
         mounts
             .iter()
-            .filter(|mi| path.starts_with(Path::new(&mi.mount_dir)))
-            .max_by_key(|mi| mi.mount_dir.len())
+            .filter(|mi| path.starts_with(mount_field_path(&mi.mount_dir)))
+            .max_by_key(|mi| mount_field_len(&mi.mount_dir))
     })
+}
+
+fn mount_field_path(field: &str) -> PathBuf {
+    #[cfg(target_os = "linux")]
+    {
+        PathBuf::from(mount_field_to_os_string(field))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        PathBuf::from(field)
+    }
+}
+
+fn mount_field_len(field: &str) -> usize {
+    #[cfg(target_os = "linux")]
+    {
+        mount_field_to_bytes(field).len()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        field.len()
+    }
+}
+
+#[cfg(unix)]
+fn mount_field_bytes(field: &str) -> Vec<u8> {
+    #[cfg(target_os = "linux")]
+    {
+        mount_field_to_bytes(field)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        field.as_bytes().to_vec()
+    }
 }
 
 impl Filesystem {
@@ -121,14 +157,21 @@ impl Filesystem {
         let _stat_path = if mount_info.mount_dir.is_empty() {
             #[cfg(unix)]
             {
-                mount_info.dev_name.clone()
+                mount_field_bytes(&mount_info.dev_name)
             }
             #[cfg(windows)]
             {
-                mount_info.dev_id.clone()
+                PathBuf::from(&mount_info.dev_id)
             }
         } else {
-            mount_info.mount_dir.clone()
+            #[cfg(unix)]
+            {
+                mount_field_bytes(&mount_info.mount_dir)
+            }
+            #[cfg(windows)]
+            {
+                mount_field_path(&mount_info.mount_dir)
+            }
         };
 
         // 收集文件系统使用情况信息
@@ -248,6 +291,12 @@ fn fs_usage_from_statfs(statvfs: StatFs) -> FsUsage {
 mod tests {
     mod mount_info_from_path {
         use ctcore::ct_fsext::CtMountInfo;
+        #[cfg(target_os = "linux")]
+        use ctcore::ct_fsext::mount_field_to_os_string;
+        #[cfg(target_os = "linux")]
+        use std::os::unix::ffi::OsStringExt;
+        #[cfg(target_os = "linux")]
+        use std::path::PathBuf;
 
         use crate::filesystem::filesystem_mount_info_from_path;
 
@@ -328,6 +377,25 @@ mod tests {
             let mounts = [mount_info];
             let actual = filesystem_mount_info_from_path(&mounts, dev_name, false).unwrap();
             assert!(mount_info_eq(actual, &mounts[0]));
+        }
+
+        #[test]
+        #[cfg(target_os = "linux")]
+        fn test_non_utf8_longest_prefix_match() {
+            let encoded_name = "\u{F0000}\u{F01F3}";
+            let parent = format!("/mnt/{encoded_name}");
+            let child = format!("{parent}/child");
+            let mounts = [mount_info("/mnt"), mount_info(&parent)];
+            let path = PathBuf::from(std::ffi::OsString::from_vec(
+                b"/mnt/\xf3/child/file".to_vec(),
+            ));
+
+            assert_eq!(
+                mount_field_to_os_string(&child).as_encoded_bytes(),
+                b"/mnt/\xf3/child"
+            );
+            let actual = filesystem_mount_info_from_path(&mounts, path, false).unwrap();
+            assert!(mount_info_eq(actual, &mounts[1]));
         }
     }
 }

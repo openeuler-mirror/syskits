@@ -28,6 +28,8 @@ use ctcore::ct_error::CTResult;
 use ctcore::ct_error::CtSimpleError;
 use ctcore::ct_error::FromIo;
 use ctcore::ct_fsext::CtMountInfo;
+#[cfg(target_os = "linux")]
+use ctcore::ct_fsext::mount_field_to_bytes;
 use ctcore::ct_fsext::read_fs_list;
 use ctcore::ct_parse_size::ParseSizeError;
 use ctcore::ct_quoting_style::{CtQuotingStyle, escape_name};
@@ -42,6 +44,7 @@ use ctcore::Tool;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
+use std::io::Write;
 use std::path::Path;
 use sys_locale::get_locale;
 use table::TableHeaderMode;
@@ -1193,10 +1196,26 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
             if filesystems.is_empty() {
                 return Ok(());
             }
-            println!("{}", Table::new(&options, filesystems));
+            let rendered = format!("{}\n", Table::new(&options, filesystems));
+            let bytes = df_rendered_text_to_bytes(&rendered);
+            std::io::stdout()
+                .lock()
+                .write_all(&bytes)
+                .map_err(|error| CtSimpleError::new(1, error.to_string()))?;
             Ok(())
         }
         Err(err) => Err(CtSimpleError::new(1, format!("{err}"))),
+    }
+}
+
+fn df_rendered_text_to_bytes(text: &str) -> Vec<u8> {
+    #[cfg(target_os = "linux")]
+    {
+        mount_field_to_bytes(text)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        text.as_bytes().to_vec()
     }
 }
 
@@ -1625,6 +1644,20 @@ mod tests {
         // 测试 execute 方法
         let args = vec![OsString::from("df"), OsString::from("--version")];
         assert!(tool.execute(&args).is_err());
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_rendered_text_restores_only_encoded_mount_bytes() {
+        let marker = '\u{F0000}';
+        let raw_byte = '\u{F01F3}';
+        let rendered = format!("raw:{marker}{raw_byte} valid:{marker}{marker}");
+        let mut expected = b"raw:".to_vec();
+        expected.push(0xF3);
+        expected.extend_from_slice(b" valid:");
+        expected.extend_from_slice(marker.to_string().as_bytes());
+
+        assert_eq!(df_rendered_text_to_bytes(&rendered), expected);
     }
 
     mod tests_ct_app {

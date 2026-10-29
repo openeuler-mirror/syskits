@@ -1441,6 +1441,10 @@ fn pr_optional_option_occurrence(arg: &str) -> Option<(char, bool)> {
         }
     }
 
+    if arg.starts_with("--") {
+        return None;
+    }
+
     let cluster = arg.strip_prefix('-')?;
     for (index, option) in cluster.char_indices() {
         if matches!(option, 'n' | 'e' | 'i' | 's') {
@@ -7563,6 +7567,30 @@ mod tests {
             assert_eq!(
                 pr_recreate_arguments(&["pr", "-s:", "-s", "file.txt"]),
                 vec!["pr", "-s=:", "file.txt"]
+            );
+        }
+
+        #[test]
+        fn test_pr_recreate_arguments_does_not_treat_long_options_as_short_clusters() {
+            assert_eq!(
+                pr_recreate_arguments(&[
+                    "pr",
+                    "--date-format=-- Date/Time --",
+                    "-h",
+                    "x",
+                    "-t",
+                    "-e",
+                    "file.txt",
+                ]),
+                vec![
+                    "pr",
+                    "--date-format=-- Date/Time --",
+                    "-h",
+                    "x",
+                    "-t",
+                    "-e",
+                    "file.txt",
+                ]
             );
         }
 

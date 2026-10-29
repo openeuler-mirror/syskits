@@ -32,7 +32,7 @@ use crate::flags::*;
 use crate::format::{
     numfmt_format_and_print_abort_with_line_ending, numfmt_format_and_print_with_line_ending,
     numfmt_format_line_abort_with_line_ending, numfmt_format_line_with_line_ending,
-    numfmt_passthrough_input, numfmt_precision_loss_inputs,
+    numfmt_passthrough_input, numfmt_precision_loss_inputs, numfmt_quote,
 };
 use crate::units::{NumfmtUnit, Result};
 use ctcore::Tool;
@@ -176,8 +176,19 @@ fn numfmt_unit_name(unit: &NumfmtUnit) -> &'static str {
 
 #[cfg(test)]
 mod native_semantic_tests {
-    use super::numfmt_native_semantic;
+    use super::{numfmt_native_semantic, numfmt_to_argument_error_message};
     use std::ffi::OsString;
+
+    #[test]
+    fn numfmt_native_semantic_rejects_invalid_to_value_with_gnu_error() {
+        let args = ["numfmt", "--to=xxxx", "1"];
+
+        let error = numfmt_native_semantic(args.iter().map(OsString::from))
+            .expect_err("an invalid --to value should be rejected");
+
+        assert_eq!(error.code(), 1);
+        assert_eq!(error.to_string(), numfmt_to_argument_error_message("xxxx"));
+    }
 
     #[test]
     fn numfmt_native_semantic_renders_rows_for_command_line_numbers() {
@@ -1261,7 +1272,7 @@ fn parse_transform(arg_matches: &ArgMatches) -> Result<NumfmtTransformOptions> {
 
 fn validate_command_options(options: &NumfmtConfigs) -> Result<()> {
     if options.transform.to == NumfmtUnit::Auto {
-        return Err("Unit 'auto' isn't supported with --to options".to_string());
+        return Err(numfmt_to_argument_error_message("auto"));
     }
     Ok(())
 }
@@ -1392,6 +1403,49 @@ fn numfmt_unknown_argument_message(error: &clap::Error) -> String {
     }
 }
 
+fn numfmt_to_argument_error_message(value: &str) -> String {
+    const VALID_ARGUMENTS: [&str; 4] = ["none", "si", "iec", "iec-i"];
+    let is_ambiguous = !VALID_ARGUMENTS.contains(&value)
+        && VALID_ARGUMENTS
+            .iter()
+            .filter(|candidate| candidate.starts_with(value))
+            .count()
+            > 1;
+
+    format!(
+        concat!(
+            "{} argument {} for {}\n",
+            "Valid arguments are:\n",
+            "  - {}\n",
+            "  - {}\n",
+            "  - {}\n",
+            "  - {}\n",
+            "Try 'numfmt --help' for more information."
+        ),
+        if is_ambiguous { "ambiguous" } else { "invalid" },
+        numfmt_quote(value),
+        numfmt_quote("--to"),
+        numfmt_quote("none"),
+        numfmt_quote("si"),
+        numfmt_quote("iec"),
+        numfmt_quote("iec-i"),
+    )
+}
+
+fn numfmt_invalid_to_value_message(error: &clap::Error) -> Option<String> {
+    match error.get(ContextKind::InvalidArg) {
+        Some(ContextValue::String(argument)) if argument == "--to <UNIT>" => {}
+        _ => return None,
+    }
+
+    let value = match error.get(ContextKind::InvalidValue) {
+        Some(ContextValue::String(value)) => value,
+        _ => return None,
+    };
+
+    Some(numfmt_to_argument_error_message(value))
+}
+
 pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
     let locale_ok = init_numfmt_locale();
     let (normalized_args, dev_debug) = normalize_numfmt_args(args);
@@ -1402,6 +1456,12 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
             return Err(Box::new(NumfmtError::NumfmtIllegalArgument(
                 numfmt_unknown_argument_message(&err),
             )));
+        }
+        Err(err) if err.kind() == ErrorKind::InvalidValue => {
+            if let Some(message) = numfmt_invalid_to_value_message(&err) {
+                return Err(Box::new(NumfmtError::NumfmtIllegalArgument(message)));
+            }
+            return Err(err.into());
         }
         Err(err) => return Err(err.into()),
     };
@@ -1465,6 +1525,12 @@ pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemanti
             return Err(Box::new(NumfmtError::NumfmtIllegalArgument(
                 numfmt_unknown_argument_message(&err),
             )));
+        }
+        Err(err) if err.kind() == ErrorKind::InvalidValue => {
+            if let Some(message) = numfmt_invalid_to_value_message(&err) {
+                return Err(Box::new(NumfmtError::NumfmtIllegalArgument(message)));
+            }
+            return Err(err.into());
         }
         Err(err) => return Err(err.into()),
     };
@@ -10104,8 +10170,51 @@ mod tests {
             assert_eq!(output.code(), 1);
             assert_eq!(
                 output.to_string(),
-                "Unit 'auto' isn't supported with --to options"
+                format!(
+                    concat!(
+                        "invalid argument {} for {}\n",
+                        "Valid arguments are:\n",
+                        "  - {}\n",
+                        "  - {}\n",
+                        "  - {}\n",
+                        "  - {}\n",
+                        "Try 'numfmt --help' for more information."
+                    ),
+                    crate::format::numfmt_quote("auto"),
+                    crate::format::numfmt_quote("--to"),
+                    crate::format::numfmt_quote("none"),
+                    crate::format::numfmt_quote("si"),
+                    crate::format::numfmt_quote("iec"),
+                    crate::format::numfmt_quote("iec-i"),
+                )
             );
+        }
+
+        #[test]
+        fn test_ct_main_invalid_to_value_returns_gnu_error() {
+            let args = [ctcore::ct_util_name(), "--to=xxxx", "1"];
+            let result = numfmt_main(args.iter().map(OsString::from));
+            let output = result.expect_err("an invalid --to value should be rejected");
+
+            assert_eq!(output.code(), 1);
+            assert_eq!(
+                output.to_string(),
+                crate::numfmt_to_argument_error_message("xxxx")
+            );
+        }
+
+        #[test]
+        fn test_ct_main_ambiguous_to_value_returns_gnu_error() {
+            let args = [ctcore::ct_util_name(), "--to=i", "1"];
+            let result = numfmt_main(args.iter().map(OsString::from));
+            let output = result.expect_err("an ambiguous --to value should be rejected");
+
+            assert_eq!(output.code(), 1);
+            assert_eq!(
+                output.to_string(),
+                crate::numfmt_to_argument_error_message("i")
+            );
+            assert!(output.to_string().starts_with("ambiguous argument "));
         }
 
         #[test]

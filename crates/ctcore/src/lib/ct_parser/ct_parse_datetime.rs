@@ -3015,9 +3015,9 @@ fn parse_gnu_local_timezone(
         .collect();
 
     let bytes = input.as_bytes();
-    let (start, end, zone_name) = candidates
+    let (start, end, zone_name, zone_is_dst) = candidates
         .iter()
-        .flat_map(|(name, _)| {
+        .flat_map(|(name, is_dst)| {
             bytes
                 .windows(name.len())
                 .enumerate()
@@ -3027,9 +3027,9 @@ fn parse_gnu_local_timezone(
                         && (*index + name.len() == bytes.len()
                             || !bytes[*index + name.len()].is_ascii_alphabetic())
                 })
-                .map(move |(index, _)| (index, index + name.len(), name.as_str()))
+                .map(move |(index, _)| (index, index + name.len(), name.as_str(), *is_dst))
         })
-        .min_by_key(|(start, _, _)| *start)?;
+        .min_by_key(|(start, _, _, _)| *start)?;
 
     let suffix = &input[end..];
     let trimmed_suffix = suffix.trim_start();
@@ -3055,6 +3055,15 @@ fn parse_gnu_local_timezone(
         Ok(parsed) => parsed,
         Err(_) => return Some(None),
     };
+    // GNU passes the DST state carried by a local-zone token to mktime.
+    // This selects the requested side of a repeated wall clock during a
+    // daylight-saving transition instead of merely validating whichever
+    // side the default local-time parser selected.
+    let requested_is_dst = has_dst_suffix || zone_is_dst;
+    let parsed = match resolve_local_datetime_with_isdst(parsed.naive_local(), requested_is_dst) {
+        Some(parsed) => parsed,
+        None => return Some(None),
+    };
     let (parsed_zone_name, parsed_is_dst) = match local_timezone_info(parsed.timestamp()) {
         Some(info) => info,
         None => return Some(None),
@@ -3068,6 +3077,44 @@ fn parse_gnu_local_timezone(
                 .then_some(parsed),
         )
     }
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_local_datetime_with_isdst(
+    naive: NaiveDateTime,
+    is_dst: bool,
+) -> Option<DateTime<Local>> {
+    let mut local_tm = unsafe { std::mem::zeroed::<libc::tm>() };
+    local_tm.tm_sec = i32::try_from(naive.second()).ok()?;
+    local_tm.tm_min = i32::try_from(naive.minute()).ok()?;
+    local_tm.tm_hour = i32::try_from(naive.hour()).ok()?;
+    local_tm.tm_mday = i32::try_from(naive.day()).ok()?;
+    local_tm.tm_mon = i32::try_from(naive.month0()).ok()?;
+    local_tm.tm_year = naive.year().checked_sub(1900)?;
+    local_tm.tm_isdst = i32::from(is_dst);
+    local_tm.tm_wday = -1;
+
+    let timestamp = unsafe { libc::mktime(&mut local_tm) };
+    if local_tm.tm_wday < 0
+        || local_tm.tm_sec != naive.second() as i32
+        || local_tm.tm_min != naive.minute() as i32
+        || local_tm.tm_hour != naive.hour() as i32
+        || local_tm.tm_mday != naive.day() as i32
+        || local_tm.tm_mon != naive.month0() as i32
+        || local_tm.tm_year != naive.year() - 1900
+    {
+        return None;
+    }
+
+    Local.timestamp_opt(timestamp, naive.nanosecond()).single()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn resolve_local_datetime_with_isdst(
+    _naive: NaiveDateTime,
+    _is_dst: bool,
+) -> Option<DateTime<Local>> {
+    None
 }
 
 #[cfg(target_os = "linux")]
@@ -4603,6 +4650,53 @@ mod tests {
         assert!(
             output.status.success(),
             "isolated DST parser test failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn test_parse_gnu_local_timezone_selects_new_york_dst_fold_side() {
+        const CHILD_ENV: &str = "CTCORE_PARSE_DATETIME_NEW_YORK_LOCAL_ZONE_CHILD";
+
+        if std::env::var_os(CHILD_ENV).is_some() {
+            let reference = Local.timestamp_opt(1_720_000_000, 0).unwrap();
+
+            for (input, expected_timestamp, expected_zone, expected_is_dst) in [
+                ("2024-11-03 01:30:00 EST", 1_730_615_400, "EST", false),
+                ("2024-11-03 01:30:00 EDT", 1_730_611_800, "EDT", true),
+                ("2024-11-03 01:30:00 EST DST", 1_730_611_800, "EDT", true),
+            ] {
+                let parsed = parse_datetime_gnu_compat(input, reference).unwrap();
+                assert_eq!(parsed.timestamp(), expected_timestamp, "input {input}");
+                assert_eq!(
+                    local_timezone_info(parsed.timestamp()),
+                    Some((expected_zone.to_string(), expected_is_dst)),
+                    "input {input}"
+                );
+            }
+
+            assert!(parse_datetime_gnu_compat("2024-07-01 12:00:00 EST", reference).is_err());
+            for zone in ["EST", "EDT"] {
+                assert!(
+                    parse_datetime_gnu_compat(&format!("2024-03-10 02:30:00 {zone}"), reference,)
+                        .is_err(),
+                    "zone {zone}"
+                );
+            }
+            return;
+        }
+
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("test_parse_gnu_local_timezone_selects_new_york_dst_fold_side")
+            .env(CHILD_ENV, "1")
+            .env("TZ", "America/New_York")
+            .output()
+            .expect("run isolated local-zone DST parser test");
+
+        assert!(
+            output.status.success(),
+            "isolated local-zone DST parser test failed:\nstdout:\n{}\nstderr:\n{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );

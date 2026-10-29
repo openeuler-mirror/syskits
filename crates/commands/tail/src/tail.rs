@@ -492,7 +492,6 @@ fn tail_exec(options: &TailOptions) -> CTResult<()> {
     let mut printer = TailHeaderPrinter::new(options.verbose, true);
     let mut observer = Observer::from(options);
 
-    observer.start(options)?;
     // Do an initial tail print of each path's content.
     // Add `path` and `reader` to `files` map if `--follow` is selected.
     for input in &options.inputs.clone() {
@@ -508,6 +507,10 @@ fn tail_exec(options: &TailOptions) -> CTResult<()> {
             }
         }
     }
+    // GNU tails the initial file contents before setting up inotify.  Besides
+    // making the initial output available promptly, this ensures a rotation
+    // during watcher setup is reconciled against the descriptor already read.
+    observer.start(options)?;
 
     if should_report_no_files_remaining_after_bad_stdin(options, paths::tail_stdin_is_bad_fd()) {
         ct_show_error!("{}", text::TAIL_NO_FILES_REMAINING);

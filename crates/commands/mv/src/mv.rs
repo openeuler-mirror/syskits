@@ -49,7 +49,7 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::io;
+use std::io::{self, Read, Seek, SeekFrom};
 #[cfg(unix)]
 use std::os::unix;
 use std::os::unix::fs::MetadataExt;
@@ -1834,13 +1834,117 @@ fn restore_timestamps(path: &Path, metadata: &fs::Metadata) -> io::Result<()> {
 }
 
 #[cfg(target_os = "linux")]
+fn copy_sparse_file_by_seek(
+    source: &fs::File,
+    destination: &mut fs::File,
+    length: u64,
+) -> io::Result<bool> {
+    use std::os::fd::AsRawFd;
+
+    fn seek_extent(fd: libc::c_int, offset: u64, whence: libc::c_int) -> io::Result<u64> {
+        let result = unsafe { libc::lseek(fd, offset as libc::off_t, whence) };
+        if result < 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(result as u64)
+        }
+    }
+
+    fn seek_is_unsupported(error: &io::Error) -> bool {
+        let error_code = error.raw_os_error();
+        error_code == Some(libc::EINVAL)
+            || error_code == Some(libc::ENOTSUP)
+            || error_code == Some(libc::EOPNOTSUPP)
+    }
+
+    let source_fd = source.as_raw_fd();
+    let mut offset = 0;
+    let mut found_hole = false;
+    let mut extents = Vec::new();
+
+    while offset < length {
+        let data = match seek_extent(source_fd, offset, libc::SEEK_DATA) {
+            Ok(data) => data,
+            Err(error) if error.raw_os_error() == Some(libc::ENXIO) => {
+                found_hole = true;
+                break;
+            }
+            Err(error) if seek_is_unsupported(&error) => return Ok(false),
+            Err(error) => return Err(error),
+        };
+        if data > offset {
+            found_hole = true;
+        }
+
+        let hole = match seek_extent(source_fd, data, libc::SEEK_HOLE) {
+            Ok(hole) => hole.min(length),
+            Err(error) if seek_is_unsupported(&error) => return Ok(false),
+            Err(error) => return Err(error),
+        };
+        if hole <= data {
+            return Ok(false);
+        }
+        if hole < length {
+            found_hole = true;
+        }
+
+        extents.push((data, hole));
+        offset = hole;
+    }
+
+    if !found_hole {
+        return Ok(false);
+    }
+
+    destination.set_len(length)?;
+    let mut source_reader = source.try_clone()?;
+    for (data, hole) in extents {
+        source_reader.seek(SeekFrom::Start(data))?;
+        destination.seek(SeekFrom::Start(data))?;
+        let extent_length = hole - data;
+        let copied = io::copy(&mut source_reader.by_ref().take(extent_length), destination)?;
+        if copied != extent_length {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "source file changed while copying",
+            ));
+        }
+    }
+    destination.set_len(length)?;
+    Ok(true)
+}
+
+#[cfg(target_os = "linux")]
+fn copy_regular_file_cross_device(
+    source: &Path,
+    destination: &Path,
+    source_metadata: &fs::Metadata,
+) -> io::Result<()> {
+    const ST_NBLOCKSIZE: u64 = 512;
+
+    let is_probably_sparse = source_metadata.len() > 0
+        && source_metadata.blocks() < source_metadata.len() / ST_NBLOCKSIZE;
+    if is_probably_sparse {
+        let source_file = fs::File::open(source)?;
+        let mut destination_file = fs::File::create(destination)?;
+        if copy_sparse_file_by_seek(&source_file, &mut destination_file, source_metadata.len())? {
+            return Ok(());
+        }
+    }
+
+    fs::copy(source, destination)?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
 fn move_regular_file_cross_device(
     source: &Path,
     destination: &Path,
     source_metadata: &fs::Metadata,
 ) -> io::Result<()> {
-    fs::copy(source, destination)?;
+    copy_regular_file_cross_device(source, destination, source_metadata)?;
     ct_fsxattr::ct_copy_xattrs(source, destination)?;
+    fs::set_permissions(destination, source_metadata.permissions())?;
     restore_timestamps(destination, source_metadata)?;
     fs::remove_file(source)
 }
@@ -1852,6 +1956,89 @@ fn restore_directory_metadata(
 ) -> io::Result<()> {
     fs::set_permissions(destination, source_metadata.permissions())?;
     restore_timestamps(destination, source_metadata)
+}
+
+/// Recreate a Unix special file during a cross-device move.
+///
+/// Opening a FIFO with `fs::copy` blocks until another process opens it for
+/// writing. GNU mv creates special files with `mknod`/`mkfifo` instead, then
+/// applies the source metadata and removes the source entry.
+#[cfg(unix)]
+fn move_special_file_cross_device(
+    source: &Path,
+    destination: &Path,
+    source_metadata: &fs::Metadata,
+) -> io::Result<bool> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
+
+    let file_type = source_metadata.file_type();
+    let is_special = file_type.is_fifo()
+        || file_type.is_block_device()
+        || file_type.is_char_device()
+        || file_type.is_socket();
+    if !is_special {
+        return Ok(false);
+    }
+
+    if file_type.is_socket() {
+        return Err(io::Error::other("cannot move socket across file systems"));
+    }
+
+    let destination_name = CString::new(destination.as_os_str().as_bytes())
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
+    let mode = source_metadata.permissions().mode() as libc::mode_t;
+    let result = unsafe {
+        if file_type.is_fifo() {
+            libc::mkfifo(destination_name.as_ptr(), mode)
+        } else {
+            let file_kind = if file_type.is_block_device() {
+                libc::S_IFBLK
+            } else {
+                libc::S_IFCHR
+            };
+            libc::mknod(
+                destination_name.as_ptr(),
+                mode | file_kind,
+                source_metadata.rdev(),
+            )
+        }
+    };
+    if result != 0 {
+        return Err(io::Error::last_os_error());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        ct_fsxattr::ct_copy_xattrs(source, destination)?;
+
+        // chmod does not open a FIFO, so it is safe to use here. The explicit
+        // chmod also removes any umask effect from mkfifo/mknod.
+        fs::set_permissions(destination, source_metadata.permissions())?;
+
+        // File::open cannot be used for a FIFO because it would block. Use
+        // utimensat to preserve its timestamps without opening the file.
+        let times = [
+            libc::timespec {
+                tv_sec: source_metadata.atime(),
+                tv_nsec: source_metadata.atime_nsec() as _,
+            },
+            libc::timespec {
+                tv_sec: source_metadata.mtime(),
+                tv_nsec: source_metadata.mtime_nsec() as _,
+            },
+        ];
+        let result = unsafe {
+            libc::utimensat(libc::AT_FDCWD, destination_name.as_ptr(), times.as_ptr(), 0)
+        };
+        if result != 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+
+    fs::remove_file(source)?;
+    Ok(true)
 }
 
 fn move_dir_cross_device_with_links(
@@ -1901,6 +2088,17 @@ fn move_dir_cross_device_with_links(
             #[cfg(unix)]
             {
                 let metadata = fs::symlink_metadata(&src_path)?;
+
+                // FIFO、设备节点和套接字不能通过 fs::copy 复制。GNU mv
+                // 直接在目标文件系统重建这些目录项。
+                if move_special_file_cross_device(&src_path, &dest_path, &metadata)? {
+                    if options.debug {
+                        println!("copied {} -> {}", src_path.quote(), dest_path.quote());
+                        println!("removed {}", src_path.quote());
+                    }
+                    continue;
+                }
+
                 let inode = metadata.ino();
 
                 // 无论当前的 nlink 是多少，必须先查表！
@@ -2011,6 +2209,17 @@ fn move_dir_cross_device_with_links_with_global_map(
         } else {
             // 处理普通文件，并尝试追踪硬链接
             let metadata = fs::symlink_metadata(&src_path)?;
+
+            // FIFO、设备节点和套接字不能通过 fs::copy 复制。GNU mv
+            // 直接在目标文件系统重建这些目录项。
+            if move_special_file_cross_device(&src_path, &dest_path, &metadata)? {
+                if options.debug {
+                    println!("copied {} -> {}", src_path.quote(), dest_path.quote());
+                    println!("removed {}", src_path.quote());
+                }
+                continue;
+            }
+
             let inode = metadata.ino();
             let dev = metadata.dev();
             let key = (dev, inode);

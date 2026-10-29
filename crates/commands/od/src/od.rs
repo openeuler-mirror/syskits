@@ -340,7 +340,9 @@ impl OdSettings {
                 format!("invalid {option_name} argument {}", value_text.quote()),
             )
         };
-        let value = od_parse_number_of_bytes(&value_text).map_err(|_| invalid_argument())?;
+        let value = od_parse_number_of_bytes(&value_text).map_err(|error| {
+            CtSimpleError::new(1, od_format_error_message(&error, &value_text, option_name))
+        })?;
         let min_len = usize::try_from(value).map_err(|_| invalid_argument())?;
         min_len.checked_add(1).ok_or_else(invalid_argument)?;
         Ok(Some(min_len))
@@ -1850,6 +1852,17 @@ mod tests {
             let value = format!("-S{}", usize::MAX);
             let args = ["od".to_string(), value];
             assert!(OdSettings::parse_strings_min_len(&args).is_err());
+        }
+
+        #[test]
+        fn test_strings_length_preserves_numeric_error_category() {
+            let args = ["od".to_string(), "--strings=bad".to_string()];
+            let error = OdSettings::parse_strings_min_len(&args).unwrap_err();
+
+            assert_eq!(
+                error.to_string(),
+                "invalid suffix in --strings argument 'bad'"
+            );
         }
 
         #[test]

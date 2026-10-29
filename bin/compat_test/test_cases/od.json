@@ -3235,13 +3235,13 @@
         {
             "tstdin": "",
             "command": "od",
-            "description": "Migrated: 16-byte float format matches GNU",
+            "description": "原始字节用例：LC_ALL=C；执行od -t f16 -N 64 binary.bin；参数完整十六进制=2d74 663136 2d4e 3634 62696e6172792e62696e；stdin为0字节、完整十六进制=空；输入fixture binary.bin为64字节、完整十六进制=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f；预期RC=0、stderr为0字节，stdout按本机16字节long double ABI输出四行数值及结束地址，包含GNU字段前导填充并逐字节匹配参考coreutils",
             "args": [
-                "-t",
-                "f16",
-                "-N",
-                "64",
-                "binary.bin"
+                "2d74",
+                "663136",
+                "2d4e",
+                "3634",
+                "62696e6172792e62696e"
             ],
             "expectation": {
                 "execution": {
@@ -3268,7 +3268,8 @@
                 "run_as_group": null,
                 "umask": null,
                 "resource_limits": null
-            }
+            },
+            "byteMode": true
         },
         {
             "tstdin": "",

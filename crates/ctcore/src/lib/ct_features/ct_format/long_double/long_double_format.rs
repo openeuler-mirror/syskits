@@ -77,6 +77,36 @@ const LONG_DOUBLE_DECIMAL_DIGITS: usize = match LONG_DOUBLE_PRECISION {
     target_arch = "s390x",
     target_arch = "sparc64"
 ))]
+const LONG_DOUBLE_EXPONENT_STRLEN_BOUND: usize = 5;
+#[cfg(not(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    target_arch = "loongarch64",
+    target_arch = "mips",
+    target_arch = "mips64",
+    target_arch = "riscv64",
+    target_arch = "s390x",
+    target_arch = "sparc64"
+)))]
+const LONG_DOUBLE_EXPONENT_STRLEN_BOUND: usize = 4;
+
+const LONG_DOUBLE_PRECISION_BOUND: usize = (LONG_DOUBLE_PRECISION * 146).div_ceil(485) + 1;
+
+pub const NATIVE_LONG_DOUBLE_STRLEN_BOUND: usize =
+    1 + LONG_DOUBLE_PRECISION_BOUND + 1 + 1 + LONG_DOUBLE_EXPONENT_STRLEN_BOUND;
+
+#[cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "aarch64",
+    target_arch = "loongarch64",
+    target_arch = "mips",
+    target_arch = "mips64",
+    target_arch = "riscv64",
+    target_arch = "s390x",
+    target_arch = "sparc64"
+))]
 const LONG_DOUBLE_MAX_EXPONENT: i32 = 16383;
 #[cfg(not(any(
     target_arch = "x86",
@@ -1154,6 +1184,26 @@ mod tests {
                 .format(&value),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn native_long_double_strlen_bound_matches_the_target_abi() {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        assert_eq!(NATIVE_LONG_DOUBLE_STRLEN_BOUND, 29);
+
+        #[cfg(any(
+            target_arch = "aarch64",
+            target_arch = "loongarch64",
+            target_arch = "mips",
+            target_arch = "mips64",
+            target_arch = "riscv64",
+            target_arch = "s390x",
+            target_arch = "sparc64"
+        ))]
+        assert_eq!(NATIVE_LONG_DOUBLE_STRLEN_BOUND, 44);
+
+        #[cfg(any(target_arch = "powerpc", target_arch = "powerpc64"))]
+        assert_eq!(NATIVE_LONG_DOUBLE_STRLEN_BOUND, 40);
     }
 
     #[test]

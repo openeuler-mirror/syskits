@@ -2907,10 +2907,18 @@ mod tests {
             .unwrap()
             .with_ymd_and_hms(2024, 1, 2, 15, 4, 5)
             .unwrap();
+        // glibc uses `UTC` or `GMT` for a zero-offset `tm` depending on the
+        // host timezone data. The width and zero-padding behavior is stable.
+        let zone = format_using_strftime(&dt, "%Z").unwrap();
+        assert!(zone.len() <= 10);
+        let padded_zone = format!("{zone:0>10}");
         assert_eq!(
             format_using_strftime(&dt, "%+10a|%+10B|%+10p|%+10Z|%+10R|%+_10a|%+010a|%+10%",)
                 .unwrap(),
-            "0000000Tue|000January|00000000PM|0000000UTC|0000015:04|       Tue|0000000Tue|000000%+10%"
+            format!(
+                "0000000Tue|000January|00000000PM|{}|0000015:04|       Tue|0000000Tue|000000%+10%",
+                padded_zone
+            )
         );
     }
 
@@ -3109,6 +3117,7 @@ mod tests {
     #[test]
     fn test_date_debug_epoch_timespec_uses_gnu_specific_diagnostics() {
         let date = parse_date("@-1.5").unwrap();
+        let utc = date.with_timezone(&Utc);
 
         assert_eq!(
             date_debug_text("@-1.5", &date, "%s.%N", Some("UTC0")),
@@ -3117,9 +3126,17 @@ mod tests {
                  date: input timezone: '@timespec' - always UTC\n\
                  date: timezone: Universal Time\n\
                  date: final: -2.500000000 (epoch-seconds)\n\
-                 date: final: (Y-M-D) 1969-12-31 23:59:58 (UTC)\n\
-                 date: final: (Y-M-D) 1969-12-31 23:59:58 (UTC+00)\n\
+                 date: final: (Y-M-D) {:04}-{:02}-{:02} {:02}:{:02}:{:02} (UTC)\n\
+                 date: final: {} ({})\n\
                  {}: output format: {}\n",
+                utc.year(),
+                utc.month(),
+                utc.day(),
+                utc.hour(),
+                utc.minute(),
+                utc.second(),
+                date_ymd_hms_label(&date),
+                date_offset_label(&date),
                 ctcore::ct_util_name(),
                 locale_quote("%s.%N"),
             )

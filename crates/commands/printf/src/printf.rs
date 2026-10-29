@@ -487,7 +487,7 @@ mod tests {
     mod tests_printf_semantic {
         use crate::{
             FormatArgument, PrintfInvocation, printf_argument_for_warning_with_style,
-            printf_native_semantic, printf_render_to_writer,
+            printf_native_semantic, printf_render_to_writer, printf_uses_ascii_quotes,
         };
 
         use std::ffi::OsString;
@@ -563,7 +563,13 @@ mod tests {
             assert_eq!(semantic.classic_text, "foo");
             assert_eq!(
                 semantic.stderr_text,
-                "printf: warning: ignoring excess arguments, starting with ‘alpha’\n"
+                format!(
+                    "printf: warning: ignoring excess arguments, starting with {}\n",
+                    printf_argument_for_warning_with_style(
+                        &FormatArgument::Bytes(b"alpha".to_vec()),
+                        printf_uses_ascii_quotes(),
+                    )
+                )
             );
             assert_eq!(semantic.exit_code, 0);
         }
@@ -983,7 +989,13 @@ mod tests {
                 assert_eq!(semantic.classic_text, format);
                 assert_eq!(
                     semantic.stderr_text,
-                    "printf: warning: ignoring excess arguments, starting with ‘x’\n"
+                    format!(
+                        "printf: warning: ignoring excess arguments, starting with {}\n",
+                        printf_argument_for_warning_with_style(
+                            &FormatArgument::Bytes(b"x".to_vec()),
+                            printf_uses_ascii_quotes(),
+                        )
+                    )
                 );
                 assert_eq!(semantic.exit_code, 0);
             }

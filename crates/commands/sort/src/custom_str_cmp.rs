@@ -78,8 +78,12 @@ pub fn custom_cmp_str(
 mod tests {
     use std::cmp::Ordering;
     use std::env;
+    use std::ffi::CStr;
+    use std::sync::Mutex;
 
     use super::{custom_cmp_chars, custom_cmp_str, custom_filter_char};
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_filter_char_no_ignore() {
@@ -634,17 +638,28 @@ mod tests {
         let result = custom_cmp_str("ABCDEF", "abcdef", false, false, true);
         assert_eq!(result, Ordering::Equal);
 
-        // 在C locale下测试字节比较行为
+        // 在C locale下测试字节比较行为。
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let previous_locale = unsafe {
+            let current = ctcore::libc::setlocale(ctcore::libc::LC_ALL, std::ptr::null());
+            (!current.is_null()).then(|| CStr::from_ptr(current).to_owned())
+        };
+        let previous_lc_all = env::var_os("LC_ALL");
         unsafe {
-            env::set_var("LC_COLLATE", "C");
+            env::set_var("LC_ALL", "C");
         }
         let result = custom_cmp_str("ABCDEF", "abcdef", false, false, false);
-        assert_eq!(result, Ordering::Less);
 
-        // 恢复原始locale设置
-        unsafe {
-            env::remove_var("LC_COLLATE");
+        match previous_lc_all {
+            Some(value) => unsafe { env::set_var("LC_ALL", value) },
+            None => unsafe { env::remove_var("LC_ALL") },
         }
+        unsafe {
+            if let Some(previous_locale) = previous_locale.as_ref() {
+                ctcore::libc::setlocale(ctcore::libc::LC_ALL, previous_locale.as_ptr());
+            }
+        }
+        assert_eq!(result, Ordering::Less);
 
         let result = custom_cmp_str(
             "abc123\x08\x00$%def",

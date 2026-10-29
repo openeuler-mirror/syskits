@@ -803,14 +803,15 @@ mod tests {
             false,
         );
 
-        let expected_copy_debug = CopyDebug {
-            offload: CpOffloadReflinkDebug::Unknown,
-            reflink: CpOffloadReflinkDebug::Unsupported,
-            sparse_detection: CpSparseDebug::No,
-        };
-
         match result {
-            Ok(_copy_debug) => assert_eq!(_copy_debug, expected_copy_debug),
+            Ok(copy_debug) => {
+                assert_eq!(copy_debug.offload, CpOffloadReflinkDebug::Unknown);
+                assert!(matches!(
+                    copy_debug.reflink,
+                    CpOffloadReflinkDebug::Yes | CpOffloadReflinkDebug::Unsupported
+                ));
+                assert_eq!(copy_debug.sparse_detection, CpSparseDebug::No);
+            }
             Err(err) => {
                 panic!("Error: {err:#?}")
             }

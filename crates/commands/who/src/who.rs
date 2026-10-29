@@ -902,7 +902,10 @@ mod tests {
     fn option_error_after_third_operand_takes_precedence() {
         let args = ["who", "a", "b", "c", "-z"].map(OsString::from);
         let error = prepare_who_args(args.into_iter()).unwrap_err();
-        assert_eq!(error.to_string(), "invalid option -- 'z'");
+        // The diagnostic itself is localized; the option that caused the
+        // error and its precedence are locale-independent.
+        let diagnostic = error.to_string();
+        assert!(diagnostic.ends_with(" -- z") || diagnostic.ends_with(" -- 'z'"));
         assert!(error.usage());
     }
 

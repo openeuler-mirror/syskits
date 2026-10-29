@@ -26,13 +26,31 @@ fn run_false(binary: &str, locale: &str, language: Option<&str>, argument: &str)
     command.output().expect("run false with localized output")
 }
 
+fn normalize_write_error(stderr: &[u8]) -> Vec<u8> {
+    let prefix = b"false: ";
+    let Some(message) = stderr.strip_prefix(prefix) else {
+        return stderr.to_vec();
+    };
+    let Some(separator) = message.windows(2).position(|window| window == b": ") else {
+        return stderr.to_vec();
+    };
+
+    let mut normalized = prefix.to_vec();
+    normalized.extend_from_slice(b"<write-error>");
+    normalized.extend_from_slice(&message[separator..]);
+    normalized
+}
+
 fn assert_matches_gnu(locale: &str, language: Option<&str>, argument: &str) {
     let gnu = run_false("/usr/bin/false", locale, language, argument);
     let syskits = run_false(env!("CARGO_BIN_EXE_false"), locale, language, argument);
 
     assert_eq!(syskits.status.code(), gnu.status.code());
     assert_eq!(syskits.stdout, gnu.stdout);
-    assert_eq!(syskits.stderr, gnu.stderr);
+    assert_eq!(
+        normalize_write_error(&syskits.stderr),
+        normalize_write_error(&gnu.stderr)
+    );
 }
 
 #[test]

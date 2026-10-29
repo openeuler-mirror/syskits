@@ -153,15 +153,27 @@ fn chgrp_recursive_symbolic_link_loop_uses_access_diagnostics_like_gnu() {
         .expect("run chgrp");
 
     assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8(output.stdout).expect("stdout is UTF-8");
+    let mut stdout_lines: Vec<_> = stdout.lines().collect();
+    assert_eq!(stdout_lines.len(), 3);
+    assert_eq!(stdout_lines.pop(), Some("group of 'tree' retained as root"));
+    stdout_lines.sort_unstable();
     assert_eq!(
-        String::from_utf8(output.stdout).expect("stdout is UTF-8"),
-        "failed to change group of 'tree/b' to 0\n\
-         failed to change group of 'tree/a' to 0\n\
-         group of 'tree' retained as root\n"
+        stdout_lines,
+        vec![
+            "failed to change group of 'tree/a' to 0",
+            "failed to change group of 'tree/b' to 0",
+        ]
     );
+
+    let stderr = String::from_utf8(output.stderr).expect("stderr is UTF-8");
+    let mut stderr_lines: Vec<_> = stderr.lines().collect();
+    stderr_lines.sort_unstable();
     assert_eq!(
-        String::from_utf8(output.stderr).expect("stderr is UTF-8"),
-        "chgrp: cannot access 'tree/b': Too many levels of symbolic links\n\
-         chgrp: cannot access 'tree/a': Too many levels of symbolic links\n"
+        stderr_lines,
+        vec![
+            "chgrp: cannot access 'tree/a': Too many levels of symbolic links",
+            "chgrp: cannot access 'tree/b': Too many levels of symbolic links",
+        ]
     );
 }

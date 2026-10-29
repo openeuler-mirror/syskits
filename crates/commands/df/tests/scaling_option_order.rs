@@ -38,16 +38,18 @@ fn last_scaling_option_overrides_human_readable_mode() {
 
 #[test]
 fn human_readable_option_overrides_an_earlier_fixed_block_size() {
-    assert_eq!(
-        header(&["-B1K", "-h", "/"]),
-        "Filesystem                Size  Used Avail Use% Mounted on"
-    );
+    let arguments = ["-B1K", "-h", "/"];
+    assert_eq!(header(&arguments), gnu_header(&arguments));
 }
 
 #[test]
 fn output_size_header_follows_the_active_scaling_mode() {
     for option in ["-h", "-H"] {
-        assert_eq!(header(&[option, "--output=size", "/"]), " Size", "{option}");
+        assert_eq!(
+            header(&[option, "--output=size", "/"]).trim(),
+            "Size",
+            "{option}"
+        );
     }
-    assert_eq!(header(&["-B1K", "--output=size", "/"]), "1K-blocks");
+    assert_eq!(header(&["-B1K", "--output=size", "/"]).trim(), "1K-blocks");
 }

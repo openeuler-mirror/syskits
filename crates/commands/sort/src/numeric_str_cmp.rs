@@ -1192,9 +1192,14 @@ mod base_tests {
 
     #[test]
     fn parses_base_exp() {
+        let locale_independent = NumInfoParseSettings {
+            thousands_separator: None,
+            decimal_pt: Some('.'),
+            ..Default::default()
+        };
         let n = "1";
         assert_eq!(
-            NumInfo::parse(n, &NumInfoParseSettings::default()),
+            NumInfo::parse(n, &locale_independent),
             (
                 NumInfo {
                     exponent: 0,
@@ -1205,7 +1210,7 @@ mod base_tests {
         );
         let n = "100";
         assert_eq!(
-            NumInfo::parse(n, &NumInfoParseSettings::default()),
+            NumInfo::parse(n, &locale_independent),
             (
                 NumInfo {
                     exponent: 2,
@@ -1220,6 +1225,7 @@ mod base_tests {
                 n,
                 &NumInfoParseSettings {
                     thousands_separator: Some(','),
+                    decimal_pt: Some('.'),
                     ..Default::default()
                 },
             ),
@@ -1233,7 +1239,7 @@ mod base_tests {
         );
         let n = "1,000";
         assert_eq!(
-            NumInfo::parse(n, &NumInfoParseSettings::default()),
+            NumInfo::parse(n, &locale_independent),
             (
                 NumInfo {
                     exponent: 0,
@@ -1244,7 +1250,7 @@ mod base_tests {
         );
         let n = "1000.00";
         assert_eq!(
-            NumInfo::parse(n, &NumInfoParseSettings::default()),
+            NumInfo::parse(n, &locale_independent),
             (
                 NumInfo {
                     exponent: 3,

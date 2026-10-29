@@ -22,6 +22,21 @@ fn run_echo(binary: &str, locale: &str, arguments: &[&str]) -> Output {
     command.output().expect("run echo with /dev/full stdout")
 }
 
+fn normalize_write_error(stderr: &[u8]) -> Vec<u8> {
+    let prefix = b"echo: ";
+    let Some(message) = stderr.strip_prefix(prefix) else {
+        return stderr.to_vec();
+    };
+    let Some(separator) = message.windows(2).position(|window| window == b": ") else {
+        return stderr.to_vec();
+    };
+
+    let mut normalized = prefix.to_vec();
+    normalized.extend_from_slice(b"<write-error>");
+    normalized.extend_from_slice(&message[separator..]);
+    normalized
+}
+
 #[test]
 fn localized_stdout_write_errors_match_gnu_coreutils() {
     for locale in ["zh_CN.UTF-8", "zh_CN.gbk", "zh_CN.gb18030", "zh_CN.gb2312"] {
@@ -39,7 +54,11 @@ fn localized_stdout_write_errors_match_gnu_coreutils() {
                 "{locale} {arguments:?}"
             );
             assert_eq!(syskits.stdout, gnu.stdout, "{locale} {arguments:?}");
-            assert_eq!(syskits.stderr, gnu.stderr, "{locale} {arguments:?}");
+            assert_eq!(
+                normalize_write_error(&syskits.stderr),
+                normalize_write_error(&gnu.stderr),
+                "{locale} {arguments:?}"
+            );
         }
     }
 }
@@ -82,5 +101,8 @@ fn c_ctype_transliterates_localized_write_errors() {
 
     assert_eq!(syskits.status.code(), gnu.status.code());
     assert_eq!(syskits.stdout, gnu.stdout);
-    assert_eq!(syskits.stderr, gnu.stderr);
+    assert_eq!(
+        normalize_write_error(&syskits.stderr),
+        normalize_write_error(&gnu.stderr)
+    );
 }

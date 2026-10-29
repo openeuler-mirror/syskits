@@ -432,12 +432,14 @@ impl ChconRecursiveMode {
 
     fn fts_open_options(self) -> c_int {
         match self {
-            Self::NotRecursive | Self::RecursiveButDoNotFollowSymLinks => fts_sys::FTS_PHYSICAL,
+            Self::NotRecursive | Self::RecursiveButDoNotFollowSymLinks => {
+                fts_sys::FTS_NOCHDIR | fts_sys::FTS_PHYSICAL
+            }
 
-            Self::RecursiveAndFollowAllDirSymLinks => fts_sys::FTS_LOGICAL,
+            Self::RecursiveAndFollowAllDirSymLinks => fts_sys::FTS_NOCHDIR | fts_sys::FTS_LOGICAL,
 
             Self::RecursiveAndFollowArgDirSymLinks => {
-                fts_sys::FTS_PHYSICAL | fts_sys::FTS_COMFOLLOW
+                fts_sys::FTS_NOCHDIR | fts_sys::FTS_PHYSICAL | fts_sys::FTS_COMFOLLOW
             }
         }
     }
@@ -929,6 +931,7 @@ mod tests {
     use std::ffi::OsString;
     use std::fs::File;
     use std::io::Write;
+    use tempfile::Builder;
 
     fn parse_error(args: &[&str]) -> String {
         let err = chcon_parse_command_line(ct_app(), args.iter().map(OsString::from))
@@ -1324,43 +1327,18 @@ mod tests {
 
     #[test]
     fn test_chcon_ctmain() {
-        // 创建文件并写入内容
-        fn chcon_create_file_with_content(filename: &str, content: &str) -> io::Result<()> {
-            let mut file = File::create(filename)?;
-            file.write_all(content.as_bytes())?;
-            file.sync_all()?;
-            Ok(())
-        }
-
-        // 删除指定文件
-        fn chcon_delete_file(filename: &str) -> io::Result<()> {
-            fs::remove_file(filename)?;
-            Ok(())
-        }
-
-        let filename = "test_chcon_h_ctmain.txt";
-
-        let content = "test_chcon_h_ctmain";
-
-        // 创建文件并写入内容
-        match chcon_create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{filename}' created successfully."),
-            Err(e) => eprintln!("Error creating file: {e}"),
-        }
+        let temp_dir = Builder::new().prefix("chcon_ctmain").tempdir().unwrap();
+        let filename = temp_dir.path().join("test_chcon_h_ctmain.txt");
+        fs::write(&filename, b"test_chcon_h_ctmain").expect("failed to create file");
+        println!("File '{}' created successfully.", filename.display());
 
         let args = [
-            ctcore::ct_util_name(),
-            "system_u:object_r:httpd_sys_content_t",
-            filename,
+            OsString::from(ctcore::ct_util_name()),
+            OsString::from("system_u:object_r:httpd_sys_content_t"),
+            filename.as_os_str().to_os_string(),
         ];
 
-        let result = chcon_main(args.iter().map(OsString::from));
-
-        // 删除文件
-        match chcon_delete_file(filename) {
-            Ok(_) => println!("File '{filename}' deleted successfully."),
-            Err(e) => eprintln!("Error deleting file: {e}"),
-        }
+        let result = chcon_main(args.into_iter());
 
         if let Err(e) = result {
             eprintln!("Error result: {e:?}");
@@ -1369,34 +1347,32 @@ mod tests {
 
     #[test]
     fn test_chcon_r_ctmain() {
-        let dir_path = "test";
+        let temp_dir = Builder::new().prefix("chcon_recursive").tempdir().unwrap();
+        let dir_path = temp_dir.path().join("test");
         let subdir_name = "subdirectory";
         let file_name = "test_chcon_h_ctmain.txt";
 
         // 创建二级目录
-        let subdir_path = format!("{dir_path}/{subdir_name}");
+        let subdir_path = dir_path.join(subdir_name);
         fs::create_dir_all(&subdir_path).expect("Failed to create directory");
 
         // 创建文件路径
-        let file_path = format!("{subdir_path}/{file_name}");
+        let file_path = subdir_path.join(file_name);
 
         // 创建文件并写入内容
         let mut file = File::create(&file_path).expect("Failed to create file");
         file.write_all(b"Hello, Rust!")
             .expect("Failed to write to file");
-        println!("File '{file_path}' created successfully.");
+        println!("File '{}' created successfully.", file_path.display());
 
         let args = [
-            ctcore::ct_util_name(),
-            "-R",
-            "system_u:object_r:httpd_sys_content_t",
-            dir_path,
+            OsString::from(ctcore::ct_util_name()),
+            OsString::from("-R"),
+            OsString::from("system_u:object_r:httpd_sys_content_t"),
+            dir_path.as_os_str().to_os_string(),
         ];
 
-        let result = chcon_main(args.iter().map(OsString::from));
-
-        // 删除目录及其内容
-        fs::remove_dir_all(dir_path).expect("Failed to delete directory");
+        let result = chcon_main(args.into_iter());
 
         if let Err(e) = result {
             eprintln!("Error result: {e:?}");
@@ -1405,44 +1381,23 @@ mod tests {
 
     #[test]
     fn test_chcon_r_t_ctmain() {
-        fn chcon_create_file_with_content(filename: &str, content: &str) -> io::Result<()> {
-            let mut file = File::create(filename)?;
-            file.write_all(content.as_bytes())?;
-            file.sync_all()?;
-            Ok(())
-        }
-
-        // 删除指定文件
-        fn chcon_delete_file(filename: &str) -> io::Result<()> {
-            fs::remove_file(filename)?;
-            Ok(())
-        }
-
-        let filename = "test_chcon_h_ctmain.txt";
-
-        let content = "test_chcon_h_ctmain";
-
-        // 创建文件并写入内容
-        match chcon_create_file_with_content(filename, content) {
-            Ok(_) => println!("File '{filename}' created successfully."),
-            Err(e) => eprintln!("Error creating file: {e}"),
-        }
+        let temp_dir = Builder::new()
+            .prefix("chcon_recursive_type")
+            .tempdir()
+            .unwrap();
+        let filename = temp_dir.path().join("test_chcon_h_ctmain.txt");
+        fs::write(&filename, b"test_chcon_h_ctmain").expect("failed to create file");
+        println!("File '{}' created successfully.", filename.display());
 
         let args = [
-            ctcore::ct_util_name(),
-            "-R",
-            "-t",
-            "system_u:object_r:httpd_sys_content_t",
-            filename,
+            OsString::from(ctcore::ct_util_name()),
+            OsString::from("-R"),
+            OsString::from("-t"),
+            OsString::from("system_u:object_r:httpd_sys_content_t"),
+            filename.as_os_str().to_os_string(),
         ];
 
-        let result = chcon_main(args.iter().map(OsString::from));
-
-        // 删除文件
-        match chcon_delete_file(filename) {
-            Ok(_) => println!("File '{filename}' deleted successfully."),
-            Err(e) => eprintln!("Error deleting file: {e}"),
-        }
+        let result = chcon_main(args.into_iter());
 
         if let Err(e) = result {
             eprintln!("Error result: {e:?}");

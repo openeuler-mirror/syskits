@@ -6731,7 +6731,7 @@ fn calculate_padding_collection<'a, W: Write>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ffi::OsString;
+    use std::ffi::{CStr, OsString};
     use std::sync::{Mutex, MutexGuard};
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -7709,12 +7709,31 @@ mod tests {
     #[test]
     fn custom_time_style_aligns_abbreviated_month() {
         let _env_lock = lock_env();
+        let previous_locale = unsafe {
+            let current = ctcore::libc::setlocale(ctcore::libc::LC_ALL, std::ptr::null());
+            (!current.is_null()).then(|| CStr::from_ptr(current).to_owned())
+        };
         let _locale = EnvVarGuard::set("LC_ALL", "gv_GB");
-        unsafe {
-            ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+        let locale_available =
+            unsafe { !ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr()).is_null() };
+        if !locale_available {
+            drop(_locale);
+            if let Some(previous_locale) = previous_locale.as_ref() {
+                unsafe {
+                    ctcore::libc::setlocale(ctcore::libc::LC_ALL, previous_locale.as_ptr());
+                }
+            }
+            eprintln!("skipping: gv_GB locale is unavailable");
+            return;
         }
 
         let january = align_locale_month_format(0, OsStr::new("[%b]")).unwrap();
+        drop(_locale);
+        if let Some(previous_locale) = previous_locale.as_ref() {
+            unsafe {
+                ctcore::libc::setlocale(ctcore::libc::LC_ALL, previous_locale.as_ptr());
+            }
+        }
         assert_eq!(os_str_display_width(OsStr::from_bytes(&january)), 11);
         assert!(january.starts_with(b"[J-guer"));
         assert!(january.ends_with(b"]"));

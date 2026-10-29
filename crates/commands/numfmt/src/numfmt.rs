@@ -1212,6 +1212,69 @@ fn normalize_numfmt_args(args: impl ctcore::Args) -> (Vec<OsString>, bool) {
     (args, dev_debug)
 }
 
+fn numfmt_missing_long_option_argument(args: &[OsString]) -> Option<&'static str> {
+    const LONG_OPTIONS: &[(&str, bool)] = &[
+        ("from", true),
+        ("from-unit", true),
+        ("to", true),
+        ("to-unit", true),
+        ("round", true),
+        ("padding", true),
+        ("suffix", true),
+        ("grouping", false),
+        ("delimiter", true),
+        ("field", true),
+        ("debug", false),
+        ("-debug", false),
+        ("header", false),
+        ("format", true),
+        ("invalid", true),
+        ("zero-terminated", false),
+        ("help", false),
+        ("version", false),
+    ];
+
+    let argument = args.last()?.as_encoded_bytes();
+    let option = argument.strip_prefix(b"--")?;
+    if option.is_empty()
+        || option.contains(&b'=')
+        || args
+            .iter()
+            .skip(1)
+            .take(args.len().saturating_sub(2))
+            .any(|arg| arg.as_encoded_bytes() == b"--")
+    {
+        return None;
+    }
+    let option = std::str::from_utf8(option).ok()?;
+
+    if let Some((canonical, requires_argument)) = LONG_OPTIONS
+        .iter()
+        .find(|(candidate, _)| *candidate == option)
+    {
+        return requires_argument.then_some(*canonical);
+    }
+
+    let mut matching = LONG_OPTIONS
+        .iter()
+        .filter(|(candidate, _)| candidate.starts_with(option));
+    let (canonical, requires_argument) = matching.next()?;
+    matching
+        .next()
+        .is_none()
+        .then_some(())
+        .and_then(|()| requires_argument.then_some(*canonical))
+}
+
+fn validate_numfmt_option_arguments(args: &[OsString]) -> Result<()> {
+    if let Some(option) = numfmt_missing_long_option_argument(args) {
+        return Err(format!(
+            "option '--{option}' requires an argument\nTry 'numfmt --help' for more information."
+        ));
+    }
+    Ok(())
+}
+
 fn map_field_parse_error(err: String) -> String {
     const TRY_HELP: &str = "\nTry 'numfmt --help' for more information.";
 
@@ -1612,6 +1675,8 @@ pub fn numfmt_main(args: impl ctcore::Args) -> CTResult<()> {
     let locale_ok = init_numfmt_locale();
     let (normalized_args, dev_debug) = normalize_numfmt_args(args);
     let _dev_trace_guard = NumfmtDevTraceGuard::new(dev_debug, false);
+    validate_numfmt_option_arguments(&normalized_args)
+        .map_err(NumfmtError::NumfmtIllegalArgument)?;
     let matches = match ct_app().try_get_matches_from(normalized_args.clone()) {
         Ok(matches) => matches,
         Err(err) if err.kind() == ErrorKind::UnknownArgument => {
@@ -1681,6 +1746,8 @@ pub fn numfmt_native_semantic(args: impl ctcore::Args) -> CTResult<NumfmtSemanti
     let locale_ok = init_numfmt_locale();
     let (normalized_args, dev_debug) = normalize_numfmt_args(args);
     let dev_trace_guard = NumfmtDevTraceGuard::new(dev_debug, true);
+    validate_numfmt_option_arguments(&normalized_args)
+        .map_err(NumfmtError::NumfmtIllegalArgument)?;
     let matches = match ct_app().try_get_matches_from(normalized_args.clone()) {
         Ok(matches) => matches,
         Err(err) if err.kind() == ErrorKind::UnknownArgument => {
@@ -1939,8 +2006,8 @@ mod tests {
     use super::{
         CtRange, Numfmt, NumfmtConfigs, NumfmtFormatOptions, NumfmtInvalidModes, NumfmtRoundMethod,
         NumfmtTransformOptions, NumfmtUnit, ct_app, numfmt_flags, numfmt_handle_args,
-        numfmt_handle_buffer, numfmt_handle_invalid_bytes, numfmt_parse_options,
-        numfmt_parse_unit_size, numfmt_parse_unit_size_suffix,
+        numfmt_handle_buffer, numfmt_handle_invalid_bytes, numfmt_missing_long_option_argument,
+        numfmt_parse_options, numfmt_parse_unit_size, numfmt_parse_unit_size_suffix,
     };
     use ctcore::Tool;
     use ctcore::ct_error::get_ct_exit_code;
@@ -2061,6 +2128,31 @@ mod tests {
         assert!(result.get_flag(numfmt_flags::NUMFMT_DEBUG));
         assert!(result.get_flag(numfmt_flags::NUMFMT_GROUPING));
         assert!(result.get_flag(numfmt_flags::NUMFMT_ZERO_TERMINATED));
+    }
+
+    #[test]
+    fn test_missing_required_long_option_argument_uses_canonical_name() {
+        for (argument, expected) in [
+            ("--from-unit", Some("from-unit")),
+            ("--from-u", Some("from-unit")),
+            ("--padding", Some("padding")),
+            ("--fro", None),
+            ("--debug", None),
+            ("--from-unit=", None),
+        ] {
+            let args = [OsString::from("numfmt"), OsString::from(argument)];
+            assert_eq!(numfmt_missing_long_option_argument(&args), expected);
+        }
+
+        let after_double_dash = [
+            OsString::from("numfmt"),
+            OsString::from("--"),
+            OsString::from("--from-unit"),
+        ];
+        assert_eq!(
+            numfmt_missing_long_option_argument(&after_double_dash),
+            None
+        );
     }
 
     #[test]

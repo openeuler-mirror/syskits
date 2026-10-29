@@ -815,6 +815,29 @@
                 }
             },
             "cleanup_commands": []
+        },
+        {
+            "command": "numfmt",
+            "description": "numfmt: 缺少长选项参数必须使用 GNU requires an argument 诊断",
+            "args": [
+                "--from-unit"
+            ],
+            "setup_commands": [],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "numfmt: option '--from-unit' requires an argument\nTry 'numfmt --help' for more information.\n"
+                },
+                "verifications": [],
+                "ignore_fields": {
+                    "ignore_exit_code": false,
+                    "ignore_stdout": false,
+                    "ignore_stderr": false,
+                    "ignore_function": false
+                }
+            },
+            "cleanup_commands": []
         }
     ]
 }

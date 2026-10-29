@@ -106,8 +106,8 @@ fn od_format_type(type_char: FormatType, byte_size: u8) -> Option<FormatterItemI
 
         // 浮点数
         (FormatType::Float, 2) => Some(FORMAT_ITEM_F16),
-        (FormatType::Float, 0 | 4) => Some(FORMAT_ITEM_F32),
-        (FormatType::Float, 8) => Some(FORMAT_ITEM_F64),
+        (FormatType::Float, 4) => Some(FORMAT_ITEM_F32),
+        (FormatType::Float, 0 | 8) => Some(FORMAT_ITEM_F64),
         (FormatType::Float, 16) => Some(FORMAT_ITEM_FLD),
 
         _ => None,
@@ -598,6 +598,10 @@ fn test_long_format_x_default() {
 fn test_long_format_f_default() {
     assert_eq!(
         parse_format_flags_str(&["od", "--format=f"]).unwrap(),
+        vec![FORMAT_ITEM_F64]
+    );
+    assert_eq!(
+        parse_format_flags_str(&["od", "-f"]).unwrap(),
         vec![FORMAT_ITEM_F32]
     );
 }
@@ -676,7 +680,7 @@ fn test_mixed_formats() {
             ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX8, false),   // tx1
             ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC16U, false), // tu2
             ParsedFormatterItemInfo::new(FORMAT_ITEM_C, false),      // tc
-            ParsedFormatterItemInfo::new(FORMAT_ITEM_F32, false),    // tf
+            ParsedFormatterItemInfo::new(FORMAT_ITEM_F64, false),    // tf
             ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX16, false),  // x
         ]
     );

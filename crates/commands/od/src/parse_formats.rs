@@ -194,7 +194,7 @@ pub(crate) fn od_option_scan_limit(args: &[String], posix_mode: bool) -> usize {
     args.len()
 }
 
-fn od_option_requires_separate_value(arg: &str) -> bool {
+pub(crate) fn od_option_requires_separate_value(arg: &str) -> bool {
     if let Some(option) = arg.strip_prefix("--") {
         if option.contains('=') || option.is_empty() {
             return false;

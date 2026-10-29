@@ -309,6 +309,73 @@
             ]
         },
         {
+            "tstdin": "",
+            "command": "od",
+            "description": "原始字节用例：LC_ALL=C；执行od -S1 --strings=3 input；参数完整十六进制=2d5331 2d2d737472696e67733d33 696e707574；stdin为0字节、完整十六进制=空；输入fixture input为9字节、完整十六进制=610061620061626300；GNU按参数顺序采用最后一个字符串最小长度3，仅输出abc记录；预期RC=0、stdout为12字节/1条换行分隔，完整十六进制=30303030303035206162630a；stderr为0字节、完整十六进制=空",
+            "args": [
+                "2d5331",
+                "2d2d737472696e67733d33",
+                "696e707574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "30303030303035206162630a",
+                    "stderr": ""
+                }
+            },
+            "setup_commands": [
+                "printf '%b' '\\141\\000\\141\\142\\000\\141\\142\\143\\000' > input"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "od",
+            "description": "原始字节用例：LC_ALL=C；执行od --strings= input；参数完整十六进制=2d2d737472696e67733d 696e707574；stdin为0字节、完整十六进制=空；输入fixture input为0字节、完整十六进制=空；GNU以长选项名称报告空长度参数无效；预期RC=1、stdout为0字节、完整十六进制=空；stderr为34字节/1条换行分隔，完整十六进制=6f643a20696e76616c6964202d2d737472696e677320617267756d656e742027270a",
+            "args": [
+                "2d2d737472696e67733d",
+                "696e707574"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "6f643a20696e76616c6964202d2d737472696e677320617267756d656e742027270a"
+                }
+            },
+            "setup_commands": [
+                ": > input"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
             "command": "od",
             "description": "Strings mode treats a plus-prefixed operand as a file",
             "args": [

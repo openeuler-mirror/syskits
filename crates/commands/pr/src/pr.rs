@@ -3394,7 +3394,7 @@ fn pr_write_multicolumn_table(
                 .map(|i| i + 1)
                 .unwrap_or(0)
         } else if output_opts.merge_files_print.is_some() {
-            last_actual_index.map_or(0, |index| index + 1)
+            columns
         } else {
             row.iter()
                 .rposition(|cell| cell.is_some())
@@ -6649,12 +6649,12 @@ mod tests {
         }
 
         #[test]
-        fn test_pr_write_columns_merge_uses_last_actual_column_instead_of_layout_width() {
+        fn test_pr_write_columns_merge_preserves_trailing_empty_columns() {
             let lines = vec![PrFileLine {
-                file_id: 1,
+                file_id: 0,
                 line_number: 1,
                 page_number: 1,
-                group_key: 2,
+                group_key: 1,
                 line_content: Ok("1       ".to_string()),
                 has_line_terminator: true,
                 form_feeds_after: 0,
@@ -6693,9 +6693,7 @@ mod tests {
             pr_write_columns(&lines, &options, &mut buf).unwrap();
 
             let output = String::from_utf8(buf).unwrap();
-            assert!(output.ends_with("1\n"));
-            assert!(!output.ends_with("1 \n"));
-            assert!(!output.ends_with("1\t\n"));
+            assert_eq!(output, "1\t\t\t\t    \n");
         }
 
         #[test]

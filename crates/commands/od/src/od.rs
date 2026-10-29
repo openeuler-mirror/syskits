@@ -344,7 +344,9 @@ impl OdSettings {
             CtSimpleError::new(1, od_format_error_message(&error, &value_text, option_name))
         })?;
         let min_len = usize::try_from(value).map_err(|_| invalid_argument())?;
-        min_len.checked_add(1).ok_or_else(invalid_argument)?;
+        min_len
+            .checked_add(1)
+            .ok_or_else(|| CtSimpleError::new(1, "memory exhausted"))?;
         Ok(Some(min_len))
     }
 
@@ -738,11 +740,11 @@ fn od_allocate_string_buffer(min_len: usize) -> CTResult<Vec<u8>> {
     let capacity = min_len
         .checked_add(1)
         .map(|size| cmp::max(100, size))
-        .ok_or_else(|| CtSimpleError::new(1, "memory allocation failed"))?;
+        .ok_or_else(|| CtSimpleError::new(1, "memory exhausted"))?;
     let mut buffer = Vec::new();
     buffer
         .try_reserve_exact(capacity)
-        .map_err(|_| CtSimpleError::new(1, "memory allocation failed"))?;
+        .map_err(|_| CtSimpleError::new(1, "memory exhausted"))?;
     Ok(buffer)
 }
 
@@ -1851,7 +1853,12 @@ mod tests {
 
             let value = format!("-S{}", usize::MAX);
             let args = ["od".to_string(), value];
-            assert!(OdSettings::parse_strings_min_len(&args).is_err());
+            assert_eq!(
+                OdSettings::parse_strings_min_len(&args)
+                    .unwrap_err()
+                    .to_string(),
+                "memory exhausted"
+            );
         }
 
         #[test]
@@ -1982,7 +1989,12 @@ mod tests {
 
         #[test]
         fn test_strings_buffer_rejects_impossible_capacity() {
-            assert!(od_allocate_string_buffer(usize::MAX).is_err());
+            assert_eq!(
+                od_allocate_string_buffer(usize::MAX)
+                    .unwrap_err()
+                    .to_string(),
+                "memory exhausted"
+            );
         }
     }
 

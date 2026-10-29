@@ -176,9 +176,8 @@ fn test_eval(stack: &mut Vec<TestSymbol>) -> ParseResult<bool> {
             let a = pop_literal!();
             match op.to_string_lossy().as_ref() {
                 "!=" => Ok(a != b),
-                "<" => Ok(a < b),
-                ">" => Ok(a > b),
-                _ => Ok(a == b),
+                "=" | "==" => Ok(a == b),
+                _ => unreachable!(),
             }
         }
         Some(TestSymbol::Op(TestOperator::Int(op))) => {
@@ -755,13 +754,6 @@ mod tests_all {
         stack.push(TestSymbol::Literal(OsString::from("abc")));
         stack.push(TestSymbol::Literal(OsString::from("def")));
         stack.push(TestSymbol::Op(TestOperator::String(OsString::from("!="))));
-        assert!(test_eval(&mut stack).unwrap());
-
-        // Test string comparison
-        let mut stack = Vec::new();
-        stack.push(TestSymbol::Literal(OsString::from("abc")));
-        stack.push(TestSymbol::Literal(OsString::from("def")));
-        stack.push(TestSymbol::Op(TestOperator::String(OsString::from("<"))));
         assert!(test_eval(&mut stack).unwrap());
 
         // Test empty string

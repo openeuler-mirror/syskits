@@ -1388,6 +1388,29 @@ fn data_cksum_classic_flagged_file_matches_direct_cksum() {
 }
 
 #[test]
+fn data_cksum_json_reports_decimal_crc_format() {
+    let out = Command::new(env!("CARGO_BIN_EXE_syskits"))
+        .args(["data", "format=json", r#"printf "CTyunOS\n" | cksum"#])
+        .output()
+        .expect("run syskits data cksum json");
+
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains(r#""checksum":"2906786367""#),
+        "stdout: {stdout}"
+    );
+    assert!(
+        stdout.contains(r#""output_format":"decimal""#),
+        "stdout: {stdout}"
+    );
+}
+
+#[test]
 fn data_cksum_classic_error_path_matches_direct_cksum() {
     let temp_dir = TempDir::new().expect("tempdir");
     let missing = temp_dir.path().join("missing.txt");

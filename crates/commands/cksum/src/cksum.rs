@@ -712,10 +712,21 @@ fn clean_io_error(err: &io::Error) -> String {
         .to_string()
 }
 
-fn cksum_output_format_name(format: &CksumOutputFormat) -> &'static str {
+fn cksum_output_format_name(algo_name: &str, format: &CksumOutputFormat) -> &'static str {
     match format {
-        CksumOutputFormat::Hexadecimal => "hexadecimal",
         CksumOutputFormat::Raw => "raw",
+        CksumOutputFormat::Hexadecimal | CksumOutputFormat::Base64
+            if matches!(
+                algo_name,
+                CKSUM_ALGORITHM_OPTIONS_CRC
+                    | CKSUM_ALGORITHM_OPTIONS_CRC32B
+                    | CKSUM_ALGORITHM_OPTIONS_SYSV
+                    | CKSUM_ALGORITHM_OPTIONS_BSD
+            ) =>
+        {
+            "decimal"
+        }
+        CksumOutputFormat::Hexadecimal => "hexadecimal",
         CksumOutputFormat::Base64 => "base64",
     }
 }
@@ -1271,7 +1282,11 @@ fn cksum_native_compute(invocation: &CksumSemanticInvocation) -> CTResult<CksumS
             reported_size,
             size_kind,
             block_size,
-            output_format: cksum_output_format_name(&invocation.output_format).into(),
+            output_format: cksum_output_format_name(
+                invocation.algo_name,
+                &invocation.output_format,
+            )
+            .into(),
             tagged: !invocation.untagged,
             binary: invocation.binary,
             status: None,
@@ -1316,7 +1331,11 @@ fn cksum_native_compute(invocation: &CksumSemanticInvocation) -> CTResult<CksumS
             reported_size,
             size_kind,
             block_size,
-            output_format: cksum_output_format_name(&invocation.output_format).into(),
+            output_format: cksum_output_format_name(
+                invocation.algo_name,
+                &invocation.output_format,
+            )
+            .into(),
             tagged: !invocation.untagged,
             binary: invocation.binary,
             status: None,
@@ -4627,6 +4646,7 @@ mod tests {
         use crate::CKSUM_ALGORITHM_OPTIONS_BLAKE2B;
         use crate::CKSUM_ALGORITHM_OPTIONS_BSD;
         use crate::CKSUM_ALGORITHM_OPTIONS_CRC;
+        use crate::CKSUM_ALGORITHM_OPTIONS_CRC32B;
         use crate::CKSUM_ALGORITHM_OPTIONS_MD5;
         use crate::CKSUM_ALGORITHM_OPTIONS_SHA1;
         use crate::CKSUM_ALGORITHM_OPTIONS_SHA224;
@@ -4637,7 +4657,7 @@ mod tests {
         use crate::CKSUM_ALGORITHM_OPTIONS_SYSV;
         use crate::{
             CksumOptions, CksumOutputFormat, blake2b_tag, cksum, cksum_detect_algo,
-            cksum_native_semantic, crc_debug_message, ct_app, opt_flags,
+            cksum_native_semantic, cksum_output_format_name, crc_debug_message, ct_app, opt_flags,
         };
         use std::ffi::{OsStr, OsString};
         use std::fs;
@@ -6487,9 +6507,48 @@ mod tests {
             assert_eq!(semantic.rows[0].kind, "compute");
             assert_eq!(semantic.rows[0].algorithm, "crc");
             assert_eq!(semantic.rows[0].checksum, "1219131554");
+            assert_eq!(semantic.rows[0].output_format, "decimal");
             assert_eq!(semantic.rows[0].bytes, Some(3));
             assert_eq!(semantic.rows[0].reported_size, Some(3));
             assert!(semantic.classic_text.contains("1219131554 3 "));
+        }
+
+        #[test]
+        fn test_cksum_output_format_name_describes_rendered_checksum() {
+            for algorithm in [
+                CKSUM_ALGORITHM_OPTIONS_CRC,
+                CKSUM_ALGORITHM_OPTIONS_CRC32B,
+                CKSUM_ALGORITHM_OPTIONS_SYSV,
+                CKSUM_ALGORITHM_OPTIONS_BSD,
+            ] {
+                assert_eq!(
+                    cksum_output_format_name(algorithm, &CksumOutputFormat::Hexadecimal),
+                    "decimal"
+                );
+                assert_eq!(
+                    cksum_output_format_name(algorithm, &CksumOutputFormat::Base64),
+                    "decimal"
+                );
+            }
+
+            assert_eq!(
+                cksum_output_format_name(
+                    CKSUM_ALGORITHM_OPTIONS_SHA256,
+                    &CksumOutputFormat::Hexadecimal,
+                ),
+                "hexadecimal"
+            );
+            assert_eq!(
+                cksum_output_format_name(
+                    CKSUM_ALGORITHM_OPTIONS_SHA256,
+                    &CksumOutputFormat::Base64,
+                ),
+                "base64"
+            );
+            assert_eq!(
+                cksum_output_format_name(CKSUM_ALGORITHM_OPTIONS_CRC, &CksumOutputFormat::Raw,),
+                "raw"
+            );
         }
 
         #[test]

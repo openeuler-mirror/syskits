@@ -3303,8 +3303,13 @@ fn copy_file(
         source_in_command_line,
     )?;
 
-    // 如果目标不是符号链接，设置其文件权限。
-    if !dest_path.is_symlink() && cp_opts.copy_mode != CpCopyMode::Link {
+    // A newly created --attributes-only destination still needs its initial
+    // source-derived mode. For an existing destination, however, GNU cp does
+    // not issue chmod unless mode preservation was requested; that is handled
+    // below by copy_attributes_with_deref.
+    let set_initial_permissions = cp_opts.copy_mode != CpCopyMode::Link
+        && !(dest_existed && cp_opts.copy_mode == CpCopyMode::AttrOnly);
+    if !dest_path.is_symlink() && set_initial_permissions {
         #[cfg(unix)]
         {
             match cp_opts.attributes.mode {

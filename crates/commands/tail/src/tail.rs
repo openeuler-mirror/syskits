@@ -668,6 +668,13 @@ fn handle_tailable_file(
 ) -> CTResult<()> {
     match File::open(path) {
         Ok(mut file) => {
+            // Keep the identity of the descriptor being tailed.  The path may
+            // be replaced while the initial contents are being written.
+            let metadata = if options.follow.is_some() {
+                Some(file.metadata()?)
+            } else {
+                None
+            };
             header_printer.print_input(input);
 
             let reader =
@@ -688,6 +695,7 @@ fn handle_tailable_file(
                 input.display_name.as_str(),
                 input.header_name(),
                 Some(Box::new(reader)),
+                metadata,
                 true,
             )?;
         }
@@ -1277,16 +1285,16 @@ mod tests {
     use crate::follow::Observer;
     use crate::paths::{TailHeaderPrinter, TailInput};
     use crate::tail_forwards_thru_file;
-    #[cfg(unix)]
-    use std::ffi::OsStr;
     use std::ffi::OsString;
+    #[cfg(unix)]
+    use std::ffi::{CString, OsStr};
     use std::fs::File;
     use std::io::Cursor;
     use std::io::{Read, Write};
     #[cfg(unix)]
     use std::os::unix::ffi::OsStrExt;
     #[cfg(unix)]
-    use std::os::unix::fs::symlink;
+    use std::os::unix::fs::{MetadataExt, symlink};
     use tempfile::NamedTempFile;
     #[cfg(unix)]
     use tempfile::tempdir;
@@ -1355,6 +1363,60 @@ mod tests {
         assert!(!should_report_no_files_remaining_after_bad_stdin(
             &options, true
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn following_registration_keeps_open_descriptor_identity_across_rotation() {
+        let temp_dir = tempdir().unwrap();
+        let path = temp_dir.path().join("follow");
+        let old_path = temp_dir.path().join("follow.1");
+        let fifo_path = CString::new(path.as_os_str().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(fifo_path.as_ptr(), 0o600) }, 0);
+
+        let writer_path = path.clone();
+        let writer_old_path = old_path.clone();
+        let writer = std::thread::spawn(move || {
+            let mut fifo = std::fs::OpenOptions::new()
+                .write(true)
+                .open(&writer_path)
+                .unwrap();
+            fifo.write_all(b"start\n").unwrap();
+            std::fs::rename(&writer_path, &writer_old_path).unwrap();
+            std::fs::write(&writer_path, b"rotated\n").unwrap();
+        });
+
+        let options = TailOptions {
+            follow: Some(TailFollowMode::Name),
+            retry: true,
+            ..TailOptions::default()
+        };
+        let input = TailInput::from(path.as_os_str());
+        let mut printer = TailHeaderPrinter::new(false, true);
+        let mut observer = Observer::from(&options);
+        let mut buffer = Vec::new();
+
+        handle_tailable_file(
+            &options,
+            &mut printer,
+            &input,
+            &path,
+            &mut observer,
+            0,
+            Some(&mut buffer),
+        )
+        .unwrap();
+        writer.join().unwrap();
+
+        assert_eq!(buffer, b"start\n");
+        let tracked = observer.files.get(&path).metadata.as_ref().unwrap();
+        let old = old_path.metadata().unwrap();
+        let replacement = path.metadata().unwrap();
+        assert_eq!((tracked.dev(), tracked.ino()), (old.dev(), old.ino()));
+        assert_ne!(
+            (tracked.dev(), tracked.ino()),
+            (replacement.dev(), replacement.ino())
+        );
     }
 
     /// 辅助函数：创建临时文件并写入内容

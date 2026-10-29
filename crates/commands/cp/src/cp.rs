@@ -954,6 +954,116 @@ impl CpOptions {
         Self::cp_from_matches_impl(args_match, Some(args))
     }
 
+    fn cp_parse_ordered_update_overwrite(
+        args: &[OsString],
+        clobber: CpClobberMode,
+    ) -> (CtUpdateMode, CpOverwriteMode) {
+        #[derive(Clone, Copy)]
+        enum InteractiveState {
+            Unspecified,
+            Ask,
+            NoClobber,
+            UpdateNone,
+        }
+
+        let mut update = CtUpdateMode::ReplaceAll;
+        let mut interactive = InteractiveState::Unspecified;
+        let mut skip_next = false;
+        let mut end_of_options = false;
+
+        for arg in args.iter().skip(1) {
+            if skip_next {
+                skip_next = false;
+                continue;
+            }
+
+            let value = arg.to_string_lossy();
+            if value == "--" {
+                end_of_options = true;
+                continue;
+            }
+            if end_of_options || value == "-" || !value.starts_with('-') {
+                continue;
+            }
+
+            if let Some(long) = value.strip_prefix("--") {
+                let (name, attached_value) = long
+                    .split_once('=')
+                    .map_or((long, None), |(name, value)| (name, Some(value)));
+                let is_long = |full: &str| !name.is_empty() && full.starts_with(name);
+
+                if is_long("interactive") {
+                    interactive = InteractiveState::Ask;
+                } else if is_long("no-clobber") {
+                    interactive = InteractiveState::NoClobber;
+                } else if is_long("update") {
+                    if let Some(update_value) = attached_value {
+                        if !matches!(
+                            interactive,
+                            InteractiveState::NoClobber | InteractiveState::UpdateNone
+                        ) {
+                            match update_value {
+                                "all" => {
+                                    update = CtUpdateMode::ReplaceAll;
+                                    interactive = InteractiveState::Unspecified;
+                                }
+                                "none" => {
+                                    update = CtUpdateMode::ReplaceAll;
+                                    interactive = InteractiveState::UpdateNone;
+                                }
+                                "older" => {
+                                    update = CtUpdateMode::ReplaceIfOlder;
+                                    interactive = InteractiveState::Unspecified;
+                                }
+                                _ => {}
+                            }
+                        }
+                    } else {
+                        // Unlike --update=older, bare --update and -u do not
+                        // override an earlier -i in GNU coreutils 9.4.
+                        update = CtUpdateMode::ReplaceIfOlder;
+                    }
+                } else if attached_value.is_none()
+                    && matches!(
+                        name,
+                        "no-preserve" | "sparse" | "target-directory" | "suffix"
+                    )
+                {
+                    skip_next = true;
+                }
+                continue;
+            }
+
+            let Some(short) = value.strip_prefix('-') else {
+                continue;
+            };
+            let mut chars = short.chars();
+            while let Some(option) = chars.next() {
+                match option {
+                    'i' => interactive = InteractiveState::Ask,
+                    'n' => interactive = InteractiveState::NoClobber,
+                    'u' => update = CtUpdateMode::ReplaceIfOlder,
+                    'S' | 't' => {
+                        if chars.next().is_none() {
+                            skip_next = true;
+                        }
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        match interactive {
+            InteractiveState::Unspecified => (update, CpOverwriteMode::Clobber(clobber)),
+            InteractiveState::Ask => (update, CpOverwriteMode::Interactive(clobber)),
+            InteractiveState::NoClobber => (update, CpOverwriteMode::NoClobber),
+            InteractiveState::UpdateNone => {
+                (CtUpdateMode::ReplaceNone, CpOverwriteMode::Clobber(clobber))
+            }
+        }
+    }
+
     #[allow(clippy::cognitive_complexity)]
     fn cp_from_matches_impl(
         args_match: &ArgMatches,
@@ -982,11 +1092,18 @@ impl CpOptions {
             Err(e) => return Err(CpError::Backup(format!("{e}"))),
             Ok(mode) => mode,
         };
-        let update_mode = ct_update_control::ct_determine_update_mode(args_match);
-
         let backup_suffix = ct_backup_control::determine_backup_suffix_os(args_match);
-
-        let overwrite = CpOverwriteMode::cp_from_matches(args_match);
+        let (update_mode, overwrite) = if let Some(args) = ordered_args {
+            Self::cp_parse_ordered_update_overwrite(
+                args,
+                CpClobberMode::cp_from_matches(args_match),
+            )
+        } else {
+            (
+                ct_update_control::ct_determine_update_mode(args_match),
+                CpOverwriteMode::cp_from_matches(args_match),
+            )
+        };
 
         // 解析目标目录选项
         let no_target_dir = args_match.get_flag(opt_flags::NO_TARGET_DIRECTORY);

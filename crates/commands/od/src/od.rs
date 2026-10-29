@@ -161,6 +161,11 @@ fn od_handle_stdout_result(result: std::io::Result<()>) {
     }
 }
 
+fn od_finish_input_result(result: CTResult<()>, input_failed: bool) -> CTResult<()> {
+    result?;
+    if input_failed { Err(1.into()) } else { Ok(()) }
+}
+
 #[cfg(unix)]
 fn od_exit_for_closed_stdout() {
     if !ctcore::ct_stdout_was_closed() {
@@ -608,12 +613,7 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
         if stdin_was_closed {
             ct_show_error!("standard input: Bad file descriptor");
         }
-        result?;
-        return if input.has_error() {
-            Err(1.into())
-        } else {
-            Ok(())
-        };
+        return od_finish_input_result(result, input.has_error() || stdin_was_closed);
     }
 
     let mut input_decoder =
@@ -636,7 +636,7 @@ pub fn od_main(args: impl ctcore::Args) -> CTResult<()> {
     if stdin_was_closed {
         ct_show_error!("standard input: Bad file descriptor");
     }
-    result
+    od_finish_input_result(result, stdin_was_closed)
 }
 
 fn od_normalize_optional_arguments(args: Vec<OsString>) -> Vec<OsString> {
@@ -1648,6 +1648,20 @@ mod tests {
         // 测试 execute 方法
         let args = vec![OsString::from("od"), OsString::from("--version")];
         assert!(tool.execute(&args).is_err());
+    }
+
+    #[test]
+    fn test_finish_input_result_preserves_all_failure_sources() {
+        assert!(od_finish_input_result(Ok(()), false).is_ok());
+        assert!(od_finish_input_result(Ok(()), true).is_err());
+
+        let error: CTResult<()> = Err(CtSimpleError::new(7, "sentinel input failure"));
+        assert_eq!(
+            od_finish_input_result(error, false)
+                .unwrap_err()
+                .to_string(),
+            "sentinel input failure"
+        );
     }
 
     mod od_settings_tests {

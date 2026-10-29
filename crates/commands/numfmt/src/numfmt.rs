@@ -1682,6 +1682,7 @@ pub fn ct_app() -> Command {
                      N defaults to 1 if not specified",
             )
             .num_args(..=1)
+            .require_equals(true)
             .value_name("N")
             .default_missing_value(numfmt_flags::NUMFMT_HEADER_DEFAULT)
             .hide_default_value(true),
@@ -8764,7 +8765,7 @@ mod tests {
         #[test]
         fn test_parse_options_header_long_0() {
             let command = ct_app();
-            let cmd_args = vec![ctcore::ct_util_name(), "--header", "0"];
+            let cmd_args = vec![ctcore::ct_util_name(), "--header=0"];
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
@@ -8776,7 +8777,7 @@ mod tests {
         #[test]
         fn test_parse_options_header_long_1() {
             let command = ct_app();
-            let cmd_args = vec![ctcore::ct_util_name(), "--header", "1"];
+            let cmd_args = vec![ctcore::ct_util_name(), "--header=1"];
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
@@ -8811,7 +8812,7 @@ mod tests {
         #[test]
         fn test_parse_options_header_long_10() {
             let command = ct_app();
-            let cmd_args = vec![ctcore::ct_util_name(), "--header", "10"];
+            let cmd_args = vec![ctcore::ct_util_name(), "--header=10"];
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
@@ -8846,7 +8847,7 @@ mod tests {
         #[test]
         fn test_parse_options_header_long_100() {
             let command = ct_app();
-            let cmd_args = vec![ctcore::ct_util_name(), "--header", "100"];
+            let cmd_args = vec![ctcore::ct_util_name(), "--header=100"];
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
@@ -8881,20 +8882,19 @@ mod tests {
         #[test]
         fn test_parse_options_header_long_negitive_1() {
             let command = ct_app();
-            let cmd_args = vec![ctcore::ct_util_name(), "--header", "-1"];
-            let result = command.try_get_matches_from(cmd_args);
+            let cmd_args = vec![ctcore::ct_util_name(), "--header=-1"];
+            let result = command.try_get_matches_from(cmd_args).unwrap();
 
-            assert!(result.is_err());
-            assert_eq!(
-                result.unwrap_err().kind(),
-                clap::error::ErrorKind::UnknownArgument
-            );
+            let options = numfmt_parse_options(&result);
+            let expected_value = "invalid header value '-1'";
+            assert!(options.is_err());
+            assert_eq!(options.unwrap_err(), expected_value);
         }
 
         #[test]
         fn test_parse_options_header_long_a() {
             let command = ct_app();
-            let cmd_args = vec![ctcore::ct_util_name(), "--header", "a"];
+            let cmd_args = vec![ctcore::ct_util_name(), "--header=a"];
             let result = command.try_get_matches_from(cmd_args).unwrap();
 
             let options = numfmt_parse_options(&result);
@@ -13425,7 +13425,7 @@ mod tests {
 
         #[test]
         fn test_ct_main_header_long_0() {
-            let args = [ctcore::ct_util_name(), "--header", "0", "10000"];
+            let args = [ctcore::ct_util_name(), "--header=0", "10000"];
             let result = numfmt_main(args.iter().map(OsString::from));
 
             if let Err(output) = result {
@@ -13439,7 +13439,7 @@ mod tests {
 
         #[test]
         fn test_ct_main_header_long_1() {
-            let args = [ctcore::ct_util_name(), "--header", "1", "10000"];
+            let args = [ctcore::ct_util_name(), "--header=1", "10000"];
             let result = numfmt_main(args.iter().map(OsString::from));
 
             if let Err(output) = result {
@@ -13453,7 +13453,7 @@ mod tests {
 
         #[test]
         fn test_ct_main_header_long_10() {
-            let args = [ctcore::ct_util_name(), "--header", "10", "10000"];
+            let args = [ctcore::ct_util_name(), "--header=10", "10000"];
             let result = numfmt_main(args.iter().map(OsString::from));
 
             if let Err(output) = result {
@@ -13467,7 +13467,7 @@ mod tests {
 
         #[test]
         fn test_ct_main_header_long_100() {
-            let args = [ctcore::ct_util_name(), "--header", "100", "10000"];
+            let args = [ctcore::ct_util_name(), "--header=100", "10000"];
             let result = numfmt_main(args.iter().map(OsString::from));
 
             if let Err(output) = result {
@@ -13481,7 +13481,7 @@ mod tests {
 
         #[test]
         fn test_ct_main_header_long_negitive_1() {
-            let args = [ctcore::ct_util_name(), "--header", "-1", "10000"];
+            let args = [ctcore::ct_util_name(), "--header=-1", "10000"];
             let result = numfmt_main(args.iter().map(OsString::from));
 
             if let Err(output) = result {
@@ -13495,7 +13495,7 @@ mod tests {
 
         #[test]
         fn test_ct_main_header_long_a() {
-            let args = [ctcore::ct_util_name(), "--header", "a", "10000"];
+            let args = [ctcore::ct_util_name(), "--header=a", "10000"];
             let result = numfmt_main(args.iter().map(OsString::from));
 
             if let Err(output) = result {
@@ -13917,7 +13917,7 @@ mod tests {
         //       --to <UNIT>          auto-scale output numbers to UNITs; see UNIT below [default: none]
         //       --to-unit <N>        the output unit size [default: 1]
         //       --padding <N>        pad the output to N characters; positive N will right-align; negative N will left-align; padding is ignored if the output is wider than N; the default is to automatically pad if a whitespace is found
-        //       --header [<N>]       print (without converting) the first N header lines; N defaults to 1 if not specified
+        //       --header[=<N>]       print (without converting) the first N header lines; N defaults to 1 if not specified
         //       --round <METHOD>     use METHOD for rounding when scaling [default: from-zero] [possible values: up, down, from-zero, towards-zero, nearest]
         //       --suffix <SUFFIX>    print SUFFIX after each formatted number, and accept inputs optionally ending with SUFFIX
         //       --invalid <INVALID>  set the failure mode for invalid input [default: abort] [possible values: abort, fail, warn, ignore]
@@ -16670,7 +16670,7 @@ mod tests {
         #[test]
         fn test_ct_app_header_long_0() {
             let command = ct_app();
-            let cmd_args = vec![ctcore::ct_util_name(), "--header", "0"];
+            let cmd_args = vec![ctcore::ct_util_name(), "--header=0"];
             let result = command.try_get_matches_from(cmd_args);
             assert!(result.is_ok());
             assert_eq!(
@@ -16682,7 +16682,7 @@ mod tests {
         #[test]
         fn test_ct_app_header_long_1() {
             let command = ct_app();
-            let cmd_args = vec![ctcore::ct_util_name(), "--header", "1"];
+            let cmd_args = vec![ctcore::ct_util_name(), "--header=1"];
             let result = command.try_get_matches_from(cmd_args);
             assert!(result.is_ok());
             assert_eq!(
@@ -16694,7 +16694,7 @@ mod tests {
         #[test]
         fn test_ct_app_header_long_10() {
             let command = ct_app();
-            let cmd_args = vec![ctcore::ct_util_name(), "--header", "10"];
+            let cmd_args = vec![ctcore::ct_util_name(), "--header=10"];
             let result = command.try_get_matches_from(cmd_args);
             assert!(result.is_ok());
             assert_eq!(
@@ -16706,7 +16706,7 @@ mod tests {
         #[test]
         fn test_ct_app_header_long_100() {
             let command = ct_app();
-            let cmd_args = vec![ctcore::ct_util_name(), "--header", "100"];
+            let cmd_args = vec![ctcore::ct_util_name(), "--header=100"];
             let result = command.try_get_matches_from(cmd_args);
             assert!(result.is_ok());
             assert_eq!(
@@ -16718,24 +16718,41 @@ mod tests {
         #[test]
         fn test_ct_app_header_long_negitive_1() {
             let command = ct_app();
-            let cmd_args = vec![ctcore::ct_util_name(), "--header", "-1"];
+            let cmd_args = vec![ctcore::ct_util_name(), "--header=-1"];
             let result = command.try_get_matches_from(cmd_args);
-            assert!(result.is_err());
+            assert!(result.is_ok());
             assert_eq!(
-                result.unwrap_err().kind(),
-                clap::error::ErrorKind::UnknownArgument
+                result.unwrap().get_one::<String>("header"),
+                Some(&"-1".to_string())
             );
         }
 
         #[test]
         fn test_ct_app_header_long_a() {
             let command = ct_app();
-            let cmd_args = vec![ctcore::ct_util_name(), "--header", "a"];
+            let cmd_args = vec![ctcore::ct_util_name(), "--header=a"];
             let result = command.try_get_matches_from(cmd_args);
             assert!(result.is_ok());
             assert_eq!(
                 result.unwrap().get_one::<String>("header"),
                 Some(&"a".to_string())
+            );
+        }
+
+        #[test]
+        fn test_ct_app_header_does_not_consume_number() {
+            let command = ct_app();
+            let cmd_args = vec![ctcore::ct_util_name(), "--header", "7"];
+            let result = command.try_get_matches_from(cmd_args).unwrap();
+
+            assert_eq!(result.get_one::<String>("header"), Some(&"1".to_string()));
+            assert_eq!(
+                result
+                    .get_many::<String>("NUMBER")
+                    .unwrap()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+                vec!["7"]
             );
         }
 

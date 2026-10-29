@@ -142,6 +142,76 @@
             "byteMode": true
         },
         {
+            "tstdin": "",
+            "command": "od",
+            "description": "原始字节用例：POSIXLY_CORRECT=1且LC_ALL=C；执行od --skip-bytes=bad input -j；参数完整十六进制=2d2d736b69702d62797465733d626164 696e707574 2d6a；stdin为0字节、完整十六进制=空；输入fixture input为3字节、完整十六进制=616263；文件后的-j作为文件名且不得改写前面长选项的数值诊断；预期RC=1、stdout为0字节、完整十六进制=空；stderr为50字节/1条换行分隔，完整十六进制=6f643a20696e76616c69642073756666697820696e202d2d736b69702d627974657320617267756d656e742027626164270a",
+            "args": [
+                "2d2d736b69702d62797465733d626164",
+                "696e707574",
+                "2d6a"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "6f643a20696e76616c69642073756666697820696e202d2d736b69702d627974657320617267756d656e742027626164270a"
+                }
+            },
+            "setup_commands": [
+                "printf '%b' '\\141\\142\\143' > input"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0",
+                    "POSIXLY_CORRECT": "1"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "od",
+            "description": "原始字节用例：POSIXLY_CORRECT=1且LC_ALL=C；执行od -Nbad input --read-bytes=1；参数完整十六进制=2d4e626164 696e707574 2d2d726561642d62797465733d31；stdin为0字节、完整十六进制=空；输入fixture input为3字节、完整十六进制=616263；文件后的--read-bytes=1作为文件名且不得改写前面短选项的数值诊断；预期RC=1、stdout为0字节、完整十六进制=空；stderr为40字节/1条换行分隔，完整十六进制=6f643a20696e76616c69642073756666697820696e202d4e20617267756d656e742027626164270a",
+            "args": [
+                "2d4e626164",
+                "696e707574",
+                "2d2d726561642d62797465733d31"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "6f643a20696e76616c69642073756666697820696e202d4e20617267756d656e742027626164270a"
+                }
+            },
+            "setup_commands": [
+                "printf '%b' '\\141\\142\\143' > input"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0",
+                    "POSIXLY_CORRECT": "1"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
+        },
+        {
             "command": "od",
             "description": "Accept the unique --format long-option abbreviation",
             "args": [

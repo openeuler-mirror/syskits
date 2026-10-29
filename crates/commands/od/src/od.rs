@@ -1537,15 +1537,21 @@ pub fn od_native_semantic(args: impl ctcore::Args) -> CTResult<OdSemantic> {
 }
 
 fn od_numeric_option_name(args: &[String], short: char, long: &'static str) -> &'static str {
-    let mut used_short = false;
-    let mut parsing_options = true;
+    od_numeric_option_name_with_mode(args, short, long, posixly_correct())
+}
 
-    for arg in args.iter().skip(1) {
-        if !parsing_options {
-            continue;
-        }
+fn od_numeric_option_name_with_mode(
+    args: &[String],
+    short: char,
+    long: &'static str,
+    posix_mode: bool,
+) -> &'static str {
+    let mut used_short = false;
+    let option_limit = od_option_scan_limit(args, posix_mode);
+
+    for arg in args.iter().take(option_limit).skip(1) {
         if arg == "--" {
-            parsing_options = false;
+            break;
         } else if let Some(name) = arg.strip_prefix("--") {
             let name = name.split_once('=').map_or(name, |(name, _)| name);
             if !name.is_empty() && long.starts_with(name) {
@@ -1788,6 +1794,33 @@ mod tests {
             let args = ["od".to_string(), "--strings=".to_string()];
             let error = OdSettings::parse_strings_min_len(&args).unwrap_err();
             assert_eq!(error.to_string(), "invalid --strings argument ''");
+        }
+
+        #[test]
+        fn test_posix_numeric_diagnostic_ignores_options_after_file() {
+            let long_then_late_short =
+                ["od", "--skip-bytes=bad", "input", "-j"].map(str::to_string);
+            assert_eq!(
+                od_numeric_option_name_with_mode(
+                    &long_then_late_short,
+                    'j',
+                    od_options::OD_SKIP_BYTES,
+                    true,
+                ),
+                "--skip-bytes"
+            );
+
+            let short_then_late_long =
+                ["od", "-Nbad", "input", "--read-bytes=1"].map(str::to_string);
+            assert_eq!(
+                od_numeric_option_name_with_mode(
+                    &short_then_late_long,
+                    'N',
+                    od_options::OD_READ_BYTES,
+                    true,
+                ),
+                "-N"
+            );
         }
     }
 

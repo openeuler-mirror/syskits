@@ -101,10 +101,15 @@ fn semantic_to_value(semantic: &ct_factor::FactorSemantic) -> CtValue {
 
 fn row_to_value(row: &ct_factor::FactorRow) -> CtValue {
     CtValue::Record(vec![
-        ("number".into(), CtValue::String(row.number.clone())),
+        ("number".into(), factor_number_to_value(&row.number)),
         (
             "factors".into(),
-            CtValue::List(row.factors.iter().cloned().map(CtValue::String).collect()),
+            CtValue::List(
+                row.factors
+                    .iter()
+                    .map(|factor| factor_number_to_value(factor))
+                    .collect(),
+            ),
         ),
         (
             "factor_powers".into(),
@@ -113,7 +118,7 @@ fn row_to_value(row: &ct_factor::FactorRow) -> CtValue {
                     .iter()
                     .map(|power| {
                         CtValue::Record(vec![
-                            ("prime".into(), CtValue::String(power.prime.clone())),
+                            ("prime".into(), factor_number_to_value(&power.prime)),
                             ("exponent".into(), CtValue::Int(i64::from(power.exponent))),
                         ])
                     })
@@ -122,6 +127,13 @@ fn row_to_value(row: &ct_factor::FactorRow) -> CtValue {
         ),
         ("print_exponents".into(), CtValue::Bool(row.print_exponents)),
     ])
+}
+
+fn factor_number_to_value(number: &str) -> CtValue {
+    number
+        .parse::<i64>()
+        .map(CtValue::Int)
+        .unwrap_or_else(|_| CtValue::String(number.to_string()))
 }
 
 fn display_columns(print_exponents: bool) -> CtValue {
@@ -237,24 +249,20 @@ mod tests {
         assert_eq!(
             value,
             CtValue::List(vec![CtValue::Record(vec![
-                ("number".into(), CtValue::String("12".into())),
+                ("number".into(), CtValue::Int(12)),
                 (
                     "factors".into(),
-                    CtValue::List(vec![
-                        CtValue::String("2".into()),
-                        CtValue::String("2".into()),
-                        CtValue::String("3".into()),
-                    ]),
+                    CtValue::List(vec![CtValue::Int(2), CtValue::Int(2), CtValue::Int(3),]),
                 ),
                 (
                     "factor_powers".into(),
                     CtValue::List(vec![
                         CtValue::Record(vec![
-                            ("prime".into(), CtValue::String("2".into())),
+                            ("prime".into(), CtValue::Int(2)),
                             ("exponent".into(), CtValue::Int(2)),
                         ]),
                         CtValue::Record(vec![
-                            ("prime".into(), CtValue::String("3".into())),
+                            ("prime".into(), CtValue::Int(3)),
                             ("exponent".into(), CtValue::Int(1)),
                         ]),
                     ]),
@@ -262,6 +270,35 @@ mod tests {
                 ("print_exponents".into(), CtValue::Bool(true)),
             ])])
         );
+    }
+
+    #[test]
+    fn semantic_to_value_preserves_numbers_outside_i64_as_strings() {
+        let value = semantic_to_value(&ct_factor::FactorSemantic {
+            rows: vec![ct_factor::FactorRow {
+                number: "9223372036854775808".into(),
+                factors: vec!["2".into(), "9223372036854775808".into()],
+                factor_powers: vec![ct_factor::FactorPower {
+                    prime: "9223372036854775808".into(),
+                    exponent: 1,
+                }],
+                print_exponents: false,
+            }],
+            classic_text: String::new(),
+            stderr_text: String::new(),
+            exit_code: 0,
+        });
+
+        let CtValue::List(rows) = value else {
+            panic!("expected list");
+        };
+        let CtValue::Record(fields) = &rows[0] else {
+            panic!("expected record");
+        };
+        assert!(matches!(
+            fields.iter().find(|(key, _)| key == "number").map(|(_, value)| value),
+            Some(CtValue::String(value)) if value == "9223372036854775808"
+        ));
     }
 
     #[test]

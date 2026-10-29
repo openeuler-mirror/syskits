@@ -924,7 +924,10 @@ impl<'a> SortLine<'a> {
         // 优化。
 
         let line = self.line.replace('\t', ">");
-        writeln!(w, "{line}")?;
+        for &byte in self.raw_bytes {
+            w.write_all(&[if byte == b'\t' { b'>' } else { byte }])?;
+        }
+        w.write_all(b"\n")?;
 
         let mut fields = vec![];
         tokenize_with_record_mode(
@@ -5072,6 +5075,28 @@ mod tests {
 
             // This test depends heavily on the output format of `print_debug`, adjust assertion accordingly
             assert!(String::from_utf8(output).unwrap().contains("Hello, world"));
+        }
+
+        #[test]
+        fn test_print_debug_preserves_raw_multibyte_input() {
+            let line_text: String = [0xc2, 0xb2]
+                .into_iter()
+                .map(sort_raw_field_separator)
+                .collect();
+            let line = SortLine {
+                line: &line_text,
+                raw_bytes: b"\xc2\xb2",
+                index: 0,
+            };
+            let settings = SortGlobalConfigs {
+                is_debug: true,
+                ..Default::default()
+            };
+            let mut output = Vec::new();
+
+            line.print_debug(&settings, &mut output).unwrap();
+
+            assert!(output.starts_with(b"\xc2\xb2\n"));
         }
 
         #[test]

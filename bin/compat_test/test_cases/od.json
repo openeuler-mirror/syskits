@@ -3796,6 +3796,35 @@
                 "resource_limits": null
             },
             "byteMode": true
+        },
+        {
+            "tstdin": "",
+            "command": "od",
+            "description": "原始字节用例：LC_ALL=C；执行od --endian=；参数完整十六进制=2d2d656e6469616e3d；stdin为0字节、完整十六进制=空；空值同时是little与big的前缀，GNU将其报告为歧义参数而非普通非法参数；预期RC=1、stdout为0字节、完整十六进制=空；stderr为123字节/5条换行分隔，完整十六进制=6f643a20616d626967756f757320617267756d656e7420272720666f7220272d2d656e6469616e270a56616c696420617267756d656e7473206172653a0a20202d20276c6974746c65270a20202d2027626967270a54727920276f64202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a",
+            "args": [
+                "2d2d656e6469616e3d"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": "6f643a20616d626967756f757320617267756d656e7420272720666f7220272d2d656e6469616e270a56616c696420617267756d656e7473206172653a0a20202d20276c6974746c65270a20202d2027626967270a54727920276f64202d2d68656c702720666f72206d6f726520696e666f726d6174696f6e2e0a"
+                }
+            },
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            },
+            "byteMode": true
         }
     ]
 }

@@ -513,12 +513,57 @@ pub(crate) fn numfmt_passthrough_input<'a>(
     input: &'a str,
     options: &NumfmtConfigs,
 ) -> Cow<'a, str> {
-    match &options.delimiter {
-        Some(delimiter) if delimiter.is_empty() => {
-            Cow::Borrowed(numfmt_nul_delimited_first_field(input))
+    let Some(custom_suffix) = options.suffix.as_deref() else {
+        return match &options.delimiter {
+            Some(delimiter) if delimiter.is_empty() => {
+                Cow::Borrowed(numfmt_nul_delimited_first_field(input))
+            }
+            Some(_) => Cow::Borrowed(input),
+            None => Cow::Owned(numfmt_normalize_whitespace_separators(input)),
+        };
+    };
+
+    let strip_custom_suffix = |field: &'a str, field_number| {
+        if !ctcore::ct_ranges::contain(&options.fields, field_number) {
+            return field;
         }
-        Some(_) => Cow::Borrowed(input),
-        None => Cow::Owned(numfmt_normalize_whitespace_separators(input)),
+
+        if field.len() > custom_suffix.len() {
+            field.strip_suffix(custom_suffix).unwrap_or(field)
+        } else {
+            field
+        }
+    };
+
+    match &options.delimiter {
+        Some(delimiter) if delimiter.is_empty() => Cow::Borrowed(strip_custom_suffix(
+            numfmt_nul_delimited_first_field(input),
+            1,
+        )),
+        Some(delimiter) => {
+            let mut out = String::with_capacity(input.len());
+            for (field_number, field) in (1..).zip(input.split(delimiter)) {
+                if field_number > 1 {
+                    out.push_str(delimiter);
+                }
+                out.push_str(strip_custom_suffix(field, field_number));
+            }
+            Cow::Owned(out)
+        }
+        None => {
+            let mut out = String::with_capacity(input.len());
+            for (field_number, (prefix, field)) in
+                (1..).zip(NumfmtWhitespaceSplitter { s: Some(input) })
+            {
+                numfmt_push_unselected_whitespace_field(
+                    &mut out,
+                    field_number,
+                    prefix,
+                    strip_custom_suffix(field, field_number),
+                );
+            }
+            Cow::Owned(out)
+        }
     }
 }
 
@@ -1595,6 +1640,7 @@ pub(crate) fn numfmt_format_and_print_abort_with_line_ending(
 mod tests {
     use super::*;
     use crate::flags::NumfmtInvalidModes;
+    use ctcore::ct_ranges::CtRange;
 
     fn setup_default_config() -> NumfmtConfigs {
         NumfmtConfigs {
@@ -1629,6 +1675,31 @@ mod tests {
         assert_eq!(
             numfmt_group_number_thousands_with("1234567e+08", ",", &[3, 0]),
             "1,234,567e+08"
+        );
+    }
+
+    #[test]
+    fn passthrough_strips_custom_suffix_from_selected_whitespace_field() {
+        let mut config = setup_default_config();
+        config.fields = vec![CtRange { low: 2, high: 2 }];
+        config.suffix = Some("QWE".to_string());
+
+        assert_eq!(
+            numfmt_passthrough_input("x\t12q3QWE zQWE", &config),
+            "x 12q3 zQWE"
+        );
+    }
+
+    #[test]
+    fn passthrough_strips_custom_suffix_with_explicit_delimiter() {
+        let mut config = setup_default_config();
+        config.fields = vec![CtRange { low: 2, high: 2 }];
+        config.delimiter = Some(":".to_string());
+        config.suffix = Some("QWE".to_string());
+
+        assert_eq!(
+            numfmt_passthrough_input("x:12q3QWE:zQWE", &config),
+            "x:12q3:zQWE"
         );
     }
 

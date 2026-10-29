@@ -986,18 +986,9 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
 
         let mut _read_some = false;
 
-        // Reconcile name-followed files before checking `--pid`. GNU tail
-        // performs one final file scan after the watched process dies, so a
-        // replacement that completed during the previous interval is still
-        // reopened and read before tail exits.
+        // Reconcile name-followed files at the start of each iteration. This
+        // catches changes that happened while no notify event was available.
         _read_some = observer.reconcile_follow_name_retry(options.verbose)? || _read_some;
-
-        // If `--pid=p`, tail checks whether process p
-        // is alive at least every `--sleep-interval=N` seconds
-        if options.follow.is_some() && observer.pid != 0 && process.is_dead() {
-            // p is dead, tail will also terminate
-            break;
-        }
 
         // With  -f, sleep for approximately N seconds (default 1.0) between iterations;
         // We wake up if Notify sends an Event or if we wait more than `sleep_sec`.
@@ -1076,6 +1067,16 @@ pub fn follow(mut observer: Observer, options: &TailOptions) -> CTResult<()> {
         // main print loop
         for path in &paths {
             _read_some = observer.files.tail_file(path, options.verbose)?;
+        }
+
+        // GNU tail does not stop until it has completed the iteration in
+        // which --pid's process dies.  In particular, a rotation can be
+        // observed between the last reconcile and the PID check, leaving the
+        // replacement event queued for this iteration.  Reconcile once more
+        // after consuming that event so the replacement is read before exit.
+        if options.follow.is_some() && observer.pid != 0 && process.is_dead() {
+            let _ = observer.reconcile_follow_name_retry(options.verbose)?;
+            break;
         }
     }
     Ok(())

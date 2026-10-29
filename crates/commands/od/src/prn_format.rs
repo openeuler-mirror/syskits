@@ -12,9 +12,12 @@
 use std::ffi::CStr;
 
 use crate::formatteriteminfo::*;
+use ctcore::ct_format::long_double::NATIVE_LONG_DOUBLE_STRLEN_BOUND;
 use half::f16;
 use std::f32;
 use std::f64;
+
+const NATIVE_LONG_DOUBLE_PRINT_WIDTH: usize = NATIVE_LONG_DOUBLE_STRLEN_BOUND + 1;
 
 pub static FORMAT_ITEM_A: FormatterItemInfo = FormatterItemInfo {
     byte_size: 1,
@@ -99,7 +102,7 @@ pub static FORMAT_ITEM_F64: FormatterItemInfo = FormatterItemInfo {
 
 pub static FORMAT_ITEM_FLD: FormatterItemInfo = FormatterItemInfo {
     byte_size: 16,
-    print_width: 30,
+    print_width: NATIVE_LONG_DOUBLE_PRINT_WIDTH,
     formatter: OdFormatWriter::FloatBytesWriter(format_item_flo128),
 };
 
@@ -119,9 +122,8 @@ pub fn format_item_flo64(f: f64, output: &mut String, buffer: &mut OdFloatFormat
 }
 
 pub fn format_item_flo128(bytes: &[u8]) -> String {
-    const WIDTH: usize = 30;
     let text = format_long_double(bytes);
-    format!("{text:>WIDTH$}")
+    format!("{text:>NATIVE_LONG_DOUBLE_PRINT_WIDTH$}")
 }
 
 fn format_flo16(f: f16) -> String {
@@ -674,6 +676,18 @@ fn test_format_long_double_decodes_aarch64_binary128() {
     for (chunk, expected) in bytes.chunks_exact(16).zip(expected) {
         assert_eq!(format_long_double(chunk), expected);
     }
+}
+
+#[test]
+#[cfg(all(unix, target_arch = "aarch64"))]
+fn long_double_output_uses_the_native_gnu_field_width() {
+    let bytes: Vec<u8> = (0..16).collect();
+
+    assert_eq!(
+        format_item_flo128(&bytes),
+        "    2.610793871763096751958758746575379e-3772"
+    );
+    assert_eq!(FORMAT_ITEM_FLD.print_width, 45);
 }
 
 #[test]

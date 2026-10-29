@@ -5192,7 +5192,7 @@ fn locale_time_format(recent: bool) -> String {
 }
 
 #[cfg(unix)]
-fn align_locale_month_format(seconds: i64, fmt: &str) -> Option<Vec<u8>> {
+fn align_locale_month_format(seconds: i64, fmt: &OsStr) -> Option<Vec<u8>> {
     use std::ffi::CStr;
 
     let fmt_bytes = fmt.as_bytes();
@@ -5355,7 +5355,10 @@ fn display_date_bytes(metadata: &Metadata, config: &LsConfig) -> Vec<u8> {
                     let fmt = locale_time_format(is_recent);
                     #[cfg(unix)]
                     {
-                        let aligned_fmt = align_locale_month_format(time.timestamp(), &fmt)
+                        let aligned_fmt = align_locale_month_format(
+                            time.timestamp(),
+                            OsStr::new(&fmt),
+                        )
                             .unwrap_or_else(|| fmt.as_bytes().to_vec());
                         ls_format_local_time_strftime_bytes(
                             time.timestamp(),
@@ -5373,10 +5376,12 @@ fn display_date_bytes(metadata: &Metadata, config: &LsConfig) -> Vec<u8> {
                     let fmt = if is_recent { recent } else { non_recent };
                     #[cfg(unix)]
                     {
+                        let aligned_fmt = align_locale_month_format(time.timestamp(), fmt)
+                            .unwrap_or_else(|| fmt.as_bytes().to_vec());
                         ls_format_local_time_strftime_bytes(
                             time.timestamp(),
                             time.timestamp_subsec_nanos(),
-                            fmt,
+                            OsStr::from_bytes(&aligned_fmt),
                         )
                         .unwrap_or_else(|| fmt.as_bytes().to_vec())
                     }
@@ -7694,5 +7699,20 @@ mod tests {
             ls_format_local_time_strftime(0, 123_456_789, "%s.%N").unwrap(),
             "0.123456789"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn custom_time_style_aligns_abbreviated_month() {
+        let _env_lock = lock_env();
+        let _locale = EnvVarGuard::set("LC_ALL", "gv_GB");
+        unsafe {
+            ctcore::libc::setlocale(ctcore::libc::LC_ALL, c"".as_ptr());
+        }
+
+        let january = align_locale_month_format(0, OsStr::new("[%b]")).unwrap();
+        assert_eq!(os_str_display_width(OsStr::from_bytes(&january)), 11);
+        assert!(january.starts_with(b"[J-guer"));
+        assert!(january.ends_with(b"]"));
     }
 }

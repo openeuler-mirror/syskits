@@ -1179,7 +1179,7 @@ pub fn df_main(args: impl ctcore::Args) -> CTResult<()> {
     }
 
     // 从命令行匹配项中解析DfOptions。
-    let show_listed_fs = args_match.get_many::<String>(DF_OPT_PATHS).is_some();
+    let show_listed_fs = args_match.get_many::<OsString>(DF_OPT_PATHS).is_some();
     let mut options =
         DfOptions::from_with_block_size_option(&args_match, df_block_size_option(&args))
             .map_err(DfError::OptionsError)?;
@@ -1220,7 +1220,7 @@ pub fn df_native_semantic(args: impl ctcore::Args) -> CTResult<DfSemantic> {
         }
     }
 
-    let show_listed_fs = args_match.get_many::<String>(DF_OPT_PATHS).is_some();
+    let show_listed_fs = args_match.get_many::<OsString>(DF_OPT_PATHS).is_some();
     let mut classic_options =
         DfOptions::from_with_block_size_option(&args_match, df_block_size_option(&args))
             .map_err(DfError::OptionsError)?;
@@ -1432,7 +1432,7 @@ fn get_filesystem(
     options: &DfOptions,
 ) -> Result<Vec<Filesystem>, Box<dyn CTError>> {
     // 根据命令行参数获取要显示的文件系统列表。
-    let filesystem_paths: Vec<Filesystem> = match args_match.get_many::<String>(DF_OPT_PATHS) {
+    let filesystem_paths: Vec<Filesystem> = match args_match.get_many::<OsString>(DF_OPT_PATHS) {
         // 如果没有指定路径，则获取所有文件系统的信息。
         None => {
             let filesystem = get_all_filesystems(options)
@@ -1596,6 +1596,7 @@ fn df_args_init() -> Vec<Arg> {
             .help("limit listing to file systems not of type TYPE"),
         Arg::new(DF_OPT_PATHS)
             .action(ArgAction::Append)
+            .value_parser(ValueParser::os_string())
             .value_hint(clap::ValueHint::AnyPath),
         Arg::new("ignored-v")
             .short('v')

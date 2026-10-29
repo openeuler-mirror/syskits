@@ -1057,10 +1057,7 @@ impl CpOptions {
                     interactive = InteractiveState::NoClobber;
                 } else if is_long("update") {
                     if let Some(update_value) = attached_value {
-                        if !matches!(
-                            interactive,
-                            InteractiveState::NoClobber | InteractiveState::UpdateNone
-                        ) {
+                        if !matches!(interactive, InteractiveState::NoClobber) {
                             match update_value {
                                 "all" => {
                                     update = CtUpdateMode::ReplaceAll;
@@ -4022,12 +4019,32 @@ mod tests {
         use crate::CpOptions;
         use crate::CpPreserve;
         use crate::CpSparseDebug;
+        use crate::{CpClobberMode, CpOverwriteMode};
+        use ctcore::ct_update_control::CtUpdateMode;
 
         use std::cmp::Ordering;
         use std::collections::HashMap;
         use std::fs::File;
         use std::path::{Path, PathBuf};
         use tempfile::Builder;
+
+        #[test]
+        fn test_cp_repeated_update_uses_last_value() {
+            let args = [
+                std::ffi::OsString::from("cp"),
+                std::ffi::OsString::from("--update=none"),
+                std::ffi::OsString::from("--update=all"),
+            ];
+
+            let (update, overwrite) =
+                CpOptions::cp_parse_ordered_update_overwrite(&args, CpClobberMode::Standard);
+
+            assert_eq!(update, CtUpdateMode::ReplaceAll);
+            assert!(matches!(
+                overwrite,
+                CpOverwriteMode::Clobber(CpClobberMode::Standard)
+            ));
+        }
 
         #[cfg(unix)]
         #[test]

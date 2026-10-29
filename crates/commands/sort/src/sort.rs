@@ -1514,20 +1514,6 @@ fn sort_invalid_sort_diagnostic(error: &clap::Error) -> Option<String> {
 }
 
 fn sort_validate_inputs(files: &[OsString], output: &SortOutput) -> CTResult<()> {
-    if let Some(out_name) = output.as_output_name() {
-        // GNU sort validates and creates a named output before consuming any input.
-        // Do not truncate here: merge mode may still need to preserve an aliased input.
-        OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(out_name)
-            .map_err(|error| SortError::SortOpenFailed {
-                path: out_name.to_string_lossy().into_owned(),
-                error,
-            })?;
-    }
-
     // 前置可用性扫描 (Early Validation)
     // 扫描所有输入文件是否可读，如果有不可读的直接报错，决不提前触碰 stdin
     for file in files {
@@ -1547,6 +1533,19 @@ fn sort_validate_inputs(files: &[OsString], output: &SortOutput) -> CTResult<()>
                 .into());
             }
         }
+    }
+
+    if let Some(out_name) = output.as_output_name() {
+        // Do not truncate here: merge mode may still need to preserve an aliased input.
+        OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(out_name)
+            .map_err(|error| SortError::SortOpenFailed {
+                path: out_name.to_string_lossy().into_owned(),
+                error,
+            })?;
     }
 
     Ok(())
@@ -3175,6 +3174,18 @@ mod tests {
         assert_eq!(semantic.rows[1].line, "alpha\t2");
         assert_eq!(semantic.classic_text, "alpha\t10\nalpha\t2\nbeta\ngamma\n");
         assert_eq!(semantic.exit_code, 0);
+    }
+
+    #[test]
+    fn sort_validates_missing_input_before_creating_output() {
+        let temp_dir = tempfile::TempDir::new().expect("tempdir");
+        let missing = temp_dir.path().join("missing");
+        let output = SortOutput::new(Some(missing.as_os_str())).expect("sort output");
+
+        let result = sort_validate_inputs(&[missing.as_os_str().to_owned()], &output);
+
+        assert!(result.is_err());
+        assert!(!missing.exists());
     }
 
     #[cfg(test)]

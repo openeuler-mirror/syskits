@@ -1642,6 +1642,92 @@
                 "umask": null,
                 "resource_limits": null
             }
+        },
+        {
+            "tstdin": "y\n",
+            "command": "cp",
+            "description": "--update=none before -i lets the later interactive option overwrite",
+            "args": [
+                "--update=none",
+                "-i",
+                "source",
+                "destination"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": "cp: overwrite 'destination'? "
+                },
+                "verifications": [
+                    {
+                        "command": "cat destination",
+                        "expected_exit": 0,
+                        "expected_stdout": "new\n",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "setup_commands": [
+                "printf 'new\\n' > source",
+                "printf 'old\\n' > destination"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
+        },
+        {
+            "tstdin": "n\n",
+            "command": "cp",
+            "description": "--update=all after -i disables the earlier interactive option",
+            "args": [
+                "-i",
+                "--update=all",
+                "source",
+                "destination"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat destination",
+                        "expected_exit": 0,
+                        "expected_stdout": "new\n",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "setup_commands": [
+                "printf 'new\\n' > source",
+                "printf 'old\\n' > destination"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
         }
     ]
 }

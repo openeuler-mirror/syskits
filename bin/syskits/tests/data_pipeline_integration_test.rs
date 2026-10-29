@@ -49,6 +49,15 @@ fn test_run_data_entry_from_select_to_json_inline_source() {
 }
 
 #[test]
+fn test_run_data_entry_json_toml_json_round_trip() {
+    let args = vec![OsString::from(
+        r#"from json "{\"a\":1}" | to toml | from toml | to json"#,
+    )];
+    let code = ctengine::run_data_entry_with_registry(&args, make_registry());
+    assert_eq!(code, 0);
+}
+
+#[test]
 fn test_run_data_entry_usage_error_exit_code() {
     let args = vec![OsString::from("| bad")];
     let code = ctengine::run_data_entry_with_registry(&args, make_registry());

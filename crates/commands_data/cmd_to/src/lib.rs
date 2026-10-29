@@ -130,7 +130,8 @@ impl DataCommand for CmdTo {
                     String::new()
                 } else {
                     let tv = ct_to_toml(&value);
-                    tv.to_string()
+                    toml::to_string(&tv)
+                        .map_err(|e| CtDiagnosticError::simple(format!("to toml: {e}")))?
                 }
             }
             "text" => {
@@ -1009,7 +1010,9 @@ mod tests {
         let CtPipelineData::Value(CtValue::String(t), _) = r else {
             panic!("string");
         };
-        assert!(t.contains("a = 1"));
+        assert_eq!(t, "a = 1\n");
+        let parsed: toml::Value = toml::from_str(&t).expect("to toml must emit a TOML document");
+        assert_eq!(parsed["a"].as_integer(), Some(1));
     }
 
     #[test]

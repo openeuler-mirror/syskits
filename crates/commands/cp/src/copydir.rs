@@ -28,6 +28,8 @@ use ctcore::ct_show_error;
 use ctcore::uio_error;
 use filetime::FileTime;
 use indicatif::ProgressBar;
+#[cfg(unix)]
+use walkdir::DirEntryExt;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
@@ -496,12 +498,17 @@ pub(crate) fn copy_directory(
         fs::symlink_metadata(root).ok()
     };
     let mut dirs_to_preserve = Vec::new();
-    // Traverse the contents of the directory, copying each one.
-    for direntry_result in WalkDir::new(root)
+    // GNU's SAVEDIR_SORT_FASTREAD orders directory entries by the inode from
+    // readdir on systems that provide d_ino.
+    let walker = WalkDir::new(root)
         .same_file_system(options.one_file_system)
         .follow_links(options.dereference)
-        .follow_root_links(options.cp_dereference(source_in_command_line))
-    {
+        .follow_root_links(options.cp_dereference(source_in_command_line));
+    #[cfg(unix)]
+    let walker = walker.sort_by(|left, right| left.ino().cmp(&right.ino()));
+
+    // Traverse the contents of the directory, copying each one.
+    for direntry_result in walker {
         match direntry_result {
             Ok(direntry) => {
                 let entry = Entry::new(&context, &direntry, options.no_target_dir)?;

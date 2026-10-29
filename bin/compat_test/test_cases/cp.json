@@ -2026,6 +2026,50 @@
                 "umask": null,
                 "resource_limits": null
             }
+        },
+        {
+            "tstdin": "",
+            "command": "cp",
+            "description": "Recursive traversal follows GNU fast-read inode order",
+            "args": [
+                "-Rv",
+                "source",
+                "destination"
+            ],
+            "expectation": {
+                "execution": {
+                    "exit_code": 0,
+                    "stdout": "'source' -> 'destination'\n'source/first' -> 'destination/first'\n'source/second' -> 'destination/second'\n'source/third' -> 'destination/third'\n",
+                    "stderr": ""
+                },
+                "verifications": [
+                    {
+                        "command": "cat destination/first destination/second destination/third",
+                        "expected_exit": 0,
+                        "expected_stdout": "FIRST\nSECOND\nTHIRD\n",
+                        "expected_stderr": ""
+                    }
+                ]
+            },
+            "setup_commands": [
+                "mkdir source",
+                "printf 'FIRST\\n' > source/first",
+                "printf 'SECOND\\n' > source/second",
+                "printf 'THIRD\\n' > source/third"
+            ],
+            "environment": {
+                "files": [],
+                "env_vars": {
+                    "LC_ALL": "C",
+                    "LANG": "C",
+                    "TZ": "UTC0"
+                },
+                "working_dir": null,
+                "run_as_user": null,
+                "run_as_group": null,
+                "umask": null,
+                "resource_limits": null
+            }
         }
     ]
 }

@@ -3911,25 +3911,6 @@ mod tests {
                 ))
             );
         }
-    }
-    #[test]
-    fn test_unexpand_flags_new_with_combined_flags() {
-        let app = ct_app();
-        let matches = app.get_matches_from(vec![
-            "unexpand",
-            "--tabs",
-            "4,8",
-            "--all",
-            "--no-utf8",
-            "file1",
-            "file2",
-        ]);
-        let flags = UnexpandFlags::new(&matches).unwrap();
-        assert_eq!(flags.tabstops, vec![4, 8]);
-        assert_eq!(flags.files, vec!["file1".to_string(), "file2".to_string()]);
-        assert_eq!(flags.is_a_flag, true);
-        assert_eq!(flags.is_u_flag, false);
-    }
 
         #[test]
         fn test_unexpand_flags_new_with_combined_flags() {
